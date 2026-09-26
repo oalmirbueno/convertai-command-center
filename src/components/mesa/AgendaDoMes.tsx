@@ -609,7 +609,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   );
 
   return (
-    <section id="agenda-do-mes" className="scroll-mt-40 space-y-3">
+    <section id="agenda-do-mes" className="scroll-mt-40 space-y-3 lg:scroll-mt-4">
       <TituloDeSecao
         acao={
           <Link to={`/calendario?client=${clientId}`} className="text-[12px] text-primary underline-offset-2 hover:underline">
@@ -714,7 +714,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
       </div>
 
       {/* Seleção: abaixo do calendário, na largura toda, com rolagem própria. */}
-      <div id="selecao-do-mes" className="scroll-mt-40 overflow-hidden rounded-xl border border-border bg-card">
+      <div id="selecao-do-mes" className="scroll-mt-40 lg:scroll-mt-4 overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex min-w-0 flex-wrap items-center border-b border-border px-3 py-2.5">
           <p className="mr-3 min-w-0 text-[13px] font-medium">
             Selecionados

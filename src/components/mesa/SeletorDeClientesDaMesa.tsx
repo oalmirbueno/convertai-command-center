@@ -151,8 +151,9 @@ export default function SeletorDeClientesDaMesa({
           aria-expanded={aberto}
           aria-haspopup="listbox"
           aria-label={valor ? `Cliente: ${rotulo}. Trocar de cliente` : "Escolher o cliente"}
-          className="flex h-8 min-w-0 max-w-full items-center rounded-lg border border-border bg-card px-2.5 text-left text-[13px] font-semibold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[240px]"
+          className={`flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${aberto ? "bg-muted" : ""}`}
         >
+          {/* Visual da casca das mesas (docs/design/SISTEMA.md): sem caixa, ao lado do seletor de mesa. */}
           <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
           <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />

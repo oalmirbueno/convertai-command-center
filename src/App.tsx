@@ -6,6 +6,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { criarQueryClient, LimpezaDoCacheAoTrocarDeUsuario, opcoesDePersistencia } from "@/lib/mesa/cachePersistido";
 import { PaginaMesaAds, PaginaMesaDoCliente, PaginaMesaFoto } from "@/lib/mesa/preCarga";
 import { PaginaMesaVideos } from "@/lib/mesa/preCarga";
+import { PaginaMesaEdicao } from "@/lib/mesa/preCarga";
 import { PaginaMesaPublicidade } from "@/lib/mesa/preCarga";
 import { PaginaMesaRoteiros } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
@@ -74,6 +75,7 @@ const MesaDoCliente = PaginaMesaDoCliente;
 const MesaAds = PaginaMesaAds;
 const MesaFoto = PaginaMesaFoto;
 const MesaVideos = PaginaMesaVideos;
+const MesaEdicao = PaginaMesaEdicao;
 const MesaPublicidade = PaginaMesaPublicidade;
 const MesaRoteiros = PaginaMesaRoteiros;
 
@@ -307,8 +309,10 @@ export function AppRoutes() {
         <Route path="/mesa-ads" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Foto: estúdio fotográfico (docs/mesa-foto/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
         <Route path="/mesa-foto" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaFoto /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
-        {/* Mesa Vídeos: acervo, história, edição e versões (docs/mesa-videos/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        {/* Mesa Vídeos: gerar cenas e vídeos com IA (docs/mesa-videos/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
         <Route path="/mesa-videos" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaVideos /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Edição: subir vídeos de fora, organizar e editar (frente E2; função mesa-videos). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-edicao" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaEdicao /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Publicidade: dirige campanhas de produto (kit publicidade; supabase/functions/mesa-publicidade). Mesmos papéis e o mesmo esqueleto da Mesa. */}
         <Route path="/mesa-publicidade" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaPublicidade /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Roteiros: agenda, roteiro, revisão salva e PDF (supabase/functions/mesa-roteiros). Mesmos papéis e o mesmo esqueleto da Mesa. */}

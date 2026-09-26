@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { X, ChevronDown, ChevronUp, RotateCw, CheckCircle2, AlertCircle, Loader2, Upload as UploadIcon, XCircle } from "lucide-react";
 import type { UploadItem } from "@/hooks/useWorkspaceUploads";
+import { botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 
 const fmtBytes = (n: number) => {
   if (!n) return "0 B";
@@ -25,8 +24,15 @@ type Props = {
   onClearDone: () => void;
 };
 
+/**
+ * Janela flutuante dos envios do Workspace (fila com recuperação em
+ * useWorkspaceUploads). Sistema de design: uma janela só, lista com
+ * divisória, ícones com aria-label. Recolhida ou aberta fica lembrado.
+ */
 export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onClearDone }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useEstadoDaTela<boolean>("workspace:envios:recolhido", false, {
+    validar: (v) => typeof v === "boolean",
+  });
   if (!items.length) return null;
 
   const active = items.filter(i => i.status === "uploading" || i.status === "queued").length;
@@ -35,84 +41,107 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
   const totalPct = items.length
     ? items.reduce((a, x) => a + (x.status === "done" ? 100 : x.progress), 0) / items.length
     : 0;
+  const titulo = active > 0
+    ? `Enviando ${active} arquivo(s)`
+    : errored > 0
+      ? `${errored} com erro`
+      : `${done} concluído(s)`;
 
   return (
     <div
-      className="fixed z-50 rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in
+      role="region"
+      aria-label="Envios"
+      className="fixed z-50 overflow-hidden rounded-lg border border-border bg-card shadow-xl
         left-2 right-2 w-auto bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)]
         sm:left-auto sm:right-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)] sm:bottom-4"
     >
-
-
       <button
+        type="button"
         onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-border bg-secondary/40 text-left"
+        aria-expanded={!collapsed}
+        className={juntar("flex w-full min-w-0 items-center border-b border-border px-4 py-2.5 text-left transition-colors hover:bg-muted/50", foco)}
       >
-        <UploadIcon className="w-4 h-4 text-primary" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold truncate">
-            {active > 0 ? `Enviando ${active} arquivo(s)` : errored > 0 ? `${errored} com erro` : `${done} concluído(s)`}
-          </p>
+        <UploadIcon className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className={juntar(texto.tituloSecao, "block truncate text-[13px]")}>{titulo}</span>
           {active > 0 && (
-            <div className="mt-1 h-1 rounded-full bg-secondary overflow-hidden">
-              <div className="h-full bg-primary transition-all" style={{ width: `${totalPct}%` }} />
-            </div>
+            <span className="mt-1 block h-1 overflow-hidden rounded-full bg-muted">
+              <span className="block h-full bg-primary transition-all" style={{ width: `${totalPct}%` }} />
+            </span>
           )}
-        </div>
-        {collapsed ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </span>
+        {collapsed
+          ? <ChevronUp className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          : <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        <span className="sr-only">{collapsed ? "Mostrar envios" : "Recolher envios"}</span>
       </button>
 
       {!collapsed && (
         <>
-          <ul className="max-h-[45vh] sm:max-h-[320px] overflow-y-auto overscroll-contain divide-y divide-border">
+          <ul className="max-h-[45vh] divide-y divide-border overflow-y-auto overscroll-contain sm:max-h-[320px]">
             {items.map(item => (
-              <li key={item.id} className="px-3 py-2.5 hover:bg-secondary/30">
-                <div className="flex items-start gap-2">
+              <li key={item.id} className="px-3 py-2.5">
+                <div className="flex min-w-0 items-start">
                   <StatusIcon status={item.status} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-medium truncate">{item.name}</p>
-                    <div className="mt-1 h-1 rounded-full bg-secondary overflow-hidden">
+                  <div className="ml-2 min-w-0 flex-1">
+                    <p className={juntar(texto.corpo, "truncate text-[12.5px] font-medium")}>{item.name}</p>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                       <div
-                        className={cn(
+                        className={juntar(
                           "h-full transition-all",
                           item.status === "error" ? "bg-destructive" :
                           item.status === "done" ? "bg-primary" :
-                          item.status === "canceled" ? "bg-muted-foreground" : "bg-primary/80"
+                          item.status === "canceled" ? "bg-muted-foreground" : "bg-primary/80",
                         )}
                         style={{ width: `${item.status === "done" ? 100 : item.progress}%` }}
                       />
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                      <span>{fmtBytes(item.size)}</span>
+                    <p className={juntar(texto.auxiliar, "mt-1 truncate text-[11px] tabular-nums")}>
+                      {fmtBytes(item.size)}
                       {item.status === "uploading" && (
                         <>
-                          <span>· {item.progress.toFixed(0)}%</span>
-                          {item.speed ? <span>· {fmtBytes(item.speed)}/s</span> : null}
-                          {item.eta ? <span>· {fmtEta(item.eta)} restantes</span> : null}
+                          {` · ${item.progress.toFixed(0)}%`}
+                          {item.speed ? ` · ${fmtBytes(item.speed)}/s` : ""}
+                          {item.eta ? ` · ${fmtEta(item.eta)} restantes` : ""}
                         </>
                       )}
-                      {item.status === "error" && <span className="text-destructive truncate">· {item.error}</span>}
-                      {item.status === "done" && <span className="text-primary">· Concluído</span>}
-                      {item.status === "canceled" && <span>· Cancelado</span>}
-                      {item.status === "queued" && <span>· Na fila</span>}
-                    </div>
+                      {item.status === "error" && <span className="text-destructive"> · {item.error}</span>}
+                      {item.status === "done" && <span className="text-primary"> · Concluído</span>}
+                      {item.status === "canceled" && " · Cancelado"}
+                      {item.status === "queued" && " · Na fila"}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="ml-1 flex shrink-0 items-center">
                     {item.status === "error" && (
-                      <button onClick={() => onRetry(item.id)} title="Tentar novamente"
-                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
-                        <RotateCw className="w-3.5 h-3.5" />
+                      <button
+                        type="button"
+                        onClick={() => onRetry(item.id)}
+                        title="Tentar de novo"
+                        aria-label={`Tentar de novo: ${item.name}`}
+                        className={juntar(botao.icone, "h-7 w-7")}
+                      >
+                        <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     )}
                     {(item.status === "uploading" || item.status === "queued") && item.cancelable ? (
-                      <button onClick={() => onCancel(item.id)} title="Cancelar"
-                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive">
-                        <XCircle className="w-3.5 h-3.5" />
+                      <button
+                        type="button"
+                        onClick={() => onCancel(item.id)}
+                        title="Cancelar"
+                        aria-label={`Cancelar envio: ${item.name}`}
+                        className={juntar(botao.icone, "h-7 w-7 hover:text-destructive")}
+                      >
+                        <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     ) : item.status !== "uploading" && item.status !== "queued" ? (
-                      <button onClick={() => onDismiss(item.id)} title="Remover"
-                        className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
-                        <X className="w-3.5 h-3.5" />
+                      <button
+                        type="button"
+                        onClick={() => onDismiss(item.id)}
+                        title="Remover"
+                        aria-label={`Remover da lista: ${item.name}`}
+                        className={juntar(botao.icone, "h-7 w-7")}
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     ) : null}
                   </div>
@@ -121,9 +150,8 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
             ))}
           </ul>
           {(done > 0 || errored > 0) && active === 0 && (
-            <div className="p-2 border-t border-border flex justify-end">
-              <button onClick={onClearDone}
-                className="text-[11px] text-muted-foreground hover:text-foreground px-2 py-1 rounded">
+            <div className="flex justify-end border-t border-border px-2 py-1.5">
+              <button type="button" onClick={onClearDone} className={juntar(botao.discreto, "h-8 text-[12px]")}>
                 Limpar concluídos
               </button>
             </div>
@@ -135,9 +163,9 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
 }
 
 function StatusIcon({ status }: { status: UploadItem["status"] }) {
-  if (status === "done") return <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />;
-  if (status === "error") return <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />;
-  if (status === "canceled") return <XCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />;
-  if (status === "uploading") return <Loader2 className="w-4 h-4 text-primary shrink-0 mt-0.5 animate-spin" />;
-  return <UploadIcon className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />;
+  if (status === "done") return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-label="Concluído" />;
+  if (status === "error") return <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-label="Erro" />;
+  if (status === "canceled") return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Cancelado" />;
+  if (status === "uploading") return <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Enviando" />;
+  return <UploadIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Na fila" />;
 }

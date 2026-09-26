@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,7 +135,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
-      toast({ title: "Plano de pagamento criado!" });
+      toast({ title: "Plano de pagamento criado" });
       setCreateOpen(false);
       resetForm();
     } catch (err: any) {
@@ -207,7 +207,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
-      toast({ title: "Plano de pagamento atualizado!" });
+      toast({ title: "Plano de pagamento atualizado" });
       setEditOpen(false);
       resetForm();
     } catch (err: any) {
@@ -264,7 +264,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-audit-log"] });
-      toast({ title: "Parcela atualizada!" });
+      toast({ title: "Parcela atualizada" });
       setEditInstOpen(false);
       setEditingInst(null);
     } catch (err: any) {
@@ -291,20 +291,22 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     setNotes("");
   };
 
-  if (loadingPayment) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>;
+  if (loadingPayment) return <Carregando linhas={3} rotulo="Carregando pagamentos" />;
 
   if (!payment) {
     return (
-      <div className="text-center py-12 space-y-4">
-        <DollarSign className="w-8 h-8 text-muted-foreground/50 mx-auto" />
-        <p className="text-sm text-muted-foreground">Nenhum plano de pagamento configurado.</p>
-        {isAdmin && (
-          <Button onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus className="w-3.5 h-3.5" /> Criar Plano de Pagamento
-          </Button>
-        )}
+      <>
+        <EstadoVazio
+          icone={<DollarSign className="h-5 w-5" />}
+          titulo="Nenhum plano de pagamento configurado."
+          acao={isAdmin && (
+            <button type="button" onClick={() => setCreateOpen(true)} className={botao.primario}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Criar plano de pagamento
+            </button>
+          )}
+        />
         {renderCreateDialog()}
-      </div>
+      </>
     );
   }
 
@@ -317,91 +319,90 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const progressPct = payment.total_value > 0 ? Math.round((paidTotal / payment.total_value) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Project link */}
-      <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-xs text-primary">
-        <span className="font-medium">Projeto:</span> {projectName}
-      </div>
-
-      {/* Summary card */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Valor Total</p>
-            <p className="text-xl font-semibold text-foreground">{formatCurrency(payment.total_value)}</p>
+    <div className="min-w-0 space-y-6">
+      {/* Resumo do plano: o valor é o assunto da aba, então fica em destaque */}
+      <Painel
+        titulo={`Plano de pagamento · ${projectName}`}
+        acao={isAdmin && (
+          <button type="button" className={botao.secundario} onClick={openEditDialog} aria-label="Editar plano">
+            <Pencil className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Editar</span>
+          </button>
+        )}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="min-w-0">
+            <p className={texto.rotulo}>Valor total</p>
+            <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{formatCurrency(payment.total_value)}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Pago</p>
-              <p className="text-xl font-semibold text-success">{formatCurrency(paidTotal)}</p>
-            </div>
-            {isAdmin && (
-              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openEditDialog}>
-                <Pencil className="w-3.5 h-3.5" /> Editar
-              </Button>
-            )}
+          <div className="min-w-0 text-right">
+            <p className={texto.rotulo}>Pago</p>
+            <p className="text-[20px] font-semibold leading-7 tabular-nums text-success">{formatCurrency(paidTotal)}</p>
           </div>
         </div>
-        <div>
-          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+        <div className="mt-4">
+          <div className={juntar(texto.auxiliar, "mb-1.5 flex items-center justify-between")}>
             <span>Progresso</span>
-            <span>{progressPct}%</span>
+            <span className="tabular-nums">{progressPct}%</span>
           </div>
-          <div className="h-2 rounded-full bg-secondary overflow-hidden">
-            <div className="h-full rounded-full bg-success transition-all duration-500" style={{ width: `${progressPct}%` }} />
+          <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100} aria-label="Pago do total">
+            <div className="h-full rounded-full bg-success" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-          <span>Entrada: {payment.entry_percentage}% ({formatCurrency(payment.entry_amount)})</span>
-          <span>•</span>
-          <span>{payment.installments_count}x restante</span>
-          <span>•</span>
-          <span className="text-foreground font-medium">Falta: {formatCurrency(payment.total_value - paidTotal)}</span>
-        </div>
-        {payment.notes && <p className="text-xs text-muted-foreground italic">{payment.notes}</p>}
-      </div>
+        <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>
+          Entrada: {payment.entry_percentage}% ({formatCurrency(payment.entry_amount)})
+          <span className="mx-1.5" aria-hidden="true">·</span>
+          {payment.installments_count}x restante
+          <span className="mx-1.5" aria-hidden="true">·</span>
+          <span className="font-medium text-foreground">Falta: {formatCurrency(payment.total_value - paidTotal)}</span>
+        </p>
+        {payment.notes && <p className={juntar(texto.auxiliar, "mt-1 italic leading-5")}>{payment.notes}</p>}
+      </Painel>
 
-      {/* Installments */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">Parcelas</p>
+      {/* Parcelas: lista com divisória, valor e situação à direita */}
+      <Secao titulo="Parcelas" descricao={installments && installments.length ? `${installments.length} no total` : undefined}>
         {loadingInstallments ? (
-          <Skeleton className="h-16 w-full rounded-xl" />
+          <Carregando linhas={2} rotulo="Carregando parcelas" />
         ) : (
-          (installments || []).map((inst: any) => {
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+          {(installments || []).map((inst: any) => {
             const status = getInstallmentStatus(inst);
             const config = statusConfig[status];
             const Icon = config.icon;
             const paidAmt = Number(inst.paid_amount || 0);
             const isPartial = inst.status === "partial" || (paidAmt > 0 && paidAmt < inst.amount);
             return (
-              <div key={inst.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${config.className}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{inst.description}</p>
-                  <p className="text-xs text-muted-foreground">
+              <li key={inst.id} className="flex min-w-0 items-center px-4 py-3">
+                <span className={`mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${config.className}`}>
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium leading-5 text-foreground">{inst.description}</p>
+                  <p className={juntar(texto.auxiliar, "truncate")}>
                     Vencimento: {formatDate(inst.due_date)}
-                    {inst.paid_date && ` • Pago em ${formatDate(inst.paid_date)}`}
+                    {inst.paid_date && ` · Pago em ${formatDate(inst.paid_date)}`}
                   </p>
                   {isPartial && paidAmt > 0 && (
-                    <p className="text-xs text-primary">
+                    <p className="text-[12px] text-primary">
                       Pago parcial: {formatCurrency(paidAmt)} de {formatCurrency(inst.amount)}
                     </p>
                   )}
                 </div>
-                <p className="text-sm font-semibold text-foreground whitespace-nowrap">{formatCurrency(inst.amount)}</p>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap ${config.className}`}>{config.label}</span>
+                <div className="ml-3 shrink-0 text-right">
+                  <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(inst.amount)}</p>
+                  <span className={juntar(etiqueta, "mt-0.5", config.className)}>{config.label}</span>
+                </div>
                 {isAdmin && (
-                  <Button size="sm" variant="ghost" className="text-xs h-7 px-2" onClick={() => openEditInstallment(inst)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
-                  </Button>
+                  <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => openEditInstallment(inst)} aria-label={`Editar ${inst.description}`}>
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
                 )}
-              </div>
+              </li>
             );
-          })
+          })}
+          </ul>
         )}
-      </div>
+      </Secao>
 
       {/* Edit installment dialog */}
       <Dialog open={isAdmin && editInstOpen} onOpenChange={setEditInstOpen}>

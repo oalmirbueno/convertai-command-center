@@ -12,6 +12,7 @@ import { Cronometro } from "./Cronometro";
 import type { Trabalho } from "./useItensDoMes";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
+import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import {
   aplicarMudancasDoDiretor,
   ATALHOS_DO_DIRETOR,
@@ -386,7 +387,8 @@ export default function DiretorDoEstudio({
 
   return (
     <div className={`flex min-h-0 min-w-0 flex-col ${className}`}>
-      <div ref={listaRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Conversa com o diretor de arte">
+      {/* Casca fixa de agente do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
+      <MensagensDoAgente ref={listaRef} rotulo="Conversa com o diretor de arte" className="px-4 py-3">
         {estiloPedido && (
           <p className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug [overflow-wrap:anywhere]">
             <span className="font-medium">Estilo pedido para este trabalho:</span> <span className="text-muted-foreground">{estiloPedido}</span>
@@ -438,9 +440,9 @@ export default function DiretorDoEstudio({
             </div>
           </div>
         )}
-      </div>
+      </MensagensDoAgente>
 
-      <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+      <CompositorDoAgente>
         <OQuePossoFazer
           capacidades={["reordenar as lâminas", "refazer lâminas", "trocar um texto em várias", "mudar o formato", "arquivar versões antigas"]}
           atalhos={[
@@ -511,7 +513,7 @@ export default function DiretorDoEstudio({
             </span>
           </div>
         </div>
-      </div>
+      </CompositorDoAgente>
     </div>
   );
 }

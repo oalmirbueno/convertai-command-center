@@ -121,7 +121,9 @@ describe("o Escritório é a porta de entrada", () => {
   const pagina = ler("src/pages/AdminExecucao.tsx");
 
   it("abre nele, e não no quadro por colunas", () => {
-    expect(pagina).toContain('useState<(typeof VISOES)[number]["id"]>("escritorio")');
+    // A visão agora é guardada (useEstadoDaTela do sistema); o padrão, na
+    // primeira visita, continua sendo o Escritório.
+    expect(pagina).toContain('useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao", "escritorio"');
     expect(pagina).toMatch(/VISOES = \[\s*\{ id: "escritorio"/);
   });
 

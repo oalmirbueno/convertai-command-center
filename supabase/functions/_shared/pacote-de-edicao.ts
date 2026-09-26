@@ -13,6 +13,7 @@
  */
 
 import { COLUNAS_DOS_BEATS, conhecimentoEdicao, FONTE_BRABO, FONTE_KIT_AUDIOVISUAL } from "./conhecimento-edicao.ts";
+import { edlDoProjeto, type ProjetoDeEdicao, projetoDosTakes } from "./projeto-de-edicao.ts";
 
 export const VERSAO_DO_PACOTE = 1;
 
@@ -62,6 +63,12 @@ export interface EntradaDoPacote {
   referencias?: { titulo: string; url?: string | null; nota?: string | null }[];
   /** Nota da equipe para esta peça (vale sobre o método). */
   direcao?: string | null;
+  /**
+   * Projeto de edição (frente E2, projeto-de-edicao.ts). O edl.json e o
+   * projeto.json saem dele. Sem ele, a primeira montagem é feita aqui com os
+   * melhores takes inteiros (o mesmo de antes).
+   */
+  projeto?: ProjetoDeEdicao | null;
   gerado_em: string;
 }
 
@@ -128,7 +135,7 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
   const fps = typeof e.fps === "number" && e.fps > 0 ? e.fps : null;
   const pendencias: string[] = [];
 
-  if (!takes.length) pendencias.push("Nenhum take no pacote: suba as gravações na aba Acervo.");
+  if (!takes.length) pendencias.push("Nenhum take no pacote: suba os vídeos na Entrada da Mesa Edição.");
   if (!roteiro) pendencias.push("Sem roteiro aprovado ligado: a ordem das cenas sai dos nomes e grupos dos takes.");
   if (roteiro) {
     roteiro.cenas
@@ -239,36 +246,18 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
     });
   if (semLegenda.length) arquivos["legendas/PENDENTE.txt"] = `Sem legenda pronta:\n${semLegenda.map((t) => `- ${t.nome}`).join("\n")}\n`;
 
-  // EDL inicial no formato dos projetos Remotion do dono (take inteiro; o corte fino é do editor).
-  const fontes: Record<string, string> = {};
-  const ranges: { source: string; start: number; end: number }[] = [];
-  let total = 0;
-  let semDuracao = false;
-  (melhores.length ? melhores : []).forEach((t) => {
-    const chave = slugDoPacote(t.nome.replace(/\.[a-z0-9]{2,5}$/i, ""), 40);
-    fontes[chave] = t.nome;
-    const d = segundos(t.duracao_s);
-    if (d === null) {
-      semDuracao = true;
-      return;
-    }
-    ranges.push({ source: chave, start: 0, end: d });
-    total += d;
-  });
-  arquivos["edl.json"] = JSON.stringify(
-    {
-      version: 1,
-      sources: fontes,
-      fps: fps || 25,
-      ranges,
-      grade: "none",
-      overlays: [],
-      total_duration_s: Math.round(total * 100) / 100,
-      note: `Primeira montagem com os melhores takes inteiros, na ordem das cenas. Cortar no editor.${semDuracao ? " Há take sem duração lida: fora dos ranges." : ""}${fps ? "" : " FPS 25 provisório: confira no arquivo."}`,
-    },
-    null,
-    1,
-  );
+  // Projeto de edição (frente E2): o edl.json no formato dos projetos Remotion do
+  // dono sai dele. Sem projeto vindo da tela, a primeira montagem é a de sempre:
+  // os melhores takes inteiros, na ordem das cenas (o corte fino é do editor).
+  const semDuracao = melhores.some((t) => segundos(t.duracao_s) === null);
+  const projeto =
+    e.projeto ||
+    projetoDosTakes({ titulo, formato: e.formato || null, fps, roteiro_id: roteiro ? roteiro.id : null, direcao: e.direcao || null, takes: melhores, agora: e.gerado_em });
+  const nota = e.projeto
+    ? undefined
+    : `Primeira montagem com os melhores takes inteiros, na ordem das cenas. Cortar no editor.${semDuracao ? " Há take sem duração lida: fora dos ranges." : ""}${fps ? "" : " FPS 25 provisório: confira no arquivo."}`;
+  arquivos["edl.json"] = JSON.stringify(edlDoProjeto(projeto, nota), null, 1);
+  arquivos["projeto.json"] = JSON.stringify(projeto, null, 1);
 
   // Links (URLs vencem)
   const comUrl = takes.filter((t) => t.url);
@@ -293,13 +282,14 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
   arquivos["LEIA-ME.md"] = [
     `# Pacote para editar: ${titulo}`,
     "",
-    `Cliente: ${e.cliente.nome}. Gerado em ${e.gerado_em.slice(0, 10)} pela Mesa Vídeos.`,
+    `Cliente: ${e.cliente.nome}. Gerado em ${e.gerado_em.slice(0, 10)} pela Mesa Edição.`,
     "",
     "- roteiro.md: o roteiro aprovado e a história do Canvas.",
     "- takes.csv: os takes na ordem de montar (melhores primeiro em cada cena).",
     "- decupagem.csv: uma linha por beat para preencher com os tempos reais.",
     "- direcao.md: a direção de edição (método Brabo destilado e a nota da equipe).",
-    "- edl.json: primeira montagem no formato dos projetos Remotion.",
+    "- edl.json: a montagem no formato dos projetos Remotion (sai do projeto de edição).",
+    "- projeto.json: o projeto de edição (trilhas, clipes, textos e transições) para abrir no editor.",
     "- legendas/: SRT prontos ou a lista do que falta.",
     "- links.txt: onde baixar os arquivos (quando incluído).",
     "",

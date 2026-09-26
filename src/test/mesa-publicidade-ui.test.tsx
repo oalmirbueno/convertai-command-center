@@ -174,15 +174,22 @@ describe("rota e casca da Mesa Publicidade", () => {
     expect(screen.getByRole("heading", { name: "Mesa Publicidade" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Publicidade" });
     expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["1Campanha", "2Direção", "3Tomadas", "4Revisão", "5Envio"]);
-    expect((nav.querySelector("[data-caminho-principal]") as HTMLElement).className).toContain("grid-cols-5");
+    for (const b of within(nav).getAllByRole("button")) expect(b.className).toContain("whitespace-nowrap");
     expect(screen.getByRole("combobox", { name: /Cliente: Ótica Sintética/ })).toBeTruthy();
-    const troca = screen.getByRole("navigation", { name: "Trocar de mesa" });
-    expect(within(troca).getByText("Publicidade").getAttribute("aria-current")).toBe("page");
-    expect(within(troca).getAllByRole("link").map((l) => l.textContent)).toEqual(expect.arrayContaining(["Mesa", "Mesa Ads", "Mesa Foto"]));
-    expect(await screen.findByRole("button", { name: "Abrir o agente da Mesa Publicidade" }, { timeout: 8000 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Publicidade/ }));
+    const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });
+    expect(within(troca).getByLabelText("Publicidade").getAttribute("aria-current")).toBe("page");
+    expect(within(troca).getAllByRole("link").map((l) => l.getAttribute("aria-label"))).toEqual(expect.arrayContaining(["Mesa", "Mesa Ads", "Mesa Foto"]));
+    fireEvent.keyDown(troca, { key: "Escape" });
+    // O agente é fixo (lateral da área de trabalho): já montado, com o campo à vista,
+    // e lê o histórico da campanha ao montar (sem custo).
+    const agente = await screen.findByRole("region", { name: "Agente da campanha" }, { timeout: 8000 });
+    expect(agente.closest("[data-agente-publicidade]")).toBeTruthy();
+    expect(within(agente).getByRole("textbox", { name: "Mensagem ao agente" })).toBeTruthy();
+    await waitFor(() => expect(mock.invoke.mock.calls.some((c) => c[1] && c[1].body && c[1].body.acao === "agente_historico")).toBe(true));
     const pagina = ler("src/pages/MesaPublicidade.tsx");
     expect(pagina).toContain("const telaCheia = useTelaCheiaDaMesa();");
-    expect(pagina).toContain("<BotaoDeTelaCheia tela={telaCheia}");
+    expect(pagina).toContain("telaCheia={telaCheia}");
   });
 });
 
@@ -224,6 +231,9 @@ describe("direção, revisão e envio", () => {
     });
     // O atalho do agente para reprovar as que mudaram o produto.
     expect(screen.getByRole("button", { name: /Reprovar as 1 que mudaram o produto/ })).toBeTruthy();
+    // Pedir ao agente (fixo ao lado) põe o pedido no campo dele, para a equipe revisar e enviar.
+    fireEvent.click(screen.getByRole("button", { name: /Reprovar as 1 que mudaram o produto/ }));
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Mensagem ao agente" }) as HTMLTextAreaElement).value).toBe("Reprove as fotos que mudaram o produto."), { timeout: 8000 });
   });
 
   it("o envio leva só as aprovadas, registra a linhagem e avisa que anúncio e verba são à parte", async () => {

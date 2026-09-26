@@ -119,6 +119,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Período, objetivo e lista ficam lembrados no navegador (useEstadoDaTela): cada teste começa limpo.
+  window.localStorage.clear();
   mock.tabelas = {};
   mock.rpc.mockResolvedValue({ data: { saldo_usd: 10 }, error: null });
   responder({});
@@ -157,16 +159,18 @@ describe("resultados claros (código)", () => {
 });
 
 describe("aba Conta v5", () => {
-  it("resumo no topo com o alerta de engajamento, agente sênior, pacote e importação à vista; objetivo filtra as abas", async () => {
+  // Tela grande (a conta inteira com o agente ao lado): as buscas por papel no jsdom passam de 5 s com a máquina ocupada.
+  it("resumo no topo com o alerta de engajamento, agente sênior, pacote e importação à vista; objetivo filtra as abas", { timeout: 20000 }, async () => {
     responder({ conta_ao_vivo: CONTA, conta_conversa_ler: { conversa_id: null, mensagens: [] } });
     montar(h(AbaConta, {}));
     expect(await screen.findByText(/70% do investimento está em engajamento/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Agente sênior de tráfego" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Baixar pacote de otimização \(\.zip\)/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Importar pacote no Estúdio Ads/ })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Ativos agora (3)" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Mensagem (2)" }));
-    expect(screen.getByRole("tab", { name: "Ativos agora (1)" })).toBeTruthy();
+    // Listas e objetivo em seletores compactos (sistema de design): 5 listas viram lista; até 4 objetivos, segmentado.
+    expect(screen.getByRole("button", { name: "Ver anúncios: Ativos agora (3)" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Mensagem (2)" }));
+    expect(screen.getByRole("button", { name: "Ver anúncios: Ativos agora (1)" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Anúncio Chama no WhatsApp" })).toBeTruthy();
     expect(screen.queryByRole("article", { name: "Anúncio Post A" })).toBeNull();
   });

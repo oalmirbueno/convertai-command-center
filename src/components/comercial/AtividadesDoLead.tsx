@@ -2,14 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Clock, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { EstadoVazio, botao, campo, foco, juntar, texto } from "@/components/sistema";
 import {
   TIPOS_DE_ATIVIDADE,
   type Atividade,
@@ -19,6 +12,7 @@ import {
   rotuloDaAtividade,
   salvarAtividade,
 } from "@/lib/comercial";
+import { ehTexto, useEstadoDoComercial } from "./useEstadoDoComercial";
 
 /**
  * A agenda de um lead.
@@ -26,7 +20,7 @@ import {
  * Substitui o `next_action` de texto livre, que era um campo só: marcar a
  * ligação como feita apagava a reunião marcada, e não sobrava registro do
  * que foi tentado. Aqui cada compromisso tem tipo, data e dono, e concluir
- * empurra a linha para a história do lead — que é o que responde "o que já
+ * empurra a linha para a história do lead, que é o que responde "o que já
  * tentaram aqui?" quando outra pessoa pega a conversa.
  */
 
@@ -62,7 +56,8 @@ const quando = (iso: string) => {
 
 export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props) {
   const queryClient = useQueryClient();
-  const [titulo, setTitulo] = useState("");
+  // O que foi escrito e não agendado volta ao reabrir o lead.
+  const [titulo, setTitulo, esquecerTitulo] = useEstadoDoComercial(`rascunho:atividade:${leadId}`, "", { validar: ehTexto });
   const [tipo, setTipo] = useState("ligacao");
   const [prazo, setPrazo] = useState(proximaHoraLocal);
   const [salvando, setSalvando] = useState(false);
@@ -111,84 +106,87 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
       toast.error("Não foi possível agendar.");
       return;
     }
-    setTitulo("");
+    esquecerTitulo();
     setPrazo(proximaHoraLocal());
     await recarregar();
     toast.success("Agendado.");
   };
 
   const agora = new Date().toISOString();
+  const abertas = doLead.filter((a) => !a.done_at).length;
 
   return (
-    <div className="border-t border-border pt-3">
-      <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Atividades
-      </p>
+    <section className="border-t border-border pt-4" aria-label="Atividades do lead">
+      <div className="mb-2 flex min-w-0 items-baseline">
+        <h3 className={juntar(texto.tituloSecao, "text-[14px]")}>Atividades</h3>
+        {doLead.length > 0 && <span className={juntar(texto.auxiliar, "ml-2")}>{abertas} em aberto</span>}
+      </div>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-[auto_1fr_auto_auto]">
-        <Select value={tipo} onValueChange={setTipo}>
-          <SelectTrigger className="h-10 sm:w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIPOS_DE_ATIVIDADE.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          value={titulo}
-          onChange={(e) => setTitulo(e.target.value)}
-          placeholder="O que precisa ser feito"
-          className="h-10"
-        />
-        <Input
+      {/* Celular: tipo e quando lado a lado, e o que fazer com o botão na
+          mesma linha (botão nunca sozinho numa linha). */}
+      <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-[120px_190px_minmax(0,1fr)]">
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)} className={campo} aria-label="Tipo da atividade">
+          {TIPOS_DE_ATIVIDADE.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <input
           type="datetime-local"
           value={prazo}
           onChange={(e) => setPrazo(e.target.value)}
-          className="h-10 sm:w-[190px]"
+          className={campo}
           aria-label="Quando"
         />
-        <button
-          type="button"
-          onClick={() => void criar()}
-          disabled={salvando}
-          className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground disabled:opacity-50"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Agendar
-        </button>
+        <div className="col-span-2 flex min-w-0 items-center md:col-span-1">
+          <input
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void criar();
+              }
+            }}
+            placeholder="O que precisa ser feito"
+            aria-label="O que precisa ser feito"
+            className={juntar(campo, "mr-2")}
+          />
+          <button type="button" onClick={() => void criar()} disabled={salvando} className={botao.secundario} aria-label="Agendar atividade">
+            <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Agendar</span>
+          </button>
+        </div>
       </div>
 
-      <div className="mt-2 space-y-1.5">
-        {doLead.map((atividade) => (
-          <Linha
-            key={atividade.id}
-            atividade={atividade}
-            agora={agora}
-            onAlternar={async () => {
-              if (await concluirAtividade(atividade, !atividade.done_at)) {
-                await recarregar();
-              } else toast.error("Não foi possível salvar.");
-            }}
-            onApagar={async () => {
-              if (await apagarAtividade(atividade.id)) {
-                await recarregar();
-                toast.success("Atividade removida.");
-              } else toast.error("Não foi possível remover.");
-            }}
-          />
-        ))}
-        {doLead.length === 0 && (
-          <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-[10.5px] leading-relaxed text-muted-foreground">
-            Nada agendado. Lead sem próximo compromisso é lead que some: o funil
-            morre de esquecimento, não de proposta recusada.
-          </p>
+      <div className="mt-2">
+        {doLead.length === 0 ? (
+          <EstadoVazio compacto titulo="Nada agendado." descricao="Lead sem próximo compromisso some do funil." />
+        ) : (
+          <ul className="divide-y divide-border">
+            {doLead.map((atividade) => (
+              <Linha
+                key={atividade.id}
+                atividade={atividade}
+                agora={agora}
+                onAlternar={async () => {
+                  if (await concluirAtividade(atividade, !atividade.done_at)) {
+                    await recarregar();
+                  } else toast.error("Não foi possível salvar.");
+                }}
+                onApagar={async () => {
+                  if (await apagarAtividade(atividade.id)) {
+                    await recarregar();
+                    toast.success("Atividade removida.");
+                  } else toast.error("Não foi possível remover.");
+                }}
+              />
+            ))}
+          </ul>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -206,41 +204,26 @@ function Linha({
   const feita = Boolean(atividade.done_at);
   const atrasada = !feita && atividade.due_at < agora;
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
-        feita
-          ? "border-border bg-background opacity-60"
-          : atrasada
-            ? "border-warning/40 bg-warning/[0.05]"
-            : "border-border bg-background"
-      }`}
-    >
+    <li className={juntar("flex min-w-0 items-center py-2", feita && "opacity-60")}>
       <button
         type="button"
         onClick={onAlternar}
         title={feita ? "Reabrir" : "Concluir"}
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${
-          feita
-            ? "border-border text-muted-foreground"
-            : "border-primary/40 bg-primary/10 text-primary"
-        }`}
+        aria-label={feita ? `Reabrir ${atividade.title}` : `Concluir ${atividade.title}`}
+        className={juntar(
+          "mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
+          foco,
+          feita ? "border-border text-muted-foreground" : "border-primary/50 text-primary hover:bg-primary/10",
+        )}
       >
-        {feita ? <RotateCcw className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+        {feita ? <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
       </button>
-      <div className="min-w-0 flex-1">
-        <p
-          className={`truncate text-[12px] ${
-            feita ? "text-muted-foreground line-through" : "font-medium text-foreground"
-          }`}
-        >
+      <div className="mr-2 min-w-0 flex-1">
+        <p className={juntar(texto.corpo, "truncate", feita ? "text-muted-foreground line-through" : "font-medium")}>
           {atividade.title}
         </p>
-        <p
-          className={`flex items-center gap-1 text-[10px] ${
-            atrasada ? "font-semibold text-warning" : "text-muted-foreground"
-          }`}
-        >
-          <Clock className="h-3 w-3" />
+        <p className={juntar(texto.auxiliar, "flex items-center truncate", atrasada && "font-medium text-warning")}>
+          <Clock className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
           {rotuloDaAtividade(atividade.kind)} · {quando(atividade.due_at)}
           {atrasada && " · atrasada"}
         </p>
@@ -249,10 +232,11 @@ function Linha({
         type="button"
         onClick={onApagar}
         title="Remover"
-        className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-destructive"
+        aria-label={`Remover ${atividade.title}`}
+        className={juntar(botao.icone, "hover:text-destructive")}
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
-    </div>
+    </li>
   );
 }

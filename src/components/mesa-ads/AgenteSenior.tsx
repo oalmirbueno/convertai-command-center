@@ -3,6 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, ChevronDown, ExternalLink, FlaskConical } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
+import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { foco, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cronometro, useSegundos } from "@/components/mesa/Cronometro";
 import { brl, chamarAds, humanizar, partesDoPlanoV2, rotuloDoObjetivo, type PedidoDePlano } from "./adsApi";
@@ -28,8 +32,12 @@ import { chaveDosNumeros, lerNumerosDoAgente, type AcoesDaConta, type NumerosVis
  * rápido: a conversa vem do cache persistido da Mesa; ao enviar, os números
  * da conta aparecem logo (conta_numeros, que também aquece o cache do
  * servidor) e o andamento diz em que parte ele está.
- * No celular a conversa não tem rolagem própria (o dedo rola a página); da
- * tela média para cima, a caixa tem altura máxima e rolagem só dela.
+ *
+ * 26/09 (sistema de design): casca PainelDoAgente (cabeçalho e campo fixos,
+ * só a conversa rola). Na aba Conta é a lateral fixa da área de trabalho
+ * (no celular, a gaveta do botão de baixo); no Plano de teste abre no lugar,
+ * com altura própria. A coluna é estreita: os blocos da resposta ficam um
+ * embaixo do outro. O rascunho do campo fica lembrado por cliente.
  */
 
 const ATALHOS = [
@@ -59,14 +67,14 @@ export function etapaDaResposta(segundos: number, pesquisar: boolean): string {
 }
 
 function Titulo({ children }: { children: ReactNode }) {
-  return <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
+  return <p className="mb-1 text-[12px] font-semibold text-muted-foreground">{children}</p>;
 }
 
 function Grupo({ titulo, tom, itens }: { titulo: string; tom: string; itens: { chave: string; titulo: string; texto: string }[] }) {
   if (!itens.length) return null;
   return (
     <div className="min-w-0">
-      <p className={`text-[10.5px] font-semibold uppercase tracking-wider ${tom}`}>{titulo} ({itens.length})</p>
+      <p className={`text-[12px] font-semibold ${tom}`}>{titulo} ({itens.length})</p>
       <ul className="mt-0.5 space-y-1">
         {itens.map((i) => (
           <li key={i.chave} className="min-w-0 text-[12px] leading-snug">
@@ -126,15 +134,15 @@ function PlanoDeTesteNaTela({ e, mensagemId, onPlanoPronto }: { e: EstrategiaSen
   return (
     <section className="min-w-0" aria-label="Plano de teste do agente">
       <div className="flex min-w-0 flex-wrap items-center">
-        <p className="mb-1 mr-2 flex items-center text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1 mr-2 flex items-center text-[12px] font-semibold text-muted-foreground">
           <FlaskConical className="mr-1 h-3.5 w-3.5 text-primary" /> Plano de teste
         </p>
         {mensagemId && <BotaoDoPlanoDoAgente mensagemId={mensagemId} onPlanoPronto={onPlanoPronto} className="mb-1 ml-auto" />}
       </div>
       <dl className="min-w-0 space-y-0.5 text-[12px] leading-snug">
         {linhas.map(([r, v]) => (
-          <div key={r} className="flex min-w-0 flex-col sm:flex-row">
-            <dt className="shrink-0 text-muted-foreground sm:mr-2 sm:w-36">{r}</dt>
+          <div key={r} className="min-w-0">
+            <dt className="text-muted-foreground">{r}</dt>
             <dd className="min-w-0 [overflow-wrap:anywhere]">{v}</dd>
           </div>
         ))}
@@ -189,7 +197,7 @@ export function EstrategiaNaTela({
           </ul>
         )}
         {temGrupos && (
-          <div className="grid min-w-0 grid-cols-1 gap-3 pt-1 md:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 pt-1">
             <Grupo titulo="Escalar" tom="text-success" itens={e.escalar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: [x.porque, x.como].filter(Boolean).join(" ") }))} />
             <Grupo titulo="Manter" tom="text-foreground" itens={e.manter.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
             <Grupo titulo="Cortar" tom="text-destructive" itens={e.cortar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
@@ -220,7 +228,7 @@ export function EstrategiaNaTela({
           <div className="mt-2 min-w-0 space-y-3">
             {(re.porque || re.campanhas.length > 0) && (
               <div className="min-w-0">
-                <p className="text-[10.5px] font-semibold uppercase tracking-wider text-primary">Reestruturação recomendada</p>
+                <p className="text-[12px] font-semibold text-primary">Reestruturação recomendada</p>
                 <p className="mt-1 text-[12px] leading-snug">
                   {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
                   {re.evento_otimizacao && <span className="text-muted-foreground">Otimizar para {re.evento_otimizacao}. </span>}
@@ -255,7 +263,7 @@ export function EstrategiaNaTela({
             {e.proximos_criativos.length > 0 && (
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center">
-                  <p className="mb-1 mr-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Próximos criativos ({e.proximos_criativos.length})</p>
+                  <p className="mb-1 mr-2 text-[12px] font-semibold text-muted-foreground">Próximos criativos ({e.proximos_criativos.length})</p>
                   {onCriarPlano && (
                     <span className="mb-1 ml-auto">
                       <BotaoComCusto
@@ -332,7 +340,7 @@ function Esqueleto() {
       <div className="ml-auto h-7 w-2/5 animate-pulse rounded-2xl bg-muted" />
       <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
       <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
-      <div className="h-16 w-full animate-pulse rounded-xl bg-muted/70" />
+      <div className="h-16 w-full animate-pulse rounded-lg bg-muted/70" />
     </div>
   );
 }
@@ -356,11 +364,13 @@ export default function AgenteSenior({
   onCriarPlano?: (p: PedidoDePlano) => void;
   /** Plano de teste criado já preenchido (abre no Plano de teste). */
   onPlanoPronto?: (planoId: string) => void;
+  /** Na lateral da área de trabalho ocupa a coluna; solto na página, quem usa dá a altura. */
   className?: string;
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [texto, setTexto] = useState("");
+  // Rascunho lembrado por cliente (sair e voltar mantém o que foi escrito).
+  const [texto, setTexto] = useEstadoDaTela(`mesa-ads:agente-senior:rascunho:${clientId}`, "");
   const [pesquisar, setPesquisar] = useState(true);
   const [agir, setAgir] = useState(lerModoAgir);
   const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
@@ -440,101 +450,107 @@ export default function AgenteSenior({
     );
   };
 
+  // Casca fixa de agente (src/components/sistema/PainelDoAgente.tsx): cabeçalho e
+  // campo sempre à vista; só a conversa rola, por dentro. Na aba Conta é a lateral
+  // da área de trabalho; no Plano de teste abre no lugar, com altura própria.
   return (
-    <section className={`flex min-w-0 flex-col rounded-xl border border-border bg-card ${className}`} aria-label="Agente sênior de tráfego">
-      <div className="flex min-w-0 items-center px-4 pb-2 pt-3">
-        <Briefcase className="mr-2 h-4 w-4 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] font-semibold">Agente sênior de tráfego</span>
-          <span className="block text-[11.5px] text-muted-foreground">Lê a conta, recomenda e prepara as ações. Nada muda sem você confirmar.</span>
-        </span>
-      </div>
-
-      <div ref={listaRef} className="min-w-0 space-y-4 border-t border-border px-4 py-3 sm:max-h-[640px] sm:overflow-y-auto sm:overscroll-contain" aria-live="polite" aria-label="Conversa com o agente sênior">
-        {conversa.isLoading && <Esqueleto />}
-        {conversa.isError && <AvisoDeErro erro={conversa.error} />}
-        {conversa.data && mensagens.length === 0 && !envio && (
-          <p className="py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
-            Peça o que fazer com a conta. Ele mostra o que leu, o que recomenda e as ações prontas para confirmar.
-          </p>
-        )}
-        {antigas.length > 0 && (
-          <div className="min-w-0">
-            <button type="button" className="flex items-center text-[11.5px] font-medium text-muted-foreground hover:text-foreground" onClick={() => setHistoricoAberto(!historicoAberto)} aria-expanded={historicoAberto}>
-              <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${historicoAberto ? "rotate-180" : ""}`} />
-              {historicoAberto ? "Esconder conversas anteriores" : `Conversas anteriores (${antigas.filter((m) => m.papel === "usuario").length || antigas.length})`}
-            </button>
-            {historicoAberto && <div className="mt-3 min-w-0 space-y-4 opacity-90">{antigas.map(mostrar)}</div>}
+    <PainelDoAgente
+      className={className}
+      titulo="Agente sênior de tráfego"
+      descricao="Nada muda sem você confirmar"
+      icone={<Briefcase className="h-4 w-4" />}
+      acoes={
+        <AjudaRecolhida rotulo="Como o agente sênior funciona">
+          Lê a conta, a evolução, os criativos e o contexto do cliente, pesquisa o nicho quando você deixa e devolve o que viu, o que recomenda, as ações prontas para confirmar e o plano de teste. Uma chamada por mensagem, com o custo à vista.
+        </AjudaRecolhida>
+      }
+      refDasMensagens={listaRef}
+      rotuloDasMensagens="Conversa com o agente sênior"
+      avisos={aviso ? <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{aviso}</p> : null}
+      compositor={
+        <>
+          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
+            {ATALHOS.map((a) => (
+              <button
+                key={a.rotulo}
+                type="button"
+                onClick={() => setTexto(a.texto)}
+                title={a.texto}
+                className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", foco)}
+              >
+                {a.rotulo}
+              </button>
+            ))}
           </div>
-        )}
-        {recentes.map(mostrar)}
-        {envio && (
-          <div className="min-w-0 space-y-3">
-            {envio.mensagem && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
-            <FalaDoAgente>
-              <div className="space-y-2">
-                {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
-                <Andamento desde={envio.desde} pesquisar={pesquisar} />
-              </div>
-            </FalaDoAgente>
+          <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+            <Textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && podeEnviar) {
+                  e.preventDefault();
+                  const b = botaoRef.current ? botaoRef.current.querySelector("button") : null;
+                  if (b) b.click();
+                }
+              }}
+              rows={2}
+              aria-label="Mensagem ao agente sênior"
+              placeholder="Ex.: pausa o que gasta sem conversa e sobe a verba do vencedor"
+              className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
+            <div className="mt-1 flex min-w-0 flex-wrap items-center">
+              <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta em até 2 frases, com as ações prontas para confirmar">
+                <input type="checkbox" className="mr-1.5" checked={agir} onChange={(e) => mudarAgir(e.target.checked)} />
+                Direto às ações
+              </label>
+              <label className="mb-1 mr-2 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Pesquisar na web e na Biblioteca de Anúncios">
+                <input type="checkbox" className="mr-1.5" checked={pesquisar} onChange={(e) => setPesquisar(e.target.checked)} />
+                Pesquisar na web e na Biblioteca de Anúncios
+              </label>
+              <span ref={botaoRef} className="mb-1 ml-auto shrink-0">
+                <BotaoComCusto
+                  rotulo="Enviar"
+                  titulo="Mensagem ao agente sênior"
+                  descricao={`Uma chamada do agente sênior com a conta, a evolução, os criativos e o contexto do cliente${pesquisar ? ", com pesquisa web" : ""}. O Jev identifica o nicho (centavos). As ações que ele propuser só acontecem quando você confirmar.`}
+                  partes={() => partesDoAgenteSenior(catalogo, pesquisar)}
+                  executar={enviar}
+                  disabled={!podeEnviar}
+                  className="h-8"
+                />
+              </span>
+            </div>
           </div>
-        )}
-      </div>
-
-      <div className="space-y-2 border-t border-border px-3 pb-3 pt-2">
-        {aviso && <p className="text-[11px] text-muted-foreground">{aviso}</p>}
-        <div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
-          {ATALHOS.map((a) => (
-            <button
-              key={a.rotulo}
-              type="button"
-              onClick={() => setTexto(a.texto)}
-              title={a.texto}
-              className="mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-            >
-              {a.rotulo}
-            </button>
-          ))}
+        </>
+      }
+    >
+      {conversa.isLoading && <Esqueleto />}
+      {conversa.isError && <AvisoDeErro erro={conversa.error} />}
+      {conversa.data && mensagens.length === 0 && !envio && (
+        <p className="py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+          Peça o que fazer com a conta. Ele mostra o que leu, o que recomenda e as ações prontas para confirmar.
+        </p>
+      )}
+      {antigas.length > 0 && (
+        <div className="min-w-0">
+          <button type="button" className={juntar("flex items-center rounded text-[11.5px] font-medium text-muted-foreground hover:text-foreground", foco)} onClick={() => setHistoricoAberto(!historicoAberto)} aria-expanded={historicoAberto}>
+            <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${historicoAberto ? "rotate-180" : ""}`} />
+            {historicoAberto ? "Esconder conversas anteriores" : `Conversas anteriores (${antigas.filter((m) => m.papel === "usuario").length || antigas.length})`}
+          </button>
+          {historicoAberto && <div className="mt-3 min-w-0 space-y-4 opacity-90">{antigas.map(mostrar)}</div>}
         </div>
-        <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
-          <Textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && podeEnviar) {
-                e.preventDefault();
-                const b = botaoRef.current ? botaoRef.current.querySelector("button") : null;
-                if (b) b.click();
-              }
-            }}
-            rows={2}
-            aria-label="Mensagem ao agente sênior"
-            placeholder="Ex.: pausa o que gasta sem conversa e sobe a verba do vencedor"
-            className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-          <div className="mt-1 flex min-w-0 flex-wrap items-center">
-            <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta em até 2 frases, com as ações prontas para confirmar">
-              <input type="checkbox" className="mr-1.5" checked={agir} onChange={(e) => mudarAgir(e.target.checked)} />
-              Direto às ações
-            </label>
-            <label className="mb-1 mr-2 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground">
-              <input type="checkbox" className="mr-1.5" checked={pesquisar} onChange={(e) => setPesquisar(e.target.checked)} />
-              Pesquisar na web e na Biblioteca de Anúncios
-            </label>
-            <span ref={botaoRef} className="mb-1 ml-auto shrink-0">
-              <BotaoComCusto
-                rotulo="Enviar"
-                titulo="Mensagem ao agente sênior"
-                descricao={`Uma chamada do agente sênior com a conta, a evolução, os criativos e o contexto do cliente${pesquisar ? ", com pesquisa web" : ""}. O Jev identifica o nicho (centavos). As ações que ele propuser só acontecem quando você confirmar.`}
-                partes={() => partesDoAgenteSenior(catalogo, pesquisar)}
-                executar={enviar}
-                disabled={!podeEnviar}
-                className="h-8"
-              />
-            </span>
-          </div>
+      )}
+      {recentes.map(mostrar)}
+      {envio && (
+        <div className="min-w-0 space-y-3">
+          {envio.mensagem && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
+          <FalaDoAgente>
+            <div className="space-y-2">
+              {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
+              <Andamento desde={envio.desde} pesquisar={pesquisar} />
+            </div>
+          </FalaDoAgente>
         </div>
-      </div>
-    </section>
+      )}
+    </PainelDoAgente>
   );
 }

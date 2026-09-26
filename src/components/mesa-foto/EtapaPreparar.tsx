@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Crop, Images, Maximize2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
@@ -15,6 +13,9 @@ import AreasNaFoto from "./AreasNaFoto";
 import { Cartao, MiniaturaDaFoto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorDeGuia from "./SeletorDeGuia";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
+import { campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { BotaoTirarFundo } from "./EtapaAcervo";
 import {
   acrescentarFotos,
@@ -38,6 +39,10 @@ import {
  * depois da geração (máscara no servidor). Antes e depois lado a lado. A
  * derivada nasce sem aprovação: "Aprovar esta foto" (acervo_decidir) libera o
  * envio para a aprovação do cliente.
+ *
+ * 26/09 (sistema de design): blocos sem caixa, explicação no "?", campos com
+ * rótulo em cima e o modo, o cenário e o ajuste fino guardados por cliente
+ * (sair e voltar mantém o rascunho). Duas colunas só a partir de 1280 px.
  */
 
 type Vista = "lado" | "antes" | "depois";
@@ -53,11 +58,11 @@ export default function EtapaPreparar() {
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const [fotoId, setFotoId] = useState<string | null>(imagemId);
   const [escolhendo, setEscolhendo] = useState(false);
-  const [modo, setModo] = useState<ModoDePreparo>("limpar");
+  const [modo, setModo] = useEstadoDaTela<ModoDePreparo>(`mesa-foto:preparar:modo:${clientId}`, "limpar", { validar: (v) => MODOS_DE_PREPARO.some((m) => m.valor === v) });
   const [areas, setAreas] = useState<Area[]>([]);
   const [marcando, setMarcando] = useState(false);
-  const [cenario, setCenario] = useState("");
-  const [instrucao, setInstrucao] = useState("");
+  const [cenario, setCenario] = useEstadoDaTela(`mesa-foto:preparar:cenario:${clientId}`, "");
+  const [instrucao, setInstrucao] = useEstadoDaTela(`mesa-foto:preparar:instrucao:${clientId}`, "");
   const [guia, setGuia] = useState<Guia>({ modo: "nenhum" });
   const [vista, setVista] = useState<Vista>("lado");
   const [depoisId, setDepoisId] = useState<string | null>(null);
@@ -90,7 +95,7 @@ export default function EtapaPreparar() {
 
   if (!foto) {
     return (
-      <div className="min-w-0 space-y-4 pb-24">
+      <div className="min-w-0 space-y-4">
         {fotos.isSuccess && todas.length === 0 ? (
           <Vazio
             titulo="Nenhuma foto no acervo"
@@ -144,7 +149,7 @@ export default function EtapaPreparar() {
           </div>
         </>
       ) : (
-        <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-[12px] text-muted-foreground">
+        <div className="flex min-h-[200px] items-center justify-center rounded-md border border-dashed border-border p-4 text-center text-[12px] text-muted-foreground">
           A versão tratada aparece aqui. O original não muda.
         </div>
       )}
@@ -152,14 +157,14 @@ export default function EtapaPreparar() {
   );
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
+    <div className="min-w-0 space-y-4">
       {escolhendo && <SeletorDeFotos fotos={todas} titulo="Trocar a foto" multiplas={false} filtroInicial="original" onUsar={(ids) => ids[0] && escolherFoto(ids[0])} onFechar={() => setEscolhendo(false)} />}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
         <Cartao
-          titulo={<span className="normal-case tracking-normal text-foreground">{foto.nome}</span>}
+          titulo={<span className="block truncate">{foto.nome}</span>}
           acao={
             <>
-              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5">
+              <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
                 {(
                   [
                     { v: "lado", r: "Lado a lado" },
@@ -172,7 +177,7 @@ export default function EtapaPreparar() {
                     type="button"
                     aria-pressed={vista === o.v}
                     onClick={() => setVista(o.v)}
-                    className={`rounded-md px-2 py-1 text-[11.5px] ${vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}
+                    className={juntar("rounded px-2 py-1 text-[11.5px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}
                   >
                     {o.r}
                   </button>
@@ -205,12 +210,12 @@ export default function EtapaPreparar() {
             >
               <Crop className="mr-1.5 h-3.5 w-3.5" /> {marcando ? "Pronto" : "Marcar áreas protegidas"}
             </Button>
-            <span className="mb-1.5 text-[11.5px] text-muted-foreground">
+            <span className="mb-1.5 min-w-0 text-[12px] text-muted-foreground">
               {areas.length
                 ? `${areas.length} ${areas.length === 1 ? "área protegida" : "áreas protegidas"}: voltam com os pixels originais.`
                 : modo === "fundo_branco" || modo === "fundo_transparente"
-                  ? "Sem área marcada: o recorte devolve o assunto com os pixels originais."
-                  : "Sem área marcada: o gerador trata a foto inteira. Marque o que não pode mudar."}
+                  ? "Sem área: o recorte devolve o assunto original."
+                  : "Sem área: o gerador trata a foto inteira."}
             </span>
             {areas.length > 0 && (
               <button type="button" className="mb-1.5 ml-2 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAreas([])}>
@@ -220,7 +225,7 @@ export default function EtapaPreparar() {
           </div>
           {derivadas.length > 0 && (
             <div className="mt-3 border-t border-border pt-3">
-              <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Versões feitas a partir desta foto</p>
+              <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Versões feitas a partir desta foto</p>
               <div className="flex min-w-0 flex-wrap">
                 {derivadas.slice(0, 12).map((d) => (
                   <button
@@ -229,7 +234,7 @@ export default function EtapaPreparar() {
                     onClick={() => setDepoisId(d.id)}
                     aria-pressed={depois ? depois.id === d.id : false}
                     title={d.nome}
-                    className={`mb-1.5 mr-1.5 w-16 rounded-lg border p-0.5 ${depois && depois.id === d.id ? "border-primary" : "border-transparent hover:border-border"}`}
+                    className={`mb-1.5 mr-1.5 w-16 rounded-md border p-0.5 ${depois && depois.id === d.id ? "border-primary" : "border-transparent hover:border-border"}`}
                   >
                     <MiniaturaDaFoto foto={d} />
                   </button>
@@ -239,9 +244,10 @@ export default function EtapaPreparar() {
           )}
         </Cartao>
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-5">
           <Cartao
             titulo="O que fazer com a foto"
+            dica="Cada modo diz o que muda e o que fica. As áreas protegidas voltam com os pixels originais."
             acao={podeTirarFundo(foto) ? <BotaoTirarFundo foto={foto} onPronta={(id) => setDepoisId(id)} /> : undefined}
           >
             <div role="radiogroup" aria-label="Modo de preparo" className="space-y-1.5">
@@ -252,7 +258,7 @@ export default function EtapaPreparar() {
                   role="radio"
                   aria-checked={modo === m.valor}
                   onClick={() => setModo(m.valor)}
-                  className={`block w-full min-w-0 rounded-lg border px-3 py-2 text-left transition-colors ${modo === m.valor ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                  className={juntar("block w-full min-w-0 rounded-md border px-3 py-2 text-left transition-colors", foco, modo === m.valor ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}
                 >
                   <span className="block text-[12.5px] font-semibold">{m.rotulo}</span>
                   {modo === m.valor && (
@@ -271,33 +277,31 @@ export default function EtapaPreparar() {
               ))}
             </div>
             {modo === "cenario" && (
-              <label className="mt-3 block">
-                <span className="mb-1 block text-[11.5px] text-muted-foreground">Cenário</span>
-                <Input value={cenario} onChange={(e) => setCenario(e.target.value)} placeholder="Ex.: bancada de mármore claro, luz de janela" className="h-9" aria-label="Cenário" />
-              </label>
+              <CampoDeFormulario rotulo="Cenário" obrigatorio className="mt-3" erro={faltaCenario ? "Descreva superfície, fundo, props e luz." : undefined}>
+                <input value={cenario} onChange={(e) => setCenario(e.target.value)} placeholder="Ex.: bancada de mármore claro, luz de janela" className={campo} aria-label="Cenário" />
+              </CampoDeFormulario>
             )}
-            <label className="mt-3 block">
-              <span className="mb-1 block text-[11.5px] text-muted-foreground">Ajuste fino (opcional)</span>
-              <div className="relative">
-                <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={2} placeholder="Ex.: tirar o reflexo da janela na tampa" className="pr-10 text-[12.5px]" aria-label="Ajuste fino" />
-                <Ditado valor={instrucao} onChange={setInstrucao} className="absolute bottom-1.5 right-1.5" />
-              </div>
-            </label>
+            <div className="relative mt-3 min-w-0">
+              <CampoDeFormulario rotulo="Ajuste fino (opcional)">
+                <textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={2} placeholder="Ex.: tirar o reflexo da janela na tampa" className={juntar(campoTexto, "min-h-[64px] pr-10")} aria-label="Ajuste fino" />
+              </CampoDeFormulario>
+              <Ditado valor={instrucao} onChange={setInstrucao} className="absolute bottom-1.5 right-1.5" />
+            </div>
           </Cartao>
 
           <Cartao titulo="Guia">
             <SeletorDeGuia guia={guia} onMudar={setGuia} />
           </Cartao>
 
-          <Cartao titulo="Gerar a versão tratada">
+          <Cartao titulo="Gerar a versão tratada" dica="Gera uma derivada nova no acervo; o original não muda. Se o motor não fizer o que o modo exige, a Mesa avisa e não troca por um modo pior. Nada escurece a foto para dar destaque.">
             <div className="grid min-w-0 grid-cols-2 gap-2">
               <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloEscolhido} onChange={setModeloId} qualidade={qualidade} />
               <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
             </div>
-            {faltaCenario && <p className="mt-2 text-[11.5px] text-warning">Descreva o cenário (superfície, fundo, props, luz). O guia completa, não substitui.</p>}
+            {faltaCenario && <p className="mt-2 text-[12px] text-warning">Falta o cenário. O guia completa, não substitui.</p>}
             {modo === "cenario" && areas.length === 0 && (
-              <p className="mt-2 text-[11.5px] text-muted-foreground">
-                Para trocar o cenário preservando o assunto, marque a área do assunto ou use uma versão já sem fundo desta foto.
+              <p className="mt-2 text-[12px] text-muted-foreground" title="Para trocar o cenário preservando o assunto, marque a área do assunto ou use uma versão já sem fundo desta foto.">
+                Marque a área do assunto para preservá-lo.
               </p>
             )}
             <BotaoComCusto
@@ -329,9 +333,6 @@ export default function EtapaPreparar() {
                 if (vista === "antes") setVista("lado");
               }}
             />
-            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-              Se o motor não fizer o que o modo exige, a Mesa avisa e não troca por um modo pior. Nada escurece a foto para dar destaque.
-            </p>
           </Cartao>
         </div>
       </div>

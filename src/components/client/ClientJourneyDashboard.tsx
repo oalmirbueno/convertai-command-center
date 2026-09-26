@@ -8,8 +8,8 @@ import {
   ArrowUpRight,
   Briefcase,
   CalendarDays,
-  CalendarCheck,
   CheckCircle2,
+  ChevronRight,
   FileCheck,
   FileText,
   FolderOpen,
@@ -18,10 +18,27 @@ import {
   Repeat,
   Send,
   ShieldCheck,
-  Target,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AjudaRecolhida,
+  BarraDeAcoes,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  Painel,
+  Secao,
+  botao,
+  campoTexto,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 import CircularProgress from "./CircularProgress";
+import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { FadeUp, StaggerContainer } from "./motion";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { estruturaDoRitual, resumoDoRitual } from "@/lib/ritualTexto";
@@ -64,6 +81,32 @@ const isSameMonth = (value: string | null | undefined, ref: Date) => {
   return d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 };
 
+const dinheiro = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+const dataEHora = (iso: string) =>
+  `${new Date(iso).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })} às ${new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+
+/** Atalhos do portal: sempre a um toque, numa linha discreta (sem cartão por atalho). */
+const ATALHOS = [
+  { label: "Projetos", icon: Briefcase, to: "/projetos" },
+  { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
+  { label: "Calendário", icon: CalendarDays, to: "/calendario" },
+  { label: "Relatórios", icon: FileText, to: "/relatorios" },
+  { label: "Cofre", icon: FolderOpen, to: "/cofre" },
+  { label: "Pedidos", icon: Inbox, to: "/pedidos" },
+];
+
+// Etapas genericas de growth: valem para qualquer servico (social, trafego,
+// site, avulso, hibrido). A etapa e lida dos dados reais.
+const STAGES = ["Planejamento", "Produção", "Sua aprovação", "Entrega", "Acompanhamento"];
+const STAGE_HINTS = [
+  "Estamos organizando a base do trabalho.",
+  "As entregas estão sendo produzidas agora.",
+  "Tem material esperando o seu OK.",
+  "Entregas liberadas e trabalho rodando.",
+  "No ar e medindo resultado para otimizar.",
+];
+
 export default function ClientJourneyDashboard({
   clientId,
   clientName,
@@ -72,10 +115,13 @@ export default function ClientJourneyDashboard({
 }: Props) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [pulseScore, setPulseScore] = useState<number | null>(null);
-  const [pulseComment, setPulseComment] = useState("");
+  // Avaliação em andamento: sair e voltar não apaga a nota nem o comentário.
+  const [pulseScore, setPulseScore] = useEstadoDaTela<number | null>(`inicio:pulso:nota:${clientId}`, null, {
+    validar: (v) => v === null || (typeof v === "number" && v >= 1 && v <= 5),
+  });
+  const [pulseComment, setPulseComment] = useEstadoDaTela<string>(`inicio:pulso:comentario:${clientId}`, "");
   const [pulseSending, setPulseSending] = useState(false);
-  const { loadingProjects, data } = useClientDashboardData(clientId);
+  const { loadingProjects, errorProjects, refetchProjects, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
     doneProjects,
@@ -138,7 +184,7 @@ export default function ClientJourneyDashboard({
         "pulse",
         "/central"
       );
-      toast.success("Obrigado pela avaliação! Ela nos ajuda a melhorar sempre.");
+      toast.success("Obrigado pela avaliação. Ela nos ajuda a melhorar sempre.");
       queryClient.invalidateQueries({ queryKey: ["client-profile-lite", clientId] });
       setPulseScore(null);
       setPulseComment("");
@@ -178,56 +224,68 @@ export default function ClientJourneyDashboard({
     .filter((m: any) => m.status !== "completed" && m.target_date)
     .slice(0, 4);
 
+  const hasDeliveries = deliveredFiles.length > 0;
+  const currentStage =
+    published.length > 0 || latestReport ? 4 :
+    hasDeliveries || scheduled.length > 0 ? 3 :
+    pendingFiles.length > 0 ? 2 :
+    activeProjects.length > 0 ? 1 : 0;
+
+  const hojeTexto = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const hoje = hojeTexto.charAt(0).toUpperCase() + hojeTexto.slice(1);
+
   if (loadingProjects) {
+    return <Carregando forma="aba" rotulo="Carregando o seu painel" />;
+  }
+
+  if (errorProjects) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <Skeleton className="h-36 w-full rounded-xl" />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-64 w-full rounded-xl" />
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina titulo={`Bem-vindo de volta, ${firstName}`} descricao={hoje} />
+        <EstadoDeErro
+          titulo="Não foi possível carregar o seu painel."
+          acao={<button type="button" className={botao.secundario} onClick={() => refetchProjects()}>Tentar de novo</button>}
+        />
       </div>
     );
   }
 
+  const temProjetos = activeProjects.length > 0 || doneProjects.length > 0;
+  const projetosComPrazo = [...closedProjects, ...doneProjects];
+
   return (
-    <StaggerContainer className="space-y-6">
-      {/* 1 · Boas-vindas e contexto */}
+    <StaggerContainer className="min-w-0 space-y-6">
+      {/* 1 · Boas-vindas: título curto, data como estado, explicação no "?" */}
       <FadeUp>
-        <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 sm:p-8">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
-          <div className="relative z-10 flex items-start justify-between gap-4">
-            <div>
-              <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-                <CalendarDays className="h-3 w-3" />
-                {new Date().toLocaleDateString("pt-BR", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                })}
-              </p>
-              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-                Bem-vindo de volta, {firstName}
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                Acompanhe suas frentes, entregas e publicações liberadas pela Aceleriq.
-              </p>
-              {isImpersonation && (
-                <p className="mt-3 text-xs text-sky-600">
-                  Visualização administrativa em modo somente leitura.
-                </p>
-              )}
-            </div>
-            {closedProjects.length > 0 && (
-              <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
-                <CircularProgress progress={closedAvgProgress} size={80} strokeWidth={5} />
-                <span className="text-[10px] text-muted-foreground">Projetos com prazo</span>
+        <CabecalhoDePagina
+          titulo={`Bem-vindo de volta, ${firstName}`}
+          descricao={`${hoje}${isImpersonation ? " · somente leitura" : ""}`}
+          ajuda="Acompanhe suas frentes, entregas e publicações liberadas pela Aceleriq. Os números se atualizam sozinhos."
+          acoes={
+            closedProjects.length > 0 ? (
+              <div className="hidden items-center sm:flex" title="Média dos projetos com prazo">
+                <CircularProgress progress={closedAvgProgress} size={44} strokeWidth={4} />
+                <span className={juntar(texto.auxiliar, "ml-2 leading-4")}>Projetos<br />com prazo</span>
               </div>
-            )}
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
+        <nav aria-label="Atalhos" className="-ml-2 mt-2 grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:gap-0 sm:[&>*+*]:ml-1">
+          {ATALHOS.map((atalho) => (
+            <button
+              key={atalho.to}
+              type="button"
+              onClick={() => navigate(atalho.to)}
+              className={juntar(
+                "flex h-10 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:justify-start",
+                foco,
+              )}
+            >
+              <atalho.icon className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{atalho.label}</span>
+            </button>
+          ))}
+        </nav>
       </FadeUp>
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
@@ -236,20 +294,18 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className="flex w-full items-center gap-4 rounded-xl border-2 border-red-500/50 bg-red-500/10 p-5 text-left transition-colors hover:border-red-500/70"
+            className={juntar("flex w-full min-w-0 items-center rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-left transition-colors hover:border-red-500/70", foco)}
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/20">
-              <CalendarDays className="h-6 w-6 text-red-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-foreground">
-                Pagamento em atraso: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(overdueAmount)}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Regularize para manter as entregas e publicações sem pausa. Toque para ver os detalhes.
-              </p>
-            </div>
-            <ArrowUpRight className="h-5 w-5 shrink-0 text-red-500" />
+            <CalendarDays className="mr-3 h-5 w-5 shrink-0 text-red-500" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] font-semibold leading-5 text-foreground">
+                Pagamento em atraso: {dinheiro(overdueAmount)}
+              </span>
+              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                Regularize para manter as entregas sem pausa. Toque para ver os detalhes.
+              </span>
+            </span>
+            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
           </button>
         </FadeUp>
       )}
@@ -259,658 +315,531 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className="flex w-full items-center gap-4 rounded-xl border-2 border-sky-500/40 bg-sky-500/10 p-5 text-left transition-colors hover:border-sky-500/60"
+            className={juntar("flex w-full min-w-0 items-center rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-left transition-colors hover:border-sky-500/60", foco)}
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/20">
-              <Repeat className="h-6 w-6 text-sky-500" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-foreground">
+            <Repeat className="mr-3 h-5 w-5 shrink-0 text-sky-500" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] font-semibold leading-5 text-foreground">
                 {renewalDays === 0
                   ? "Sua renovação vence hoje"
                   : `Sua renovação vence em ${renewalDays} dia${renewalDays === 1 ? "" : "s"}`}
-                {clientProfile?.plan_value ? ` · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(clientProfile.plan_value))}` : ""}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Garanta a continuidade dos resultados sem interrupção. Toque para ver os detalhes.
-              </p>
-            </div>
-            <ArrowUpRight className="h-5 w-5 shrink-0 text-sky-500" />
+                {clientProfile?.plan_value ? ` · ${dinheiro(Number(clientProfile.plan_value))}` : ""}
+              </span>
+              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                Garanta a continuidade dos resultados. Toque para ver os detalhes.
+              </span>
+            </span>
+            <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
           </button>
         </FadeUp>
       )}
 
-      {/* 3 · Ação necessária: o que precisa aprovar e quando será postado */}
+      {/* 3 · Ação necessária: o que precisa aprovar (o destaque da tela) */}
       {pendingFiles.length > 0 && (
         <FadeUp>
-          <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
-            <button
-              type="button"
-              onClick={() => navigate("/aprovacoes")}
-              className="flex w-full items-center gap-4 text-left"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15">
-                <FileCheck className="h-5 w-5 text-amber-500" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">
+          <section aria-label="Aprovações pendentes" className="min-w-0 rounded-lg border border-amber-500/40 bg-amber-500/[0.04]">
+            <div className="flex min-w-0 items-center px-4 py-3">
+              <FileCheck className="mr-3 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+              <div className="mr-3 flex min-w-0 flex-1 items-center">
+                <h2 className={juntar(texto.tituloSecao, "min-w-0 text-[14px]")}>
                   {pendingFiles.length === 1
                     ? "1 entrega aguarda a sua aprovação"
                     : `${pendingFiles.length} entregas aguardam a sua aprovação`}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                </h2>
+                <AjudaRecolhida className="ml-1.5">
                   Sua aprovação libera o agendamento da publicação. Aprovou, a Aceleriq programa na data planejada.
-                </p>
+                </AjudaRecolhida>
               </div>
-              <span className="shrink-0 rounded-full bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white">
-                Aprovar agora
-              </span>
-            </button>
-            <div className="mt-3 space-y-1.5 border-t border-amber-500/20 pt-3">
-              {pendingFiles.slice(0, 3).map((file: any) => (
-                <p key={file.id} className="truncate text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{file.file_name}</span>
-                  {file.project?.name ? ` · ${file.project.name}` : ""}
-                </p>
-              ))}
-              {pendingFiles.length > 3 && (
-                <p className="text-[11px] text-muted-foreground">e mais {pendingFiles.length - 3} na área de Aprovações</p>
-              )}
-            </div>
-          </div>
-        </FadeUp>
-      )}
-
-      {/* 3 · Métricas gerais */}
-      <FadeUp>
-        <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {[
-            {
-              label: "Frentes ativas",
-              value: activeProjects.length,
-              detail: doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída",
-              icon: Briefcase,
-              color: "text-primary",
-              bg: "bg-primary/10",
-            },
-            {
-              label: "Etapas concluídas",
-              value: completedMilestonesCount,
-              detail: `${totalMilestones} etapa(s) no total`,
-              icon: Target,
-              color: "text-sky-500",
-              bg: "bg-sky-500/10",
-            },
-            {
-              label: "Entregas liberadas",
-              value: totalFiles,
-              detail: approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões",
-              icon: PackageCheck,
-              color: "text-emerald-500",
-              bg: "bg-emerald-500/10",
-            },
-            {
-              label: "Aprovações pendentes",
-              value: pendingFiles.length,
-              detail: pendingFiles.length ? "Ação necessária" : "Nenhuma pendência",
-              icon: FileCheck,
-              color: "text-amber-500",
-              bg: "bg-amber-500/10",
-            },
-          ].map((metric) => (
-            <div key={metric.label} className="h-full flex flex-col rounded-xl border border-border bg-card p-4 sm:p-5">
-              <div className="mb-2 flex items-center justify-between">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${metric.bg}`}>
-                  <metric.icon className={`h-4 w-4 ${metric.color}`} />
-                </div>
-                <span className="text-2xl font-bold tabular-nums text-foreground">{metric.value}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">{metric.label}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground/70">{metric.detail}</p>
-            </div>
-          ))}
-        </div>
-      </FadeUp>
-
-      {/* Atalhos principais: sempre a um toque, nunca escondidos no rodape */}
-      <FadeUp>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {[
-            { label: "Projetos", icon: Briefcase, to: "/projetos" },
-            { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
-            { label: "Calendário", icon: CalendarDays, to: "/calendario" },
-            { label: "Relatórios", icon: FileText, to: "/relatorios" },
-            { label: "Cofre", icon: FolderOpen, to: "/cofre" },
-            { label: "Pedidos", icon: Inbox, to: "/pedidos" },
-          ].map((shortcut) => (
-            <button
-              key={shortcut.to}
-              type="button"
-              onClick={() => navigate(shortcut.to)}
-              className="flex min-h-[64px] touch-manipulation flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-2 py-3 text-[11px] text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground active:scale-[0.97]"
-            >
-              <shortcut.icon className="h-[18px] w-[18px]" />
-              {shortcut.label}
-            </button>
-          ))}
-        </div>
-      </FadeUp>
-
-      {/* 4 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
-      {hasContentFront && (
-        <FadeUp>
-          <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <CalendarCheck className="h-4 w-4 text-primary" />
-                Conteúdos deste ciclo
-              </h2>
               <button
                 type="button"
-                onClick={() => navigate("/calendario")}
-                className="flex items-center gap-1 text-xs font-medium text-primary transition-opacity hover:opacity-80"
+                onClick={() => navigate("/aprovacoes")}
+                className={juntar(botao.primario.replace("bg-primary text-primary-foreground hover:bg-primary/90", ""), "bg-amber-500 text-white hover:bg-amber-500/90")}
               >
-                Ver calendário completo
-                <ArrowUpRight className="h-3.5 w-3.5" />
+                Aprovar<span className="hidden sm:inline">&nbsp;agora</span>
               </button>
             </div>
-            <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                {
-                  label: "Aguardando aprovação",
-                  value: pendingFiles.length,
-                  tone: pendingFiles.length > 0 ? "text-amber-500" : "text-muted-foreground",
-                },
-                { label: "Programados", value: scheduled.length, tone: "text-sky-500" },
-                { label: "Publicados no mês", value: publishedThisMonth.length, tone: "text-emerald-500" },
-                { label: "Publicados no total", value: published.length, tone: "text-foreground" },
-              ].map((item) => (
-                <div key={item.label} className="rounded-xl border border-border/70 bg-secondary/30 p-3">
-                  <p className={`text-xl font-bold tabular-nums ${item.tone}`}>{item.value}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{item.label}</p>
-                </div>
+            <ul className="divide-y divide-amber-500/15 border-t border-amber-500/20">
+              {pendingFiles.slice(0, 3).map((file: any) => (
+                <li key={file.id} className={juntar(texto.auxiliar, "truncate px-4 py-2 leading-5")}>
+                  <span className="font-medium text-foreground">{file.file_name}</span>
+                  {file.project?.name ? ` · ${file.project.name}` : ""}
+                </li>
               ))}
-            </div>
-            {nextPublication && (
-              <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                <Send className="h-3.5 w-3.5 text-sky-500" />
-                Próxima publicação:
-                <span className="font-medium text-foreground">
-                  {new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", {
-                    weekday: "short",
-                    day: "2-digit",
-                    month: "short",
-                  })}
-                  {" às "}
-                  {new Date(nextPublication.scheduled_at).toLocaleTimeString("pt-BR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-                {nextPublication.platform && (
-                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">
-                    {platformLabel[nextPublication.platform] || nextPublication.platform}
-                  </span>
-                )}
-              </p>
-            )}
+              {pendingFiles.length > 3 && (
+                <li className={juntar(texto.auxiliar, "px-4 py-2")}>e mais {pendingFiles.length - 3} na área de Aprovações</li>
+              )}
+            </ul>
           </section>
         </FadeUp>
       )}
 
-      {/* Linha de etapas: em que ponto do processo o trabalho esta agora */}
+      {/* 4 · Números gerais: uma faixa só, sem um cartão por número */}
       <FadeUp>
-        {(() => {
-          // Etapas genericas de growth: valem para qualquer servico (social,
-          // trafego, site, avulso, hibrido). A etapa e lida dos dados reais.
-          const stages = ["Planejamento", "Produção", "Sua aprovação", "Entrega", "Acompanhamento"];
-          const hasDeliveries = deliveredFiles.length > 0;
-          const currentStage =
-            published.length > 0 || latestReport ? 4 :
-            hasDeliveries || scheduled.length > 0 ? 3 :
-            pendingFiles.length > 0 ? 2 :
-            activeProjects.length > 0 ? 1 : 0;
-          const stageHints = [
-            "Estamos organizando a base do trabalho.",
-            "As entregas estão sendo produzidas agora.",
-            "Tem material esperando o seu OK.",
-            "Entregas liberadas e trabalho rodando.",
-            "No ar e medindo resultado para otimizar.",
-          ];
-          return (
-            <div className="rounded-xl border border-border bg-card px-4 py-4 sm:px-6">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Etapa do processo
-              </p>
-              <ol className="mt-3 flex items-center gap-0" aria-label="Etapas do trabalho">
-                {stages.map((stage, index) => {
-                  const done = index < currentStage;
-                  const current = index === currentStage;
-                  return (
-                    <li key={stage} className="flex min-w-0 flex-1 items-center">
-                      <div className="flex min-w-0 flex-col items-center gap-1.5 text-center flex-1">
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${
-                            current
-                              ? "border-primary bg-primary text-primary-foreground shadow-[0_0_12px_hsl(var(--primary)/0.45)]"
-                              : done
-                                ? "border-primary/40 bg-primary/15 text-primary"
-                                : "border-border bg-secondary/40 text-muted-foreground"
-                          }`}
-                        >
-                          {done ? "✓" : index + 1}
-                        </span>
-                        <span className={`truncate text-[9px] leading-tight sm:text-[10px] ${current ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-                          {stage}
-                        </span>
-                      </div>
-                      {index < stages.length - 1 && (
-                        <span className={`mx-0.5 mb-4 h-px flex-1 ${done ? "bg-primary/50" : "bg-border"}`} aria-hidden="true" />
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-              <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                {stageHints[currentStage]}
-              </p>
-            </div>
-          );
-        })()}
+        <FaixaDeNumeros
+          rotulo="Resumo"
+          itens={[
+            {
+              rotulo: "Frentes ativas",
+              valor: activeProjects.length,
+              apoio: doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída",
+              corDoValor: "text-primary",
+            },
+            { rotulo: "Etapas concluídas", valor: completedMilestonesCount, apoio: `${totalMilestones} etapa(s) no total`, corDoValor: "text-sky-500" },
+            {
+              rotulo: "Entregas liberadas",
+              valor: totalFiles,
+              apoio: approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões",
+              corDoValor: "text-emerald-500",
+            },
+            {
+              rotulo: "Aprovações pendentes",
+              valor: pendingFiles.length,
+              apoio: pendingFiles.length ? "Ação necessária" : "Nenhuma pendência",
+              corDoValor: pendingFiles.length ? "text-amber-500" : "text-foreground",
+              para: pendingFiles.length ? "/aprovacoes" : undefined,
+            },
+          ]}
+        />
       </FadeUp>
 
-      {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
-      <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
+      {/* 5 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
+      {hasContentFront && (
+        <FadeUp>
+          <Secao
+            divisoria
+            titulo="Conteúdos do ciclo"
+            descricao={
+              nextPublication ? (
+                <span className="block truncate">
+                  Próxima publicação {dataEHora(nextPublication.scheduled_at)}
+                  {nextPublication.platform ? ` · ${platformLabel[nextPublication.platform] || nextPublication.platform}` : ""}
+                </span>
+              ) : undefined
+            }
+            acao={
+              <button type="button" onClick={() => navigate("/calendario")} className={botao.discreto} aria-label="Ver calendário completo">
+                <CalendarDays className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Calendário</span>
+              </button>
+            }
+          >
+            <FaixaDeNumeros
+              rotulo="Conteúdos do ciclo"
+              itens={[
+                {
+                  rotulo: "Aguardando aprovação",
+                  valor: pendingFiles.length,
+                  corDoValor: pendingFiles.length > 0 ? "text-amber-500" : "text-muted-foreground",
+                },
+                { rotulo: "Programados", valor: scheduled.length, corDoValor: "text-sky-500" },
+                { rotulo: "Publicados no mês", valor: publishedThisMonth.length, corDoValor: "text-emerald-500" },
+                { rotulo: "Publicados no total", valor: published.length },
+              ]}
+            />
+          </Secao>
+        </FadeUp>
+      )}
+
+      {/* 6 · Em que ponto do processo o trabalho está agora */}
+      <FadeUp>
+        <Secao divisoria titulo="Etapa do processo" descricao={`Etapa ${currentStage + 1} de ${STAGES.length}: ${STAGES[currentStage]}`}>
+          <ol className="flex min-w-0 items-start" aria-label="Etapas do trabalho">
+            {STAGES.map((stage, index) => {
+              const done = index < currentStage;
+              const current = index === currentStage;
+              return (
+                <li key={stage} className="flex min-w-0 flex-1 items-start" aria-current={current ? "step" : undefined}>
+                  <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+                    <span
+                      className={juntar(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+                        current
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : done
+                            ? "border-primary/40 bg-primary/15 text-primary"
+                            : "border-border bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {done ? <CheckCircle2 className="h-3.5 w-3.5" aria-label="Concluída" /> : index + 1}
+                    </span>
+                    {/* No celular os nomes não cabem sem cortar: a etapa atual vai na linha de cima. */}
+                    <span
+                      className={juntar(
+                        "mt-1.5 hidden max-w-full truncate px-0.5 text-[11px] leading-4 sm:block",
+                        current ? "font-medium text-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {stage}
+                    </span>
+                  </div>
+                  {index < STAGES.length - 1 && (
+                    <span className={juntar("mt-3.5 h-px w-4 shrink-0 sm:w-auto sm:flex-1", done ? "bg-primary/50" : "bg-border")} aria-hidden="true" />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          <p className={juntar(texto.auxiliar, "mt-2 text-center")}>{STAGE_HINTS[currentStage]}</p>
+        </Secao>
+      </FadeUp>
+
+      {/* 7 · O que estamos fazendo, onde estamos e o próximo passo */}
+      <FadeUp>
+        <Secao
+          divisoria
+          titulo="Onde estamos agora"
+          acao={
+            <button type="button" onClick={() => navigate("/onde-estamos")} className={botao.discreto} aria-label="Abrir Onde Estamos">
+              <span className="hidden sm:inline">Abrir</span>
+              <ArrowUpRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
+            </button>
+          }
+        >
           {!(latestReport && reportIsFresh) && (
             <button
               type="button"
               onClick={() => navigate("/onde-estamos")}
-              className="group w-full rounded-xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] to-transparent p-4 text-left transition-colors hover:border-primary/40"
+              className={juntar("group block w-full min-w-0 rounded-lg border border-primary/25 bg-primary/[0.04] px-4 py-3 text-left transition-colors hover:border-primary/40", foco)}
             >
-              <p className="text-[13px] font-medium leading-relaxed text-foreground">
+              <span className={juntar(texto.corpo, "block")}>
                 {deliveredFiles.length > 0
                   ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
                   : "Estamos organizando o seu ciclo de trabalho."}
                 {nextPublication?.scheduled_at &&
                   ` Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.`}
-              </p>
-              <p className="mt-2 flex items-center gap-1 text-[11px] text-primary">
+              </span>
+              <span className="mt-1.5 flex items-center text-[12px] text-primary">
                 Ver o retrato completo em tempo real
-                <ArrowUpRight className="h-3 w-3" />
-              </p>
+                <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
+              </span>
             </button>
           )}
-      {latestReport && reportIsFresh && (
-        <div>
-          <button
-            type="button"
-            onClick={() => navigate("/onde-estamos")}
-            className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-              <FileText className="h-3.5 w-3.5 text-primary" />
-              {latestReport.title}
-            </p>
-            {latestReport.highlights && (
-              <div className="mt-3">
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
-              </div>
-            )}
-            {latestReport.summary && (() => {
-              // Cartao de entrada: a abertura e o primeiro bloco inteiros, sem
-              // asteriscos e sem "..." no meio da frase; o resto fica em
-              // "Onde Estamos", que e para onde o cartao leva.
-              const e = estruturaDoRitual(latestReport.summary);
-              const resumo = e.blocos.length > 0 ? resumoDoRitual(latestReport.summary, 260) : String(latestReport.summary);
-              const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
-              return (
-                <div className="mt-3">
-                  <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
-                  <p className={`mt-1 text-[11px] leading-relaxed text-muted-foreground ${e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line"}`}>{resumo}</p>
-                  {demais.length > 0 && (
-                    <p className="mt-1 text-[10px] text-muted-foreground/80">Também nesta atualização: {demais.join(" · ")}.</p>
-                  )}
-                </div>
-              );
-            })()}
-            {latestReport.next_steps && (
-              <div className="mt-3">
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</p>
-              </div>
-            )}
-            <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
-              Abrir Onde Estamos (todas as atualizações)
-              <ArrowUpRight className="h-3 w-3" />
-            </p>
-          </button>
-        </div>
-      )}
-        </section>
-
-
-      {/* Projetos com prazo e Entregas recentes lado a lado, cada um com o
-          proprio scroll. Sem projetos com prazo, as Entregas ocupam a linha
-          inteira: era a celula vazia esticada que criava o buraco branco. */}
-      <div
-        className={
-          closedProjects.length > 0 || doneProjects.length > 0
-            ? "grid grid-cols-1 gap-6 lg:grid-cols-2"
-            : "grid grid-cols-1 gap-6"
-        }
-      >
-        {(closedProjects.length > 0 || doneProjects.length > 0) && (
-        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-xl">
-            {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
-            {(closedProjects.length > 0 || doneProjects.length > 0) && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-foreground">Projetos com prazo</h2>
-                  <span className="text-xs text-muted-foreground">
-                    {closedProjects.length} ativo(s)
-                    {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
+          {latestReport && reportIsFresh && (
+            <button
+              type="button"
+              onClick={() => navigate("/onde-estamos")}
+              className={juntar("group block w-full min-w-0 rounded-lg border border-primary/25 bg-primary/[0.04] text-left transition-colors hover:border-primary/40", foco)}
+            >
+              <span className="flex min-w-0 items-center border-b border-primary/15 px-4 py-2.5">
+                <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{latestReport.title}</span>
+                <ArrowUpRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+              </span>
+              <span className="block space-y-3 px-4 py-3">
+                {latestReport.highlights && (
+                  <span className="block">
+                    <span className={juntar(texto.rotulo, "block text-primary")}>O que estamos fazendo</span>
+                    <span className={juntar(texto.corpo, "mt-0.5 line-clamp-2 block")}>{latestReport.highlights}</span>
                   </span>
-                </div>
-                {[...closedProjects, ...doneProjects].map((project: any) => {
+                )}
+                {latestReport.summary && (() => {
+                  // Cartao de entrada: a abertura e o primeiro bloco inteiros, sem
+                  // asteriscos e sem "..." no meio da frase; o resto fica em
+                  // "Onde Estamos", que e para onde o cartao leva.
+                  const e = estruturaDoRitual(latestReport.summary);
+                  const resumo = e.blocos.length > 0 ? resumoDoRitual(latestReport.summary, 260) : String(latestReport.summary);
+                  const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
+                  return (
+                    <span className="block">
+                      <span className={juntar(texto.rotulo, "block text-primary")}>Resultado explicado</span>
+                      <span className={juntar(texto.corpo, "mt-0.5 block text-muted-foreground", e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line")}>{resumo}</span>
+                      {demais.length > 0 && (
+                        <span className={juntar(texto.auxiliar, "mt-1 block")}>Também nesta atualização: {demais.join(" · ")}.</span>
+                      )}
+                    </span>
+                  );
+                })()}
+                {latestReport.next_steps && (
+                  <span className="block">
+                    <span className={juntar(texto.rotulo, "block text-primary")}>Próxima etapa</span>
+                    <span className={juntar(texto.corpo, "mt-0.5 block text-muted-foreground")}>{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</span>
+                  </span>
+                )}
+              </span>
+            </button>
+          )}
+        </Secao>
+      </FadeUp>
+
+      {/* 8 · Projetos com prazo e Entregas recentes lado a lado. Sem projetos
+          com prazo, as Entregas ocupam a linha inteira (sem buraco ao lado).
+          Listas curtas (até 6): a página rola, nada de caixa com rolagem própria. */}
+      <FadeUp>
+        <div className={juntar("grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5", projetosComPrazo.length > 0 && "lg:grid-cols-2")}>
+          {projetosComPrazo.length > 0 && (
+            <Secao
+              titulo="Projetos com prazo"
+              descricao={`${closedProjects.length} ativo(s)${doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}`}
+            >
+              <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                {projetosComPrazo.map((project: any) => {
                   const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
                   const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
                   const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
                   return (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => onSelectProject(project)}
-                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
-                    >
-                      <div className="flex items-start gap-4">
-                        <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                                {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
-                              </p>
-                              <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
-                            </div>
-                            <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                              {completed}/{projectMilestones.length} etapas
-                            </span>
-                            {project.deadline && (
-                              <span>
-                                {deadlineDistance !== null && deadlineDistance < 0
-                                  ? "Prazo em atualização"
-                                  : `Previsão ${formatDateShort(project.deadline)}`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </section>
-            )}
-        </div>
-        )}
-        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-xl">
-            {/* 9 · Entregas recentes (histórico de valor) */}
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
-              <div className="rounded-xl border border-border bg-card p-4">
-                {deliveredFiles.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">
-                    Nenhuma entrega liberada ainda.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {deliveredFiles.slice(0, 6).map((file: any) => (
-                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {file.project?.name || "Entrega"} · v{file.version || 1}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <FadeUp className="lg:col-span-2">
-          <div className="space-y-6">
-            {/* 5 · Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
-            {recurringFronts.length > 0 && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Repeat className="h-4 w-4 text-primary" />
-                    Frentes recorrentes
-                  </h2>
-                  <span className="text-xs text-muted-foreground">Ciclo mensal</span>
-                </div>
-                {recurringFronts.map((project: any) => {
-                  const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
-                  const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
-                  return (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => onSelectProject(project)}
-                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                            {typeLabels[project.project_type] || "Recorrente"} · {projectStatusLabel[project.status] || project.status}
-                          </p>
-                          <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
-                        </div>
-                        <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <PackageCheck className="h-3 w-3 text-emerald-500" />
-                          {projectDeliveredMonth} entrega(s) liberada(s) neste mês
+                    <li key={project.id} className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => onSelectProject(project)}
+                        className={juntar("group flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                        aria-label={`Abrir o projeto ${project.name}`}
+                      >
+                        <span className="mr-3 shrink-0">
+                          <CircularProgress progress={project.progress || 0} size={44} strokeWidth={3} />
                         </span>
-                        {projectPending > 0 && (
-                          <span className="flex items-center gap-1 text-amber-500">
-                            <FileCheck className="h-3 w-3" />
-                            {projectPending} aguardando sua aprovação
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[14px] font-medium leading-5 text-foreground">{project.name}</span>
+                          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                            {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
+                            {" · "}
+                            {completed}/{projectMilestones.length} etapas
+                            {project.deadline &&
+                              (deadlineDistance !== null && deadlineDistance < 0
+                                ? " · Prazo em atualização"
+                                : ` · Previsão ${formatDateShort(project.deadline)}`)}
                           </span>
-                        )}
-                        {nextPublication && (
-                          <span className="flex items-center gap-1">
-                            <Send className="h-3 w-3 text-sky-500" />
-                            Próxima publicação {formatDateShort(nextPublication.scheduled_at)}
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                        </span>
+                        <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                      </button>
+                    </li>
                   );
                 })}
-              </section>
+              </ul>
+            </Secao>
+          )}
+          <Secao
+            titulo="Entregas recentes"
+            descricao={deliveredFiles.length > 0 ? `${deliveredFiles.length} liberada(s)` : undefined}
+            acao={
+              deliveredFiles.length > 0 ? (
+                <button type="button" onClick={() => navigate("/documentos")} className={botao.discreto} aria-label="Ver todas as entregas em Documentos">
+                  <span className="hidden sm:inline">Ver todas</span>
+                  <ChevronRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
+                </button>
+              ) : undefined
+            }
+          >
+            {deliveredFiles.length === 0 ? (
+              <EstadoVazio compacto titulo="Nenhuma entrega liberada ainda." />
+            ) : (
+              <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                {deliveredFiles.slice(0, 6).map((file: any) => (
+                  <li key={file.id} className="flex min-w-0 items-center px-4 py-2.5">
+                    <PackageCheck className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{file.file_name}</span>
+                      <span className={juntar(texto.auxiliar, "block truncate")}>
+                        {file.project?.name || "Entrega"} · v{file.version || 1}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Secao>
+        </div>
+      </FadeUp>
+
+      {/* 9 · Frentes recorrentes + diário à esquerda; agenda e próximas entregas à direita */}
+      <FadeUp>
+        <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
+          <div className="min-w-0 space-y-6 lg:col-span-2">
+            {/* Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
+            {recurringFronts.length > 0 && (
+              <Secao titulo="Frentes recorrentes" descricao="Ciclo mensal">
+                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                  {recurringFronts.map((project: any) => {
+                    const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
+                    const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
+                    return (
+                      <li key={project.id} className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => onSelectProject(project)}
+                          className={juntar("group flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                          aria-label={`Abrir a frente ${project.name}`}
+                        >
+                          <Repeat className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center">
+                              <span className="mr-2 min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{project.name}</span>
+                              <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
+                                {typeLabels[project.project_type] || "Recorrente"}
+                              </span>
+                            </span>
+                            <span className={juntar(texto.auxiliar, "mt-1 block")}>
+                              {projectStatusLabel[project.status] || project.status}
+                              {" · "}
+                              {projectDeliveredMonth} entrega(s) liberada(s) neste mês
+                              {projectPending > 0 && <span className="text-amber-500"> · {projectPending} aguardando sua aprovação</span>}
+                              {nextPublication && ` · Próxima publicação ${formatDateShort(nextPublication.scheduled_at)}`}
+                            </span>
+                          </span>
+                          <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Secao>
             )}
 
-            {clientId && (
-              <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-                <ProjectJournal clientId={clientId} canWrite={false} />
-              </div>
-            )}
+            {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
 
-            {activeProjects.length === 0 && doneProjects.length === 0 && (
-              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                Novos projetos aparecerão aqui quando forem iniciados.
-              </div>
+            {!temProjetos && (
+              <EstadoVazio
+                icone={<Briefcase className="h-5 w-5" />}
+                titulo="Nenhum projeto ainda"
+                descricao="Novos projetos aparecerão aqui quando forem iniciados."
+              />
             )}
           </div>
-        </FadeUp>
 
-        <FadeUp>
-          <div className="space-y-6">
-            {/* 7 · Quando será postado: agenda das publicações confirmadas */}
+          <div className="min-w-0 space-y-6">
+            {/* Quando será postado: agenda das publicações confirmadas */}
             {(scheduled.length > 0 || published.length > 0) && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-foreground">Quando será postado</h2>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/calendario")}
-                    className="text-[11px] font-medium text-primary hover:opacity-80"
-                  >
-                    Ver calendário
+              <Secao
+                titulo="Quando será postado"
+                acao={
+                  <button type="button" onClick={() => navigate("/calendario")} className={botao.discreto} aria-label="Ver calendário">
+                    <CalendarDays className="h-4 w-4" aria-hidden="true" />
                   </button>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-4">
+                }
+              >
+                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
                   {scheduled.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">
-                      Nenhuma publicação programada no momento.
-                    </p>
+                    <li className={juntar(texto.auxiliar, "px-4 py-3")}>Nenhuma publicação programada no momento.</li>
                   ) : (
-                    <div className="space-y-3">
-                      {scheduled
-                        .filter((p: any) => p.scheduled_at)
-                        .slice(0, 5)
-                        .map((publication: any) => (
-                          <div key={publication.id} className="flex items-center gap-3 border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
-                              <Send className="h-3.5 w-3.5 text-sky-500" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium text-foreground">
-                                {new Date(publication.scheduled_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
-                                {" às "}
-                                {new Date(publication.scheduled_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                              </p>
-                              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                {platformLabel[publication.platform] || publication.platform || "Rede social"} · Programado
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
+                    scheduled
+                      .filter((p: any) => p.scheduled_at)
+                      .slice(0, 5)
+                      .map((publication: any) => (
+                        <li key={publication.id} className="flex min-w-0 items-center px-4 py-2.5">
+                          <Send className="mr-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{dataEHora(publication.scheduled_at)}</span>
+                            <span className={juntar(texto.auxiliar, "block truncate")}>
+                              {platformLabel[publication.platform] || publication.platform || "Rede social"} · Programado
+                            </span>
+                          </span>
+                        </li>
+                      ))
                   )}
-                  {published.slice(0, 2).some((p: any) => p.permalink) && (
-                    <div className="mt-3 border-t border-border/60 pt-3 space-y-1.5">
-                      {published
-                        .filter((p: any) => p.permalink)
-                        .slice(0, 2)
-                        .map((publication: any) => (
-                          <a
-                            key={publication.id}
-                            href={publication.permalink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1.5 text-[11px] text-emerald-500 no-underline hover:opacity-80"
-                          >
-                            <CheckCircle2 className="h-3 w-3" />
-                            Publicado · ver no {platformLabel[publication.platform] || "perfil"}
-                            <ArrowUpRight className="h-3 w-3" />
-                          </a>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              </section>
+                  {published
+                    .filter((p: any) => p.permalink)
+                    .slice(0, 2)
+                    .map((publication: any) => (
+                      <li key={publication.id} className="min-w-0">
+                        <a
+                          href={publication.permalink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={juntar("flex min-w-0 items-center px-4 py-2.5 text-[12.5px] text-emerald-500 no-underline transition-colors hover:bg-muted/40", foco)}
+                        >
+                          <CheckCircle2 className="mr-3 h-4 w-4 shrink-0" aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate">Publicado · ver no {platformLabel[publication.platform] || "perfil"}</span>
+                          <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        </a>
+                      </li>
+                    ))}
+                </ul>
+              </Secao>
             )}
 
             {/* Próximas entregas (etapas com data) */}
             {upcomingMilestones.length > 0 && (
-              <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-foreground">Próximas entregas</h2>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <div className="space-y-3">
-                    {upcomingMilestones.map((milestone: any) => (
-                      <div key={milestone.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                        <p className="truncate text-xs font-medium text-foreground">{milestone.title}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {milestone.project?.name || "Projeto"} · previsão {formatDateShort(milestone.target_date)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
+              <Secao titulo="Próximas entregas">
+                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                  {upcomingMilestones.map((milestone: any) => (
+                    <li key={milestone.id} className="min-w-0 px-4 py-2.5">
+                      <p className="truncate text-[13px] font-medium leading-5 text-foreground">{milestone.title}</p>
+                      <p className={juntar(texto.auxiliar, "truncate")}>
+                        {milestone.project?.name || "Projeto"} · previsão {formatDateShort(milestone.target_date)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </Secao>
             )}
-
           </div>
-        </FadeUp>
-      </div>
+        </div>
+      </FadeUp>
 
-      {/* Pulso Aceleriq: avaliação rápida da experiência */}
+      {/* 10 · Pulso Aceleriq: avaliação rápida da experiência (formulário em destaque) */}
       {showPulse && (
         <FadeUp>
-          <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
-            <p className="text-sm font-semibold text-foreground">Como está sendo a experiência com a Aceleriq?</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo.
-            </p>
-            <div className="mt-4 flex items-center gap-2">
-              {[1, 2, 3, 4, 5].map((score) => (
-                <button
-                  key={score}
-                  type="button"
-                  onClick={() => setPulseScore(score)}
-                  aria-label={`Nota ${score}`}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl border text-base font-semibold transition-colors ${
-                    pulseScore === score
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-secondary/30 text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  {score}
-                </button>
-              ))}
-              <span className="ml-1 text-[10px] text-muted-foreground hidden sm:inline">1 = precisa melhorar · 5 = excelente</span>
+          <Painel
+            as="section"
+            aria-label="Avaliação da experiência"
+            titulo={
+              <span className="flex min-w-0 items-center">
+                <span className="min-w-0">Como está sendo a experiência com a Aceleriq?</span>
+                <AjudaRecolhida className="ml-1.5">
+                  Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo.
+                </AjudaRecolhida>
+              </span>
+            }
+          >
+            <div className="flex min-w-0 flex-wrap items-center">
+              <div role="radiogroup" aria-label="Nota de 1 a 5" className="mr-3 inline-grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((score) => (
+                  <button
+                    key={score}
+                    type="button"
+                    role="radio"
+                    aria-checked={pulseScore === score}
+                    onClick={() => setPulseScore(score)}
+                    aria-label={`Nota ${score}`}
+                    className={juntar(
+                      "flex h-10 w-10 items-center justify-center rounded-md border text-[15px] font-semibold transition-colors",
+                      foco,
+                      pulseScore === score
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                    )}
+                  >
+                    {score}
+                  </button>
+                ))}
+              </div>
+              <span className={juntar(texto.auxiliar, "mt-2 sm:mt-0")}>1 = precisa melhorar · 5 = excelente</span>
             </div>
             {pulseScore !== null && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3">
                 <textarea
                   value={pulseComment}
                   onChange={(e) => setPulseComment(e.target.value)}
                   rows={2}
+                  aria-label="Comentário (opcional)"
                   placeholder="Quer contar algo para a gente? (opcional)"
-                  className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2 text-xs text-foreground resize-none"
+                  className={juntar(campoTexto, "min-h-[64px] resize-none")}
                 />
-                <button
-                  type="button"
-                  onClick={submitPulse}
-                  disabled={pulseSending}
-                  className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {pulseSending ? "Enviando…" : "Enviar avaliação"}
-                </button>
+                <BarraDeAcoes inicio={`Nota ${pulseScore} de 5`}>
+                  <button type="button" onClick={submitPulse} disabled={pulseSending} className={botao.primario}>
+                    {pulseSending ? "Enviando..." : "Enviar avaliação"}
+                  </button>
+                </BarraDeAcoes>
               </div>
             )}
-          </div>
+          </Painel>
         </FadeUp>
       )}
 
-      {/* 10 · Evolução acumulada + atalhos */}
+      {/* 11 · Evolução acumulada: uma linha de estado, sem caixa */}
       <FadeUp>
-        <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              Evolução acumulada:
-            </span>
-            <span><span className="font-semibold text-foreground">{totalFiles}</span> entregas liberadas</span>
-            <span><span className="font-semibold text-foreground">{approvedFiles}</span> aprovadas</span>
-            {published.length > 0 && (
-              <span><span className="font-semibold text-foreground">{published.length}</span> publicações realizadas</span>
-            )}
-            {doneProjects.length > 0 && (
-              <span><span className="font-semibold text-foreground">{doneProjects.length}</span> projetos concluídos</span>
-            )}
-          </div>
+        <div className={juntar(superficie.divisoria, "flex min-w-0 flex-wrap items-center pt-4 text-[12px] text-muted-foreground [&>*]:mr-5 [&>*]:mb-1")}>
+          <span className="flex items-center font-medium text-foreground">
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
+            Evolução acumulada
+          </span>
+          <span><span className="font-semibold tabular-nums text-foreground">{totalFiles}</span> entregas liberadas</span>
+          <span><span className="font-semibold tabular-nums text-foreground">{approvedFiles}</span> aprovadas</span>
+          {published.length > 0 && (
+            <span><span className="font-semibold tabular-nums text-foreground">{published.length}</span> publicações realizadas</span>
+          )}
+          {doneProjects.length > 0 && (
+            <span><span className="font-semibold tabular-nums text-foreground">{doneProjects.length}</span> projetos concluídos</span>
+          )}
         </div>
       </FadeUp>
     </StaggerContainer>

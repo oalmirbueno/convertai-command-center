@@ -5,10 +5,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight, ClipboardCopy, Clock,
-  FileCheck2, PauseCircle, RefreshCw, ShieldAlert, XCircle,
+  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
+  FileCheck2, PauseCircle, RefreshCw, Search, ShieldAlert, Wrench, XCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
@@ -29,6 +28,11 @@ import {
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
+import {
+  AreaDeTrabalho, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Etapas,
+  RegiaoRolavel, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, superficie, texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 /** Estado de uma execucao do agente, em palavras. */
 const RUN_EM_PALAVRAS: Record<string, string> = {
@@ -144,8 +148,14 @@ export default function AdminExecucao() {
   const aprovacaoAlvo = searchParams.get("aprovacao");
   const propostaAlvo = searchParams.get("proposta");
   const abaAlvo = searchParams.get("aba");
-  const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("escritorio");
-  const [aba, setAba] = useState<(typeof ABAS)[number]["id"]>("pessoas");
+  // Aba e visão ficam guardadas (sair e voltar mantém). O padrão continua
+  // sendo o Escritório: é a porta de entrada.
+  const [visao, setVisao] = useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao", "escritorio", {
+    validar: (v) => VISOES.some((x) => x.id === v),
+  });
+  const [aba, setAba] = useEstadoDaTela<(typeof ABAS)[number]["id"]>("execucao:aba", "pessoas", {
+    validar: (v) => ABAS.some((x) => x.id === v),
+  });
   // A tarefa aberta DENTRO da Execução, em pop-up central. Antes isto era
   // window.open numa aba nova: o app inteiro recarregava, e a sensação era
   // de reiniciar em vez de navegar.
@@ -163,14 +173,16 @@ export default function AdminExecucao() {
   // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
   // lista sem recorte. Busca e livre; cliente e prazo sao os dois cortes
   // que o dono realmente usa para decidir onde olhar primeiro.
-  const [busca, setBusca] = useState("");
-  const [filtroCliente, setFiltroCliente] = useState("");
-  const [filtroPrazo, setFiltroPrazo] = useState<"todas" | "vencidas" | "semana">("todas");
+  // Busca e filtros persistentes (useEstadoDaTela): sair e voltar mantém.
+  const [busca, setBusca] = useEstadoDaTela<string>("execucao:busca", "");
+  const [filtroCliente, setFiltroCliente] = useEstadoDaTela<string>("execucao:cliente", "", { validar: (v) => typeof v === "string" });
+  const [filtroPrazo, setFiltroPrazo] = useEstadoDaTela<"todas" | "vencidas" | "semana">("execucao:prazo", "todas", {
+    validar: (v) => v === "todas" || v === "vencidas" || v === "semana",
+  });
   /** Vínculo sem tarefa ativa fica no histórico, fora do quadro por padrão. */
-  const [mostrarEncerradas, setMostrarEncerradas] = useState(false);
+  const [mostrarEncerradas, setMostrarEncerradas] = useEstadoDaTela<boolean>("execucao:encerradas", false, { validar: (v) => typeof v === "boolean" });
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
-  const abasRef = useRef<Record<string, HTMLButtonElement | null>>({});
 
   /**
    * A flag, com a distinção que faltava: DESLIGADA e NÃO-CONSEGUI-LER são
@@ -182,7 +194,7 @@ export default function AdminExecucao() {
    * errada com ar de certeza é pior que erro cru: manda consertar o que
    * não está quebrado.
    */
-  const { data: flag } = useQuery({
+  const { data: flag, refetch: relerFlag, isFetching: lendoFlag, isError: flagFalhou } = useQuery({
     queryKey: ["flag-operators-layer"],
     queryFn: async (): Promise<"on" | "off" | "erro"> => {
       const { data, error } = await (supabase as any)
@@ -210,7 +222,7 @@ export default function AdminExecucao() {
     enabled: flag === "on",
   });
 
-  const { data: vinculos = [], dataUpdatedAt, error: erroVinculos } = useQuery({
+  const { data: vinculos = [], dataUpdatedAt, error: erroVinculos, isLoading: carregandoVinculos } = useQuery({
     queryKey: ["operador-vinculos"],
     queryFn: async () => {
       // Consultar e atualizar a tela não alteram execuções nem ordens.
@@ -415,14 +427,12 @@ export default function AdminExecucao() {
     } as Record<string, number>;
   }, [vinculos, vinculosAtivos, mostrarEncerradas, operadores]);
 
-  /**
+  /*
    * Quando a visao muda sozinha (notificacao apontando para um vinculo), a
-   * aba escolhida pode estar fora da faixa visivel no telefone. Trazer ela
-   * para a tela evita a impressao de que nada aconteceu ao tocar no aviso.
+   * aba dona abre sozinha (efeito "a aba segue a visao", abaixo) e as Etapas
+   * do sistema trazem a aba aberta para a vista no telefone. A visao dentro
+   * da aba fica no seletor ao lado dos filtros, sempre a vista.
    */
-  useEffect(() => {
-    abasRef.current[visao]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [visao]);
 
   // O filtro roda ANTES das visoes: quadro, fila e listas enxergam o
   // mesmo recorte, senao o numero da aba discorda do conteudo dela.
@@ -474,7 +484,13 @@ export default function AdminExecucao() {
    * você" — a aba diria uma coisa e a tela outra, que é pior do que não
    * ter aba nenhuma.
    */
+  // Na abertura, "O que foi feito" guardada fica (ela nao tem visao propria);
+  // depois disso, toda troca de visao leva a aba junto.
+  const visaoAnterior = useRef<string | null>(null);
   useEffect(() => {
+    const primeira = visaoAnterior.current === null;
+    visaoAnterior.current = visao;
+    if (primeira && aba === "feito") return;
     const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(visao));
     if (dona && dona.id !== aba) setAba(dona.id);
   }, [visao]);
@@ -483,6 +499,13 @@ export default function AdminExecucao() {
     setAba(id);
     const primeira = ABAS.find((a) => a.id === id)?.visoes[0];
     if (primeira) setVisao(primeira as (typeof VISOES)[number]["id"]);
+  };
+
+  /** Vai direto a uma visao (linha de "O que pede a sua atencao"), com a aba dona. */
+  const irParaVisao = (id: (typeof VISOES)[number]["id"]) => {
+    setVisao(id);
+    const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(id));
+    if (dona) setAba(dona.id);
   };
 
   const filtrados = useMemo(() => {
@@ -857,26 +880,43 @@ export default function AdminExecucao() {
   );
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
-    return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
+    return <EstadoVazio icone={<ShieldAlert className="h-5 w-5" />} titulo="Esta área é da equipe." />;
   }
   if (flag === "off") {
     return (
-      <div className="p-6 text-sm text-muted-foreground">
-        A camada de operadores está <strong>desligada</strong> (flag <code>operators_layer</code>).
-        Nada foi apagado; religar a flag traz tudo de volta.
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina titulo="Execução" />
+        <EstadoVazio
+          icone={<PauseCircle className="h-5 w-5" />}
+          titulo="A camada de operadores está desligada."
+          descricao={<>Flag <code>operators_layer</code>. Nada foi apagado; religar a flag traz tudo de volta.</>}
+        />
       </div>
     );
   }
-  if (flag === "erro") {
+  if (flag === "erro" || (flag === undefined && flagFalhou)) {
     // A distinção que faltava: não é "desligada", é "não consegui ler".
     return (
-      <div className="mx-auto max-w-lg p-6">
-        <p className="text-sm font-medium text-foreground">Não consegui ler a configuração desta área.</p>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-          Isso não quer dizer que ela esteja desligada. Costuma acontecer nos primeiros minutos
-          depois que as tabelas nascem, enquanto a API ainda não as enxerga. Recarregue em
-          instantes; se persistir, confira se a migration dos operadores foi aplicada.
-        </p>
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina titulo="Execução" />
+        <EstadoDeErro
+          titulo="Não consegui ler a configuração desta área."
+          descricao="Isso não quer dizer que ela esteja desligada. Costuma acontecer nos primeiros minutos depois que as tabelas nascem, enquanto a API ainda não as enxerga. Se persistir, confira se a migration dos operadores foi aplicada."
+          acao={
+            <button type="button" className={botao.secundario} disabled={lendoFlag} onClick={() => void relerFlag()}>
+              Tentar de novo
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (flag === undefined) {
+    // Primeira leitura: esqueleto no lugar da tela, sem piscar números zerados.
+    return (
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina titulo="Execução" />
+        <Carregando forma="aba" rotulo="Carregando a execução" />
       </div>
     );
   }
@@ -906,30 +946,33 @@ export default function AdminExecucao() {
           if (id) setTarefaAberta(tarefas.get(String(id)) ?? { id });
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
-        className={cn(
-          "cursor-pointer rounded-xl border bg-card p-3.5 transition-colors hover:border-primary/50",
-          destacado ? "border-primary ring-2 ring-primary/40" : "border-border",
+        className={juntar(
+          "min-w-0 cursor-pointer px-3.5 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          destacado && "bg-primary/10 ring-2 ring-inset ring-primary/50",
         )}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-foreground">
-              {t?.title || v.last_action || "(sem tarefa vinculada)"}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {[cliente ? (cliente.company_name || cliente.full_name) : null, t?.project?.name]
-                .filter(Boolean).join(" · ") || "sem projeto"}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        <p className="text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
+          {t?.title || v.last_action || "(sem tarefa vinculada)"}
+        </p>
+        <div className="mt-1">
+          <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
+            <span className={juntar(
+              etiqueta,
+              v.status === "done" ? "bg-success/15 text-success"
+                : v.status === "blocked" ? "bg-destructive/15 text-destructive"
+                : v.status === "review" ? "bg-warning/15 text-warning"
+                : "bg-muted text-muted-foreground",
+            )}>
+              {STATUS_ROTULO[v.status] || v.status}
+            </span>
             {/* ORIGEM: isso depende de mim? CATEGORIA: que trabalho e este?
                 Sao os dois badges que faltavam para "em revisao" nao
                 parecer "arte final publicada". */}
             {(() => {
               const origem = origemDaExecucao(v);
               return origem !== "interno" && (
-                <span className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                <span className={juntar(
+                  etiqueta,
                   origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive",
                 )}>
                   {ROTULO_ORIGEM[origem]}
@@ -939,26 +982,21 @@ export default function AdminExecucao() {
             {(() => {
               const cat = categoriaDaTarefa(t?.title);
               return cat !== "geral" && (
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
                   {ROTULO_CATEGORIA[cat]}
                 </span>
               );
             })()}
-            <span className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              v.status === "done" ? "bg-success/15 text-success"
-                : v.status === "blocked" ? "bg-destructive/15 text-destructive"
-                : v.status === "review" ? "bg-warning/15 text-warning"
-                : "bg-secondary text-muted-foreground",
-            )}>
-              {STATUS_ROTULO[v.status] || v.status}
+            <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>
+              {[cliente ? (cliente.company_name || cliente.full_name) : null, t?.project?.name]
+                .filter(Boolean).join(" · ") || "sem projeto"}
             </span>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Bot className="h-3 w-3" /> {op?.display_name || "?"}
+        <div className="-mx-1.5 mt-1.5 flex flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mx-1.5">
+          <span className="inline-flex items-center">
+            <Bot className="mr-1 h-3 w-3" aria-hidden="true" /> {op?.display_name || "?"}
           </span>
           <span>
             humano: <span className="font-medium text-foreground/80">
@@ -966,15 +1004,15 @@ export default function AdminExecucao() {
             </span>
           </span>
           {t?.due_date && (
-            <span className={cn("inline-flex items-center gap-1", prazoVencido && "font-semibold text-destructive")}>
-              <Clock className="h-3 w-3" /> {t.due_date}
+            <span className={juntar("inline-flex items-center tabular-nums", prazoVencido && "font-semibold text-destructive")}>
+              <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> {t.due_date}
             </span>
           )}
-          <span>{dataCurta(v.updated_at)}</span>
+          <span className="tabular-nums">{dataCurta(v.updated_at)}</span>
         </div>
 
         {v.last_action && (
-          <p className="mt-1.5 text-[11.5px] text-foreground/85">
+          <p className={juntar(texto.corpo, "mt-1.5 text-foreground/85")}>
             {falarComoGente(v.last_action).humano}
           </p>
         )}
@@ -993,20 +1031,20 @@ export default function AdminExecucao() {
                clicável, e o clique aqui é outra intenção. */
             onClick={(e) => e.stopPropagation()}
           >
-            <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden">
+            <summary className="cursor-pointer list-none text-[12px] text-muted-foreground marker:hidden">
               <span className="break-words">
                 {v.last_evidence.startsWith("http")
                   ? <a className="break-all text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
                   : ev.humano}
               </span>
               {ev.temDetalheTecnico && (
-                <span className="ml-1 whitespace-nowrap text-[10px] text-primary/70 underline">
+                <span className="ml-1 whitespace-nowrap text-[11px] text-primary/80 underline">
                   detalhe técnico
                 </span>
               )}
             </summary>
             {ev.temDetalheTecnico && (
-              <p className="mt-1 break-all rounded-lg bg-secondary/60 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+              <p className={juntar(superficie.poco, "mt-1 break-all p-2 font-mono text-[11px] leading-relaxed text-muted-foreground")}>
                 {ev.original}
               </p>
             )}
@@ -1014,589 +1052,664 @@ export default function AdminExecucao() {
           );
         })()}
         {v.next_step && (
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-[12px] text-muted-foreground">
             próximo passo: {falarComoGente(v.next_step).humano}
           </p>
         )}
         {encerrado(v) && (
-          <p className="mt-1 rounded-lg border border-border bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-[12px] text-muted-foreground">
             encerrado: a tarefa foi concluída, arquivada ou excluída; este vínculo ficou como histórico.
           </p>
         )}
         {!encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3 && (
-          <p className="mt-1 text-[11px] text-warning">
+          <p className="mt-1 text-[12px] text-warning">
             parado há {diasParado(v)} dias{v.status === "awaiting_input" ? ": o agente espera uma resposta sua" : v.status === "review" ? ": esperando sua revisão" : v.status === "queued" ? ": na fila, nenhum agente pegou" : ""}
           </p>
         )}
         {v.block_reason && !encerrado(v) && (
-          <p className="mt-1 rounded-lg border border-destructive/25 bg-secondary px-2 py-1 text-[11px] text-destructive">
+          <p className="mt-1 text-[12px] text-destructive">
             bloqueio: {falarComoGente(v.block_reason).humano}
           </p>
         )}
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {precisaDecisao(v) && (
+        <div className="mt-2">
+          <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
+            {precisaDecisao(v) && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setVisao("aprovacao"); }}
+                className="inline-flex h-7 items-center rounded-md bg-warning/15 px-2 text-[12px] font-medium text-warning hover:bg-warning/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> aprovação necessária: decidir
+              </button>
+            )}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setVisao("aprovacao"); }}
-              className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning hover:bg-warning/25"
+              onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }); }}
+              className="inline-flex h-7 items-center rounded-md border border-border px-2 text-[12px] font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title="Conversar com o agente nesta execução: instrução, contexto, correção"
             >
-              <ShieldAlert className="h-3 w-3" /> aprovação necessária — decidir
+              diário
             </button>
-          )}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }); }}
-            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
-            title="Conversar com o agente nesta execução: instrução, contexto, correção"
-          >
-            diário
-          </button>
+          </div>
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-        <h1 className="text-lg font-bold text-foreground">Execução da equipe</h1>
-        <p className="text-[12px] text-muted-foreground">
-          Operadores internos executam e relatam; o responsável humano continua sendo quem responde.
-          {dataUpdatedAt ? ` Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}.` : " Aguardando a primeira leitura."}
-        </p>
-        {(erroVinculos || erroRuns) && <p role="alert" className="mt-1 text-xs text-destructive">Não foi possível ler parte da execução. Os dados exibidos podem estar desatualizados.</p>}
-        {runsSemHeartbeat > 0 && <p className="mt-1 text-xs text-warning">{runsSemHeartbeat} execução(ões) sem sinal dentro do prazo. O estado registrado aguarda reconciliação.</p>}
-        {diasSemAgente !== null && diasSemAgente >= 2 && (
-          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11.5px] text-warning">
-            <PauseCircle className="h-3.5 w-3.5" /> Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"}). A fila só anda com o Hermes ligado; o painel não dispara agente.
-          </p>
-        )}
-        {totalEncerradas > 0 && (
-          <button
-            type="button"
-            onClick={() => setMostrarEncerradas((v) => !v)}
-            className="mt-1.5 block text-[11px] text-muted-foreground underline-offset-2 hover:underline"
-          >
-            {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"} (tarefa concluída, arquivada ou excluída)
-          </button>
-        )}
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-        {profile?.role === "admin" && <button type="button" onClick={() => void reconciliarExecucoes()} disabled={reconciliando}
-          title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
-          className="h-8 rounded-lg border border-border px-2.5 text-[11.5px] text-muted-foreground disabled:opacity-50">
-          {reconciliando ? "Reconciliando…" : "Reconciliar execuções"}
-        </button>}
-        <button
-          type="button"
-          onClick={() => void atualizarTudo()}
-          disabled={atualizando}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", atualizando && "animate-spin")} />
-          Atualizar
-        </button>
-        </div>
-      </div>
+  /** Lista de vínculos: linhas com divisória num painel só, sem caixa por linha. */
+  const ListaDeCartoes = ({ lista, rotulo }: { lista: Vinculo[]; rotulo: string }) => (
+    <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label={rotulo}>
+      {lista.map((v) => (
+        <li key={v.id} className="min-w-0">
+          <Cartao v={v} />
+        </li>
+      ))}
+    </ul>
+  );
 
-      {/* O que pede a sua atencao, em frases e na ordem de urgencia. Seis
-          caixinhas com numero soltavam sete numeros na cara sem dizer o que
-          fazer com eles; aqui cada linha e uma coisa para decidir e leva
-          para a visao certa com um toque. */}
-      {(() => {
-        const linhas: Array<{ chave: string; texto: string; tom: string; visao: string }> = [];
-        if (numeros.aprovacoes > 0) linhas.push({ chave: "aprov", texto: `${numeros.aprovacoes} ${numeros.aprovacoes === 1 ? "ação espera a sua aprovação" : "ações esperam a sua aprovação"}`, tom: "text-warning", visao: "aprovacao" });
-        if (numeros.vencidas > 0) linhas.push({ chave: "venc", texto: `${numeros.vencidas} ${numeros.vencidas === 1 ? "tarefa passou do prazo" : "tarefas passaram do prazo"}`, tom: "text-destructive", visao: "quadro" });
-        if (numeros.aguardando > 0) linhas.push({ chave: "aguard", texto: `${numeros.aguardando} ${numeros.aguardando === 1 ? "agente espera uma resposta sua" : "agentes esperam uma resposta sua"}`, tom: "text-warning", visao: "awaiting_input" });
-        if (numeros.revisao > 0) linhas.push({ chave: "rev", texto: `${numeros.revisao} ${numeros.revisao === 1 ? "entrega pronta para você revisar" : "entregas prontas para você revisar"}`, tom: "text-warning", visao: "review" });
-        if (numeros.bloqueadas > 0) linhas.push({ chave: "bloq", texto: `${numeros.bloqueadas} ${numeros.bloqueadas === 1 ? "tarefa travada" : "tarefas travadas"} (o motivo está no cartão)`, tom: "text-destructive", visao: "blocked" });
-        if (numeros.andamento > 0) linhas.push({ chave: "and", texto: `${numeros.andamento} em andamento agora`, tom: "text-info", visao: "in_progress" });
-        if (numeros.feitas > 0) linhas.push({ chave: "feitas", texto: `${numeros.feitas} ${numeros.feitas === 1 ? "concluída com prova" : "concluídas com prova"}`, tom: "text-success", visao: "done" });
-        return (
-          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
-            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">O que pede a sua atenção</p>
-            {linhas.length === 0 ? (
-              <p className="mt-1 text-[12.5px] text-muted-foreground">Nada esperando você agora.</p>
-            ) : (
-              <ul className="mt-1.5 space-y-1">
-                {linhas.map((l) => (
-                  <li key={l.chave}>
-                    <button type="button" onClick={() => { setVisao(l.visao as (typeof VISOES)[number]["id"]); }} className={cn("text-left text-[12.5px] font-medium hover:underline", l.tom)}>
-                      • {l.texto}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-2 text-[11.5px] text-muted-foreground">
-              {numeros.kanbanAbertas === 0
-                ? "Nenhuma tarefa aberta no Kanban agora."
-                : `${numeros.kanbanAbertas} ${numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban${numeros.semOperador.length > 0 ? `, ${numeros.semOperador.length} ainda sem agente` : ", todas com agente"}.`}
-            </p>
-          </div>
-        );
-      })()}
+  /* O que pede a sua atencao, em frases e na ordem de urgencia. Seis
+     caixinhas com numero soltavam sete numeros na cara sem dizer o que
+     fazer com eles; aqui cada linha e uma coisa para decidir e leva
+     para a visao certa com um toque. */
+  const linhasDeAtencao: Array<{ chave: string; texto: string; tom: string; ponto: string; visao: (typeof VISOES)[number]["id"] }> = [];
+  if (numeros.aprovacoes > 0) linhasDeAtencao.push({ chave: "aprov", texto: `${numeros.aprovacoes} ${numeros.aprovacoes === 1 ? "ação espera a sua aprovação" : "ações esperam a sua aprovação"}`, tom: "text-warning", ponto: "bg-warning", visao: "aprovacao" });
+  if (numeros.vencidas > 0) linhasDeAtencao.push({ chave: "venc", texto: `${numeros.vencidas} ${numeros.vencidas === 1 ? "tarefa passou do prazo" : "tarefas passaram do prazo"}`, tom: "text-destructive", ponto: "bg-destructive", visao: "quadro" });
+  if (numeros.aguardando > 0) linhasDeAtencao.push({ chave: "aguard", texto: `${numeros.aguardando} ${numeros.aguardando === 1 ? "agente espera uma resposta sua" : "agentes esperam uma resposta sua"}`, tom: "text-warning", ponto: "bg-warning", visao: "awaiting_input" });
+  if (numeros.revisao > 0) linhasDeAtencao.push({ chave: "rev", texto: `${numeros.revisao} ${numeros.revisao === 1 ? "entrega pronta para você revisar" : "entregas prontas para você revisar"}`, tom: "text-warning", ponto: "bg-warning", visao: "review" });
+  if (numeros.bloqueadas > 0) linhasDeAtencao.push({ chave: "bloq", texto: `${numeros.bloqueadas} ${numeros.bloqueadas === 1 ? "tarefa travada" : "tarefas travadas"} (o motivo está no cartão)`, tom: "text-destructive", ponto: "bg-destructive", visao: "blocked" });
+  if (numeros.andamento > 0) linhasDeAtencao.push({ chave: "and", texto: `${numeros.andamento} em andamento agora`, tom: "text-info", ponto: "bg-info", visao: "in_progress" });
+  if (numeros.feitas > 0) linhasDeAtencao.push({ chave: "feitas", texto: `${numeros.feitas} ${numeros.feitas === 1 ? "concluída com prova" : "concluídas com prova"}`, tom: "text-success", ponto: "bg-success", visao: "done" });
 
-      {/* AS AREAS COMO FAIXA, e nao como pilha.
-          Minha versao anterior recolhia cada area numa barra de largura
-          inteira: nove barras quase vazias empilhadas, que polui mais do
-          que o problema que eu tinha ido resolver. Recolhido nao pode
-          ocupar o mesmo espaco que aberto.
-          Agora fechada e uma pastilha, e as nove cabem em duas linhas.
-          Aberta vira bloco, logo abaixo. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {agrupadosPorArea.map(([area, doGrupo]) => {
-          const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
-          const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
-          const bloqueadas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).bloqueadas, 0);
-          const temMovimento = emAndamento + feitas + bloqueadas > 0;
-          const aberta = !estaFechada(area);
-          return (
-            <button
-              key={area}
-              type="button"
-              onClick={() => alternarArea(area)}
-              aria-expanded={aberta}
-              title={`${doGrupo.length} ${doGrupo.length === 1 ? "agente" : "agentes"}`}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                aberta
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {/* O ponto so aparece onde HA movimento: pintar todas faria a
-                  cor deixar de significar alguma coisa. */}
-              {temMovimento && (
-                <span className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  bloqueadas > 0 ? "bg-destructive" : emAndamento > 0 ? "bg-info" : "bg-success",
-                )} aria-hidden />
-              )}
-              {area}
-              <span className={cn(
-                "rounded-full px-1.5 text-[10px] tabular-nums",
-                aberta ? "bg-primary/20" : "bg-muted",
-              )}>
-                {doGrupo.length}
-              </span>
-            </button>
-          );
-        })}
+  const atencao = (
+    <Secao
+      titulo="O que pede a sua atenção"
+      descricao={numeros.kanbanAbertas === 0
+        ? "Nenhuma tarefa aberta no Kanban agora."
+        : `${numeros.kanbanAbertas} ${numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban${numeros.semOperador.length > 0 ? `, ${numeros.semOperador.length} ainda sem agente` : ", todas com agente"}.`}
+    >
+      {carregandoVinculos && vinculos.length === 0 ? (
+        <Carregando linhas={3} rotulo="Carregando o resumo" />
+      ) : linhasDeAtencao.length === 0 ? (
+        <EstadoVazio compacto titulo="Nada esperando você agora." />
+      ) : (
+        <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+          {linhasDeAtencao.map((l) => (
+            <li key={l.chave}>
+              <button
+                type="button"
+                onClick={() => irParaVisao(l.visao)}
+                className="flex w-full min-w-0 items-center px-3.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
+                <span className={juntar("mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full", l.ponto)} aria-hidden="true" />
+                <span className={juntar("min-w-0 flex-1 text-[13px] font-medium", l.tom)}>{l.texto}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Secao>
+  );
 
-        {agrupadosPorArea.length > 1 && (
+  const areasEIncidentes = (
+    <div className="space-y-6 lg:pb-6 lg:pr-1">
+      {incidentes.length > 0 && (
+        <Secao titulo={`${incidentes.length} incidente(s) de execução`}>
+          <ul className="space-y-1.5">
+            {incidentes.slice(0, 5).map((r) => (
+              <li key={String(r.id)} className="flex min-w-0 items-start text-[12px] leading-5 text-muted-foreground" title={`execução ${String(r.run_key)}`}>
+                <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <strong className="font-medium text-foreground/85">{opDe(String(r.operator_id))?.display_name || "Um agente"}</strong>{" "}
+                  {runEmPalavras(r.status)} {dataCurta(String(r.finished_at || r.started_at))}
+                  {r.error ? `: ${falarComoGente(String(r.error)).humano}` : ""}
+                  {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Secao>
+      )}
+
+      <Secao
+        titulo="Áreas"
+        descricao={`${operadores.length} ${operadores.length === 1 ? "agente" : "agentes"}`}
+        acao={agrupadosPorArea.length > 1 ? (
           <button
             type="button"
             onClick={() => alternarArea("", agrupadosPorArea.map(([a]) => a))}
-            className="ml-auto text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+            className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
           >
             {agrupadosPorArea.every(([a]) => estaFechada(a)) ? "abrir todas" : "fechar todas"}
           </button>
-        )}
-      </div>
-
-      {/* So as areas ABERTAS viram bloco. Fechada ja disse o que tinha a
-          dizer na pastilha acima. */}
-      {agrupadosPorArea.filter(([area]) => !estaFechada(area)).map(([area, doGrupo]) => (
-        <section key={area} className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary px-3 py-2">
-            <span className="h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
-            <h3 className="text-[10.5px] font-bold uppercase tracking-wider text-foreground">{area}</h3>
-            {(() => {
-              const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
-              const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
-              return (
-                <span className="ml-auto flex gap-2.5 text-[9.5px] tabular-nums">
-                  {emAndamento > 0 && <span className="text-info">{emAndamento} em andamento</span>}
-                  {feitas > 0 && <span className="text-success">{feitas} feitas</span>}
+        ) : undefined}
+      >
+        {/* AS AREAS COMO FAIXA, e nao como pilha.
+            Minha versao anterior recolhia cada area numa barra de largura
+            inteira: nove barras quase vazias empilhadas, que polui mais do
+            que o problema que eu tinha ido resolver. Recolhido nao pode
+            ocupar o mesmo espaco que aberto.
+            Agora fechada e uma pastilha, e as nove cabem em duas linhas.
+            Aberta vira bloco, logo abaixo. */}
+        <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
+          {agrupadosPorArea.map(([area, doGrupo]) => {
+            const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
+            const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
+            const bloqueadas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).bloqueadas, 0);
+            const temMovimento = emAndamento + feitas + bloqueadas > 0;
+            const aberta = !estaFechada(area);
+            return (
+              <button
+                key={area}
+                type="button"
+                onClick={() => alternarArea(area)}
+                aria-expanded={aberta}
+                title={`${doGrupo.length} ${doGrupo.length === 1 ? "agente" : "agentes"}`}
+                className={juntar(
+                  "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  aberta
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {/* O ponto so aparece onde HA movimento: pintar todas faria a
+                    cor deixar de significar alguma coisa. */}
+                {temMovimento && (
+                  <span className={juntar(
+                    "mr-1.5 h-1.5 w-1.5 rounded-full",
+                    bloqueadas > 0 ? "bg-destructive" : emAndamento > 0 ? "bg-info" : "bg-success",
+                  )} aria-hidden />
+                )}
+                {area}
+                <span className={juntar(
+                  "ml-1.5 rounded-full px-1.5 text-[10px] tabular-nums",
+                  aberta ? "bg-primary/20" : "bg-muted",
+                )}>
+                  {doGrupo.length}
                 </span>
-              );
-            })()}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* So as areas ABERTAS viram bloco. Fechada ja disse o que tinha a
+            dizer na pastilha acima. Dentro do bloco, os agentes sao linhas
+            com divisoria: nada de cartao dentro de cartao. */}
+        <div className="mt-3 space-y-3">
+          {agrupadosPorArea.filter(([area]) => !estaFechada(area)).map(([area, doGrupo]) => {
+            const emAndamentoDaArea = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
+            const feitasDaArea = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
+            return (
+              <section key={area} aria-label={area} className={juntar(superficie.painel, "overflow-hidden")}>
+                <div className="flex min-w-0 items-center border-b border-border py-1.5 pl-3.5 pr-1.5">
+                  <span className="mr-2 h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
+                  <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{area}</h3>
+                  {emAndamentoDaArea > 0 && <span className="ml-2 shrink-0 text-[11px] tabular-nums text-info">{emAndamentoDaArea} em andamento</span>}
+                  {feitasDaArea > 0 && <span className="ml-2 shrink-0 text-[11px] tabular-nums text-success">{feitasDaArea} feitas</span>}
+                  <button
+                    type="button"
+                    onClick={() => alternarArea(area)}
+                    className={juntar(botao.discreto, "ml-1 h-7 px-2 text-[12px]")}
+                  >
+                    fechar
+                  </button>
+                </div>
+                <ul className="divide-y divide-border">
+                  {doGrupo.map((o) => {
+                    const n = numerosDoOperador(o.id);
+                    return (
+                      <li key={o.id}>
+                        <button
+                          type="button"
+                          onClick={() => setAgenteAberto(o)}
+                          className="flex w-full min-w-0 items-start px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        >
+                          <Bot className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center">
+                              <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{o.display_name}</span>
+                              {o.is_coordinator && (
+                                <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>coordenador</span>
+                              )}
+                            </span>
+                            <span className="block truncate text-[12px] text-muted-foreground">
+                              {o.role}{o.scope ? ` · ${o.scope}` : ""}
+                            </span>
+                            {o.parent_slug && (
+                              <span className={juntar(texto.auxiliar, "block truncate")}>
+                                responde a {operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug}
+                              </span>
+                            )}
+                            <span className="mt-1 flex flex-wrap text-[11px] [&>*]:mr-2.5">
+                              {n.total === 0 ? (
+                                <span className="text-muted-foreground">nenhuma tarefa ainda</span>
+                              ) : (
+                                <>
+                                  {n.andamento > 0 && <span className="text-info">{n.andamento} em andamento</span>}
+                                  {n.feitas > 0 && <span className="text-success">{n.feitas} feitas</span>}
+                                  {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
+                                  {n.revisao > 0 && <span className="text-warning">{n.revisao} em revisão</span>}
+                                  {n.comEvidencia > 0 && (
+                                    <span className="text-muted-foreground">{n.comEvidencia} com evidência</span>
+                                  )}
+                                </>
+                              )}
+                              <span className="text-muted-foreground">
+                                {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
+                              </span>
+                            </span>
+                          </span>
+                          <span
+                            className={juntar("ml-2 mt-1.5 h-2 w-2 shrink-0 rounded-full", o.status === "active" ? "bg-success" : "bg-muted-foreground/40")}
+                            aria-label={o.status === "active" ? "ativo" : "pausado"}
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      </Secao>
+    </div>
+  );
+
+  /** A visão aberta: o conteúdo que rola na região principal. */
+  const conteudoDaVisao = carregandoVinculos && vinculos.length === 0 ? (
+    <Carregando linhas={4} rotulo="Carregando o trabalho dos agentes" />
+  ) : visao === "escritorio" ? (
+    <Escritorio
+      agentes={operadores}
+      trabalhos={vinculosVisiveis as any}
+      tarefas={tarefas}
+      humanos={humanos}
+      aoAbrirAgente={(a) => {
+        const op = operadores.find((o) => o.id === a.id);
+        if (op) setAgenteAberto(op);
+      }}
+      aoAbrirTarefa={(id) => setTarefaAberta(tarefas.get(String(id)) ?? { id })}
+    />
+  ) : visao === "hierarquia" ? (
+    <OrganogramaAgentes
+      nos={nosDoOrganograma}
+      nomeDoDono={profile?.full_name || "Você"}
+      aoAbrir={(no) => {
+        const op = operadores.find((o) => o.id === no.id);
+        if (op) setAgenteAberto(op);
+        else toast.info(
+          no.nivel === "gateway"
+            ? "O Hermes é a porta de entrada: a conversa acontece no grupo dele."
+            : "Você está no topo: aprova, decide e recebe os relatórios.",
+        );
+      }}
+    />
+  ) : visao === "relatorios" ? (
+    <div className="grid gap-4 md:grid-cols-2">
+      {[
+        { titulo: "Abertura do dia", texto: relatorio.abertura, icone: Activity },
+        { titulo: "Checkpoint de exceções", texto: relatorio.excecoes, icone: AlertTriangle },
+        { titulo: "Fechamento do dia", texto: relatorio.fechamento, icone: CheckCircle2 },
+        { titulo: "Semana do piloto", texto: relatorio.semanal, icone: FileCheck2 },
+      ].map((r) => (
+        <section key={r.titulo} aria-label={r.titulo} className={juntar(superficie.painel, "min-w-0")}>
+          <div className="flex min-w-0 items-center justify-between border-b border-border py-2 pl-4 pr-2">
+            <h3 className="inline-flex min-w-0 items-center text-[13px] font-semibold text-foreground">
+              <r.icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="truncate">{r.titulo}</span>
+            </h3>
             <button
               type="button"
-              onClick={() => alternarArea(area)}
-              className="rounded-md px-1.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+              onClick={() => void copiar(r.texto, r.titulo)}
+              className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
             >
-              fechar
+              <ClipboardCopy className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Copiar
             </button>
           </div>
-          <div className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            {doGrupo.map((o) => {
-              const n = numerosDoOperador(o.id);
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => setAgenteAberto(o)}
-                  className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
-                    <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
-                    {o.is_coordinator && (
-                      <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">coordenador</span>
-                    )}
-                    <span className={cn(
-                      "ml-auto h-2 w-2 rounded-full",
-                      o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
-                    )} />
-                  </div>
-                  <p className="mt-0.5 text-[10px] font-medium text-foreground/80">{o.role}</p>
-                  <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
-                  {o.parent_slug && (
-                    <p className="mt-0.5 truncate text-[9.5px] text-muted-foreground/80">
-                      responde a {operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug}
-                    </p>
-                  )}
-                  <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px]">
-                    {n.total === 0 ? (
-                      <span className="text-muted-foreground/70">nenhuma tarefa ainda</span>
-                    ) : (
-                      <>
-                        {n.andamento > 0 && <span className="text-info">{n.andamento} em andamento</span>}
-                        {n.feitas > 0 && <span className="text-success">{n.feitas} feitas</span>}
-                        {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
-                        {n.revisao > 0 && <span className="text-warning">{n.revisao} em revisão</span>}
-                        {n.comEvidencia > 0 && (
-                          <span className="text-muted-foreground">{n.comEvidencia} com evidência</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <p className="mt-1 text-[9.5px] text-muted-foreground">
-                    {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+          <pre className="whitespace-pre-wrap px-4 py-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            {r.texto}
+          </pre>
         </section>
       ))}
+    </div>
+  ) : visao === "fila" ? (
+    <div className="space-y-6">
+      {operadores.filter((o) => !o.is_coordinator).map((o) => {
+        const doOperador = filtrados.filter((v) => v.operator_id === o.id);
+        return (
+          <Secao key={o.id} nivel={3} titulo={o.display_name} descricao={`${doOperador.length} na fila`}>
+            {doOperador.length === 0 ? (
+              <EstadoVazio
+                compacto
+                titulo={`${o.display_name} ainda não pegou nenhuma tarefa.`}
+                descricao={numeros.semOperador.length > 0 ? `Há ${numeros.semOperador.length} esperando alguém.` : undefined}
+              />
+            ) : (
+              <ListaDeCartoes lista={doOperador} rotulo={`Fila de ${o.display_name}`} />
+            )}
+          </Secao>
+        );
+      })}
 
-      {incidentes.length > 0 && (
-        <div className="rounded-xl border border-destructive/30 bg-secondary p-3">
-          <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-destructive">
-            <AlertTriangle className="h-3.5 w-3.5" /> {incidentes.length} incidente(s) de execução
-          </p>
-          <div className="mt-1 space-y-0.5">
-            {incidentes.slice(0, 5).map((r) => (
-              <p key={String(r.id)} className="text-[11px] text-muted-foreground" title={`execução ${String(r.run_key)}`}>
-                <strong className="text-foreground/85">{opDe(String(r.operator_id))?.display_name || "Um agente"}</strong>{" "}
-                {runEmPalavras(r.status)} {dataCurta(String(r.finished_at || r.started_at))}
-                {r.error ? `: ${falarComoGente(String(r.error)).humano}` : ""}
-                {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* A barra de recorte: busca, cliente e prazo. Aplica antes das
-          visoes para numero e conteudo nunca discordarem. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar tarefa, cliente, projeto ou agente…"
-          className="h-8 w-full max-w-xs rounded-lg border border-border bg-card px-2.5 text-[11.5px] text-foreground placeholder:text-muted-foreground/60"
-        />
-        <select
-          value={filtroCliente}
-          onChange={(e) => setFiltroCliente(e.target.value)}
-          className="h-8 rounded-lg border border-border bg-card px-2 text-[11.5px] text-foreground"
-        >
-          <option value="">todos os clientes</option>
-          {clientesDoQuadro.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select
-          value={filtroPrazo}
-          onChange={(e) => setFiltroPrazo(e.target.value as typeof filtroPrazo)}
-          className="h-8 rounded-lg border border-border bg-card px-2 text-[11.5px] text-foreground"
-        >
-          <option value="todas">qualquer prazo</option>
-          <option value="vencidas">vencidas</option>
-          <option value="semana">próximos 7 dias</option>
-        </select>
-        {(busca || filtroCliente || filtroPrazo !== "todas") && (
-          <button
-            type="button"
-            onClick={() => { setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }}
-            className="text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
-          >
-            limpar ({vinculosVisiveis.length}/{vinculos.length})
-          </button>
-        )}
-      </div>
-
-      {/* AS ABAS: separam por pergunta, e ficam acima de tudo. */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border pb-0 scrollbar-hidden">
-        {ABAS.map((x) => {
-          const ativa = aba === x.id;
-          // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
-          // faz o TypeScript inferir never[]. O tipo explicito resolve sem
-          // obrigar a aba a inventar uma visao que ela nao tem.
-          const quantos = (x.visoes as readonly string[])
-            .reduce((s, id) => s + (contagemDaVisao[id] ?? 0), 0);
-          return (
-            <button
-              key={x.id}
-              type="button"
-              onClick={() => irParaAba(x.id)}
-              className={cn(
-                "relative shrink-0 px-3 pb-2 pt-1 text-[13px] font-semibold transition-colors",
-                ativa ? "text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {x.rotulo}
-              {quantos > 0 && (
-                <span className={cn(
-                  "ml-1.5 rounded-full px-1.5 text-[10px] tabular-nums",
-                  ativa ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                )}>
-                  {quantos}
-                </span>
-              )}
-              {ativa && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* No telefone as dez visoes empilhavam em cinco fileiras e comiam a
-          tela antes do conteudo comecar. Vira faixa que corre para o lado,
-          e volta a quebrar em linhas no desktop, onde ha largura de sobra.
-          Mesmo padrao da Central, para as duas areas se comportarem igual. */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 scrollbar-hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-        {visoesDaAba.map((x) => {
-          const quantos = contagemDaVisao[x.id] ?? null;
-          return (
-            <button
-              key={x.id}
-              type="button"
-              ref={(el) => { abasRef.current[x.id] = el; }}
-              onClick={() => setVisao(x.id)}
-              className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-semibold transition-colors",
-                visao === x.id
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {x.rotulo}
-              {quantos !== null && quantos > 0 && (
-                <span className={cn(
-                  "rounded-full px-1.5 text-[10px] tabular-nums",
-                  visao === x.id ? "bg-primary/15" : "bg-muted",
-                )}>
-                  {quantos}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {visao === "escritorio" ? (
-        <Escritorio
-          agentes={operadores}
-          trabalhos={vinculosVisiveis as any}
-          tarefas={tarefas}
-          humanos={humanos}
-          aoAbrirAgente={(a) => {
-            const op = operadores.find((o) => o.id === a.id);
-            if (op) setAgenteAberto(op);
-          }}
-          aoAbrirTarefa={(id) => setTarefaAberta(tarefas.get(String(id)) ?? { id })}
-        />
-      ) : visao === "quadro" ? (
-        /* O quadro: colunas com ROLAGEM PRÓPRIA. Sem isso, uma coluna
-           cheia empurra a página inteira e as outras somem de vista. */
-        <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
-          {COLUNAS.map((c) => {
-            const daColuna = vinculosVisiveis.filter((v) => v.status === c.id);
-            return (
-              <div key={c.id} className="flex w-[250px] shrink-0 flex-col rounded-xl border border-border bg-card/60 p-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", c.cor)} />
-                  <p className="truncate text-[11px] font-bold uppercase tracking-wide text-foreground">{c.titulo}</p>
-                  <span className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
-                    {daColuna.length}
-                  </span>
-                </div>
-                <div className="mt-2 max-h-[62vh] space-y-1.5 overflow-y-auto pr-0.5">
-                  {daColuna.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border px-2 py-4 text-center text-[10px] text-muted-foreground">
-                      vazia
+      {/* Esperando alguém: as tarefas reais do Kanban sem operador, com
+          o id pronto para copiar. É o que transforma "está vazio" em
+          "comece por aqui" — e o que o Hermes precisa para escolher uma
+          tarefa de verdade em vez de inventar. */}
+      {numeros.semOperador.length > 0 && (
+        <Secao nivel={3} titulo="Esperando um operador" descricao={`${numeros.semOperador.length} no Kanban`}>
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+            {numeros.semOperador.slice(0, 8).map((t) => {
+              const cliente = t.project?.client;
+              const vencida = t.due_date && String(t.due_date) <= hoje;
+              return (
+                <li key={String(t.id)} className="flex min-w-0 items-center px-3.5 py-2.5">
+                  <div className="mr-3 min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-foreground">{t.title}</p>
+                    <p className={juntar(texto.auxiliar, "truncate")}>
+                      {[cliente ? (cliente.company_name || cliente.full_name) : null, t.project?.name]
+                        .filter(Boolean).join(" · ") || "sem projeto"}
+                      {t.due_date && (
+                        <span className={juntar("ml-1", vencida && "font-semibold text-destructive")}>
+                          · prazo {t.due_date}
+                        </span>
+                      )}
                     </p>
-                  ) : (
-                    daColuna.map((v) => <Cartao key={v.id} v={v} />)
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : visao === "hierarquia" ? (
-        <OrganogramaAgentes
-          nos={nosDoOrganograma}
-          nomeDoDono={profile?.full_name || "Você"}
-          aoAbrir={(no) => {
-            const op = operadores.find((o) => o.id === no.id);
-            if (op) setAgenteAberto(op);
-            else toast.info(
-              no.nivel === "gateway"
-                ? "O Hermes é a porta de entrada: a conversa acontece no grupo dele."
-                : "Você está no topo: aprova, decide e recebe os relatórios.",
-            );
-          }}
-        />
-      ) : visao === "relatorios" ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          {[
-            { titulo: "Abertura do dia", texto: relatorio.abertura, icone: Activity },
-            { titulo: "Checkpoint de exceções", texto: relatorio.excecoes, icone: AlertTriangle },
-            { titulo: "Fechamento do dia", texto: relatorio.fechamento, icone: CheckCircle2 },
-            { titulo: "Semana do piloto", texto: relatorio.semanal, icone: FileCheck2 },
-          ].map((r) => (
-            <div key={r.titulo} className="rounded-xl border border-border bg-card p-3.5">
-              <div className="flex items-center justify-between">
-                <p className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
-                  <r.icone className="h-3.5 w-3.5 text-primary" /> {r.titulo}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void copiar(r.texto, r.titulo)}
-                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <ClipboardCopy className="h-3 w-3" /> Copiar
-                </button>
-              </div>
-              <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-[10.5px] leading-relaxed text-muted-foreground">
-                {r.texto}
-              </pre>
-            </div>
-          ))}
-        </div>
-      ) : visao === "fila" ? (
-        <div className="space-y-4">
-          {operadores.filter((o) => !o.is_coordinator).map((o) => {
-            const doOperador = filtrados.filter((v) => v.operator_id === o.id);
-            return (
-              <div key={o.id}>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {o.display_name} · {doOperador.length} na fila
-                </p>
-                {doOperador.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                    {o.display_name} ainda não pegou nenhuma tarefa.
-                    {numeros.semOperador.length > 0 && ` Há ${numeros.semOperador.length} esperando alguém.`}
-                  </p>
-                ) : (
-                  <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">{doOperador.map((v) => <Cartao key={v.id} v={v} />)}</div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Esperando alguém: as tarefas reais do Kanban sem operador, com
-              o id pronto para copiar. É o que transforma "está vazio" em
-              "comece por aqui" — e o que o Hermes precisa para escolher uma
-              tarefa de verdade em vez de inventar. */}
-          {numeros.semOperador.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Esperando um operador · {numeros.semOperador.length} no Kanban
-              </p>
-              <div className="space-y-1">
-                {numeros.semOperador.slice(0, 8).map((t) => {
-                  const cliente = t.project?.client;
-                  const vencida = t.due_date && String(t.due_date) <= hoje;
-                  return (
-                    <div key={String(t.id)} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11.5px] text-foreground">{t.title}</p>
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {[cliente ? (cliente.company_name || cliente.full_name) : null, t.project?.name]
-                            .filter(Boolean).join(" · ") || "sem projeto"}
-                          {t.due_date && (
-                            <span className={cn("ml-1", vencida && "font-semibold text-destructive")}>
-                              · prazo {t.due_date}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => setMenuEncaminhar({
-                          x: e.clientX, y: e.clientY,
-                          tarefaId: String(t.id), titulo: String(t.title),
-                        })}
-                        title="Colocar esta tarefa na fila de um agente"
-                        className="shrink-0 rounded-lg border border-primary/40 bg-secondary px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10"
-                      >
-                        encaminhar
-                      </button>
-                    </div>
-                  );
-                })}
-                {numeros.semOperador.length > 8 && (
-                  <p className="text-[10px] text-muted-foreground">
-                    e mais {numeros.semOperador.length - 8} no Kanban.
-                  </p>
-                )}
-              </div>
-            </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => setMenuEncaminhar({
+                      x: e.clientX, y: e.clientY,
+                      tarefaId: String(t.id), titulo: String(t.title),
+                    })}
+                    title="Colocar esta tarefa na fila de um agente"
+                    className={juntar(botao.secundario, "h-8 px-3 text-[12px] text-primary")}
+                  >
+                    encaminhar
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {numeros.semOperador.length > 8 && (
+            <p className={juntar(texto.auxiliar, "mt-2")}>
+              e mais {numeros.semOperador.length - 8} no Kanban.
+            </p>
           )}
-        </div>
-      ) : visao === "aprovacao" ? (
-        <div className="space-y-4">
-          {/* Primeiro os pedidos EXPLICADOS (tabela nova), depois as
-              propostas de responsavel, e por ultimo os vinculos que so
-              carregam o selo antigo — visiveis para nada ficar invisivel
-              enquanto o agente ainda nao migrou para o pedido explicado. */}
-          <AprovacoesExplicadas
-            nomesDeAgentes={nomesDeAgentes}
-            titulosDeTarefas={titulosDeTarefas}
-            destaqueId={aprovacaoAlvo}
-            aoAbrirDiario={(linkId) => setDiarioAberto({ linkId })}
-          />
-          <PropostasDeResponsavel
-            nomesDeAgentes={nomesDeAgentes}
-            titulosDeTarefas={titulosDeTarefas}
-            destaqueId={propostaAlvo}
-          />
-          {filtrados.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Vínculos marcados com o selo · {filtrados.length}
-              </p>
-              <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
-            </div>
-          )}
-        </div>
-      ) : filtrados.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <PauseCircle className="mx-auto h-5 w-5 text-muted-foreground" />
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Nada em <strong>{VISOES.find((x) => x.id === visao)?.rotulo.toLowerCase()}</strong> agora.
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {numeros.andamento > 0
-              ? `${numeros.andamento} tarefa(s) em andamento em outra visão.`
-              : `${numeros.kanbanAbertas} tarefas abertas no Kanban esperando execução.`}
-          </p>
-        </div>
-      ) : (
-        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
+        </Secao>
       )}
-
+    </div>
+  ) : visao === "aprovacao" ? (
+    <div className="space-y-6">
+      {/* Primeiro os pedidos EXPLICADOS (tabela nova), depois as
+          propostas de responsavel, e por ultimo os vinculos que so
+          carregam o selo antigo — visiveis para nada ficar invisivel
+          enquanto o agente ainda nao migrou para o pedido explicado. */}
+      <AprovacoesExplicadas
+        nomesDeAgentes={nomesDeAgentes}
+        titulosDeTarefas={titulosDeTarefas}
+        destaqueId={aprovacaoAlvo}
+        aoAbrirDiario={(linkId) => setDiarioAberto({ linkId })}
+      />
+      <PropostasDeResponsavel
+        nomesDeAgentes={nomesDeAgentes}
+        titulosDeTarefas={titulosDeTarefas}
+        destaqueId={propostaAlvo}
+      />
+      {filtrados.length > 0 && (
+        <Secao nivel={3} titulo="Vínculos marcados com o selo" descricao={`${filtrados.length}`}>
+          <ListaDeCartoes lista={filtrados} rotulo="Vínculos marcados com o selo" />
+        </Secao>
+      )}
+    </div>
+  ) : filtrados.length === 0 ? (
+    <EstadoVazio
+      icone={<PauseCircle className="h-5 w-5" />}
+      titulo={<>Nada em {VISOES.find((x) => x.id === visao)?.rotulo.toLowerCase()} agora.</>}
+      descricao={numeros.andamento > 0
+        ? `${numeros.andamento} tarefa(s) em andamento em outra visão.`
+        : `${numeros.kanbanAbertas} tarefas abertas no Kanban esperando execução.`}
+    />
+  ) : (
+    <div className="space-y-3">
+      <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
-        <p className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-secondary px-2.5 py-1.5 text-[11px] text-warning">
-          <XCircle className="h-3.5 w-3.5" />
+        <p className="flex items-center text-[12px] text-warning">
+          <XCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
         </p>
       )}
+    </div>
+  );
+
+  /* O quadro: colunas com ROLAGEM PRÓPRIA no computador. Sem isso, uma
+     coluna cheia empurra a página inteira e as outras somem de vista. No
+     celular as colunas viram seções empilhadas e a página rola normal. */
+  const quadro = (
+    <div className="min-w-0 space-y-6 lg:flex lg:min-h-0 lg:flex-1 lg:space-y-0 lg:overflow-x-auto lg:pb-3 lg:[&>*+*]:ml-3">
+      {COLUNAS.map((c) => {
+        const daColuna = vinculosVisiveis.filter((v) => v.status === c.id);
+        return (
+          <section key={c.id} aria-label={c.titulo} className="min-w-0 lg:flex lg:min-h-0 lg:w-[264px] lg:shrink-0 lg:flex-col">
+            <div className="mb-2 flex shrink-0 items-center">
+              <span className={juntar("mr-2 h-1.5 w-1.5 shrink-0 rounded-full", c.cor)} aria-hidden="true" />
+              <h3 className="min-w-0 truncate text-[13px] font-semibold text-foreground">{c.titulo}</h3>
+              <span className={juntar(etiqueta, "ml-auto bg-muted text-muted-foreground")}>{daColuna.length}</span>
+            </div>
+            {daColuna.length === 0 ? (
+              <EstadoVazio compacto titulo="Vazia" />
+            ) : (
+              <RegiaoRolavel modo="lg" rotulo={`Coluna ${c.titulo}`} memoria={`execucao:quadro:${c.id}`}>
+                <ListaDeCartoes lista={daColuna} rotulo={c.titulo} />
+              </RegiaoRolavel>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+
+  const filtrosAtivos = Boolean(busca.trim() || filtroCliente || filtroPrazo !== "todas");
+  const mostraFiltros = aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
+
+  const principal = (
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className="shrink-0 border-b border-border">
+        {/* AS ABAS: separam por pergunta, e ficam acima de tudo. */}
+        <Etapas
+          rotulo="Abas da Execução"
+          valor={aba}
+          onEscolher={(id) => irParaAba(id as (typeof ABAS)[number]["id"])}
+          itens={ABAS.map((x) => {
+            // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
+            // faz o TypeScript inferir never[]. O tipo explicito resolve sem
+            // obrigar a aba a inventar uma visao que ela nao tem.
+            const quantos = (x.visoes as readonly string[])
+              .reduce((s, id) => s + (contagemDaVisao[id] ?? 0), 0);
+            return { valor: x.id, rotulo: x.rotulo, contador: quantos };
+          })}
+        />
+      </div>
+
+      {(visoesDaAba.length > 1 || mostraFiltros) && (
+        <div className="mt-3 shrink-0">
+          {/* A visão da aba e os recortes numa linha só. As visões são um
+              seletor (mais de 4 vira lista); a busca, o cliente e o prazo
+              aplicam antes das visões para número e conteúdo nunca
+              discordarem. */}
+          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+            {mostraFiltros && (
+              <label className="relative block w-full min-w-0 sm:w-60">
+                <span className="sr-only">Buscar tarefa, cliente, projeto ou agente</span>
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar tarefa, cliente ou agente"
+                  className={juntar(campo, "pl-8")}
+                />
+              </label>
+            )}
+            {aba !== "feito" && visoesDaAba.length > 1 && (
+              <SeletorCompacto
+                rotulo="Visão"
+                valor={visao}
+                onEscolher={(v) => setVisao(v as (typeof VISOES)[number]["id"])}
+                listaQuandoNaoCabe
+                opcoes={visoesDaAba.map((x) => {
+                  const quantos = contagemDaVisao[x.id] ?? null;
+                  return { valor: x.id, rotulo: x.rotulo, contador: quantos !== null && quantos > 0 ? quantos : null };
+                })}
+              />
+            )}
+            {mostraFiltros && (
+              <>
+                <SeletorCompacto
+                  rotulo="Cliente"
+                  icone={<Building2 className="h-3.5 w-3.5" />}
+                  valor={filtroCliente}
+                  onEscolher={setFiltroCliente}
+                  modo="lista"
+                  opcoes={[{ valor: "", rotulo: "Todos os clientes" }].concat(clientesDoQuadro.map((c) => ({ valor: c, rotulo: c })))}
+                />
+                <SeletorCompacto
+                  rotulo="Prazo"
+                  valor={filtroPrazo}
+                  onEscolher={(v) => setFiltroPrazo(v as typeof filtroPrazo)}
+                  modo="segmentado"
+          listaQuandoNaoCabe
+                  opcoes={[
+                    { valor: "todas", rotulo: "Qualquer prazo" },
+                    { valor: "vencidas", rotulo: "Vencidas" },
+                    { valor: "semana", rotulo: "Próximos 7 dias" },
+                  ]}
+                />
+                {filtrosAtivos && (
+                  <button
+                    type="button"
+                    onClick={() => { setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }}
+                    className={botao.discreto}
+                  >
+                    Limpar ({vinculosVisiveis.length}/{vinculos.length})
+                  </button>
+                )}
+                {totalEncerradas > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarEncerradas((v) => !v)}
+                    title="Tarefa concluída, arquivada ou excluída"
+                    className={botao.discreto}
+                  >
+                    {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+        {aba !== "feito" && visao === "quadro" ? (
+          quadro
+        ) : (
+          <RegiaoRolavel
+            modo="lg"
+            rotulo="Trabalho dos agentes"
+            memoria={`execucao:${aba === "feito" ? "feito" : visao}`}
+          >
+            <div className="space-y-6 lg:pb-6 lg:pr-1">
+              {aba === "feito" && <OQueFoiFeito />}
+              {aba !== "feito" && conteudoDaVisao}
+              {/* O espelho de "precisa de você": o que já saiu das suas mãos e agora
+                  espera o agente. Sem isto, autorizar parecia concluir. */}
+              {aba === "decisoes" && <OrdensAutorizadas />}
+            </div>
+          </RegiaoRolavel>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-w-0">
+      {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
+          altura da janela; o trabalho (abas e lista) rola de um lado e o resumo
+          (atenção, incidentes e áreas) do outro, cada um por conta própria. No
+          celular a página rola normal: primeiro o que pede atenção, depois o
+          trabalho, por último as áreas. */}
+      <AreaDeTrabalho principalRolavel={false}>
+        <CabecalhoDePagina
+          titulo="Execução"
+          className="shrink-0"
+          descricao={dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura"}
+          ajuda="Operadores internos executam e relatam; o responsável humano continua sendo quem responde. Feito só conta com evidência. A fila só anda com o Hermes ligado: o painel não dispara agente."
+          acoes={
+            <>
+              {profile?.role === "admin" && (
+                <button
+                  type="button"
+                  onClick={() => void reconciliarExecucoes()}
+                  disabled={reconciliando}
+                  title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
+                  aria-label="Reconciliar execuções"
+                  className={botao.secundario}
+                >
+                  <Wrench className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">{reconciliando ? "Reconciliando…" : "Reconciliar"}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void atualizarTudo()}
+                disabled={atualizando}
+                aria-label="Atualizar"
+                className={botao.secundario}
+              >
+                <RefreshCw className={juntar("h-3.5 w-3.5 sm:mr-1.5", atualizando && "animate-spin")} aria-hidden="true" />
+                <span className="hidden sm:inline">Atualizar</span>
+              </button>
+            </>
+          }
+        />
+
+        {((erroVinculos || erroRuns) || runsSemHeartbeat > 0 || (diasSemAgente !== null && diasSemAgente >= 2)) && (
+          <div className="mt-3 shrink-0 space-y-2">
+            {(erroVinculos || erroRuns) && (
+              <EstadoDeErro
+                titulo="Não foi possível ler parte da execução."
+                descricao="Os dados exibidos podem estar desatualizados."
+                acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void atualizarTudo()}>Tentar de novo</button>}
+              />
+            )}
+            {runsSemHeartbeat > 0 && (
+              <p className="flex items-center text-[12px] text-warning">
+                <Clock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {runsSemHeartbeat} execução(ões) sem sinal dentro do prazo. O estado registrado aguarda reconciliação.
+              </p>
+            )}
+            {diasSemAgente !== null && diasSemAgente >= 2 && (
+              <p className="flex items-center text-[12px] text-warning">
+                <PauseCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"}).
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 min-w-0 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-6 lg:gap-y-5 xl:grid-cols-[minmax(0,1fr)_340px] desk:grid-cols-[minmax(0,1fr)_380px]">
+          <aside aria-label="O que pede a sua atenção" className="min-w-0 lg:col-start-2 lg:row-start-1">
+            {atencao}
+          </aside>
+          <section aria-label="Trabalho dos agentes" className="mt-6 flex min-w-0 flex-col lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:min-h-0">
+            {principal}
+          </section>
+          <aside aria-label="Áreas e incidentes" className="mt-8 flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:mt-0 lg:min-h-0">
+            <RegiaoRolavel modo="lg" rotulo="Áreas e incidentes" memoria="execucao:areas">
+              {areasEIncidentes}
+            </RegiaoRolavel>
+          </aside>
+        </div>
+      </AreaDeTrabalho>
 
       {menuEncaminhar && (
         <MenuDeContexto
@@ -1634,11 +1747,6 @@ export default function AdminExecucao() {
         tarefas={tarefas}
         aoFechar={() => setAgenteAberto(null)}
       />
-
-      {/* O espelho de "precisa de você": o que já saiu das suas mãos e agora
-          espera o agente. Sem isto, autorizar parecia concluir. */}
-      {aba === "decisoes" && <OrdensAutorizadas />}
-      {aba === "feito" && <OQueFoiFeito />}
 
       {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem
           sair da Execução. */}

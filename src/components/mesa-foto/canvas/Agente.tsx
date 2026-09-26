@@ -16,6 +16,7 @@ import {
   type NoDoCanvas,
 } from "../canvasApi";
 import { BOTAO, CAMPO, ROTULO, type Fontes } from "./comum";
+import { AjudaRecolhida, CompositorDoAgente, MensagensDoAgente } from "@/components/sistema";
 
 /**
  * Conversa com o Agente (a bolinha do quadro). Dono, 25/09: "uma bolinha onde
@@ -90,11 +91,12 @@ export function ChatDoAgente({
 
   return (
     <div className="flex min-w-0 flex-col space-y-2.5" data-chat-do-agente={no.id}>
-      <div className="flex items-center">
-        <span className="mr-2 flex h-7 w-7 items-center justify-center rounded-full bg-violet-500/20">
-          <Bot className="h-4 w-4 text-violet-300" />
+      <div className="flex min-w-0 items-center">
+        <span className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/20">
+          <Bot className="h-4 w-4 text-violet-300" aria-hidden="true" />
         </span>
-        <p className="min-w-0 flex-1 text-[11.5px] leading-snug text-zinc-400">Lê o contexto do cliente, o que está ligado e a última foto. Escreve o pedido do Resultado.</p>
+        <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-zinc-100">Agente do Resultado</p>
+        <AjudaRecolhida className="ml-1">Lê o contexto do cliente, o que está ligado e a última foto, e escreve o pedido do Resultado. Cada mensagem tem o custo à vista ao lado do Enviar.</AjudaRecolhida>
       </div>
       {!resultado && (
         <button
@@ -108,8 +110,10 @@ export function ChatDoAgente({
           <Link2 className="mr-1 h-3.5 w-3.5" /> Ligar ao Resultado
         </button>
       )}
-      <div ref={conversa} className="nowheel max-h-[30vh] min-h-[80px] space-y-1.5 overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900/60 p-2" aria-label="Conversa com o agente" role="log" data-rolagem-propria="">
-        {mensagens.length === 0 && <p className="text-[11.5px] text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
+      {/* Casca do sistema (PainelDoAgente em peças): a conversa rola por dentro, numa caixa de altura fixa; o campo fica logo abaixo, sempre à vista. */}
+      <div className="flex h-[30vh] min-h-[120px] min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900/60" data-caixa-da-conversa="">
+      <MensagensDoAgente ref={conversa} rotulo="Conversa com o agente" className="nowheel nopan nodrag !space-y-1.5 !p-2">
+        {mensagens.length === 0 && <p className="text-[12px] text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
         {mensagens.map((msg, i) => (
           <p
             key={i}
@@ -124,7 +128,9 @@ export function ChatDoAgente({
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> pensando
           </p>
         )}
+      </MensagensDoAgente>
       </div>
+      <CompositorDoAgente className="!border-t-0 !px-0 !pb-0 !pt-0">
       <div className="flex min-w-0 flex-wrap">
         {ATALHOS.map((a) => (
           <button key={a} type="button" disabled={enviando} onClick={() => void enviar(a)} className="mb-1 mr-1 rounded-full border border-white/10 px-2 py-0.5 text-[10.5px] text-zinc-400 hover:text-white disabled:opacity-50">
@@ -155,6 +161,8 @@ export function ChatDoAgente({
           </button>
         </div>
       </div>
+      </CompositorDoAgente>
+
       <div className="min-w-0">
         <p className={ROTULO}>Pedido que vai ao gerador</p>
         <textarea value={no.dados.pedido || ""} onChange={(e) => onMudarCanvas((c) => mudarDados(c, no.id, { pedido: e.target.value }))} rows={3} placeholder="O agente escreve aqui. Dá para ajustar à mão." aria-label="Pedido do agente" className={CAMPO} />

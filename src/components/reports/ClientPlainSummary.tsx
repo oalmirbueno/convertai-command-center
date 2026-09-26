@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import RitualEstruturado from "@/components/client/RitualEstruturado";
 import { estruturaDoRitual } from "@/lib/ritualTexto";
 import {
   Eye, UserPlus, MessageCircle, ShoppingBag, Wallet,
-  TrendingUp, Lightbulb, ArrowRight, CheckCircle2,
+  TrendingUp, Lightbulb, CheckCircle2,
 } from "lucide-react";
+import { Painel, Secao, etiqueta, juntar, texto } from "@/components/sistema";
 
 /**
  * Leitura do relatório em linguagem de gente.
@@ -50,7 +51,8 @@ export default function ClientPlainSummary({
       if (/investi|spend|verba|gasto|orcamento/.test(key)) return "spend";
       if (/receita|revenue|faturamento/.test(key)) return "revenue";
       if (/venda|compra|purchase|reserva|pedido|booking|checkout_conclu/.test(key)) return "purchases";
-      if (/conversa|lead|mensagem|msg|contato|whatsapp|direct|conversion/.test(key)) return "contacts";
+      // "messages" é o campo padrão do relatório (Mensagens, em AdminReportCreate).
+      if (/conversa|lead|mensagem|messag|msg|contato|whatsapp|direct|conversion/.test(key)) return "contacts";
       if (/clique|click|visita|trafego|traffic|sessao|sessions/.test(key)) return "visits";
       if (/alcance|impress|reach/.test(key)) return "reach";
       if (/seguidor|follower/.test(key)) return "followers";
@@ -242,126 +244,101 @@ export default function ClientPlainSummary({
   ].filter(Boolean) as { icon: any; text: string }[];
 
   return (
-    <section className="rounded-2xl border border-primary/25 bg-card overflow-hidden">
-      <header className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7 sm:py-5">
-        <h2 className="text-base font-semibold text-foreground sm:text-lg">
-          O que aconteceu, em português claro
-        </h2>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-[13px]">
-          Um resumo sem termos técnicos: quantas pessoas viram sua marca, quantas se interessaram e quantas
-          chegaram até vocês {periodDays > 0 ? `nos últimos ${periodDays} dias` : "no período"}.
-        </p>
-      </header>
-
-      <div className="space-y-6 px-5 py-6 sm:px-7">
-        {/* Jornada das pessoas */}
-        <div className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            O caminho que as pessoas fizeram
-          </p>
-          <div className="space-y-2.5">
-            {journey.map((step, index) => (
-              <div key={step.label} className="relative">
-                <div className="flex items-start gap-3.5 rounded-xl border border-border bg-secondary/25 p-3.5 sm:p-4">
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${step.bg}`}>
-                    <step.icon className={`h-5 w-5 ${step.tone}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                      <span className={`text-xl font-bold tabular-nums ${step.tone} sm:text-2xl`}>
-                        {step.value}
+    <Secao
+      titulo="O que aconteceu"
+      descricao={periodDays > 0 ? `Nos últimos ${periodDays} dias` : undefined}
+      ajuda="Um resumo sem termos técnicos: quantas pessoas viram sua marca, quantas se interessaram e quantas chegaram até vocês."
+      divisoria
+    >
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-8">
+        {/* Jornada das pessoas: os números são o assunto, então ficam num painel */}
+        <Painel semEspaco titulo="O caminho que as pessoas fizeram" className="self-start">
+          <ol className="divide-y divide-border">
+            {journey.map((step) => (
+              <li key={step.label} className="flex min-w-0 items-start px-4 py-3">
+                <step.icon className="mr-3 mt-1 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <div className="-mb-1 flex min-w-0 flex-wrap items-baseline [&>*]:mb-1 [&>*]:mr-2">
+                    <span className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{step.value}</span>
+                    <span className="text-[13px] font-medium text-foreground">{step.label}</span>
+                    {step.growth !== null && Math.abs(step.growth) >= 5 && (
+                      <span className={juntar(etiqueta, step.growth > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                        {step.growth > 0 ? "+" : ""}
+                        {Math.round(step.growth)}% vs. período anterior
                       </span>
-                      <span className="text-[13px] font-medium text-foreground">{step.label}</span>
-                      {step.growth !== null && Math.abs(step.growth) >= 5 && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            step.growth > 0
-                              ? "bg-emerald-500/10 text-emerald-500"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {step.growth > 0 ? "+" : ""}
-                          {Math.round(step.growth)}% vs. período anterior
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{step.explain}</p>
+                    )}
                   </div>
+                  <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>{step.explain}</p>
                 </div>
-                {index < journey.length - 1 && (
-                  <div className="flex justify-center py-0.5">
-                    <ArrowRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ol>
+        </Painel>
 
-        {/* Investimento explicado */}
-        {investmentReading.length > 0 && (
-          <div className="rounded-xl border border-border bg-secondary/25 p-4 sm:p-5">
-            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <Wallet className="h-3.5 w-3.5" /> O investimento na prática
-            </p>
-            <div className="mt-2.5 space-y-1.5">
+        {/* Leituras em texto corrido, separadas por divisória (sem caixa) */}
+        <div className="min-w-0 divide-y divide-border">
+          {investmentReading.length > 0 && (
+            <Leitura icone={Wallet} titulo="O investimento na prática">
               {investmentReading.map((line) => (
-                <p key={line} className="text-[13px] leading-relaxed text-foreground">
-                  {line}
+                <p key={line}>{line}</p>
+              ))}
+            </Leitura>
+          )}
+
+          <Leitura icone={TrendingUp} titulo={journeyPhase.title}>
+            <p>{journeyPhase.text}</p>
+          </Leitura>
+
+          <Leitura icone={Lightbulb} titulo="O que isso significa" destaque>
+            <p>{interpretation}</p>
+            {summary && estruturaDoRitual(summary).blocos.length > 0 ? (
+              <div className="pt-1"><RitualEstruturado body={summary} /></div>
+            ) : summary && (
+              <p className="whitespace-pre-line text-muted-foreground">{summary}</p>
+            )}
+          </Leitura>
+
+          {extras.length > 0 && (
+            <Leitura icone={UserPlus} titulo="Também aconteceu no período">
+              {extras.map((extra) => (
+                <p key={extra.text} className="flex items-start text-muted-foreground">
+                  <extra.icon className="mr-2 mt-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">{extra.text}</span>
                 </p>
               ))}
-            </div>
-          </div>
-        )}
+            </Leitura>
+          )}
 
-        {/* Em que fase estamos */}
-        <div className="rounded-xl border border-border bg-secondary/25 p-4 sm:p-5">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            <TrendingUp className="h-3.5 w-3.5" /> {journeyPhase.title}
-          </p>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-foreground">{journeyPhase.text}</p>
-        </div>
-
-        {/* O que isso significa */}
-        <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 sm:p-5">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-            <Lightbulb className="h-3.5 w-3.5" /> O que isso significa
-          </p>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-foreground">{interpretation}</p>
-          {summary && estruturaDoRitual(summary).blocos.length > 0 ? (
-            <div className="mt-3 border-t border-primary/15 pt-3"><RitualEstruturado body={summary} /></div>
-          ) : summary && (
-            <p className="mt-3 whitespace-pre-line border-t border-primary/15 pt-3 text-[13px] leading-relaxed text-muted-foreground">
-              {summary}
-            </p>
+          {nextSteps && (
+            <Leitura icone={CheckCircle2} titulo="O próximo passo">
+              <p className="whitespace-pre-line">{nextSteps.replace(/\*/g, "")}</p>
+            </Leitura>
           )}
         </div>
-
-        {/* Ganhos adicionais */}
-        {extras.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Também aconteceu no período
-            </p>
-            {extras.map((extra) => (
-              <p key={extra.text} className="flex items-start gap-2 text-[12px] leading-relaxed text-muted-foreground">
-                <extra.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                {extra.text}
-              </p>
-            ))}
-          </div>
-        )}
-
-        {/* Próximo passo */}
-        {nextSteps && (
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4 sm:p-5">
-            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
-              <CheckCircle2 className="h-3.5 w-3.5" /> O próximo passo
-            </p>
-            <p className="mt-2.5 whitespace-pre-line text-[13px] leading-relaxed text-foreground">{nextSteps.replace(/\*/g, "")}</p>
-          </div>
-        )}
       </div>
-    </section>
+    </Secao>
+  );
+}
+
+/** Um bloco de leitura: título curto com ícone e o texto embaixo. */
+function Leitura({
+  icone: Icone,
+  titulo,
+  destaque = false,
+  children,
+}: {
+  icone: any;
+  titulo: string;
+  destaque?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 py-3 first:pt-0 last:pb-0">
+      <h3 className="flex items-center text-[13px] font-semibold leading-5 text-foreground">
+        <Icone className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0", destaque ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+        {titulo}
+      </h3>
+      <div className={juntar(texto.corpo, "mt-1.5 space-y-1.5")}>{children}</div>
+    </div>
   );
 }

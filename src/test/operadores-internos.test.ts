@@ -528,9 +528,14 @@ describe("a area Execucao da equipe", () => {
   it("o quadro tem colunas com rolagem PROPRIA", () => {
     // Sem rolagem por coluna, uma coluna cheia empurra a pagina e as
     // outras somem de vista — o quadro deixa de ser quadro.
+    // Sistema de design (E3): cada coluna é uma RegiaoRolavel com a posição
+    // guardada (rola por dentro no computador; no celular as colunas
+    // empilham e a página rola normal, sem rolagem presa).
     expect(pagina).toContain('visao === "quadro"');
-    expect(pagina).toContain("max-h-[62vh] space-y-1.5 overflow-y-auto");
-    expect(pagina).toContain("overflow-x-auto");
+    const quadro = pagina.slice(pagina.indexOf("const quadro = ("), pagina.indexOf("const filtrosAtivos"));
+    expect(quadro).toContain("<RegiaoRolavel");
+    expect(quadro).toContain("memoria={`execucao:quadro:${c.id}`}");
+    expect(quadro).toContain("lg:overflow-x-auto");
   });
 
   it("a mao humana move o quadro pelo RPC, e entra na MESMA trilha", () => {
@@ -595,13 +600,14 @@ describe("a area Execucao da equipe", () => {
 describe("no telefone, as opcoes correm para o lado", () => {
   it("a faixa rola em vez de empilhar, e volta a quebrar no desktop", () => {
     // Dez visoes em flex-wrap viravam quatro fileiras num aparelho de
-    // 375px e comiam a tela antes do conteudo comecar. Medido na bancada:
-    // 1 fileira e 44px de altura no telefone, 2 fileiras e 70px no
-    // desktop, sem estourar a pagina em nenhum dos dois.
-    expect(pagina).toContain("overflow-x-auto");
-    expect(pagina).toContain("scrollbar-hidden");
-    expect(pagina).toContain("md:flex-wrap");
-    expect(pagina).toContain("md:overflow-visible");
+    // 375px e comiam a tela antes do conteudo comecar. Sistema de design
+    // (E3): as abas sao Etapas (uma linha que rola para o lado no
+    // telefone) e as visoes da aba viram um SeletorCompacto (mais de 4
+    // opcoes = lista), entao nunca empilham em fileiras.
+    expect(pagina).toContain("<Etapas");
+    expect(pagina).toContain('rotulo="Abas da Execução"');
+    expect(pagina).toContain("<SeletorCompacto");
+    expect(pagina).toContain('rotulo="Visão"');
   });
 
   it("cada aba mostra quantos itens tem, senao arrastar e as cegas", () => {
@@ -613,9 +619,12 @@ describe("no telefone, as opcoes correm para o lado", () => {
 
   it("a aba escolhida por notificacao e trazida para a tela", () => {
     // Sem isso, tocar no aviso mudava uma visao que estava fora da faixa
-    // e parecia que nada tinha acontecido.
-    expect(pagina).toContain('abasRef.current[visao]?.scrollIntoView');
-    expect(pagina).toContain('inline: "center"');
+    // e parecia que nada tinha acontecido. Agora a aba dona segue a visao
+    // e as Etapas do sistema rolam a aba aberta para a vista; a visao da
+    // aba fica no seletor, sempre visivel.
+    expect(pagina).toContain("const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(visao));");
+    expect(pagina).toContain("valor={aba}");
+    expect(pagina).toContain("valor={visao}");
   });
 });
 
@@ -628,9 +637,15 @@ describe("a hierarquia se le como estrutura, nao como grade", () => {
     expect(organograma).toContain('"mx-auto w-px bg-border"');
   });
 
-  it("cada grupo de funcao e uma caixa solida com nome, contagem e acento", () => {
-    expect(organograma).toContain("rounded-xl border border-border bg-secondary");
+  it("cada grupo de funcao tem nome, contagem e acento", () => {
+    // Sistema de design (E3): nada de cartao dentro de cartao. O grupo
+    // deixou de ser uma caixa em volta dos cartoes dos agentes; o nome, a
+    // contagem e a barra de acento ficam na linha do titulo do grupo.
     expect(organograma).toContain("acentoDaArea");
+    const grupo = organograma.slice(organograma.indexOf("{areas.map(([area, doGrupo]) => {"));
+    expect(grupo).toContain('cn("mr-2 h-3.5 w-1 shrink-0 rounded-full", acento)');
+    expect(grupo).toContain("{doGrupo.length}");
+    expect(grupo).toContain("<Caixa key={o.id} no={o} acento={acento} />");
   });
 
   it("nenhuma superficie grande usa fundo translucido", () => {

@@ -9,14 +9,14 @@ import { excluirTarefa } from "@/lib/taskDelete";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2, ChevronUp, ChevronDown, MoreVertical, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, Plus, X, Paperclip, CalendarIcon, Trash2, MoreVertical, ArrowRight, SlidersHorizontal } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { toast } from "sonner";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useCelular } from "@/hooks/useCelular";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -34,6 +34,23 @@ import {
   TASK_DELIVERY_TYPE_OPTIONS,
   type TaskDeliveryType,
 } from "@/lib/taskDeliveryTypes";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoVazio,
+  Etapas,
+  RegiaoRolavel,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  texto,
+  useEstadoDaTela,
+  lerEstadoDaTela,
+  gravarEstadoDaTela,
+} from "@/components/sistema";
 
 const columns = [
   { id: "backlog", title: "Backlog", dotColor: "bg-muted-foreground" },
@@ -73,6 +90,26 @@ interface KanbanProjectOption {
   } | null;
 }
 
+/** Filtros lembrados ao sair e voltar (docs/design/SISTEMA.md, "Estado que não se perde"). */
+interface FiltrosGuardados {
+  cliente: string;
+  projeto: string;
+  area: string;
+  tipo: string;
+  responsavel: string;
+  prioridade: string;
+  de: string;
+  ate: string;
+  ordem: string;
+}
+const ORDENS = ["manual", "title_asc", "title_desc", "due_asc", "due_desc", "priority"];
+const filtrosValidos = (v: unknown) => !!v && typeof v === "object" && typeof (v as FiltrosGuardados).cliente === "string";
+const dataGuardada = (iso?: string) => {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? undefined : d;
+};
+
 function taskDeliveryTypeLabel(task: {
   delivery_type?: string | null;
 }): string | null {
@@ -91,9 +128,12 @@ export default function Kanban() {
   const suppressRealtimeUntilRef = useRef<number>(0);
   const dropInFlightRef = useRef(false);
   const [dropSaving, setDropSaving] = useState(false);
-  const [mobileTab, setMobileTab] = useState("backlog");
+  // Coluna aberta no celular: lembrada ao sair e voltar.
+  const [mobileTab, setMobileTab] = useEstadoDaTela("coluna", "backlog", {
+    validar: (v) => columns.some((c) => c.id === v),
+  });
   const queryClient = useQueryClient();
-  const isMobile = useIsMobile();
+  const isMobile = useCelular();
 
   const isClient = profile?.role === "client";
 
@@ -158,17 +198,39 @@ export default function Kanban() {
   // Filters
   const [searchParams] = useSearchParams();
   const openedTaskParamRef = useRef<string | null>(null);
-  const [filterClient, setFilterClient] = useState(searchParams.get("client") || "");
-  const [filterProject, setFilterProject] = useState(searchParams.get("project") || "");
-  const [filterArea, setFilterArea] = useState(searchParams.get("area") || "");
-  const [filterDeliveryType, setFilterDeliveryType] = useState(
-    searchParams.get("type") || "",
+  // Link com filtro (?client, ?project, ?area, ?type) manda; sem ele, volta o
+  // que a pessoa tinha escolhido da última vez.
+  const [guardado] = useState<FiltrosGuardados | null>(() =>
+    ["client", "project", "area", "type", "task"].some((k) => searchParams.get(k))
+      ? null
+      : lerEstadoDaTela<FiltrosGuardados | null>("filtros", null, filtrosValidos),
   );
-  const [filterAssignee, setFilterAssignee] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
-  const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(undefined);
-  const [sortBy, setSortBy] = useState<"manual" | "title_asc" | "title_desc" | "due_asc" | "due_desc" | "priority">("manual");
+  const [filterClient, setFilterClient] = useState(searchParams.get("client") || guardado?.cliente || "");
+  const [filterProject, setFilterProject] = useState(searchParams.get("project") || guardado?.projeto || "");
+  const [filterArea, setFilterArea] = useState(searchParams.get("area") || guardado?.area || "");
+  const [filterDeliveryType, setFilterDeliveryType] = useState(
+    searchParams.get("type") || guardado?.tipo || "",
+  );
+  const [filterAssignee, setFilterAssignee] = useState(guardado?.responsavel || "");
+  const [filterPriority, setFilterPriority] = useState(guardado?.prioridade || "");
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(dataGuardada(guardado?.de));
+  const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(dataGuardada(guardado?.ate));
+  const [sortBy, setSortBy] = useState<"manual" | "title_asc" | "title_desc" | "due_asc" | "due_desc" | "priority">(
+    guardado && ORDENS.indexOf(guardado.ordem) >= 0 ? (guardado.ordem as "manual") : "manual",
+  );
+  useEffect(() => {
+    gravarEstadoDaTela<FiltrosGuardados>("filtros", {
+      cliente: filterClient,
+      projeto: filterProject,
+      area: filterArea,
+      tipo: filterDeliveryType,
+      responsavel: filterAssignee,
+      prioridade: filterPriority,
+      de: filterDateFrom ? filterDateFrom.toISOString() : "",
+      ate: filterDateTo ? filterDateTo.toISOString() : "",
+      ordem: sortBy,
+    });
+  }, [filterClient, filterProject, filterArea, filterDeliveryType, filterAssignee, filterPriority, filterDateFrom, filterDateTo, sortBy]);
 
   useEffect(() => {
     const requestedTaskId = searchParams.get("task");
@@ -731,20 +793,18 @@ export default function Kanban() {
     }
   };
 
-  // Mobile: carousel refs para permitir tap na aba mover o carrossel horizontalmente
-  const mobileScrollerRef = useRef<HTMLDivElement | null>(null);
-  const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const mobileScrollRaf = useRef<number | null>(null);
-  const scrollToCol = (colId: string) => {
-    const el = colRefs.current[colId];
-    setMobileTab(colId);
-    if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
-  };
+  // Celular: uma coluna por vez (Etapas no topo) e a página rola normal. O
+  // deslize para o lado troca de coluna, como no carrossel antigo, sem caixa
+  // com rolagem própria prendendo o dedo.
+  const toqueInicial = useRef<{ x: number; y: number } | null>(null);
   const stepMobileColumn = (dir: -1 | 1) => {
     const idx = Math.max(0, columns.findIndex(c => c.id === mobileTab));
     const next = columns[Math.min(columns.length - 1, Math.max(0, idx + dir))];
-    if (next) scrollToCol(next.id);
+    if (next) setMobileTab(next.id);
   };
+
+  const tarefasDaColuna = (colId: string) =>
+    filteredTasks.filter((t: any) => canonicalTaskStatus(t.status) === colId);
 
   const Modals = (
     <>
@@ -783,11 +843,17 @@ export default function Kanban() {
     </>
   );
 
-  // Filtros: extraído em variável para reuso mobile/desktop
+  const limparFiltros = () => {
+    setFilterClient(""); setFilterProject(""); setFilterArea(""); setFilterDeliveryType(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual");
+  };
+  const filtrosExtras = [filterArea, filterDeliveryType, filterAssignee, filterPriority, filterDateFrom, filterDateTo, sortBy !== "manual" ? sortBy : ""].filter(Boolean).length;
+  const campoDoFiltro = juntar(campo, "h-9 pr-8");
+
+  // Filtros: cliente e projeto à vista; o resto num seletor "Filtros" (mais de 4 opções vira seletor).
   const FiltersBar = (
-    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden md:flex-wrap md:gap-3 md:overflow-visible md:pb-0">
-      <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+    <div className="flex min-w-0 items-center" role="group" aria-label="Filtros do Kanban">
       <select
+        aria-label="Cliente"
         value={filterClient}
         onChange={(e) => {
           const nextClientId = e.target.value;
@@ -799,330 +865,400 @@ export default function Kanban() {
             setFilterProject("");
           }
         }}
-        className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
+        className={juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none")}
       >
-        <option value="">Todos os clientes</option>
+        <option value="">Clientes</option>
         {clientOptions.map((client) => (
           <option key={client.id} value={client.id}>
             {client.name}
           </option>
         ))}
       </select>
-      <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
-        className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0">
-        <option value="">Todos projetos</option>
+      <select
+        aria-label="Projeto"
+        value={filterProject}
+        onChange={(e) => setFilterProject(e.target.value)}
+        className={juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none")}
+      >
+        <option value="">Projetos</option>
         {visibleProjectOptions.map((project) => (
           <option key={project.id} value={project.id}>
             {project.name}
           </option>
         ))}
       </select>
-      {!isClient && (
-        <select
-          value={filterArea}
-          onChange={(e) => setFilterArea(e.target.value)}
-          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
-          title="Filtrar por área"
-        >
-          <option value="">Todas as áreas</option>
-          <option value="editorial">Design e conteúdo</option>
-          <option value="traffic">Tráfego</option>
-          <option value="development">Desenvolvimento</option>
-          <option value="operations">Operações</option>
-          <option value="general">Geral</option>
-        </select>
-      )}
-      {!isClient && (
-        <select
-          value={filterDeliveryType}
-          onChange={(event) => setFilterDeliveryType(event.target.value)}
-          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
-          title="Filtrar por tipo de entrega"
-        >
-          <option value="">Todos os tipos</option>
-          {TASK_DELIVERY_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      )}
-      {!isClient && (
-        <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
-          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0">
-          <option value="">Todos os responsáveis</option>
-          {(teamMembers || []).map((m: any) => (<option key={m.id} value={m.id}>{m.full_name}</option>))}
-        </select>
-      )}
-      <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}
-        className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0">
-        <option value="">Todas prioridades</option>
-        <option value="urgent">Urgente</option>
-        <option value="high">Alta</option>
-        <option value="medium">Média</option>
-        <option value="low">Baixa</option>
-      </select>
       <Popover>
         <PopoverTrigger asChild>
-          <button className={cn("bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0 flex items-center gap-1.5", !filterDateFrom && "text-muted-foreground")}>
-            <CalendarIcon className="w-3 h-3" />
-            {filterDateFrom ? format(filterDateFrom, "dd/MM") : "De"}
+          <button
+            type="button"
+            className={juntar(botao.secundario, "px-2.5")}
+            aria-label={`Mais filtros, ${filtrosExtras} ${filtrosExtras === 1 ? "ativo" : "ativos"}`}
+          >
+            <SlidersHorizontal className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Filtros</span>
+            {filtrosExtras > 0 && (
+              <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground">
+                {filtrosExtras}
+              </span>
+            )}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={filterDateFrom} onSelect={setFilterDateFrom} className={cn("p-3 pointer-events-auto")} />
+        <PopoverContent align="end" className="w-[calc(100vw-24px)] max-w-[360px] p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <p className={texto.tituloSecao}>Filtros</p>
+            <button type="button" onClick={limparFiltros} disabled={!hasFilters} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
+              <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Limpar
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {!isClient && (
+              <label className="col-span-2 block min-w-0 sm:col-span-1">
+                <span className={juntar(texto.rotulo, "mb-1 block")}>Área</span>
+                <select
+                  value={filterArea}
+                  onChange={(e) => setFilterArea(e.target.value)}
+                  className={campoDoFiltro}
+                  title="Filtrar por área"
+                >
+                  <option value="">Todas as áreas</option>
+                  <option value="editorial">Design e conteúdo</option>
+                  <option value="traffic">Tráfego</option>
+                  <option value="development">Desenvolvimento</option>
+                  <option value="operations">Operações</option>
+                  <option value="general">Geral</option>
+                </select>
+              </label>
+            )}
+            {!isClient && (
+              <label className="col-span-2 block min-w-0 sm:col-span-1">
+                <span className={juntar(texto.rotulo, "mb-1 block")}>Tipo de entrega</span>
+                <select
+                  value={filterDeliveryType}
+                  onChange={(event) => setFilterDeliveryType(event.target.value)}
+                  className={campoDoFiltro}
+                  title="Filtrar por tipo de entrega"
+                >
+                  <option value="">Todos os tipos</option>
+                  {TASK_DELIVERY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {!isClient && (
+              <label className="col-span-2 block min-w-0 sm:col-span-1">
+                <span className={juntar(texto.rotulo, "mb-1 block")}>Responsável</span>
+                <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className={campoDoFiltro}>
+                  <option value="">Todos os responsáveis</option>
+                  {(teamMembers || []).map((m: any) => (<option key={m.id} value={m.id}>{m.full_name}</option>))}
+                </select>
+              </label>
+            )}
+            <label className="col-span-2 block min-w-0 sm:col-span-1">
+              <span className={juntar(texto.rotulo, "mb-1 block")}>Prioridade</span>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} className={campoDoFiltro}>
+                <option value="">Todas prioridades</option>
+                <option value="urgent">Urgente</option>
+                <option value="high">Alta</option>
+                <option value="medium">Média</option>
+                <option value="low">Baixa</option>
+              </select>
+            </label>
+            <div className="min-w-0">
+              <span className={juntar(texto.rotulo, "mb-1 block")}>Prazo de</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className={juntar(campo, "flex items-center text-left", !filterDateFrom && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {filterDateFrom ? format(filterDateFrom, "dd/MM") : "De"}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={filterDateFrom} onSelect={setFilterDateFrom} className={cn("p-3 pointer-events-auto")} />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="min-w-0">
+              <span className={juntar(texto.rotulo, "mb-1 block")}>até</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className={juntar(campo, "flex items-center text-left", !filterDateTo && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {filterDateTo ? format(filterDateTo, "dd/MM") : "Até"}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} className={cn("p-3 pointer-events-auto")} />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <label className="col-span-2 block min-w-0">
+              <span className={juntar(texto.rotulo, "mb-1 block")}>Ordem</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className={campoDoFiltro} title="Ordenar">
+                <option value="manual">Ordem manual</option>
+                <option value="title_asc">Título A-Z</option>
+                <option value="title_desc">Título Z-A</option>
+                <option value="due_asc">Prazo ↑</option>
+                <option value="due_desc">Prazo ↓</option>
+                <option value="priority">Prioridade</option>
+              </select>
+            </label>
+          </div>
         </PopoverContent>
       </Popover>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button className={cn("bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0 flex items-center gap-1.5", !filterDateTo && "text-muted-foreground")}>
-            <CalendarIcon className="w-3 h-3" />
-            {filterDateTo ? format(filterDateTo, "dd/MM") : "Até"}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} className={cn("p-3 pointer-events-auto")} />
-        </PopoverContent>
-      </Popover>
-      <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
-        className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0" title="Ordenar">
-        <option value="manual">Ordem manual</option>
-        <option value="title_asc">Título A-Z</option>
-        <option value="title_desc">Título Z-A</option>
-        <option value="due_asc">Prazo ↑</option>
-        <option value="due_desc">Prazo ↓</option>
-        <option value="priority">Prioridade</option>
-      </select>
       {hasFilters && (
-        <button onClick={() => { setFilterClient(""); setFilterProject(""); setFilterArea(""); setFilterDeliveryType(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual"); }}
-          className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer bg-transparent border-none shrink-0">
-          <X className="w-3 h-3" /> Limpar
+        <button type="button" onClick={limparFiltros} className={juntar(botao.icone, "ml-1")} aria-label="Limpar filtros" title="Limpar filtros">
+          <X className="h-4 w-4" />
         </button>
       )}
     </div>
   );
 
-  // ═══ MOBILE: layout app-like — header/abas fixos, carrossel horizontal de colunas ═══
-  if (isMobile) {
+  /**
+   * O cartão da tarefa: o MESMO nos dois layouts (colunas no computador e
+   * uma coluna por vez no celular). Arrastar, botão direito, teclado e o
+   * menu de três pontos moram aqui, num lugar só.
+   */
+  const renderCartao = (task: any, col: (typeof columns)[number], colTasks: any[]) => {
+    const showTopLine = dragOver?.id === task.id && dragOver.position === "top";
+    const showBottomLine = dragOver?.id === task.id && dragOver.position === "bottom";
+    const podeArrastar = !isClient && !dragBlockedByFilters && !dropSaving;
     return (
-      <div
-        className="flex h-full min-h-0 flex-col animate-fade-in -mx-4 overflow-hidden"
-      >
-        {/* Header fixo */}
-        <div className="shrink-0 px-4 pt-1 pb-2 bg-background/95 backdrop-blur-sm border-b border-border/50">
-          <h1 className="heading-page mb-2" data-tour="kanban-create-btn">Kanban</h1>
-          {FiltersBar}
-          {/* Tabs indicadoras */}
-          <div className="mt-1 flex items-center gap-1 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => stepMobileColumn(-1)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground disabled:opacity-30"
-              disabled={mobileTab === columns[0].id}
-              aria-label="Coluna anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden overscroll-x-contain" style={{ touchAction: "pan-x" }}>
-              {columns.map(col => {
-                const count = filteredTasks.filter(
-                  (t: any) => canonicalTaskStatus(t.status) === col.id,
-                ).length;
-                const active = mobileTab === col.id;
-                return (
-                  <button
-                    key={col.id}
-                    onClick={() => scrollToCol(col.id)}
-                    className={cn(
-                      "flex-shrink-0 px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap border-b-2 transition-colors bg-transparent",
-                      active ? "text-foreground border-primary" : "text-muted-foreground border-transparent"
-                    )}
-                  >
-                    {col.title} <span className="text-[10px] font-mono opacity-70 ml-1">({count})</span>
-                  </button>
-                );
-              })}
+      <div key={task.id} className="relative" data-cartao-da-tarefa={task.id}>
+        {showTopLine && <div className="mb-1 h-0.5 rounded-full bg-primary" />}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`Abrir tarefa ${task.title}`}
+          draggable={!isClient && !dragBlockedByFilters && !dropSaving}
+          onDragStart={podeArrastar ? (e) => { e.stopPropagation(); handleDragStart(task.id); } : undefined}
+          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
+          onDragOver={isClient ? undefined : (e) => {
+            e.preventDefault();
+            const active = draggedTaskRef.current || draggedTask;
+            if (!active || active === task.id) return;
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+            setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
+          }}
+          onDragLeave={isClient ? undefined : (e) => {
+            e.stopPropagation();
+          }}
+          onDrop={isClient ? undefined : (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const position = dragOver?.id === task.id ? dragOver.position : "bottom";
+            const others = colTasks.filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
+            const targetIdx = others.findIndex((t: any) => t.id === task.id);
+            const insertAt = position === "top" ? targetIdx : targetIdx + 1;
+            handleDrop(col.id, insertAt);
+          }}
+          onClick={() => handleCardClick(task)}
+          onContextMenu={(e) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); }}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleCardClick(task);
+            }
+          }}
+          className={cn(
+            "rounded-md border border-border border-l-[3px] bg-card transition-colors hover:border-muted-foreground/30",
+            priorityBorderColors[task.priority] || "border-l-border",
+            podeArrastar ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+            draggedTask === task.id && "opacity-40",
+            foco,
+          )}
+        >
+          <div className="p-3">
+            <p className="text-[13px] font-medium leading-snug text-foreground">{task.title}</p>
+            {task.project?.name && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{task.project.name}</p>}
+            {(taskDeliveryTypeLabel(task) || isEditorialTask(task, designMemberIds) || task.status === "blocked" || task.milestone?.title) && (
+              <div className="mt-1.5 flex flex-wrap">
+                {taskDeliveryTypeLabel(task) ? (
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-violet-500/10 text-violet-500")}>
+                    {taskDeliveryTypeLabel(task)}
+                  </span>
+                ) : isEditorialTask(task, designMemberIds) && (
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-violet-500/10 text-violet-500")}>
+                    Design e conteúdo
+                  </span>
+                )}
+                {task.status === "blocked" && (
+                  <span className={juntar(etiqueta, "mb-1 mr-1 bg-warning/10 text-warning")}>
+                    Bloqueada
+                  </span>
+                )}
+                {task.milestone?.title && (
+                  <span className={juntar(etiqueta, "mb-1 mr-1 max-w-full truncate bg-primary/10 text-primary")}>
+                    {task.milestone.title}
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="mt-2 flex items-center justify-between">
+              <div className="flex min-w-0 items-center text-[11px] tabular-nums text-muted-foreground">
+                {task.due_date && (
+                  <span className="mr-2 flex items-center">
+                    <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
+                    {formatDate(task.due_date)}
+                  </span>
+                )}
+                {(attachmentCounts || {})[task.id] > 0 && (
+                  <span className="flex items-center" aria-label={`${(attachmentCounts || {})[task.id]} anexos`}>
+                    <Paperclip className="mr-0.5 h-3 w-3" aria-hidden="true" />
+                    {(attachmentCounts || {})[task.id]}
+                  </span>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center">
+                <Avatar className="h-6 w-6" title={task.assignee?.full_name || "Sem responsável"}>
+                  <AvatarFallback className="bg-muted text-[10px] font-medium text-muted-foreground">
+                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                  </AvatarFallback>
+                </Avatar>
+                {!isClient && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className={juntar(botao.icone, "ml-1 h-7 w-7")}
+                        aria-label={`Ações da tarefa ${task.title}`}
+                        title="Ações da tarefa"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      className="w-48 p-1"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <p className={juntar(texto.rotulo, "px-2 py-1.5")}>Mover para</p>
+                      {columns
+                        .filter(
+                          (column) =>
+                            column.id !== canonicalTaskStatus(task.status),
+                        )
+                        .map((column) => (
+                          <button
+                            key={column.id}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void changeStatus(
+                                task,
+                                column.id,
+                              );
+                            }}
+                            className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-foreground hover:bg-muted", foco)}
+                          >
+                            <span className={`mr-2 h-1.5 w-1.5 rounded-full ${column.dotColor}`} aria-hidden="true" />
+                            {column.title}
+                            <ArrowRight className="ml-auto h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                          </button>
+                        ))}
+                      {!requestIdFromTaskSource(task.source) && (
+                        <>
+                          <div className="my-1 border-t border-border" />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setDeleteTask(task);
+                            }}
+                            className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-destructive hover:bg-destructive/10", foco)}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                            Excluir
+                          </button>
+                        </>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => stepMobileColumn(1)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground disabled:opacity-30"
-              disabled={mobileTab === columns[columns.length - 1].id}
-              aria-label="Próxima coluna"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
           </div>
         </div>
+        {showBottomLine && <div className="mt-1 h-0.5 rounded-full bg-primary" />}
+      </div>
+    );
+  };
 
-        {/* Carrossel de colunas com snap horizontal */}
+  const cabecalho = (
+    <CabecalhoDePagina
+      titulo="Kanban"
+      ajuda="Todas as tarefas da equipe por etapa. Arraste o cartão para mudar de coluna ou de ordem (com os filtros limpos e a ordem manual). Botão direito no cartão abre o menu."
+      descricao={isLoading ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`}
+      acoes={
+        !isClient ? (
+          <button
+            type="button"
+            data-tour="kanban-create-btn"
+            onClick={() => setCreateStatus(isMobile ? mobileTab : "backlog")}
+            className={botao.primario}
+            aria-label="Nova tarefa"
+          >
+            <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Nova tarefa</span>
+          </button>
+        ) : undefined
+      }
+    />
+  );
+
+  // ═══ CELULAR: uma coluna por vez, a página rola normal ═══
+  if (isMobile) {
+    const col = columns.find((c) => c.id === mobileTab) || columns[0];
+    const colTasks = tarefasDaColuna(col.id);
+    return (
+      <div className="min-w-0">
+        {cabecalho}
+        <div className="mt-3">{FiltersBar}</div>
+        <Etapas
+          className="mt-3 border-b border-border"
+          rotulo="Colunas do Kanban"
+          itens={columns.map((c) => ({ valor: c.id, rotulo: c.title, contador: isLoading ? null : tarefasDaColuna(c.id).length }))}
+          valor={col.id}
+          onEscolher={setMobileTab}
+        />
         <div
-          ref={mobileScrollerRef}
-          className="flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hidden overscroll-x-contain"
-          style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
-          onScroll={(e) => {
-            const scroller = e.currentTarget;
-            if (mobileScrollRaf.current) return;
-            mobileScrollRaf.current = window.requestAnimationFrame(() => {
-              mobileScrollRaf.current = null;
-              const center = scroller.scrollLeft + scroller.clientWidth / 2;
-              let closest = columns[0].id;
-              let bestDist = Infinity;
-              columns.forEach(col => {
-                const el = colRefs.current[col.id];
-                if (!el) return;
-                const mid = el.offsetLeft + el.offsetWidth / 2;
-                const d = Math.abs(mid - center);
-                if (d < bestDist) { bestDist = d; closest = col.id; }
-              });
-              setMobileTab(prev => prev === closest ? prev : closest);
-            });
+          className="mt-3 min-h-[50vh] space-y-2 pb-4"
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            toqueInicial.current = t ? { x: t.clientX, y: t.clientY } : null;
           }}
+          onTouchEnd={(e) => {
+            const inicio = toqueInicial.current;
+            const t = e.changedTouches[0];
+            toqueInicial.current = null;
+            if (!inicio || !t) return;
+            const dx = t.clientX - inicio.x;
+            const dy = t.clientY - inicio.y;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) stepMobileColumn(dx < 0 ? 1 : -1);
+          }}
+          onDragOver={isClient ? undefined : (e) => e.preventDefault()}
+          onDrop={isClient ? undefined : () => handleDrop(col.id)}
         >
           {isLoading ? (
-            <div className="text-sm text-muted-foreground py-8 text-center w-full">Carregando...</div>
+            <Carregando rotulo="Carregando tarefas" linhas={4} />
+          ) : colTasks.length === 0 ? (
+            <EstadoVazio
+              compacto
+              titulo="Sem tarefas nesta coluna."
+              acao={!isClient ? (
+                <button type="button" onClick={() => setCreateStatus(col.id)} className={botao.discreto} aria-label={`Nova tarefa em ${col.title}`}>
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova
+                </button>
+              ) : undefined}
+            />
           ) : (
-            columns.map(col => {
-              const colTasks = filteredTasks.filter(
-                (t: any) => canonicalTaskStatus(t.status) === col.id,
-              );
-              return (
-                <div
-                  key={col.id}
-                  ref={(el) => { colRefs.current[col.id] = el; }}
-                   className="snap-start shrink-0 w-full px-4 flex flex-col min-h-0"
-                  onDragOver={isClient ? undefined : (e) => e.preventDefault()}
-                  onDrop={isClient ? undefined : () => handleDrop(col.id)}
-                >
-                  {/* Header da coluna (sticky dentro do próprio card) */}
-                  <div className="flex items-center gap-2 px-1 pt-3 pb-2 shrink-0">
-                    <div className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
-                    <span className="label-sm">{col.title}</span>
-                    <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded ml-auto">{colTasks.length}</span>
-                    {!isClient && (
-                      <button onClick={() => setCreateStatus(col.id)}
-                        className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-secondary">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Lista scrollável da coluna */}
-                  <div
-                    className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 pb-4"
-                    style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}
-                  >
-                    {colTasks.length === 0 && (
-                      <p className="text-[12px] text-muted-foreground py-8 text-center">Sem tarefas.</p>
-                    )}
-                    {colTasks.map((task: any) => (
-                      <div
-                        key={task.id}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Abrir tarefa ${task.title}`}
-                        draggable={!isClient && !dragBlockedByFilters && !dropSaving}
-                        onDragStart={isClient || dragBlockedByFilters || dropSaving ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
-                        onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
-                        onClick={() => handleCardClick(task)}
-                        onContextMenu={(e) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); }}
-                        onKeyDown={(event) => {
-                          if (event.target !== event.currentTarget) return;
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            handleCardClick(task);
-                          }
-                        }}
-                        className={cn(
-                          "bg-card border border-border rounded-[10px] border-l-[3px] cursor-pointer active:scale-[0.99] transition-transform",
-                          !isClient && !dragBlockedByFilters && !dropSaving && "cursor-grab active:cursor-grabbing",
-                          draggedTask === task.id && "opacity-40",
-                          priorityBorderColors[task.priority] || "border-l-border"
-                        )}
-                      >
-                        <div className="p-3 space-y-2">
-                          <div>
-                            <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{task.project?.name}</p>
-                            {taskDeliveryTypeLabel(task) ? (
-                              <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
-                                {taskDeliveryTypeLabel(task)}
-                              </span>
-                            ) : isEditorialTask(task, designMemberIds) && (
-                              <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
-                                Design e conteúdo
-                              </span>
-                            )}
-                            {task.status === "blocked" && (
-                              <span className="ml-1 mt-1 inline-flex rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] font-medium text-warning">
-                                Bloqueada
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              <span className="font-mono">{formatDate(task.due_date)}</span>
-                              {(attachmentCounts || {})[task.id] > 0 && (
-                                <span className="flex items-center gap-0.5"><Paperclip className="w-3 h-3" />{(attachmentCounts || {})[task.id]}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Avatar className="w-6 h-6">
-                                <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                                  {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                                </AvatarFallback>
-                              </Avatar>
-                              {!isClient && (
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <button
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="p-1.5 rounded hover:bg-secondary text-muted-foreground"
-                                      title="Mover"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-                                  </PopoverTrigger>
-                                  <PopoverContent align="end" className="w-48 p-1" onClick={(e) => e.stopPropagation()}>
-                                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1.5">Mover para</p>
-                                    {columns.filter(
-                                      (c) =>
-                                        c.id !== canonicalTaskStatus(task.status),
-                                    ).map(c => (
-                                      <button
-                                        key={c.id}
-                                        onClick={(e) => { e.stopPropagation(); changeStatus(task, c.id); }}
-                                        className="w-full flex items-center gap-2 px-2 py-2 rounded text-[13px] hover:bg-secondary text-foreground"
-                                      >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${c.dotColor}`} />
-                                        {c.title}
-                                        <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground" />
-                                      </button>
-                                    ))}
-                                    {!requestIdFromTaskSource(task.source) && (
-                                      <>
-                                        <div className="border-t border-border my-1" />
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                                          className="w-full flex items-center gap-2 px-2 py-2 rounded text-[13px] hover:bg-destructive/10 text-destructive"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" /> Excluir
-                                        </button>
-                                      </>
-                                    )}
-                                  </PopoverContent>
-                                </Popover>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })
+            colTasks.map((task: any) => renderCartao(task, col, colTasks))
           )}
         </div>
         {Modals}
@@ -1130,240 +1266,74 @@ export default function Kanban() {
     );
   }
 
+  // ═══ COMPUTADOR: quatro colunas; cada uma rola sozinha de 1024 px para cima ═══
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="heading-page" data-tour="kanban-create-btn">Kanban</h1>
+    <div className="min-w-0">
+      {cabecalho}
+      <div className="mt-3">{FiltersBar}</div>
 
-      {/* Filters */}
-      {FiltersBar}
-
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-      ) : (tasks || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhuma tarefa encontrada.</div>
-      ) : (
-        /* ═══ DESKTOP: Columns layout ═══ */
-        <div className="flex gap-6 overflow-x-auto pb-4" data-tour="kanban-board" style={{ scrollSnapType: 'x mandatory' }}>
-          {columns.map((col) => {
-            const colTasks = filteredTasks.filter(
-              (t: any) => canonicalTaskStatus(t.status) === col.id,
-            );
-            return (
-              <div
-                key={col.id}
-                className="min-w-[300px] max-w-[320px] flex-shrink-0 space-y-3"
-                style={{ scrollSnapAlign: 'start' }}
-                onDragOver={isClient ? undefined : (e) => e.preventDefault()}
-                onDrop={isClient ? undefined : () => handleDrop(col.id)}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
-                  <span className="label-sm">{col.title}</span>
-                  <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded ml-auto">{colTasks.length}</span>
-                  {!isClient && (
-                    <button onClick={() => setCreateStatus(col.id)}
-                      className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-0.5 rounded hover:bg-secondary">
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100svh - 280px)", scrollbarWidth: "none" }}>
-                  {colTasks.map((task: any, idx: number) => {
-                    const showTopLine = dragOver?.id === task.id && dragOver.position === "top";
-                    const showBottomLine = dragOver?.id === task.id && dragOver.position === "bottom";
-                    return (
-                      <div key={task.id} className="relative">
-                        {showTopLine && <div className="h-0.5 bg-primary rounded-full mb-1 animate-fade-in" />}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Abrir tarefa ${task.title}`}
-                          draggable={!isClient && !dragBlockedByFilters && !dropSaving}
-                          onDragStart={isClient || dragBlockedByFilters || dropSaving ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
-                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
-                          onDragOver={isClient ? undefined : (e) => {
-                            e.preventDefault();
-                            const active = draggedTaskRef.current || draggedTask;
-                            if (!active || active === task.id) return;
-                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                            const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
-                            setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
-                          }}
-                          onDragLeave={isClient ? undefined : (e) => {
-                            e.stopPropagation();
-                          }}
-                          onDrop={isClient ? undefined : (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const position = dragOver?.id === task.id ? dragOver.position : "bottom";
-                            const others = colTasks.filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
-                            const targetIdx = others.findIndex((t: any) => t.id === task.id);
-                            const insertAt = position === "top" ? targetIdx : targetIdx + 1;
-                            handleDrop(col.id, insertAt);
-                          }}
-                          onClick={() => handleCardClick(task)}
-                          onContextMenu={(e) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); }}
-                          onKeyDown={(event) => {
-                            if (event.target !== event.currentTarget) return;
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handleCardClick(task);
-                            }
-                          }}
-                          className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient || dragBlockedByFilters || dropSaving ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${draggedTask === task.id ? "opacity-40" : ""} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
-                        >
-                          <div className="p-3.5 space-y-2.5">
-                            <div>
-                              <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
-                              {taskDeliveryTypeLabel(task) ? (
-                                <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
-                                  {taskDeliveryTypeLabel(task)}
-                                </span>
-                              ) : isEditorialTask(task, designMemberIds) && (
-                                <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
-                                  Design e conteúdo
-                                </span>
-                              )}
-                              {task.status === "blocked" && (
-                                <span className="ml-1 mt-1 inline-flex rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] font-medium text-warning">
-                                  Bloqueada
-                                </span>
-                              )}
-                              {task.milestone?.title && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                                  {task.milestone.title}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                                  <Clock className="w-3 h-3" />
-                                  {formatDate(task.due_date)}
-                                </div>
-                                {(attachmentCounts || {})[task.id] > 0 && (
-                                  <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                    <Paperclip className="w-3 h-3" />
-                                    {(attachmentCounts || {})[task.id]}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {!isClient && (
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <button
-                                        onClick={(event) =>
-                                          event.stopPropagation()
-                                        }
-                                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                                        title="Ações da tarefa"
-                                      >
-                                        <MoreVertical className="h-4 w-4" />
-                                      </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent
-                                      align="end"
-                                      className="w-48 p-1"
-                                      onClick={(event) =>
-                                        event.stopPropagation()
-                                      }
-                                    >
-                                      <p className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                                        Mover para
-                                      </p>
-                                      {columns
-                                        .filter(
-                                          (column) =>
-                                            column.id !==
-                                            canonicalTaskStatus(task.status),
-                                        )
-                                        .map((column) => (
-                                          <button
-                                            key={column.id}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              void changeStatus(
-                                                task,
-                                                column.id,
-                                              );
-                                            }}
-                                            className="flex w-full items-center gap-2 rounded px-2 py-2 text-[13px] text-foreground hover:bg-secondary"
-                                          >
-                                            <span
-                                              className={`h-1.5 w-1.5 rounded-full ${column.dotColor}`}
-                                            />
-                                            {column.title}
-                                            <ArrowRight className="ml-auto h-3 w-3 text-muted-foreground" />
-                                          </button>
-                                        ))}
-                                      {!requestIdFromTaskSource(task.source) && (
-                                        <>
-                                          <div className="my-1 border-t border-border" />
-                                          <button
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              setDeleteTask(task);
-                                            }}
-                                            className="flex w-full items-center gap-2 rounded px-2 py-2 text-[13px] text-destructive hover:bg-destructive/10"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                            Excluir
-                                          </button>
-                                        </>
-                                      )}
-                                    </PopoverContent>
-                                  </Popover>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        {showBottomLine && <div className="h-0.5 bg-primary rounded-full mt-1 animate-fade-in" />}
+      <AreaDeTrabalho principalRolavel={false} className="mt-4">
+        {!isLoading && (tasks || []).length === 0 ? (
+          <EstadoVazio
+            titulo="Nenhuma tarefa ainda."
+            acao={!isClient ? (
+              <button type="button" onClick={() => setCreateStatus("backlog")} className={botao.primario}>Nova tarefa</button>
+            ) : undefined}
+          />
+        ) : (
+          <div
+            className="grid min-w-0 gap-4 md:grid-cols-2 lg:h-full lg:min-h-0 lg:grid-cols-4 lg:grid-rows-[minmax(0,1fr)]"
+            data-tour="kanban-board"
+          >
+            {columns.map((col) => {
+              const colTasks = tarefasDaColuna(col.id);
+              return (
+                <section
+                  key={col.id}
+                  aria-label={col.title}
+                  className="flex min-w-0 flex-col lg:min-h-0"
+                  onDragOver={isClient ? undefined : (e) => e.preventDefault()}
+                  onDrop={isClient ? undefined : () => handleDrop(col.id)}
+                >
+                  <div className="mb-2 flex h-8 shrink-0 items-center px-0.5">
+                    <span aria-hidden="true" className={`mr-2 h-1.5 w-1.5 rounded-full ${col.dotColor}`} />
+                    <h2 className={juntar(texto.rotulo, "text-foreground")}>{col.title}</h2>
+                    <span className="ml-2 text-[11px] tabular-nums text-muted-foreground">{isLoading ? "" : colTasks.length}</span>
+                    {!isClient && (
+                      <button
+                        type="button"
+                        onClick={() => setCreateStatus(col.id)}
+                        className={juntar(botao.icone, "ml-auto h-7 w-7")}
+                        aria-label={`Nova tarefa em ${col.title}`}
+                        title={`Nova tarefa em ${col.title}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <RegiaoRolavel
+                    rotulo={`Tarefas em ${col.title}`}
+                    memoria={`kanban:coluna:${col.id}`}
+                    className="min-h-[120px] space-y-2 pb-16 lg:pr-1"
+                  >
+                    {isLoading ? (
+                      <Carregando rotulo={`Carregando ${col.title}`} linhas={3} />
+                    ) : colTasks.length === 0 ? (
+                      <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-border px-3 text-center">
+                        <p className={texto.auxiliar}>{isClient ? "Sem tarefas." : "Sem tarefas. Arraste para cá."}</p>
                       </div>
-                    );
-                  })}
-                </div>
+                    ) : (
+                      colTasks.map((task: any) => renderCartao(task, col, colTasks))
+                    )}
+                  </RegiaoRolavel>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </AreaDeTrabalho>
 
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Task Detail Drawer */}
-      {detailTask && (
-        <TaskDetailDrawer
-          task={detailTask}
-          onClose={() => setDetailTask(null)}
-          teamMembers={teamMembers || []}
-          projects={projects || []}
-          readOnly={isClient}
-        />
-      )}
-
-      {!isClient && (
-        <CreateTaskModal
-          open={!!createStatus}
-          onClose={() => setCreateStatus(null)}
-          defaultStatus={createStatus || "backlog"}
-          teamMembers={teamMembers || []}
-        />
-      )}
-
-      <ConfirmModal
-        open={!!deleteTask}
-        title="Excluir tarefa"
-        description={`Tem certeza que deseja excluir "${deleteTask?.title}"? Esta ação removerá comentários, checklists e anexos vinculados.`}
-        onConfirm={handleDeleteTask}
-        onCancel={() => setDeleteTask(null)}
-      />
+      {Modals}
     </div>
   );
 }

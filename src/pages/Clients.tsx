@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useClientFinancialSummaries, useFinancePlans, useFinanceSettings } from "@/hooks/useFinanceV2";
@@ -14,13 +14,27 @@ import {
   Search,
   X,
   ChevronRight,
+  MoreHorizontal,
   Users,
-  DollarSign,
-  Receipt,
-  Wallet,
-  AlertCircle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AjudaRecolhida,
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  Painel,
+  Secao,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  juntar,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -47,16 +61,17 @@ function getRenewalStatus(dateStr: string | null | undefined) {
 }
 
 const STATUS_TABS = [
-  { value: "all", label: "Todos" },
+  { value: "all", label: "Todos os status" },
   { value: "active", label: "Ativos" },
-  { value: "onboarding", label: "Em Andamento" },
+  { value: "onboarding", label: "Em andamento" },
   { value: "standby", label: "Standby" },
   { value: "inactive", label: "Inativos" },
 ];
 
+// Bolinha de status parada (nada piscando na lista).
 const statusDot: Record<string, string> = {
-  active: "bg-success pulse-dot",
-  onboarding: "bg-warning pulse-dot",
+  active: "bg-success",
+  onboarding: "bg-warning",
   standby: "bg-accent",
   inactive: "bg-muted-foreground",
 };
@@ -89,10 +104,13 @@ const SERVICE_FILTERS: { value: string; label: string }[] = [
 ];
 
 const typeBadge: Record<string, { label: string; cls: string }> = {
-  recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary border-primary/30" },
-  one_off: { label: "Avulso", cls: "bg-warning/10 text-warning border-warning/30" },
-  hybrid: { label: "Híbrido", cls: "bg-accent/10 text-accent-foreground border-accent/30" },
+  recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary" },
+  one_off: { label: "Avulso", cls: "bg-warning/10 text-warning" },
+  hybrid: { label: "Híbrido", cls: "bg-accent/15 text-foreground" },
 };
+
+const validarOpcao = (opcoes: { value: string }[]) => (v: unknown) =>
+  typeof v === "string" && opcoes.some((o) => o.value === v);
 
 function normalizeSearch(value: string) {
   return value
@@ -607,6 +625,9 @@ export default function Clients() {
       { separador: true },
       { rotulo: "Copiar nome", acao: copiar("Nome", c.company_name || c.full_name || "") },
     ];
+    if (isAdmin && !isInternalClient(c)) {
+      itens.splice(1, 0, { rotulo: "Cobrança e custo no Financeiro", acao: () => navigate("/financeiro") });
+    }
     if (c.email) itens.push({ rotulo: "Copiar e-mail", acao: copiar("E-mail", c.email) });
     if (c.phone) itens.push({ rotulo: "Copiar telefone", acao: copiar("Telefone", c.phone) });
     if (c.phone) {
@@ -615,14 +636,23 @@ export default function Clients() {
         acao: () => window.open(`https://wa.me/${String(c.phone).replace(/\D/g, "")}`, "_blank", "noopener,noreferrer"),
       });
     }
+    if (!isInternalClient(c) && (c.client_type || "recurring") === "one_off") {
+      const concluido = Boolean(c?.services_config?.one_off_done);
+      itens.push({ separador: true });
+      itens.push({
+        rotulo: concluido ? "Retomar cliente" : "Marcar avulso como concluído",
+        acao: () => void toggleOneOffDone(c, !concluido),
+      });
+    }
     return itens;
   }
   const [briefingOpen, setBriefingOpen] = useState(false);
-  const [tab, setTab] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [showDoneOneOffs, setShowDoneOneOffs] = useState(false);
-  const [serviceFilter, setServiceFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  // Filtros, busca e o grupo de avulsos concluídos ficam lembrados ao sair e voltar.
+  const [tab, setTab] = useEstadoDaTela("filtro:status", "all", { validar: validarOpcao(STATUS_TABS) });
+  const [typeFilter, setTypeFilter] = useEstadoDaTela("filtro:tipo", "all", { validar: validarOpcao(TYPE_TABS) });
+  const [showDoneOneOffs, setShowDoneOneOffs] = useEstadoDaTela("avulsos-concluidos", false, { validar: (v) => typeof v === "boolean" });
+  const [serviceFilter, setServiceFilter] = useEstadoDaTela("filtro:servico", "all", { validar: validarOpcao(SERVICE_FILTERS) });
+  const [search, setSearch] = useEstadoDaTela("busca", "", { validar: (v) => typeof v === "string" });
 
   useEffect(() => {
     const requestedClientId = searchParams.get("client");
@@ -867,7 +897,6 @@ export default function Clients() {
       label: "Clientes ativos",
       value: String(activeClientCount),
       helper: "recorrentes + híbridos",
-      icon: Users,
       tone: "text-success",
       loading: isLoading,
     },
@@ -875,7 +904,6 @@ export default function Clients() {
       label: "MRR (mensalidades)",
       value: formatCurrency(grossBilling),
       helper: `soma real de ${payingClients.length} mensalista(s)`,
-      icon: DollarSign,
       tone: "text-primary",
       loading: isLoading,
     },
@@ -883,7 +911,6 @@ export default function Clients() {
       label: "Recebido no mês",
       value: formatCurrency(receivedThisMonth),
       helper: `Mensalidades ${formatCurrency(receivedMonthBills)} · Projetos ${formatCurrency(receivedMonthInstallments)}`,
-      icon: Receipt,
       tone: "text-success",
       loading: isLoading,
     },
@@ -891,7 +918,6 @@ export default function Clients() {
       label: "A receber no mês",
       value: formatCurrency(receivableTotal),
       helper: `Mensalidades ${formatCurrency(receivableBillsMonth)} · Projetos ${formatCurrency(receivableInstallmentsMonth)}`,
-      icon: Wallet,
       tone: "text-warning",
       loading: isLoading,
     },
@@ -899,146 +925,412 @@ export default function Clients() {
       label: "Inadimplente",
       value: formatCurrency(overdueTotal),
       helper: "saldo vencido",
-      icon: AlertCircle,
       tone: overdueTotal && overdueTotal > 0 ? "text-destructive" : "text-muted-foreground",
       loading: isLoading,
     },
   ];
 
-  return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="heading-page">Clientes</p>
-        {isAdmin && (
-          <div className="flex gap-2 flex-wrap justify-end">
-            <button onClick={() => navigate("/ver-como-cliente")}
-              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Ver como</span> Cliente
-            </button>
-            <button onClick={() => setBriefingOpen(true)}
-              data-tour="clients-briefing-btn"
-              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
-              <Link2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Link</span> Briefing
-            </button>
-            <button
-              onClick={() => setCreateOpen(true)}
-              data-tour="clients-create-btn"
-              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Novo</span> Cliente
-            </button>
-          </div>
-        )}
-      </div>
+  const filtrosAtivos = serviceFilter !== "all" || typeFilter !== "all" || tab !== "all";
+  const abrirMenuNoBotao = (e: { currentTarget: HTMLElement }, cliente: any) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenuCliente({ x: Math.max(8, r.right - 220), y: r.bottom + 4, cliente });
+  };
 
-      {isAdmin && (
-        <section className="mt-4" aria-label="Resumo financeiro dos clientes">
-          <div className="grid grid-flow-col auto-cols-[minmax(158px,1fr)] gap-2 overflow-x-auto pb-1 scrollbar-hidden md:grid-flow-row md:auto-cols-auto md:grid-cols-3 md:overflow-visible xl:grid-cols-5">
-            {kpiCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div key={card.label} className="rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {card.label}
-                    </p>
-                    <Icon className={`h-3.5 w-3.5 shrink-0 ${card.tone}`} aria-hidden="true" />
-                  </div>
-                  {card.loading ? (
-                    <div className="mt-2 h-5 w-24 animate-pulse rounded bg-secondary" aria-label={`Carregando ${card.label}`} />
-                  ) : (
-                    <p className={`mt-1 truncate font-mono text-base font-semibold ${card.tone}`}>{card.value}</p>
-                  )}
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{card.helper}</p>
-                </div>
-              );
-            })}
-          </div>
-          {financialError && (
-            <p className="mt-1.5 flex items-center gap-1 text-[10px] text-warning" role="status">
-              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              O resumo financeiro está temporariamente indisponível; os clientes continuam acessíveis.
-            </p>
-          )}
-        </section>
-      )}
+  /** Uma linha da lista: identificação, renovação, projetos e (admin) o financeiro numa faixa só. */
+  const renderClientRow = (c: any, extra?: { acao?: ReactNode; apagado?: boolean }) => {
+    const financialRecord = financialByClient.get(String(c.id));
+    const internal = isInternalClient(c);
+    // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
+    // operacional do plano do perfil para a linha nunca ficar sem soma.
+    const profileValue = Number((c as any).plan_value) || 0;
+    // Regra de ouro: cada degrau só ganha se tiver VALOR de verdade.
+    // Um vínculo vazio no resumo oficial (o caso Acerbi: híbrido com
+    // linha zerada) não pode esconder o valor que existe no termo, no
+    // cadastro ou no catálogo de planos.
+    const recordValue =
+      Number(financialRecord?.operationalAmount) || Number(financialRecord?.finalAmount) || 0;
+    // Degrau 1.5: o termo do cliente lido direto (o valor que a equipe
+    // digitou ao escolher o plano mora aqui e não pode sumir).
+    const directTerm = !internal ? termByClient.get(String(c.id)) : null;
+    const termVersion = directTerm?.plan_version_id
+      ? planVersionById.get(directTerm.plan_version_id)
+      : null;
+    const termOperational =
+      Number(directTerm?.operational_amount) || Number(termVersion?.amount) || 0;
+    // Último degrau (o bug do "tudo zerado"): cadastro tem o PLANO
+    // mas nenhum valor. O preço oficial do plano no Financeiro vale.
+    const matchedPlan =
+      !internal && c.plan_name
+        ? planByName.get(normalizePlanName(String(c.plan_name)))
+        : null;
+    const matchedVersion = matchedPlan?.currentVersion || matchedPlan?.versions?.[0] || null;
+    const matchedAmount =
+      Number(matchedVersion?.amount) || Number(matchedVersion?.finalAmount) || 0;
+    const financial = financialRecord && recordValue > 0
+      ? financialRecord
+      : directTerm && termOperational > 0
+        ? ({
+            clientId: String(c.id),
+            planName: c.plan_name || null,
+            pricingMode:
+              directTerm.pricing_mode === "linked" || directTerm.pricing_mode === "custom"
+                ? directTerm.pricing_mode
+                : null,
+            operationalAmount: termOperational,
+            finalAmount: Number(directTerm.final_amount) || termOperational,
+            planAmount: termOperational,
+            finalPlanAmount: Number(directTerm.final_amount) || termOperational,
+            billingPeriod: directTerm.billing_period || null,
+            termStatus: directTerm.status || null,
+            reviewRequired: false,
+            directCost: Number(directTerm.direct_cost_amount) || null,
+            directCostEstimated: !!directTerm.direct_cost_estimated,
+            marginPercent:
+              termOperational > 0 && Number(directTerm.direct_cost_amount) > 0
+                ? ((termOperational - Number(directTerm.direct_cost_amount)) / termOperational) * 100
+                : null,
+            dueLabel: null,
+            billingStatus: c.plan_status || null,
+            receivableAmount: null,
+            overdueAmount: null,
+            raw: {},
+          } as ClientFinancialView)
+      : profileValue > 0 && !internal
+        ? ({
+            clientId: String(c.id),
+            planName: c.plan_name || null,
+            pricingMode: null,
+            operationalAmount: profileValue * (1 - 0.06),
+            finalAmount: profileValue,
+            planAmount: profileValue,
+            finalPlanAmount: profileValue,
+            billingPeriod: null,
+            termStatus: null,
+            reviewRequired: false,
+            directCost: null,
+            directCostEstimated: false,
+            marginPercent: null,
+            dueLabel: null,
+            billingStatus: c.plan_status || null,
+            receivableAmount: null,
+            overdueAmount: null,
+            raw: {},
+          } as ClientFinancialView)
+        : matchedAmount > 0
+          ? ({
+              clientId: String(c.id),
+              planName: matchedPlan.name,
+              pricingMode: null,
+              operationalAmount: matchedVersion.amount ?? null,
+              finalAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
+              planAmount: matchedVersion.amount ?? null,
+              finalPlanAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
+              billingPeriod: matchedVersion.billingPeriod || null,
+              termStatus: null,
+              reviewRequired: false,
+              directCost: matchedVersion.directCost ?? null,
+              directCostEstimated: !!matchedVersion.directCostEstimated,
+              marginPercent:
+                matchedVersion.amount && matchedVersion.directCost != null
+                  ? ((matchedVersion.amount - matchedVersion.directCost) / matchedVersion.amount) * 100
+                  : null,
+              dueLabel: null,
+              billingStatus: c.plan_status || null,
+              receivableAmount: null,
+              overdueAmount: null,
+              raw: {},
+            } as ClientFinancialView)
+          // Vínculo existe mas está sem valor: mantém a linha oficial
+          // (vencimento/status) em vez de fingir que não há financeiro.
+          : financialRecord || undefined;
+    const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
+    // Leitura da cobrança em uma frase, sem jargão interno: primeiro
+    // a verdade do billing (Atrasado / A receber / Em dia); sem
+    // cobrança no mês, diz isso com todas as letras.
+    const billingRead = internal ? null : billingReadByClient.get(String(c.id));
+    const statusMeta = internal
+      ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
+      : billingRead
+        ? {
+            label: billingRead.label,
+            className:
+              billingRead.tone === "late"
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : billingRead.tone === "due"
+                  ? "border-warning/30 bg-warning/10 text-warning"
+                  : "border-success/30 bg-success/10 text-success",
+          }
+        : (c.client_type || "recurring") === "one_off"
+          ? { label: "Por projeto", className: "border-border bg-secondary/60 text-muted-foreground" }
+          : financial
+            ? { label: "Sem cobrança este mês", className: "border-border bg-secondary/60 text-muted-foreground" }
+            : { label: "Sem cobrança criada", className: "border-border bg-secondary/60 text-muted-foreground" };
+    // O selo conta de ONDE o valor veio, na ordem real dos degraus.
+    const priceSource =
+      financialRecord && recordValue > 0
+        ? "official"
+        : directTerm && termOperational > 0
+          ? "term"
+          : profileValue > 0 && !internal
+            ? "profile"
+            : matchedAmount > 0
+              ? "plan"
+              : "none";
+    const modeLabel = internal
+      ? "Sem cobrança"
+      : financial?.pricingMode === "linked"
+        ? "Vinculado"
+        : financial?.pricingMode === "custom"
+          ? "Personalizado"
+          : priceSource === "plan"
+            ? "Preço do plano"
+            : priceSource === "profile"
+              ? "Valor do cadastro"
+              : priceSource === "official" || priceSource === "term"
+                ? "Valor do financeiro"
+                : financial
+                  ? "Definir valor"
+                  : "Financeiro pendente";
+    // Fechamento da linha: custo e margem SEMPRE somam, igual para
+    // todos. Sem custo real cadastrado, entra a estimativa (custo do
+    // plano no catálogo, senão o padrão do Financeiro).
+    const rowOperational =
+      Number(financial?.operationalAmount) || Number(financial?.finalAmount) || 0;
+    const realCost = Number(financial?.directCost) || 0;
+    const estimatedCost = Number(matchedVersion?.directCost) || defaultDirectCost;
+    const displayCost = internal
+      ? null
+      : realCost > 0
+        ? realCost
+        : rowOperational > 0
+          ? estimatedCost
+          : null;
+    const costIsEstimate =
+      !internal && displayCost != null && (realCost <= 0 || !!financial?.directCostEstimated);
+    const displayMargin =
+      financial?.marginPercent != null
+        ? financial.marginPercent
+        : rowOperational > 0 && displayCost != null
+          ? ((rowOperational - displayCost) / rowOperational) * 100
+          : null;
 
-      {/* Filtros: status, tipo e serviço contratado */}
-      <div className="mt-4 space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Filtrar por</p>
-          <select
-            value={serviceFilter}
-            onChange={(event) => setServiceFilter(event.target.value)}
-            aria-label="Filtrar clientes por serviço contratado"
-            className="rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+
+    const nome = c.company_name || c.full_name;
+    const status = getRenewalStatus(c.plan_renewal_date);
+    const renovacaoEmAlerta = status?.level === "expired" || status?.level === "urgent";
+    const tipo = typeBadge[c.client_type || "recurring"];
+    const origemDoValor =
+      priceSource === "official"
+        ? "Valores vêm da cobrança oficial do Financeiro."
+        : priceSource === "term"
+          ? "Valores vêm do termo do cliente no Financeiro."
+          : priceSource === "profile"
+            ? "Valor digitado no cadastro do cliente."
+            : priceSource === "plan"
+              ? "Preço de tabela do plano. Ajuste no cadastro se este cliente paga diferente."
+              : "Sem valor definido ainda. Defina o plano no cadastro ou crie a cobrança no Financeiro.";
+
+    return (
+      <li
+        key={c.id}
+        className={juntar("min-w-0 px-3 py-3 transition-colors hover:bg-muted/30 sm:px-4", extra?.apagado && "opacity-80")}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c });
+        }}
+        data-cliente={c.id}
+      >
+        <div className="flex min-w-0 items-center">
+          <button
+            type="button"
+            onClick={() => setEditClient(c)}
+            aria-label={`Abrir cadastro do cliente ${nome}`}
+            aria-describedby={isAdmin ? `client-finance-${c.id}` : undefined}
+            className="flex min-w-0 flex-1 items-center rounded-md bg-transparent text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {SERVICE_FILTERS.map((service) => (
-              <option key={service.value} value={service.value}>{service.label}</option>
-            ))}
-          </select>
-          {(serviceFilter !== "all" || typeFilter !== "all" || tab !== "all") && (
-            <button
-              type="button"
-              onClick={() => { setServiceFilter("all"); setTypeFilter("all"); setTab("all"); }}
-              className="text-[11px] text-primary hover:opacity-80 cursor-pointer bg-transparent border-none"
-            >
-              Limpar filtros
-            </button>
+            <FotoDoCliente nome={nome || ""} foto={fotoDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
+            <span className="ml-3 block min-w-0 flex-1">
+              <span className="flex min-w-0 items-center">
+                <span className="min-w-0 truncate text-[14px] font-semibold leading-5 text-foreground">{nome}</span>
+                {(searching || tab === "all") && (
+                  <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground sm:inline-flex")}>
+                    {statusLabel[c.plan_status || "active"] || "Sem status"}
+                  </span>
+                )}
+                {tipo && <span className={juntar(etiqueta, "ml-1.5", tipo.cls)}>{tipo.label}</span>}
+                {c.brand && (
+                  <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground md:inline-flex")}>
+                    {c.brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
+                  </span>
+                )}
+              </span>
+              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
+                {[c.email, c.phone].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+          </button>
+
+          {c.plan_renewal_date && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={juntar(
+                      "ml-3 hidden shrink-0 items-center rounded-md px-2 py-1 text-[12px] tabular-nums md:inline-flex",
+                      renovacaoEmAlerta ? juntar(status?.color, "bg-destructive/10") : "text-muted-foreground",
+                    )}
+                    aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${status?.label ? `. ${status.label}` : ""}`}
+                  >
+                    {status?.icon ? <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <CalendarClock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                    {formatBRDate(c.plan_renewal_date)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">{status?.label || "Renovação"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
-        </div>
-      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
-        <div className="flex shrink-0 gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit" role="group" aria-label="Filtrar clientes por status">
-          {STATUS_TABS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setTab(t.value)}
-              aria-pressed={tab === t.value}
-              className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
-                tab === t.value
-                  ? "bg-background text-foreground font-medium shadow-sm"
-                  : "text-muted-foreground hover:text-foreground bg-transparent"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          <span className="ml-3 hidden w-16 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground lg:inline" title="Projetos">
+            {c.projectCount ?? 0} {Number(c.projectCount) === 1 ? "projeto" : "projetos"}
+          </span>
+          <span
+            role="img"
+            aria-label={`Status: ${statusLabel[c.plan_status || "active"] || "sem status"}`}
+            className={`ml-3 h-2 w-2 shrink-0 rounded-full ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
+          />
+          {extra?.acao && <span className="ml-2 shrink-0">{extra.acao}</span>}
+          <button
+            type="button"
+            onClick={(e) => abrirMenuNoBotao(e, c)}
+            aria-label={`Mais ações de ${nome}`}
+            aria-haspopup="menu"
+            className={juntar(botao.icone, "ml-1")}
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <ChevronRight className="ml-0.5 hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
         </div>
 
-        <div className="flex shrink-0 gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit" role="group" aria-label="Filtrar clientes por tipo">
-          {TYPE_TABS.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setTypeFilter(t.value)}
-              aria-pressed={typeFilter === t.value}
-              className={`px-3 py-1.5 rounded-md text-[12px] transition-colors cursor-pointer border-none ${
-                typeFilter === t.value
-                  ? "bg-background text-foreground font-medium shadow-sm"
-                  : "text-muted-foreground hover:text-foreground bg-transparent"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      </div>
+        {isAdmin && (
+          <dl
+            id={`client-finance-${c.id}`}
+            className="mt-2.5 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:ml-[52px] sm:grid-cols-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))_minmax(0,1.7fr)]"
+          >
+            <div className="col-span-2 min-w-0 sm:col-span-1">
+              <dt className="flex h-5 min-w-0 items-center text-[11px] text-muted-foreground">
+                Plano
+                {!internal && (
+                  <AjudaRecolhida rotulo={`De onde vem o valor de ${nome}`} className="ml-1">
+                    {origemDoValor}
+                    {costIsEstimate ? " Custo direto é estimativa padrão." : ""}
+                  </AjudaRecolhida>
+                )}
+              </dt>
+              <dd className="mt-0.5 flex min-w-0 items-center">
+                <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{planName}</span>
+                <span
+                  className={juntar(
+                    etiqueta,
+                    "ml-1.5",
+                    financial?.pricingMode === "custom"
+                      ? "bg-warning/10 text-warning"
+                      : financial?.pricingMode === "linked"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {modeLabel}
+                </span>
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Operacional</dt>
+              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.operationalAmount ?? null)}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Final</dt>
+              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="flex h-5 items-center text-[11px] text-muted-foreground">
+                Custo direto
+                {costIsEstimate && (
+                  <span title="Custo padrão do Financeiro. Defina o custo real em Cobrança e custo." className="ml-1 text-warning">
+                    (estimativa)
+                  </span>
+                )}
+              </dt>
+              <dd className="mt-0.5 text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(displayCost)}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Margem</dt>
+              <dd
+                className={juntar(
+                  "mt-0.5 text-[13px] font-semibold tabular-nums",
+                  displayMargin == null ? "text-muted-foreground" : displayMargin < 0 ? "text-destructive" : "text-success",
+                )}
+              >
+                {formatPercent(displayMargin)}
+              </dd>
+            </div>
+            <div className="col-span-2 min-w-0 sm:col-span-1">
+              <dt className="flex h-5 items-center text-[11px] text-muted-foreground">Cobrança do mês</dt>
+              <dd className="mt-0.5 flex min-w-0 items-center">
+                <span className="min-w-0 truncate text-[13px] tabular-nums text-foreground">{billingRead?.detail || financial?.dueLabel || "-"}</span>
+                <span className={juntar(etiqueta, "ml-1.5 border", statusMeta.className)}>{statusMeta.label}</span>
+              </dd>
+            </div>
+          </dl>
+        )}
+      </li>
+    );
+  };
 
-      <div className="mt-3" data-tour="clients-search">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+  const cabecalhoDescricao = isLoading
+    ? "Carregando"
+    : searching || filtrosAtivos
+      ? `${filtered.length} de ${clientRows.length} na lista`
+      : `${activeClientCount} ${activeClientCount === 1 ? "ativo" : "ativos"} · ${clientRows.length} no total`;
+
+  return (
+    <div className="min-w-0 space-y-4">
+      <CabecalhoDePagina
+        titulo="Clientes"
+        descricao={cabecalhoDescricao}
+        ajuda="Cadastro, plano e cobrança de cada cliente. Toque na linha para abrir a ficha; botão direito ou ... para copiar contatos e outras ações."
+        acoes={
+          isAdmin ? (
+            <>
+              <button type="button" onClick={() => navigate("/ver-como-cliente")} className={botao.discreto} aria-label="Ver como cliente">
+                <Eye className="h-4 w-4" aria-hidden="true" />
+                <span className="ml-1.5 hidden md:inline">Ver como cliente</span>
+              </button>
+              <button type="button" onClick={() => setBriefingOpen(true)} data-tour="clients-briefing-btn" className={botao.secundario} aria-label="Link do briefing">
+                <Link2 className="h-4 w-4" aria-hidden="true" />
+                <span className="ml-1.5 hidden sm:inline">Link do briefing</span>
+              </button>
+              <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={botao.primario} aria-label="Novo cliente">
+                <UserPlus className="h-4 w-4" aria-hidden="true" />
+                <span className="ml-1.5 hidden sm:inline">Novo cliente</span>
+              </button>
+            </>
+          ) : undefined
+        }
+      />
+
+
+      {/* Filtros: status, tipo e serviço contratado, e a busca na mesma linha */}
+      <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+        <div className="relative min-w-0 flex-1 basis-full sm:basis-[240px]" data-tour="clients-search">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Digite o nome da empresa, contato, e-mail ou telefone"
+            placeholder="Buscar por empresa, contato, e-mail ou telefone"
             aria-label="Buscar cliente existente"
-            className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-10 text-[16px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/60 md:text-sm"
+            className={juntar(campo, "pl-9 pr-9 text-[16px] sm:text-[13px]")}
           />
           {searching && (
             <button
@@ -1046,510 +1338,199 @@ export default function Clients() {
               onClick={() => setSearch("")}
               aria-label="Limpar busca"
               title="Limpar busca"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border-none bg-transparent p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className={juntar(botao.icone, "absolute right-0.5 top-1/2 -translate-y-1/2")}
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
-        <p aria-live="polite" className="mt-1.5 text-[11px] text-muted-foreground">
-          {searching
-            ? filtered.length === 1
-              ? "1 cliente encontrado entre os clientes disponíveis."
-              : `${filtered.length} clientes encontrados entre os clientes disponíveis.`
-            : "Busque um cliente que já existe para abrir e conferir o cadastro. Você não precisa cadastrá-lo novamente."}
-        </p>
-      </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {isError ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-destructive">Não foi possível carregar os clientes.</p>
-          <p className="mt-1 text-xs text-muted-foreground">Não cadastre novamente agora, isso pode criar um cliente duplicado.</p>
+        <SeletorCompacto
+          rotulo="Status"
+          opcoes={STATUS_TABS.map((t) => ({ valor: t.value, rotulo: t.label }))}
+          valor={tab}
+          onEscolher={setTab}
+          modo="lista"
+        />
+        <SeletorCompacto
+          rotulo="Serviço"
+          opcoes={SERVICE_FILTERS.map((s) => ({ valor: s.value, rotulo: s.label }))}
+          valor={serviceFilter}
+          onEscolher={setServiceFilter}
+          modo="lista"
+        />
+        <SeletorCompacto
+          rotulo="Filtrar clientes por tipo"
+          opcoes={TYPE_TABS.map((t) => ({ valor: t.value, rotulo: t.label }))}
+          valor={typeFilter}
+          onEscolher={setTypeFilter}
+        />
+        {filtrosAtivos && (
           <button
             type="button"
-            onClick={() => refetch()}
-            className="mt-3 rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-foreground hover:border-muted-foreground/50"
+            onClick={() => {
+              setServiceFilter("all");
+              setTypeFilter("all");
+              setTab("all");
+            }}
+            className={botao.discreto}
           >
-            Tentar carregar novamente
+            Limpar filtros
           </button>
-        </div>
-      ) : isLoading ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-      ) : filtered.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {searching
-              ? `Nenhum cliente encontrado para "${search.trim()}".`
-              : "Nenhum cliente encontrado com os filtros aplicados."}
-          </p>
-          {searching && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="mt-3 rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-foreground hover:border-muted-foreground/50"
-            >
-              Limpar busca
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {(() => {
-            const renderClientRow = (c: any) => {
-            const financialRecord = financialByClient.get(String(c.id));
-            const internal = isInternalClient(c);
-            // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
-            // operacional do plano do perfil para a linha nunca ficar sem soma.
-            const profileValue = Number((c as any).plan_value) || 0;
-            // Regra de ouro: cada degrau só ganha se tiver VALOR de verdade.
-            // Um vínculo vazio no resumo oficial (o caso Acerbi: híbrido com
-            // linha zerada) não pode esconder o valor que existe no termo, no
-            // cadastro ou no catálogo de planos.
-            const recordValue =
-              Number(financialRecord?.operationalAmount) || Number(financialRecord?.finalAmount) || 0;
-            // Degrau 1.5: o termo do cliente lido direto (o valor que a equipe
-            // digitou ao escolher o plano mora aqui e não pode sumir).
-            const directTerm = !internal ? termByClient.get(String(c.id)) : null;
-            const termVersion = directTerm?.plan_version_id
-              ? planVersionById.get(directTerm.plan_version_id)
-              : null;
-            const termOperational =
-              Number(directTerm?.operational_amount) || Number(termVersion?.amount) || 0;
-            // Último degrau (o bug do "tudo zerado"): cadastro tem o PLANO
-            // mas nenhum valor. O preço oficial do plano no Financeiro vale.
-            const matchedPlan =
-              !internal && c.plan_name
-                ? planByName.get(normalizePlanName(String(c.plan_name)))
-                : null;
-            const matchedVersion = matchedPlan?.currentVersion || matchedPlan?.versions?.[0] || null;
-            const matchedAmount =
-              Number(matchedVersion?.amount) || Number(matchedVersion?.finalAmount) || 0;
-            const financial = financialRecord && recordValue > 0
-              ? financialRecord
-              : directTerm && termOperational > 0
-                ? ({
-                    clientId: String(c.id),
-                    planName: c.plan_name || null,
-                    pricingMode:
-                      directTerm.pricing_mode === "linked" || directTerm.pricing_mode === "custom"
-                        ? directTerm.pricing_mode
-                        : null,
-                    operationalAmount: termOperational,
-                    finalAmount: Number(directTerm.final_amount) || termOperational,
-                    planAmount: termOperational,
-                    finalPlanAmount: Number(directTerm.final_amount) || termOperational,
-                    billingPeriod: directTerm.billing_period || null,
-                    termStatus: directTerm.status || null,
-                    reviewRequired: false,
-                    directCost: Number(directTerm.direct_cost_amount) || null,
-                    directCostEstimated: !!directTerm.direct_cost_estimated,
-                    marginPercent:
-                      termOperational > 0 && Number(directTerm.direct_cost_amount) > 0
-                        ? ((termOperational - Number(directTerm.direct_cost_amount)) / termOperational) * 100
-                        : null,
-                    dueLabel: null,
-                    billingStatus: c.plan_status || null,
-                    receivableAmount: null,
-                    overdueAmount: null,
-                    raw: {},
-                  } as ClientFinancialView)
-              : profileValue > 0 && !internal
-                ? ({
-                    clientId: String(c.id),
-                    planName: c.plan_name || null,
-                    pricingMode: null,
-                    operationalAmount: profileValue * (1 - 0.06),
-                    finalAmount: profileValue,
-                    planAmount: profileValue,
-                    finalPlanAmount: profileValue,
-                    billingPeriod: null,
-                    termStatus: null,
-                    reviewRequired: false,
-                    directCost: null,
-                    directCostEstimated: false,
-                    marginPercent: null,
-                    dueLabel: null,
-                    billingStatus: c.plan_status || null,
-                    receivableAmount: null,
-                    overdueAmount: null,
-                    raw: {},
-                  } as ClientFinancialView)
-                : matchedAmount > 0
-                  ? ({
-                      clientId: String(c.id),
-                      planName: matchedPlan.name,
-                      pricingMode: null,
-                      operationalAmount: matchedVersion.amount ?? null,
-                      finalAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
-                      planAmount: matchedVersion.amount ?? null,
-                      finalPlanAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
-                      billingPeriod: matchedVersion.billingPeriod || null,
-                      termStatus: null,
-                      reviewRequired: false,
-                      directCost: matchedVersion.directCost ?? null,
-                      directCostEstimated: !!matchedVersion.directCostEstimated,
-                      marginPercent:
-                        matchedVersion.amount && matchedVersion.directCost != null
-                          ? ((matchedVersion.amount - matchedVersion.directCost) / matchedVersion.amount) * 100
-                          : null,
-                      dueLabel: null,
-                      billingStatus: c.plan_status || null,
-                      receivableAmount: null,
-                      overdueAmount: null,
-                      raw: {},
-                    } as ClientFinancialView)
-                  // Vínculo existe mas está sem valor: mantém a linha oficial
-                  // (vencimento/status) em vez de fingir que não há financeiro.
-                  : financialRecord || undefined;
-            const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
-            // Leitura da cobrança em uma frase, sem jargão interno: primeiro
-            // a verdade do billing (Atrasado / A receber / Em dia); sem
-            // cobrança no mês, diz isso com todas as letras.
-            const billingRead = internal ? null : billingReadByClient.get(String(c.id));
-            const statusMeta = internal
-              ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
-              : billingRead
-                ? {
-                    label: billingRead.label,
-                    className:
-                      billingRead.tone === "late"
-                        ? "border-destructive/30 bg-destructive/10 text-destructive"
-                        : billingRead.tone === "due"
-                          ? "border-warning/30 bg-warning/10 text-warning"
-                          : "border-success/30 bg-success/10 text-success",
-                  }
-                : (c.client_type || "recurring") === "one_off"
-                  ? { label: "Por projeto", className: "border-border bg-secondary/60 text-muted-foreground" }
-                  : financial
-                    ? { label: "Sem cobrança este mês", className: "border-border bg-secondary/60 text-muted-foreground" }
-                    : { label: "Sem cobrança criada", className: "border-border bg-secondary/60 text-muted-foreground" };
-            // O selo conta de ONDE o valor veio, na ordem real dos degraus.
-            const priceSource =
-              financialRecord && recordValue > 0
-                ? "official"
-                : directTerm && termOperational > 0
-                  ? "term"
-                  : profileValue > 0 && !internal
-                    ? "profile"
-                    : matchedAmount > 0
-                      ? "plan"
-                      : "none";
-            const modeLabel = internal
-              ? "Sem cobrança"
-              : financial?.pricingMode === "linked"
-                ? "Vinculado"
-                : financial?.pricingMode === "custom"
-                  ? "Personalizado"
-                  : priceSource === "plan"
-                    ? "Preço do plano"
-                    : priceSource === "profile"
-                      ? "Valor do cadastro"
-                      : priceSource === "official" || priceSource === "term"
-                        ? "Valor do financeiro"
-                        : financial
-                          ? "Definir valor"
-                          : "Financeiro pendente";
-            // Fechamento da linha: custo e margem SEMPRE somam, igual para
-            // todos. Sem custo real cadastrado, entra a estimativa (custo do
-            // plano no catálogo, senão o padrão do Financeiro).
-            const rowOperational =
-              Number(financial?.operationalAmount) || Number(financial?.finalAmount) || 0;
-            const realCost = Number(financial?.directCost) || 0;
-            const estimatedCost = Number(matchedVersion?.directCost) || defaultDirectCost;
-            const displayCost = internal
-              ? null
-              : realCost > 0
-                ? realCost
-                : rowOperational > 0
-                  ? estimatedCost
-                  : null;
-            const costIsEstimate =
-              !internal && displayCost != null && (realCost <= 0 || !!financial?.directCostEstimated);
-            const displayMargin =
-              financial?.marginPercent != null
-                ? financial.marginPercent
-                : rowOperational > 0 && displayCost != null
-                  ? ((rowOperational - displayCost) / rowOperational) * 100
-                  : null;
+        )}
+        <p aria-live="polite" className="sr-only">
+          {searching ? (filtered.length === 1 ? "1 cliente encontrado." : `${filtered.length} clientes encontrados.`) : ""}
+        </p>
+      </div>
 
-            return (
-              <div
-                key={c.id}
-                className="rounded-xl border border-border bg-card transition-colors hover:border-muted-foreground/30"
-              >
-                <button
-                  type="button"
-                  onClick={() => setEditClient(c)}
-                  onContextMenu={(e) => { e.preventDefault(); setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c }); }}
-                  aria-label={`Abrir cadastro do cliente ${c.company_name || c.full_name}`}
-                  aria-describedby={isAdmin ? `client-finance-${c.id}` : undefined}
-                  className="flex w-full items-center gap-3 rounded-xl border-0 bg-transparent px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:gap-4 md:px-5 md:py-4"
-                >
-                  <FotoDoCliente nome={c.company_name || c.full_name || ""} foto={fotoDe({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })} tamanho="lg" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="truncate text-[15px] font-semibold leading-tight text-foreground">{c.company_name || c.full_name}</p>
-                      {(searching || tab === "all") && (
-                        <span className="inline-flex items-center rounded-md border border-border bg-secondary/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          {statusLabel[c.plan_status || "active"] || "Sem status"}
-                        </span>
-                      )}
-                      {(() => {
-                        const t = typeBadge[c.client_type || "recurring"];
-                        return t ? (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider border ${t.cls}`}>
-                            {t.label}
-                          </span>
-                        ) : null;
-                      })()}
-                      {c.brand && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-foreground/5 text-muted-foreground border border-border">
-                          {c.brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 truncate text-[11.5px] leading-relaxed text-muted-foreground">
-                      {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
-                      {[c.email, c.phone].filter(Boolean).join(" · ")}
+      <AreaDeTrabalho memoriaDaRolagem="clientes:lista" rotuloDoPrincipal="Lista de clientes">
+        {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados. */}
+        {isAdmin && (
+          <section aria-label="Resumo financeiro dos clientes" className="mb-5">
+            <Painel semEspaco className="overflow-hidden">
+              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-5">
+                {kpiCards.map((card, i) => (
+                  <div key={card.label} className={juntar("min-w-0 bg-card px-4 py-3", i === kpiCards.length - 1 && "col-span-2 sm:col-span-1")}>
+                    <p className={juntar(texto.rotulo, "truncate")}>{card.label}</p>
+                    {card.loading ? (
+                      <div className="mt-1.5 h-5 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} />
+                    ) : (
+                      <p className={juntar("mt-1 truncate text-[17px] font-semibold leading-6 tabular-nums", card.tone)}>{card.value}</p>
+                    )}
+                    <p className={juntar(texto.auxiliar, "mt-0.5 hidden truncate sm:block")} title={card.helper}>
+                      {card.helper}
                     </p>
                   </div>
-                  {c.plan_renewal_date && (() => {
-                    const status = getRenewalStatus(c.plan_renewal_date);
-                    const isAlert = status?.level === "expired" || status?.level === "urgent";
-                    return (
-                      <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className={`text-right hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-transparent ${isAlert ? status.bg : ""} ${status?.color || "text-muted-foreground"}`}>
-                              {status?.icon ? (
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              ) : (
-                                <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                              )}
-                              <div>
-                                <p className={`text-xs font-mono ${isAlert ? status.color : "text-foreground"}`}>
-                                  {formatBRDate(c.plan_renewal_date)}
-                                </p>
-                                <p className="text-[10px]">renovação</p>
-                              </div>
-                            </div>
-                          </TooltipTrigger>
-                          {status?.label && (
-                            <TooltipContent side="top">
-                              <p className="text-xs">{status.label}</p>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
-                    );
-                  })()}
-                  <div className="text-right hidden md:block">
-                    <p className="text-xs font-mono text-foreground">{c.projectCount}</p>
-                    <p className="text-[10px] text-muted-foreground">projetos</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                    <span className="hidden sm:inline">Abrir</span> <ChevronRight className="h-3.5 w-3.5" />
-                  </span>
-                  <span
-                    role="img"
-                    aria-label={`Status: ${statusLabel[c.plan_status || "active"] || "sem status"}`}
-                    className={`w-2 h-2 rounded-full shrink-0 ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
-                  />
-                </button>
-
-                {isAdmin && (
-                  <div id={`client-finance-${c.id}`} className="mx-4 mb-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/60 pt-3 sm:grid-cols-3 xl:grid-cols-6 md:mx-5 md:mb-4">
-                    <div className="col-span-2 min-w-0 sm:col-span-1">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Plano</p>
-                      <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                        <p className="truncate text-xs font-medium text-foreground">{planName}</p>
-                        <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${
-                          financial?.pricingMode === "custom"
-                            ? "border-warning/30 bg-warning/10 text-warning"
-                            : financial?.pricingMode === "linked"
-                              ? "border-primary/30 bg-primary/10 text-primary"
-                              : "border-border bg-secondary/60 text-muted-foreground"
-                        }`}>
-                          {modeLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Operacional</p>
-                      <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
-                        {formatCurrency(financial?.operationalAmount ?? null)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Final</p>
-                      <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
-                        {formatCurrency(financial?.finalAmount ?? null)}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1">
-                        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Custo direto</p>
-                        {costIsEstimate && (
-                          <span
-                            title="Custo padrão do Financeiro. Defina o custo real em Cobrança e custo."
-                            className="rounded bg-warning/10 px-1 py-0.5 text-[7px] font-semibold uppercase tracking-wide text-warning"
-                          >
-                            Estimativa
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
-                        {formatCurrency(displayCost)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Margem</p>
-                      <p className={`mt-0.5 font-mono text-xs font-semibold ${
-                        displayMargin == null
-                          ? "text-muted-foreground"
-                          : displayMargin < 0
-                            ? "text-destructive"
-                            : "text-success"
-                      }`}>
-                        {formatPercent(displayMargin)}
-                      </p>
-                    </div>
-                    <div className="col-span-2 sm:col-span-1">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Cobrança do mês</p>
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        <span className="font-mono text-xs text-foreground">
-                          {billingRead?.detail || financial?.dueLabel || "-"}
-                        </span>
-                        <span className={`rounded-md border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${statusMeta.className}`}>
-                          {statusMeta.label}
-                        </span>
-                      </div>
-                    </div>
-                    {!internal && (
-                      <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/40 pt-2 sm:col-span-3 xl:col-span-6">
-                        <button
-                          type="button"
-                          onClick={() => setEditClient(c)}
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/40 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                        >
-                          Editar cadastro e plano
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigate("/financeiro")}
-                          className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/40 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                        >
-                          Cobrança e custo no Financeiro
-                        </button>
-                        <span className="text-[10px] leading-relaxed text-muted-foreground">
-                          {priceSource === "official"
-                            ? "Valores vêm da cobrança oficial do Financeiro."
-                            : priceSource === "term"
-                              ? "Valores vêm do termo do cliente no Financeiro."
-                              : priceSource === "profile"
-                                ? "Valor digitado no cadastro do cliente."
-                                : priceSource === "plan"
-                                  ? "Preço de tabela do plano. Ajuste no cadastro se este cliente paga diferente."
-                                  : "Sem valor definido ainda. Defina o plano no cadastro ou crie a cobrança no Financeiro."}
-                          {costIsEstimate ? " Custo direto é estimativa padrão." : ""}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                ))}
               </div>
-            );
-            };
+            </Painel>
+            {financialError && (
+              <p className={juntar(texto.auxiliar, "mt-1.5 flex items-center text-warning")} role="status">
+                <AlertTriangle className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Resumo financeiro indisponível agora. Os clientes seguem acessíveis.
+              </p>
+            )}
+          </section>
+        )}
+        {isError ? (
+          <EstadoDeErro
+            titulo="Não foi possível carregar os clientes."
+            descricao="Não cadastre de novo agora: isso pode criar um cliente duplicado."
+            acao={
+              <button type="button" onClick={() => refetch()} className={botao.secundario}>
+                Tentar de novo
+              </button>
+            }
+          />
+        ) : isLoading && !clients ? (
+          <Carregando rotulo="Carregando clientes" linhas={6} />
+        ) : filtered.length === 0 ? (
+          <EstadoVazio
+            icone={<Users className="h-5 w-5" />}
+            titulo={searching ? `Nenhum cliente para "${search.trim()}"` : "Nenhum cliente nesses filtros"}
+            acao={
+              searching ? (
+                <button type="button" onClick={() => setSearch("")} className={botao.secundario}>
+                  Limpar busca
+                </button>
+              ) : filtrosAtivos ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServiceFilter("all");
+                    setTypeFilter("all");
+                    setTab("all");
+                  }}
+                  className={botao.secundario}
+                >
+                  Limpar filtros
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <div className="space-y-6">
+            <section aria-label="Clientes recorrentes e híbridos">
+              {principais.length > 0 ? (
+                <Painel semEspaco>
+                  <ul className="divide-y divide-border">{principais.map((c) => renderClientRow(c))}</ul>
+                </Painel>
+              ) : (
+                <EstadoVazio compacto titulo="Nenhum recorrente ou híbrido nestes filtros." />
+              )}
+            </section>
 
-            return (
-              <>
-                <div className="space-y-2 stagger-children">
-                  {principais.map((c) => renderClientRow(c))}
-                  {principais.length === 0 && (
-                    <p className="py-3 text-center text-xs text-muted-foreground">Nenhum cliente recorrente ou híbrido nos filtros aplicados.</p>
-                  )}
-                </div>
-
-                {avulsosList.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-1 pt-2 flex-wrap">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Avulsos ({avulsosList.length})</span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">
-                        Total geral: {principais.length + avulsosList.length} clientes ({principais.length} recorrentes/híbridos + {avulsosList.length} avulsos)
-                      </span>
-                    </div>
-                    <div className="space-y-2 text-[13px]">
-                      {avulsosList.map((c) => (
-                        <div key={c.id} className="relative">
-                          {renderClientRow(c)}
+            {avulsosList.length > 0 && (
+              <Secao
+                titulo="Avulsos"
+                descricao={`${avulsosList.length} em andamento · ${principais.length + avulsosList.length} clientes no total`}
+              >
+                <Painel semEspaco>
+                  <ul className="divide-y divide-border">
+                    {avulsosList.map((c) =>
+                      renderClientRow(c, {
+                        acao: (
                           <button
                             type="button"
-                            onClick={(event) => { event.stopPropagation(); toggleOneOffDone(c, true); }}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleOneOffDone(c, true);
+                            }}
                             title="Marcar este avulso como concluído"
-                            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg border border-success/30 bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success transition-colors hover:bg-success/20"
+                            className={juntar(botao.secundario, "h-8 px-2.5 text-[12px] text-success")}
                           >
                             Concluir
                           </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {avulsosDone.length > 0 && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowDoneOneOffs((v) => !v)}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-left"
-                    >
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Avulsos concluídos ({avulsosDone.length})
-                      </span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">
-                        {showDoneOneOffs ? "Recolher" : "Mostrar"}
-                      </span>
-                    </button>
-                    {showDoneOneOffs && (
-                      <div className="space-y-2 text-[13px] opacity-80">
-                        {avulsosDone.map((c) => (
-                          <div key={c.id} className="space-y-1">
-                            {renderClientRow(c)}
-                            <div className="px-1">
-                              <button
-                                type="button"
-                                onClick={() => toggleOneOffDone(c, false)}
-                                className="rounded-md border border-border bg-transparent px-2 py-1 text-[10px] text-primary transition-colors hover:border-primary/40"
-                              >
-                                Retomar cliente
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                        ),
+                      }),
                     )}
-                  </div>
-                )}
+                  </ul>
+                </Painel>
+              </Secao>
+            )}
 
-                {internasList.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-1 pt-2 flex-wrap">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-info">Empresas do grupo ({internasList.length})</span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">Organização interna · fora da contagem e das cobranças</span>
-                    </div>
-                    <div className="space-y-1">
-                      {internasList.map((c) => renderClientRow(c))}
-                    </div>
-                  </div>
+            {avulsosDone.length > 0 && (
+              <Secao
+                titulo="Avulsos concluídos"
+                descricao={`${avulsosDone.length} ${avulsosDone.length === 1 ? "concluído" : "concluídos"}`}
+                acao={
+                  <button type="button" onClick={() => setShowDoneOneOffs((v) => !v)} aria-expanded={showDoneOneOffs} className={botao.discreto}>
+                    {showDoneOneOffs ? "Recolher" : "Mostrar"}
+                  </button>
+                }
+              >
+                {showDoneOneOffs && (
+                  <Painel semEspaco>
+                    <ul className="divide-y divide-border">
+                      {avulsosDone.map((c) =>
+                        renderClientRow(c, {
+                          apagado: true,
+                          acao: (
+                            <button type="button" onClick={() => toggleOneOffDone(c, false)} className={juntar(botao.discreto, "h-8 text-[12px] text-primary")}>
+                              Retomar cliente
+                            </button>
+                          ),
+                        }),
+                      )}
+                    </ul>
+                  </Painel>
                 )}
-              </>
-            );
-          })()}
-        </div>
-      )}
-      </div>
+              </Secao>
+            )}
+
+            {internasList.length > 0 && (
+              <Secao
+                titulo="Empresas do grupo"
+                descricao={`${internasList.length} ${internasList.length === 1 ? "empresa" : "empresas"}`}
+                ajuda="Organização interna. Fica fora da contagem, das cobranças e dos alertas."
+              >
+                <Painel semEspaco>
+                  <ul className="divide-y divide-border">{internasList.map((c) => renderClientRow(c))}</ul>
+                </Painel>
+              </Secao>
+            )}
+          </div>
+        )}
+      </AreaDeTrabalho>
 
       {isAdmin && <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} />}
       <EditClientDrawer

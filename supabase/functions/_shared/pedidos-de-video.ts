@@ -10,8 +10,14 @@
  * da cena, revisão da legenda); mídia, render, armazenamento, impostos e
  * câmbio ficam fora, como o próprio kit avisa.
  *
+ * Frente E2 (26/09): "gerar_cena" (cena de roteiro aprovado sem foto, texto
+ * para vídeo) e o modelo de vídeo escolhido pela equipe (catálogo documentado
+ * em modelos-de-video.ts), com a duração presa ao que o modelo aceita.
+ *
  * Puro: sem Deno, sem banco. A tela, a função mesa-videos e os testes usam o mesmo.
  */
+
+import { duracaoNoModelo, FORMATOS_DE_VIDEO, modeloDeVideo, MODELOS_DE_VIDEO_DOCUMENTADOS } from "./modelos-de-video.ts";
 
 export const PRECOS_REFERENCIA = {
   conferido_em: "2026-09-25",
@@ -30,11 +36,12 @@ export const PRECOS_REFERENCIA = {
 export type ModeloDeReferencia = (typeof PRECOS_REFERENCIA.modelos)[number]["modelo"];
 export const MODELO_PADRAO_DO_TEXTO: ModeloDeReferencia = "claude-sonnet-5";
 
-export const TIPOS_DE_PEDIDO = ["animar_cena", "transcrever", "legendar"] as const;
+export const TIPOS_DE_PEDIDO = ["animar_cena", "gerar_cena", "transcrever", "legendar"] as const;
 export type TipoDePedido = (typeof TIPOS_DE_PEDIDO)[number];
 
 export const ROTULO_DO_PEDIDO: Record<TipoDePedido, string> = {
   animar_cena: "Animar cena",
+  gerar_cena: "Gerar cena do roteiro",
   transcrever: "Transcrever",
   legendar: "Legendar",
 };
@@ -68,7 +75,16 @@ export interface ParametrosDoAnimar {
   audio: { fala: string | null; trilha: string | null; efeitos: string | null };
   /** Id do motor de vídeo no catálogo (ia_modelos) quando existir. */
   motor_video: string | null;
+  /** Modelo de vídeo escolhido pela equipe (modelos-de-video.ts); a duração segue o que ele aceita. */
+  modelo?: string | null;
+  /** Formato do quadro ("9:16"...). */
+  formato?: string | null;
+  /** O que acontece na cena (gerar_cena, sem foto: o texto é a base). */
+  descricao?: string | null;
 }
+
+/** Tipos que geram vídeo (usam motor de vídeo). */
+export const ehPedidoDeVideo = (tipo: string) => tipo === "animar_cena" || tipo === "gerar_cena";
 
 export interface ParametrosDaFala {
   /** Duração do take em segundos (para estimar); null = desconhecida. */
@@ -90,16 +106,30 @@ const textoCurto = (v: unknown, max: number): string | null => {
 
 export function normalizarParametros(tipo: TipoDePedido, bruto: unknown): ParametrosDoPedido {
   const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
-  if (tipo === "animar_cena") {
+  if (ehPedidoDeVideo(tipo)) {
     const d = Number(o.duracao_s);
     const mov = String(o.movimento || "");
     const a = o.audio && typeof o.audio === "object" ? (o.audio as Record<string, unknown>) : {};
-    return {
-      duracao_s: isFinite(d) && d > 0 ? Math.max(DURACAO_MIN_S, Math.min(DURACAO_MAX_S, Math.round(d))) : DURACAO_PADRAO_S,
+    const presa = isFinite(d) && d > 0 ? Math.max(DURACAO_MIN_S, Math.min(DURACAO_MAX_S, Math.round(d))) : DURACAO_PADRAO_S;
+    const saida: ParametrosDoAnimar = {
+      duracao_s: presa,
       movimento: MOVIMENTOS_DE_CAMERA.some((m) => m.valor === mov) ? mov : "parada",
       audio: { fala: textoCurto(a.fala, 400), trilha: textoCurto(a.trilha, 200), efeitos: textoCurto(a.efeitos, 200) },
       motor_video: textoCurto(o.motor_video, 120),
     };
+    // Campos da frente E2: só entram quando vêm (o pedido antigo continua igual).
+    if ("modelo" in o) {
+      const id = textoCurto(o.modelo, 60);
+      const m = modeloDeVideo(id, MODELOS_DE_VIDEO_DOCUMENTADOS);
+      saida.modelo = id;
+      if (m) saida.duracao_s = duracaoNoModelo(m, presa, { min: DURACAO_MIN_S, max: DURACAO_MAX_S });
+    }
+    if ("formato" in o) {
+      const f = String(o.formato || "");
+      saida.formato = (FORMATOS_DE_VIDEO as readonly string[]).indexOf(f) >= 0 ? f : "9:16";
+    }
+    if ("descricao" in o || tipo === "gerar_cena") saida.descricao = textoCurto(o.descricao, 600);
+    return saida;
   }
   const d = Number(o.duracao_s);
   const vocab = Array.isArray(o.vocabulario) ? o.vocabulario : String(o.vocabulario || "").split(",");
@@ -144,13 +174,18 @@ export const tokensDaFala = (duracaoS: number) => Math.ceil((duracaoS / 60) * 15
 export function estimarPedido(tipo: TipoDePedido, p: ParametrosDoPedido, modeloDoTexto: string = MODELO_PADRAO_DO_TEXTO): EstimativaDoPedido {
   const nome = (PRECOS_REFERENCIA.modelos.find((x) => x.modelo === modeloDoTexto) || { rotulo: modeloDoTexto }).rotulo;
   const partes: ParteDoCusto[] = [];
-  if (tipo === "animar_cena") {
+  if (ehPedidoDeVideo(tipo)) {
     const a = p as ParametrosDoAnimar;
+    const escolhido = modeloDeVideo(a.modelo || null);
     partes.push({ rotulo: "Direção da cena (texto)", usd: precoDoTexto(modeloDoTexto, 6000, 1500), detalhe: `${nome}, ~6 mil tokens de entrada e ~1,5 mil de saída` });
     partes.push({
       rotulo: `Vídeo de ${a.duracao_s} s`,
       usd: null,
-      detalhe: a.motor_video ? `motor ${a.motor_video}: sem preço de referência por segundo` : "sem motor de vídeo configurado",
+      detalhe: a.motor_video
+        ? `motor ${a.motor_video}: sem preço de referência por segundo`
+        : escolhido
+          ? `${escolhido.rotulo}: motor ainda não ligado, sem preço de referência`
+          : "sem motor de vídeo configurado",
     });
   } else {
     const f = p as ParametrosDaFala;
@@ -199,16 +234,18 @@ export interface ModeloDoCatalogo {
  * Sem ele, "em_breve". Nunca troca o motor escolhido pela equipe.
  */
 export function executorDoPedido(tipo: TipoDePedido, catalogo: ModeloDoCatalogo[], escolhido?: string | null): { executor: string; rotulo: string; estado: EstadoDoPedido } {
-  const tipoDoMotor = tipo === "animar_cena" ? "video" : "audio";
+  const tipoDoMotor = ehPedidoDeVideo(tipo) ? "video" : "audio";
   const ativos = (catalogo || []).filter((m) => m && m.ativo && m.tipo === tipoDoMotor);
   const m = (escolhido && ativos.find((x) => x.id === escolhido)) || ativos[0] || null;
-  if (!m) return { executor: "em_breve", rotulo: tipo === "animar_cena" ? "Motor de vídeo em breve" : "Transcrição em breve", estado: "em_breve" };
+  if (!m) return { executor: "em_breve", rotulo: ehPedidoDeVideo(tipo) ? "Motor de vídeo em breve" : "Transcrição em breve", estado: "em_breve" };
   return { executor: m.id, rotulo: m.rotulo || m.id, estado: "aguardando_confirmacao" };
 }
 
 /** Chave que impede o mesmo pedido duas vezes (mesmo alvo, tipo e parâmetros). */
 export function chaveDoPedido(tipo: TipoDePedido, alvo: Record<string, unknown>, p: ParametrosDoPedido): string {
   const partes = [tipo, String(alvo.canvas_id || ""), String(alvo.no_id || ""), String(alvo.arquivo_id || ""), JSON.stringify(p)];
+  // Cena de roteiro (gerar_cena): o roteiro e a cena entram na chave.
+  if (alvo.roteiro_id || alvo.cena_ref) partes.push(String(alvo.roteiro_id || ""), String(alvo.cena_ref || ""));
   let h = 5381;
   const s = partes.join("|");
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;

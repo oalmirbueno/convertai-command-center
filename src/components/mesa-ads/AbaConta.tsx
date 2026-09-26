@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, FileSearch, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Briefcase, CalendarDays, FileSearch, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { dataCurta, dataEHora } from "@/lib/mesa/api";
+import { dataCurta, dataEHora, textoDoErro } from "@/lib/mesa/api";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
+import { botao, foco, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   brl,
   chamarAds,
@@ -29,7 +34,7 @@ import {
   type PedidoDePlano,
   type SinalDoAnuncio,
 } from "./adsApi";
-import { Andamento, Diagnostico, Foto, pilula, SeloDoSinal, useAndamento } from "./Comuns";
+import { Andamento, CabecalhoDaParte, Diagnostico, Foto, SeloDoSinal, useAndamento } from "./Comuns";
 import JanelaDaReferencia from "./JanelaDaReferencia";
 import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TabelaDeCampanhas, TendenciaDiaria } from "./ContaPaineis";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
@@ -57,6 +62,11 @@ import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from 
  * juntos) e evolução (vencedores, manter, descartar, próximos testes e
  * aprendizados gravados para os agentes). Trocar de período mostra os
  * números anteriores até os novos chegarem.
+ *
+ * 26/09 (sistema de design): área de trabalho com o agente sênior como
+ * lateral fixa (PainelDoAgente); os painéis da conta rolam por conta
+ * própria. Explicações no "?", período num seletor, período e objetivo
+ * lembrados por cliente.
  */
 
 export const PERIODOS_DA_CONTA: PeriodoDaConta[] = PERIODOS_DA_CONTA_V4.slice();
@@ -119,7 +129,7 @@ function CartaoDoAnuncio({
   const { catalogo } = useMesa();
   const m = a.metricas;
   return (
-    <article className="min-w-0 rounded-xl border border-border bg-card p-3" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+    <article className="min-w-0 rounded-lg border border-border bg-card p-3" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
         <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-lg border border-border bg-secondary/40" aria-label={`Ver ${a.nome}`}>
           <div className="relative w-full" style={{ paddingTop: "125%" }}>
@@ -223,19 +233,19 @@ function PainelDaAnalise({
     { titulo: "Renovar", tom: "text-warning", itens: analise.renovar },
   ];
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Análise do estrategista">
+    <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Análise do estrategista">
       <div className="flex min-w-0 items-start">
         <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <h3 className="text-[13.5px] font-semibold">Leitura do estrategista</h3>
-          {quando && <p className="text-[11px] text-muted-foreground">Feita {dataEHora(quando)}. Os números vêm da conta; a leitura, do estrategista.</p>}
+          {quando && <p className="truncate text-[11px] text-muted-foreground" title="Os números vêm da conta; a leitura, do estrategista.">Feita {dataEHora(quando)}</p>}
         </div>
       </div>
       {analise.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{analise.resumo}</p>}
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
         {grupos.map((g) => (
-          <div key={g.titulo} className="min-w-0 rounded-lg border border-border bg-card p-3">
-            <p className={`text-[11px] font-semibold uppercase tracking-wider ${g.tom}`}>
+          <div key={g.titulo} className="min-w-0 rounded-md bg-background/60 p-3">
+            <p className={`text-[12px] font-semibold ${g.tom}`}>
               {g.titulo} ({g.itens.length})
             </p>
             {g.itens.length === 0 ? (
@@ -255,8 +265,8 @@ function PainelDaAnalise({
         ))}
       </div>
       {analise.copy.length > 0 && (
-        <div className="min-w-0 rounded-lg border border-border bg-card p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Estratégia de copy</p>
+        <div className="min-w-0 rounded-md bg-background/60 p-3">
+          <p className="text-[12px] font-semibold text-muted-foreground">Estratégia de copy</p>
           <ul className="mt-1.5 space-y-2">
             {analise.copy.map((c, k) => (
               <li key={k} className="min-w-0 text-[12.5px] leading-snug [overflow-wrap:anywhere]">
@@ -269,10 +279,10 @@ function PainelDaAnalise({
       )}
       {analise.proximos_testes.length > 0 && (
         <div className="min-w-0">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Próximos testes</p>
+          <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
           <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
             {analise.proximos_testes.map((t, k) => (
-              <li key={`${t.titulo}-${k}`} className="flex min-w-0 flex-col rounded-lg border border-border bg-card p-3">
+              <li key={`${t.titulo}-${k}`} className="flex min-w-0 flex-col rounded-md bg-background/60 p-3">
                 <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
@@ -316,8 +326,11 @@ export default function AbaConta({
   const { clientId, catalogo, isAdmin } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const [dias, setDias] = useState<PeriodoDaConta>(14);
-  const [grupo, setGrupo] = useState<GrupoDeObjetivo | "">("");
+  // Período e objetivo lembrados por cliente (sair e voltar mantém).
+  const [dias, setDias] = useEstadoDaTela<PeriodoDaConta>(`mesa-ads:conta:dias:${clientId}`, 14, {
+    validar: (v) => typeof v === "number" && PERIODOS_DA_CONTA.indexOf(v as PeriodoDaConta) >= 0,
+  });
+  const [grupo, setGrupo] = useEstadoDaTela<GrupoDeObjetivo | "">(`mesa-ads:conta:objetivo:${clientId}`, "", { validar: (v) => typeof v === "string", esperaMs: 0 });
   const [campanha, setCampanha] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
   const [analiseNova, setAnaliseNova] = useState<{ analise: AnaliseDaConta; criado_em: string } | null>(null);
@@ -417,137 +430,158 @@ export default function AbaConta({
     onCriarPlano({ rotulo: t.titulo, pedido: partes.join(" "), objetivo: t.objetivo || undefined });
   };
 
+  const custoRef = dados && dados.conta.custo_referencia ? dados.conta.custo_referencia : null;
+
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-3">
-        <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold">Conta de anúncios ao vivo</h2>
-          <p className="text-[12px] text-muted-foreground" aria-live="polite">
-            {dados && dados.conta.periodo ? `De ${dataCurta(dados.conta.periodo.inicio)} a ${dataCurta(dados.conta.periodo.fim)} · ` : ""}
-            Atualizado {tempoDesde(dados ? dados.conta.atualizado_em : null)}
-            {conta.isFetching && !conta.isLoading ? " · relendo" : ""}. Relê sozinha a cada 10 min enquanto esta aba está aberta.
-            {dados && dados.conta.custo_referencia
-              ? ` O sinal compara com ${brl(dados.conta.custo_referencia.valor)} por resultado (${dados.conta.custo_referencia.fonte === "briefing" ? "custo tolerável do briefing" : "média da conta"}).`
-              : ""}
-          </p>
-        </div>
-        <div className="mb-1 mr-2 mt-1 flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Período">
-          {PERIODOS_DA_CONTA.map((d) => (
-            <button
-              key={d}
-              type="button"
-              role="radio"
-              aria-checked={dias === d}
-              onClick={() => setDias(d)}
-              className={`h-7 rounded-md px-2.5 text-[12px] ${dias === d ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              {d} dias
-            </button>
-          ))}
-        </div>
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 mt-1 h-9" disabled={sincronizando} onClick={() => void sincronizar()} title="Pede a coleta da Meta agora e relê a conta (sem custo de IA)">
-          {sincronizando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-          Sincronizar agora
-        </Button>
-        <span className="mb-1 mt-1 inline-flex items-center">
-          <BotaoComCusto
-            rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
-            titulo="Analisar a conta"
-            descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
-            className="h-9"
-            disabled={!dados || !anuncios.length || desdeAnalise !== null}
-            partes={() => partesDaAnaliseDaConta(catalogo)}
-            executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, dias }))}
-            aoConcluir={(data) => {
-              const a = normalizarAnalise(data && data.analise);
-              if (a) setAnaliseNova({ analise: a, criado_em: new Date().toISOString() });
-              void queryClient.invalidateQueries({ queryKey: chavesAds.analise(clientId) });
-            }}
+    // Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no computador
+    // os painéis da conta rolam por dentro e o agente sênior fica parado ao lado,
+    // com o campo sempre à vista; no celular a página rola normal e o agente abre
+    // em tela cheia pelo botão de baixo.
+    <AreaDeTrabalho
+      memoria="mesa-ads-conta"
+      larguraDaLateral="larga"
+      rotuloDaLateral="Agente sênior"
+      iconeDaLateral={<Briefcase className="h-4 w-4" />}
+      rotuloDoPrincipal="Conta de anúncios"
+      memoriaDaRolagem={`mesa-ads:conta:${clientId}`}
+      lateral={<AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} onPlanoPronto={onAbrirPlano} />}
+    >
+      <div className="min-w-0 space-y-5 pb-6">
+        <div>
+          <CabecalhoDaParte
+            titulo="Conta ao vivo"
+            ajuda={`Tudo o que roda na conta de anúncios, grátis. Relê sozinha a cada 10 min enquanto esta etapa está aberta; Sincronizar pede a coleta da Meta agora. O sinal de cada anúncio é regra em código, nunca IA.${
+              custoRef ? ` O sinal compara com ${brl(custoRef.valor)} por resultado (${custoRef.fonte === "briefing" ? "custo tolerável do briefing" : "média da conta"}).` : ""
+            }`}
+            descricao={
+              <>
+                {dados && dados.conta.periodo ? `De ${dataCurta(dados.conta.periodo.inicio)} a ${dataCurta(dados.conta.periodo.fim)} · ` : ""}
+                Atualizado {tempoDesde(dados ? dados.conta.atualizado_em : null)}
+                {conta.isFetching && !conta.isLoading ? " · relendo" : ""}
+              </>
+            }
+            acoes={
+              <>
+                <SeletorCompacto
+                  rotulo="Período"
+                  icone={<CalendarDays className="h-3.5 w-3.5" />}
+                  opcoes={PERIODOS_DA_CONTA.map((d) => ({ valor: String(d), rotulo: `${d} dias` }))}
+                  valor={String(dias)}
+                  onEscolher={(v) => setDias(Number(v) as PeriodoDaConta)}
+                />
+                <Button type="button" size="sm" variant="outline" className="h-9" disabled={sincronizando} onClick={() => void sincronizar()} title="Pede a coleta da Meta agora e relê a conta (sem custo de IA)">
+                  {sincronizando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+                  Sincronizar agora
+                </Button>
+                <BotaoComCusto
+                  rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
+                  titulo="Analisar a conta"
+                  descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
+                  className="h-9"
+                  disabled={!dados || !anuncios.length || desdeAnalise !== null}
+                  partes={() => partesDaAnaliseDaConta(catalogo)}
+                  executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, dias }))}
+                  aoConcluir={(data) => {
+                    const a = normalizarAnalise(data && data.analise);
+                    if (a) setAnaliseNova({ analise: a, criado_em: new Date().toISOString() });
+                    void queryClient.invalidateQueries({ queryKey: chavesAds.analise(clientId) });
+                  }}
+                />
+              </>
+            }
           />
-        </span>
-        {desdeAnalise !== null && (
-          <div className="w-full">
-            <Andamento desde={desdeAnalise} rotulo="O estrategista está lendo a conta" />
-          </div>
+          {desdeAnalise !== null && <Andamento desde={desdeAnalise} rotulo="O estrategista está lendo a conta" />}
+        </div>
+
+        {conta.isError && (
+          <EstadoDeErro
+            titulo="A conta não abriu."
+            descricao={textoDoErro(conta.error)}
+            acao={
+              <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => void conta.refetch()}>
+                Tentar de novo
+              </Button>
+            }
+          />
+        )}
+        {conta.isLoading && <Carregando forma="aba" rotulo="Lendo a conta" />}
+
+        {dados && !dados.conta.conectada && (
+          <EstadoVazio
+            icone={<BarChart3 className="h-5 w-5" />}
+            titulo="A conta de anúncios deste cliente não está conectada"
+            descricao="Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui."
+          />
+        )}
+
+        {dados && dados.conta.conectada && extras && (
+          <>
+            <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
+            <details className="min-w-0 border-y border-border py-2">
+              <summary className={juntar("cursor-pointer rounded text-[12.5px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
+              <div className="mt-3 min-w-0 space-y-3">
+                <ResumoDaConta totais={dados.conta.totais} extras={extras} />
+                <SaldosDasContas contas={extras.contas} />
+                <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} />
+              </div>
+            </details>
+
+            <section className="min-w-0 space-y-2" aria-label="Otimização">
+              <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
+              <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+                <BaixarPacoteDeOtimizacao dias={diasDoAgente} />
+                <ImportarPacote onImportado={onImportado} />
+              </div>
+            </section>
+
+            {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
+
+            <TabelaDeCampanhas campanhas={dados.conta.campanhas} rotuloPorId={extras.rotuloPorId} selecionada={campanha} onSelecionar={(id) => setCampanha(id)} />
+
+            <section className="min-w-0 border-t border-border pt-5" aria-label="Anúncios">
+              <CabecalhoDaParte
+                titulo="Anúncios"
+                nivel={3}
+                descricao={campanha ? "Só a campanha escolhida" : undefined}
+                acoes={
+                  <>
+                    <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
+                    {campanha && (
+                      <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={() => setCampanha("")}>
+                        Todas as campanhas
+                      </button>
+                    )}
+                  </>
+                }
+              />
+              {dadosDaLista && (
+                <PainelDeResultados
+                  key={`${grupo}|${campanha}`}
+                  dados={dadosDaLista}
+                  grupo={grupo}
+                  memoria={`mesa-ads:conta:aba:${clientId}`}
+                  renderAnuncio={(a) => (
+                    <CartaoDoAnuncio
+                      a={a}
+                      abrindo={abrindo === a.ad_id}
+                      onVariar={() => variar(a)}
+                      onFicha={() => void abrirFicha(a)}
+                      rotuloDoResultado={a.resultado_rotulo || extras.rotuloPorId[a.ad_id]}
+                      formato={a.formato || extras.formatoPorAd[a.ad_id]}
+                      conjunto={a.conjunto || extras.conjuntoPorAd[a.ad_id]}
+                    />
+                  )}
+                />
+              )}
+            </section>
+
+            <PainelDaEvolucao dias={dias} />
+            <PainelDoDesempenho dias={dias} />
+          </>
         )}
       </div>
 
-      {conta.isError && <AvisoDeErro erro={conta.error} />}
-      {conta.isLoading && (
-        <div className="space-y-3" aria-busy="true">
-          <div className="h-20 animate-pulse rounded-xl bg-muted/70" />
-          <div className="h-64 animate-pulse rounded-xl bg-muted/60" />
-        </div>
-      )}
-
-      {dados && !dados.conta.conectada && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <BarChart3 className="mx-auto h-6 w-6 text-primary" />
-          <p className="mt-3 text-[14px] font-medium">A conta de anúncios deste cliente não está conectada</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui.</p>
-        </div>
-      )}
-
-      {dados && dados.conta.conectada && extras && (
-        <>
-          <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
-          <details className="min-w-0 rounded-xl border border-border bg-card px-3 py-2">
-            <summary className="cursor-pointer text-[12px] text-muted-foreground">Mais números do período (CTR, CPM, alcance, frequência, saldo e dia a dia)</summary>
-            <div className="mt-2 min-w-0 space-y-3">
-              <ResumoDaConta totais={dados.conta.totais} extras={extras} />
-              <SaldosDasContas contas={extras.contas} />
-              <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} />
-            </div>
-          </details>
-
-          <section className="min-w-0 space-y-2" aria-label="Otimização">
-            <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
-            <AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} onPlanoPronto={onAbrirPlano} />
-            <div className="flex min-w-0 flex-wrap items-center">
-              <BaixarPacoteDeOtimizacao dias={diasDoAgente} className="mb-1 mr-2" />
-              <ImportarPacote onImportado={onImportado} className="mb-1" />
-            </div>
-          </section>
-
-          {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
-
-          <TabelaDeCampanhas campanhas={dados.conta.campanhas} rotuloPorId={extras.rotuloPorId} selecionada={campanha} onSelecionar={(id) => setCampanha(id)} />
-
-          <section className="min-w-0 space-y-2" aria-label="Anúncios">
-            <div className="flex min-w-0 flex-wrap items-center">
-              <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
-              {campanha && (
-                <button type="button" className="mb-1.5 ml-2 text-[12px] text-primary hover:underline" onClick={() => setCampanha("")}>
-                  Todas as campanhas
-                </button>
-              )}
-            </div>
-            {dadosDaLista && (
-              <PainelDeResultados
-                key={`${grupo}|${campanha}`}
-                dados={dadosDaLista}
-                grupo={grupo}
-                renderAnuncio={(a) => (
-                  <CartaoDoAnuncio
-                    a={a}
-                    abrindo={abrindo === a.ad_id}
-                    onVariar={() => variar(a)}
-                    onFicha={() => void abrirFicha(a)}
-                    rotuloDoResultado={a.resultado_rotulo || extras.rotuloPorId[a.ad_id]}
-                    formato={a.formato || extras.formatoPorAd[a.ad_id]}
-                    conjunto={a.conjunto || extras.conjuntoPorAd[a.ad_id]}
-                  />
-                )}
-              />
-            )}
-          </section>
-
-          <PainelDaEvolucao dias={dias} />
-          <PainelDoDesempenho dias={dias} />
-        </>
-      )}
-
       <JanelaDaReferencia referencia={null} referenciaId={aberta} onFechar={() => setAberta(null)} />
-    </div>
+    </AreaDeTrabalho>
   );
 }

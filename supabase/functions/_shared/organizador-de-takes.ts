@@ -131,7 +131,7 @@ export function limparGrupo(v: unknown): string {
 
 // ------------------------------------------------------------------ proposta
 
-export type OperacaoDoOrganizador = "renomear" | "agrupar" | "ligar_roteiro" | "ligar_cena" | "arquivar";
+export type OperacaoDoOrganizador = "renomear" | "agrupar" | "ligar_roteiro" | "ligar_cena" | "arquivar" | "marcar_melhor";
 
 export interface ItemProposto {
   arquivo_id: string;
@@ -169,8 +169,12 @@ const comparar = (a: string | null | undefined, b: string | null | undefined) =>
  * cada grupo. O número que o nome já traz fica quando não se repete no grupo;
  * os demais recebem o próximo livre, na ordem de gravação (depois de envio e
  * nome original). Só entra o que muda. Nada é arquivado aqui.
+ *
+ * Com `melhores` (Mesa Edição, frente E2): em cada cena de roteiro (ou com cena
+ * no nome) sem melhor take marcado, sugere o último take gravado, que costuma
+ * ser o que ficou. É sugestão: a equipe confere na lista e confirma.
  */
-export function proporOrganizacao(takes: TakeParaOrganizar[], roteiros: RoteiroParaOrganizar[] = []): ItemProposto[] {
+export function proporOrganizacao(takes: TakeParaOrganizar[], roteiros: RoteiroParaOrganizar[] = [], opcoes: { melhores?: boolean } = {}): ItemProposto[] {
   const porRoteiro: Record<string, RoteiroParaOrganizar> = {};
   roteiros.forEach((r) => {
     porRoteiro[r.id] = r;
@@ -224,6 +228,13 @@ export function proporOrganizacao(takes: TakeParaOrganizar[], roteiros: RoteiroP
       const nome = nomeNormalizado({ base: base === "Sem roteiro" ? "take" : base, cena: g.cena, take: numeroDe[t.id], ext: extensaoDoNome(t.nome_original || t.nome) });
       if (t.nome !== nome) saida.push({ arquivo_id: t.id, operacao: "renomear", para: nome });
     });
+    if (opcoes.melhores && g.cena && lista.length && !lista.some((t) => t.melhor)) {
+      const videos = lista.filter((t) => t.tipo !== "audio");
+      if (videos.length) {
+        const ultimo = videos.reduce((a, b) => (numeroDe[b.id] > numeroDe[a.id] ? b : a));
+        saida.push({ arquivo_id: ultimo.id, operacao: "marcar_melhor", para: "" });
+      }
+    }
   });
   return saida;
 }
@@ -236,6 +247,7 @@ export const ROTULOS_DO_ORGANIZADOR: Record<OperacaoDoOrganizador, string> = {
   ligar_roteiro: "Ligar ao roteiro",
   ligar_cena: "Ligar à cena",
   arquivar: "Arquivar",
+  marcar_melhor: "Marcar como melhor",
 };
 
 export type AlvoDoTake = Alvo & { dados: { take: TakeParaOrganizar } };
@@ -261,6 +273,11 @@ export function regrasDoOrganizador(roteiros: RoteiroParaOrganizar[] = []): Reco
       },
     },
     ligar_cena: { rotulo: ROTULOS_DO_ORGANIZADOR.ligar_cena, combina: true, para: (v) => String(v ?? "").trim().slice(0, MAX_CENA_REF) || null },
+    marcar_melhor: {
+      rotulo: ROTULOS_DO_ORGANIZADOR.marcar_melhor,
+      combina: true,
+      trava: (alvo) => (alvo.dados.take.melhor ? "Já é o melhor take." : alvo.dados.take.estado === "arquivado" ? "Está arquivado." : null),
+    },
     arquivar: {
       rotulo: ROTULOS_DO_ORGANIZADOR.arquivar,
       trava: (alvo) =>

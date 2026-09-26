@@ -86,7 +86,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
   return (
     <section aria-label="Saldo das contas" className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
       {contas.map((c) => (
-        <div key={c.external_account_id} className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5">
+        <div key={c.external_account_id} className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5">
           <p className="flex min-w-0 items-center text-[12.5px] font-semibold">
             <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
@@ -139,7 +139,7 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
   const maiorRes = Math.max.apply(null, serie.map((p) => p.resultados).concat([1]));
   const pontos = serie.map((p, i) => `${(i + 0.5) * passo},${A - (p.resultados / maiorRes) * (A - 8) - 4}`).join(" ");
   return (
-    <section aria-label="Tendência diária" className="min-w-0 rounded-xl border border-border bg-card p-3">
+    <section aria-label="Tendência diária" className="min-w-0 rounded-lg border border-border bg-card p-3">
       <div className="flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
         <TrendingUp className="mr-1.5 h-3.5 w-3.5 text-primary" />
         <span className="mr-3 font-medium uppercase tracking-wider">Por dia</span>
@@ -201,8 +201,8 @@ export function TabelaDeCampanhas({
   const visiveis = todas ? campanhas : campanhas.slice(0, CAMPANHAS_VISIVEIS);
   return (
     <section className="min-w-0" aria-label="Campanhas">
-      <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Campanhas ({campanhas.length})</h3>
-      <ul className="min-w-0 divide-y divide-border rounded-xl border border-border bg-card">
+      <h3 className="mb-2 text-[12px] font-medium text-muted-foreground">Campanhas ({campanhas.length})</h3>
+      <ul className="min-w-0 divide-y divide-border rounded-lg border border-border bg-card">
         {visiveis.map((c) => {
           const ativa = selecionada === c.campaign_id;
           const m = c.metricas;
@@ -252,7 +252,7 @@ export function PainelDoDesempenho({ dias }: { dias: number }) {
   const q = useQuery({ queryKey: chavesConta.desempenho(clientId, dias), queryFn: () => lerDesempenho(clientId, dias), enabled: aberto, staleTime: 5 * 60_000, retry: false });
   const d = q.data || null;
   return (
-    <section aria-label="Desempenho do cliente" className="min-w-0 rounded-xl border border-border bg-card p-4">
+    <section aria-label="Desempenho do cliente" className="min-w-0 rounded-lg border border-border bg-card p-4">
       <div className="flex min-w-0 flex-wrap items-center">
         <div className="mb-1 mr-3 min-w-0 flex-1">
           <h3 className="text-[13.5px] font-semibold">Desempenho do cliente: perfil e anúncios juntos</h3>
@@ -275,8 +275,8 @@ export function PainelDoDesempenho({ dias }: { dias: number }) {
             <Kpi rotulo={`${d.anuncios.resultado_rotulo} (anúncios)`} valor={inteiro(d.anuncios.resultados)} dica={`Custo por resultado: ${brl(d.anuncios.custo_por_resultado)}`} />
           </dl>
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="min-w-0 rounded-lg border border-border p-3 text-[12px]">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Orgânico</p>
+            <div className="min-w-0 rounded-md bg-muted/50 p-3 text-[12px]">
+              <p className="text-[12px] font-semibold text-muted-foreground">Orgânico</p>
               <p className="mt-1 tabular-nums">
                 {inteiro(d.organico.posts)} posts ({inteiro(d.organico.posts_medidos)} com alcance medido) · alcance semanal {inteiro(d.organico.alcance_semanas)}
               </p>
@@ -284,8 +284,8 @@ export function PainelDoDesempenho({ dias }: { dias: number }) {
                 {inteiro(d.organico.curtidas)} curtidas · {inteiro(d.organico.comentarios)} comentários · {inteiro(d.organico.salvos)} salvamentos · {inteiro(d.organico.compartilhamentos)} compartilhamentos
               </p>
             </div>
-            <div className="min-w-0 rounded-lg border border-border p-3 text-[12px]">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Anúncios</p>
+            <div className="min-w-0 rounded-md bg-muted/50 p-3 text-[12px]">
+              <p className="text-[12px] font-semibold text-muted-foreground">Anúncios</p>
               {d.anuncios.conectada ? (
                 <p className="mt-1 tabular-nums">
                   Investido {brl(d.anuncios.gasto)} · alcance aprox. {inteiro(d.anuncios.alcance)}
@@ -298,7 +298,7 @@ export function PainelDoDesempenho({ dias }: { dias: number }) {
           </div>
           {d.organico.melhores.length > 0 && (
             <div className="min-w-0">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Posts que mais alcançaram</p>
+              <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Posts que mais alcançaram</p>
               <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6">
                 {d.organico.melhores.map((p) => (
                   <a key={p.id} href={p.link || undefined} target="_blank" rel="noreferrer" className="block min-w-0" title={p.legenda}>
@@ -324,8 +324,8 @@ export function PainelDoDesempenho({ dias }: { dias: number }) {
 
 function ListaDeItens({ titulo, tom, itens, porItem, vazio }: { titulo: string; tom: string; itens: ItemDaEvolucao[]; porItem: Record<string, string>; vazio: string }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-3">
-      <p className={`text-[11px] font-semibold uppercase tracking-wider ${tom}`}>
+    <div className="min-w-0 rounded-md bg-background/60 p-3">
+      <p className={`text-[12px] font-semibold ${tom}`}>
         {titulo} ({itens.length})
       </p>
       {itens.length === 0 ? (
@@ -370,7 +370,7 @@ export function PainelDaEvolucao({ dias }: { dias: number }) {
   const q = useQuery({ queryKey: chave, queryFn: () => lerEvolucao(clientId, dias, false), enabled: aberto, staleTime: 10 * 60_000, retry: false });
   const l = explicada || q.data || null;
   return (
-    <section aria-label="Evolução" className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+    <section aria-label="Evolução" className="min-w-0 space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
       <div className="flex min-w-0 flex-wrap items-start">
         <TrendingUp className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="mb-1 mr-3 min-w-0 flex-1">
@@ -432,10 +432,10 @@ export function PainelDaEvolucao({ dias }: { dias: number }) {
           )}
           {l.proximos_testes.length > 0 && (
             <div className="min-w-0">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Próximos testes</p>
+              <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
               <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
                 {l.proximos_testes.map((t, k) => (
-                  <li key={`${t.titulo}-${k}`} className="min-w-0 rounded-lg border border-border bg-card p-3 text-[12px] leading-snug">
+                  <li key={`${t.titulo}-${k}`} className="min-w-0 rounded-md bg-background/60 p-3 text-[12px] leading-snug">
                     <p className="font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                     <p className="mt-0.5 text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>
                     <p className="mt-1 [overflow-wrap:anywhere]"><span className="font-medium">Como:</span> {t.como}</p>
@@ -446,8 +446,8 @@ export function PainelDaEvolucao({ dias }: { dias: number }) {
             </div>
           )}
           {l.aprendizados.length > 0 && (
-            <div className="min-w-0 rounded-lg border border-border bg-card p-3">
-              <p className="flex items-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="min-w-0 rounded-md bg-background/60 p-3">
+              <p className="flex items-center text-[12px] font-semibold text-muted-foreground">
                 <BookOpen className="mr-1.5 h-3.5 w-3.5" /> Aprendizados para a Mesa
               </p>
               <ul className="mt-1.5 space-y-1.5">

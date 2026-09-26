@@ -112,7 +112,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
       )}
       {ativas.length > 0 && (
         <>
-          <div role="radiogroup" aria-label="Campanha da Mesa" className="flex max-h-32 min-w-0 flex-wrap overflow-y-auto" data-campanhas-da-mesa="">
+          <div role="radiogroup" aria-label="Campanha da Mesa" className="flex min-w-0 flex-wrap lg:max-h-32 lg:overflow-y-auto lg:overscroll-contain" data-campanhas-da-mesa="">
             {ativas.map((c) => (
               <button
                 key={c.id}

@@ -3,16 +3,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell,
 } from "recharts";
+import { Plus, Briefcase, Edit3, Trash2 } from "lucide-react";
 import {
-  Plus, Briefcase, TrendingUp, Edit3, Trash2, Calendar,
-  ArrowUpRight, ArrowDownRight, Wallet, Info,
-} from "lucide-react";
+  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, RegiaoRolavel, Secao, SeletorCompacto,
+  botao, campo, campoTexto, juntar, superficie, texto,
+} from "@/components/sistema";
+import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi } from "@/components/finance/pecasDoFinanceiro";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -66,7 +66,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
   const [modal, setModal] = useState<{ data: any } | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
 
-  const { data: allExpenses = [] } = useQuery({
+  const { data: allExpenses = [], isLoading, error, refetch } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
@@ -268,265 +268,234 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
   };
 
   const hasData = investor.total > 0 || investorEntries.length > 0;
+  // Esqueleto só na primeira carga (sem dado ainda).
+  const primeiraCarga = isLoading && (allExpenses || []).length === 0;
 
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
-            <Briefcase className="w-5 h-5" />
-          </span>
-          <div>
-            <h2 className="text-xl font-semibold text-foreground tracking-tight">Capital de Investidor</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Aportes de sócios isolados do fluxo operacional. ROI bruto medido a partir da data exata do primeiro aporte.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setModal({ data: {} })}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 border-none cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" /> Novo aporte
-        </button>
-      </div>
+    <div className="min-w-0 space-y-6">
+      <Secao
+        titulo="Capital de investidor"
+        descricao={hasData ? `${investorEntries.length} ${investorEntries.length === 1 ? "lançamento" : "lançamentos"}` : undefined}
+        ajuda="Aportes de sócios ficam isolados do fluxo operacional: não entram como receita nem como despesa. O ROI bruto é medido a partir da data exata do primeiro aporte."
+        acao={
+          hasData ? (
+            <button type="button" onClick={() => setModal({ data: {} })} className={botao.primario} aria-label="Novo aporte">
+              <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Novo aporte</span>
+            </button>
+          ) : undefined
+        }
+      >
+        {error ? (
+          <EstadoDeErro
+            titulo="Não consegui ler os aportes."
+            acao={<button type="button" onClick={() => refetch()} className={botao.secundario}>Tentar de novo</button>}
+          />
+        ) : primeiraCarga ? (
+          <Carregando forma="aba" rotulo="Carregando capital" />
+        ) : !hasData ? (
+          <EstadoVazio
+            icone={<Briefcase className="h-5 w-5" />}
+            titulo="Nenhum capital registrado"
+            descricao="Quando um sócio investir, registre aqui. O valor fica fora do DRE e serve de base para medir o retorno."
+            acao={
+              <button type="button" onClick={() => setModal({ data: {} })} className={botao.primario}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Registrar primeiro aporte
+              </button>
+            }
+          />
+        ) : (
+          <GradeDeKpis>
+            <Kpi
+              rotulo="Total aportado"
+              valor={fmt(investor.total)}
+              apoio={investor.contributors.length === 1 ? "1 investidor" : `${investor.contributors.length} investidores`}
+              tom="primario"
+            />
+            <Kpi
+              rotulo="Aporte deste mês"
+              valor={fmt(investor.currentMonth)}
+              apoio={investor.firstDate ? `Início ${investor.firstDate.toLocaleDateString("pt-BR")}` : "-"}
+            />
+            <Kpi
+              rotulo={`Retorno bruto${daysSinceInvest ? ` (${daysSinceInvest}d)` : ""}`}
+              valor={fmt(returns.net)}
+              apoio={`${fmt(returns.receitas)} entradas · ${fmt(returns.despesas)} saídas`}
+              tom={returns.net >= 0 ? "sucesso" : "perigo"}
+            />
+            <Kpi
+              rotulo="ROI bruto"
+              valor={investor.total > 0 ? `${roiBruto.toFixed(1)}%` : "-"}
+              apoio={returns.net >= 0 ? "Antes da divisão de custos" : "Ainda em recuperação"}
+              tom={roiBruto >= 0 ? "sucesso" : "perigo"}
+            />
+          </GradeDeKpis>
+        )}
+      </Secao>
 
-      {!hasData ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center">
-          <span className="inline-flex w-12 h-12 rounded-2xl bg-primary/10 text-primary items-center justify-center mb-3">
-            <Briefcase className="w-6 h-6" />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Nenhum capital registrado</h3>
-          <p className="text-[12px] text-muted-foreground mt-1 max-w-md mx-auto">
-            Quando um sócio investir, registre aqui. O valor não entra no DRE · fica isolado e serve de base para medir o retorno bruto da operação.
-          </p>
-          <button
-            onClick={() => setModal({ data: {} })}
-            className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground border-none cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" /> Registrar primeiro aporte
-          </button>
-        </div>
-      ) : (
+      {hasData && !error && (
         <>
-          {/* RESUMO CAPITAL */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              icon={<Briefcase className="w-4 h-4" />}
-              label="Total aportado"
-              value={fmt(investor.total)}
-              hint={investor.contributors.length === 1 ? "1 investidor" : `${investor.contributors.length} investidores`}
-              tone="primary"
-            />
-            <StatCard
-              icon={<Calendar className="w-4 h-4" />}
-              label="Aporte deste mês"
-              value={fmt(investor.currentMonth)}
-              hint={investor.firstDate ? `Início ${investor.firstDate.toLocaleDateString("pt-BR")}` : "-"}
-              tone="primary"
-            />
-            <StatCard
-              icon={returns.net >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-              label={`Retorno bruto${daysSinceInvest ? ` (${daysSinceInvest}d)` : ""}`}
-              value={fmt(returns.net)}
-              hint={`${fmt(returns.receitas)} entradas · ${fmt(returns.despesas)} saídas`}
-              tone={returns.net >= 0 ? "success" : "danger"}
-            />
-            <StatCard
-              icon={<TrendingUp className="w-4 h-4" />}
-              label="ROI bruto"
-              value={investor.total > 0 ? `${roiBruto.toFixed(1)}%` : "-"}
-              hint={returns.net >= 0 ? "Antes da divisão de custos" : "Ainda em recuperação"}
-              tone={roiBruto >= 0 ? "success" : "danger"}
-            />
-          </div>
-
           {/* Barra de recuperação do capital */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Recuperação do capital</h3>
-                <p className="text-[11px] text-muted-foreground">Quanto do total aportado já foi devolvido pela operação (bruto, sem divisão).</p>
-              </div>
-              <span className="text-sm font-mono font-semibold text-primary">{recoveryPct.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+          <Secao
+            divisoria
+            titulo="Recuperação do capital"
+            ajuda="Quanto do total aportado já voltou pela operação, bruto. ROI bruto = receitas confirmadas menos despesas operacionais pagas, divididas pelo total aportado. Ainda não considera a divisão de custo entre sócios: esse rateio acontece numa etapa posterior."
+            acao={<span className="text-[15px] font-semibold tabular-nums text-primary">{recoveryPct.toFixed(1)}%</span>}
+          >
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(recoveryPct)} aria-label="Recuperação do capital">
               <div
-                className={`h-full ${returns.net >= 0 ? "bg-primary" : "bg-destructive"}`}
+                className={juntar("h-full", returns.net >= 0 ? "bg-primary" : "bg-destructive")}
                 style={{ width: `${Math.max(2, recoveryPct)}%` }}
               />
             </div>
-            <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground font-mono">
+            <div className={juntar(texto.auxiliar, "mt-1.5 flex items-center justify-between tabular-nums")}>
               <span>R$ 0</span>
               <span>{fmt(investor.total)}</span>
             </div>
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
-              <Info className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                ROI bruto = receitas confirmadas <span className="text-foreground">menos</span> despesas operacionais pagas, divididas pelo total aportado. Não considera ainda a divisão de custo entre sócios · esse rateio acontece em uma etapa posterior.
-              </p>
-            </div>
-          </div>
+          </Secao>
 
           {/* GRÁFICO */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Evolução do capital vs retorno</h3>
-                <p className="text-[11px] text-muted-foreground">Aporte acumulado e retorno bruto acumulado mês a mês.</p>
+          <Secao
+            divisoria
+            titulo="Capital e retorno"
+            ajuda="Aporte acumulado e retorno bruto acumulado, mês a mês, desde o primeiro aporte."
+            acao={
+              <div className={juntar(texto.auxiliar, "hidden items-center sm:flex")}>
+                <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-primary" /> Aporte</span>
+                <span className="flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-success" /> Retorno</span>
               </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-primary" /> Aporte acumulado</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Retorno acumulado</span>
+            }
+          >
+            <Painel>
+              <div className="h-[260px]">
+                <ResponsiveContainer>
+                  <AreaChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="aporteGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="retornoGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                      formatter={(v: any) => fmt(Number(v))}
+                    />
+                    <Area type="monotone" dataKey="acumAporte" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#aporteGrad)" name="Aporte acumulado" isAnimationActive={false} />
+                    <Area type="monotone" dataKey="acumRetorno" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#retornoGrad)" name="Retorno acumulado" isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
-            </div>
-            <div className="h-[280px]">
-              <ResponsiveContainer>
-                <AreaChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="aporteGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
-                    </linearGradient>
-                    <linearGradient id="retornoGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
-                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                    formatter={(v: any) => fmt(Number(v))}
-                  />
-                  <Area type="monotone" dataKey="acumAporte" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#aporteGrad)" name="Aporte acumulado" />
-                  <Area type="monotone" dataKey="acumRetorno" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#retornoGrad)" name="Retorno acumulado" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+            </Painel>
+          </Secao>
 
           {/* INVESTIDORES + ALOCAÇÃO */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-1">Investidores</h3>
-              <p className="text-[11px] text-muted-foreground mb-4">Participação no capital total aportado.</p>
-              <div className="space-y-2">
+          <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
+            <Secao titulo="Investidores" ajuda="Participação de cada um no capital total aportado." className="lg:col-span-2">
+              <ul className="divide-y divide-border">
                 {investor.contributors.map((c, i) => {
                   const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
                   return (
-                    <div key={i} className="rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                          <span className="text-[13px] font-medium text-foreground truncate">{c.name}</span>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <span className="text-[11px] text-primary font-mono font-semibold">{pct.toFixed(1)}%</span>
-                          <span className="text-[13px] font-mono text-foreground">{fmt(c.value)}</span>
-                        </div>
+                    <li key={i} className="min-w-0 py-2.5">
+                      <div className="mb-1.5 flex min-w-0 items-center">
+                        <span className="mr-3 min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{c.name}</span>
+                        <span className="mr-3 shrink-0 text-[12px] font-semibold tabular-nums text-primary">{pct.toFixed(1)}%</span>
+                        <span className="shrink-0 text-[13px] tabular-nums text-foreground">{fmt(c.value)}</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
-            </div>
+              </ul>
+            </Secao>
 
-            <div className="rounded-2xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-1">Alocação do capital</h3>
-              <p className="text-[11px] text-muted-foreground mb-3">Para onde o capital está sendo direcionado.</p>
+            <Secao titulo="Alocação" ajuda="Para onde o capital está sendo direcionado.">
               {investor.allocation.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground py-10 text-center">Sem dados</p>
+                <EstadoVazio compacto titulo="Sem dados." />
               ) : (
                 <>
                   <div className="h-[160px]">
                     <ResponsiveContainer>
                       <PieChart>
-                        <Pie data={investor.allocation} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2}>
+                        <Pie data={investor.allocation} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2} isAnimationActive={false}>
                           {investor.allocation.map((d, i) => <Cell key={i} fill={d.color} />)}
                         </Pie>
                         <Tooltip formatter={(v: any) => fmt(Number(v))}
-                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="space-y-1.5 mt-3">
+                  <ul className="mt-3 space-y-1.5">
                     {investor.allocation.slice(0, 5).map((c, i) => {
                       const tot = investor.allocation.reduce((a, x) => a + x.value, 0);
                       const pct = tot > 0 ? (c.value / tot) * 100 : 0;
                       return (
-                        <div key={i} className="flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.color }} />
-                            <span className="text-foreground truncate">{c.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-muted-foreground">{pct.toFixed(0)}%</span>
-                            <span className="font-mono text-foreground">{fmtCompact(c.value)}</span>
-                          </div>
-                        </div>
+                        <li key={i} className="flex min-w-0 items-center text-[12px]">
+                          <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                          <span className="mr-2 min-w-0 flex-1 truncate text-foreground">{c.name}</span>
+                          <span className="mr-2 shrink-0 tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                          <span className="shrink-0 tabular-nums text-foreground">{fmtCompact(c.value)}</span>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 </>
               )}
-            </div>
+            </Secao>
           </div>
 
           {/* MOVIMENTAÇÕES */}
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Histórico de aportes</h3>
-                <p className="text-[11px] text-muted-foreground">Cada lançamento de capital registrado.</p>
-              </div>
-              <span className="text-[11px] text-muted-foreground font-mono">{investorEntries.length} lançamentos</span>
-            </div>
-            <div className="divide-y divide-border">
-              {investorEntries.map((e: any) => {
-                const cm = catMeta(e.category);
-                return (
-                  <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${cm.color}22`, color: cm.color }}>
-                        <Briefcase className="w-4 h-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
-                        <p className="text-[11px] text-muted-foreground">
+          <Secao divisoria titulo="Histórico de aportes" descricao={`${investorEntries.length} ${investorEntries.length === 1 ? "lançamento" : "lançamentos"}`}>
+            <RegiaoRolavel memoria="financeiro:capital:aportes" rotulo="Histórico de aportes" className="lg:max-h-[60vh]">
+              <ul className="divide-y divide-border">
+                {investorEntries.map((e: any) => {
+                  const cm = catMeta(e.category);
+                  return (
+                    <li key={e.id} className="flex min-w-0 flex-wrap items-center py-2.5">
+                      <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                      <div className="mr-3 min-w-0 flex-1 basis-48">
+                        <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                        <p className={juntar(texto.auxiliar, "truncate")}>
                           {cm.label} · {parseDate(e.paid_date || e.due_date)?.toLocaleDateString("pt-BR")}
                           {e.supplier && ` · ${e.supplier}`}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === "paid" ? "bg-primary/15 text-primary" : "bg-warning/15 text-warning"}`}>
-                        {e.status === "paid" ? "Aportado" : "Previsto"}
-                      </span>
-                      <span className="text-[13px] font-mono font-semibold text-primary">{fmt(Number(e.amount))}</span>
-                      <button onClick={() => setModal({ data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                      <div className="ml-auto flex shrink-0 items-center py-1">
+                        <Etiqueta tom={e.status === "paid" ? "primario" : "aviso"} className="mr-3">
+                          {e.status === "paid" ? "Aportado" : "Previsto"}
+                        </Etiqueta>
+                        <span className="mr-1 text-[13px] font-semibold tabular-nums text-primary">{fmt(Number(e.amount))}</span>
+                        <button type="button" onClick={() => setModal({ data: e })} className={botao.icone} aria-label={`Editar ${e.description}`} title="Editar">
+                          <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                        <button type="button" onClick={() => setConfirmDel(e.id)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Remover ${e.description}`} title="Remover">
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </RegiaoRolavel>
+          </Secao>
         </>
       )}
 
       {/* MODAL APORTE */}
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
-        <DialogContent className="bg-card border-border max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-border bg-card">
           <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-primary" />
+            <DialogTitle className="flex items-center text-foreground">
+              <Briefcase className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
               {modal?.data?.id ? "Editar aporte" : "Novo aporte de capital"}
             </DialogTitle>
           </DialogHeader>
@@ -541,33 +510,15 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
       </Dialog>
 
       <Dialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
-        <DialogContent className="bg-card border-border max-w-sm">
+        <DialogContent className="max-w-sm border-border bg-card">
           <DialogHeader><DialogTitle className="text-foreground">Remover aporte?</DialogTitle></DialogHeader>
-          <p className="text-[13px] text-muted-foreground">Essa ação não pode ser desfeita. O ROI será recalculado.</p>
-          <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setConfirmDel(null)} className="px-3 py-1.5 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
-            <button onClick={() => confirmDel && del(confirmDel)} className="px-3 py-1.5 rounded-lg text-[12px] bg-destructive text-destructive-foreground border-none cursor-pointer">Remover</button>
-          </div>
+          <p className="text-[13px] leading-5 text-muted-foreground">Não dá para desfazer. O ROI é recalculado.</p>
+          <AcoesDoDialogo>
+            <button type="button" onClick={() => setConfirmDel(null)} className={botao.discreto}>Cancelar</button>
+            <button type="button" onClick={() => confirmDel && del(confirmDel)} className={botao.perigo}>Remover</button>
+          </AcoesDoDialogo>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, hint, tone }: any) {
-  const tones: any = {
-    success: "from-success/15 to-success/0 text-success border-success/20",
-    danger: "from-destructive/15 to-destructive/0 text-destructive border-destructive/20",
-    primary: "from-primary/15 to-primary/0 text-primary border-primary/20",
-  };
-  return (
-    <div className={`relative rounded-2xl border bg-gradient-to-br ${tones[tone] || tones.primary} p-4 overflow-hidden`}>
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</span>
-        <span className="opacity-70">{icon}</span>
-      </div>
-      <p className="mt-2 text-2xl font-mono font-semibold text-foreground tracking-tight">{value}</p>
-      {hint && <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>}
     </div>
   );
 }
@@ -588,64 +539,49 @@ function InvestorForm({ initial, onSave, onCancel }: any) {
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
-        <p className="text-[11px] text-foreground">
-          <span className="text-primary font-semibold">Capital de investidor.</span> Não conta como receita nem como despesa. Serve de base para medir o ROI bruto a partir da data do aporte.
-        </p>
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground">Descrição *</label>
-        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder="Ex: Aporte sócio Junho/26" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground">Destino do capital</label>
-          <select value={form.category} onChange={e => set("category", e.target.value)}
-            className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+    <div className="space-y-4">
+      <p className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
+        <span className="font-semibold text-primary">Capital de investidor.</span> Não conta como receita nem como despesa. É a base do ROI bruto a partir da data do aporte.
+      </p>
+      <GrupoDeCampos>
+        <CampoDeFormulario rotulo="Descrição" obrigatorio largo>
+          <input value={form.description} onChange={e => set("description", e.target.value)} className={campo} placeholder="Ex.: Aporte sócio junho/26" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Destino do capital">
+          <select value={form.category} onChange={e => set("category", e.target.value)} className={campo}>
             {INVESTMENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Valor (R$)" obrigatorio>
+          <input type="number" step="0.01" inputMode="decimal" value={form.amount} onChange={e => set("amount", e.target.value)} className={campo} placeholder="0,00" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Data do aporte" obrigatorio>
+          <input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className={campo} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Investidor / sócio">
+          <input value={form.supplier} onChange={e => set("supplier", e.target.value)} className={campo} placeholder="Nome do investidor" />
+        </CampoDeFormulario>
+        <div className="min-w-0 sm:col-span-full">
+          <p className={juntar(texto.rotulo, "mb-1.5")}>Status</p>
+          <SeletorCompacto
+            opcoes={[{ valor: "paid", rotulo: "Aportado" }, { valor: "pending", rotulo: "Previsto" }]}
+            valor={form.status}
+            onEscolher={(v) => set("status", v)}
+            rotulo="Status do aporte"
+            modo="segmentado"
+            larguraTotal
+          />
         </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">Valor (R$) *</label>
-          <Input type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} className="mt-1" placeholder="0,00" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground">Data do aporte *</label>
-          <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="mt-1" />
-        </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">Investidor / Sócio</label>
-          <Input value={form.supplier} onChange={e => set("supplier", e.target.value)} className="mt-1" placeholder="Nome do investidor" />
-        </div>
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground">Status</label>
-        <div className="flex gap-2 mt-1">
-          {[
-            { v: "paid", label: "Aportado" },
-            { v: "pending", label: "Previsto" },
-          ].map(s => (
-            <button key={s.v} type="button" onClick={() => set("status", s.v)}
-              className={`flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer ${form.status === s.v ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-muted-foreground border-border"}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground">Observações</label>
-        <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2}
-          className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" />
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
-        <button onClick={() => onSave(form)} className="px-4 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground border-none cursor-pointer">
+        <CampoDeFormulario rotulo="Observações" largo>
+          <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2} className={juntar(campoTexto, "resize-none")} />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
+      <AcoesDoDialogo>
+        <button type="button" onClick={onCancel} className={botao.discreto}>Cancelar</button>
+        <button type="button" onClick={() => onSave(form)} className={botao.primario}>
           {form.id ? "Salvar" : "Registrar aporte"}
         </button>
-      </div>
+      </AcoesDoDialogo>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ChevronDown, KeyRound, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { textoDoErro } from "@/lib/mesa/api";
 import { META_OAUTH_MESSAGE_TYPE, startAdsOAuth, type MetaOAuthPopupMessage } from "@/lib/socialMetaOAuth";
 import { tempoDesde } from "./adsApi";
@@ -117,7 +118,7 @@ export default function AtivarGestao({
 
   const ativa = !!(g && g.disponivel);
   return (
-    <section className={`min-w-0 rounded-xl border border-border bg-card px-4 py-3 ${className}`} aria-label="Gestão de campanhas">
+    <section className={`min-w-0 rounded-lg border border-border bg-card px-4 py-3 ${className}`} aria-label="Gestão de campanhas">
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" className="mb-1 mr-3 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
           <span className="min-w-0">
@@ -159,9 +160,9 @@ export default function AtivarGestao({
             ) : (
               <span className="mb-1 mr-3 font-medium">Peça a um admin para conectar pedindo gestão.</span>
             )}
-            <span className="mb-1 min-w-0 flex-1 text-[11.5px] text-muted-foreground">
+            <AjudaRecolhida className="mb-1" rotulo="Como funciona o login com gestão">
               O painel pede ads_management no login. Se a configuração do Login for Business não tiver a permissão, a Meta não mostra o pedido; depois do login, o painel confere e diz o que faltou.
-            </span>
+            </AjudaRecolhida>
           </div>
           {g && !g.guardada && <p className="text-[11px] text-muted-foreground">A conferência ainda não fica guardada no banco (SQL pendente): o painel confere de novo a cada 10 minutos.</p>}
         </div>

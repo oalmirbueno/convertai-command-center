@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Check, Loader2, Wand2 } from "lucide-react";
+import { ArrowRight, Check, Compass, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { partesDoPlanejamento } from "@/components/mesa-foto/fotoApi";
-import { AvisoDoRascunho, CabecalhoDaEtapa, SemCampanha, useMesaPublicidade } from "./Comuns";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { botao, campoTexto, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { AvisoDoRascunho, CabecalhoDaEtapa, RotuloLargo, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { aprovarTerritorio, lacunasDoBriefing, proporTerritorios, type Territorio } from "./publicidadeApi";
 
 /**
@@ -19,60 +21,41 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 function CartaoDoTerritorio({ t, podeAprovar, onAprovar, aprovando }: { t: Territorio; podeAprovar: boolean; onAprovar: () => void; aprovando: boolean }) {
   const aprovado = t.status === "aprovado";
+  const linha = (rotulo: string, valor: string) =>
+    valor ? (
+      <div>
+        <dt className="inline font-medium text-foreground">{rotulo}: </dt>
+        <dd className="inline text-muted-foreground">{valor}</dd>
+      </div>
+    ) : null;
   return (
-    <article className={`flex min-w-0 flex-col rounded-xl border bg-card p-3.5 ${aprovado ? "border-primary ring-1 ring-primary/30" : "border-border"}`} data-territorio={t.id} data-aprovado={aprovado ? "" : undefined}>
+    <article
+      className={juntar(superficie.painel, "flex min-w-0 flex-col p-4", aprovado && "border-primary ring-1 ring-primary/30")}
+      data-territorio={t.id}
+      data-aprovado={aprovado ? "" : undefined}
+    >
       <div className="flex min-w-0 items-start">
-        <h3 className="mr-2 min-w-0 flex-1 text-[14px] font-semibold leading-tight [overflow-wrap:anywhere]">{t.nome}</h3>
-        {aprovado && (
-          <span className="inline-flex shrink-0 items-center rounded-full bg-success/15 px-2 py-0.5 text-[10.5px] font-medium">
-            <Check className="mr-1 h-3 w-3" /> Aprovado
+        <h3 className="mr-2 min-w-0 flex-1 text-[14px] font-semibold leading-5 [overflow-wrap:anywhere]">{t.nome}</h3>
+        {aprovado ? (
+          <span className={juntar(etiqueta, "bg-success/15 text-foreground")}>
+            <Check className="mr-1 h-3 w-3" aria-hidden="true" /> Aprovado
           </span>
+        ) : (
+          <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} disabled={!podeAprovar || aprovando} onClick={onAprovar} aria-label="Aprovar este território">
+            {aprovando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+            Aprovar
+          </button>
         )}
       </div>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{t.conceito}</p>
-      <dl className="mt-2 space-y-1 text-[11.5px] leading-snug">
-        {t.tensao_humana && (
-          <div>
-            <dt className="inline font-medium">Tensão humana: </dt>
-            <dd className="inline text-muted-foreground">{t.tensao_humana}</dd>
-          </div>
-        )}
-        {t.promessa && (
-          <div>
-            <dt className="inline font-medium">Promessa: </dt>
-            <dd className="inline text-muted-foreground">{t.promessa}</dd>
-          </div>
-        )}
-        {t.razao_para_acreditar && (
-          <div>
-            <dt className="inline font-medium">Razão para acreditar: </dt>
-            <dd className="inline text-muted-foreground">{t.razao_para_acreditar}</dd>
-          </div>
-        )}
-        <div>
-          <dt className="inline font-medium">Casting: </dt>
-          <dd className="inline text-muted-foreground">
-            {[t.casting.perfil, `${t.casting.idade_aprox} anos`, t.casting.estilo, t.casting.figurino].filter(Boolean).join(", ")} (pessoa sintética)
-          </dd>
-        </div>
-        {t.ambiente && (
-          <div>
-            <dt className="inline font-medium">Ambiente: </dt>
-            <dd className="inline text-muted-foreground">{t.ambiente}</dd>
-          </div>
-        )}
-        {(t.direcao_de_arte.luz || t.direcao_de_arte.tratamento) && (
-          <div>
-            <dt className="inline font-medium">Luz e tratamento: </dt>
-            <dd className="inline text-muted-foreground">{[t.direcao_de_arte.luz, t.direcao_de_arte.tratamento, t.direcao_de_arte.enquadramentos].filter(Boolean).join("; ")}</dd>
-          </div>
-        )}
-        {t.por_que_combina && (
-          <div>
-            <dt className="inline font-medium">Por que combina: </dt>
-            <dd className="inline text-muted-foreground">{t.por_que_combina}</dd>
-          </div>
-        )}
+      <p className={juntar(texto.corpo, "mt-1.5 leading-relaxed [overflow-wrap:anywhere]")}>{t.conceito}</p>
+      <dl className="mt-2 space-y-1 text-[12px] leading-snug [overflow-wrap:anywhere]">
+        {linha("Tensão humana", t.tensao_humana)}
+        {linha("Promessa", t.promessa)}
+        {linha("Razão para acreditar", t.razao_para_acreditar)}
+        {linha("Casting", `${[t.casting.perfil, `${t.casting.idade_aprox} anos`, t.casting.estilo, t.casting.figurino].filter(Boolean).join(", ")} (pessoa sintética)`)}
+        {linha("Ambiente", t.ambiente)}
+        {linha("Luz e tratamento", [t.direcao_de_arte.luz, t.direcao_de_arte.tratamento, t.direcao_de_arte.enquadramentos].filter(Boolean).join("; "))}
+        {linha("Por que combina", t.por_que_combina)}
       </dl>
       {t.direcao_de_arte.paleta.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center" aria-label="Paleta">
@@ -83,29 +66,21 @@ function CartaoDoTerritorio({ t, podeAprovar, onAprovar, aprovando }: { t: Terri
               <span key={c} className="mb-1 mr-1 rounded-full bg-muted px-1.5 py-px text-[10.5px]">
                 {c}
               </span>
-            )
+            ),
           )}
         </div>
       )}
-      {t.riscos.length > 0 && <p className="mt-1.5 text-[11px] text-muted-foreground">Riscos: {t.riscos.join("; ")}</p>}
-      <p className="mt-1 text-[10.5px] text-muted-foreground">Feito com o briefing versão {t.briefing_versao}.</p>
-      <div className="mt-auto pt-2.5">
-        {!aprovado && (
-          <Button type="button" size="sm" variant="outline" className="h-8" disabled={!podeAprovar || aprovando} onClick={onAprovar}>
-            {aprovando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-            Aprovar este território
-          </Button>
-        )}
-      </div>
+      {t.riscos.length > 0 && <p className={juntar(texto.auxiliar, "mt-1.5 leading-5 [overflow-wrap:anywhere]")}>Riscos: {t.riscos.join("; ")}</p>}
+      <p className="mt-auto pt-2 text-[11px] text-muted-foreground">Briefing versão {t.briefing_versao}</p>
     </article>
   );
 }
 
 export default function EtapaDirecao() {
-  const { catalogo } = useMesa();
+  const { clientId, catalogo } = useMesa();
   const { campanha, banco, aplicar, irPara } = useMesaPublicidade();
   const avisarErro = useAvisarErro();
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela<string>(`mesa-publicidade:pedido-ao-diretor:${clientId}:${campanha ? campanha.id || "rascunho" : "nenhuma"}`, "");
   const [aprovando, setAprovando] = useState<string | null>(null);
   if (!campanha) return <SemCampanha etapa="a direção" />;
   const travado = !!campanha.ensaio_id;
@@ -125,51 +100,65 @@ export default function EtapaDirecao() {
     }
   };
 
+  const estado = travado
+    ? "Tomadas já pedidas com o território aprovado. Outra direção pede campanha nova."
+    : lacunas.length
+      ? `O briefing tem ${lacunas.length} ${lacunas.length === 1 ? "lacuna" : "lacunas"}. O diretor aponta, não inventa.`
+      : `${campanha.territorios.length} ${campanha.territorios.length === 1 ? "território" : "territórios"}`;
+
   return (
-    <div className="space-y-4" data-etapa-publicidade="direcao">
+    <div className="min-w-0 space-y-5" data-etapa-publicidade="direcao">
       <CabecalhoDaEtapa
         titulo="Direção"
-        descricao="Três territórios criativos com conceito, direção de arte, casting, ambiente e luz. A equipe aprova um."
+        ajuda="Três territórios criativos com conceito, direção de arte, casting, ambiente e luz. A equipe aprova um; só então as tomadas saem."
+        estado={estado}
         acoes={
-          campanha.territorio_id ? (
-            <Button type="button" size="sm" className="h-8" onClick={() => irPara("tomadas")}>
-              Seguir para as tomadas
-            </Button>
-          ) : null
+          <>
+            {!travado && (
+              <BotaoComCusto
+                rotulo={
+                  <>
+                    <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+                    {campanha.territorios.length ? "Propor 3 novos" : "Propor 3 territórios"}
+                  </>
+                }
+                titulo="Territórios propostos"
+                variant={campanha.territorio_id ? "outline" : "default"}
+                className="h-9"
+                partes={() => partesDoPlanejamento(catalogo)}
+                disabled={!campanha.kit_id}
+                executar={async () => {
+                  const r = await proporTerritorios(campanha, pedido);
+                  aplicar(r.campanha);
+                  const avisos: string[] = (r.bruto && Array.isArray(r.bruto.avisos) ? r.bruto.avisos : []).concat(r.bruto && Array.isArray(r.bruto.lacunas) ? r.bruto.lacunas : []);
+                  if (avisos.length) toast.message("Do diretor", { description: avisos.slice(0, 3).join(" ") });
+                  return r.bruto;
+                }}
+              />
+            )}
+            {campanha.territorio_id && (
+              <button type="button" className={botao.primario} onClick={() => irPara("tomadas")} aria-label="Seguir para as tomadas">
+                <ArrowRight className="h-3.5 w-3.5" />
+                <RotuloLargo>Seguir para as tomadas</RotuloLargo>
+              </button>
+            )}
+          </>
         }
       />
       {!banco && <AvisoDoRascunho />}
-      {lacunas.length > 0 && <p className="text-[12px] text-muted-foreground">O briefing tem {lacunas.length} {lacunas.length === 1 ? "lacuna" : "lacunas"}. O diretor não inventa o que falta: ele aponta.</p>}
 
       {!travado && (
-        <section className="rounded-xl border border-border bg-card p-3.5">
-          <label className="block">
-            <span className="text-[12px] font-medium">Pedido ao diretor (opcional)</span>
-            <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={2} maxLength={1500} placeholder="Ex.: fugir do clichê de praia; público de 30 a 45 anos" className="mt-1 text-[12.5px]" />
-          </label>
-          <div className="mt-2">
-            <BotaoComCusto
-              rotulo={
-                <>
-                  <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                  {campanha.territorios.length ? "Propor 3 territórios novos" : "Propor 3 territórios"}
-                </>
-              }
-              titulo="Territórios propostos"
-              partes={() => partesDoPlanejamento(catalogo)}
-              disabled={!campanha.kit_id}
-              executar={async () => {
-                const r = await proporTerritorios(campanha, pedido);
-                aplicar(r.campanha);
-                const avisos: string[] = (r.bruto && Array.isArray(r.bruto.avisos) ? r.bruto.avisos : []).concat(r.bruto && Array.isArray(r.bruto.lacunas) ? r.bruto.lacunas : []);
-                if (avisos.length) toast.message("Do diretor", { description: avisos.slice(0, 3).join(" ") });
-                return r.bruto;
-              }}
-            />
-          </div>
-        </section>
+        <CampoDeFormulario rotulo="Pedido ao diretor" ajuda="Opcional. Entra na próxima proposta de territórios." className="max-w-3xl">
+          <textarea
+            value={pedido}
+            onChange={(e) => setPedido(e.target.value)}
+            rows={2}
+            maxLength={1500}
+            placeholder="Ex.: fugir do clichê de praia; público de 30 a 45 anos"
+            className={juntar(campoTexto, "min-h-[64px]")}
+          />
+        </CampoDeFormulario>
       )}
-      {travado && <p className="text-[12px] text-muted-foreground">As tomadas já foram pedidas à Mesa Foto com o território aprovado. Para outra direção, abra uma campanha nova.</p>}
 
       {campanha.territorios.length > 0 ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-territorios="">
@@ -178,7 +167,7 @@ export default function EtapaDirecao() {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border p-6 text-center text-[12.5px] text-muted-foreground">Nenhum território ainda. Peça ao diretor os três caminhos.</div>
+        <EstadoVazio compacto icone={<Compass className="h-4 w-4" />} titulo="Nenhum território ainda." descricao="Peça ao diretor os três caminhos." />
       )}
     </div>
   );

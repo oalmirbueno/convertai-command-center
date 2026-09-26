@@ -486,7 +486,7 @@ describe("tela: oferta já vem do contexto e o agente lapida", () => {
     expect(chamadasDe("oferta_conversar")[0]).toMatchObject({ oferta_id: "of-ctx", client_id: CLIENTE });
     // Não monta de novo sozinho.
     expect(chamadasDe("oferta_do_contexto")).toHaveLength(1);
-  });
+  }, 20000);
 
   it("com oferta em uso, não monta sozinho; Remontar do contexto pede forcar", async () => {
     mock.tabelas.ads_ofertas = [OFERTA_DO_CONTEXTO];

@@ -10,6 +10,7 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, FotoInteira, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
+import { Carregando } from "@/components/sistema/Estados";
 import { MenuDeUso, MOTIVOS_RAPIDOS } from "./UsoDaFoto";
 import {
   chaveDosEnsaios,
@@ -162,7 +163,7 @@ function CartaoDaVersao({
   const leitor = padraoPara(catalogo, "leitura");
   return (
     <li
-      className={`min-w-0 rounded-xl border bg-card p-2 ${versao.aprovada ? "border-success/60" : versao.rejeitada ? "border-destructive/30 opacity-80" : "border-border"}`}
+      className={`min-w-0 rounded-lg border bg-card p-2 ${versao.aprovada ? "border-success/60" : versao.rejeitada ? "border-destructive/30 opacity-80" : "border-border"}`}
       data-versao={versao.versao}
     >
       <button type="button" onClick={onAmpliar} className="block w-full cursor-zoom-in" aria-label={`Ver a versão ${versao.versao} grande`}>
@@ -265,7 +266,7 @@ function LinhaDaTomada({
   const identidade = kit ? kit.refs.find((r) => r.papel === "identidade" || r.papel === "rosto") || kit.refs[0] : null;
   const fonte = identidade ? fotos.find((f) => f.id === identidade.imagem_id) || null : null;
   return (
-    <li className="min-w-0 rounded-xl border border-border bg-card p-3" data-revisar-tomada={tomada.id}>
+    <li className="min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0" data-revisar-tomada={tomada.id}>
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         <p className="mr-2 min-w-0 truncate text-[13px] font-semibold">{tomada.nome}</p>
         <span className={`mr-2 rounded-full px-1.5 py-px text-[10.5px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
@@ -294,7 +295,7 @@ function LinhaDaTomada({
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-[150px_minmax(0,1fr)]">
         <div className="min-w-0">
-          <p className="mb-1 text-[11px] font-medium text-muted-foreground">Fotos do produto</p>
+          <p className="mb-1 text-[12px] font-medium text-muted-foreground">Fotos do produto</p>
           <FontesDoKit kit={kit} fotos={fotos} onAbrir={(f) => onAmpliar(f.storage_path, `Fonte: ${f.nome}`)} />
         </div>
         {tomada.versoes.length === 0 ? (
@@ -393,11 +394,9 @@ export default function EtapaRevisar() {
 
   if (!ensaio) {
     return (
-      <div className="min-w-0 space-y-4 pb-24">
+      <div className="min-w-0 space-y-4">
         {ensaios.isLoading ? (
-          <p className="flex items-center text-[12px] text-muted-foreground">
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo os ensaios...
-          </p>
+          <Carregando linhas={3} rotulo="Lendo os ensaios" />
         ) : lista.length ? (
           <Cartao titulo="Qual ensaio revisar?">
             <ul className="space-y-1.5">
@@ -405,7 +404,7 @@ export default function EtapaRevisar() {
                 const r = resumoDoEnsaio(e);
                 return (
                   <li key={e.id}>
-                    <button type="button" onClick={() => escolherEnsaio(e.id)} className="flex w-full min-w-0 items-center rounded-lg border border-border px-3 py-2 text-left hover:border-primary/40">
+                    <button type="button" onClick={() => escolherEnsaio(e.id)} className="flex w-full min-w-0 items-center rounded-md border border-border px-3 py-2 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{nomeDaReceita(receitas.data ? receitas.data.receitas : null, e.receita_id)}</span>
                       <span className="ml-2 shrink-0 text-[11.5px] text-muted-foreground">
                         {r.paraRevisar} para revisar · {r.aprovadas} aprovadas
@@ -434,9 +433,9 @@ export default function EtapaRevisar() {
   const tomadas = ensaio.tomadas.filter((t) => (so === "todas" ? true : t.versoes.length > 0 && !t.versoes.some((v) => v.aprovada)));
 
   return (
-    <div className="min-w-0 space-y-3 pb-24">
+    <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-center">
-        <p className="mb-1.5 mr-auto text-[12.5px] text-muted-foreground">
+        <p className="mb-1.5 mr-auto min-w-0 text-[12.5px] text-muted-foreground">
           <span className="font-semibold text-foreground">{resumo.paraRevisar}</span> para revisar · {resumo.aprovadas} de {resumo.total} aprovadas · {resumo.versoes} versões · {usd(resumo.custo)} no ensaio
         </p>
         <Pilulas
@@ -448,6 +447,11 @@ export default function EtapaRevisar() {
           valor={so}
           onEscolher={setSo}
         />
+        {resumo.aprovadas > 0 && (
+          <Button type="button" size="sm" className="mb-1.5 ml-1 h-8 text-[12px]" onClick={() => irPara("usar")}>
+            Usar as {resumo.aprovadas} aprovadas
+          </Button>
+        )}
       </div>
       {tomadas.length === 0 ? (
         <Vazio titulo={so === "revisar" ? "Nada esperando revisão" : "Sem tomadas"}>
@@ -460,7 +464,7 @@ export default function EtapaRevisar() {
           )}
         </Vazio>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
           {tomadas.map((t) => (
             <LinhaDaTomada
               key={t.id}
@@ -473,13 +477,6 @@ export default function EtapaRevisar() {
             />
           ))}
         </ul>
-      )}
-      {resumo.aprovadas > 0 && (
-        <div className="flex justify-end">
-          <Button type="button" size="sm" className="h-9 text-[12.5px]" onClick={() => irPara("usar")}>
-            Usar as {resumo.aprovadas} aprovadas
-          </Button>
-        </div>
       )}
       <Comparar
         aberto={!!comparando}

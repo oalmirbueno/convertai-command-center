@@ -94,7 +94,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
   const r = resumoDoLote(lote);
   const pct = r.total ? Math.round((r.andando / r.total) * 100) : 0;
   return (
-    <section className={`min-w-0 rounded-xl border border-primary/30 bg-card p-3 ${className}`} aria-label="Andamento do lote" data-lote={ensaioId}>
+    <section className={`min-w-0 rounded-lg border border-primary/30 p-3 ${className}`} aria-label="Andamento do lote" data-lote={ensaioId}>
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mr-auto min-w-0 text-[12.5px] font-semibold" role="status" aria-live="polite">
           {lote.ativo ? (

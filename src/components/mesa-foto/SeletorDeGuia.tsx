@@ -92,7 +92,7 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
             <p className="text-[12px] text-muted-foreground">Nada na biblioteca com essa busca. A etapa Biblioteca traz prompts e referências públicas.</p>
           )}
           {guia.modo === "biblioteca" ? (
-            <ul className="max-h-64 space-y-1 overflow-y-auto" aria-label="Prompts da biblioteca">
+            <ul className="space-y-1 lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Prompts da biblioteca">
               {lista.map((i) => (
                 <li key={i.id}>
                   <button
@@ -111,7 +111,7 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
               ))}
             </ul>
           ) : (
-            <div className="grid max-h-72 min-w-0 grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-4 md:grid-cols-6" aria-label="Referências da biblioteca">
+            <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:max-h-72 lg:overflow-y-auto lg:overscroll-contain" aria-label="Referências da biblioteca">
               {lista.map((i) => {
                 const marcada = refs.indexOf(i.id) >= 0;
                 return (

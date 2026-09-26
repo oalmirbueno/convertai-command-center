@@ -259,6 +259,35 @@ Deno.serve(async (req) => {
       (m: any) => `Registro (${m.kind}, ${String(m.created_at || "").slice(0, 10)}): ${String(m.title || "")} — ${String(m.content || "").replace(/\s+/g, " ").slice(0, 220)}`,
     );
 
+    // Frente P (26/09): sinais dos concorrentes monitorados (Perfis do Instagram,
+    // Contexto da Mesa). Só leitura, com o JWT de quem chamou; sem a tabela, nada muda.
+    let concorrentesLine = "";
+    try {
+      const desde = new Date(Date.now() - 35 * 24 * 3600 * 1000).toISOString();
+      const { data: rodadas, error: erroRodadas } = await db
+        .from("cliente_perfis_rodadas")
+        .select("perfil_id, ideias, fora_da_curva, iniciada_em")
+        .eq("client_id", clientId)
+        .in("tipo", ["monitoramento", "ideias"])
+        .gte("iniciada_em", desde)
+        .order("iniciada_em", { ascending: false })
+        .limit(6);
+      const sinais: string[] = [];
+      if (!erroRodadas) {
+        for (const r of (rodadas || []) as Array<{ ideias?: unknown; fora_da_curva?: number }>) {
+          for (const i of Array.isArray(r.ideias) ? r.ideias as Array<Record<string, unknown>> : []) {
+            const tema = String(i?.tema || "").replace(/\s+/g, " ").trim().slice(0, 120);
+            if (tema) sinais.push(`${tema}${i?.por_que ? ` (${String(i.por_que).replace(/\s+/g, " ").slice(0, 140)})` : ""}`);
+            if (sinais.length >= 5) break;
+          }
+          if (sinais.length >= 5) break;
+        }
+      }
+      if (sinais.length) concorrentesLine = `SINAIS DOS CONCORRENTES (monitoramento do Instagram, ideias de resposta ainda não decididas): ${sinais.join(" | ")}`;
+    } catch {
+      concorrentesLine = "";
+    }
+
     const cerebro = await cerebroP;
     const context = [
       `Cliente: ${clientName}`,
@@ -269,6 +298,7 @@ Deno.serve(async (req) => {
       briefingLine,
       ...memoriaLines,
       ...igLines,
+      concorrentesLine,
       `Tempo de casa: ${months} mes(es)`,
       `Frentes contratadas: ${
         [...new Set(projects.map((p: any) => p.project_type).filter(Boolean))].join(", ") ||

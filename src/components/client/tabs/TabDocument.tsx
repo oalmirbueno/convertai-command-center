@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText, Sparkles } from "lucide-react";
 import { NotesPreview } from "@/components/workspace/StudioPanel";
+import { Carregando, EstadoVazio, Painel, etiqueta, juntar, texto } from "@/components/sistema";
 
 interface Props { projectId: string }
 
@@ -34,29 +35,29 @@ export default function TabDocument({ projectId }: Props) {
     return () => { mounted = false; supabase.removeChannel(ch); };
   }, [projectId]);
 
-  if (loading) return <div className="text-sm text-muted-foreground p-6">Carregando…</div>;
+  if (loading) return <Carregando forma="aba" rotulo="Carregando o plano do projeto" />;
   if (!doc || !doc.published || !doc.notes?.trim()) {
     return (
-      <div className="p-10 text-center border border-dashed border-border rounded-xl bg-secondary/20">
-        <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
-        <p className="text-sm font-medium">Nenhum documento publicado ainda.</p>
-        <p className="text-xs text-muted-foreground mt-1">Assim que a equipe publicar o plano deste projeto, ele aparece aqui em tempo real.</p>
-      </div>
+      <EstadoVazio
+        icone={<Sparkles className="h-5 w-5" />}
+        titulo="Nenhum documento publicado ainda."
+        descricao="Assim que a equipe publicar o plano deste projeto, ele aparece aqui em tempo real."
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FileText className="w-3.5 h-3.5 text-primary" />
-        <span>Documento vivo · atualizado {new Date(doc.updated_at).toLocaleString("pt-BR")}</span>
-        <span className="ml-auto px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">AO VIVO</span>
+    <div className="min-w-0 space-y-3">
+      <div className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+        <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">Documento vivo · atualizado {new Date(doc.updated_at).toLocaleString("pt-BR")}</span>
+        <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Ao vivo</span>
       </div>
-      <div className="rounded-2xl border border-border bg-card p-6 md:p-10 shadow-sm">
-        <div className="max-w-3xl mx-auto studio-doc">
+      <Painel className="md:px-5 md:py-5">
+        <div className="studio-doc mx-auto max-w-3xl">
           <NotesPreview src={doc.notes} clientId={null} clientName={null} />
         </div>
-      </div>
+      </Painel>
     </div>
   );
 }

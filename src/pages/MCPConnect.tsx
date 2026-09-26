@@ -1,10 +1,8 @@
-import { Copy, ExternalLink, Key, Lock, Network, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { Copy, ExternalLink, Key, Lock, ShieldCheck } from "lucide-react";
+import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { toast } from "sonner";
 import { MCP_OAUTH_METADATA_URL, MCP_SERVER_URL } from "@/lib/mcp/endpoints";
+import { Secao, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 const MCP_URL = MCP_SERVER_URL;
 const PRM_URL = MCP_OAUTH_METADATA_URL;
@@ -13,12 +11,12 @@ const agents = [
   {
     name: "ChatGPT Work",
     auth: "OAuth",
-    text: "Use a URL MCP e escolha OAuth. O ChatGPT deve abrir a tela de login e autorização do Aceleriq.",
+    text: "Use a URL MCP e escolha OAuth. O ChatGPT abre a tela de login e autorização do Aceleriq.",
   },
   {
     name: "Claude Code",
     auth: "OAuth ou Bearer",
-    text: "Prefira OAuth para acesso por usuário. Use Bearer somente em automações técnicas controladas.",
+    text: "Prefira OAuth para acesso por usuário. Use Bearer só em automações técnicas controladas.",
   },
   {
     name: "Codex",
@@ -36,72 +34,77 @@ function copy(value: string) {
   navigator.clipboard.writeText(value).then(() => toast.success("Copiado"), () => toast.error("Não foi possível copiar"));
 }
 
+/**
+ * Guia público para conectar agentes ao MCP. Minimalista: a marca, os dois
+ * endereços que importam, os agentes numa lista e os passos do ChatGPT Work.
+ * Sem caixas empilhadas.
+ */
 export default function MCPConnect() {
   return (
-    <main className="min-h-screen bg-background px-4 py-10 text-foreground">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-4">
-            <img src={aceleriqLogo} alt="Aceleriq" className="h-24 w-auto" />
-            <div>
-              <Badge variant="outline" className="mb-3 gap-1.5 border-primary/30 text-primary">
-                <Network className="h-3.5 w-3.5" /> MCP oficial
-              </Badge>
-              <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">Conectar agentes ao Aceleriq OS</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Endpoint universal para ChatGPT Work, Codex, Claude Code, Hermes, OpenClaw e outros clientes MCP autorizados.
-              </p>
-            </div>
-          </div>
-          <Button asChild variant="outline" className="gap-2">
-            <a href={MCP_URL} target="_blank" rel="noreferrer">
-              Abrir status <ExternalLink className="h-4 w-4" />
-            </a>
-          </Button>
+    <main className="min-h-screen bg-background px-4 py-10 text-foreground sm:py-16">
+      <div className="mx-auto w-full min-w-0 max-w-3xl space-y-8">
+        <header className="min-w-0">
+          <MarcaAceleriq altura={28} />
+          <p className="mt-6 inline-flex items-center text-[12px] font-medium text-primary">
+            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+            MCP oficial
+          </p>
+          <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-[-0.01em] sm:text-[32px]">Conectar agentes ao Aceleriq OS</h1>
+          <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>Um endereço para ChatGPT Work, Codex, Claude Code, Hermes, OpenClaw e outros clientes MCP autorizados.</p>
         </header>
 
-        <section className="grid gap-3 md:grid-cols-2">
-          <Card>
-            <CardContent className="space-y-3 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-primary" /> URL MCP</div>
-              <div className="rounded-md border bg-secondary/40 p-3 font-mono text-xs break-all">{MCP_URL}</div>
-              <Button size="sm" onClick={() => copy(MCP_URL)} className="gap-2"><Copy className="h-3.5 w-3.5" /> Copiar URL</Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="space-y-3 p-5">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Lock className="h-4 w-4 text-primary" /> Descoberta OAuth</div>
-              <div className="rounded-md border bg-secondary/40 p-3 font-mono text-xs break-all">{PRM_URL}</div>
-              <Button size="sm" variant="outline" onClick={() => copy(PRM_URL)} className="gap-2"><Copy className="h-3.5 w-3.5" /> Copiar PRM</Button>
-            </CardContent>
-          </Card>
-        </section>
+        <Secao titulo="Endereços" divisoria>
+          <ul className="divide-y divide-border">
+            <li className="min-w-0 py-3 first:pt-0">
+              <div className="flex min-w-0 items-center">
+                <ShieldCheck className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>URL MCP</span>
+                <a href={MCP_URL} target="_blank" rel="noreferrer" className={juntar(botao.icone, "mr-1")} aria-label="Abrir status do servidor" title="Abrir status">
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+                <button type="button" onClick={() => copy(MCP_URL)} className={botao.primario}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar URL
+                </button>
+              </div>
+              <code className={juntar(superficie.poco, "mt-2 block px-3 py-2 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]")}>{MCP_URL}</code>
+            </li>
+            <li className="min-w-0 py-3">
+              <div className="flex min-w-0 items-center">
+                <Lock className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>Descoberta OAuth</span>
+                <button type="button" onClick={() => copy(PRM_URL)} className={botao.secundario}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar PRM
+                </button>
+              </div>
+              <code className={juntar(superficie.poco, "mt-2 block px-3 py-2 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]")}>{PRM_URL}</code>
+            </li>
+          </ul>
+        </Secao>
 
-        <section className="grid gap-3 md:grid-cols-2">
-          {agents.map(agent => (
-            <Card key={agent.name}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold">{agent.name}</h2>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{agent.text}</p>
-                  </div>
-                  <Badge variant="secondary" className="whitespace-nowrap"><Key className="mr-1 h-3 w-3" /> {agent.auth}</Badge>
+        <Secao titulo="Agentes" divisoria>
+          <ul className="divide-y divide-border">
+            {agents.map((agent) => (
+              <li key={agent.name} className="min-w-0 py-3 first:pt-0">
+                <div className="flex min-w-0 items-center">
+                  <h2 className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-semibold")}>{agent.name}</h2>
+                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
+                    <Key className="mr-1 h-3 w-3" aria-hidden="true" /> {agent.auth}
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
+                <p className="mt-1 text-[12.5px] leading-5 text-muted-foreground">{agent.text}</p>
+              </li>
+            ))}
+          </ul>
+        </Secao>
 
-        <section className="rounded-lg border bg-card p-5 text-sm leading-6 text-muted-foreground">
-          <p className="font-medium text-foreground">Configuração recomendada para ChatGPT Work</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <Secao titulo="ChatGPT Work" divisoria>
+          <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-5 text-muted-foreground marker:text-primary">
             <li>Criar um Custom Connector MCP.</li>
             <li>Colar a URL MCP acima.</li>
             <li>Selecionar OAuth.</li>
             <li>Entrar no Aceleriq e autorizar a conexão quando a tela aparecer.</li>
           </ol>
-        </section>
+        </Secao>
       </div>
     </main>
   );

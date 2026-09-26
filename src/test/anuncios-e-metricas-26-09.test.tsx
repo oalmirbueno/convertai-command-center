@@ -382,10 +382,23 @@ describe("compatibilidade e texto", () => {
   });
 
   it("caixas com rolagem própria têm altura máxima", () => {
+    // Sistema de design (26/09): lista longa não empurra o resto da tela, mas
+    // só rola por dentro de 1024 px para cima (lg:); no celular a página rola
+    // normal, sem caixa prendendo o dedo. Toda rolagem própria tem teto.
     const tela = ler("src/pages/AdminAds.tsx");
-    expect(tela).toContain("max-h-64 min-w-0 divide-y divide-border overflow-y-auto");
-    expect(tela).toContain("max-h-[22rem] space-y-1.5 overflow-y-auto");
-    expect(ler("src/pages/AdminMetricas.tsx")).toContain("max-h-[520px] min-w-0 divide-y divide-border overflow-y-auto");
+    expect(tela).toContain("divide-y divide-border lg:max-h-64 lg:overflow-y-auto");
+    expect(tela).toContain("lg:max-h-[22rem] lg:overflow-y-auto");
+    expect(ler("src/pages/AdminMetricas.tsx")).toContain("divide-y divide-border lg:max-h-[520px] lg:overflow-y-auto");
+    for (const arquivo of ["src/pages/AdminAds.tsx", "src/pages/AdminMetricas.tsx", "src/components/ads/CampanhasAtivas.tsx", "src/components/ads/GaleriaDeCriativos.tsx"]) {
+      const f = ler(arquivo);
+      for (const classes of f.match(/className="[^"]*overflow-y-auto[^"]*"/g) || []) {
+        // O modal da galeria (janela de altura fixa) é a exceção que o sistema permite.
+        if (classes.includes("max-h-full")) continue;
+        expect(classes, arquivo).toMatch(/lg:overflow-y-auto/);
+        expect(classes, arquivo).not.toMatch(/(^|[\s"])overflow-y-auto/);
+        expect(classes, arquivo).toMatch(/lg:max-h-/);
+      }
+    }
   });
 
   it("nenhum token sai do cofre para a tela", () => {

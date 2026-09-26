@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { Cartao, ListaCurta, MiniaturaDaFoto, Pilulas, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import { Cartao, ListaCurta, MiniaturaDaFoto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { campo, campoTexto } from "@/components/sistema/estilos";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import SeletorDeFotos from "./SeletorDeFotos";
@@ -61,6 +64,10 @@ import {
  * id, o kit novo ainda não salvo e a identificação ficam guardados na sessão
  * do navegador: trocar de etapa não apaga mais nada (era assim que o kit
  * "sumia": vivia só no estado desta tela, que desmonta ao trocar de etapa).
+ *
+ * 26/09 (sistema de design): blocos sem caixa, explicação no "?", formulário
+ * com rótulo em cima (CampoDeFormulario em GrupoDeCampos) e o tipo do kit num
+ * seletor (8 opções). A lista de kits fica ao lado só a partir de 1280 px.
  */
 
 export { gravarNaSessao, lerDaSessao } from "./sessao";
@@ -245,7 +252,7 @@ function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit
   // Com id, a função já gravou a proposta como kit rascunho.
   const salva = !!proposta.id;
   return (
-    <div className="min-w-0 space-y-2 rounded-xl border border-primary/30 bg-background p-3" data-proposta={salva ? "salva" : ""}>
+    <div className="min-w-0 space-y-2 rounded-lg border border-primary/30 p-3" data-proposta={salva ? "salva" : ""}>
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold">{proposta.nome}</p>
@@ -406,9 +413,9 @@ export default function EtapaKits() {
   const selecionadasFora = selecionadas.filter((id) => idsNoKit.indexOf(id) < 0);
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="min-w-0 space-y-3">
+    <div className="min-w-0">
+      <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="min-w-0 space-y-4">
           <Cartao
             titulo="Kits do cliente"
             acao={
@@ -417,13 +424,9 @@ export default function EtapaKits() {
               </Button>
             }
           >
-            {kits.isLoading && (
-              <p className="flex items-center text-[12px] text-muted-foreground">
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo os kits...
-              </p>
-            )}
+            {kits.isLoading && <Carregando linhas={3} rotulo="Lendo os kits" />}
             {kits.isError && <AvisoDeErro erro={kits.error} />}
-            {kits.isSuccess && lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhum produto ainda. Em Fotos, toque em Identificar o produto, ou crie um novo aqui.</p>}
+            {kits.isSuccess && lista.length === 0 && <EstadoVazio compacto titulo="Nenhum produto ainda." descricao="Identifique em Fotos ou crie um novo." />}
             <ul className="space-y-1.5">
               {lista.map((k) => {
                 const capa = todas.find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id)));
@@ -434,7 +437,7 @@ export default function EtapaKits() {
                       type="button"
                       onClick={() => escolherKit(k.id)}
                       aria-current={ativo ? "true" : undefined}
-                      className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
+                      className={`flex w-full min-w-0 items-center rounded-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                     >
                       <span className="w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
                       <span className="ml-2 min-w-0 flex-1">
@@ -505,11 +508,7 @@ export default function EtapaKits() {
         </aside>
 
         <div className="min-w-0 space-y-4">
-          <Cartao
-            titulo="Identificar o produto"
-            dica="Pela embalagem ou por uma foto: marca, modelo e variante, e as fotos oficiais da internet para o produto sair fiel."
-            className={!lista.length && !identificacao ? "border-primary/50" : ""}
-          >
+          <Cartao titulo="Identificar o produto" dica="Pela embalagem ou por uma foto: marca, modelo e variante, e as fotos oficiais da internet para o produto sair fiel.">
             <div className="flex min-w-0 flex-wrap items-center">
               <BotaoComCusto
                 rotulo={
@@ -519,6 +518,7 @@ export default function EtapaKits() {
                 }
                 titulo="Produto identificado"
                 descricao="Lê a embalagem ou a foto e pesquisa o produto real na internet. As fotos achadas são só para fidelidade, não para publicar."
+                variant={!lista.length && !identificacao ? "default" : "outline"}
                 className="mb-1.5 mr-2 h-9 text-[12.5px]"
                 disabled={!fotosParaLer.length}
                 partes={() => partesDaIdentificacao(catalogo, fotosParaLer.length)}
@@ -627,26 +627,33 @@ export default function EtapaKits() {
                 ) : undefined
               }
             >
-              <div className="space-y-4">
-                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-[11.5px] text-muted-foreground">Nome</span>
-                    <Input value={editando.nome} onChange={(e) => setEditando({ ...editando, nome: e.target.value })} placeholder="Ex.: Mouse sem fio M720" className="h-9" aria-label="Nome do kit" />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-[11.5px] text-muted-foreground">Variante (cor, tamanho, sabor)</span>
-                    <Input value={editando.variante} onChange={(e) => setEditando({ ...editando, variante: e.target.value })} placeholder="Ex.: grafite" className="h-9" aria-label="Variante" />
-                  </label>
-                </div>
-                <div>
-                  <p className="mb-1 text-[11.5px] text-muted-foreground">Tipo</p>
-                  <Pilulas rotulo="Tipo do kit" opcoes={TIPOS_DE_KIT} valor={editando.tipo} onEscolher={(t) => setEditando({ ...editando, tipo: t })} />
-                </div>
+              <div className="space-y-5">
+                <GrupoDeCampos>
+                  <CampoDeFormulario rotulo="Nome" obrigatorio>
+                    <input value={editando.nome} onChange={(e) => setEditando({ ...editando, nome: e.target.value })} placeholder="Ex.: Mouse sem fio M720" className={campo} aria-label="Nome do kit" />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Variante" ajuda="Cor, tamanho, sabor.">
+                    <input value={editando.variante} onChange={(e) => setEditando({ ...editando, variante: e.target.value })} placeholder="Ex.: grafite" className={campo} aria-label="Variante" />
+                  </CampoDeFormulario>
+                  <div className="min-w-0">
+                    <p className="mb-1.5 text-[12px] font-medium leading-4 text-muted-foreground">Tipo</p>
+                    <SeletorCompacto
+                      modo="lista"
+                      rotulo="Tipo do kit"
+                      opcoes={TIPOS_DE_KIT.map((t) => ({ valor: t.valor, rotulo: t.rotulo }))}
+                      valor={editando.tipo}
+                      onEscolher={(t) => setEditando({ ...editando, tipo: t as KitDeFoto["tipo"] })}
+                      className="w-full justify-between"
+                    />
+                  </div>
+                </GrupoDeCampos>
                 {editando.tipo === "pessoa" && <Autorizacao kit={editando} onMudar={setEditando} />}
 
                 <div className="space-y-2">
                   <div className="flex min-w-0 flex-wrap items-center">
-                    <p className="mr-auto text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fotos do produto</p>
+                    <p className="mr-auto text-[13px] font-semibold">
+                      Fotos do produto <span className="font-normal tabular-nums text-muted-foreground">{editando.refs.length}</span>
+                    </p>
                     {selecionadasFora.length > 0 && (
                       <Button
                         type="button"
@@ -679,9 +686,7 @@ export default function EtapaKits() {
                     />
                   )}
                   {editando.refs.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border p-3 text-[12px] text-muted-foreground">
-                      Nenhuma foto ainda. Produto: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Pessoa: frente, três quartos e expressão natural, só autorizadas.
-                    </p>
+                    <EstadoVazio compacto titulo="Nenhuma foto ainda." descricao="Produto: frente, três quartos, laterais, verso, detalhes e a embalagem. Pessoa: só autorizadas." />
                   ) : (
                     <ul className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
                       {editando.refs.map((r, i) => (
@@ -712,37 +717,31 @@ export default function EtapaKits() {
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Atributos (um por linha)</p>
-                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
-                    {(
-                      [
-                        { campo: "observado", rotulo: "Observado", dica: "Visto nas fotos. Ex.: logo no topo, 2 botões laterais." },
-                        { campo: "informado", rotulo: "Informado", dica: "O cliente disse. Ex.: 12 cm de comprimento." },
-                        { campo: "inferido", rotulo: "Inferido", dica: "Deduzido, a confirmar. Não vira verdade na geração." },
-                      ] as { campo: keyof Textos; rotulo: string; dica: string }[]
-                    ).map((c) => (
-                      <label key={c.campo} className="block min-w-0">
-                        <span className="mb-1 block text-[11.5px] font-medium">{c.rotulo}</span>
-                        <Textarea value={textos[c.campo]} onChange={(e) => setTextos({ ...textos, [c.campo]: e.target.value })} rows={4} placeholder={c.dica} aria-label={`Atributos ${c.rotulo.toLowerCase()}`} className="text-[12.5px]" />
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                <GrupoDeCampos titulo="Atributos" descricao="Um por linha." colunas={3}>
+                  {(
+                    [
+                      { campo: "observado", rotulo: "Observado", dica: "Visto nas fotos. Ex.: logo no topo, 2 botões laterais." },
+                      { campo: "informado", rotulo: "Informado", dica: "O cliente disse. Ex.: 12 cm de comprimento." },
+                      { campo: "inferido", rotulo: "Inferido", dica: "Deduzido, a confirmar. Não vira verdade na geração." },
+                    ] as { campo: keyof Textos; rotulo: string; dica: string }[]
+                  ).map((c) => (
+                    <CampoDeFormulario key={c.campo} rotulo={c.rotulo}>
+                      <textarea value={textos[c.campo]} onChange={(e) => setTextos({ ...textos, [c.campo]: e.target.value })} rows={4} placeholder={c.dica} aria-label={`Atributos ${c.rotulo.toLowerCase()}`} className={campoTexto} />
+                    </CampoDeFormulario>
+                  ))}
+                </GrupoDeCampos>
 
-                <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-[11.5px] font-medium">Não pode mudar (invariantes)</span>
-                    <Textarea value={textos.invariantes} onChange={(e) => setTextos({ ...textos, invariantes: e.target.value })} rows={4} placeholder={"Ex.: texto do rótulo\nquantidade de botões\ncor grafite"} aria-label="Invariantes" className="text-[12.5px]" />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-[11.5px] font-medium text-warning">Lacunas (o que falta documentar)</span>
-                    <Textarea value={textos.lacunas} onChange={(e) => setTextos({ ...textos, lacunas: e.target.value })} rows={4} placeholder={"Ex.: vista inferior não documentada\nverso sem foto"} aria-label="Lacunas" className="text-[12.5px]" />
-                  </label>
-                </div>
+                <GrupoDeCampos>
+                  <CampoDeFormulario rotulo="Não pode mudar" ajuda="Invariantes: o que a geração nunca pode trocar.">
+                    <textarea value={textos.invariantes} onChange={(e) => setTextos({ ...textos, invariantes: e.target.value })} rows={4} placeholder={"Ex.: texto do rótulo\nquantidade de botões\ncor grafite"} aria-label="Invariantes" className={campoTexto} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Lacunas" ajuda="O que falta documentar nas fotos.">
+                    <textarea value={textos.lacunas} onChange={(e) => setTextos({ ...textos, lacunas: e.target.value })} rows={4} placeholder={"Ex.: vista inferior não documentada\nverso sem foto"} aria-label="Lacunas" className={campoTexto} />
+                  </CampoDeFormulario>
+                </GrupoDeCampos>
 
                 {avisos.length > 0 && (
-                  <ul className="space-y-1 rounded-lg bg-warning/10 p-3" data-avisos-do-kit="">
+                  <ul className="space-y-1 rounded-md bg-warning/10 p-3" data-avisos-do-kit="">
                     {avisos.map((a) => (
                       <li key={a} className="flex items-start text-[12px] leading-snug">
                         <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" /> {a}

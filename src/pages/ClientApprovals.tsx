@@ -4,13 +4,13 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { AlertTriangle, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { notifyAdmin } from "@/lib/notifyHelpers";
@@ -21,7 +21,7 @@ import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
   approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado" },
-  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajuste Solicitado" },
+  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajuste pedido" },
 };
 
 const fileIcon = (name: string) => {
@@ -161,6 +161,9 @@ export default function ClientApprovals() {
   const [previewIdx, setPreviewIdx] = useState(0);
   const previewSwipeStart = useRef<{ x: number; y: number } | null>(null);
   const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
+  const [filtro, setFiltro] = useEstadoDaTela<string>("aprovacoes:filtro", "todos", {
+    validar: (v) => typeof v === "string" && ["todos", "pending", "approved", "rejected"].indexOf(v) >= 0,
+  });
   const editorialPreview = useEditorialApprovalPreview(
     previewFile?.id || null,
     !!previewFile,
@@ -221,7 +224,7 @@ export default function ClientApprovals() {
         expectedVersion: file.version,
         decision: "approved",
       });
-      toast({ title: "Aprovado com sucesso!" });
+      toast({ title: "Aprovado" });
       void notifyAdmin(
         `Aprovação recebida: ${profile?.company_name || profile?.full_name || "Cliente"} aprovou "${file.file_name}". Pronto para agendar na Agenda.`,
         "approval",
@@ -249,7 +252,7 @@ export default function ClientApprovals() {
         decision: "rejected",
         feedback: feedbackText,
       });
-      toast({ title: "Feedback enviado" });
+      toast({ title: "Pedido de ajuste enviado" });
       void notifyAdmin(
         `Ajustes solicitados: ${profile?.company_name || profile?.full_name || "Cliente"} pediu mudanças em "${file.file_name}".`,
         "approval",
@@ -270,46 +273,86 @@ export default function ClientApprovals() {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  const contagem = { todos: approvalFiles.length, pending: 0, approved: 0, rejected: 0 } as Record<string, number>;
+  approvalFiles.forEach((f: any) => {
+    if (f.approval_status in contagem) contagem[f.approval_status] += 1;
+  });
+  const visiveis = filtro === "todos" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === filtro);
+  const abrirComTeclado = (e: { key: string; preventDefault: () => void }, f: any) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setPreviewFile(f);
+    }
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="heading-page">Aprovações</h1>
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Aprovações"
+        descricao={approvalFiles.length ? (contagem.pending ? `${contagem.pending} ${contagem.pending === 1 ? "esperando você" : "esperando você"}` : "Nada esperando você") : undefined}
+        ajuda="Os materiais que a equipe preparou para você conferir antes de publicar. Toque num item para ver em tamanho grande e aprovar ou pedir ajuste. Aprovar não tem volta."
+      />
       {isReadOnly && (
-        <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
-          Modo somente leitura: você pode conferir a experiência do cliente, mas não aprovar nem pedir ajustes por ele.
-        </div>
+        <p className={juntar(texto.auxiliar, "leading-5 text-sky-600")} role="note">
+          Somente leitura: dá para conferir a experiência do cliente, mas não aprovar nem pedir ajuste por ele.
+        </p>
+      )}
+
+      {approvalFiles.length > 0 && (
+        <SeletorCompacto
+          rotulo="Filtrar aprovações"
+          valor={filtro}
+          onEscolher={setFiltro}
+          modo="segmentado"
+          listaQuandoNaoCabe
+          opcoes={[
+            { valor: "todos", rotulo: "Todos", contador: contagem.todos },
+            { valor: "pending", rotulo: "Pendentes", contador: contagem.pending },
+            { valor: "approved", rotulo: "Aprovados", contador: contagem.approved },
+            { valor: "rejected", rotulo: "Com ajuste", contador: contagem.rejected },
+          ]}
+        />
       )}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
-        </div>
+        <Carregando forma="grade" linhas={3} rotulo="Carregando aprovações" />
       ) : approvalFiles.length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Nenhuma aprovação pendente</div>
+        <EstadoVazio
+          icone={<CheckCircle2 className="h-5 w-5" />}
+          titulo="Nenhuma aprovação pendente"
+          descricao="Quando a equipe mandar um material para você conferir, ele aparece aqui e você recebe um aviso."
+        />
+      ) : visiveis.length === 0 ? (
+        <EstadoVazio compacto titulo="Nada neste filtro." />
       ) : (
-        <div className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
-          {approvalFiles.map((f: any) => {
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {visiveis.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
             const images = getCarouselImages(f);
             const isCarousel = images.length > 1;
             return (
-              <div key={f.id} className="h-full flex flex-col bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
-                onClick={() => setPreviewFile(f)}>
+              <div
+                key={f.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver ${f.file_name}`}
+                className={juntar(superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/30", foco)}
+                onClick={() => setPreviewFile(f)}
+                onKeyDown={(e) => abrirComTeclado(e, f)}
+              >
                 <CarouselPreview images={images} small />
-                <div className="p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
-                    {isCarousel && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap">
-                        Carrossel • {images.length}
-                      </span>
-                    )}
+                <div className="min-w-0 px-4 py-3">
+                  <div className="flex min-w-0 items-center">
+                    <p className="mr-2 min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{f.file_name}</p>
+                    <span className={juntar(etiqueta, "border", badge.cls)}>{badge.label}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{f.project?.name || "-"} • {formatDate(f.created_at)}</p>
-                  <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border ${badge.cls}`}>{badge.label}</span>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                    {isCarousel ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"} · {formatDate(f.created_at)}
+                  </p>
                   {f.approval_status === "rejected" && f.feedback && (
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                      <p className="text-[11px] text-muted-foreground mb-0.5">Seu feedback:</p>
-                      <p className="text-xs text-foreground">{f.feedback}</p>
+                    <div className={juntar(superficie.poco, "mt-2 px-3 py-2")}>
+                      <p className={texto.auxiliar}>Seu pedido de ajuste</p>
+                      <p className="line-clamp-3 text-xs text-foreground">{f.feedback}</p>
                     </div>
                   )}
                 </div>
@@ -413,9 +456,9 @@ export default function ClientApprovals() {
               </div>
 
               <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}</p>
-              {previewFile.caption && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {previewFile.caption && <div className="space-y-0.5"><p className={texto.rotulo}>Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div className="space-y-0.5"><p className={texto.rotulo}>Texto do carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div className="space-y-0.5"><p className={texto.rotulo}>Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
               {editorialPreview.isLoading && (
                 <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -454,10 +497,10 @@ export default function ClientApprovals() {
                 && (editorialPreview.data || []).map((snapshot) => (
                   <section
                     key={snapshot.post_id}
-                    className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4"
+                    className="space-y-3 border-t border-border pt-4"
                   >
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
+                      <p className="text-[12px] font-medium text-primary">
                         Conteúdo editorial vinculado
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
@@ -469,7 +512,7 @@ export default function ClientApprovals() {
                     </div>
                     {snapshot.objective && (
                       <div>
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <p className={texto.rotulo}>
                           Objetivo
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
@@ -479,7 +522,7 @@ export default function ClientApprovals() {
                     )}
                     {snapshot.default_caption && (
                       <div>
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <p className={texto.rotulo}>
                           Legenda base
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
@@ -490,7 +533,7 @@ export default function ClientApprovals() {
                     {snapshot.plans.map((plan, planIndex) => (
                       <div
                         key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`}
-                        className="space-y-2 rounded-md border border-border bg-background/70 p-3"
+                        className="space-y-2 rounded-md bg-muted/50 p-3"
                       >
                         <div>
                           <p className="text-xs font-medium text-foreground">
@@ -506,7 +549,7 @@ export default function ClientApprovals() {
                         </div>
                         {plan.caption && (
                           <div>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <p className={texto.rotulo}>
                               Legenda da plataforma
                             </p>
                             <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
@@ -516,7 +559,7 @@ export default function ClientApprovals() {
                         )}
                         {plan.first_comment && (
                           <div>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <p className={texto.rotulo}>
                               Primeiro comentário
                             </p>
                             <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
@@ -526,7 +569,7 @@ export default function ClientApprovals() {
                         )}
                         {plan.alt_text && (
                           <div>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <p className={texto.rotulo}>
                               Texto alternativo
                             </p>
                             <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
@@ -539,8 +582,8 @@ export default function ClientApprovals() {
                   </section>
                 ))}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
+                <div className="rounded-md bg-destructive/5 px-3 py-2">
+                  <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
                   <p className="text-xs text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
@@ -552,7 +595,7 @@ export default function ClientApprovals() {
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
-                Solicitar ajuste
+                Pedir ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
                 disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
@@ -581,13 +624,13 @@ export default function ClientApprovals() {
       {/* Feedback dialog */}
       <Dialog open={!!feedbackFileId} onOpenChange={() => setFeedbackFileId(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Solicitar Ajuste</DialogTitle></DialogHeader>
-          <Textarea placeholder="Descreva as mudanças necessárias... (mínimo 10 caracteres)"
+          <DialogHeader><DialogTitle>Pedir ajuste</DialogTitle></DialogHeader>
+          <Textarea placeholder="O que precisa mudar? (mínimo 10 caracteres)"
             value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setFeedbackFileId(null)}>Cancelar</Button>
             <Button onClick={handleReject} disabled={submitting || isReadOnly || feedbackText.trim().length < 10}>
-              {submitting ? "Enviando..." : "Enviar Feedback"}
+              {submitting ? "Enviando..." : "Enviar pedido de ajuste"}
             </Button>
           </DialogFooter>
         </DialogContent>

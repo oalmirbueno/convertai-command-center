@@ -100,7 +100,8 @@ describe("os campos de qualificação", () => {
   it("o editor mostra o vazio como não confirmado e nunca pré-preenche", () => {
     const editor = readFileSync("src/pages/AdminComercial.tsx", "utf8");
     expect(editor).toContain("vazio significa não confirmado");
-    expect(editor).toContain('SelectItem value="nao_confirmado"');
+    expect(editor).toContain('<option value="nao_confirmado">não confirmado</option>');
+    expect(editor).toContain('e.target.value === "nao_confirmado" ? "" : e.target.value');
     // O estado inicial parte do que o lead JÁ tem; nada de default esperto.
     expect(editor).toContain('classe: lead?.classe || ""');
   });

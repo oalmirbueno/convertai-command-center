@@ -13,6 +13,12 @@ export default {
       },
     },
     extend: {
+      // Faixas do sistema (docs/design/SISTEMA.md): celular < 640 (sm), tablet
+      // 640-1023, notebook 1024-1439 (lg), desktop >= 1440 (desk). `desk` entra
+      // depois de 2xl no CSS: não use desk: e 2xl: no mesmo elemento.
+      screens: {
+        desk: "1440px",
+      },
       fontFamily: {
         outfit: ["Outfit", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],

@@ -17,6 +17,10 @@ import { DecisaoRapida, MenuDeUso } from "./UsoDaFoto";
 import { Cartao, ListaCurta, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { geraNoLote, useLote } from "./lote";
 import SeletorDeGuia from "./SeletorDeGuia";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { campoTexto, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   AZIMUTES,
   chaveDosEnsaios,
@@ -81,6 +85,10 @@ import {
  * organizado por tipo, em cartões menores; cada foto aprova, rejeita, refaz e
  * tem o menu Usar ali mesmo (revisar embutido). A campanha da Mesa (a do mês
  * vem marcada) vai no plano.
+ *
+ * 26/09 (sistema de design): blocos sem caixa, explicação no "?", duas
+ * colunas só a partir de 1280 px (o diretor fica ao lado), o resultado rola
+ * por dentro só no computador e o pedido ao diretor fica guardado por cliente.
  */
 
 const QUANTIDADES_DE_VARIACAO = [4, 6, 8, 12, 16].map((n) => ({ valor: n, rotulo: `${n} fotos` }));
@@ -93,7 +101,7 @@ function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
   const fotos = useFotos(clientId);
   const todas = fotos.data || [];
   return (
-    <div className="min-w-0 space-y-2 rounded-lg border border-border bg-background p-3" data-resumo-do-kit="">
+    <div className="min-w-0 space-y-2 rounded-md bg-muted/50 p-3" data-resumo-do-kit="">
       <div className="flex min-w-0 flex-wrap">
         {kit.refs.slice(0, 8).map((r) => {
           const f = todas.find((x) => x.id === r.imagem_id);
@@ -130,7 +138,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const [fora, setFora] = useState<string[]>([]);
   const [finalidade, setFinalidade] = useState("catalogo");
   const [formatos, setFormatos] = useState<string[]>(["1:1", "4:5"]);
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:ensaio:pedido:${clientId}`, "");
   const campanha = useCampanhaEscolhida();
   // "fora" guarda ids de tomada da receita: é o que ensaio_planejar aceita em tomadas_pedidas.
   const tomadas = receita ? receita.tomadas.filter((t) => fora.indexOf(t.id) < 0) : [];
@@ -160,8 +168,8 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const tipos = tiposEscolhidos;
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-w-0 space-y-4">
+    <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-5">
         <Pilulas
           rotulo="Como montar"
           opcoes={[
@@ -195,7 +203,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         {modo === "variacoes" && (
           <Cartao titulo="Variações" dica="Quantas fotos e de que tipos. Cada uma sai realmente diferente: câmera, cenário e luz próprios.">
             <Pilulas rotulo="Quantas fotos" opcoes={QUANTIDADES_DE_VARIACAO} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
-            <p className="mb-1 mt-2 text-[11.5px] text-muted-foreground">Tipos (toque para tirar ou pôr)</p>
+            <p className="mb-1 mt-2 text-[12px] text-muted-foreground">Tipos</p>
             <div className="flex min-w-0 flex-wrap" role="group" aria-label="Tipos de variação">
               {TIPOS_DE_VARIACAO.map((t) => {
                 const dentro = tiposEscolhidos.indexOf(t.valor) >= 0;
@@ -212,7 +220,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                 );
               })}
             </div>
-            <p className="text-[11px] leading-snug text-muted-foreground">
+            <p className="text-[12px] leading-snug text-muted-foreground">
               {!tiposEscolhidos.length
                 ? "Sem tipo escolhido, o diretor escolhe pelo produto e pela marca."
                 : quantidade > tiposEscolhidos.length
@@ -226,11 +234,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
 
         {modo === "receita" && (
           <Cartao titulo="Receita" dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
-            {receitas.isLoading && (
-              <p className="flex items-center text-[12px] text-muted-foreground">
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo as receitas...
-              </p>
-            )}
+            {receitas.isLoading && <Carregando linhas={2} rotulo="Lendo as receitas" />}
             <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               {combinam.concat(outras).map((r) => {
                 const ativa = receita ? receita.id === r.id : false;
@@ -242,7 +246,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                     role="radio"
                     aria-checked={ativa}
                     onClick={() => setReceitaId(r.id)}
-                    className={`min-w-0 rounded-lg border px-3 py-2 text-left transition-colors ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"} ${combina ? "" : "opacity-60"}`}
+                    className={`min-w-0 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"} ${combina ? "" : "opacity-60"}`}
                   >
                     <span className="block truncate text-[12.5px] font-semibold">{r.nome}</span>
                     <span className="block text-[11.5px] leading-snug text-muted-foreground">{r.direcao}</span>
@@ -255,7 +259,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             </div>
             {receita && (
               <div className="mt-3 space-y-1.5">
-                <p className="text-[11.5px] text-muted-foreground">Tomadas (toque para tirar):</p>
+                <p className="text-[12px] text-muted-foreground">Tomadas (toque para tirar)</p>
                 <div className="flex min-w-0 flex-wrap">
                   {receita.tomadas.map((t) => {
                     const dentro = fora.indexOf(t.id) < 0;
@@ -279,16 +283,15 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         )}
       </div>
 
-      <div className="min-w-0 space-y-4">
+      <div className="min-w-0 space-y-5">
         {modo === "variacoes" && (
-          <Cartao titulo="Montar">
-            <label className="block">
-              <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
-              <div className="relative">
-                <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: fundo verde da marca, mesa de escritório clara" className="pr-10 text-[12.5px]" aria-label="Pedido das variações" />
-                <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
-              </div>
-            </label>
+          <Cartao titulo="Montar" dica="O diretor monta as tomadas com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes.">
+            <div className="relative min-w-0">
+              <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
+                <textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: fundo verde da marca, mesa de escritório clara" className={juntar(campoTexto, "pr-10")} aria-label="Pedido das variações" />
+              </CampoDeFormulario>
+              <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+            </div>
             <BotaoComCusto
               rotulo={
                 <>
@@ -309,18 +312,18 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
               }}
             />
             {imagem && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Depois, gerar as {quantidade} fotos custa perto de <EstimativaDoLote modeloId={imagem.id} quantidade={quantidade} />.
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Gerar as {quantidade} depois: ~<EstimativaDoLote modeloId={imagem.id} quantidade={quantidade} />
               </p>
             )}
-            {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o produto.</p>}
-            {campanha.campanha && <p className="mt-2 text-[11px] text-muted-foreground">Dentro da campanha {campanha.campanha.nome}.</p>}
+            {!kit && <p className="mt-2 text-[12px] text-muted-foreground">Escolha o produto.</p>}
+            {campanha.campanha && <p className="mt-2 truncate text-[12px] text-muted-foreground">Dentro da campanha {campanha.campanha.nome}.</p>}
           </Cartao>
         )}
         {modo === "receita" && (
           <Cartao titulo="Para quê">
             <Pilulas rotulo="Finalidade" opcoes={FINALIDADES} valor={finalidade} onEscolher={setFinalidade} />
-            <p className="mb-1 mt-2 text-[11.5px] text-muted-foreground">Formatos</p>
+            <p className="mb-1 mt-2 text-[12px] text-muted-foreground">Formatos</p>
             <div className="flex min-w-0 flex-wrap" role="group" aria-label="Formatos">
               {FORMATOS.map((f) => (
                 <button
@@ -334,13 +337,12 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                 </button>
               ))}
             </div>
-            <label className="mt-2 block">
-              <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
-              <div className="relative">
-                <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: clima de escritório claro, espaço para texto à direita" className="pr-10 text-[12.5px]" aria-label="Pedido ao diretor" />
-                <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
-              </div>
-            </label>
+            <div className="relative mt-3 min-w-0">
+              <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
+                <textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: clima de escritório claro, espaço para texto à direita" className={juntar(campoTexto, "pr-10")} aria-label="Pedido ao diretor" />
+              </CampoDeFormulario>
+              <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+            </div>
             <BotaoComCusto
               rotulo={
                 <>
@@ -371,9 +373,9 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                 }
               }}
             />
-            {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o produto.</p>}
+            {!kit && <p className="mt-2 text-[12px] text-muted-foreground">Escolha o produto.</p>}
             {kit && receita && !receitaServeParaKit(receita, kit.tipo) && (
-              <p className="mt-2 text-[11.5px] text-warning">A receita {receita.nome} não serve para kit de {rotuloDoTipo(kit.tipo).toLowerCase()} (produto deste tipo). Escolha uma receita em destaque.</p>
+              <p className="mt-2 text-[12px] text-warning">A receita {receita.nome} não serve para kit de {rotuloDoTipo(kit.tipo).toLowerCase()} (produto deste tipo). Escolha uma receita em destaque.</p>
             )}
           </Cartao>
         )}
@@ -485,7 +487,7 @@ function CartaoDaTomada({
     }
   };
   return (
-    <li className={`min-w-0 rounded-xl border bg-card p-2 ${aprovada ? "border-success/50" : "border-border"}`} data-tomada={tomada.id}>
+    <li className={`min-w-0 rounded-lg border bg-card p-2 ${aprovada ? "border-success/50" : "border-border"}`} data-tomada={tomada.id}>
       <div className="relative min-w-0">
         {mostrada && mostrada.storage_path ? (
           <button type="button" className="block w-full cursor-zoom-in" onClick={() => mostrada.storage_path && onAmpliar(mostrada.storage_path)} aria-label={`Ver grande: ${tomada.nome}`}>
@@ -522,7 +524,7 @@ function CartaoDaTomada({
           {mostrada && <span className="text-[10.5px] text-muted-foreground">v{mostrada.versao}</span>}
         </div>
         {bloqueada && (
-          <p className="flex items-start rounded-lg bg-warning/10 px-2 py-1.5 text-[11.5px] leading-snug">
+          <p className="flex items-start rounded-md bg-warning/10 px-2 py-1.5 text-[11.5px] leading-snug">
             <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <span className="min-w-0 [overflow-wrap:anywhere]">
               {tomada.motivo_bloqueio || "Falta evidência no produto para esta foto."} Complete o produto para liberar.{" "}
@@ -535,7 +537,7 @@ function CartaoDaTomada({
           </p>
         )}
         {tomada.status === "falhou" && !gerando && (
-          <p className="flex items-start rounded-lg bg-destructive/10 px-2 py-1.5 text-[11.5px] leading-snug" data-falhou="">
+          <p className="flex items-start rounded-md bg-destructive/10 px-2 py-1.5 text-[11.5px] leading-snug" data-falhou="">
             <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
             <span className="min-w-0 [overflow-wrap:anywhere]">{tomada.ultimo_erro || "A geração falhou."} Pode gerar de novo.</span>
           </p>
@@ -671,7 +673,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
   const faltamGerar = ensaio.tomadas.filter((t) => !t.versoes.length).length;
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_300px] desk:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-3">
         <AndamentoDoLote ensaioId={ensaio.id} />
         <div className="flex min-w-0 flex-wrap items-center">
@@ -707,14 +709,15 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
         {ensaio.tomadas.length === 0 ? (
           <Vazio titulo="Este lote não tem fotos planejadas">O diretor não montou fotos. Planeje de novo com outro pedido ou complete o produto.</Vazio>
         ) : visiveis.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
+          <EstadoVazio compacto titulo="Nenhuma foto com esse filtro." />
         ) : (
-          <div className="max-h-[75vh] min-w-0 overflow-y-auto rounded-xl border border-border bg-background p-2" data-rolagem-propria="" data-resultado-do-lote="">
+          // Rolagem própria só no computador (no celular a página rola; caixa com rolagem prende o dedo).
+          <div className="min-w-0 lg:max-h-[75vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-1" data-rolagem-propria="" data-resultado-do-lote="">
             {grupos.map((g) => (
               <section key={g.tipo || "sem-tipo"} className="mb-3 min-w-0 last:mb-0" data-grupo-do-tipo={g.tipo || "outras"}>
                 {comTipo && (
-                  <h4 className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {g.tipo ? rotuloDoTipoDeVariacao(g.tipo) : "Outras"} · {g.tomadas.length}
+                  <h4 className="mb-1.5 px-0.5 text-[12px] font-medium text-muted-foreground">
+                    {g.tipo ? rotuloDoTipoDeVariacao(g.tipo) : "Outras"} <span className="tabular-nums">{g.tomadas.length}</span>
                   </h4>
                 )}
                 <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -738,8 +741,8 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
           </div>
         )}
       </div>
-      <div className="min-w-0 space-y-4">
-        <Cartao titulo="Gerar">
+      <div className="min-w-0 space-y-5">
+        <Cartao titulo="Gerar" dica="Pode trocar de etapa enquanto gera: o andamento segue na barra de cima e cada foto pronta já fica salva. Aprove ou refaça em cada foto.">
           <div className="grid min-w-0 grid-cols-2 gap-2">
             <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
             <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
@@ -757,7 +760,6 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
               </>
             )}
           />
-          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">Pode trocar de etapa enquanto gera: o andamento segue na barra de cima e cada foto pronta já fica salva. Aprove ou refaça em cada foto.</p>
         </Cartao>
         {kit && (
           <Cartao titulo={`Produto: ${kit.nome}`}>
@@ -795,7 +797,7 @@ export default function EtapaEnsaio() {
   }, [ensaio ? ensaio.id : null]);
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
+    <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-center">
         <Select
           value={ensaio ? ensaio.id : ""}
@@ -838,9 +840,7 @@ export default function EtapaEnsaio() {
       </div>
       {(kits.isError || ensaios.isError) && <AvisoDeErro erro={kits.error || ensaios.error} />}
       {kits.isLoading ? (
-        <p className="flex items-center text-[12px] text-muted-foreground">
-          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo kits e ensaios...
-        </p>
+        <Carregando forma="aba" rotulo="Lendo kits e ensaios" />
       ) : ensaio ? (
         <EnsaioAberto key={ensaio.id} ensaio={ensaio} kit={kitDoEnsaio} />
       ) : (

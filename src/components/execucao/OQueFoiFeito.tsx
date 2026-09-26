@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { BookOpen, ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Carregando, EstadoDeErro, EstadoVazio, Secao, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * O que os agentes fizeram — e onde você acha cada coisa.
@@ -36,7 +36,7 @@ export function comoAbrir(onde: string): { tipo: "url" | "rota" | "texto"; valor
 }
 
 export default function OQueFoiFeito({ clientId }: { clientId?: string }) {
-  const { data = [], error, isLoading } = useQuery({
+  const { data = [], error, isLoading, refetch } = useQuery({
     queryKey: ["o-que-foi-feito", clientId ?? "todos"],
     queryFn: async () => {
       let q = (supabase as any)
@@ -62,91 +62,89 @@ export default function OQueFoiFeito({ clientId }: { clientId?: string }) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[12px] text-destructive">
-        Não consegui ler o que foi feito: {error instanceof Error ? error.message : String(error)}.
-        Isso não quer dizer que nada foi feito — a leitura é que falhou.
-      </div>
+      <EstadoDeErro
+        titulo="Não consegui ler o que foi feito."
+        descricao={<>{error instanceof Error ? error.message : String(error)}. Isso não quer dizer que nada foi feito: a leitura é que falhou.</>}
+        acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void refetch()}>Tentar de novo</button>}
+      />
     );
   }
-  if (isLoading) return null;
+  if (isLoading) return <Carregando linhas={3} rotulo="Carregando o que foi feito" />;
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card p-4 text-[12px] leading-relaxed text-muted-foreground">
-        Nenhuma entrega registrada ainda. Quando um agente fizer algo, ele registra
-        aqui <strong className="text-foreground">o que fez, como, e onde você acessa</strong> —
-        a função recusa o registro sem o link de acesso, justamente para não sobrar
-        trabalho que ninguém acha depois.
-      </div>
+      <EstadoVazio
+        icone={<BookOpen className="h-5 w-5" />}
+        titulo="Nenhuma entrega registrada ainda."
+        descricao="Toda entrega traz onde acessar; a função recusa o registro sem o link de acesso."
+      />
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="mb-2.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        <BookOpen className="h-3.5 w-3.5 text-primary" /> O que foi feito
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">{data.length}</span>
-      </p>
-
-      <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+    <Secao
+      titulo="O que foi feito"
+      descricao={`${data.length} ${data.length === 1 ? "entrega" : "entregas"}`}
+      ajuda="O que os agentes fizeram, como, e onde você acessa cada coisa. Por conta: o agente decidiu sozinho. Sua ordem: cumpriu algo que você aprovou."
+    >
+      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Entregas dos agentes">
         {data.map((d: any) => {
           const autonoma = !d.approval_id;
           const acesso = comoAbrir(d.onde_acessar);
           return (
-            <div key={d.id} className="rounded-lg border border-border bg-secondary/40 p-2.5">
-              <div className="flex flex-wrap items-center gap-1.5">
+            <li key={d.id} className="min-w-0 px-4 py-3">
+              <div className="flex min-w-0 items-center">
                 {/* Decidiu sozinho ou cumpriu sua ordem: são coisas
                     diferentes, e misturá-las esconderia quanto o agente
                     está realmente decidindo por conta. */}
-                <span className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                <span className={juntar(
+                  etiqueta,
+                  "mr-1.5",
                   autonoma ? "bg-info/15 text-info" : "bg-success/15 text-success",
                 )}>
-                  {autonoma ? <Sparkles className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
+                  {autonoma ? <Sparkles className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> : <ShieldCheck className="mr-1 h-2.5 w-2.5" aria-hidden="true" />}
                   {autonoma ? "por conta" : "sua ordem"}
                 </span>
-                <span className="text-[10px] font-medium text-foreground/80">{d.agente}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground">{quando(d.occurred_at)}</span>
+                <span className="min-w-0 truncate text-[12px] font-medium text-foreground/80">{d.agente}</span>
+                <span className="ml-auto shrink-0 pl-2 text-[11.5px] tabular-nums text-muted-foreground">{quando(d.occurred_at)}</span>
               </div>
 
-              <p className="mt-1 text-[12.5px] font-medium text-foreground">{d.o_que}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{d.como}</p>
+              <p className="mt-1 text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{d.o_que}</p>
+              {d.como && <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{d.como}</p>}
 
               {/* O ACESSO. É a linha mais importante do item: sem ela, saber
                   que algo foi feito não ajuda em nada. */}
-              <div className="mt-1.5 flex flex-wrap items-baseline gap-1.5">
-                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  onde acessar
-                </span>
+              <p className="mt-1.5 min-w-0 text-[12.5px]">
+                <span className="mr-1.5 text-[12px] font-medium text-muted-foreground">onde acessar</span>
                 {acesso.tipo === "url" ? (
                   <a
                     href={acesso.valor}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex min-w-0 items-center gap-1 break-all text-[11.5px] text-primary underline"
+                    className="break-all text-primary underline"
                   >
-                    <ExternalLink className="h-2.5 w-2.5 shrink-0" />{acesso.valor}
+                    <ExternalLink className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />{acesso.valor}
                   </a>
                 ) : acesso.tipo === "rota" ? (
-                  <a href={acesso.valor} className="break-all text-[11.5px] text-primary underline">
+                  <a href={acesso.valor} className="break-all text-primary underline">
                     {acesso.valor}
                   </a>
                 ) : (
-                  <span className="break-words text-[11.5px] text-foreground/85">{acesso.valor}</span>
+                  <span className="break-words text-foreground/85">{acesso.valor}</span>
                 )}
-              </div>
+              </p>
 
               {d.onde_documentado && (
-                <p className="mt-0.5 break-words text-[10.5px] text-muted-foreground">
+                <p className={juntar(texto.auxiliar, "mt-0.5 break-words leading-5")}>
                   documentado em: {ehLink(d.onde_documentado)
                     ? <a href={d.onde_documentado} target="_blank" rel="noopener noreferrer" className="text-primary underline">{d.onde_documentado}</a>
                     : d.onde_documentado}
                 </p>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ul>
+    </Secao>
   );
 }

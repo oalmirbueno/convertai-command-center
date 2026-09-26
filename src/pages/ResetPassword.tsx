@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { Loader2 } from "lucide-react";
+import { CampoDeFormulario, GrupoDeCampos, botao, juntar } from "@/components/sistema";
+import CascaPublica, { CampoDeSenha } from "@/components/publico/CascaPublica";
 
 /**
  * Página de destino do link "Esqueci minha senha" (recuperação do Supabase Auth).
@@ -16,6 +18,9 @@ export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  // Erro no lugar do apoio do campo em que ele aconteceu.
+  const [erro, setErro] = useState<{ campo: "senha" | "confirmar"; texto: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -37,72 +42,72 @@ export default function ResetPassword() {
     };
   }, []);
 
-  const submit = async () => {
-    if (password.length < 8) { toast.error("A senha precisa ter pelo menos 8 caracteres"); return; }
-    if (password !== confirm) { toast.error("As senhas não conferem"); return; }
+  const submit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErro(null);
+    if (password.length < 8) { setErro({ campo: "senha", texto: "A senha precisa ter pelo menos 8 caracteres." }); return; }
+    if (password !== confirm) { setErro({ campo: "confirmar", texto: "As senhas não conferem." }); return; }
     setSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      toast.success("Senha definida com sucesso! Bem-vindo ao painel.");
+      toast.success("Senha definida. Bem-vindo ao painel.");
       navigate("/dashboard", { replace: true });
     } catch (err: any) {
-      toast.error(err.message || "Não foi possível definir a senha. Peça um novo link.");
+      setErro({ campo: "confirmar", texto: err.message || "Não foi possível definir a senha. Peça um novo link." });
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 space-y-4">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-8 mx-auto" />
-        <div className="text-center">
-          <h1 className="text-lg font-semibold text-foreground">Definir nova senha</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {hasSession
-              ? "Crie a senha que você vai usar para acessar o painel."
-              : ready
-                ? "Link inválido ou expirado. Volte ao login e peça um novo link de recuperação."
-                : "Validando o link de recuperação..."}
-          </p>
-        </div>
-        {hasSession && (
-          <div className="space-y-3">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Nova senha (mínimo 8 caracteres)"
-              autoComplete="new-password"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
-            />
-            <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Confirmar a nova senha"
-              autoComplete="new-password"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
-            />
-            <button
-              onClick={submit}
-              disabled={saving}
-              className="w-full py-2.5 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-            >
-              {saving ? "Salvando..." : "Salvar senha e entrar"}
+  if (!hasSession) {
+    return (
+      <CascaPublica
+        titulo={ready ? "Link inválido ou expirado" : "Nova senha"}
+        descricao={ready ? "Volte ao login e peça um novo link." : "Validando o link de recuperação..."}
+      >
+        {ready && (
+          <div>
+            <button type="button" onClick={() => navigate("/login", { replace: true })} className={botao.primario}>
+              Voltar ao login
             </button>
           </div>
         )}
-        {!hasSession && ready && (
-          <button
-            onClick={() => navigate("/login", { replace: true })}
-            className="w-full py-2.5 rounded-[10px] text-[13px] bg-secondary text-foreground border border-border cursor-pointer"
-          >
-            Voltar ao login
-          </button>
-        )}
-      </div>
-    </div>
+      </CascaPublica>
+    );
+  }
+
+  return (
+    <CascaPublica titulo="Nova senha" descricao="Crie a senha que você vai usar no painel.">
+      <form onSubmit={submit}>
+        <GrupoDeCampos colunas={1}>
+          <CampoDeFormulario rotulo="Nova senha" apoio="Mínimo 8 caracteres." erro={erro && erro.campo === "senha" ? erro.texto : undefined}>
+            <CampoDeSenha
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
+              autoFocus
+              mostrar={showPw}
+              aoAlternar={() => setShowPw((v) => !v)}
+            />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Confirmar a senha" erro={erro && erro.campo === "confirmar" ? erro.texto : undefined}>
+            <CampoDeSenha
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Repita a senha"
+              autoComplete="new-password"
+              mostrar={showPw}
+              aoAlternar={() => setShowPw((v) => !v)}
+            />
+          </CampoDeFormulario>
+        </GrupoDeCampos>
+        <button type="submit" disabled={saving} className={juntar(botao.primario, "mt-6 w-full")}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {saving ? "Salvando..." : "Salvar senha e entrar"}
+        </button>
+      </form>
+    </CascaPublica>
   );
 }

@@ -4,10 +4,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import ClientVault from "@/components/vault/ClientVault";
-import { KeyRound, Link2, Server, Search, Users, ShieldCheck, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { MoreHorizontal, Search, Trash2, Users } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import {
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  juntar,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 interface ClientOption {
   id: string;
@@ -15,6 +28,8 @@ interface ClientOption {
   company_name: string | null;
   avatar_url: string | null;
 }
+
+const idOuNada = (v: unknown) => v === null || typeof v === "string";
 
 export default function ClientVaultPage() {
   const { profile, user } = useAuth();
@@ -24,8 +39,9 @@ export default function ClientVaultPage() {
   // Hub mode = admin/team browsing all clients (only when NOT impersonating)
   const isHubMode = isAdminOrTeam && !impersonatedId;
 
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  // Cliente escolhido e busca ficam guardados: sair e voltar abre no mesmo lugar.
+  const [selectedClientId, setSelectedClientId] = useEstadoDaTela<string | null>("cofre:cliente", null, { validar: idOuNada });
+  const [search, setSearch] = useEstadoDaTela<string>("cofre:busca", "");
   const [confirmClearId, setConfirmClearId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const qc = useQueryClient();
@@ -46,28 +62,39 @@ export default function ClientVaultPage() {
   };
 
   // Load all clients (hub mode only)
-  const { data: clients } = useQuery({
+  const {
+    data: clients,
+    isLoading: loadingClients,
+    isError: clientsFailed,
+    refetch: refetchClients,
+    isFetching: fetchingClients,
+  } = useQuery({
     queryKey: ["vault-clients-list"],
     queryFn: async () => {
-      const { data: roles } = await supabase
+      const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id")
         .eq("role", "client");
+      if (rolesError) throw rolesError;
       const ids = (roles || []).map((r: any) => r.user_id);
       if (ids.length === 0) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, company_name, avatar_url")
         .in("id", ids)
         .order("full_name", { ascending: true });
+      if (error) throw error;
       return (data || []) as ClientOption[];
     },
     enabled: isHubMode,
   });
 
+  // Cliente guardado que não existe mais cai no primeiro da lista.
+  const guardadoValido = !!selectedClientId && !!clients && clients.some((c) => c.id === selectedClientId);
+
   // Effective client id being viewed
   const effectiveClientId = isHubMode
-    ? (selectedClientId || clients?.[0]?.id || null)
+    ? ((guardadoValido ? selectedClientId : null) || clients?.[0]?.id || null)
     : (impersonatedId || user?.id || null);
 
   // Counts per category for the selected client
@@ -105,73 +132,99 @@ export default function ClientVaultPage() {
 
   if (!effectiveClientId && !isAdminOrTeam) return null;
 
+  // Uma linha de estado: o que tem no cofre aberto.
+  const resumo = counts
+    ? `${counts.total} ${counts.total === 1 ? "item" : "itens"} · ${counts.password} ${counts.password === 1 ? "senha" : "senhas"} · ${counts.link} ${counts.link === 1 ? "link" : "links"} · ${counts.system} ${counts.system === 1 ? "sistema" : "sistemas"}`
+    : undefined;
+  const podeLimpar = isAdminOrTeam && !!effectiveClientId && isHubMode;
+  const nomeDoCliente = (c: ClientOption) => c.company_name || c.full_name;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
-            <KeyRound className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="heading-page">
-              Cofre de Acessos
-            </h1>
-            <p className="text-[13px] text-muted-foreground mt-1 max-w-xl">
-              Centralize senhas, links úteis e sistemas em um único lugar · protegido,
-              organizado e acessível em segundos.
-            </p>
-          </div>
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Cofre"
+        descricao={resumo}
+        ajuda="Senhas, links úteis e sistemas do cliente num lugar só. As senhas ficam mascaradas até alguém pedir para ver."
+        acoes={
+          <>
+            {podeLimpar && (
+              <button
+                type="button"
+                onClick={() => setConfirmClearId(effectiveClientId)}
+                className={juntar(botao.discreto, "hidden hover:text-destructive sm:inline-flex")}
+                title="Limpar todo o cofre deste cliente"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Limpar cofre
+              </button>
+            )}
+            {podeLimpar && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={juntar(botao.icone, "sm:hidden")} aria-label="Mais ações">
+                    <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="text-destructive" onSelect={() => setConfirmClearId(effectiveClientId)}>
+                    <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                    Limpar cofre
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+      />
+
+      {/* Celular e tablet: o cliente é escolhido aqui, logo abaixo do título (a lista lateral só aparece no computador). */}
+      {isHubMode && clients && clients.length > 0 && effectiveClientId && (
+        <div className="mb-4 min-w-0 lg:hidden">
+          <SeletorCompacto
+            modo="lista"
+            rotulo="Cliente"
+            icone={<Users className="h-3.5 w-3.5" />}
+            valor={effectiveClientId}
+            onEscolher={(id) => setSelectedClientId(id)}
+            opcoes={clients.map((c) => ({ valor: c.id, rotulo: nomeDoCliente(c), descricao: c.company_name ? c.full_name : undefined }))}
+          />
         </div>
+      )}
 
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-secondary/50 border border-border px-3 py-2 rounded-xl">
-          <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-          Senhas mascaradas por padrão
-        </div>
-      </div>
-
-      {/* Metric cards */}
-      <div className="grid auto-rows-fr grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Total" value={counts?.total ?? 0} icon={KeyRound} accent="text-foreground" />
-        <MetricCard label="Senhas" value={counts?.password ?? 0} icon={KeyRound} accent="text-primary" />
-        <MetricCard label="Links Úteis" value={counts?.link ?? 0} icon={Link2} accent="text-sky-400" />
-        <MetricCard label="Sistemas" value={counts?.system ?? 0} icon={Server} accent="text-amber-400" />
-      </div>
-
-      <div className={isHubMode ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
-        {/* Client selector · hub mode only (admin/team not impersonating) */}
+      <div className={isHubMode ? "grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]" : "min-w-0"}>
+        {/* Lista de clientes: só no computador, com rolagem própria (no celular vira o seletor abaixo do título). */}
         {isHubMode && (
-          <aside className="space-y-3">
-            <div className="bg-card border border-border rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                <h2 className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Clientes ({clients?.length || 0})
-                </h2>
-              </div>
-
-              <div className="relative mb-2">
-                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar cliente..."
-                  className="w-full bg-secondary border border-border rounded-lg pl-8 pr-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
-                />
-              </div>
-
-              <div className="max-h-[480px] overflow-y-auto -mx-1 px-1 space-y-1">
-                {filteredClients.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground text-center py-6">
-                    Nenhum cliente encontrado
-                  </p>
-                ) : (
-                  filteredClients.map((c) => {
+          <aside className="hidden min-w-0 lg:block" aria-label="Clientes">
+            <div className="relative mb-2">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar cliente"
+                aria-label="Buscar cliente"
+                className={juntar(campo, "pl-8")}
+              />
+            </div>
+            <p className={juntar(texto.auxiliar, "mb-1 tabular-nums")}>
+              {clients ? `${filteredClients.length} de ${clients.length} clientes` : "Clientes"}
+            </p>
+            {loadingClients && !clients ? (
+              <Carregando forma="lista" linhas={6} rotulo="Carregando clientes" />
+            ) : clientsFailed && !clients ? (
+              <EstadoDeErro
+                titulo="Não foi possível carregar os clientes."
+                acao={
+                  <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
+                    Tentar de novo
+                  </button>
+                }
+              />
+            ) : filteredClients.length === 0 ? (
+              <EstadoVazio compacto titulo="Nenhum cliente encontrado." />
+            ) : (
+              <RegiaoRolavel memoria="cofre:clientes" rotulo="Lista de clientes" className="lg:max-h-[70vh]">
+                <ul className="divide-y divide-border">
+                  {filteredClients.map((c) => {
                     const active = c.id === effectiveClientId;
                     const initials = (c.full_name || "?")
                       .split(" ")
@@ -180,93 +233,76 @@ export default function ClientVaultPage() {
                       .slice(0, 2)
                       .toUpperCase();
                     return (
-                      <div
-                        key={c.id}
-                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors border ${
-                          active
-                            ? "bg-primary/10 border-primary/40 text-foreground"
-                            : "bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                        }`}
-                      >
+                      <li key={c.id} className="group flex min-w-0 items-center py-1">
                         <button
+                          type="button"
                           onClick={() => setSelectedClientId(c.id)}
-                          className="flex-1 min-w-0 flex items-center gap-2.5 bg-transparent border-none cursor-pointer text-inherit p-0 text-left"
+                          aria-current={active ? "true" : undefined}
+                          className={juntar(
+                            "flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
                         >
-                          <div className="w-7 h-7 rounded-lg bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
+                          <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                             {c.avatar_url ? (
-                              <img src={c.avatar_url} alt="" className="w-full h-full object-cover" />
+                              <img src={c.avatar_url} alt="" className="h-full w-full object-cover" />
                             ) : (
                               <span className="text-[10px] font-semibold text-primary">{initials}</span>
                             )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[12px] font-medium truncate">{c.full_name}</p>
-                            {c.company_name && (
-                              <p className="text-[10px] opacity-70 truncate">{c.company_name}</p>
-                            )}
-                          </div>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-medium">{c.full_name}</span>
+                            {c.company_name && <span className="block truncate text-[11.5px] text-muted-foreground">{c.company_name}</span>}
+                          </span>
+                          {active && <span className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
                         </button>
                         {isAdminOrTeam && (
                           <button
+                            type="button"
                             onClick={(e) => { e.stopPropagation(); setConfirmClearId(c.id); }}
-                            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-secondary bg-transparent border-none cursor-pointer shrink-0"
+                            className={juntar(botao.icone, "ml-1 hover:text-destructive")}
+                            aria-label={`Limpar cofre de ${c.full_name}`}
                             title="Limpar cofre deste cliente"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
                         )}
-                        {active && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                      </div>
+                      </li>
                     );
-                  })
-                )}
-              </div>
-            </div>
+                  })}
+                </ul>
+              </RegiaoRolavel>
+            )}
           </aside>
         )}
 
         {/* Vault content */}
-        <div>
+        <section className="min-w-0" aria-label="Itens do cofre">
           {isHubMode && selectedClient && (
-            <div className="mb-4 px-4 py-3 rounded-xl bg-secondary/40 border border-border flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
-                <KeyRound className="w-4 h-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Cofre de
-                </p>
-                <p className="text-[14px] font-medium text-foreground truncate">
-                  {selectedClient.full_name}
-                  {selectedClient.company_name && (
-                    <span className="text-muted-foreground"> · {selectedClient.company_name}</span>
-                  )}
-                </p>
-              </div>
-              {isAdminOrTeam && effectiveClientId && (
-                <button
-                  onClick={() => setConfirmClearId(effectiveClientId)}
-                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-destructive bg-transparent border border-border hover:border-destructive/40 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors"
-                  title="Limpar todo o cofre deste cliente"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Limpar cofre
-                </button>
-              )}
-            </div>
+            <h2 className={juntar(texto.tituloSecao, "mb-3 truncate")}>
+              {selectedClient.full_name}
+              {selectedClient.company_name && <span className="font-normal text-muted-foreground"> · {selectedClient.company_name}</span>}
+            </h2>
           )}
 
           {effectiveClientId ? (
             <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} />
+          ) : isHubMode && loadingClients ? (
+            <Carregando forma="lista" linhas={4} rotulo="Carregando o cofre" />
+          ) : isHubMode && clientsFailed ? (
+            <EstadoDeErro
+              className="lg:hidden"
+              titulo="Não foi possível carregar os clientes."
+              acao={
+                <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
+                  Tentar de novo
+                </button>
+              }
+            />
           ) : (
-            <div className="text-center py-16 bg-card border border-border rounded-xl">
-              <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
-              <p className="text-[13px] text-muted-foreground">
-                Selecione um cliente ao lado para visualizar o cofre.
-              </p>
-            </div>
+            <EstadoVazio icone={<Users className="h-5 w-5" />} titulo="Nenhum cliente" descricao="Cadastre um cliente para guardar os acessos dele." />
           )}
-        </div>
+        </section>
       </div>
 
       <ConfirmModal
@@ -277,30 +313,6 @@ export default function ClientVaultPage() {
         onConfirm={() => confirmClearId && clearClientVault(confirmClearId)}
         onCancel={() => !clearing && setConfirmClearId(null)}
       />
-    </motion.div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: number;
-  icon: any;
-  accent: string;
-}) {
-  return (
-    <div className="h-full flex flex-col bg-card border border-border rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-          {label}
-        </span>
-        <Icon className={`w-3.5 h-3.5 ${accent}`} />
-      </div>
-      <p className={`text-2xl font-mono font-semibold ${accent}`}>{value}</p>
     </div>
   );
 }

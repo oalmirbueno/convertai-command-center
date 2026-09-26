@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Bot, ChevronDown, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
+import { etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 
 /**
  * O escritório: cada agente como uma pessoa, e o que ela está fazendo agora.
@@ -116,13 +116,14 @@ const FRASE: Record<string, string> = {
   done: "entregou tudo",
 };
 
+/** A cor da frase de estado: o que trava grita, o que anda informa. */
 const TOM: Record<string, string> = {
-  blocked: "border-destructive/50 bg-destructive/[0.06]",
-  awaiting_input: "border-warning/50 bg-warning/[0.06]",
-  review: "border-warning/40 bg-warning/[0.05]",
-  in_progress: "border-info/40 bg-info/[0.05]",
-  queued: "border-border bg-card",
-  done: "border-success/30 bg-success/[0.04]",
+  blocked: "text-destructive",
+  awaiting_input: "text-warning",
+  review: "text-warning",
+  in_progress: "text-info",
+  queued: "text-muted-foreground",
+  done: "text-success",
 };
 
 const PONTO: Record<string, string> = {
@@ -177,9 +178,11 @@ export default function Escritorio({
    *
    * Guardo as ABERTAS por escolha: uma área que ganhar trabalho amanhã
    * abre sozinha, em vez de ficar escondida por um estado que não a
-   * conhecia.
+   * conhecia. A escolha fica guardada no navegador (sair e voltar mantém).
    */
-  const [escolhas, setEscolhas] = useState<Record<string, boolean>>({});
+  const [escolhas, setEscolhas] = useEstadoDaTela<Record<string, boolean>>("execucao:escritorio:areas", {}, {
+    validar: (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v),
+  });
 
   /*
    * A escolha da pessoa vale nos DOIS sentidos.
@@ -206,165 +209,165 @@ export default function Escritorio({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-4">
       {/* A frase que resume o dia. Um número sozinho não diz o que fazer. */}
-      <div className="rounded-xl border border-border bg-secondary/40 px-3.5 py-2.5">
-        <p className="text-[12.5px] text-foreground">
+      <p className={juntar(texto.corpo, "flex items-start")}>
+        <span
+          className={juntar("mr-2 mt-1.5 h-2 w-2 shrink-0 rounded-full", totalEsperandoVoce > 0 ? "bg-warning" : "bg-success")}
+          aria-hidden="true"
+        />
+        <span className="min-w-0">
           {totalEsperandoVoce > 0 ? (
             <>
-              <strong className="font-mono">{totalEsperandoVoce}</strong>{" "}
+              <strong className="font-semibold tabular-nums">{totalEsperandoVoce}</strong>{" "}
               {totalEsperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
               decisão sua. Eles aparecem primeiro na lista.
             </>
           ) : (
             <>Nada está parado esperando você. O que estiver em andamento segue sozinho.</>
           )}
-        </p>
-      </div>
+        </span>
+      </p>
 
       {areas.map(({ area, agentes: doGrupo, urgencia }) => {
         const aberta = estaAberta(area, urgencia);
         return (
-        <div key={area} className="space-y-2">
-          {/* O nome da área, discreto: separa sem competir com os cartões. */}
+        <section key={area} aria-label={area} className="min-w-0">
+          {/* O nome da área, discreto: separa sem competir com a lista. */}
           <button
             type="button"
             onClick={() => alternar(area, urgencia)}
             aria-expanded={aberta}
-            className="flex w-full items-center gap-2 text-left"
+            className={juntar("flex w-full min-w-0 items-center rounded-md py-1 text-left", foco)}
           >
-            <ChevronDown className={cn(
-              "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+            <ChevronDown className={juntar(
+              "mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
               !aberta && "-rotate-90",
-            )} />
-            <span className="h-3 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{area}</span>
-            <span className="text-[10px] text-muted-foreground">
+            )} aria-hidden="true" />
+            <span className="mr-2 h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+            <span className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">{area}</span>
+            <span className={juntar(texto.auxiliar, "shrink-0")}>
               {doGrupo.length} {doGrupo.length === 1 ? "agente" : "agentes"}
               {!aberta && urgencia >= 90 && " · sem trabalho agora"}
             </span>
           </button>
           {aberta && (
+            <ul className={juntar(superficie.painel, "mt-2 divide-y divide-border overflow-hidden")}>
+              {doGrupo.map((a) => {
+                const meus = porAgente.get(a.id) ?? [];
+                const estado = estadoQueManda(meus);
+                const pausado = a.status !== "active";
+                // A tarefa que representa o agente agora: a do estado que manda.
+                const emFoco = meus.find((t) => t.status === estado);
+                const idTarefa = emFoco?.kanban_task_id || emFoco?.painel_task_id || null;
+                const tarefa = idTarefa ? tarefas.get(String(idTarefa)) : null;
+                const cliente = tarefa?.project?.client;
+                const responsavel = tarefa?.assigned_to
+                  ? humanos.get(String(tarefa.assigned_to))
+                  : null;
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-        {doGrupo.map((a) => {
-          const meus = porAgente.get(a.id) ?? [];
-          const estado = estadoQueManda(meus);
-          const pausado = a.status !== "active";
-          // A tarefa que representa o agente agora: a do estado que manda.
-          const foco = meus.find((t) => t.status === estado);
-          const idTarefa = foco?.kanban_task_id || foco?.painel_task_id || null;
-          const tarefa = idTarefa ? tarefas.get(String(idTarefa)) : null;
-          const cliente = tarefa?.project?.client;
-          const responsavel = tarefa?.assigned_to
-            ? humanos.get(String(tarefa.assigned_to))
-            : null;
-
-          return (
-            <div
-              key={a.id}
-              className={cn(
-                "rounded-xl border p-3 transition-colors",
-                pausado ? "border-border bg-card opacity-60" : (TOM[estado ?? "queued"] ?? "border-border bg-card"),
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => aoAbrirAgente(a)}
-                className="flex w-full items-center gap-2 text-left"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <Bot className="h-4 w-4 text-primary" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-semibold text-foreground">
-                      {a.display_name}
-                    </span>
-                    {a.is_coordinator && (
-                      <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
-                        coordena
+                return (
+                  <li key={a.id} className={juntar("min-w-0 px-3.5 py-3", pausado && "opacity-60")}>
+                    <div className="flex min-w-0 items-start">
+                      <button
+                        type="button"
+                        onClick={() => aoAbrirAgente(a)}
+                        className={juntar("flex min-w-0 flex-1 items-center rounded-md text-left", foco)}
+                      >
+                        <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                          <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center">
+                            <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">
+                              {a.display_name}
+                            </span>
+                            {a.is_coordinator && (
+                              <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>
+                                coordena
+                              </span>
+                            )}
+                          </span>
+                          <span className="block truncate text-[12px] text-muted-foreground">
+                            {a.role}
+                            {/* A frase de estado, em português de gente. */}
+                            <span className="mx-1" aria-hidden="true">·</span>
+                            <span className={juntar("font-medium", pausado ? "text-muted-foreground" : estado ? TOM[estado] : "text-muted-foreground")}>
+                              {pausado
+                                ? "pausado por você"
+                                : estado
+                                  ? FRASE[estado]
+                                  : "sem tarefa no momento"}
+                            </span>
+                          </span>
+                        </span>
+                      </button>
+                      <span className="ml-3 flex shrink-0 flex-col items-end">
+                        <span className="flex items-center">
+                          {meus.some((t) => precisaDecisao(t)) && (
+                            <span className={juntar(etiqueta, "mr-1 bg-warning/15 text-warning")}>
+                              <ShieldAlert className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> aprovação
+                            </span>
+                          )}
+                          {pausado && (
+                            <span className={juntar(etiqueta, "mr-1 bg-muted text-muted-foreground")}>
+                              <PauseCircle className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> pausado
+                            </span>
+                          )}
+                          {!pausado && estado && (
+                            <span className={juntar("h-2 w-2 rounded-full", PONTO[estado])} aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                          {a.last_run_at ? quando(a.last_run_at) : "nunca executou"}
+                        </span>
                       </span>
+                    </div>
+
+                    {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
+                    {tarefa && (
+                      <button
+                        type="button"
+                        onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
+                        className={juntar(superficie.poco, "mt-2 block w-full min-w-0 px-2.5 py-1.5 text-left transition-colors hover:bg-muted", foco)}
+                      >
+                        <span className="block truncate text-[12.5px] text-foreground">{tarefa.title}</span>
+                        <span className="-mx-1 mt-0.5 flex flex-wrap items-center text-[11px] text-muted-foreground [&>*]:mx-1">
+                          {cliente && (
+                            <span className="font-medium text-foreground/80">
+                              {cliente.company_name || cliente.full_name}
+                            </span>
+                          )}
+                          {tarefa.project?.name && <span>{tarefa.project.name}</span>}
+                          <span className="inline-flex items-center">
+                            <UserRound className="mr-1 h-2.5 w-2.5" aria-hidden="true" />
+                            {responsavel || "sem responsável"}
+                          </span>
+                          {tarefa.due_date && (
+                            <span className="inline-flex items-center tabular-nums">
+                              <Clock className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> {tarefa.due_date}
+                            </span>
+                          )}
+                        </span>
+                      </button>
                     )}
-                  </span>
-                  <span className="block truncate text-[10.5px] text-muted-foreground">
-                    {a.role}
-                  </span>
-                </span>
-                {!pausado && estado && (
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", PONTO[estado])} />
-                )}
-              </button>
 
-              {/* A frase de estado, em português de gente. */}
-              <p className="mt-2 text-[11.5px] font-medium text-foreground/90">
-                {pausado
-                  ? "pausado por você"
-                  : estado
-                    ? FRASE[estado]
-                    : "sem tarefa no momento"}
-              </p>
-
-              {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
-              {tarefa && (
-                <button
-                  type="button"
-                  onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
-                  className="mt-1.5 block w-full rounded-lg border border-border bg-background/60 px-2.5 py-1.5 text-left transition-colors hover:border-primary/50"
-                >
-                  <span className="block truncate text-[11.5px] text-foreground">{tarefa.title}</span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-                    {cliente && (
-                      <span className="font-medium text-foreground/80">
-                        {cliente.company_name || cliente.full_name}
-                      </span>
+                    {(emFoco?.next_step || meus.length > 1) && (
+                      <p className="mt-1.5 flex min-w-0 text-[11.5px] text-muted-foreground">
+                        {emFoco?.next_step && <span className="mr-2 min-w-0 flex-1 truncate">próximo: {emFoco.next_step}</span>}
+                        {meus.length > 1 && (
+                          <span className="ml-auto shrink-0">
+                            +{meus.length - 1} outra{meus.length - 1 > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </p>
                     )}
-                    {tarefa.project?.name && <span>{tarefa.project.name}</span>}
-                    <span className="inline-flex items-center gap-1">
-                      <UserRound className="h-2.5 w-2.5" />
-                      {responsavel || "sem responsável"}
-                    </span>
-                    {tarefa.due_date && (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="h-2.5 w-2.5" /> {tarefa.due_date}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              )}
-
-              {foco?.next_step && (
-                <p className="mt-1.5 line-clamp-2 text-[10.5px] text-muted-foreground">
-                  próximo: {foco.next_step}
-                </p>
-              )}
-
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {meus.some((t) => precisaDecisao(t)) && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
-                    <ShieldAlert className="h-2.5 w-2.5" /> aprovação
-                  </span>
-                )}
-                {pausado && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                    <PauseCircle className="h-2.5 w-2.5" /> pausado
-                  </span>
-                )}
-                {meus.length > 1 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    +{meus.length - 1} outra{meus.length - 1 > 1 ? "s" : ""}
-                  </span>
-                )}
-                <span className="ml-auto text-[9.5px] text-muted-foreground">
-                  {a.last_run_at ? quando(a.last_run_at) : "nunca executou"}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </div>
+        </section>
         );
       })}
     </div>

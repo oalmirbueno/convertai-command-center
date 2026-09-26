@@ -3,10 +3,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Edit, Folder, ChevronRight, Megaphone } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Plus, FileText, Eye, Send, Folder, ChevronRight, Megaphone, Search, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  Painel,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 import { recordMemory } from "@/lib/clientMemory";
 
@@ -29,6 +43,10 @@ function formatNumber(n: number) {
   return String(n);
 }
 
+function normalizar(v: string) {
+  return v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 function formatDate(d: string) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -39,7 +57,13 @@ export default function AdminReports() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: reports, isLoading } = useQuery({
+  // Busca e situação lembradas ao sair e voltar.
+  const [busca, setBusca] = useEstadoDaTela("relatorios:busca", "", { validar: (v) => typeof v === "string" });
+  const [filtroStatus, setFiltroStatus] = useEstadoDaTela("relatorios:situacao", "todos", {
+    validar: (v) => v === "todos" || v === "publicados" || v === "rascunhos",
+  });
+
+  const { data: reports, isLoading, isError, refetch } = useQuery({
     queryKey: ["reports"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -100,161 +124,227 @@ export default function AdminReports() {
     toast.success("Relatório enviado ao cliente!");
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}
-      </div>
-    );
-  }
+  const lista = (reports || []) as any[];
+  const termo = normalizar(busca);
+  const filtrados = lista.filter((r) => {
+    if (filtroStatus === "publicados" && r.status !== "published") return false;
+    if (filtroStatus === "rascunhos" && r.status === "published") return false;
+    if (!termo) return true;
+    return normalizar([r.title, getClientName(r), r.project?.name].filter(Boolean).join(" ")).indexOf(termo) >= 0;
+  });
+  const rascunhos = lista.filter((r) => r.status !== "published").length;
+  const filtrando = filtroStatus !== "todos" || !!termo;
 
   return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="heading-page">Relatórios</h1>
-        <div className="flex items-center gap-2">
-          {/* O relatório de anúncios passou a nascer em Anúncios, onde os
-              números já estão coletados — aqui ficaria pedindo a planilha do
-              Gerenciador de novo. O de entrega continua sendo criado daqui. */}
-          <button
-            onClick={() => navigate("/anuncios")}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-[13px] font-medium text-foreground hover:border-primary/40 transition-colors cursor-pointer"
-          >
-            <Megaphone className="w-4 h-4" /> De anúncios
-          </button>
-          <button onClick={() => navigate("/relatorios/novo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer">
-            <Plus className="w-4 h-4" /> De entrega
-          </button>
-        </div>
-      </div>
-      </div>
+    <div className="min-w-0 space-y-4">
+      <CabecalhoDePagina
+        titulo="Relatórios"
+        descricao={
+          isLoading && !reports
+            ? "Carregando"
+            : filtrando
+              ? `${filtrados.length} de ${lista.length}`
+              : `${lista.length} ${lista.length === 1 ? "relatório" : "relatórios"}${rascunhos ? ` · ${rascunhos} em rascunho` : ""}`
+        }
+        ajuda="Relatórios por cliente e por período. O de anúncios nasce em Anúncios, onde os números já estão coletados; o de entrega é criado aqui."
+        acoes={
+          <>
+            {/* O relatório de anúncios passou a nascer em Anúncios, onde os
+                números já estão coletados; aqui ficaria pedindo a planilha do
+                Gerenciador de novo. O de entrega continua sendo criado daqui. */}
+            <button type="button" onClick={() => navigate("/anuncios")} className={botao.secundario} aria-label="Relatório de anúncios">
+              <Megaphone className="h-4 w-4" aria-hidden="true" />
+              <span className="ml-1.5 hidden sm:inline">De anúncios</span>
+            </button>
+            <button type="button" onClick={() => navigate("/relatorios/novo")} className={botao.primario} aria-label="Novo relatório de entrega">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span className="ml-1.5 hidden sm:inline">De entrega</span>
+            </button>
+          </>
+        }
+      />
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {(!reports || reports.length === 0) ? (
-        <div className="text-center py-16">
-          <FileText className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Nenhum relatório criado ainda</p>
+      {lista.length > 0 && (
+        <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+          <div className="relative min-w-0 flex-1 basis-full sm:basis-[240px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por cliente, título ou projeto"
+              aria-label="Buscar relatório"
+              className={juntar(campo, "pl-9 pr-9 text-[16px] sm:text-[13px]")}
+            />
+            {busca && (
+              <button type="button" onClick={() => setBusca("")} aria-label="Limpar busca" className={juntar(botao.icone, "absolute right-0.5 top-1/2 -translate-y-1/2")}>
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <SeletorCompacto
+            rotulo="Situação do relatório"
+            opcoes={[
+              { valor: "todos", rotulo: "Todos" },
+              { valor: "publicados", rotulo: "Publicados" },
+              { valor: "rascunhos", rotulo: "Rascunhos", contador: rascunhos || null },
+            ]}
+            valor={filtroStatus}
+            onEscolher={setFiltroStatus}
+          />
         </div>
-      ) : (
-        <GroupedReports
-          reports={reports}
-          metricLabels={metricLabels}
-          formatNumber={formatNumber}
-          formatDate={formatDate}
-          onView={(id) => navigate(`/relatorios/${id}`)}
-          onSend={handleSendToClient}
-        />
       )}
-      </div>
+
+      <AreaDeTrabalho memoriaDaRolagem="relatorios:lista" rotuloDoPrincipal="Relatórios por cliente">
+        {isError ? (
+          <EstadoDeErro
+            titulo="Não foi possível carregar os relatórios."
+            acao={
+              <button type="button" onClick={() => refetch()} className={botao.secundario}>
+                Tentar de novo
+              </button>
+            }
+          />
+        ) : isLoading && !reports ? (
+          <Carregando rotulo="Carregando relatórios" linhas={5} />
+        ) : lista.length === 0 ? (
+          <EstadoVazio
+            icone={<FileText className="h-5 w-5" />}
+            titulo="Nenhum relatório ainda"
+            descricao="Crie o de entrega aqui ou o de anúncios em Anúncios."
+          />
+        ) : filtrados.length === 0 ? (
+          <EstadoVazio
+            compacto
+            titulo="Nenhum relatório nesse filtro."
+            acao={
+              <button type="button" onClick={() => { setBusca(""); setFiltroStatus("todos"); }} className={botao.discreto}>
+                Limpar filtros
+              </button>
+            }
+          />
+        ) : (
+          <GroupedReports
+            reports={filtrados}
+            abrirTudo={!!termo}
+            metricLabels={metricLabels}
+            formatNumber={formatNumber}
+            formatDate={formatDate}
+            onView={(id: string) => navigate(`/relatorios/${id}`)}
+            onSend={handleSendToClient}
+          />
+        )}
+      </AreaDeTrabalho>
     </div>
   );
 }
 
-function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onView, onSend }: any) {
+function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, formatDate, onView, onSend }: any) {
   const grouped = groupReports(reports as any[], getClientName);
   const clients = Object.keys(grouped).sort();
-  // Pastas iniciam RECOLHIDAS — usuário expande clicando
-  const [openClients, setOpenClients] = useState<Record<string, boolean>>({});
-  const [openModels, setOpenModels] = useState<Record<string, boolean>>({});
+  // Pastas iniciam RECOLHIDAS; o que a pessoa abriu fica lembrado ao sair e voltar.
+  const objeto = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
+  const [openClients, setOpenClients] = useEstadoDaTela<Record<string, boolean>>("relatorios:pastas", {}, { validar: objeto });
+  const [openModels, setOpenModels] = useEstadoDaTela<Record<string, boolean>>("relatorios:modelos", {}, { validar: objeto });
 
   const toggleClient = (c: string) => setOpenClients(s => ({ ...s, [c]: !s[c] }));
   const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: !s[k] }));
 
   return (
-    <div className="space-y-3">
-      {clients.map((client) => {
-        const models = grouped[client];
-        const modelKeys = PERIOD_ORDER.filter(p => models[p]);
-        const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
-        const isOpen = !!openClients[client];
-        return (
-          <div key={client} className="bg-card border border-border rounded-xl overflow-hidden">
-            <button
-              onClick={() => toggleClient(client)}
-              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-secondary/30 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <Folder className="w-4 h-4 text-primary shrink-0" />
-                <p className="text-sm font-semibold text-foreground truncate">{client}</p>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{totalCount}</span>
-              </div>
-              <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
-            </button>
-            {isOpen && (
-              <div className="border-t border-border/60 divide-y divide-border/40">
-                {modelKeys.map((model) => {
-                  const list = models[model];
-                  const key = `${client}::${model}`;
-                  const modelOpen = !!openModels[key];
-                  return (
-                    <div key={model} className="bg-background/40">
-                      <button
-                        onClick={() => toggleModel(key)}
-                        className="w-full flex items-center justify-between gap-3 px-5 py-3 hover:bg-secondary/20 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <p className="text-[12px] font-medium text-foreground">{model}</p>
-                          <span className="text-[10px] text-muted-foreground">({list.length})</span>
-                        </div>
-                        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${modelOpen ? "rotate-90" : ""}`} />
-                      </button>
-                      {modelOpen && (
-                        <div className="px-5 pb-4 space-y-2">
-                          {list.map((r: any) => {
-                            const m = (r.metrics || {}) as Record<string, any>;
-                            const visibleMetrics = Object.entries(m)
-                              .filter(([k]) => k !== "custom" && metricLabels[k] && m[k] !== undefined)
-                              .slice(0, 4);
-                            return (
-                              <div key={r.id} className="bg-card border border-border rounded-xl p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-[13px] font-semibold text-foreground truncate">{r.title}</p>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+    <Painel semEspaco>
+      <ul className="divide-y divide-border">
+        {clients.map((client) => {
+          const models = grouped[client];
+          const modelKeys = PERIOD_ORDER.filter(p => models[p]);
+          const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
+          const isOpen = abrirTudo || !!openClients[client];
+          return (
+            <li key={client} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => toggleClient(client)}
+                aria-expanded={isOpen}
+                className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
+              >
+                <ChevronRight className={`mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden="true" />
+                <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{client}</span>
+                <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{totalCount}</span>
+              </button>
+              {isOpen && (
+                <div className="pb-2 pl-4 pr-3 sm:pl-10 sm:pr-4">
+                  {modelKeys.map((model) => {
+                    const list = models[model];
+                    const key = `${client}::${model}`;
+                    const modelOpen = abrirTudo || !!openModels[key];
+                    return (
+                      <div key={model} className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleModel(key)}
+                          aria-expanded={modelOpen}
+                          className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-2 text-left hover:bg-muted/30", foco)}
+                        >
+                          <ChevronRight className={`mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${modelOpen ? "rotate-90" : ""}`} aria-hidden="true" />
+                          <span className={juntar(texto.rotulo, "text-foreground")}>{model}</span>
+                          <span className={juntar(texto.auxiliar, "ml-1.5 tabular-nums")}>{list.length}</span>
+                        </button>
+                        {modelOpen && (
+                          <ul className="mb-2 divide-y divide-border border-l border-border pl-3 sm:ml-2">
+                            {list.map((r: any) => {
+                              const m = (r.metrics || {}) as Record<string, any>;
+                              const visibleMetrics = Object.entries(m)
+                                .filter(([k]) => k !== "custom" && metricLabels[k] && m[k] !== undefined)
+                                .slice(0, 4);
+                              const publicado = r.status === "published";
+                              return (
+                                <li key={r.id} className="flex min-w-0 items-center py-2.5">
+                                  <button type="button" onClick={() => onView(r.id)} className={juntar("min-w-0 flex-1 rounded-md text-left", foco)}>
+                                    <span className="flex min-w-0 items-center">
+                                      <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{r.title}</span>
+                                      <span className={juntar(etiqueta, "ml-2", publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+                                        {publicado ? "Publicado" : "Rascunho"}
+                                      </span>
+                                    </span>
+                                    <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
                                       {r.project?.name}
-                                      {r.period_start && r.period_end && ` • ${formatDate(r.period_start)}-${formatDate(r.period_end)}`}
-                                    </p>
-                                  </div>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${r.status === "published" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                                    {r.status === "published" ? "Publicado" : "Rascunho"}
-                                  </span>
-                                </div>
-                                {visibleMetrics.length > 0 && (
-                                  <div className="flex flex-wrap gap-3 mt-3">
-                                    {visibleMetrics.map(([key, val]) => (
-                                      <div key={key} className="min-w-[70px]">
-                                        <p className="text-sm font-mono text-foreground">
-                                          {key === "engagement" || key === "ctr" ? val + "%" : formatNumber(val as number)}
-                                        </p>
-                                        <p className="text-[9px] uppercase text-muted-foreground">{metricLabels[key]}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="flex gap-3 mt-3">
-                                  <button onClick={() => onView(r.id)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
-                                    <Eye className="w-3 h-3" /> Ver
+                                      {r.period_start && r.period_end && ` · ${formatDate(r.period_start)} a ${formatDate(r.period_end)}`}
+                                    </span>
                                   </button>
-                                  <button onClick={() => onSend(r)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
-                                    <Send className="w-3 h-3" /> Enviar ao Cliente
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
+                                  {visibleMetrics.length > 0 && (
+                                    <dl className="ml-4 hidden shrink-0 lg:flex">
+                                      {visibleMetrics.map(([key, val]) => (
+                                        <div key={key} className="ml-4 w-[72px] text-right first:ml-0">
+                                          <dd className="text-[13px] tabular-nums text-foreground">
+                                            {key === "engagement" || key === "ctr" ? val + "%" : formatNumber(val as number)}
+                                          </dd>
+                                          <dt className="truncate text-[11px] text-muted-foreground">{metricLabels[key]}</dt>
+                                        </div>
+                                      ))}
+                                    </dl>
+                                  )}
+                                  <div className="ml-3 flex shrink-0 items-center [&>*+*]:ml-1">
+                                    <button type="button" onClick={() => onView(r.id)} className={botao.icone} aria-label={`Ver ${r.title}`} title="Ver">
+                                      <Eye className="h-4 w-4" aria-hidden="true" />
+                                    </button>
+                                    <button type="button" onClick={() => onSend(r)} className={juntar(botao.discreto, "h-8")} aria-label={`Enviar ${r.title} ao cliente`}>
+                                      <Send className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                                      <span className="hidden sm:inline">Enviar ao cliente</span>
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Painel>
   );
 }

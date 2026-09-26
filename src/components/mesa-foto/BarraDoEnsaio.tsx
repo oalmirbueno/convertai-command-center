@@ -38,7 +38,7 @@ export default function BarraDoEnsaio() {
         <DropdownMenuTrigger asChild>
           <button type="button" className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground" aria-label="Trocar o produto (kit)">
             <Layers className="mr-1 h-3.5 w-3.5 shrink-0" />
-            <span className="mr-1">Produto:</span>
+            <span className="mr-1 hidden sm:inline">Produto:</span>
             <span className={`min-w-0 truncate ${kit ? "font-medium text-foreground" : ""}`}>{kit ? `${kit.nome} · ${rotuloDoTipo(kit.tipo)}` : "nenhum"}</span>
             {kit && kit.status === "rascunho" && <span className="ml-1 shrink-0 rounded-full border border-border px-1.5 text-[10px]">rascunho</span>}
             <ChevronDown className="ml-0.5 h-3 w-3 shrink-0" />
@@ -70,7 +70,7 @@ export default function BarraDoEnsaio() {
         className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground"
       >
         <Camera className="mr-1 h-3.5 w-3.5 shrink-0" />
-        <span className="mr-1">Criando:</span>
+        <span className="mr-1 hidden sm:inline">Criando:</span>
         <span className={`min-w-0 truncate ${ensaio ? "font-medium text-foreground" : ""}`}>
           {ensaio ? `${nomeDaReceita(receitas.data ? receitas.data.receitas : null, ensaio.receita_id)} · ${rotuloDoEstadoDoEnsaio(ensaio.status)}` : "nenhum"}
         </span>
@@ -111,7 +111,7 @@ export default function BarraDoEnsaio() {
         <button
           type="button"
           onClick={() => irPara(proximo.etapa as EtapaDaMesaFoto, proximo.extras)}
-          className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-full bg-primary px-2.5 py-1 text-[11.5px] font-semibold text-primary-foreground shadow-sm hover:opacity-90"
+          className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-md bg-primary px-2.5 py-1 text-[12px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-proximo-passo=""
         >
           <span className="truncate">Próximo: {proximo.rotulo}</span>

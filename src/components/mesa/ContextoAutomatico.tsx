@@ -163,7 +163,7 @@ function Completude({ itens, onIr }: { itens: ItemDoChecklist[]; onIr: (secao: S
   const pct = completude(itens);
   const feitos = itens.filter((i) => i.situacao === "feito").length;
   return (
-    <section aria-label="Completude do contexto" className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5 sm:px-4">
+    <section aria-label="Completude do contexto" className="min-w-0">
       <div className="flex min-w-0 items-center">
         <p className="shrink-0 text-[12px] font-medium text-foreground">Completude</p>
         <div
@@ -294,7 +294,7 @@ function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
   const [todas, setTodas] = useState(false);
   const faltas = todas ? r.faltas : r.faltas.slice(0, 4);
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border bg-muted/40 p-3 md:grid-cols-[180px_minmax(0,1fr)]">
+    <div className="grid min-w-0 grid-cols-1 gap-3 rounded-md bg-muted/40 p-3 md:grid-cols-[180px_minmax(0,1fr)]">
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Score do contexto</p>
         <p className="mt-0.5 flex items-baseline">
@@ -424,14 +424,14 @@ function SugestoesPendentes({
   if (!campos.length) return null;
   const rotulos: Record<string, string> = { paleta: "Paleta", estilo: "Estilo visual", regras: "Regras" };
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-primary/50 bg-card p-3.5 sm:p-4">
+    <section className="min-w-0 space-y-3 rounded-lg border border-primary/50 bg-card p-3.5 sm:p-4">
       <div>
         <p className="flex items-center text-[13px] font-semibold"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" /> Sugestões do agente</p>
         <p className="text-[11.5px] text-muted-foreground">A equipe já tinha preenchido estes campos, então o agente não trocou nada. Aplique o que fizer sentido.</p>
       </div>
       <ul className="space-y-2">
         {campos.map((campo) => (
-          <li key={campo} className="min-w-0 space-y-2 rounded-lg border border-border bg-muted p-2.5">
+          <li key={campo} className="min-w-0 space-y-2 rounded-md bg-muted/60 p-2.5">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{rotulos[campo]}</p>
             {campo === "paleta" ? (
               <div className="space-y-1.5">
@@ -657,11 +657,14 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const fontesDoResumo = item("fontes");
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div className="flex min-w-0 flex-wrap items-center justify-between">
-        <div className="mb-1 mr-3 min-w-0">
-          <h2 className="truncate text-[15px] font-semibold text-foreground">Contexto{clientName ? ` de ${clientName}` : ""}</h2>
-          <p className="flex items-center text-[11.5px] text-muted-foreground">
+    <div className="min-w-0 space-y-4">
+      {/* Título curto e ações na mesma linha, também no celular (o cliente já está na barra da mesa). */}
+      <div className="flex min-w-0 items-center justify-between">
+        <div className="mr-3 min-w-0 flex-1">
+          <h2 className="truncate text-[20px] font-semibold leading-7 tracking-[-0.01em] text-foreground" title={clientName ? `Contexto de ${clientName}` : undefined}>
+            Contexto
+          </h2>
+          <p className="flex items-center text-[12px] text-muted-foreground">
             {leitura.isFetching && <Loader2 className="mr-1.5 h-3 w-3 shrink-0 animate-spin" />}
             {leitura.isLoading
               ? "Lendo o que o painel já tem..."
@@ -670,7 +673,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
                 : "Contexto ainda não montado"}
           </p>
         </div>
-        <div className="mb-1 flex items-center">
+        <div className="flex shrink-0 items-center">
           <Button
             type="button"
             size="sm"
@@ -706,14 +709,14 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
       <Completude itens={itens} onIr={irParaSecao} />
 
       {montando && (
-        <p className="flex items-center rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
+        <p className="flex items-center rounded-md bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
           <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
           Montando o contexto a partir do que o cliente já tem...
         </p>
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
       {leitura.isError && (
-        <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-col rounded-md bg-muted/40 p-3 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
             <AvisoDeErro erro={leitura.error} />
           </div>
@@ -723,7 +726,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         </div>
       )}
       {dados && !temMaterial && !contextoMontado && (
-        <p className="rounded-xl border border-dashed border-border bg-card px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
+        <p className="rounded-md bg-muted/40 px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
           Ainda não há documentos, dossiê nem artes aprovadas deste cliente no painel. Envie a identidade em Arquivos ou conte ao agente de contexto o que já sabe da marca.
         </p>
       )}

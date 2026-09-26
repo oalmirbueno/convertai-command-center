@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AlertTriangle, ClipboardCopy, History, Lightbulb, ListChecks, TrendingUp } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * Entrar no agente: tudo o que ele fez, como está indo e o que melhorar.
@@ -226,6 +226,15 @@ export default function PerfilDoAgente({
     }
   };
 
+  /** Título de bloco dentro da janela: ícone discreto e texto normal (sem caixa alta). */
+  const Titulo = ({ icone: Icone, children, acao }: { icone: typeof TrendingUp; children: ReactNode; acao?: ReactNode }) => (
+    <div className="mb-2 flex min-w-0 items-center">
+      <Icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{children}</h3>
+      {acao}
+    </div>
+  );
+
   return (
     /* CENTRALIZADO, e nao mais gaveta lateral.
        A gaveta jogava o conteudo para a borda e, no telefone, cobria a
@@ -235,19 +244,19 @@ export default function PerfilDoAgente({
       <DialogContent className="flex max-h-[88vh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
         {operador && (
           <>
-            <div className="shrink-0 border-b border-border px-4 pb-3 pt-[max(1.5rem,calc(env(safe-area-inset-top)+0.75rem))]">
-              <DialogTitle className="pr-12 text-left text-[17px] font-bold leading-tight text-foreground">
+            <div className="shrink-0 border-b border-border px-5 pb-3 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+              <DialogTitle className={juntar(texto.tituloPagina, "pr-12 text-left")}>
                 {operador.display_name}
               </DialogTitle>
-              <DialogDescription className="text-left text-[11.5px] text-muted-foreground">
+              <DialogDescription className={juntar(texto.auxiliar, "mt-0.5 text-left leading-5")}>
                 {operador.role} · {operador.scope}
               </DialogDescription>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="text-[10.5px] text-muted-foreground">
+              <div className="mt-2 flex min-w-0 flex-wrap items-center [&>*]:mr-2">
+                <p className={texto.auxiliar}>
                   {operador.last_run_at ? `última execução ${quando(operador.last_run_at)}` : "sem execução ainda"}
                 </p>
                 {operador.status !== "active" && (
-                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                  <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
                     {operador.status === "paused" ? "pausado" : operador.status}
                   </span>
                 )}
@@ -268,8 +277,9 @@ export default function PerfilDoAgente({
                     if (motivo === null) return; // cancelou
                     pausar.mutate({ pausarAgora: pausando, motivo });
                   }}
-                  className={cn(
-                    "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-50",
+                  className={juntar(
+                    botao.secundario,
+                    "h-7 px-2.5 text-[12px]",
                     operador.status === "active"
                       ? "border-warning/50 text-warning hover:bg-warning/10"
                       : "border-success/50 text-success hover:bg-success/10",
@@ -280,13 +290,11 @@ export default function PerfilDoAgente({
               </div>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-4">
               {/* O progresso em números, não em adjetivo. */}
-              <div>
-                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <TrendingUp className="h-3 w-3" /> Progresso
-                </p>
-                <div className="grid grid-cols-3 gap-2">
+              <section>
+                <Titulo icone={TrendingUp}>Progresso</Titulo>
+                <dl className={juntar(superficie.poco, "grid grid-cols-2 gap-x-4 gap-y-3 p-3 sm:grid-cols-3")}>
                   {[
                     { r: "Em andamento", v: numeros.andamento },
                     { r: "Feitas com evidência", v: numeros.comEvidencia },
@@ -295,16 +303,16 @@ export default function PerfilDoAgente({
                     { r: "Falhas de execução", v: numeros.falhas },
                     {
                       r: "Evidência nas conclusões",
-                      v: numeros.taxaEvidencia === null ? "—" : `${numeros.taxaEvidencia}%`,
+                      v: numeros.taxaEvidencia === null ? "sem dado" : `${numeros.taxaEvidencia}%`,
                     },
                   ].map((k) => (
-                    <div key={k.r} className="rounded-lg border border-border bg-card px-2 py-1.5">
-                      <p className="text-[15px] font-bold tabular-nums leading-none text-foreground">{k.v}</p>
-                      <p className="mt-0.5 text-[9px] leading-tight text-muted-foreground">{k.r}</p>
+                    <div key={k.r} className="min-w-0">
+                      <dt className={juntar(texto.auxiliar, "truncate")}>{k.r}</dt>
+                      <dd className="mt-0.5 text-[16px] font-semibold tabular-nums leading-6 text-foreground">{k.v}</dd>
                     </div>
                   ))}
-                </div>
-              </div>
+                </dl>
+              </section>
 
               {/* AS TAREFAS, que era o que faltava.
                   O perfil sabia contar quantas eram e nao mostrava
@@ -313,29 +321,28 @@ export default function PerfilDoAgente({
                   cliente, o estado, a evidencia clicavel e o caminho para
                   abrir a tarefa no Kanban. */}
               {meus.length > 0 && (
-                <div>
-                  <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    <ListChecks className="h-3 w-3" /> Tarefas deste agente
-                    <span className="tabular-nums text-muted-foreground/70">{meus.length}</span>
-                  </p>
-                  <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                <section>
+                  <Titulo icone={ListChecks}>
+                    Tarefas deste agente <span className="ml-1 font-normal tabular-nums text-muted-foreground">{meus.length}</span>
+                  </Titulo>
+                  <ul className="divide-y divide-border border-y border-border">
                     {[...meus]
                       .sort((a, b) => ORDEM_DO_ESTADO.indexOf(a.status) - ORDEM_DO_ESTADO.indexOf(b.status))
                       .map((v) => {
                         const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
                         const tarefaId = v.kanban_task_id || v.painel_task_id;
                         return (
-                          <div key={v.id} className="rounded-lg border border-border bg-card p-2.5">
-                            <div className="flex items-start gap-2">
-                              <span className={cn(
-                                "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
+                          <li key={v.id} className="min-w-0 py-2.5">
+                            <div className="flex min-w-0 items-start">
+                              <span className={juntar(
+                                "mr-2 mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
                                 TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground",
-                              )} />
+                              )} aria-hidden="true" />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-[11.5px] font-semibold text-foreground">
+                                <p className="truncate text-[13px] font-medium text-foreground">
                                   {t?.title || v.last_action || "(tarefa sem título)"}
                                 </p>
-                                <p className="mt-0.5 text-[9.5px] text-muted-foreground">
+                                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
                                   {ROTULO_DO_ESTADO[v.status] ?? v.status}
                                   {t?.project?.client && ` · ${t.project.client.company_name || t.project.client.full_name}`}
                                   {v.updated_at && ` · ${quando(v.updated_at)}`}
@@ -344,159 +351,156 @@ export default function PerfilDoAgente({
                               {tarefaId && (
                                 <a
                                   href={`/kanban?task=${tarefaId}`}
-                                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[9.5px] font-semibold text-muted-foreground hover:text-foreground"
+                                  className={juntar(botao.discreto, "ml-2 h-7 px-2 text-[12px]")}
                                 >
                                   abrir
                                 </a>
                               )}
                             </div>
 
-                            {v.last_evidence && (
-                              <p className="mt-1.5 truncate text-[10px]">
-                                {/^https?:\/\//.test(String(v.last_evidence).trim()) ? (
-                                  <a
-                                    href={String(v.last_evidence).trim()}
-                                    target="_blank"
-                                    rel="noreferrer noopener"
-                                    className="text-info underline underline-offset-2"
-                                  >
-                                    evidência: {String(v.last_evidence).trim()}
-                                  </a>
-                                ) : (
-                                  <span className="text-muted-foreground">
-                                    evidência: {String(v.last_evidence)}
-                                  </span>
-                                )}
-                              </p>
-                            )}
+                            <div className="pl-3.5">
+                              {v.last_evidence && (
+                                <p className="mt-1 truncate text-[12px]">
+                                  {/^https?:\/\//.test(String(v.last_evidence).trim()) ? (
+                                    <a
+                                      href={String(v.last_evidence).trim()}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      className="text-info underline underline-offset-2"
+                                    >
+                                      evidência: {String(v.last_evidence).trim()}
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      evidência: {String(v.last_evidence)}
+                                    </span>
+                                  )}
+                                </p>
+                              )}
 
-                            {v.status === "done" && !v.last_evidence && (
-                              <p className="mt-1.5 text-[10px] text-warning">
-                                concluída sem evidência
-                              </p>
-                            )}
-                            {v.block_reason && (
-                              <p className="mt-1 text-[10px] text-destructive">
-                                bloqueio: {v.block_reason}
-                              </p>
-                            )}
-                            {v.next_step && (
-                              <p className="mt-1 text-[10px] text-muted-foreground">
-                                próximo passo: {v.next_step}
-                              </p>
-                            )}
-                            {precisaDecisao(v) && (
-                              <p className="mt-1 text-[10px] font-semibold text-warning">
-                                precisa da sua aprovação
-                              </p>
-                            )}
-                          </div>
+                              {v.status === "done" && !v.last_evidence && (
+                                <p className="mt-1 text-[12px] text-warning">
+                                  concluída sem evidência
+                                </p>
+                              )}
+                              {v.block_reason && (
+                                <p className="mt-1 text-[12px] text-destructive">
+                                  bloqueio: {v.block_reason}
+                                </p>
+                              )}
+                              {v.next_step && (
+                                <p className="mt-1 text-[12px] text-muted-foreground">
+                                  próximo passo: {v.next_step}
+                                </p>
+                              )}
+                              {precisaDecisao(v) && (
+                                <p className="mt-1 text-[12px] font-medium text-warning">
+                                  precisa da sua aprovação
+                                </p>
+                              )}
+                            </div>
+                          </li>
                         );
                       })}
-                  </div>
-                </div>
+                  </ul>
+                </section>
               )}
 
               {/* O que melhorar: cada linha sai de um número acima. */}
-              <div>
-                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <Lightbulb className="h-3 w-3" /> O que melhorar
-                </p>
-                <div className="space-y-1">
+              <section>
+                <Titulo icone={Lightbulb}>O que melhorar</Titulo>
+                <ul className="space-y-1.5">
                   {melhorias.map((m, i) => (
-                    <p
+                    <li
                       key={i}
-                      className={cn(
-                        "rounded-lg border px-2.5 py-1.5 text-[11px] leading-relaxed",
-                        m.grave
-                          ? "border-warning/30 bg-warning/[0.06] text-warning"
-                          : "border-border bg-card text-muted-foreground",
+                      className={juntar(
+                        "flex items-start text-[12.5px] leading-5",
+                        m.grave ? "text-warning" : "text-muted-foreground",
                       )}
                     >
-                      {m.texto}
-                    </p>
+                      <span className={juntar("mr-2 mt-2 h-1.5 w-1.5 shrink-0 rounded-full", m.grave ? "bg-warning" : "bg-muted-foreground")} aria-hidden="true" />
+                      <span className="min-w-0">{m.texto}</span>
+                    </li>
                   ))}
-                </div>
-              </div>
+                </ul>
+              </section>
 
               {/* O comando pronto: o Hermes recebe o estado sem redigitar. */}
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Acionar no grupo
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void copiar(comandoDeAcionamento, "Comando")}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
-                  >
-                    <ClipboardCopy className="h-3 w-3" /> Copiar
-                  </button>
-                </div>
-                <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-card p-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
+              <section>
+                <Titulo
+                  icone={ClipboardCopy}
+                  acao={
+                    <button
+                      type="button"
+                      onClick={() => void copiar(comandoDeAcionamento, "Comando")}
+                      className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
+                    >
+                      <ClipboardCopy className="mr-1 h-3 w-3" aria-hidden="true" /> Copiar
+                    </button>
+                  }
+                >
+                  Acionar no grupo
+                </Titulo>
+                <pre className={juntar(superficie.poco, "whitespace-pre-wrap p-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]")}>
                   {comandoDeAcionamento}
                 </pre>
-              </div>
+              </section>
 
               {/* Execuções: onde a falha aparece com nome e tentativa. */}
-              <div>
-                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <AlertTriangle className="h-3 w-3" /> Execuções recentes
-                </p>
+              <section>
+                <Titulo icone={AlertTriangle}>Execuções recentes</Titulo>
                 {runs.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground">Nenhuma execução registrada ainda.</p>
+                  <p className={texto.auxiliar}>Nenhuma execução registrada ainda.</p>
                 ) : (
-                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                  <ul className="divide-y divide-border border-y border-border">
                     {runs.map((r) => (
-                      <div key={String(r.id)} className="flex items-baseline gap-2 text-[10.5px]">
-                        <span className={cn(
-                          "shrink-0 font-semibold",
+                      <li key={String(r.id)} className="flex min-w-0 items-baseline py-1.5 text-[12px]">
+                        <span className={juntar(
+                          "mr-2 shrink-0 font-medium",
                           r.status === "done" ? "text-success"
                             : ["failed", "timeout"].includes(String(r.status)) ? "text-destructive"
                             : "text-muted-foreground",
                         )}>
                           {({ started: "começou", progress: "em andamento", done: "concluída", review: "para revisar", awaiting_input: "esperando você", failed: "falhou", timeout: "parou sem sinal" } as Record<string, string>)[String(r.status)] ?? String(r.status)}
                         </span>
-                        <span className="min-w-0 truncate text-muted-foreground" title={`execução ${String(r.run_key)}`}>
+                        <span className="min-w-0 flex-1 truncate text-muted-foreground" title={`execução ${String(r.run_key)}`}>
                           {r.error ? String(r.error) : r.status === "done" ? "sem ocorrências" : ""}
                           {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
                         </span>
-                        <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
+                        <span className="ml-2 shrink-0 tabular-nums text-muted-foreground">
                           {quando(r.finished_at || r.started_at)}
                         </span>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </section>
 
               {/* A trilha imutável: o histórico que ninguém conserta. */}
-              <div>
-                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <History className="h-3 w-3" /> Tudo o que ele fez
-                </p>
+              <section>
+                <Titulo icone={History}>Tudo o que ele fez</Titulo>
                 {trilha.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground">Sem histórico ainda.</p>
+                  <p className={texto.auxiliar}>Sem histórico ainda.</p>
                 ) : (
-                  <div className="max-h-72 space-y-1 overflow-y-auto">
+                  <ul className="divide-y divide-border border-y border-border">
                     {trilha.map((a) => (
-                      <div key={String(a.id)} className="rounded-lg border border-border bg-card px-2.5 py-1.5">
-                        <p className="text-[11px] text-foreground/85">
+                      <li key={String(a.id)} className="min-w-0 py-2">
+                        <p className="text-[12.5px] text-foreground/85 [overflow-wrap:anywhere]">
                           {String(a.action)}
                           {a.old_status && a.new_status && a.old_status !== a.new_status && (
                             <span className="text-muted-foreground"> · {String(a.old_status)} para {String(a.new_status)}</span>
                           )}
                         </p>
-                        <p className="mt-0.5 text-[9.5px] text-muted-foreground">
+                        <p className={juntar(texto.auxiliar, "mt-0.5")}>
                           {quando(a.occurred_at)} · {String(a.actor)}
                           {a.from_cron ? " · via cron" : ""}
                           {a.evidence ? " · com evidência" : ""}
                         </p>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </section>
             </div>
           </>
         )}

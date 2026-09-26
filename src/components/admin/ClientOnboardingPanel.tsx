@@ -4,11 +4,11 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Check, ChevronRight, Loader2, AlertTriangle, RotateCcw, EyeOff,
-  FileSignature, ClipboardList, Sparkles, ExternalLink, Ban,
+  Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Loader2, RotateCcw, EyeOff,
+  FileSignature, ClipboardList, ExternalLink, Ban,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Carregando, EstadoVazio, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 /** Maps service_config keys (from EditClientDrawer) → service_checklists.service_type */
 const SERVICE_TYPE_MAP: Record<string, string[]> = {
@@ -257,19 +257,11 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     setCollapsed((c) => ({ ...c, [phase]: !c[phase] }));
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 text-muted-foreground">
-        <Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando esteira…
-      </div>
-    );
+    return <Carregando linhas={4} rotulo="Carregando a esteira" />;
   }
 
   if (!catalog?.items?.length) {
-    return (
-      <div className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
-        Nenhum checklist disponível para os serviços ativos.
-      </div>
-    );
+    return <EstadoVazio compacto titulo="Sem checklist." descricao="Nenhum item para os serviços ativos deste cliente." />;
   }
 
   const allPhasesCollapsed = PHASE_ORDER.filter((p) => grouped[p]).every((p) => collapsed[p]);
@@ -280,121 +272,116 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     });
     setCollapsed(next);
   };
+  const pendentes = totalCount - doneCount;
 
   return (
-    <div className="space-y-4">
-      {/* Progress banner */}
-      <div className="rounded-xl border border-border bg-secondary/40 p-4">
-        <div className="flex items-center justify-between mb-2 gap-3">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            Esteira de Onboarding
-          </p>
-          <div className="flex items-center gap-2">
-            <p className="font-mono text-sm text-foreground shrink-0">
-              {doneCount}/{totalCount} · {percent}%
-            </p>
+    <div className="min-w-0">
+      {/* Progresso: estado em uma linha, ações à direita, barra fina embaixo */}
+      <div className="flex min-w-0 items-center justify-between">
+        <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate tabular-nums")}>
+          <span className="font-medium text-foreground">
+            {doneCount} de {totalCount}
+          </span>
+          {` · ${percent}%`}
+          {pendentes > 0 && <span className="text-warning">{` · ${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"}`}</span>}
+          {(contract || briefing) && (
+            <span className="text-primary" title="Contrato assinado e briefing entregue marcam os itens sozinhos.">
+              {" · auto-preenchido"}
+            </span>
+          )}
+        </p>
+        <div className="flex shrink-0 items-center [&>*+*]:ml-1">
+          {skippedCount > 0 && (
             <button
-              onClick={toggleAll}
-              className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1 transition-colors"
-              title={allPhasesCollapsed ? "Expandir tudo" : "Recolher tudo"}
+              type="button"
+              onClick={() => setShowSkipped((s) => !s)}
+              aria-pressed={showSkipped}
+              aria-label={showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}
+              className={juntar(botao.discreto, "h-8")}
             >
-              {allPhasesCollapsed ? "Expandir" : "Recolher"}
+              <EyeOff className="h-4 w-4" aria-hidden="true" />
+              <span className="ml-1.5 hidden sm:inline">{showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}</span>
             </button>
-          </div>
-        </div>
-        <div className="h-2 rounded-full bg-background overflow-hidden">
-          <motion.div
-            className="h-full bg-primary"
-            initial={{ width: 0 }}
-            animate={{ width: `${percent}%` }}
-            transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          />
-        </div>
-        <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
-          {percent < 100 ? (
-            <p className="flex items-center gap-1.5 text-[11px] text-warning">
-              <AlertTriangle className="w-3 h-3" />
-              {totalCount - doneCount} item(ns) pendente(s)
-            </p>
-          ) : <span />}
-          <div className="flex items-center gap-3">
-            {(contract || briefing) && (
-              <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-primary">
-                <Sparkles className="w-3 h-3" />
-                Auto-preenchido
-              </p>
-            )}
-            {skippedCount > 0 && (
-              <button
-                onClick={() => setShowSkipped((s) => !s)}
-                className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
-              >
-                <EyeOff className="w-3 h-3" />
-                {showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}
-              </button>
-            )}
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleAll}
+            aria-label={allPhasesCollapsed ? "Expandir tudo" : "Recolher tudo"}
+            title={allPhasesCollapsed ? "Expandir tudo" : "Recolher tudo"}
+            className={juntar(botao.discreto, "h-8")}
+          >
+            {allPhasesCollapsed ? <ChevronsUpDown className="h-4 w-4" aria-hidden="true" /> : <ChevronsDownUp className="h-4 w-4" aria-hidden="true" />}
+            <span className="ml-1.5 hidden sm:inline">{allPhasesCollapsed ? "Expandir" : "Recolher"}</span>
+          </button>
         </div>
       </div>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Progresso do onboarding"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+      >
+        <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${percent}%` }} />
+      </div>
 
-      {/* Phases */}
-      {PHASE_ORDER.filter((p) => grouped[p]).map((phase) => {
-        const phaseLists = grouped[phase];
-        const phaseItems = phaseLists.flatMap((g) => g.items);
-        const phaseDone = phaseItems.filter((i) => stateMap.get(i.id)?.is_done).length;
-        const phasePct =
-          phaseItems.length > 0 ? Math.round((phaseDone / phaseItems.length) * 100) : 0;
-        const isCollapsed = !!collapsed[phase];
-        return (
-          <div key={phase} className="rounded-xl border border-border bg-card overflow-hidden">
-            <button
-              onClick={() => togglePhase(phase)}
-              className="w-full px-4 py-3 border-b border-border flex items-center justify-between hover:bg-secondary/40 transition-colors text-left"
-              aria-expanded={!isCollapsed}
-            >
-              <div className="flex items-center gap-2">
-                <motion.div animate={{ rotate: isCollapsed ? 0 : 90 }} transition={{ duration: 0.2 }}>
-                  <ChevronRight className="w-3.5 h-3.5 text-primary" />
-                </motion.div>
-                <h4 className="text-sm font-semibold text-foreground">{PHASE_LABEL[phase]}</h4>
+      {/* Fases: lista com divisória, cada uma recolhível */}
+      <ul className="mt-4 divide-y divide-border border-y border-border">
+        {PHASE_ORDER.filter((p) => grouped[p]).map((phase) => {
+          const phaseLists = grouped[phase];
+          const phaseItems = phaseLists.flatMap((g) => g.items);
+          const phaseDone = phaseItems.filter((i) => stateMap.get(i.id)?.is_done).length;
+          const phasePct =
+            phaseItems.length > 0 ? Math.round((phaseDone / phaseItems.length) * 100) : 0;
+          const isCollapsed = !!collapsed[phase];
+          return (
+            <li key={phase} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => togglePhase(phase)}
+                className={juntar("flex w-full min-w-0 items-center py-3 text-left hover:bg-muted/40", foco)}
+                aria-expanded={!isCollapsed}
+              >
+                <ChevronRight
+                  className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", !isCollapsed && "rotate-90")}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{PHASE_LABEL[phase]}</span>
                 {phasePct === 100 && phaseItems.length > 0 && (
-                  <Check className="w-3.5 h-3.5 text-primary" />
+                  <Check className="ml-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Fase completa" />
                 )}
-              </div>
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {phaseDone}/{phaseItems.length} · {phasePct}%
-              </span>
-            </button>
-            <AnimatePresence initial={false}>
+                <span className={juntar(texto.auxiliar, "ml-auto shrink-0 pl-3 tabular-nums")}>
+                  {phaseDone} de {phaseItems.length}
+                </span>
+              </button>
               {!isCollapsed && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: "easeInOut" }}
-                >
-                  <div className="divide-y divide-border">
-                    {phaseLists.map((g) => (
-                      <div key={g.list.id} className="px-4 py-3">
-                        <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-2">
-                          {g.list.title}
-                          {g.list.service_type !== "geral" && (
-                            <span className="text-[10px] uppercase text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
-                              {g.list.service_type}
-                            </span>
-                          )}
-                          {g.hiddenCount > 0 && !showSkipped && (
-                            <span className="text-[10px] text-muted-foreground italic">
-                              · {g.hiddenCount} N/A
-                            </span>
-                          )}
-                        </p>
-                        {g.items.length === 0 ? (
-                          <p className="text-[11px] text-muted-foreground italic">
-                            Nenhum item ativo para este cliente.
+                <div className="space-y-3 pb-3 pl-5">
+                  {phaseLists.map((g) => {
+                    const mostrarRotulo =
+                      phaseLists.length > 1 ||
+                      g.list.title !== PHASE_LABEL[phase] ||
+                      g.list.service_type !== "geral" ||
+                      (g.hiddenCount > 0 && !showSkipped);
+                    return (
+                      <div key={g.list.id} className="min-w-0">
+                        {mostrarRotulo && (
+                          <p className={juntar(texto.rotulo, "mb-1 flex min-w-0 items-center")}>
+                            <span className="min-w-0 truncate">{g.list.title}</span>
+                            {g.list.service_type !== "geral" && (
+                              <span className={juntar(etiqueta, "ml-2 bg-muted font-normal text-muted-foreground")}>
+                                {g.list.service_type}
+                              </span>
+                            )}
+                            {g.hiddenCount > 0 && !showSkipped && (
+                              <span className="ml-2 shrink-0 font-normal">{g.hiddenCount} N/A</span>
+                            )}
                           </p>
+                        )}
+                        {g.items.length === 0 ? (
+                          <p className={juntar(texto.auxiliar, "py-1")}>Nenhum item ativo para este cliente.</p>
                         ) : (
-                          <ul className="space-y-2">
+                          <ul className="divide-y divide-border">
                             {g.items.map((it: any) => {
                               const s = stateMap.get(it.id);
                               const checked = !!s?.is_done;
@@ -403,68 +390,71 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                               return (
                                 <li
                                   key={it.id}
-                                  className={`group flex items-start gap-2 rounded-md -mx-2 px-2 py-1.5 transition-colors ${
-                                    skipped
-                                      ? "opacity-60 bg-secondary/20"
-                                      : auto && checked
-                                        ? "bg-primary/5 hover:bg-primary/10"
-                                        : "hover:bg-secondary/30"
-                                  }`}
+                                  className={juntar("flex min-w-0 items-start py-2.5", skipped && "opacity-60")}
                                 >
                                   <button
+                                    type="button"
+                                    role="checkbox"
+                                    aria-checked={checked}
+                                    aria-label={it.label}
                                     onClick={() => toggleItem(it.id, !checked)}
                                     disabled={saving === it.id || skipped}
-                                    className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                      checked
-                                        ? "bg-primary border-primary text-primary-foreground"
-                                        : "border-border bg-background hover:border-primary"
-                                    } disabled:cursor-not-allowed`}
+                                    className={juntar(
+                                      "group/caixa -my-1.5 -ml-2 mr-0.5 flex h-8 min-h-0 w-8 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed",
+                                      foco,
+                                    )}
                                   >
-                                    {checked && <Check className="w-3 h-3" />}
-                                  </button>
-                                  <div className="flex-1 min-w-0">
-                                    <p
-                                      className={`text-xs flex items-center gap-1.5 flex-wrap ${
-                                        checked || skipped
-                                          ? "line-through text-muted-foreground"
-                                          : "text-foreground"
-                                      }`}
+                                    <span
+                                      aria-hidden="true"
+                                      className={juntar(
+                                        "flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                                        checked
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-muted-foreground/50 bg-background group-hover/caixa:border-primary",
+                                      )}
                                     >
-                                      {auto?.kind === "contract" && (
-                                        <FileSignature className="w-3 h-3 text-primary shrink-0" />
-                                      )}
-                                      {auto?.kind === "briefing" && (
-                                        <ClipboardList className="w-3 h-3 text-primary shrink-0" />
-                                      )}
-                                      <span>{it.label}</span>
-                                      {it.is_required && !skipped && (
-                                        <span className="text-destructive">*</span>
+                                      {checked && <Check className="h-3 w-3" />}
+                                    </span>
+                                  </button>
+                                  <div className="min-w-0 flex-1 sm:flex sm:items-start">
+                                    <div className="min-w-0 sm:mr-4 sm:flex-1">
+                                      <p
+                                        className={juntar(
+                                          texto.corpo,
+                                          "flex min-w-0 flex-wrap items-center",
+                                          (checked || skipped) && "text-muted-foreground",
+                                        )}
+                                      >
+                                        {auto?.kind === "contract" && (
+                                          <FileSignature className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                                        )}
+                                        {auto?.kind === "briefing" && (
+                                          <ClipboardList className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                                        )}
+                                        <span className={juntar("min-w-0", (checked || skipped) && "line-through")}>{it.label}</span>
+                                        {it.is_required && !skipped && (
+                                          <span className="ml-0.5 text-destructive" aria-label="obrigatório">*</span>
+                                        )}
+                                        {auto && !skipped && (
+                                          <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Auto</span>
+                                        )}
+                                        {skipped && (
+                                          <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Não necessário</span>
+                                        )}
+                                      </p>
+                                      {it.hint && !skipped && (
+                                        <p className={juntar(texto.auxiliar, "mt-0.5")}>{it.hint}</p>
                                       )}
                                       {auto && !skipped && (
-                                        <span className="text-[9px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                                          Auto
-                                        </span>
+                                        <Link
+                                          to={auto.href}
+                                          className={juntar("mt-1 inline-flex items-center rounded-sm text-[12px] text-primary hover:underline", foco)}
+                                        >
+                                          <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />
+                                          {auto.label}
+                                        </Link>
                                       )}
-                                      {skipped && (
-                                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary px-1.5 py-0.5 rounded no-underline">
-                                          Não necessário
-                                        </span>
-                                      )}
-                                    </p>
-                                    {it.hint && !skipped && (
-                                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                                        {it.hint}
-                                      </p>
-                                    )}
-                                    {auto && !skipped && (
-                                      <Link
-                                        to={auto.href}
-                                        className="inline-flex items-center gap-1 mt-1 text-[11px] text-primary hover:underline"
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        {auto.label}
-                                      </Link>
-                                    )}
+                                    </div>
                                     {!skipped && (
                                       <input
                                         type="text"
@@ -474,32 +464,31 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                                             updateValue(it.id, e.target.value);
                                           }
                                         }}
-                                        placeholder="Link / observação (opcional)"
-                                        className="mt-1 w-full text-[11px] bg-background border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+                                        placeholder="Link ou observação"
+                                        aria-label={`Link ou observação: ${it.label}`}
+                                        className={juntar(campo, "mt-2 h-8 sm:mt-0 sm:w-64 sm:shrink-0")}
                                       />
                                     )}
                                   </div>
                                   <button
+                                    type="button"
                                     onClick={() => setSkipped(it.id, !skipped)}
                                     disabled={saving === it.id}
                                     title={skipped ? "Marcar como necessário" : "Marcar como não necessário"}
-                                    className={`shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-1 rounded border transition-all ${
-                                      skipped
-                                        ? "border-border text-muted-foreground hover:text-primary hover:border-primary opacity-100"
-                                        : "border-transparent text-muted-foreground hover:text-destructive hover:border-destructive/40 opacity-40 group-hover:opacity-100"
-                                    }`}
+                                    aria-label={skipped ? `Restaurar ${it.label}` : `Marcar ${it.label} como não necessário`}
+                                    className={juntar(botao.discreto, "-my-1 ml-2 h-8 min-h-0 px-2 text-[12px]", skipped ? "hover:text-primary" : "hover:text-destructive")}
                                   >
                                     {saving === it.id ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                                     ) : skipped ? (
                                       <>
-                                        <RotateCcw className="w-3 h-3" />
-                                        Restaurar
+                                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                        <span className="ml-1 hidden sm:inline">Restaurar</span>
                                       </>
                                     ) : (
                                       <>
-                                        <Ban className="w-3 h-3" />
-                                        N/A
+                                        <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                                        <span className="ml-1 hidden sm:inline">N/A</span>
                                       </>
                                     )}
                                   </button>
@@ -509,14 +498,14 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                           </ul>
                         )}
                       </div>
-                    ))}
-                  </div>
-                </motion.div>
+                    );
+                  })}
+                </div>
               )}
-            </AnimatePresence>
-          </div>
-        );
-      })}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

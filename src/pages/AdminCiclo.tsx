@@ -45,6 +45,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
+import { AjudaRecolhida, Carregando, EstadoVazio, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 import {
   CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
 } from "@/lib/cycleDefs";
@@ -99,7 +100,7 @@ const hourOf = (iso?: string | null) =>
 export default function AdminCiclo() {
   const { user, profile } = useAuth();
   const canWrite = ["admin", "manager"].includes(profile?.role || "");
-  const { data: clients } = useClients();
+  const { data: clients, isLoading: carregandoClientes } = useClients();
   const queryClient = useQueryClient();
 
   usePwaProfile({
@@ -983,6 +984,7 @@ export default function AdminCiclo() {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    try { window.scrollTo(0, 0); } catch { /* sem janela */ }
   }, [area]);
 
   const coachCacheKey = `aceleriq-coach-${area}-${weekKey}`;
@@ -1275,9 +1277,10 @@ export default function AdminCiclo() {
       <div
         key={client.id}
         ref={(node) => { cardRefs.current[client.id] = node; }}
-        className={`rounded-2xl border p-3 transition-colors ${
-          complete ? "border-success/40 bg-success/[0.06]" : "border-border bg-card"
-        } ${highlighted === client.id ? "ring-2 ring-primary" : ""}`}
+        // Sem caixa (sistema): linha com divisória; semana fechada ganha só a marca verde à esquerda.
+        className={`min-w-0 border-t border-border py-3 transition-colors ${
+          complete ? "border-l-2 border-l-success pl-3" : ""
+        } ${highlighted === client.id ? "rounded-md ring-2 ring-primary" : ""}`}
       >
         {/* Linha de identidade: altura fixa, contador com largura reservada */}
         <button
@@ -1291,21 +1294,21 @@ export default function AdminCiclo() {
           {avulso ? (
             <span
               title="Entrega avulsa: as etapas sao as do servico contratado"
-              className="shrink-0 truncate rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground"
+              className={juntar(etiqueta, "truncate bg-muted text-muted-foreground")}
             >
               {SERVICE_LABELS[servicoDoCard(client) || ""] || "avulso"}
             </span>
           ) : onboarding ? (
             <span
               title="Em onboarding: 6 etapas do ciclo + 4 de entrada"
-              className="shrink-0 rounded bg-info/15 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-info"
+              className={juntar(etiqueta, "bg-info/15 text-info")}
             >
               Novo
             </span>
           ) : (
             <span
               title={`Fase do método A.C.E.L.E.R.A: ${PHASE_LABELS[phaseOf(client)]}`}
-              className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground"
+              className={juntar(etiqueta, "bg-muted text-muted-foreground")}
             >
               {PHASE_LABELS[phaseOf(client)]}
             </span>
@@ -1415,9 +1418,9 @@ export default function AdminCiclo() {
 
         {/* Avulso: uma entrega, uma fila — o holofote sequencial. */}
         {avulso && nextStep && (
-          <div className="mb-1.5 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.06] p-2.5">
-            <div className="min-w-0 flex-1">
-              <p className="text-[9.5px] font-bold uppercase tracking-wider text-primary">
+          <div className={juntar(superficie.poco, "mb-1.5 flex items-center p-2.5")}>
+            <div className="mr-2 min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-primary">
                 Agora · {doneCount + 1} de {clientTotal}
               </p>
               <p className="truncate text-[12.5px] font-semibold leading-snug text-foreground">
@@ -1438,7 +1441,7 @@ export default function AdminCiclo() {
           </div>
         )}
         {complete && (
-          <p className="mb-1.5 rounded-xl border border-success/30 bg-success/[0.08] p-2 text-center text-[11.5px] font-semibold text-success">
+          <p className="mb-1.5 py-1 text-center text-[12px] font-semibold text-success">
             {avulso ? "Entrega completa 🎉" : "Semana fechada 🎉 Cliente sai da fila."}
           </p>
         )}
@@ -1449,7 +1452,7 @@ export default function AdminCiclo() {
             de jogo, REAL: cada Feito marca a etapa de verdade no
             histórico. Corrigir uma marcação é na folha (toque no nome). */}
         {!avulso ? (
-          <div className="space-y-1.5">
+          <div className="divide-y divide-border border-t border-border">
             {FRENTES_DA_SEMANA.map((frente) => {
               const aberta = frente.steps.find((s) => !etapaFeita(client, s)) ?? null;
               const feitasNaFila = frente.steps.filter((s) => etapaFeita(client, s)).length;
@@ -1457,9 +1460,9 @@ export default function AdminCiclo() {
                 return (
                   <div
                     key={frente.nome}
-                    className="flex h-8 items-center gap-2 rounded-lg border border-success/25 bg-success/[0.05] px-2.5"
+                    className="flex h-9 items-center"
                   >
-                    <Check className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
+                    <Check className="mr-2 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                     <span className="text-[11px] font-semibold text-success">
                       {frente.nome} fechada
                     </span>
@@ -1470,10 +1473,10 @@ export default function AdminCiclo() {
               return (
                 <div
                   key={frente.nome}
-                  className="flex items-center gap-2 rounded-xl border border-border bg-secondary/20 p-2"
+                  className="flex items-center py-2"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="mr-2 min-w-0 flex-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">
                       {frente.nome} · {feitasNaFila + 1} de {frente.steps.length}
                     </p>
                     <p className="truncate text-[12px] font-semibold leading-snug text-foreground">
@@ -1514,8 +1517,8 @@ export default function AdminCiclo() {
             conta conectou, a arte subiu. E a sequência sai do que ELE
             contratou, então quem não tem tráfego nunca vê campanha. */}
         {onboarding && !avulso && jornadaDe(client) && (
-          <div className="mt-2 space-y-1 rounded-xl border border-info/25 bg-info/[0.04] p-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-info">
+          <div className={juntar(superficie.poco, "mt-2 space-y-1 p-2.5")}>
+            <p className="text-[11px] font-medium text-info">
               Entrada do cliente · {ondeEstaNaEntrada(jornadaDe(client)!)}
             </p>
             {jornadaDe(client)!.map((etapa) => (
@@ -1656,9 +1659,12 @@ export default function AdminCiclo() {
             <Menu className="h-5 w-5" />
           </button>
           <div className="min-w-0 text-center">
-            <p className="flex items-center justify-center gap-1.5 text-[15px] font-bold leading-tight text-foreground">
-              <ListChecks className="h-4 w-4 text-primary" /> Ciclo da Semana
-            </p>
+            <h1 className="flex items-center justify-center text-[16px] font-semibold leading-tight text-foreground">
+              <ListChecks className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Ciclo da Semana
+              <AjudaRecolhida className="ml-1 min-h-0" titulo="Ciclo da Semana">
+                Seis etapas por cliente em cada frente, em três filas. Marque Feito na etapa da vez; toque no nome do cliente para ver a evolução e num dia da semana para ver o que foi feito nele.
+              </AjudaRecolhida>
+            </h1>
             <p className="truncate text-[10px] leading-tight text-muted-foreground">{avulsosAbertos ? "Clientes avulsos" : cycle.label}</p>
           </div>
           <button
@@ -1686,7 +1692,7 @@ export default function AdminCiclo() {
             </span>
             <span className="block text-[9.5px] leading-tight text-muted-foreground">
               {isCurrentWeek
-                ? "toque num dia para ver o que aconteceu"
+                ? "Semana atual"
                 : `${Math.abs(weekOffset)} ${Math.abs(weekOffset) === 1 ? "semana" : "semanas"} ${weekOffset < 0 ? "atrás" : "à frente"} · voltar para hoje`}
             </span>
           </button>
@@ -1716,7 +1722,7 @@ export default function AdminCiclo() {
                 }`}
                 aria-label={`Dia ${day.getDate()}: ${count} ${count === 1 ? "marcação" : "marcações"}`}
               >
-                <span className={`text-[8.5px] uppercase leading-none ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                <span className={`text-[10px] leading-none ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
                   {WEEKDAY_INITIALS[index]}
                 </span>
                 <span className={`text-[13px] font-semibold leading-tight tabular-nums ${isToday ? "text-primary" : "text-foreground"}`}>
@@ -1771,28 +1777,23 @@ export default function AdminCiclo() {
       {/* Conteúdo ancorado entre o topo e a barra, exatamente como no painel:
           a rolagem acontece aqui dentro e a área termina onde a barra começa,
           sem sobra e sem depender de altura de tela reportada pelo sistema. */}
+      <div aria-hidden style={{ height: headerH }} />
       <div
         ref={scrollRef}
-        className="fixed inset-x-0 z-0 mx-auto w-full max-w-3xl overflow-y-auto overflow-x-hidden px-3 py-3"
-        style={{
-          top: headerH,
-          bottom: "calc(env(safe-area-inset-bottom) + 56px)",
-          WebkitOverflowScrolling: "touch",
-          overscrollBehavior: "contain",
-        }}
+        className="mx-auto w-full min-w-0 max-w-5xl px-3 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-3 sm:px-4"
       >
-        <div className="w-full space-y-2.5">
+        <div className="w-full min-w-0 space-y-3">
           {nextUp && canWrite && (
             <button
               type="button"
               onClick={jumpToNext}
-              className="flex w-full items-center gap-2.5 rounded-2xl border border-primary/30 bg-primary/[0.06] p-3 text-left"
+              className="flex w-full items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] p-3 text-left"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-bold tabular-nums text-primary">
                 {nextUp.step}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-primary">
+                <span className="block text-[11px] font-medium text-primary">
                   Continuar de onde parou
                 </span>
                 <span className="block truncate text-[13px] font-semibold text-foreground">
@@ -1805,9 +1806,9 @@ export default function AdminCiclo() {
           )}
 
           {coach?.coach && (
-            <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-3">
+            <div className={juntar(superficie.poco, "p-3")}>
               <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-primary">
+                <p className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
                   <Sparkles className="h-3 w-3" /> Coach da semana
                 </p>
                 <button
@@ -1829,35 +1830,15 @@ export default function AdminCiclo() {
               abrir qualquer um levava ao checklist de social media, que não
               é o trabalho dele. */}
           {avulsosAbertos && servicosDosAvulsos.length > 0 && (
-            <div className="-mx-0.5 flex snap-x gap-1.5 overflow-x-auto px-0.5 pb-0.5">
-              <button
-                type="button"
-                onClick={() => setServicoAvulso(null)}
-                className={`shrink-0 snap-start cursor-pointer rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
-                  servicoAvulso === null
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Todos
-                <span className="ml-1 tabular-nums opacity-70">{totalAvulsos}</span>
-              </button>
-              {servicosDosAvulsos.map(({ servico, total }) => (
-                <button
-                  key={servico}
-                  type="button"
-                  onClick={() => setServicoAvulso(servico)}
-                  className={`shrink-0 snap-start cursor-pointer rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
-                    servicoAvulso === servico
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {SERVICE_LABELS[servico] || servico}
-                  <span className="ml-1 tabular-nums opacity-70">{total}</span>
-                </button>
-              ))}
-            </div>
+            <SeletorCompacto
+              rotulo="Serviço"
+              valor={servicoAvulso || ""}
+              onEscolher={(v) => setServicoAvulso(v || null)}
+              opcoes={[
+                { valor: "", rotulo: "Todos", contador: totalAvulsos },
+                ...servicosDosAvulsos.map(({ servico, total }) => ({ valor: servico, rotulo: SERVICE_LABELS[servico] || servico, contador: total })),
+              ]}
+            />
           )}
 
           {/* A faixa de HOJE: as ações mais urgentes da carteira inteira,
@@ -1874,8 +1855,8 @@ export default function AdminCiclo() {
             );
             if (acoes.length === 0) return null;
             return (
-              <div className="mb-3 rounded-2xl border border-border bg-card p-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <p className={juntar(texto.tituloSecao, "mb-1.5 text-[14px]")}>
                   O que pede ação hoje
                 </p>
                 <div className="space-y-1.5">
@@ -1936,25 +1917,25 @@ export default function AdminCiclo() {
             );
           })()}
 
-          {openClients.map(renderClientCard)}
+          {carregandoClientes ? (
+            <Carregando rotulo="Carregando os clientes" linhas={4} />
+          ) : (
+            <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6 empty:border-b-0">{openClients.map(renderClientCard)}</div>
+          )}
 
-          {activeClients.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-              <p className="text-sm font-medium text-foreground">
-                {avulsosAbertos
+          {!carregandoClientes && activeClients.length === 0 && (
+            <EstadoVazio
+              titulo={<>{avulsosAbertos
                   ? servicoAvulso
                     ? `Nenhum avulso de ${SERVICE_LABELS[servicoAvulso] || servicoAvulso}`
                     : "Nenhum cliente avulso ativo"
-                  : `Nenhum cliente de ${cycle.label.toLowerCase()}`}
-              </p>
-              <p className="mt-1 text-[11.5px] text-muted-foreground">
-                {avulsosAbertos
+                  : `Nenhum cliente de ${cycle.label.toLowerCase()}`}</>}
+              descricao={<>{avulsosAbertos
                   ? servicoAvulso
                     ? `Nenhum cliente avulso de ${SERVICE_LABELS[servicoAvulso] || servicoAvulso} agora. Toque em "Todos" para ver os outros.`
                     : "Cliente avulso é o cadastrado como entrega pontual, sem contrato correndo. Nenhum está ativo agora."
-                  : `A lista usa o serviço marcado no cadastro. Marque "${area === "social" ? "Social" : "Tráfego"}" em Clientes, ou use "Incluir cliente nesta frente" aqui embaixo.`}
-              </p>
-            </div>
+                  : `A lista usa o serviço marcado no cadastro. Marque "${area === "social" ? "Social" : "Tráfego"}" em Clientes, ou use "Incluir cliente nesta frente" aqui embaixo.`}</>}
+            />
           )}
 
           {/* Sumiu da lista? Foi concluído. Dizer para onde foi evita a
@@ -1974,7 +1955,7 @@ export default function AdminCiclo() {
               <button
                 type="button"
                 onClick={() => setShowClosed((current) => !current)}
-                className="flex h-10 w-full items-center justify-between rounded-xl border border-success/25 bg-success/5 px-3 text-left"
+                className="flex h-10 w-full items-center justify-between rounded-lg border border-success/25 bg-success/5 px-3 text-left"
               >
                 <span className="text-[11.5px] font-semibold text-success">
                   {closedClients.length} {closedClients.length === 1 ? "cliente fechado" : "clientes fechados"}
@@ -1983,7 +1964,7 @@ export default function AdminCiclo() {
                   {showClosed ? "esconder" : "ver"}
                 </span>
               </button>
-              {showClosed && closedClients.map(renderClientCard)}
+              {showClosed && <div className="grid min-w-0 grid-cols-1 border-b border-border lg:grid-cols-2 lg:gap-x-6">{closedClients.map(renderClientCard)}</div>}
             </div>
           )}
 
@@ -1991,11 +1972,11 @@ export default function AdminCiclo() {
               o caso real: o cliente em preparação, o que entrou no meio da
               semana, o que pediu uma frente por fora. */}
           {!avulsosAbertos && clientesDeFora.length > 0 && (
-            <div className="mt-1 rounded-2xl border border-border bg-card px-3 py-2">
+            <div className="border-t border-border pt-3">
               <button
                 type="button"
                 onClick={() => setAbrirInclusao((valor) => !valor)}
-                className="w-full text-left text-[11px] font-semibold text-foreground"
+                className="w-full text-left text-[13px] font-medium text-foreground"
               >
                 Incluir cliente nesta frente
                 <span className="ml-1.5 font-normal text-muted-foreground">
@@ -2023,7 +2004,7 @@ export default function AdminCiclo() {
                         client.company_name || client.full_name || "Cliente",
                       )
                     }
-                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/40 px-2.5 py-1.5 text-left disabled:opacity-40"
+                    className="flex w-full items-center justify-between gap-2 border-b border-border py-2 text-left last:border-b-0 disabled:opacity-40"
                   >
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate text-[12px] text-foreground">
@@ -2183,7 +2164,7 @@ export default function AdminCiclo() {
                 ? row.done_by === user?.id ? "você" : doneByNames?.[row.done_by] || "equipe"
                 : null;
               return (
-                <div key={row.id} className="flex items-start gap-2.5 rounded-xl border border-border bg-card p-2.5">
+                <div key={row.id} className="flex items-start gap-2.5 border-b border-border py-2.5 last:border-b-0">
                   <span className="w-10 shrink-0 text-[10.5px] font-semibold tabular-nums text-muted-foreground">
                     {hourOf(row.done_at)}
                   </span>
@@ -2195,7 +2176,7 @@ export default function AdminCiclo() {
                       {row.step}. {label}
                     </span>
                   </span>
-                  <span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
+                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
                     {rowCycle.short}
                   </span>
                 </div>
@@ -2254,7 +2235,7 @@ export default function AdminCiclo() {
               </button>
             )}
             <div className="my-2 border-t border-border" />
-            <p className="px-3 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <p className={juntar(texto.rotulo, "px-3 pb-1")}>
               Ir para o painel
             </p>
             {MENU_LINKS.map((link) => (
@@ -2314,8 +2295,8 @@ export default function AdminCiclo() {
               })}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-border bg-card p-3">
-                <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div className={juntar(superficie.poco, "p-3")}>
+                <p className={texto.rotulo}>
                   Sequência
                 </p>
                 <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
@@ -2325,8 +2306,8 @@ export default function AdminCiclo() {
                   </span>
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-card p-3">
-                <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div className={juntar(superficie.poco, "p-3")}>
+                <p className={texto.rotulo}>
                   Esta semana
                 </p>
                 <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
@@ -2377,7 +2358,7 @@ export default function AdminCiclo() {
                 <span className="min-w-0">
                   {slot.label}
                   {!slot.fixed && (
-                    <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="ml-1.5 text-[11px] text-muted-foreground">
                       · muda toda semana
                     </span>
                   )}
@@ -2385,7 +2366,7 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
-          <p className="mt-4 px-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <p className={juntar(texto.rotulo, "mt-4 px-4")}>
             Onboarding · etapas 7 a 10
           </p>
           <ol className="mt-2 space-y-2 px-4">

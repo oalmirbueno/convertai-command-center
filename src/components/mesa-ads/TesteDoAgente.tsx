@@ -23,7 +23,7 @@ export default function TesteDoAgente({ plano }: { plano: PlanoAds }) {
     ["Critério de vitória", t.criterio_vitoria],
   ] as [string, string][]);
   return (
-    <section className="min-w-0 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Teste montado pelo agente sênior">
+    <section className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Teste montado pelo agente sênior">
       <h3 className="flex items-center text-[13.5px] font-semibold">
         <Briefcase className="mr-1.5 h-4 w-4 text-primary" />
         Teste montado pelo agente sênior

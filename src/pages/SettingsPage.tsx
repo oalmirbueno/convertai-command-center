@@ -1,81 +1,74 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { Bell, ChevronRight, Moon, Palette, Shield, Sun, User } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
-import { User, Bell, Shield, Sun, Moon } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { CabecalhoDePagina, SeletorCompacto, foco, juntar, texto } from "@/components/sistema";
+
+/**
+ * Configurações: uma lista limpa, uma linha por assunto (ícone, título curto e
+ * a ação à direita). Tema no segmentado; Perfil e Segurança abrem o perfil
+ * (onde a senha muda); Notificações abre o painel de avisos.
+ */
+
+function IconeDaLinha({ children }: { children: ReactNode }) {
+  return (
+    <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const sections = [
-    { icon: User, label: "Perfil", desc: "Editar nome, empresa e foto", action: () => navigate("/perfil") },
-    { icon: Bell, label: "Notificações", desc: "Consultar avisos e acompanhar atualizações", action: () => setNotificationsOpen(true) },
-    { icon: Shield, label: "Segurança", desc: "Alterar sua senha na página de perfil", action: () => navigate("/perfil") },
+  const linhas = [
+    { icon: User, label: "Perfil", apoio: "Nome, empresa e foto", action: () => navigate("/perfil") },
+    { icon: Bell, label: "Notificações", apoio: "Avisos e atualizações", action: () => setNotificationsOpen(true) },
+    { icon: Shield, label: "Segurança", apoio: "Senha, no perfil", action: () => navigate("/perfil") },
   ];
 
   return (
-    <div className="-mx-4 flex h-full min-h-0 w-auto flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-        <p className="heading-page">Configurações</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Personalize a aparência, consulte avisos e acesse seu perfil e senha.
-        </p>
-      </div>
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina titulo="Configurações" ajuda="Tema do painel, avisos, perfil e senha." />
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {/* Aparência */}
-          <div className="bg-card border border-border rounded-xl p-5 space-y-3 md:col-span-2 xl:col-span-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Aparência</p>
-              <p className="text-[11px] text-muted-foreground">Alterne entre tema claro e escuro.</p>
-            </div>
-            <div className="bg-secondary/40 border border-border rounded-xl p-1.5 flex gap-1 max-w-md">
-              <button
-                onClick={() => setTheme("dark")}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                  theme === "dark"
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Moon className="w-4 h-4" />
-                Escuro
-              </button>
-              <button
-                onClick={() => setTheme("light")}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                  theme === "light"
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Sun className="w-4 h-4" />
-                Claro
-              </button>
-            </div>
-          </div>
-
-          {/* Sections as cards */}
-          {sections.map((s) => (
+      <ul className="max-w-3xl divide-y divide-border border-y border-border">
+        <li className="flex min-w-0 items-center py-3">
+          <IconeDaLinha>
+            <Palette className="h-4 w-4" />
+          </IconeDaLinha>
+          <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>Aparência</span>
+          <SeletorCompacto
+            rotulo="Tema"
+            valor={theme}
+            onEscolher={(v) => setTheme(v === "light" ? "light" : "dark")}
+            opcoes={[
+              { valor: "dark", rotulo: "Escuro", icone: <Moon className="h-3.5 w-3.5" /> },
+              { valor: "light", rotulo: "Claro", icone: <Sun className="h-3.5 w-3.5" /> },
+            ]}
+          />
+        </li>
+        {linhas.map((s) => (
+          <li key={s.label} className="min-w-0">
             <button
-              key={s.label}
+              type="button"
               onClick={s.action}
-              className="group bg-card border border-border rounded-xl p-5 flex flex-col gap-3 hover:border-primary/40 hover:bg-secondary/20 transition-all cursor-pointer text-left"
+              className={juntar("flex w-full min-w-0 items-center rounded-md py-3 text-left transition-colors hover:bg-muted/50", foco)}
             >
-              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                <s.icon className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{s.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{s.desc}</p>
-              </div>
+              <IconeDaLinha>
+                <s.icon className="h-4 w-4" />
+              </IconeDaLinha>
+              <span className={juntar(texto.corpo, "mr-3 min-w-0 truncate font-medium")}>{s.label}</span>
+              <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 flex-1 truncate text-right sm:block")}>{s.apoio}</span>
+              <span className="min-w-0 flex-1 sm:hidden" aria-hidden="true" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>
-          ))}
-        </div>
-      </div>
+          </li>
+        ))}
+      </ul>
+
       {notificationsOpen && <NotificationsPanel open={notificationsOpen} onOpenChange={setNotificationsOpen} />}
     </div>
   );

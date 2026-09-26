@@ -45,16 +45,18 @@ export function RitualEstruturado({ body, nextSteps, compact = false, className 
         <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">{e.solto.join("\n")}</p>
       )}
       {blocos.map((b, i) => (
-        <section key={`${b.titulo}-${i}`} className="rounded-lg border border-border/70 bg-secondary/25 px-3.5 py-2.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary">{rotulo(b.titulo)}</p>
+        // Sistema de design: bloco sem caixa (quem mostra o ritual já está num
+        // painel); o título do bloco é um rótulo curto, sem caixa alta.
+        <section key={`${b.titulo}-${i}`} className="min-w-0">
+          <p className="text-[12px] font-medium leading-4 text-primary">{rotulo(b.titulo)}</p>
           {b.linhas.length > 1 ? (
             <ul className="mt-1 space-y-1">
               {b.linhas.map((l, j) => (
-                <li key={j} className="flex gap-2 text-[12.5px] leading-relaxed text-foreground"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />{l}</li>
+                <li key={j} className="flex text-[13px] leading-5 text-foreground"><span className="mr-2 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" aria-hidden="true" /><span className="min-w-0">{l}</span></li>
               ))}
             </ul>
           ) : (
-            <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{b.linhas[0] ?? ""}</p>
+            <p className="mt-1 text-[13px] leading-5 text-foreground">{b.linhas[0] ?? ""}</p>
           )}
         </section>
       ))}
@@ -64,9 +66,9 @@ export function RitualEstruturado({ body, nextSteps, compact = false, className 
         </p>
       )}
       {!compact && !passoRepetido && (
-        <section className="rounded-lg border border-primary/25 bg-primary/[0.05] px-3.5 py-2.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary">Próximo passo combinado</p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{passo}</p>
+        <section className="min-w-0 border-l-2 border-primary/60 pl-3">
+          <p className="text-[12px] font-medium leading-4 text-primary">Próximo passo combinado</p>
+          <p className="mt-1 text-[13px] leading-5 text-foreground">{passo}</p>
         </section>
       )}
       {!compact && e.fechamento && <p className="text-[12px] leading-relaxed text-muted-foreground">{e.fechamento}</p>}

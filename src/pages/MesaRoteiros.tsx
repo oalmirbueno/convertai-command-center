@@ -10,9 +10,15 @@ import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { CustoCompacto } from "@/components/mesa/CustoCompacto";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
-import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
-import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import Etapas from "@/components/sistema/Etapas";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { Clapperboard } from "lucide-react";
 
 /**
  * Mesa Roteiros (/mesa-roteiros, só equipe: admin, gestor e design), Frente
@@ -26,7 +32,8 @@ import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components
  * (gerar com custo antes e editar), Revisão (versões, comentários, aprovar,
  * gravado, arquivar), PDF (padrão do documento de roteiro da agência, Baixar
  * e Compartilhar com o cliente) e Modelos (memória do cliente e da agência).
- * O agente da mesa fica à mão em todas as etapas, com ações confirmadas.
+ * O agente da mesa fica fixo ao lado das etapas (lateral da AreaDeTrabalho;
+ * no celular, a gaveta do botão de baixo), com ações confirmadas.
  */
 
 const carregarAgenda = () => import("@/components/mesa-roteiros/EtapaAgenda");
@@ -81,13 +88,12 @@ function gravarOnde(clientId: string, etapa: string, nome: string | null) {
 }
 
 function EsqueletoDaEtapa() {
-  return (
-    <div aria-busy="true" aria-label="Abrindo a etapa" className="space-y-3">
-      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted sm:w-1/3" />
-      <div className="h-28 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
-    </div>
-  );
+  return <Carregando forma="aba" rotulo="Abrindo a etapa" />;
+}
+
+/** Enquanto o agente baixa (primeira abertura): a casca dele, sem texto. */
+function EsqueletoDoAgente() {
+  return <div aria-busy="true" aria-label="Abrindo o agente" className="h-full min-h-[320px] animate-pulse rounded-lg border border-border bg-card" />;
 }
 
 export default function MesaRoteiros() {
@@ -111,7 +117,6 @@ export default function MesaRoteiros() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
-  const [agenteAberto, setAgenteAberto] = useState(false);
   const telaCheia = useTelaCheiaDaMesa();
 
   const role = profile?.role || "";
@@ -130,6 +135,8 @@ export default function MesaRoteiros() {
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
+  // Rascunho do campo do agente, guardado por cliente (sair e voltar mantém).
+  const [rascunhoDoAgente, setRascunhoDoAgente] = useEstadoDaTela<string>(`mesa-roteiros:agente:rascunho:${clientId || "sem-cliente"}`, "");
 
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
     const next = new URLSearchParams(params);
@@ -214,92 +221,95 @@ export default function MesaRoteiros() {
     : null;
 
   return (
-    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-24 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa Roteiros</h1>
-        <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
-          <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
-            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Roteiros</span>
-            <SeletorDeClientesDaMesa mesa="roteiros" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
-          </div>
-          {clientId && (
-            <nav
-              aria-label="Etapas da Mesa Roteiros"
-              className="order-last mt-2 grid w-full grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
-            >
-              {ETAPAS_DA_MESA_ROTEIROS.map((e, i) => (
-                <button
-                  key={e.valor}
-                  type="button"
-                  onClick={() => mudar({ etapa: e.valor })}
-                  aria-current={etapa === e.valor ? "page" : undefined}
-                  className={`min-w-0 truncate rounded-md px-1 py-1.5 text-[12px] font-medium transition-colors lg:flex-auto lg:px-1.5 ${
-                    etapa === e.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline lg:hidden 2xl:inline">{i + 1}</span>
-                  {e.rotulo}
-                </button>
-              ))}
-            </nav>
-          )}
-          {clientId && <TrocaDeMesas atual="roteiros" clientId={clientId} />}
-          {clientId && (
-            <CustoCompacto
-              saldoUsd={saldoUsd}
-              consumo={consumo.data || null}
-              previsao={previsao.data || null}
-              carregando={consumo.isLoading}
-              podeRecarregar={podeRecarregar}
-              isAdmin={isAdmin}
-              onRecarregar={() => setRecargaAberta(true)}
-              onChaves={() => {
-                setChavesUsadas(true);
-                setChavesAbertas(true);
-              }}
-              onModelos={() => {
-                setModelosUsados(true);
-                setModelosAbertos(true);
-              }}
-            />
-          )}
-          <BotaoDeTelaCheia tela={telaCheia} />
-        </div>
-      </header>
+    // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx).
+    <CascaDaMesa
+      mesa="roteiros"
+      titulo="Mesa Roteiros"
+      clientId={clientId}
+      telaCheia={telaCheia}
+      cliente={<SeletorDeClientesDaMesa mesa="roteiros" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
+      etapas={
+        clientId ? (
+          <Etapas
+            rotulo="Etapas da Mesa Roteiros"
+            numerar
+            itens={ETAPAS_DA_MESA_ROTEIROS.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))}
+            valor={etapa}
+            onEscolher={(v) => mudar({ etapa: v })}
+          />
+        ) : null
+      }
+      acoes={
+        clientId ? (
+          <CustoCompacto
+            saldoUsd={saldoUsd}
+            consumo={consumo.data || null}
+            previsao={previsao.data || null}
+            carregando={consumo.isLoading}
+            podeRecarregar={podeRecarregar}
+            isAdmin={isAdmin}
+            onRecarregar={() => setRecargaAberta(true)}
+            onChaves={() => {
+              setChavesUsadas(true);
+              setChavesAbertas(true);
+            }}
+            onModelos={() => {
+              setModelosUsados(true);
+              setModelosAbertos(true);
+            }}
+          />
+        ) : null
+      }
+    >
 
       {!clientId && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Roteiros dele.</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            As peças de vídeo da agenda viram roteiro de gravação: gancho, falas com tempo, direção, texto na tela, apoio, CTA e legenda. Revisão com versões e o PDF para o cliente.
-          </p>
-        </div>
+        <EstadoVazio
+          icone={<Clapperboard className="h-5 w-5" />}
+          titulo="Escolha um cliente para abrir a Mesa Roteiros dele."
+          descricao="Peças de vídeo da agenda viram roteiro de gravação, com revisão e PDF."
+        />
       )}
 
       {valor && (
         <MesaProvider valor={valor}>
-          <div key={valor.clientId} className="min-w-0">
-            <Suspense fallback={<EsqueletoDaEtapa />}>
-              {etapa === "agenda" && <EtapaAgenda onAbrirRoteiro={(id) => abrirRoteiro(id)} onNovoDaPeca={novoDaPeca} onAvulso={() => novoAvulso()} />}
-              {etapa === "roteiro" && (
-                <EtapaRoteiro
-                  roteiroId={roteiroUrl}
-                  tarefaId={tarefaUrl}
-                  avulso={avulso}
-                  modeloId={modeloUrl}
-                  onAberto={(id) => mudar({ roteiro: id, tarefa: null, avulso: null, modelo: null }, true)}
-                  onIrPara={(e, id) => mudar({ etapa: e, roteiro: id || roteiroUrl })}
-                  onVoltar={() => mudar({ etapa: "agenda", roteiro: null, tarefa: null, avulso: null, modelo: null })}
-                />
-              )}
-              {etapa === "revisao" && <EtapaRevisao roteiroId={roteiroUrl} onAbrirRoteiro={(id, e) => abrirRoteiro(id, e || "revisao")} />}
-              {etapa === "pdf" && <EtapaPdf roteiroId={roteiroUrl} />}
-              {etapa === "modelos" && <EtapaModelos onUsarModelo={(id) => novoAvulso(id)} />}
-            </Suspense>
-            <Suspense fallback={null}>
-              <AgenteRoteirista aberto={agenteAberto} onAberto={setAgenteAberto} roteiroId={roteiroUrl} onAbrirRoteiro={(id) => abrirRoteiro(id)} />
-            </Suspense>
-          </div>
+          {/* Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no
+              computador a etapa rola por dentro e o agente fica parado ao lado,
+              com o campo sempre à vista; no celular a página rola normal e o
+              agente abre em tela cheia pelo botão de baixo. */}
+          <AreaDeTrabalho
+            key={valor.clientId}
+            memoria="mesa-roteiros"
+            rotuloDaLateral="Agente de roteiros"
+            iconeDaLateral={<Clapperboard className="h-4 w-4" />}
+            rotuloDoPrincipal="Etapa da Mesa Roteiros"
+            principalRolavel={false}
+            lateral={
+              <Suspense fallback={<EsqueletoDoAgente />}>
+                <AgenteRoteirista roteiroId={roteiroUrl} onAbrirRoteiro={(id) => abrirRoteiro(id)} rascunho={rascunhoDoAgente} onRascunho={setRascunhoDoAgente} />
+              </Suspense>
+            }
+          >
+            {/* Uma região por etapa e cliente: trocar de etapa e voltar devolve a rolagem. */}
+            <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-roteiros:${valor.clientId}:${etapa}`} className="pb-24 lg:pr-1" data-regiao-da-etapa={etapa}>
+              <Suspense fallback={<EsqueletoDaEtapa />}>
+                {etapa === "agenda" && <EtapaAgenda onAbrirRoteiro={(id) => abrirRoteiro(id)} onNovoDaPeca={novoDaPeca} onAvulso={() => novoAvulso()} />}
+                {etapa === "roteiro" && (
+                  <EtapaRoteiro
+                    roteiroId={roteiroUrl}
+                    tarefaId={tarefaUrl}
+                    avulso={avulso}
+                    modeloId={modeloUrl}
+                    onAberto={(id) => mudar({ roteiro: id, tarefa: null, avulso: null, modelo: null }, true)}
+                    onIrPara={(e, id) => mudar({ etapa: e, roteiro: id || roteiroUrl })}
+                    onVoltar={() => mudar({ etapa: "agenda", roteiro: null, tarefa: null, avulso: null, modelo: null })}
+                  />
+                )}
+                {etapa === "revisao" && <EtapaRevisao roteiroId={roteiroUrl} onAbrirRoteiro={(id, e) => abrirRoteiro(id, e || "revisao")} />}
+                {etapa === "pdf" && <EtapaPdf roteiroId={roteiroUrl} />}
+                {etapa === "modelos" && <EtapaModelos onUsarModelo={(id) => novoAvulso(id)} />}
+              </Suspense>
+            </RegiaoRolavel>
+          </AreaDeTrabalho>
 
           {podeRecarregar && (
             <DialogoDeRecarga
@@ -326,6 +336,6 @@ export default function MesaRoteiros() {
           )}
         </MesaProvider>
       )}
-    </div>
+    </CascaDaMesa>
   );
 }

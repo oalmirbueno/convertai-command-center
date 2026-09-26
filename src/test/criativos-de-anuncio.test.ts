@@ -109,7 +109,9 @@ describe("a galeria mostra a peca e o numero", () => {
   });
 
   it("a lista de contas da Meta tem rolagem propria", () => {
-    expect(tela).toContain("max-h-[22rem] space-y-1.5 overflow-y-auto");
+    // Sistema de design: rola por dentro so de 1024 px para cima; no celular
+    // a pagina rola normal (nada de caixa prendendo o dedo).
+    expect(tela).toContain("lg:max-h-[22rem] lg:overflow-y-auto");
   });
 
   it("atualizar agora colhe campanhas E criativos", () => {
@@ -154,7 +156,8 @@ describe("busca, filtro e rolagem na galeria", () => {
     // Metade da carteira nunca rodou: 19 das 34 da Verzelo. Elas precisam
     // existir em algum lugar, mas quem abre a tela para decidir verba esta
     // olhando as que gastaram.
-    expect(galeria).toContain('useState<"rodaram" | "paradas" | "todas">("rodaram")');
+    // O recorte fica lembrado por cliente (useEstadoDaTela), com "rodaram" de inicio.
+    expect(galeria).toMatch(/useEstadoDaTela<"rodaram" \| "paradas" \| "todas">\([^,]+, "rodaram"/);
     expect(galeria).toContain('if (recorte === "rodaram" && c.gasto <= 0) return false;');
   });
 
@@ -175,8 +178,13 @@ describe("busca, filtro e rolagem na galeria", () => {
     expect(galeria).toContain("for (const c of criativos) if (c.campanha) nomes.add(c.campanha);");
   });
 
-  it("a grade rola sozinha, sem empurrar as campanhas para fora", () => {
-    expect(galeria).toContain('max-h-[38rem] overflow-y-auto');
+  it("a grade mostra um lote e o resto a um clique, sem empurrar a tela nem prender o dedo", () => {
+    // Antes era uma caixa com rolagem propria (max-h-[38rem]); no celular ela
+    // prendia o dedo. Agora a grade mostra um lote e "Ver mais" traz o resto.
+    expect(galeria).toContain("const LOTE = 12;");
+    expect(galeria).toContain("ordenados.slice(0, visiveis)");
+    expect(galeria).toContain("setVisiveis((v) => v + LOTE)");
+    expect(galeria).not.toContain("max-h-[38rem]");
   });
 
   it("o contador diz quantas de quantas", () => {

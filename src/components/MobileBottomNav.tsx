@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -14,6 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
 interface Props {
   unreadCount: number;
   onOpenNotifications: () => void;
+  /** Lançador (agente, ajuda, tour) como item da barra: nada flutua sobre o conteúdo. */
+  lancador?: ReactNode;
 }
 
 /**
@@ -21,7 +24,7 @@ interface Props {
  * O Studio abre pelo botão no topo. Calendário entra sem retirar o atalho
  * operacional de Workspace/Aprovações.
  */
-export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Props) {
+export default function MobileBottomNav({ unreadCount, onOpenNotifications, lancador }: Props) {
   const { profile } = useAuth();
   const isStaff =
     profile?.role === "admin" ||
@@ -118,6 +121,8 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
           </div>
           <span>Avisos</span>
         </button>
+
+        {lancador}
       </div>
     </nav>
   );

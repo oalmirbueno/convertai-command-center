@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ImagePlus, Library, Link2, Loader2, Star, X } from "lucide-react";
+import { Download, ExternalLink, ImagePlus, Library, Link2, Loader2, ShieldCheck, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,11 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Cus
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { imagensDoColar } from "@/components/mesa/EstudioFotos";
 import { ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { botao, foco, juntar, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   adicionarLink,
   adicionarPrint,
@@ -34,7 +39,7 @@ import {
   type Evidencia,
   type ReferenciaAds,
 } from "./adsApi";
-import { Andamento, Foto, pilula, SeloDeEvidencia, useAndamento } from "./Comuns";
+import { Andamento, CabecalhoDaParte, Foto, SeloDeEvidencia, useAndamento } from "./Comuns";
 import JanelaDaReferencia, { CartaoTipografico } from "./JanelaDaReferencia";
 
 export { CAMPOS_DA_FICHA } from "./adsApi";
@@ -46,6 +51,10 @@ export { CAMPOS_DA_FICHA } from "./adsApi";
  * (JanelaDaReferencia). Adicionar: qualquer link (referencia_importar_url
  * busca a página e as imagens), print, os anúncios do próprio cliente com as
  * métricas reais (grátis) ou os padrões do nicho criados pelo estrategista.
+ *
+ * 26/09 (sistema de design): área de trabalho (no computador a biblioteca rola
+ * por dentro, com a posição lembrada), explicação no "?", filtros em
+ * seletores compactos e lembrados por cliente.
  */
 
 export const LINKS_UTEIS = [
@@ -100,7 +109,7 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
         }
       }}
       aria-label={`Abrir ${r.titulo}`}
-      className="group min-w-0 cursor-pointer overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="relative w-full" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
@@ -163,12 +172,17 @@ export default function AbaReferencias() {
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const referencias = useQuery({ queryKey: chavesAds.referencias(clientId), queryFn: () => lerReferencias(clientId) });
-  const [filtroEvidencia, setFiltroEvidencia] = useState<Evidencia | "">("");
-  const [filtroOrigem, setFiltroOrigem] = useState("");
-  const [filtroMecanismo, setFiltroMecanismo] = useState("");
-  const [filtroNicho, setFiltroNicho] = useState("");
-  const [filtroEstilo, setFiltroEstilo] = useState("");
-  const [deQuem, setDeQuem] = useState<FiltroDaAgencia>("todas");
+  // Filtros lembrados por cliente (sair e voltar mantém).
+  const texto0 = { validar: (v: unknown) => typeof v === "string", esperaMs: 0 };
+  const [filtroEvidencia, setFiltroEvidencia] = useEstadoDaTela<Evidencia | "">(`mesa-ads:referencias:evidencia:${clientId}`, "", texto0);
+  const [filtroOrigem, setFiltroOrigem] = useEstadoDaTela(`mesa-ads:referencias:origem:${clientId}`, "", texto0);
+  const [filtroMecanismo, setFiltroMecanismo] = useEstadoDaTela(`mesa-ads:referencias:mecanismo:${clientId}`, "", texto0);
+  const [filtroNicho, setFiltroNicho] = useEstadoDaTela(`mesa-ads:referencias:nicho:${clientId}`, "", texto0);
+  const [filtroEstilo, setFiltroEstilo] = useEstadoDaTela(`mesa-ads:referencias:estilo:${clientId}`, "", texto0);
+  const [deQuem, setDeQuem] = useEstadoDaTela<FiltroDaAgencia>(`mesa-ads:referencias:de-quem:${clientId}`, "todas", {
+    validar: (v) => v === "todas" || v === "cliente" || v === "agencia",
+    esperaMs: 0,
+  });
   const [aberta, setAberta] = useState<string | null>(null);
   const [colarLink, setColarLink] = useState(false);
   const [link, setLink] = useState("");
@@ -314,11 +328,12 @@ export default function AbaReferencias() {
     setDeQuem("todas");
   };
 
-  const seletor = "mb-1.5 mr-2 h-8 max-w-[220px] rounded-md border border-input bg-background px-2 text-[12px]";
+  const seletor = `h-9 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-[13px] text-foreground ${foco}`;
 
   return (
+    <AreaDeTrabalho rotuloDoPrincipal="Referências" memoriaDaRolagem={`mesa-ads:referencias:${clientId}`}>
     <div
-      className={`min-w-0 space-y-4 rounded-xl ${arrastando ? "ring-2 ring-primary/50" : ""}`}
+      className={`min-w-0 space-y-4 rounded-lg pb-6 ${arrastando ? "ring-2 ring-primary/50" : ""}`}
       onPaste={colar}
       onDragOver={(e) => {
         e.preventDefault();
@@ -329,87 +344,67 @@ export default function AbaReferencias() {
       }}
       onDrop={soltar}
     >
-      <nav aria-label="Bibliotecas de anúncios" className="flex min-w-0 flex-wrap items-center">
-        <span className="mb-1.5 mr-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Buscar em</span>
-        {LINKS_UTEIS.map((l) => (
-          <a
-            key={l.url}
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border border-border bg-card px-2.5 text-[11.5px] text-foreground/90 transition-colors hover:border-primary/50"
-          >
-            {l.rotulo} <ExternalLink className="ml-1 h-3 w-3 text-muted-foreground" />
-          </a>
-        ))}
-      </nav>
-
-      <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-3">
-        <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold">Referências</h2>
-          <p className="text-[12px] text-muted-foreground">
-            {todas.length} na biblioteca · {todas.filter((r) => r.destaque).length} em destaque para o plano. Clique para abrir aqui mesmo. Cole um print com Ctrl+V ou arraste para cá.
-          </p>
-        </div>
-        <div className="mb-1 mt-1 flex min-w-0 flex-wrap items-center">
-          {enviando > 0 && (
-            <span className="mb-1 mr-2 inline-flex items-center text-[11.5px] text-muted-foreground">
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> guardando
-            </span>
-          )}
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={() => setColarLink((v) => !v)} aria-expanded={colarLink}>
-            <Link2 className="mr-1 h-3.5 w-3.5" /> Adicionar por link
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={() => entrada.current && entrada.current.click()}>
-            <ImagePlus className="mr-1 h-3.5 w-3.5" /> Subir print
-          </Button>
-          <input
-            ref={entrada}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            multiple
-            className="hidden"
-            aria-label="Escolher prints"
-            onChange={(e) => {
-              const arquivos = e.target.files ? (Array.prototype.slice.call(e.target.files) as File[]) : [];
-              e.target.value = "";
-              void subir(arquivos);
-            }}
-          />
-          <span className="mb-1 mr-1.5 inline-flex items-center">
-            <BotaoComCusto
-              rotulo={<><Library className="mr-1 h-3.5 w-3.5" /> Padrões do nicho</>}
-              titulo="Padrões do nicho"
-              descricao={`O estrategista cria ${QUANTIDADE_DE_PADROES} padrões de criativo do nicho deste cliente, com a ficha completa e conferidos pelo Jev (risco de política). Entram como E0: inspiração, não prova.`}
-              variant="outline"
-              className="h-9"
-              partes={() => partesDosPadroes(catalogo, QUANTIDADE_DE_PADROES)}
-              executar={() => rodarPadroes(() => chamarAds<any>("biblioteca_do_nicho", { client_id: clientId, quantidade: QUANTIDADE_DE_PADROES }))}
-              aoConcluir={(data) => {
-                setFiltroOrigem("padrao");
-                const descartados = data && Array.isArray(data.descartados) ? data.descartados.length : 0;
-                const aviso = data && typeof data.aviso === "string" ? data.aviso : "";
-                if (descartados || aviso) {
-                  toast.info("Padrões do nicho", {
-                    description: `${descartados ? `${descartados} padrão(ões) saíram na conferência de política. ` : ""}${aviso}`.trim(),
-                  });
-                }
-                void atualizar();
-              }}
-            />
-          </span>
-          <Button type="button" size="sm" className="mb-1 h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
-            {importando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
-            Importar meus anúncios
-          </Button>
-        </div>
-        {desdePadroes !== null && (
-          <div className="w-full">
-            <Andamento desde={desdePadroes} rotulo="Criando os padrões do nicho" />
-          </div>
-        )}
+      <section className="min-w-0" aria-label="Biblioteca de referências">
+        <CabecalhoDaParte
+          titulo="Referências"
+          ajuda="Clique numa referência para abrir aqui mesmo. Cole um print com Ctrl+V ou arraste para cá. Destaque as melhores: o estrategista usa no plano. Importar meus anúncios traz imagem, copy e métricas reais, sem custo de IA."
+          descricao={`${todas.length} na biblioteca · ${todas.filter((r) => r.destaque).length} em destaque`}
+          acoes={
+            <>
+              {enviando > 0 && (
+                <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> guardando
+                </span>
+              )}
+              <Button type="button" size="sm" variant="outline" className="h-9" onClick={() => setColarLink((v) => !v)} aria-expanded={colarLink}>
+                <Link2 className="mr-1 h-3.5 w-3.5" /> Adicionar por link
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="h-9" onClick={() => entrada.current && entrada.current.click()}>
+                <ImagePlus className="mr-1 h-3.5 w-3.5" /> Subir print
+              </Button>
+              <input
+                ref={entrada}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                className="hidden"
+                aria-label="Escolher prints"
+                onChange={(e) => {
+                  const arquivos = e.target.files ? (Array.prototype.slice.call(e.target.files) as File[]) : [];
+                  e.target.value = "";
+                  void subir(arquivos);
+                }}
+              />
+              <BotaoComCusto
+                rotulo={<><Library className="mr-1 h-3.5 w-3.5" /> Padrões do nicho</>}
+                titulo="Padrões do nicho"
+                descricao={`O estrategista cria ${QUANTIDADE_DE_PADROES} padrões de criativo do nicho deste cliente, com a ficha completa e conferidos pelo Jev (risco de política). Entram como E0: inspiração, não prova.`}
+                variant="outline"
+                className="h-9"
+                partes={() => partesDosPadroes(catalogo, QUANTIDADE_DE_PADROES)}
+                executar={() => rodarPadroes(() => chamarAds<any>("biblioteca_do_nicho", { client_id: clientId, quantidade: QUANTIDADE_DE_PADROES }))}
+                aoConcluir={(data) => {
+                  setFiltroOrigem("padrao");
+                  const descartados = data && Array.isArray(data.descartados) ? data.descartados.length : 0;
+                  const aviso = data && typeof data.aviso === "string" ? data.aviso : "";
+                  if (descartados || aviso) {
+                    toast.info("Padrões do nicho", {
+                      description: `${descartados ? `${descartados} padrão(ões) saíram na conferência de política. ` : ""}${aviso}`.trim(),
+                    });
+                  }
+                  void atualizar();
+                }}
+              />
+              <Button type="button" size="sm" className="h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
+                {importando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
+                Importar meus anúncios
+              </Button>
+            </>
+          }
+        />
+        {desdePadroes !== null && <Andamento desde={desdePadroes} rotulo="Criando os padrões do nicho" />}
         {colarLink && (
-          <div className="mt-2 flex w-full min-w-0 flex-wrap items-center border-t border-border pt-3">
+          <div className="mb-3 flex w-full min-w-0 flex-wrap items-center border-y border-border py-3">
             <Input
               autoFocus
               aria-label="Link da referência"
@@ -422,37 +417,52 @@ export default function AbaReferencias() {
                 }
               }}
               placeholder="https:// (Pinterest, Instagram, Behance, Meta Ad Library, imagem ou página)"
-              className="mb-1.5 mr-2 h-9 w-full min-w-0 flex-1 text-[12.5px] sm:w-auto"
+              className="mb-1.5 mr-2 h-9 w-full min-w-0 flex-1 text-[13px] sm:w-auto"
             />
-            <Input aria-label="Título da referência" value={tituloDoLink} onChange={(e) => setTituloDoLink(e.target.value)} placeholder="Título (opcional)" className="mb-1.5 mr-2 h-9 w-full text-[12.5px] sm:w-56" />
+            <Input aria-label="Título da referência" value={tituloDoLink} onChange={(e) => setTituloDoLink(e.target.value)} placeholder="Título (opcional)" className="mb-1.5 mr-2 h-9 w-full text-[13px] sm:w-56" />
             <Button type="button" size="sm" className="mb-1.5 h-9" onClick={() => void guardarLink()} disabled={!link.trim() || enviando > 0}>
               Guardar e abrir
             </Button>
-            <button type="button" aria-label="Fechar" onClick={() => setColarLink(false)} className="mb-1.5 ml-1 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary">
+            <button type="button" aria-label="Fechar" onClick={() => setColarLink(false)} className={juntar(botao.icone, "mb-1.5 ml-1 h-9 w-9")}>
               <X className="h-4 w-4" />
             </button>
           </div>
         )}
-      </div>
 
-      <div className="min-w-0 space-y-1" aria-label="Filtros">
-        <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por evidência">
-          <button type="button" className={pilula(filtroEvidencia === "")} onClick={() => setFiltroEvidencia("")}>
-            Toda evidência
-          </button>
-          {ESCALA_DE_EVIDENCIA.map((e) => (
-            <button key={e.valor} type="button" className={pilula(filtroEvidencia === e.valor)} onClick={() => setFiltroEvidencia(filtroEvidencia === e.valor ? "" : e.valor)} title={`${e.rotulo}: ${e.dica}`}>
-              {e.valor}
-            </button>
+        <nav aria-label="Bibliotecas de anúncios" className="mb-3 flex min-w-0 flex-wrap items-center">
+          <span className={juntar(texto.auxiliar, "mb-1 mr-2")}>Buscar em</span>
+          {LINKS_UTEIS.map((l) => (
+            <a
+              key={l.url}
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={juntar("mb-1 mr-3 inline-flex items-center rounded text-[12px] text-foreground/90 underline-offset-2 hover:text-primary hover:underline", foco)}
+            >
+              {l.rotulo} <ExternalLink className="ml-1 h-3 w-3 text-muted-foreground" />
+            </a>
           ))}
-          <span className="mx-1.5 mb-1.5 h-5 w-px bg-border" aria-hidden="true" />
-          {(["todas", "cliente", "agencia"] as FiltroDaAgencia[]).map((q) => (
-            <button key={q} type="button" className={pilula(deQuem === q)} onClick={() => setDeQuem(q)}>
-              {q === "todas" ? "Cliente e agência" : q === "cliente" ? "Do cliente" : "Da agência"}
-            </button>
-          ))}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center">
+        </nav>
+
+        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" aria-label="Filtros">
+          <SeletorCompacto
+            rotulo="Filtrar por evidência"
+            icone={<ShieldCheck className="h-3.5 w-3.5" />}
+            modo="lista"
+            opcoes={[{ valor: "", rotulo: "Toda evidência" }].concat(ESCALA_DE_EVIDENCIA.map((e) => ({ valor: e.valor, rotulo: `${e.valor} ${e.rotulo}`, descricao: e.dica })))}
+            valor={filtroEvidencia}
+            onEscolher={(v) => setFiltroEvidencia(v as Evidencia | "")}
+          />
+          <SeletorCompacto
+            rotulo="Filtrar por dono"
+            opcoes={[
+              { valor: "todas", rotulo: "Todas" },
+              { valor: "cliente", rotulo: "Do cliente" },
+              { valor: "agencia", rotulo: "Da agência" },
+            ]}
+            valor={deQuem}
+            onEscolher={(v) => setDeQuem(v as FiltroDaAgencia)}
+          />
           <select aria-label="Filtrar por origem" value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)} className={seletor}>
             <option value="">Toda origem</option>
             {origensUsadas.map((o) => (
@@ -493,28 +503,21 @@ export default function AbaReferencias() {
             </select>
           )}
           {temFiltro && (
-            <button type="button" className="mb-1.5 text-[12px] text-primary hover:underline" onClick={limparFiltros}>
+            <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={limparFiltros}>
               Limpar filtros
             </button>
           )}
         </div>
-      </div>
+      </section>
 
       {referencias.isError && <AvisoDeErro erro={referencias.error} />}
-      {referencias.isLoading && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-64 animate-pulse rounded-xl bg-muted/70" />
-          ))}
-        </div>
-      )}
+      {referencias.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo as referências" />}
       {referencias.data && filtradas.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">{todas.length ? "Nenhuma referência com esses filtros" : "A biblioteca ainda está vazia"}</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            {todas.length ? "Limpe os filtros para ver todas." : "Importe os anúncios do cliente, peça os padrões do nicho, cole um link ou suba um print para começar."}
-          </p>
-        </div>
+        <EstadoVazio
+          icone={<Library className="h-5 w-5" />}
+          titulo={todas.length ? "Nenhuma referência com esses filtros" : "A biblioteca ainda está vazia"}
+          descricao={todas.length ? "Limpe os filtros para ver todas." : "Importe os anúncios do cliente, peça os padrões do nicho, cole um link ou suba um print."}
+        />
       )}
       {filtradas.length > 0 && (
         <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
@@ -526,5 +529,6 @@ export default function AbaReferencias() {
 
       <JanelaDaReferencia referencia={abertaRef} referenciaId={aberta} onFechar={() => setAberta(null)} />
     </div>
+    </AreaDeTrabalho>
   );
 }

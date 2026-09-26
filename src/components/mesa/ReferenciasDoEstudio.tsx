@@ -8,6 +8,9 @@ import { useMesa } from "./MesaContexto";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioPranchaDaReferencia from "./EstudioPranchaDaReferencia";
+import EstudioAdaptarConteudo from "./EstudioAdaptarConteudo";
+import EstudioAvisoSemFonte from "./EstudioAvisoSemFonte";
+import EstudioRostoDaReferencia from "./EstudioRostoDaReferencia";
 import SeletorDeReferencias, { MiniaturasEscolhidas, type AbaDoSeletor } from "./SeletorDeReferencias";
 import { gravarTrabalhoNoCache, type TrabalhoGravado } from "./estudioUtil";
 import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
@@ -232,6 +235,10 @@ export default function ReferenciasDoEstudio({
                 onSalvar={salvarConfig}
               />
             </div>
+            {/* Frente R (26/09): estética da referência, conteúdo da copy, e o rosto da pessoa (por trabalho). */}
+            <EstudioAdaptarConteudo direcao={trabalho.direcao} bloqueado={entregue} onSalvar={salvarConfig} />
+            <EstudioAvisoSemFonte clientId={clientId} />
+            <EstudioRostoDaReferencia trabalhoId={trabalho.id} clientId={clientId} direcao={trabalho.direcao} bloqueado={entregue} onSalvar={salvarConfig} />
             {escolhidas.map((id, i) => (
               <EstudioPranchaDaReferencia
                 key={id}

@@ -176,8 +176,11 @@ describe("a tela financeira", () => {
   });
 
   it("o histórico tem rolagem própria", () => {
+    // Design etapa 2: a rolagem própria é a RegiaoRolavel do sistema, com a
+    // posição guardada e o teto de altura só no computador (no celular a
+    // página rola, sem caixa prendendo o dedo).
     expect(custos).toContain("Histórico de pagamentos");
-    expect(custos).toMatch(/max-h-\S+ space-y-1 overflow-y-auto/);
+    expect(custos).toMatch(/<RegiaoRolavel memoria="financeiro:custos:historico"[^>]*className="lg:max-h-\S+"/);
   });
 
   it("a aba do pró-labore soma com o proporcional", () => {
@@ -239,7 +242,8 @@ describe("as saidas realizadas e o pro-labore no fluxo", () => {
   const fluxo = ler("src/components/finance/CashFlow.tsx");
 
   it("a aba Realizadas existe e so mostra o que saiu", () => {
-    expect(fluxo).toContain("Realizadas (");
+    // Cinco listas nas Saídas: viraram um seletor, com a contagem no contador.
+    expect(fluxo).toContain('{ valor: "done", rotulo: "Realizadas", contador: paidOutList.length }');
     expect(fluxo).toContain('e.status === "paid" && e.paid_date');
   });
 
@@ -256,8 +260,10 @@ describe("as saidas realizadas e o pro-labore no fluxo", () => {
   });
 
   it("as duas listas novas tem rolagem propria", () => {
-    expect(fluxo).toContain('max-h-[420px] divide-y divide-border overflow-y-auto');
-    expect(fluxo).toContain('max-h-[300px] divide-y divide-border overflow-y-auto');
+    // RegiaoRolavel com memória: rola por dentro no computador (teto lg:max-h)
+    // e guarda a posição; no celular vira parte da página.
+    expect(fluxo).toMatch(/<RegiaoRolavel memoria="financeiro:fluxo:realizadas"[^>]*className="lg:max-h-\[420px\]"/);
+    expect(fluxo).toMatch(/<RegiaoRolavel memoria="financeiro:fluxo:prolabore"[^>]*className="lg:max-h-\[300px\]"/);
   });
 });
 

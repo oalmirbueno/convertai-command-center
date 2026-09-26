@@ -23,7 +23,9 @@ const diario = ler("src/components/shared/ProjectJournal.tsx");
 describe("o perfil do cliente desenha inteiro no celular", () => {
   it("a grade de dois cartões não usa mais a otimização de lista longa", () => {
     expect(central).not.toContain('className="lista-longa grid');
-    expect(central).toContain('data-tour="central-carteira" className="grid gap-4 lg:auto-rows-fr lg:grid-cols-2 xl:gap-5"');
+    // E3 (26/09, sistema de design): as duas colunas viraram seções sem caixa;
+    // uma coluna no celular, duas do notebook para cima.
+    expect(central).toMatch(/data-tour="central-carteira" className="grid [^"]*lg:grid-cols-2[^"]*"/);
   });
 
   it("content-visibility só liga no computador", () => {
@@ -33,15 +35,15 @@ describe("o perfil do cliente desenha inteiro no celular", () => {
     expect(css).not.toMatch(/\n {2}\.lista-longa > \* \{/);
   });
 
-  it("os dois cartões do perfil podem encolher até a largura da tela", () => {
-    expect(central).toContain('className="min-w-0 bg-card border border-border rounded-xl overflow-hidden lg:h-full flex flex-col"');
-    expect(central).toContain('<div className="min-w-0 space-y-4">');
+  it("as duas colunas do perfil podem encolher até a largura da tela", () => {
+    expect(central).toContain('<div className="min-w-0" data-coluna="rituais">');
+    expect(central).toContain('<div className="min-w-0 space-y-6" data-coluna="mensagens">');
   });
 });
 
 describe("nada vaza para o lado nem prende o toque", () => {
   it("a Central inteira tem a regra de celular: corta vazamento, deixa filho encolher e quebra palavra sem espaço", () => {
-    expect(central).toContain('"space-y-7 central-celular"');
+    expect(central).toContain('"space-y-5 central-celular"');
     expect(central).toContain("text-foreground central-celular");
     const regra = css.slice(css.indexOf("@media (max-width: 639px) {\n    .central-celular"));
     expect(regra).toContain("overflow-x: clip;");
@@ -51,13 +53,23 @@ describe("nada vaza para o lado nem prende o toque", () => {
 
   it("caixa com rolagem própria só existe no computador; no celular a página rola inteira", () => {
     expect(central).not.toMatch(/"divide-y divide-border max-h-\[\d+px\] overflow-y-auto"/);
-    expect(central.match(/sm:max-h-\[560px\] sm:overflow-y-auto/g)?.length).toBe(4);
-    expect(diario).toContain("sm:max-h-[380px] sm:overflow-y-auto");
-    expect(diario).not.toContain('"relative max-h-[380px]');
+    // E3 (26/09): as listas rolam por dentro só de 1024 px para cima
+    // (RegiaoRolavel modo "lg", dentro da AreaDeTrabalho); abaixo disso a página rola.
+    expect(central).not.toMatch(/max-h-\[\d+px\] sm:overflow-y-auto/);
+    expect(central.match(/<RegiaoRolavel modo="lg"/g)?.length).toBe(6);
+    expect(central).toContain("<AreaDeTrabalho principalRolavel={false}>");
+    // O diário não tem caixa com rolagem própria: ele mora dentro de regiões
+    // que já rolam; o tamanho fica nos 12 mais recentes e "Ver tudo".
+    expect(diario).not.toMatch(/max-h-\[\d+px\]/);
+    expect(diario).not.toContain("overflow-y-auto");
+    expect(diario).toContain("entries.slice(0, 12)");
   });
 
   it("os botões dos momentos têm área de toque no celular", () => {
-    expect(central.match(/flex min-h-9 items-center gap-1 rounded-lg border/g)?.length).toBe(3);
+    // Botões do sistema (36 px de altura em toda largura).
+    const momentos = central.split('data-botao-do-momento=""').slice(1);
+    expect(momentos.length).toBe(3);
+    for (const trecho of momentos) expect(trecho.slice(0, 700)).toMatch(/className=\{(juntar\()?botao\.discreto/);
   });
 
   it("'Onde estamos com este cliente' mostra o resumo limpo, não o texto cru do WhatsApp", () => {

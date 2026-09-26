@@ -1,4 +1,5 @@
-import { Bot, Crown, Network, Sparkles } from "lucide-react";
+import { Bot, Crown, Network } from "lucide-react";
+import { AjudaRecolhida } from "@/components/sistema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -107,8 +108,8 @@ export default function OrganogramaAgentes({
         onClick={() => aoAbrir(no)}
         title={no.papel}
         className={cn(
-          "group relative w-full overflow-hidden rounded-xl border text-left transition-all",
-          "hover:-translate-y-px hover:border-primary/60 hover:shadow-lg hover:shadow-black/20",
+          "group relative w-full overflow-hidden rounded-lg border text-left transition-colors",
+          "hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destaque === "dono"
             ? "border-primary/50 bg-card"
             : destaque === "gateway"
@@ -128,10 +129,10 @@ export default function OrganogramaAgentes({
           aria-hidden
         />
 
-        <div className="flex items-start gap-2.5 p-3 pl-4">
+        <div className="flex items-start p-3 pl-4">
           <span
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10.5px] font-bold",
+              "mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold",
               destaque === "dono"
                 ? "bg-primary/20 text-primary"
                 : destaque === "gateway"
@@ -149,7 +150,7 @@ export default function OrganogramaAgentes({
           </span>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center [&>*+*]:ml-1.5">
               {/* Ponto de estado: verde vivo, cinza parado. Uma bolinha lê
                   mais rápido que a palavra "inativo" no canto. */}
               {no.nivel !== "dono" && no.nivel !== "gateway" && (
@@ -165,17 +166,17 @@ export default function OrganogramaAgentes({
                 {no.nome}
               </p>
               {no.nivel === "coordenador" && (
-                <span className="shrink-0 rounded-md bg-primary/20 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-primary">
+                <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[10.5px] font-medium text-primary">
                   coordena
                 </span>
               )}
             </div>
-            <p className="mt-1 line-clamp-2 text-[10.5px] leading-snug text-muted-foreground">
+            <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted-foreground">
               {no.papel}
             </p>
             {no.chefe && (
-              <p className="mt-1 flex items-center gap-1 truncate text-[9.5px] text-muted-foreground">
-                <Bot className="h-2.5 w-2.5 shrink-0" />
+              <p className="mt-1 flex items-center truncate text-[11px] text-muted-foreground">
+                <Bot className="mr-1 h-2.5 w-2.5 shrink-0" />
                 responde a {no.chefe}
               </p>
             )}
@@ -183,9 +184,9 @@ export default function OrganogramaAgentes({
         </div>
 
         {numeros.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 border-t border-border px-3 py-1.5 pl-4">
+          <div className="flex flex-wrap items-center border-t border-border px-3 py-1.5 pl-4 [&>*]:mr-2.5">
             {numeros.map((n) => (
-              <span key={n.titulo} className="flex items-baseline gap-1 text-[9.5px]">
+              <span key={n.titulo} className="flex items-baseline text-[11px] [&>*+*]:ml-1">
                 <strong className={cn("text-[11px] font-bold tabular-nums", n.cor)}>{n.valor}</strong>
                 <span className="text-muted-foreground">{n.titulo}</span>
               </span>
@@ -194,7 +195,7 @@ export default function OrganogramaAgentes({
         )}
 
         {no.ativo === false && (
-          <div className="border-t border-border bg-secondary px-3 py-1 pl-4 text-[9.5px] font-medium text-muted-foreground">
+          <div className="border-t border-border bg-secondary px-3 py-1 pl-4 text-[11px] font-medium text-muted-foreground">
             pausado
           </div>
         )}
@@ -208,33 +209,36 @@ export default function OrganogramaAgentes({
     <div className={cn("mx-auto w-px bg-border", alto)} aria-hidden />
   );
 
+  /*
+   * Sem caixa em volta (sistema de design: nada de cartão dentro de cartão).
+   * O resumo é a linha do título; cada agente é UM cartão sólido sobre o
+   * fundo; as funções se separam por espaço e pela barra de acento do
+   * título, não por outra caixa.
+   */
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-secondary px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20">
-            <Network className="h-3.5 w-3.5 text-primary" />
-          </span>
-          <p className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
-            Hierarquia da operação
-          </p>
+    <section aria-label="Hierarquia da operação" className="min-w-0">
+      <header className="mb-4 flex min-w-0 flex-wrap items-center justify-between">
+        <div className="mr-4 flex min-w-0 items-center">
+          <Network className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <h2 className="min-w-0 truncate text-[15px] font-semibold text-foreground">Hierarquia da operação</h2>
+          <AjudaRecolhida className="ml-1.5">
+            Toque em qualquer um para ver o contexto e copiar o comando de acionamento.
+            Quem organiza esta hierarquia é o Hermes, pelo próprio MCP, e o painel
+            redesenha na hora. O painel não dispara o agente sozinho: quem conversa
+            com ele é o grupo.
+          </AjudaRecolhida>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground">
+        <p className="-mx-1.5 flex flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mx-1.5">
           <span><strong className="tabular-nums text-foreground">{total}</strong> {total === 1 ? "agente" : "agentes"}</span>
-          <span className="text-border">·</span>
           <span><strong className="tabular-nums text-foreground">{areas.length}</strong> {areas.length === 1 ? "função" : "funções"}</span>
-          <span className="text-border">·</span>
           <span><strong className="tabular-nums text-success">{ativos}</strong> ativos</span>
           {trabalhando > 0 && (
-            <>
-              <span className="text-border">·</span>
-              <span><strong className="tabular-nums text-info">{trabalhando}</strong> em andamento</span>
-            </>
+            <span><strong className="tabular-nums text-info">{trabalhando}</strong> em andamento</span>
           )}
-        </div>
+        </p>
       </header>
 
-      <div className="flex flex-col items-center p-4">
+      <div className="flex flex-col items-center">
         <div className="w-full max-w-[16rem]">
           <Caixa
             no={{ id: "dono", nome: nomeDoDono, papel: "Dono da operação · decide e aprova", nivel: "dono" }}
@@ -268,27 +272,27 @@ export default function OrganogramaAgentes({
         {/* A base, separada por FUNÇÃO. As áreas saem do banco, então um
             agente novo do Hermes aparece aqui sozinho, no grupo certo, sem
             ninguém mexer em código. */}
-        <div className="w-full space-y-2.5">
+        <div className="w-full space-y-5">
           {areas.map(([area, doGrupo]) => {
             const acento = acentoDaArea(area);
             const emAndamento = doGrupo.reduce((s, o) => s + (o.emAndamento ?? 0), 0);
             return (
-              <section key={area} className="overflow-hidden rounded-xl border border-border bg-secondary">
-                <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-                  <span className={cn("h-3.5 w-1 shrink-0 rounded-full", acento)} aria-hidden />
-                  <h3 className="text-[10.5px] font-bold uppercase tracking-wider text-foreground">
+              <section key={area} aria-label={area} className="min-w-0">
+                <div className="mb-2 flex min-w-0 items-center">
+                  <span className={cn("mr-2 h-3.5 w-1 shrink-0 rounded-full", acento)} aria-hidden />
+                  <h3 className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">
                     {area}
                   </h3>
-                  <span className="rounded-md bg-card px-1.5 py-0.5 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
+                  <span className="mr-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">
                     {doGrupo.length}
                   </span>
                   {emAndamento > 0 && (
-                    <span className="text-[9.5px] font-semibold tabular-nums text-info">
+                    <span className="shrink-0 text-[12px] tabular-nums text-info">
                       {emAndamento} em andamento
                     </span>
                   )}
                 </div>
-                <div className="grid gap-2 p-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {doGrupo.map((o) => <Caixa key={o.id} no={o} acento={acento} />)}
                 </div>
               </section>
@@ -296,16 +300,6 @@ export default function OrganogramaAgentes({
           })}
         </div>
       </div>
-
-      <footer className="flex items-start gap-2 border-t border-border bg-secondary px-4 py-2.5 text-[10.5px] leading-relaxed text-muted-foreground">
-        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
-        <span>
-          Toque em qualquer um para ver o contexto e copiar o comando de acionamento.
-          Quem organiza esta hierarquia é o Hermes, pelo próprio MCP, e o painel
-          redesenha na hora. O painel não dispara o agente sozinho: quem conversa
-          com ele é o grupo.
-        </span>
-      </footer>
-    </div>
+    </section>
   );
 }

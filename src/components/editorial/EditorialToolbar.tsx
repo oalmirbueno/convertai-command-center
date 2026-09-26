@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   CalendarDays,
   CalendarPlus2,
@@ -10,8 +11,6 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -24,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { SeletorCompacto, botao, campo, juntar, texto } from "@/components/sistema";
 
 export type EditorialView = "board" | "month" | "week" | "list";
 
@@ -34,6 +33,10 @@ interface SelectOption {
 }
 
 interface EditorialToolbarProps {
+  /** Título da página (h1 + "?" + resumo): a primeira linha começa por ele. */
+  cabecalho?: ReactNode;
+  /** No quadro de conteúdos (sem período), o que vai no começo da segunda linha. */
+  inicioDaLinha?: ReactNode;
   title: string;
   view: EditorialView;
   search: string;
@@ -99,8 +102,8 @@ function FilterSelect({
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
-        className={cn(
-          "h-11 w-full min-w-0 bg-background sm:h-9",
+        className={juntar(
+          "h-9 w-full min-w-0 bg-background text-[13px]",
           className,
         )}
         aria-label={label}
@@ -119,7 +122,25 @@ function FilterSelect({
   );
 }
 
+function CampoDoFiltro({ rotulo, children }: { rotulo: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className={juntar(texto.rotulo, "mb-1")}>{rotulo}</p>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Barra da Agenda editorial (frente E4, 26/09): duas linhas, sem caixa em
+ * volta. Linha 1: título, área (Agenda ou Conteúdos) e a ação principal.
+ * Linha 2: período e visão à esquerda; busca, cliente, projeto e o seletor
+ * "Filtros" (formato, plataforma, publicação, etapa, aprovação e
+ * responsável) à direita. No celular, cliente e projeto moram no "Filtros".
+ */
 export default function EditorialToolbar({
+  cabecalho,
+  inicioDaLinha,
   title,
   view,
   search,
@@ -161,6 +182,7 @@ export default function EditorialToolbar({
   const isActiveFilter = (value: string) =>
     Boolean(value && value !== "all");
   const advancedFilterCount = [
+    format,
     platform,
     status,
     productionStatus,
@@ -181,281 +203,232 @@ export default function EditorialToolbar({
     ].some(isActiveFilter);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card/70">
-      <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {view !== "board" && (
-            <div className="flex shrink-0 items-center rounded-lg border border-border bg-background">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-11 w-10 rounded-r-none sm:h-9 sm:w-9"
-                onClick={onPrevious}
-                aria-label="Período anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-11 rounded-none border-x border-border px-3 text-xs sm:h-9"
-                onClick={onToday}
-              >
-                Hoje
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-11 w-10 rounded-l-none sm:h-9 sm:w-9"
-                onClick={onNext}
-                aria-label="Próximo período"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-          <h2 className="min-w-0 truncate text-base font-semibold text-foreground sm:text-lg">
-            {title}
-          </h2>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          <div
-            className="grid h-11 grid-cols-2 rounded-lg border border-border bg-background p-1 sm:h-auto"
-            role="group"
-            aria-label="Área editorial"
-          >
-            <button
-              type="button"
-              onClick={() => onViewChange("month")}
-              className={cn(
-                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                view !== "board"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-pressed={view !== "board"}
-            >
-              <CalendarDays className="h-3.5 w-3.5" />
-              Agenda
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewChange("board")}
-              className={cn(
-                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                view === "board"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-pressed={view === "board"}
-            >
-              <Columns3 className="h-3.5 w-3.5" />
-              Conteúdos
-            </button>
-          </div>
-
-          {view !== "board" && (
-            <div
-              className="grid h-11 grid-cols-3 rounded-lg border border-border bg-background p-1 sm:h-auto"
-              role="group"
-              aria-label="Visualização da agenda"
-            >
-              {agendaViewOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onViewChange(option.value)}
-                  className={cn(
-                    "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                    view === option.value
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-pressed={view === option.value}
-                  aria-label={`Visualização: ${option.label}`}
-                >
-                  <option.icon className="h-3.5 w-3.5" />
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="min-w-0">
+      {/* Linha 1: título e ações */}
+      <div className="flex min-w-0 flex-wrap items-center justify-between">
+        <div className="mb-3 mr-3 min-w-0 flex-1">{cabecalho}</div>
+        <div className="mb-3 flex shrink-0 items-center [&>*+*]:ml-2">
+          <SeletorCompacto
+            className="hidden sm:inline-flex"
+            rotulo="Área editorial"
+            opcoes={[
+              { valor: "agenda", rotulo: "Agenda", icone: <CalendarDays className="h-3.5 w-3.5" /> },
+              { valor: "board", rotulo: "Conteúdos", icone: <Columns3 className="h-3.5 w-3.5" /> },
+            ]}
+            valor={view === "board" ? "board" : "agenda"}
+            onEscolher={(v) => onViewChange(v === "board" ? "board" : "month")}
+          />
 
           {view === "board" && canCreate && (
-            <Button
+            <button
               type="button"
-              size="sm"
-              className="h-11 w-full px-4 sm:h-9 sm:w-auto"
+              className={botao.primario}
               onClick={onCreate}
+              aria-label="Criar conteúdo"
             >
-              <Columns3 className="mr-1.5 h-4 w-4" />
-              Criar conteúdo
-            </Button>
+              <Columns3 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Criar conteúdo</span>
+            </button>
           )}
 
           {view !== "board" && canSchedule && (
-            <Button
+            <button
               type="button"
-              size="sm"
-              className="h-11 w-full px-4 sm:h-9 sm:w-auto"
+              className={botao.primario}
               onClick={onSchedule}
+              aria-label="Agendar publicação"
             >
-              <CalendarPlus2 className="mr-1.5 h-4 w-4" />
-              Agendar publicação
-            </Button>
+              <CalendarPlus2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Agendar publicação</span>
+            </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 border-t border-border bg-card/40 p-3 sm:grid-cols-2 xl:flex xl:items-center">
-        <div className="relative min-w-0 sm:col-span-2 xl:min-w-[280px] xl:flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar conteúdo, legenda ou conta"
-            aria-label="Buscar conteúdo, legenda ou conta"
-            className="h-11 bg-background pl-9 sm:h-9"
-          />
+      {/* Linha 2: período e visão | busca e filtros */}
+      <div className="flex min-w-0 flex-wrap items-center justify-between">
+        <div className="mb-2 mr-3 flex min-w-0 flex-wrap items-center">
+          {view !== "board" ? (
+            <>
+              <div className="mr-2 flex shrink-0 items-center rounded-md border border-border">
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "h-9 w-9 rounded-r-none")}
+                  onClick={onPrevious}
+                  aria-label="Período anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className={juntar(botao.discreto, "rounded-none border-x border-border px-3 text-foreground")}
+                  onClick={onToday}
+                >
+                  Hoje
+                </button>
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "h-9 w-9 rounded-l-none")}
+                  onClick={onNext}
+                  aria-label="Próximo período"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <h2 className={juntar(texto.tituloSecao, "mr-3 min-w-0 truncate first-letter:uppercase")}>
+                {title}
+              </h2>
+              <SeletorCompacto
+                rotulo="Visualização da agenda"
+                opcoes={agendaViewOptions.map((option) => ({
+                  valor: option.value,
+                  rotulo: option.label,
+                  icone: <option.icon className="h-3.5 w-3.5" />,
+                }))}
+                valor={view}
+                onEscolher={(v) => onViewChange(v as EditorialView)}
+                className="hidden sm:inline-flex"
+              />
+            </>
+          ) : (
+            inicioDaLinha
+          )}
         </div>
-        {clients.length > 0 && (
-          <FilterSelect
-            value={clientId}
-            label="Todos os clientes"
-            options={clients}
-            onChange={onClientChange}
-            className="xl:w-[170px]"
-          />
-        )}
-        <FilterSelect
-          value={projectId}
-          label="Todos os projetos"
-          options={projects}
-          onChange={onProjectChange}
-          className="xl:w-[170px]"
-        />
-        <FilterSelect
-          value={format}
-          label="Todos os formatos"
-          options={formats}
-          onChange={onFormatChange}
-          className="xl:w-[170px]"
-        />
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full justify-start gap-2 bg-background px-3 sm:h-9 xl:w-auto xl:min-w-[142px]"
-              aria-label={`Mais filtros, ${advancedFilterCount} ${
-                advancedFilterCount === 1 ? "ativo" : "ativos"
-              }`}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span>Mais filtros</span>
-              <span
-                className={cn(
-                  "ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums",
-                  advancedFilterCount > 0
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground",
-                )}
-                aria-hidden="true"
-              >
-                {advancedFilterCount}
-              </span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[calc(100vw-2rem)] max-w-[360px] rounded-xl p-3"
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Mais filtros
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Refine plataforma, etapa, aprovação e responsável.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0 px-2 text-xs"
-                onClick={onClearFilters}
-                disabled={!hasAnyActiveFilter}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Limpar
-              </Button>
-            </div>
 
-            <div className="mt-3 grid gap-3">
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-foreground">
-                  Plataforma
-                </p>
-                <FilterSelect
-                  value={platform}
-                  label="Todas as plataformas"
-                  options={platforms}
-                  onChange={onPlatformChange}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-foreground">
-                  Publicação
-                </p>
-                <FilterSelect
-                  value={status}
-                  label="Todas as publicações"
-                  options={statuses}
-                  onChange={onStatusChange}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-foreground">
-                  Etapa de produção
-                </p>
-                <FilterSelect
-                  value={productionStatus}
-                  label="Todas as etapas"
-                  options={productionStatuses}
-                  onChange={onProductionStatusChange}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-foreground">
-                  Aprovação
-                </p>
-                <FilterSelect
-                  value={approvalStatus}
-                  label="Toda aprovação"
-                  options={approvalStatuses}
-                  onChange={onApprovalStatusChange}
-                />
-              </div>
-              {responsibles.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">
-                    Responsável
-                  </p>
-                  <FilterSelect
-                    value={responsibleId}
-                    label="Todos os responsáveis"
-                    options={responsibles}
-                    onChange={onResponsibleChange}
-                  />
-                </div>
-              )}
+        <div className="mb-2 flex w-full min-w-0 items-center lg:w-auto">
+          {/* Celular: área e visão num seletor só (a linha do título não comporta os dois segmentados). */}
+          <div className="mr-2 shrink-0 sm:hidden">
+            <SeletorCompacto
+              rotulo="Visão"
+              modo="lista"
+              opcoes={[
+                ...agendaViewOptions.map((option) => ({
+                  valor: option.value,
+                  rotulo: option.label,
+                  icone: <option.icon className="h-3.5 w-3.5" />,
+                })),
+                { valor: "board", rotulo: "Conteúdos", icone: <Columns3 className="h-3.5 w-3.5" /> },
+              ]}
+              valor={view}
+              onEscolher={(v) => onViewChange(v as EditorialView)}
+            />
+          </div>
+          <div className="relative mr-2 min-w-0 flex-1 lg:w-[220px] lg:flex-none">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Buscar conteúdo"
+              aria-label="Buscar conteúdo, legenda ou conta"
+              className={juntar(campo, "pl-9")}
+            />
+          </div>
+          {clients.length > 0 && (
+            <div className="mr-2 hidden w-[170px] shrink-0 sm:block">
+              <FilterSelect
+                value={clientId}
+                label="Todos os clientes"
+                options={clients}
+                onChange={onClientChange}
+              />
             </div>
-          </PopoverContent>
-        </Popover>
+          )}
+          <div className="mr-2 hidden w-[170px] shrink-0 sm:block">
+            <FilterSelect
+              value={projectId}
+              label="Todos os projetos"
+              options={projects}
+              onChange={onProjectChange}
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={juntar(botao.secundario, "px-2.5")}
+                aria-label={`Mais filtros, ${advancedFilterCount} ${
+                  advancedFilterCount === 1 ? "ativo" : "ativos"
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Filtros</span>
+                {advancedFilterCount > 0 && (
+                  <span
+                    className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                    aria-hidden="true"
+                  >
+                    {advancedFilterCount}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-[calc(100vw-24px)] max-w-[380px] p-3"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <p className={texto.tituloSecao}>Filtros</p>
+                <button
+                  type="button"
+                  className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
+                  onClick={onClearFilters}
+                  disabled={!hasAnyActiveFilter}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                  Limpar
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {/* No celular cliente e projeto moram aqui (a linha não comporta). */}
+                {clients.length > 0 && (
+                  <div className="sm:hidden">
+                    <CampoDoFiltro rotulo="Cliente">
+                      <FilterSelect value={clientId} label="Todos os clientes" options={clients} onChange={onClientChange} />
+                    </CampoDoFiltro>
+                  </div>
+                )}
+                <div className="sm:hidden">
+                  <CampoDoFiltro rotulo="Projeto">
+                    <FilterSelect value={projectId} label="Todos os projetos" options={projects} onChange={onProjectChange} />
+                  </CampoDoFiltro>
+                </div>
+                <CampoDoFiltro rotulo="Formato">
+                  <FilterSelect value={format} label="Todos os formatos" options={formats} onChange={onFormatChange} />
+                </CampoDoFiltro>
+                <CampoDoFiltro rotulo="Plataforma">
+                  <FilterSelect value={platform} label="Todas as plataformas" options={platforms} onChange={onPlatformChange} />
+                </CampoDoFiltro>
+                <CampoDoFiltro rotulo="Publicação">
+                  <FilterSelect value={status} label="Todas as publicações" options={statuses} onChange={onStatusChange} />
+                </CampoDoFiltro>
+                <CampoDoFiltro rotulo="Etapa de produção">
+                  <FilterSelect value={productionStatus} label="Todas as etapas" options={productionStatuses} onChange={onProductionStatusChange} />
+                </CampoDoFiltro>
+                <CampoDoFiltro rotulo="Aprovação">
+                  <FilterSelect value={approvalStatus} label="Toda aprovação" options={approvalStatuses} onChange={onApprovalStatusChange} />
+                </CampoDoFiltro>
+                {responsibles.length > 0 && (
+                  <CampoDoFiltro rotulo="Responsável">
+                    <FilterSelect value={responsibleId} label="Todos os responsáveis" options={responsibles} onChange={onResponsibleChange} />
+                  </CampoDoFiltro>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+          {hasAnyActiveFilter && (
+            <button
+              type="button"
+              onClick={onClearFilters}
+              className={juntar(botao.icone, "ml-1")}
+              aria-label="Limpar filtros"
+              title="Limpar filtros"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

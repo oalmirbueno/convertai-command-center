@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import {
   modelosAtivos,
   nomeDoModelo,
@@ -84,20 +85,25 @@ export function SeletorDeRaciocinio({ modelo, valor, onChange }: { modelo: Model
   );
 }
 
+/** Campo das mesas: rótulo em cima (padrão do sistema, docs/design/SISTEMA.md). */
 export function Campo({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
   return (
-    <div className={`min-w-0 space-y-1 ${className}`}>
-      <Label className="text-[11.5px] text-muted-foreground">{rotulo}</Label>
+    <div className={`min-w-0 space-y-1.5 ${className}`}>
+      <Label className="block text-[12px] font-medium leading-4 text-muted-foreground">{rotulo}</Label>
       {children}
     </div>
   );
 }
 
-/** Título de seção da Mesa: pequeno, discreto, igual ao resto do painel. */
-export function TituloDeSecao({ children, acao }: { children: ReactNode; acao?: ReactNode }) {
+/** Título de seção da Mesa: o título de seção do sistema (15 px), ação à direita. */
+export function TituloDeSecao({ children, acao, ajuda }: { children: ReactNode; acao?: ReactNode; ajuda?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{children}</h2>
+    <div className="flex min-w-0 flex-wrap items-center justify-between">
+      <div className="mr-3 flex min-w-0 items-center">
+        <h2 className="min-w-0 text-[15px] font-semibold leading-[22px] text-foreground">{children}</h2>
+        {/* A explicação mora no "?" (docs/design/SISTEMA.md, regra de texto). */}
+        {ajuda && <AjudaRecolhida className="ml-1.5">{ajuda}</AjudaRecolhida>}
+      </div>
       {acao}
     </div>
   );

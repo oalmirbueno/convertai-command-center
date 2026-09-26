@@ -7,9 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { CampoDeFormulario, SeletorCompacto, botao, campo, campoTexto, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import {
   Dialog,
   DialogContent,
@@ -29,8 +27,9 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  // Rascunho do pedido por projeto: fechar a janela ou sair não apaga o que já foi escrito.
+  const [title, setTitle] = useEstadoDaTela<string>(`pedido-projeto:titulo:${projectId}`, "");
+  const [description, setDescription] = useEstadoDaTela<string>(`pedido-projeto:descricao:${projectId}`, "");
   const [priority, setPriority] = useState<string>("normal");
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,67 +78,61 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
 
   return (
     <>
-      {/* Floating button */}
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-5 py-3 flex items-center gap-2 shadow-lg hover:scale-105 transition-all duration-200 text-sm font-medium"
-      >
-        <Plus className="w-4 h-4" />
-        Fazer Pedido
+      {/* Na linha do título do projeto (antes era um botão flutuante que cobria
+          a lista e a barra de baixo no celular). No celular vira só o ícone. */}
+      <button type="button" onClick={() => setOpen(true)} className={botao.primario} aria-label="Fazer pedido">
+        <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+        <span className="hidden sm:inline">Fazer pedido</span>
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base font-semibold">Novo Pedido</DialogTitle>
+            <DialogTitle className={texto.tituloSecao}>Novo pedido</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div>
-              <label className="label-sm mb-1.5 block">Título</label>
-              <Input
-                placeholder="Ex: Criar novo banner para Instagram"
+            <CampoDeFormulario rotulo="Título" obrigatorio>
+              <input
+                className={campo}
+                placeholder="Ex.: Criar novo banner para Instagram"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
-            </div>
+            </CampoDeFormulario>
 
-            <div>
-              <label className="label-sm mb-1.5 block">Descrição</label>
-              <Textarea
-                placeholder="Descreva o que você precisa..."
+            <CampoDeFormulario rotulo="Descrição" obrigatorio apoio={`Projeto: ${projectName}`}>
+              <textarea
+                className={juntar(campoTexto, "resize-none")}
+                placeholder="Descreva o que você precisa"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
               />
-            </div>
+            </CampoDeFormulario>
 
-            <div>
-              <label className="label-sm mb-2 block">Prioridade</label>
-              <div className="flex gap-2">
-                {priorities.map(p => (
-                  <button
-                    key={p.value}
-                    onClick={() => setPriority(p.value)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      priority === p.value
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <CampoDeFormulario rotulo="Prioridade">
+              <SeletorCompacto
+                rotulo="Prioridade"
+                modo="segmentado"
+                larguraTotal
+                valor={priority}
+                onEscolher={setPriority}
+                opcoes={priorities.map((p) => ({ valor: p.value, rotulo: p.label }))}
+              />
+            </CampoDeFormulario>
+          </div>
 
-            <Button
-              className="w-full"
+          <div className="flex items-center justify-end border-t border-border pt-3 [&>*+*]:ml-2">
+            <button type="button" onClick={() => setOpen(false)} className={botao.secundario}>Cancelar</button>
+            <button
+              type="button"
+              className={botao.primario}
               onClick={handleSubmit}
               disabled={submitting || !title.trim() || !description.trim()}
             >
-              {submitting ? "Enviando..." : "Enviar Pedido"}
-            </Button>
+              {submitting ? "Enviando..." : "Enviar pedido"}
+            </button>
           </div>
         </DialogContent>
       </Dialog>

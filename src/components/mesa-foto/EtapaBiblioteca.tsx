@@ -1,15 +1,19 @@
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, Check, Copy, Download, ExternalLink, ImageIcon, Loader2, Search, Sparkles, Star, ZoomIn } from "lucide-react";
+import { BookmarkPlus, Check, Copy, Download, ExternalLink, Filter, ImageIcon, Library, Loader2, Search, Sparkles, Star, Users, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
-import { Cartao, Moldura, Pilulas, Vazio } from "./Comuns";
+import { Cartao, Moldura, Vazio } from "./Comuns";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { campo, juntar, texto as textoDoSistema } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   buscarReferencias,
   CATEGORIAS_DA_BIBLIOTECA,
@@ -45,6 +49,10 @@ import {
  * reconhecer"): o exemplo do prompt ficou bem maior (largura cheia no
  * celular, 160 px no computador) e as referências em grade de 2 a 5 colunas,
  * sempre com "ver grande" ao tocar.
+ *
+ * 26/09 (sistema de design): título, busca e filtros numa linha só; tipo,
+ * categoria e origem viram seletores compactos (antes, fileiras de pílulas).
+ * Busca e filtros ficam guardados por cliente (sair e voltar mantém).
  */
 
 export async function copiarParaAreaDeTransferencia(texto: string): Promise<boolean> {
@@ -236,7 +244,7 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
   const [ingles, setIngles] = useState(false);
   const texto = ingles ? item.prompt_en : item.prompt_pt || item.prompt_en;
   return (
-    <li className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-start" data-prompt={item.id}>
+    <li className="flex min-w-0 flex-col rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-start" data-prompt={item.id}>
       <ExemploDoPrompt item={item} onAmpliar={onAmpliar} />
       <div className="mt-2 min-w-0 flex-1 space-y-2 sm:ml-3 sm:mt-0">
         <div className="flex min-w-0 items-start">
@@ -261,7 +269,7 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
             {item.uso}
           </p>
         )}
-        <p className="rounded-lg bg-muted px-2.5 py-2 font-mono text-[12px] leading-relaxed [overflow-wrap:anywhere]">{texto || "Sem texto"}</p>
+        <p className="rounded-md bg-muted/60 px-2.5 py-2 font-mono text-[12px] leading-relaxed [overflow-wrap:anywhere]">{texto || "Sem texto"}</p>
         {item.negativo && (
           <p className="text-[11.5px] leading-snug [overflow-wrap:anywhere]">
             <span className="text-muted-foreground">Evitar: </span>
@@ -362,7 +370,7 @@ function BuscaPublica({ categoriaInicial }: { categoriaInicial: string }) {
           void buscar();
         }}
       >
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ex.: product photography soft light, food flat lay" aria-label="O que buscar" className="h-9" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ex.: product photography soft light, food flat lay" aria-label="O que buscar" className={campo} />
         <Select value={categoria} onValueChange={setCategoria}>
           <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Categoria ao importar">
             <SelectValue />
@@ -387,7 +395,7 @@ function BuscaPublica({ categoriaInicial }: { categoriaInicial: string }) {
           {resultados.map((r) => {
             const ja = importadas.indexOf(r.chave) >= 0;
             return (
-              <li key={r.chave} className="min-w-0 rounded-xl border border-border bg-background p-1.5">
+              <li key={r.chave} className="min-w-0 rounded-lg border border-border p-1.5">
                 <Moldura proporcao={1}>
                   <img src={r.miniatura_url} alt={r.titulo} loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                 </Moldura>
@@ -425,70 +433,110 @@ export function filtrarBiblioteca(itens: ItemDaBiblioteca[], tipo: TipoFiltro, c
   });
 }
 
+const TIPOS_DO_FILTRO: TipoFiltro[] = ["todos", "prompt", "referencia"];
+const ORIGENS_DO_FILTRO: OrigemFiltro[] = ["todas", "agencia", "cliente"];
+
 export default function EtapaBiblioteca() {
   const { clientId, isAdmin } = useMesa();
   const biblioteca = useBiblioteca(clientId);
   const { salvar, salvando } = useSalvarComoMeu();
-  const [tipo, setTipo] = useState<TipoFiltro>("todos");
-  const [categoria, setCategoria] = useState("todas");
-  const [origem, setOrigem] = useState<OrigemFiltro>("todas");
-  const [busca, setBusca] = useState("");
+  // Busca e filtros guardados por cliente (useEstadoDaTela): sair e voltar mantém.
+  const [tipo, setTipo] = useEstadoDaTela<TipoFiltro>(`mesa-foto:biblioteca:tipo:${clientId}`, "todos", { validar: (v) => TIPOS_DO_FILTRO.indexOf(v as TipoFiltro) >= 0 });
+  const [categoria, setCategoria] = useEstadoDaTela(`mesa-foto:biblioteca:categoria:${clientId}`, "todas", {
+    validar: (v) => v === "todas" || CATEGORIAS_DA_BIBLIOTECA.some((c) => c.valor === v),
+  });
+  const [origem, setOrigem] = useEstadoDaTela<OrigemFiltro>(`mesa-foto:biblioteca:origem:${clientId}`, "todas", { validar: (v) => ORIGENS_DO_FILTRO.indexOf(v as OrigemFiltro) >= 0 });
+  const [busca, setBusca] = useEstadoDaTela(`mesa-foto:biblioteca:busca:${clientId}`, "");
   const itens = useMemo(() => biblioteca.data || [], [biblioteca.data]);
   const filtrados = useMemo(() => filtrarBiblioteca(itens, tipo, categoria, origem, busca), [itens, tipo, categoria, origem, busca]);
   const prompts = filtrados.filter((i) => i.tipo === "prompt");
   const referencias = filtrados.filter((i) => i.tipo === "referencia");
   const [ampliada, setAmpliada] = useState<ItemDaBiblioteca | null>(null);
+  const comFiltro = tipo !== "todos" || categoria !== "todas" || origem !== "todas" || !!busca.trim();
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
-      <Cartao titulo="Biblioteca de prompts e referências" dica={'Para guiar o Preparar e o Ensaio em "Como guiar esta foto". Licença e autor sempre à vista.'}>
-        <div className="space-y-2">
+    <div className="min-w-0 space-y-5 pb-6">
+      {/* Título, busca e filtros na mesma linha (quebra no celular). */}
+      <div className="flex min-w-0 flex-wrap items-center" data-filtros-da-biblioteca="">
+        <div className="mb-2 mr-3 flex min-w-0 items-center">
+          <h2 className={textoDoSistema.tituloSecao}>Biblioteca</h2>
+          <AjudaRecolhida className="ml-1.5" rotulo="Sobre a biblioteca">
+            Prompts e referências para guiar o Preparar e o Ensaio em "Como guiar esta foto". Licença e autor sempre à vista.
+          </AjudaRecolhida>
+          {biblioteca.isSuccess && <span className={juntar(textoDoSistema.auxiliar, "ml-2 tabular-nums")}>{comFiltro ? `${filtrados.length} de ${itens.length}` : itens.length}</span>}
+        </div>
+        <div className="mb-2 mr-2 min-w-0 flex-1 basis-[220px]">
           <div className="relative min-w-0">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título, texto, tag ou autor" aria-label="Buscar na biblioteca" className="h-9 pl-8" />
-          </div>
-          <div className="flex min-w-0 flex-wrap">
-            <Pilulas
-              className="mr-3"
-              rotulo="Tipo"
-              opcoes={[
-                { valor: "todos" as TipoFiltro, rotulo: "Tudo" },
-                { valor: "prompt" as TipoFiltro, rotulo: "Prompts" },
-                { valor: "referencia" as TipoFiltro, rotulo: "Referências" },
-              ]}
-              valor={tipo}
-              onEscolher={setTipo}
-            />
-            <Pilulas className="mr-3" rotulo="Categoria" opcoes={[{ valor: "todas", rotulo: "Todas" }].concat(CATEGORIAS_DA_BIBLIOTECA)} valor={categoria} onEscolher={setCategoria} />
-            <Pilulas
-              rotulo="Origem"
-              opcoes={[
-                { valor: "todas" as OrigemFiltro, rotulo: "Agência e cliente" },
-                { valor: "agencia" as OrigemFiltro, rotulo: "Da agência" },
-                { valor: "cliente" as OrigemFiltro, rotulo: "Deste cliente" },
-              ]}
-              valor={origem}
-              onEscolher={setOrigem}
-            />
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título, texto, tag ou autor" aria-label="Buscar na biblioteca" className={juntar(campo, "pl-8")} />
           </div>
         </div>
-      </Cartao>
+        <div className="mb-2 flex min-w-0 max-w-full flex-wrap items-center [&>*]:mb-0 [&>*+*]:ml-2">
+          <SeletorCompacto
+            rotulo="Tipo"
+            modo="lista"
+            icone={<Filter className="h-4 w-4" />}
+            opcoes={[
+              { valor: "todos", rotulo: "Tudo" },
+              { valor: "prompt", rotulo: "Prompts" },
+              { valor: "referencia", rotulo: "Referências" },
+            ]}
+            valor={tipo}
+            onEscolher={(v) => setTipo(v as TipoFiltro)}
+          />
+          <SeletorCompacto
+            rotulo="Categoria"
+            modo="lista"
+            icone={<Library className="h-4 w-4" />}
+            opcoes={[{ valor: "todas", rotulo: "Todas as categorias" }].concat(CATEGORIAS_DA_BIBLIOTECA.map((c) => ({ valor: c.valor, rotulo: c.rotulo })))}
+            valor={categoria}
+            onEscolher={setCategoria}
+          />
+          <SeletorCompacto
+            rotulo="Origem"
+            modo="lista"
+            icone={<Users className="h-4 w-4" />}
+            opcoes={[
+              { valor: "todas", rotulo: "Agência e cliente" },
+              { valor: "agencia", rotulo: "Da agência" },
+              { valor: "cliente", rotulo: "Deste cliente" },
+            ]}
+            valor={origem}
+            onEscolher={(v) => setOrigem(v as OrigemFiltro)}
+          />
+        </div>
+      </div>
 
-      {biblioteca.isLoading && (
-        <p className="flex items-center text-[12px] text-muted-foreground">
-          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo a biblioteca...
-        </p>
-      )}
+      {biblioteca.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo a biblioteca" />}
       {biblioteca.isError && <AvisoDeErro erro={biblioteca.error} />}
       {biblioteca.isSuccess && itens.length === 0 && <Vazio titulo="A biblioteca ainda está vazia">Busque referências públicas abaixo e importe as que servirem.</Vazio>}
       {biblioteca.isSuccess && itens.length > 0 && filtrados.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nada com esses filtros.</p>
+        <EstadoVazio
+          compacto
+          titulo="Nada com esses filtros."
+          acao={
+            <button
+              type="button"
+              className="text-[12px] font-medium text-primary hover:underline"
+              onClick={() => {
+                setTipo("todos");
+                setCategoria("todas");
+                setOrigem("todas");
+                setBusca("");
+              }}
+            >
+              Limpar filtros
+            </button>
+          }
+        />
       )}
 
       {prompts.length > 0 && (
-        <section className="min-w-0 space-y-2">
-          <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Prompts · {prompts.length}</h2>
-          <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <section className="min-w-0" aria-label="Prompts">
+          <h3 className="mb-2 text-[13px] font-semibold">
+            Prompts <span className="font-normal tabular-nums text-muted-foreground">{prompts.length}</span>
+          </h3>
+          <ul className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
             {prompts.map((i) => (
               <CartaoDoPrompt key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
             ))}
@@ -496,8 +544,10 @@ export default function EtapaBiblioteca() {
         </section>
       )}
       {referencias.length > 0 && (
-        <section className="min-w-0 space-y-2">
-          <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referências de imagem · {referencias.length}</h2>
+        <section className="min-w-0" aria-label="Referências de imagem">
+          <h3 className="mb-2 text-[13px] font-semibold">
+            Referências de imagem <span className="font-normal tabular-nums text-muted-foreground">{referencias.length}</span>
+          </h3>
           <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {referencias.map((i) => (
               <CartaoDaReferencia key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
@@ -506,8 +556,10 @@ export default function EtapaBiblioteca() {
         </section>
       )}
 
-      {isAdmin && <ExemplosDaBiblioteca />}
-      <BuscaPublica categoriaInicial={categoria} />
+      <div className="min-w-0 space-y-5">
+        {isAdmin && <ExemplosDaBiblioteca />}
+        <BuscaPublica categoriaInicial={categoria} />
+      </div>
       <Ampliar imagens={ampliada ? [ampliavelDoItem(ampliada)] : []} indice={ampliada ? 0 : null} onFechar={() => setAmpliada(null)} />
     </div>
   );
@@ -625,13 +677,13 @@ export function ExemplosDaBiblioteca() {
             </Button>
           </div>
           {previa && (
-            <div className="rounded-lg border border-border bg-background p-2 text-[12px]" data-previa-da-limpeza="">
+            <div className="rounded-md bg-muted/50 p-2 text-[12px]" data-previa-da-limpeza="">
               <p>
                 {previa.encontrados} {previa.encontrados === 1 ? "exemplo veio" : "exemplos vieram"} do Openverse
                 {modo === "nao_batem" ? `; ${previa.a_limpar} não ${previa.a_limpar === 1 ? "bate" : "batem"} com o prompt` : ""}.
               </p>
               {modo === "nao_batem" && previa.itens.length > 0 && (
-                <ul className="mt-1 max-h-40 overflow-y-auto text-[11.5px] text-muted-foreground">
+                <ul className="mt-1 text-[11.5px] text-muted-foreground lg:max-h-40 lg:overflow-y-auto lg:overscroll-contain">
                   {previa.itens.slice(0, 60).map((i) => (
                     <li key={i.id} className="truncate">
                       {i.titulo}
@@ -658,15 +710,15 @@ export function ExemplosDaBiblioteca() {
         </div>
         <div className="min-w-0 space-y-2" data-gerar-exemplos="">
           <p className="text-[12px] font-medium">2. Gerar o exemplo com o próprio prompt</p>
-          <p className="text-[11.5px] leading-snug text-muted-foreground">
-            Uma imagem por prompt, no gerador mais barato de boa qualidade. Cobra na carteira de {clientName || "o cliente aberto"}.
+          <p className="truncate text-[11.5px] text-muted-foreground" title="Uma imagem por prompt, no gerador mais barato de boa qualidade.">
+            Cobra na carteira de {clientName || "o cliente aberto"}.
           </p>
           {!estimativa ? (
             <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!!ocupado} onClick={() => void calcular()}>
               {ocupado === "estimar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null} Calcular o custo total
             </Button>
           ) : (
-            <div className="rounded-lg border border-border bg-background p-2 text-[12px]" data-estimativa-dos-exemplos="">
+            <div className="rounded-md bg-muted/50 p-2 text-[12px]" data-estimativa-dos-exemplos="">
               <p>
                 {estimativa.pendentes} {estimativa.pendentes === 1 ? "prompt sem exemplo" : "prompts sem exemplo"}: ~{usd(estimativa.total_usd || 0)} no total
                 {estimativa.por_imagem_usd != null ? ` (~${usd(estimativa.por_imagem_usd)} cada)` : ""}, com {estimativa.rotulo || estimativa.modelo_imagem_id}.

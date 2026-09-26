@@ -122,7 +122,7 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
   const nome = nomeDoProduto(p);
 
   return (
-    <div className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-card p-3" data-identificacao="">
+    <div className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-3" data-identificacao="">
       <div className="flex min-w-0 items-start">
         <PackageSearch className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">

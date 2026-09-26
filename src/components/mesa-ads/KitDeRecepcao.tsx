@@ -46,9 +46,9 @@ function Nota({ rotulo, nota }: { rotulo: string; nota: number | null }) {
 
 function Bloco({ titulo, icone, children, acao }: { titulo: string; icone: ReactNode; children: ReactNode; acao?: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-lg border border-border bg-background p-2.5">
+    <section className="min-w-0 rounded-md bg-muted/50 p-2.5">
       <div className="mb-1 flex min-w-0 flex-wrap items-center">
-        <p className="mr-2 flex items-center text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="mr-2 flex min-w-0 items-center text-[12px] font-medium text-muted-foreground">
           {icone}
           {titulo}
         </p>
@@ -126,7 +126,7 @@ function PostNaAgenda({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo
       <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
         <label className="mb-1 mr-2 inline-flex items-center text-[11.5px] text-muted-foreground">
           <span className="mr-1.5">Dia</span>
-          <Input type="date" aria-label="Dia do post de recepção" value={data} onChange={(e) => setData(e.target.value)} className="h-8 w-[150px] text-[12px]" />
+          <Input type="date" aria-label="Dia do post de recepção" value={data} onChange={(e) => setData(e.target.value)} className="h-8 w-[150px] max-w-full text-[12px]" />
         </label>
         <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" disabled={fazendo || !data} onClick={() => void confirmar()}>
           {fazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
@@ -288,14 +288,14 @@ export default function KitDeRecepcao({ plano, angulo, compacto = false }: { pla
   );
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-3" aria-label={`Kit de recepção: ${angulo.nome}`}>
+    <section className="min-w-0 rounded-lg border border-border bg-card p-3" aria-label={`Kit de recepção: ${angulo.nome}`}>
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" className="mb-1 mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
           <HandCoins className="mr-1.5 h-4 w-4 shrink-0 text-primary" />
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-semibold">Kit de recepção{compacto ? "" : `: ${angulo.nome}`}</span>
-            <span className="block text-[11.5px] text-muted-foreground">
-              {kit ? `Post de recepção e roteiro de vendas prontos${kit.agenda ? `, post na agenda em ${dataCurta(kit.agenda.data)}` : ""}.` : "O post e o atendimento que recebem quem clica neste anúncio."}
+            <span className="block truncate text-[11.5px] text-muted-foreground" title="O post e o atendimento que recebem quem clica neste anúncio.">
+              {kit ? `Post e roteiro de vendas prontos${kit.agenda ? `, na agenda em ${dataCurta(kit.agenda.data)}` : ""}` : "Post e atendimento de quem clica"}
             </span>
           </span>
           {kit && <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />}

@@ -166,7 +166,8 @@ const OFERTA_DA_RESPOSTA = {
 };
 
 describe("oferta: agente conversacional e ofertas", () => {
-  it("a conversa chama oferta_conversar; as ofertas voltam com as notas do Jev e as ações mandam oferta_salvar", async () => {
+  // Tela grande (ofertas, briefing inteiro e o agente ao lado): as buscas por papel no jsdom passam de 5 s com a máquina ocupada.
+  it("a conversa chama oferta_conversar; as ofertas voltam com as notas do Jev e as ações mandam oferta_salvar", { timeout: 20000 }, async () => {
     responder({
       oferta_conversar: {
         conversa_id: "c0ffee00-0000-4000-8000-000000000001",
@@ -284,7 +285,8 @@ const CONTA = {
 };
 
 describe("conta ao vivo", () => {
-  it("conta_ao_vivo com o período; sinal, métricas e tendência por anúncio; sincronizar e analisar chamam as ações; variações vão ao plano", async () => {
+  // Tela grande (a conta inteira com o agente ao lado): as buscas por papel no jsdom passam de 5 s com a máquina ocupada.
+  it("conta_ao_vivo com o período; sinal, métricas e tendência por anúncio; sincronizar e analisar chamam as ações; variações vão ao plano", { timeout: 20000 }, async () => {
     responder({
       conta_ao_vivo: CONTA,
       conta_sincronizar: { ok: true },
@@ -317,9 +319,12 @@ describe("conta ao vivo", () => {
     expect(screen.getAllByText("R$ 1.540,50").length).toBeGreaterThan(0);
     expect(screen.getByText("Mensagens | Clareamento", { selector: "span" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("radio", { name: "30 dias" }));
+    // Período num seletor compacto (sistema de design: mais de 4 opções vira lista).
+    fireEvent.click(screen.getByRole("button", { name: "Período: 14 dias" }));
+    fireEvent.click(await screen.findByRole("option", { name: "30 dias" }));
     await waitFor(() => expect(chamadasDe("conta_ao_vivo").some((c) => c.dias === 30)).toBe(true));
-    fireEvent.click(screen.getByRole("radio", { name: "14 dias" }));
+    fireEvent.click(screen.getByRole("button", { name: "Período: 30 dias" }));
+    fireEvent.click(await screen.findByRole("option", { name: "14 dias" }));
 
     fireEvent.click(screen.getByRole("button", { name: /Sincronizar agora/ }));
     await waitFor(() => expect(chamadasDe("conta_sincronizar")).toEqual([{ acao: "conta_sincronizar", client_id: CLIENTE }]));

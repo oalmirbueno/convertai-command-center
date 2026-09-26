@@ -1,18 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, CheckCircle2, Link2Off, PlugZap } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, CheckCircle2, Link2Off } from "lucide-react";
+import { EstadoDeErro, Painel, Secao, botao, etiqueta, juntar, texto } from "@/components/sistema";
 
 /**
- * Quais contas estão realmente medindo — e quais só parecem estar.
+ * Quais contas estão realmente medindo, e quais só parecem estar.
  *
  * A queixa: "alguns perfis não funcionam de verdade, apesar de estar ok".
  * Ela é justa. Uma conta cadastrada aparece na tela como qualquer outra,
  * mesmo que nunca tenha sido conectada: ela não captura nada e nada na
  * interface dizia isso. O painel mostrava a ausência de dados do mesmo
- * jeito que mostraria um perfil parado — e são coisas diferentes.
+ * jeito que mostraria um perfil parado, e são coisas diferentes.
  *
  * Aqui a diferença é dita em voz alta, com o motivo e o que fazer.
+ * Sistema de design (26/09): uma seção sem caixa em volta, a lista com
+ * divisória (nada de um cartão por conta) e a explicação no "?".
  */
 
 type Linha = {
@@ -33,7 +35,7 @@ const quando = (iso?: string | null) =>
   }) : null;
 
 export default function SaudeDasContas() {
-  const { data: linhas = [], error, isLoading } = useQuery({
+  const { data: linhas = [], error, isLoading, refetch } = useQuery({
     queryKey: ["saude-das-contas"],
     queryFn: async () => {
       const { data: contas, error: erroContas } = await (supabase as any)
@@ -85,12 +87,22 @@ export default function SaudeDasContas() {
     refetchInterval: 120_000,
   });
 
-  if (error) {
+  const ajuda =
+    "Quais contas de Instagram estão medindo de verdade. Conta não conectada aparece aqui porque o cadastro dela existe, mas o painel não consegue buscar nada: um perfil sem dados por falta de conexão é diferente de um perfil parado. Posts anteriores a 29/06 não têm insights: a coleta começou depois deles, e o histórico não foi preenchido para trás.";
+
+  if (error && linhas.length === 0) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[12px] text-destructive">
-        Não consegui ler a saúde das contas: {error instanceof Error ? error.message : String(error)}.
-        Nenhuma conta está marcada como boa ou ruim — a leitura falhou.
-      </div>
+      <Secao divisoria titulo="Saúde das contas" ajuda={ajuda}>
+        <EstadoDeErro
+          titulo="Não consegui ler a saúde das contas."
+          descricao={`${error instanceof Error ? error.message : String(error)}. Nenhuma conta está marcada como boa ou ruim: a leitura falhou.`}
+          acao={
+            <button type="button" onClick={() => refetch()} className={botao.secundario}>
+              Tentar de novo
+            </button>
+          }
+        />
+      </Secao>
     );
   }
   if (isLoading || linhas.length === 0) return null;
@@ -98,71 +110,60 @@ export default function SaudeDasContas() {
   const quebradas = linhas.filter((l) => !l.conectada || l.vencida || l.posts === 0);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        <PlugZap className="h-3.5 w-3.5 text-info" /> Saúde das contas
-        {quebradas.length > 0 ? (
-          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold normal-case text-warning">
-            {quebradas.length} não está medindo
-          </span>
-        ) : (
-          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold normal-case text-success">
-            todas medindo
-          </span>
-        )}
-      </p>
-
-      <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-        {linhas.map((l) => {
-          // O motivo, em ordem de gravidade. Cada um pede uma ação diferente,
-          // e um rótulo genérico faria o dono adivinhar qual.
-          const motivo = !l.conectada
-            ? "nunca foi conectada · o painel não busca nada dela"
-            : l.vencida
-              ? "o token venceu · reconecte para voltar a medir"
-              : l.posts === 0
-                ? "conectada, mas nenhum post capturado ainda"
-                : null;
-          return (
-            <div
-              key={l.id}
-              className={cn(
-                "flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5",
-                motivo ? "border-warning/40 bg-warning/[0.05]" : "border-border bg-secondary/40",
-              )}
-            >
-              {motivo
-                ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
-                : <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-foreground">
-                  {l.handle || l.display_name || "(sem handle)"}
-                </span>
-                <span className="block truncate text-[10px] text-muted-foreground">
-                  {l.cliente || "sem cliente"}
-                  {motivo && <span className="text-warning"> · {motivo}</span>}
-                </span>
-              </span>
-              <span className="shrink-0 text-right">
-                <span className="block font-mono text-[11.5px] tabular-nums text-foreground">
-                  {l.posts} {l.posts === 1 ? "post" : "posts"}
-                </span>
-                {l.ultima && (
-                  <span className="block text-[9.5px] text-muted-foreground">{quando(l.ultima)}</span>
-                )}
-              </span>
-              {!l.conectada && <Link2Off className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-        Conta não conectada aparece aqui porque o cadastro dela existe, mas o painel
-        não consegue buscar nada — e um perfil sem dados por falta de conexão é
-        diferente de um perfil parado. Posts anteriores a 29/06 não têm insights:
-        a coleta começou depois deles, e o histórico não foi preenchido para trás.
-      </p>
-    </div>
+    <Secao
+      divisoria
+      titulo="Saúde das contas"
+      ajuda={ajuda}
+      descricao={
+        <span className="flex min-w-0 items-center">
+          <span className="truncate">{linhas.length} {linhas.length === 1 ? "conta" : "contas"} de Instagram</span>
+          {quebradas.length > 0 ? (
+            <span className={juntar(etiqueta, "ml-2 bg-warning/15 text-warning")}>{quebradas.length} não está medindo</span>
+          ) : (
+            <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>todas medindo</span>
+          )}
+        </span>
+      }
+    >
+      <Painel semEspaco className="overflow-hidden">
+        {/* No computador a lista rola por dentro; no celular a página rola. */}
+        <ul className="min-w-0 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Saúde das contas">
+          {linhas.map((l) => {
+            // O motivo, em ordem de gravidade. Cada um pede uma ação diferente,
+            // e um rótulo genérico faria o dono adivinhar qual.
+            const motivo = !l.conectada
+              ? "nunca foi conectada · o painel não busca nada dela"
+              : l.vencida
+                ? "o token venceu · reconecte para voltar a medir"
+                : l.posts === 0
+                  ? "conectada, mas nenhum post capturado ainda"
+                  : null;
+            return (
+              <li key={l.id} className="flex min-w-0 items-center px-4 py-2.5">
+                {motivo
+                  ? <AlertTriangle className="mr-2.5 h-4 w-4 shrink-0 text-warning" aria-label="Não está medindo" />
+                  : <CheckCircle2 className="mr-2.5 h-4 w-4 shrink-0 text-success" aria-label="Medindo" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-foreground">
+                    {l.handle || l.display_name || "(sem handle)"}
+                  </p>
+                  <p className={juntar(texto.auxiliar, "truncate")}>
+                    {l.cliente || "sem cliente"}
+                    {motivo && <span className="text-warning"> · {motivo}</span>}
+                  </p>
+                </div>
+                <div className="ml-3 shrink-0 text-right">
+                  <p className="text-[13px] tabular-nums text-foreground">
+                    {l.posts} {l.posts === 1 ? "post" : "posts"}
+                  </p>
+                  {l.ultima && <p className={juntar(texto.auxiliar, "tabular-nums")}>{quando(l.ultima)}</p>}
+                </div>
+                {!l.conectada && <Link2Off className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Não conectada" />}
+              </li>
+            );
+          })}
+        </ul>
+      </Painel>
+    </Secao>
   );
 }

@@ -2050,6 +2050,8 @@ export interface MensagemDoDiretor {
   identificacao?: IdentificacaoDoProduto | null;
   /** Ação proposta nas fotos (aprovar, arquivar, organizar, mandar para campanha) e a mensagem guardada dela. */
   acao?: AcaoDoAgente | null;
+  /** Gerações pagas propostas pelo diretor agêntico (uma foto por item, custo antes do Confirmar). */
+  geracao?: AcaoDoAgente | null;
   mensagemId?: string | null;
 }
 
@@ -2091,6 +2093,10 @@ export interface RespostaDoDiretor {
   acao: AcaoDoAgente | null;
   /** A mensagem do diretor guardada (é por ela que a confirmação acha a lista). */
   mensagem_id: string | null;
+  /** Fotos a gerar (clone, variação, prompt, book): uma por item, só com o Confirmar e o custo à vista. */
+  geracao: AcaoDoAgente | null;
+  /** O que o diretor já conhecia nesta mensagem (pacote do cliente). */
+  contexto_do_diretor: { resumo: string; foco_rotulo: string; leituras_feitas: number } | null;
 }
 
 export async function conversarComDiretor(p: {
@@ -2106,8 +2112,11 @@ export async function conversarComDiretor(p: {
   novaConversa?: boolean;
   /** A campanha da Mesa escolhida em Variações ou Campanha (id ou "nenhuma"); sem ela, a do mês. */
   campanhaId?: string | null;
+  /** O que está aberto na tela (etapa, clone, book, produto, seleção): o diretor agêntico trabalha nisso. */
+  foco?: Record<string, unknown> | null;
 }): Promise<RespostaDoDiretor> {
   const corpo: Record<string, unknown> = { acao: "agente_conversar", client_id: p.clientId, mensagem: p.mensagem.trim() };
+  if (p.foco) corpo.foco = p.foco;
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.conversaId) corpo.conversa_id = p.conversaId;
   else if (p.novaConversa) corpo.nova_conversa = true;
@@ -2134,6 +2143,11 @@ export async function conversarComDiretor(p: {
     identificacao: ident ? normalizarIdentificacao(ident) : null,
     acao: acaoDoAnexo(data && data.acao),
     mensagem_id: textoOuNulo(data && data.mensagem_id),
+    geracao: acaoDoAnexo(data && data.acao_de_geracao),
+    contexto_do_diretor:
+      data && data.contexto_do_diretor && typeof data.contexto_do_diretor === "object"
+        ? { resumo: texto(data.contexto_do_diretor.resumo), foco_rotulo: texto(data.contexto_do_diretor.foco_rotulo), leituras_feitas: Number(data.contexto_do_diretor.leituras_feitas) || 0 }
+        : null,
   };
 }
 

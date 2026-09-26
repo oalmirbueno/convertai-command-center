@@ -3,7 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { faixaDoScore } from "./contextoDoCliente";
 
 /**
- * Caixinhas recolhíveis da aba Contexto (pedido do dono em 23/09: "muito
+ * Grupos recolhíveis da aba Contexto (pedido do dono em 23/09: "muito
  * solta, tudo misturado"). Cada hub tem título, uma linha de resumo, o score
  * dele e as ações à direita; aberto, mostra o conteúdo com rolagem própria
  * quando a lista é longa. Quais hubs ficam abertos é lembrado no navegador
@@ -110,29 +110,32 @@ export function Hub({
   rolagem?: boolean;
 }) {
   const corpo = id ? `${id}-corpo` : undefined;
+  // Sistema de design (docs/design/SISTEMA.md): sem caixa. Os hubs formam uma
+  // lista separada por linhas finas; aberto, o conteúdo fica alinhado com o
+  // título, sem outra borda em volta.
   return (
-    <section id={id} className="min-w-0 scroll-mt-28 rounded-xl border border-border bg-card md:scroll-mt-40">
+    <section id={id} className="min-w-0 scroll-mt-28 border-t border-border md:scroll-mt-40 lg:scroll-mt-4" data-hub="">
       <div className="flex min-w-0 items-center">
         <button
           type="button"
           onClick={onAlternar}
           aria-expanded={aberto}
           aria-controls={corpo}
-          className="flex min-w-0 flex-1 items-center rounded-xl px-3.5 py-3 text-left transition-colors hover:bg-muted/40 sm:px-4"
+          className="-mx-2 flex min-w-0 flex-1 items-center rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronDown className={`mr-2.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center">
-              <span className="truncate text-[13.5px] font-semibold text-foreground">{titulo}</span>
+              <span className="truncate text-[15px] font-semibold leading-[22px] text-foreground">{titulo}</span>
               {score !== undefined && <SeloDoScore score={score} rotulo={`Score de ${titulo.toLowerCase()}`} className="ml-2" />}
             </span>
-            {resumo && <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">{resumo}</span>}
+            {resumo && <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">{resumo}</span>}
           </span>
         </button>
-        {acao && <div className="flex shrink-0 items-center pr-2.5 sm:pr-3">{acao}</div>}
+        {acao && <div className="ml-2 flex shrink-0 items-center">{acao}</div>}
       </div>
       {aberto && (
-        <div id={corpo} className="min-w-0 border-t border-border px-3.5 pb-3.5 pt-3 sm:px-4 sm:pb-4">
+        <div id={corpo} className="min-w-0 pb-5 pt-1 sm:pl-[26px]">
           {rolagem ? <div className="-mr-1.5 max-h-[70vh] min-w-0 overflow-y-auto overscroll-contain pr-1.5">{children}</div> : children}
         </div>
       )}

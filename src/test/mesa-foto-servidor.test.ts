@@ -1624,7 +1624,9 @@ describe("ligada à Mesa: campanha do mês pelo calendário (campanhas.ts, sem I
     expect(f).toContain('campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,');
     expect(f).toContain('campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,');
     expect(f).toContain("A Mesa é a principal e a Mesa Foto é ferramenta dela");
-    expect(f.match(/contextoDoCliente\(clientId, corpo\.campanha_id, corpo\.marca_id\)/g) || []).toHaveLength(4);
+    expect(f.match(/contextoDoCliente\(clientId, corpo\.campanha_id, corpo\.marca_id\)/g) || []).toHaveLength(3);
+    // O diretor (agente_conversar) usa o mesmo contexto, com cache curto (diretor.ts, 26/09).
+    expect(f).toContain("DIRETOR.contextoComCache(clientId, corpo.campanha_id, corpo.marca_id)");
     // Gravada na direção do ensaio (ensaio e variações) e devolvida na resposta (variações e campanha).
     expect(f.match(/campanha_mesa: contexto\.campanha/g) || []).toHaveLength(4);
     expect(f).toContain("campanha_mesa: d.campanhaMesa ?? null,");

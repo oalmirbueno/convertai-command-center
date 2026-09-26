@@ -46,6 +46,8 @@ export interface VersaoDeVideo {
   motivo: string | null;
   criado_por: string | null;
   criado_em: string;
+  /** Projeto de edição desta versão (frente E2, projeto-de-edicao.ts; coluna do SQL E2-01). Só vem quando existe. */
+  projeto?: Record<string, unknown> | null;
 }
 
 export const MAX_TEXTO_FEEDBACK = 1200;
@@ -100,6 +102,7 @@ export function normalizarVersao(v: unknown): VersaoDeVideo | null {
     motivo: o.motivo ? texto(o.motivo, 400) : null,
     criado_por: o.criado_por ? String(o.criado_por) : null,
     criado_em: String(o.criado_em || ""),
+    ...(o.projeto && typeof o.projeto === "object" && !Array.isArray(o.projeto) ? { projeto: o.projeto as Record<string, unknown> } : {}),
   };
 }
 

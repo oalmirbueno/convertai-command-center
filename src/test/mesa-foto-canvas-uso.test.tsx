@@ -394,11 +394,14 @@ describe("canvas: rolagem", () => {
     await abrirQuadro();
     fireEvent.click(document.querySelector('[data-paleta="agente"]') as HTMLElement);
     const conversa = await waitFor(() => {
-      const c = document.querySelector('[role="log"][aria-label="Conversa com o agente"]') as HTMLElement;
+      // 26/09 (sistema de design): a conversa é a MensagensDoAgente (região que rola por dentro), numa caixa de altura fixa.
+      const c = document.querySelector('[data-mensagens-do-agente][aria-label="Conversa com o agente"]') as HTMLElement;
       expect(c).toBeTruthy();
       return c;
     });
-    expect(classes(conversa)).toEqual(expect.arrayContaining(["nowheel", "overflow-y-auto", "overscroll-contain", "max-h-[30vh]"]));
+    expect(classes(conversa)).toEqual(expect.arrayContaining(["nowheel", "overflow-y-auto", "overscroll-contain"]));
+    expect(classes(conversa.closest("[data-caixa-da-conversa]"))).toEqual(expect.arrayContaining(["h-[30vh]", "overflow-hidden"]));
+    expect(conversa.getAttribute("aria-live")).toBe("polite");
     expect(conversa.closest('[data-ajustes="abertos"]')).toBeTruthy();
     expect(espiao).not.toHaveBeenCalled();
     espiao.mockRestore();

@@ -3,17 +3,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, Cell, PieChart, Pie,
+  Tooltip, Cell, PieChart, Pie,
 } from "recharts";
 import {
-  Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Download,
-  Edit3, Trash2, Calendar, Filter, Sparkles, ArrowUpRight, ArrowDownRight,
-  Briefcase, PiggyBank,
+  Plus, Wallet, Download, Edit3, Trash2, ArrowUpRight, ArrowDownRight,
+  Briefcase, PiggyBank, ChevronDown, ListFilter,
 } from "lucide-react";
+import {
+  AjudaRecolhida, BarraDeAcoes, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel,
+  RegiaoRolavel, Secao, SeletorCompacto, botao, campo, campoTexto, foco, juntar, superficie, texto, useEstadoDaTela,
+} from "@/components/sistema";
+import {
+  AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, botaoDeLinha, corDoTom, type Tom,
+} from "@/components/finance/pecasDoFinanceiro";
 import NewIncomeModal from "./NewIncomeModal";
 import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { useFinanceBoxes, boxesTotal, EMPTY_BOXES, type FinanceBoxes } from "@/hooks/useFinanceBoxes";
@@ -85,6 +89,16 @@ const monthLabel = (key: string) => {
   return `${MONTH_LABELS[m - 1]}/${String(y).slice(2)}`;
 };
 
+const PERIODOS = [6, 12, 24] as const;
+const SEGMENTOS = [
+  { valor: "all", rotulo: "Tudo" },
+  { valor: "recurring", rotulo: "Recorrente" },
+  { valor: "one_off", rotulo: "Avulso" },
+];
+type AbaDasSaidas = "ap" | "exp" | "done" | "pro" | "inv";
+const ABAS_DAS_SAIDAS: AbaDasSaidas[] = ["ap", "exp", "done", "pro", "inv"];
+const ehBooleano = (v: unknown) => typeof v === "boolean";
+
 interface Props {
   billing: any[];
   projectPayments: any[];
@@ -94,12 +108,24 @@ interface Props {
 
 export default function CashFlow({ billing = [], projectPayments = [], clientsReserveSuggestion = 0 }: Props) {
   const qc = useQueryClient();
-  const [period, setPeriod] = useState<6 | 12 | 24>(12);
+  // Período, segmento, blocos abertos e a lista escolhida em cada bloco
+  // ficam lembrados (sair e voltar mantém).
+  const [period, setPeriod] = useEstadoDaTela<6 | 12 | 24>("financeiro:fluxo:periodo", 12, {
+    validar: (v) => v === 6 || v === 12 || v === 24,
+  });
   const [expenseModal, setExpenseModal] = useState<{ mode: "expense" | "investment"; data: any } | null>(null);
   const [incomeModalOpen, setIncomeModalOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
+  const [segment, setSegment] = useEstadoDaTela<"all" | "recurring" | "one_off">("financeiro:fluxo:segmento", "all", {
+    validar: (v) => v === "all" || v === "recurring" || v === "one_off",
+  });
+  const [abaEntradas, setAbaEntradas] = useEstadoDaTela<"ar" | "received">("financeiro:fluxo:entradas:aba", "ar", {
+    validar: (v) => v === "ar" || v === "received",
+  });
+  const [abaSaidas, setAbaSaidas] = useEstadoDaTela<AbaDasSaidas>("financeiro:fluxo:saidas:aba", "ap", {
+    validar: (v) => ABAS_DAS_SAIDAS.indexOf(v as AbaDasSaidas) >= 0,
+  });
 
   // Filter sources by segment
   // Regra: o segmento decide pelo TIPO DO CLIENTE (não pela natureza do registro).
@@ -123,7 +149,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     return projectPayments || [];
   }, [projectPayments, segment]);
 
-  const { data: allExpenses = [] } = useQuery({
+  const { data: allExpenses = [], isLoading: carregandoDespesas, error: erroDasDespesas, refetch: refetchDespesas } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
@@ -143,8 +169,8 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
   const { updateSettings } = useFinanceMutations();
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconcileInput, setReconcileInput] = useState("");
-  const [inflowsOpen, setInflowsOpen] = useState(true);
-  const [outflowsOpen, setOutflowsOpen] = useState(true);
+  const [inflowsOpen, setInflowsOpen] = useEstadoDaTela("financeiro:fluxo:entradas:aberto", true, { validar: ehBooleano });
+  const [outflowsOpen, setOutflowsOpen] = useEstadoDaTela("financeiro:fluxo:saidas:aberto", true, { validar: ehBooleano });
 
   const openingBalance = financeSettings?.openingBalance ?? 0;
   const allTimeReceived = useMemo(() => {
@@ -553,7 +579,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
         .eq("id", molde.id);
       if (error) return toast.error(error.message);
       toast.success(
-        `Pró-labore ajustado de ${fmt(atual)} para ${fmt(valor)} — sem criar uma segunda retirada.`,
+        `Pró-labore ajustado de ${fmt(atual)} para ${fmt(valor)}, sem criar uma segunda retirada.`,
       );
       qc.invalidateQueries({ queryKey: ["expenses"] });
       return;
@@ -727,776 +753,758 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     a.click(); URL.revokeObjectURL(url);
   };
 
+  const aReceber = accountsReceivable.reduce((s: number, r: any) => s + r.amount, 0);
+  const aPagar = accountsPayable.reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+  // Esqueleto só na primeira carga: depois, o dado velho fica na tela enquanto relê.
+  const primeiraCarga = carregandoDespesas && (allExpenses || []).length === 0;
+
+  const prazo = (overdue: boolean, daysUntil: number) =>
+    overdue ? (
+      <Etiqueta tom="perigo">{Math.abs(daysUntil)}d atrasado</Etiqueta>
+    ) : daysUntil <= 7 ? (
+      <Etiqueta tom="aviso">{daysUntil}d</Etiqueta>
+    ) : (
+      <Etiqueta tom="apagado">{daysUntil}d</Etiqueta>
+    );
+
+  const estadoDasSaidas = erroDasDespesas ? (
+    <div className="p-4">
+      <EstadoDeErro
+        titulo="Não consegui ler as saídas."
+        acao={<button type="button" onClick={() => refetchDespesas()} className={botao.secundario}>Tentar de novo</button>}
+      />
+    </div>
+  ) : primeiraCarga ? (
+    <Carregando linhas={4} rotulo="Carregando saídas" className="p-4" />
+  ) : null;
+
+  const acoesDaLinha = (e: any, modo: "expense" | "investment") => (
+    <>
+      <button type="button" onClick={() => setExpenseModal({ mode: modo, data: e })} className={juntar(botao.icone, "ml-1")} aria-label={`Editar ${e.description}`} title="Editar">
+        <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <button type="button" onClick={() => setConfirmDel(e.id)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Remover ${e.description}`} title="Remover">
+        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </>
+  );
+
+  const renderExpenseRow = (e: any) => {
+    const cm = catMeta(e.category);
+    return (
+      <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+        <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+        <div className="mr-3 min-w-0 flex-1 basis-48">
+          <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+          <p className={juntar(texto.auxiliar, "truncate")}>
+            {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+            {e.recurrence === "monthly" && " · Fixa mensal"}
+            {e.recurrence === "yearly" && " · Fixa anual"}
+          </p>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center py-0.5">
+          <Etiqueta tom={e.status === "paid" ? "sucesso" : "aviso"} className="mr-3">{e.status === "paid" ? "Pago" : "Pendente"}</Etiqueta>
+          <span className="mr-2 text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
+          <button type="button" onClick={() => togglePaid(e)} className={botaoDeLinha}>
+            {e.status === "paid" ? "Reabrir" : "Pagar"}
+          </button>
+          {acoesDaLinha(e, "expense")}
+        </div>
+      </li>
+    );
+  };
+
+  const opcoesDasSaidas = [
+    { valor: "ap", rotulo: "A pagar", contador: accountsPayable.length },
+    { valor: "exp", rotulo: "Todas as despesas", contador: expenses.length },
+    { valor: "done", rotulo: "Realizadas", contador: paidOutList.length },
+    { valor: "pro", rotulo: "Pró-labore" },
+    { valor: "inv", rotulo: "Investimentos", contador: investorEntries.length },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground tracking-tight">Fluxo de Caixa</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Visão financeira completa · entradas, saídas, DRE e projeção</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-1">
-            {[6, 12, 24].map(n => (
-              <button key={n} onClick={() => setPeriod(n as any)}
-                className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${period === n ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                {n}m
-              </button>
-            ))}
+    <div className="min-w-0 space-y-6">
+      {/* Filtros e ações da aba: período e segmento (lembram ao voltar), CSV e Lançamento. */}
+      <BarraDeAcoes
+        inicio={
+          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+            <SeletorCompacto
+              opcoes={PERIODOS.map((n) => ({ valor: String(n), rotulo: `${n}m` }))}
+              valor={String(period)}
+              onEscolher={(v) => setPeriod(Number(v) as 6 | 12 | 24)}
+              rotulo="Período"
+              modo="segmentado"
+            />
+            <SeletorCompacto
+              opcoes={SEGMENTOS}
+              valor={segment}
+              onEscolher={(v) => setSegment(v as "all" | "recurring" | "one_off")}
+              rotulo="Segmento"
+              modo="segmentado"
+            />
+            <AjudaRecolhida rotulo="Sobre o período e o segmento">
+              Período: meses mostrados no gráfico e no DRE (metade para trás, metade para frente). Recorrente: só mensalidades de clientes
+              recorrentes e híbridos. Avulso: projetos pontuais e cobranças de clientes avulsos (ex.: Armazén do Itamar).
+            </AjudaRecolhida>
           </div>
-          <button onClick={exportCSV}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer">
-            <Download className="w-3.5 h-3.5" /> CSV
-          </button>
-          <button onClick={() => setLauncherOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 border-none cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Lançamento
-          </button>
-        </div>
-      </div>
-
-      {/* SEGMENT TOGGLE · Recorrente / Avulso */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Segmento:</span>
-        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1">
-          {[
-            { v: "all", label: "Tudo" },
-            { v: "recurring", label: "Recorrente (MRR)" },
-            { v: "one_off", label: "Avulso (Projetos)" },
-          ].map((s) => (
-            <button key={s.v} onClick={() => setSegment(s.v as any)}
-              className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer border-none ${
-                segment === s.v ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"
-              }`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-        {segment !== "all" && (
-          <span className="text-[10px] text-muted-foreground italic">
-            {segment === "recurring" ? "Mostrando apenas mensalidades de clientes recorrentes e híbridos" : "Mostrando entradas avulsas · projetos pontuais e billing de clientes one-off (ex.: Armazén do Itamar)"}
-          </span>
-        )}
-      </div>
-
+        }
+      >
+        <button type="button" onClick={exportCSV} className={botao.secundario} aria-label="Baixar CSV" title="Baixar CSV">
+          <Download className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+          <span className="hidden sm:inline">CSV</span>
+        </button>
+        <button type="button" onClick={() => setLauncherOpen(true)} className={botao.primario}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Lançamento
+        </button>
+      </BarraDeAcoes>
 
       {/* CAIXA DA ACELERIQ */}
-      <div className="flex items-end justify-between flex-wrap gap-2">
-        <SectionHeader title="Caixa da Aceleriq" subtitle="Saldo real na conta · base anterior conciliada + entradas − saídas" />
-        <button
-          onClick={() => { setReconcileInput(""); setReconcileOpen(true); }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
-        >
-          <Wallet className="w-3.5 h-3.5" /> Conciliar saldo
-        </button>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={<Wallet className="w-4 h-4" />} label="Saldo em caixa hoje" value={fmt(cashBalance)}
-          hint="Confira com o extrato e concilie" tone={cashBalance >= 0 ? "primary" : "danger"} />
-        <KpiCard icon={<Calendar className="w-4 h-4" />} label="Base de meses anteriores" value={fmt(openingBalance)}
-          hint="Ajustada na conciliação" tone="warning" />
-        <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Entradas (histórico)" value={fmt(allTimeReceived)}
-          hint="Tudo que já foi recebido" tone="success" />
-        <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas do mês" value={fmt(cur.despesas + cur.pendDespesa)}
-          hint={`${fmt(cur.despesas)} pagas · ${fmt(cur.pendDespesa)} previstas`} tone="danger" />
-        <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas (histórico)" value={fmt(allTimePaidOut)}
-          hint="Tudo que já foi pago, todos os meses" tone="danger" />
-      </div>
+      <Secao
+        titulo="Caixa"
+        ajuda="Saldo real na conta: base anterior conciliada + entradas − saídas. Confira com o extrato e concilie quando não bater."
+        acao={
+          <button
+            type="button"
+            onClick={() => { setReconcileInput(""); setReconcileOpen(true); }}
+            className={botao.secundario}
+            aria-label="Conciliar saldo"
+          >
+            <Wallet className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Conciliar saldo</span>
+          </button>
+        }
+      >
+        <GradeDeKpis colunas={5}>
+          <Kpi rotulo="Saldo em caixa hoje" valor={fmt(cashBalance)} apoio="Confira com o extrato" tom={cashBalance >= 0 ? "primario" : "perigo"} />
+          <Kpi rotulo="Base de meses anteriores" valor={fmt(openingBalance)} apoio="Ajustada na conciliação" tom="aviso" />
+          <Kpi rotulo="Entradas (histórico)" valor={fmt(allTimeReceived)} apoio="Tudo que já foi recebido" tom="sucesso" />
+          <Kpi rotulo="Saídas do mês" valor={fmt(cur.despesas + cur.pendDespesa)} apoio={`${fmt(cur.despesas)} pagas · ${fmt(cur.pendDespesa)} previstas`} tom="perigo" />
+          <Kpi rotulo="Saídas (histórico)" valor={fmt(allTimePaidOut)} apoio="Tudo que já foi pago" tom="perigo" />
+        </GradeDeKpis>
+      </Secao>
 
       {/* CAIXINHAS DE RESERVA */}
-      <div className="rounded-2xl border border-info/30 bg-card p-4 sm:p-5 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Wallet className="w-3.5 h-3.5 text-info shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
-            Caixinhas de reserva · dinheiro separado dentro do caixa
-          </span>
-          <span className="text-[10px] text-muted-foreground">Guardado {fmt(reservedTotal)} · você atualiza os valores</span>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <Secao
+        divisoria
+        titulo="Caixinhas de reserva"
+        descricao={`Guardado ${fmt(reservedTotal)}`}
+        ajuda="Dinheiro separado dentro do caixa. Você atualiza os valores; a sugestão aparece quando o guardado está diferente dela."
+      >
+        <GradeDeKpis>
           {BOX_DEFS.map((b) => {
             const value = Number(boxes[b.key]) || 0;
             const isEditing = editingBox?.key === b.key;
             return (
-              <div key={b.key} className="bg-secondary/30 border border-border rounded-xl p-3.5 flex flex-col gap-1.5">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{b.label}</p>
+              <Kpi key={b.key} rotulo={b.label} ajuda={b.hint} valor={fmt(value)} tom="info">
                 {isEditing ? (
-                  <div className="flex items-center gap-1.5">
-                    <Input
+                  <div className="mt-2 flex min-w-0 items-center">
+                    <input
                       type="number"
                       step="0.01"
+                      inputMode="decimal"
                       autoFocus
                       value={editingBox.value}
                       onChange={(e) => setEditingBox({ key: b.key, value: e.target.value })}
                       onKeyDown={(e) => { if (e.key === "Enter") saveBox(b.key, editingBox.value); if (e.key === "Escape") setEditingBox(null); }}
-                      className="h-8 text-sm font-mono"
+                      className={juntar(campo, "flex-1 tabular-nums")}
+                      aria-label={`Novo valor de ${b.label}`}
                     />
-                    <button
-                      onClick={() => saveBox(b.key, editingBox.value)}
-                      className="text-[11px] px-2 py-1.5 rounded-md bg-success/15 text-success cursor-pointer border-none shrink-0"
-                    >
+                    <button type="button" onClick={() => saveBox(b.key, editingBox.value)} className={juntar(botaoDeLinha, "ml-1.5")}>
                       OK
                     </button>
                   </div>
                 ) : (
-                  <p className="text-lg font-mono font-semibold text-info">{fmt(value)}</p>
-                )}
-                <p className="text-[9px] text-muted-foreground leading-snug">{b.hint}</p>
-                <div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
-                  <button
-                    onClick={() => setEditingBox({ key: b.key, value: String(value || "") })}
-                    className="text-[10px] px-2 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
-                  >
-                    Atualizar
-                  </button>
-                  {b.suggestion > 0 && Math.abs(b.suggestion - value) > 0.5 && (
-                    <button
-                      onClick={() => saveBox(b.key, String(b.suggestion))}
-                      title={b.suggestionLabel}
-                      className="text-[10px] px-2 py-1 rounded-md bg-info/10 text-info hover:bg-info/20 cursor-pointer border-none"
-                    >
-                      Usar {fmt(b.suggestion)}
+                  <div className="-mb-1 mt-2 flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-1.5">
+                    <button type="button" onClick={() => setEditingBox({ key: b.key, value: String(value || "") })} className={botaoDeLinha}>
+                      Atualizar
                     </button>
-                  )}
-                </div>
-              </div>
+                    {b.suggestion > 0 && Math.abs(b.suggestion - value) > 0.5 && (
+                      <button
+                        type="button"
+                        onClick={() => saveBox(b.key, String(b.suggestion))}
+                        title={b.suggestionLabel}
+                        className={juntar(botaoDeLinha, "max-w-full border-info/40 text-info hover:bg-info/10")}
+                      >
+                        <span className="truncate">Usar {fmt(b.suggestion)}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </Kpi>
             );
           })}
-          <div className={`border rounded-xl p-3.5 ${freeBalance >= 0 ? "bg-success/5 border-success/30" : "bg-destructive/5 border-destructive/30"}`}>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Disponível livre</p>
-            <p className={`text-lg font-mono font-semibold mt-1 ${freeBalance >= 0 ? "text-success" : "text-destructive"}`}>{fmt(freeBalance)}</p>
-            <p className="text-[9px] text-muted-foreground leading-snug mt-1.5">
-              Saldo em caixa {fmt(cashBalance)} − caixinhas {fmt(reservedTotal)}. É o que pode ser usado sem tocar nas reservas.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Modal conciliar saldo */}
-      <Dialog open={reconcileOpen} onOpenChange={setReconcileOpen}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Conciliar saldo em caixa</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="bg-secondary/50 rounded-lg p-3 space-y-1">
-              <p className="text-[12px] text-muted-foreground">Saldo calculado pelo painel: <span className="font-mono text-foreground">{fmt(cashBalance)}</span></p>
-              <p className="text-[11px] text-muted-foreground">Entradas {fmt(allTimeReceived)} − Saídas {fmt(allTimePaidOut)} + Base anterior {fmt(openingBalance)}</p>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Saldo real na conta hoje (R$)</label>
-              <Input type="number" step="0.01" value={reconcileInput} onChange={(e) => setReconcileInput(e.target.value)} className="mt-1" placeholder="Ex: 5882.07" />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              A diferença (custos antigos não lançados, tarifas etc.) vai para a "base de meses anteriores" · nenhum lançamento é alterado ou apagado. Repita a conciliação sempre que quiser bater o painel com o extrato.
-            </p>
-            <button
-              onClick={reconcileBalance}
-              disabled={updateSettings.isPending}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-            >
-              Conciliar com este saldo
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          <Kpi
+            rotulo="Disponível livre"
+            valor={fmt(freeBalance)}
+            apoio="Caixa − caixinhas"
+            tom={freeBalance >= 0 ? "sucesso" : "perigo"}
+            ajuda={<>Saldo em caixa {fmt(cashBalance)} − caixinhas {fmt(reservedTotal)}. É o que pode ser usado sem tocar nas reservas.</>}
+          />
+        </GradeDeKpis>
+      </Secao>
 
       {/* RESUMO DO MÊS */}
-      <SectionHeader title="Resumo do mês" subtitle="Indicadores operacionais. Investimento não entra aqui." />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Receitas do mês" value={fmt(cur.receitas)}
-          hint={`+${fmt(cur.pendReceita)} previstas`} tone="success" />
-        <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Despesas do mês" value={fmt(cur.despesas)}
-          hint={`+${fmt(cur.pendDespesa)} previstas`} tone="danger" />
-        <KpiCard icon={<Wallet className="w-4 h-4" />} label="Resultado do mês" value={fmt(cur.net)}
-          hint={cur.net >= 0 ? "Saldo positivo" : "Saldo negativo"} tone={cur.net >= 0 ? "success" : "danger"} />
-        <KpiCard icon={<Sparkles className="w-4 h-4" />} label={`Projeção ${period}m`} value={fmt(lucroProj)}
-          hint={`Margem ${margem.toFixed(1)}%`} tone={lucroProj >= 0 ? "primary" : "warning"} />
-      </div>
-
-      {/* Capital de Investidor foi movido para sua própria aba ("Capital") em /financeiro */}
-      {investorEntries.length > 0 && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Briefcase className="w-4 h-4 text-primary flex-shrink-0" />
-            <p className="text-[12px] text-foreground truncate">
-              <span className="text-primary font-semibold">{fmt(investor.total)}</span> em capital de investidor está sendo gerenciado em uma aba dedicada · fora deste fluxo.
-            </p>
-          </div>
-          <span className="text-[10px] uppercase tracking-wider text-primary/80 font-medium hidden sm:inline">Aba "Capital"</span>
-        </div>
-      )}
-
-
-
+      <Secao divisoria titulo="Resumo do mês" ajuda="Indicadores operacionais. Investimento não entra aqui.">
+        <GradeDeKpis>
+          <Kpi rotulo="Receitas do mês" valor={fmt(cur.receitas)} apoio={`+${fmt(cur.pendReceita)} previstas`} tom="sucesso" />
+          <Kpi rotulo="Despesas do mês" valor={fmt(cur.despesas)} apoio={`+${fmt(cur.pendDespesa)} previstas`} tom="perigo" />
+          <Kpi rotulo="Resultado do mês" valor={fmt(cur.net)} apoio={cur.net >= 0 ? "Saldo positivo" : "Saldo negativo"} tom={cur.net >= 0 ? "sucesso" : "perigo"} />
+          <Kpi rotulo={`Projeção ${period}m`} valor={fmt(lucroProj)} apoio={`Margem ${margem.toFixed(1)}%`} tom={lucroProj >= 0 ? "primario" : "aviso"} />
+        </GradeDeKpis>
+        {/* Capital de Investidor foi movido para sua própria aba ("Capital") em /financeiro */}
+        {investorEntries.length > 0 && (
+          <p className={juntar(superficie.poco, "mt-3 flex min-w-0 items-center px-3 py-2 text-[12px] text-muted-foreground")}>
+            <Briefcase className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span className="min-w-0 truncate">
+              <span className="font-semibold tabular-nums text-primary">{fmt(investor.total)}</span> de capital de investidor ficam na aba Capital, fora deste fluxo.
+            </span>
+          </p>
+        )}
+      </Secao>
 
       {/* FLUXO DE CAIXA · gráfico */}
-      <SectionHeader title="Fluxo de caixa" subtitle="Entradas, saídas e saldo acumulado projetado" />
-      {/* CASH FLOW CHART */}
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Evolução do caixa</h3>
-            <p className="text-[11px] text-muted-foreground">Entradas vs saídas e saldo acumulado projetado</p>
+      <Secao
+        divisoria
+        titulo="Evolução do caixa"
+        ajuda="Entradas e saídas por mês (a parte clara é o previsto) e o saldo acumulado projetado."
+        acao={
+          <div className={juntar(texto.auxiliar, "hidden items-center sm:flex")}>
+            <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-success" /> Receita</span>
+            <span className="mr-3 flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-destructive" /> Despesa</span>
+            <span className="flex items-center"><span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-primary" /> Acumulado</span>
           </div>
-          <div className="flex items-center gap-3 text-[11px]">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Receita</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-destructive" /> Despesa</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-primary" /> Acumulado</span>
+        }
+      >
+        <Painel>
+          <div className="h-[300px]">
+            <ResponsiveContainer>
+              <ComposedChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
+                  </linearGradient>
+                  <linearGradient id="despGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                  formatter={(v: any) => fmt(Number(v))}
+                />
+                <Bar dataKey="receitas" stackId="in" fill="url(#recGrad)" radius={[4, 4, 0, 0]} name="Receita" isAnimationActive={false} />
+                <Bar dataKey="pendReceita" stackId="in" fill="hsl(var(--success) / 0.25)" radius={[4, 4, 0, 0]} name="Receita prevista" isAnimationActive={false} />
+                <Bar dataKey="despesas" stackId="out" fill="url(#despGrad)" radius={[4, 4, 0, 0]} name="Despesa" isAnimationActive={false} />
+                <Bar dataKey="pendDespesa" stackId="out" fill="hsl(var(--destructive) / 0.25)" radius={[4, 4, 0, 0]} name="Despesa prevista" isAnimationActive={false} />
+                <Line type="monotone" dataKey="acumulado" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} name="Acumulado" isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
-        </div>
-        <div className="h-[320px]">
-          <ResponsiveContainer>
-            <ComposedChart data={series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
-                </linearGradient>
-                <linearGradient id="despGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(var(--destructive))" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                formatter={(v: any) => fmt(Number(v))}
-              />
-              <Bar dataKey="receitas" stackId="in" fill="url(#recGrad)" radius={[6, 6, 0, 0]} name="Receita" />
-              <Bar dataKey="pendReceita" stackId="in" fill="hsl(var(--success) / 0.25)" radius={[6, 6, 0, 0]} name="Receita prevista" />
-              <Bar dataKey="despesas" stackId="out" fill="url(#despGrad)" radius={[6, 6, 0, 0]} name="Despesa" />
-              <Bar dataKey="pendDespesa" stackId="out" fill="hsl(var(--destructive) / 0.25)" radius={[6, 6, 0, 0]} name="Despesa prevista" />
-              <Line type="monotone" dataKey="acumulado" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={{ r: 3 }} name="Acumulado" />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        </Painel>
+      </Secao>
 
       {/* ANÁLISE · DRE + distribuição */}
-      <SectionHeader title="Análise" subtitle="DRE mensal e distribuição das despesas por categoria" />
-      {/* DRE + DISTRIBUICAO */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">DRE simplificado</h3>
-              <p className="text-[11px] text-muted-foreground">Resultado mensal · receita, custo e margem</p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="text-muted-foreground border-b border-border">
-                  <th className="text-left py-2 font-medium">Mês</th>
-                  <th className="text-right py-2 font-medium">Receita</th>
-                  <th className="text-right py-2 font-medium">Despesa</th>
-                  <th className="text-right py-2 font-medium">Lucro</th>
-                  <th className="text-right py-2 font-medium">Margem</th>
+      <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
+        <Secao
+          titulo="DRE simplificado"
+          descricao={`${dre.length} meses`}
+          ajuda="Resultado mensal: receita, despesa, lucro e margem. Soma o realizado e o previsto de cada mês."
+          className="lg:col-span-2"
+        >
+          <RegiaoRolavel memoria="financeiro:fluxo:dre" rotulo="DRE simplificado" className="lg:max-h-[360px]">
+            {/* Computador: tabela. Celular: lista. */}
+            <table className="hidden w-full text-[13px] sm:table">
+              <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+                <tr className="border-b border-border">
+                  <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Mês</th>
+                  <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Receita</th>
+                  <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Despesa</th>
+                  <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Lucro</th>
+                  <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Margem</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {dre.map((r, i) => (
-                  <tr key={i} className="border-b border-border/40 last:border-0">
-                    <td className="py-2 text-foreground">{r.label}</td>
-                    <td className="py-2 text-right font-mono text-success">{fmtCompact(r.receita)}</td>
-                    <td className="py-2 text-right font-mono text-destructive">{fmtCompact(r.despesa)}</td>
-                    <td className={`py-2 text-right font-mono font-semibold ${r.lucro >= 0 ? "text-foreground" : "text-destructive"}`}>{fmtCompact(r.lucro)}</td>
-                    <td className={`py-2 text-right font-mono ${r.margem >= 0 ? "text-success" : "text-destructive"}`}>
+                  <tr key={i}>
+                    <td className="py-2 pr-3 text-foreground">{r.label}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-success">{fmtCompact(r.receita)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-destructive">{fmtCompact(r.despesa)}</td>
+                    <td className={juntar("px-3 py-2 text-right font-semibold tabular-nums", r.lucro >= 0 ? "text-foreground" : "text-destructive")}>{fmtCompact(r.lucro)}</td>
+                    <td className={juntar("py-2 pl-3 text-right tabular-nums", r.margem >= 0 ? "text-success" : "text-destructive")}>
                       {r.margem.toFixed(1)}%
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
+            <ul className="divide-y divide-border sm:hidden">
+              {dre.map((r, i) => (
+                <li key={i} className="min-w-0 py-2">
+                  <div className="flex min-w-0 items-center">
+                    <span className="mr-2 min-w-0 flex-1 text-[13px] text-foreground">{r.label}</span>
+                    <span className={juntar("shrink-0 text-[13px] font-semibold tabular-nums", r.lucro >= 0 ? "text-foreground" : "text-destructive")}>{fmtCompact(r.lucro)}</span>
+                  </div>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                    Receita {fmtCompact(r.receita)} · despesa {fmtCompact(r.despesa)} · margem {r.margem.toFixed(1)}%
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </RegiaoRolavel>
+        </Secao>
 
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-1">Despesas por categoria</h3>
-          <p className="text-[11px] text-muted-foreground mb-3">Distribuição total</p>
+        <Secao titulo="Despesas por categoria" descricao="Distribuição total">
           {byCat.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground py-10 text-center">Nenhuma despesa cadastrada</p>
+            <EstadoVazio compacto titulo="Nenhuma despesa cadastrada." />
           ) : (
             <>
               <div className="h-[160px]">
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={byCat} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2}>
+                    <Pie data={byCat} dataKey="value" innerRadius={45} outerRadius={70} paddingAngle={2} isAnimationActive={false}>
                       {byCat.map((d, i) => <Cell key={i} fill={d.color} />)}
                     </Pie>
-                    <Tooltip formatter={(v: any) => fmt(Number(v))} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip formatter={(v: any) => fmt(Number(v))} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-1.5 mt-3">
+              <ul className="mt-3 space-y-1.5">
                 {byCat.slice(0, 5).map((c, i) => {
                   const pct = (c.value / byCat.reduce((a, x) => a + x.value, 0)) * 100;
                   return (
-                    <div key={i} className="flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.color }} />
-                        <span className="text-foreground truncate">{c.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-muted-foreground">{pct.toFixed(0)}%</span>
-                        <span className="font-mono text-foreground">{fmtCompact(c.value)}</span>
-                      </div>
-                    </div>
+                    <li key={i} className="flex min-w-0 items-center text-[12px]">
+                      <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                      <span className="mr-2 min-w-0 flex-1 truncate text-foreground">{c.name}</span>
+                      <span className="mr-2 shrink-0 tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                      <span className="shrink-0 tabular-nums text-foreground">{fmtCompact(c.value)}</span>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </>
           )}
-        </div>
+        </Secao>
       </div>
 
       {/* MOVIMENTAÇÕES */}
-      <SectionHeader title="Movimentações" subtitle="Entradas e saídas em blocos separados, cada um com pendentes e realizadas" />
-
-      {/* ENTRADAS */}
-      <div className="rounded-2xl border border-success/30 bg-card overflow-hidden">
-        <button
-          onClick={() => setInflowsOpen((v) => !v)}
-          className="w-full px-4 sm:px-5 py-3.5 border-b border-border bg-success/5 flex items-center gap-3 flex-wrap bg-transparent cursor-pointer text-left border-x-0 border-t-0"
-        >
-          <span className="w-8 h-8 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
-            <ArrowUpRight className="w-4 h-4" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Entradas</p>
-            <p className="text-[11px] text-muted-foreground">Mensalidades, projetos e avulsos</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A receber</p>
-            <p className="text-sm font-mono font-semibold text-warning">{fmt(accountsReceivable.reduce((s: number, r: any) => s + r.amount, 0))}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Recebido (histórico)</p>
-            <p className="text-sm font-mono font-semibold text-success">{fmt(allTimeReceived)}</p>
-          </div>
-          <span className="text-[10px] text-muted-foreground shrink-0">{inflowsOpen ? "▾" : "▸"}</span>
-        </button>
-        {inflowsOpen && (
-        <Tabs defaultValue="ar">
-          <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border">
-            <TabsTrigger value="ar" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              A receber ({accountsReceivable.length})
-            </TabsTrigger>
-            <TabsTrigger value="received" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              Recebidas ({receivedList.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="ar" className="m-0">
-            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              {accountsReceivable.length === 0 && (
-                <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a receber no momento</div>
-              )}
-              {accountsReceivable.map((r: any) => (
-                <div key={r.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-success/15 text-success">
-                      <ArrowUpRight className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground truncate">{r.description}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.client} · Vence {parseDate(r.due_date)?.toLocaleDateString("pt-BR")}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {r.overdue ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">{Math.abs(r.daysUntil)}d atrasado</span>
-                    ) : r.daysUntil <= 7 ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">{r.daysUntil}d</span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{r.daysUntil}d</span>
-                    )}
-                    <span className="text-[13px] font-mono font-semibold text-success">{fmt(r.amount)}</span>
-                  </div>
+      <Secao
+        divisoria
+        titulo="Movimentações"
+        ajuda="Entradas e saídas em blocos separados, cada um com pendentes e realizadas. Toque no título do bloco para recolher; o que ficou aberto e a lista escolhida continuam assim ao voltar."
+      >
+        <div className="min-w-0 space-y-4">
+          {/* ENTRADAS */}
+          <Painel semEspaco as="section" aria-label="Entradas">
+            <CabecalhoDoBloco
+              aberto={inflowsOpen}
+              onAlternar={() => setInflowsOpen((v) => !v)}
+              controla="financeiro-entradas"
+              titulo="Entradas"
+              valores={[
+                { rotulo: "A receber", valor: fmt(aReceber), tom: "aviso" },
+                { rotulo: "Recebido (histórico)", valor: fmt(allTimeReceived), tom: "sucesso" },
+              ]}
+            />
+            {inflowsOpen && (
+              <div id="financeiro-entradas" className="border-t border-border">
+                <div className="px-4 py-2.5">
+                  <SeletorCompacto
+                    opcoes={[
+                      { valor: "ar", rotulo: "A receber", contador: accountsReceivable.length },
+                      { valor: "received", rotulo: "Recebidas", contador: receivedList.length },
+                    ]}
+                    valor={abaEntradas}
+                    onEscolher={(v) => setAbaEntradas(v as "ar" | "received")}
+                    rotulo="Lista de entradas"
+                    modo="segmentado"
+                  />
                 </div>
-              ))}
-            </div>
-          </TabsContent>
 
-          <TabsContent value="received" className="m-0">
-            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-              {receivedList.length === 0 && (
-                <div className="p-10 text-center text-[12px] text-muted-foreground">Nenhuma entrada recebida ainda</div>
-              )}
-              {receivedList.map((r: any) => (
-                <div key={r.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-success/15 text-success">
-                      <TrendingUp className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground truncate">{r.description}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {r.client} · Recebido em {parseDate(r.date)?.toLocaleDateString("pt-BR")}
-                        {r.partial && ` · parcial (${fmt(r.amount)} de ${fmt(r.total)})`}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[13px] font-mono font-semibold text-success flex-shrink-0">{fmt(r.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-        )}
-      </div>
+                {abaEntradas === "ar" && (
+                  accountsReceivable.length === 0 ? (
+                    <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nada a receber no momento." /></div>
+                  ) : (
+                    <RegiaoRolavel memoria="financeiro:fluxo:a-receber" rotulo="A receber" sobre="cartao" className="lg:max-h-[420px]">
+                      <ul className="divide-y divide-border border-t border-border">
+                        {accountsReceivable.map((r: any) => (
+                          <li key={r.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                            <div className="mr-3 min-w-0 flex-1 basis-48">
+                              <p className="truncate text-[13px] font-medium text-foreground">{r.description}</p>
+                              <p className={juntar(texto.auxiliar, "truncate")}>{r.client} · Vence {parseDate(r.due_date)?.toLocaleDateString("pt-BR")}</p>
+                            </div>
+                            <div className="ml-auto flex shrink-0 items-center py-0.5">
+                              {prazo(r.overdue, r.daysUntil)}
+                              <span className="ml-3 text-[13px] font-semibold tabular-nums text-success">{fmt(r.amount)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </RegiaoRolavel>
+                  )
+                )}
 
-      {/* SAÍDAS */}
-      <div className="rounded-2xl border border-destructive/30 bg-card overflow-hidden">
-        <button
-          onClick={() => setOutflowsOpen((v) => !v)}
-          className="w-full px-4 sm:px-5 py-3.5 border-b border-border bg-destructive/5 flex items-center gap-3 flex-wrap bg-transparent cursor-pointer text-left border-x-0 border-t-0"
-        >
-          <span className="w-8 h-8 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
-            <ArrowDownRight className="w-4 h-4" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Saídas</p>
-            <p className="text-[11px] text-muted-foreground">Custos, despesas e investimentos</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A pagar</p>
-            <p className="text-sm font-mono font-semibold text-warning">{fmt(accountsPayable.reduce((s: number, e: any) => s + Number(e.amount || 0), 0))}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pago (histórico)</p>
-            <p className="text-sm font-mono font-semibold text-destructive">{fmt(allTimePaidOut)}</p>
-          </div>
-          <span className="text-[10px] text-muted-foreground shrink-0">{outflowsOpen ? "▾" : "▸"}</span>
-        </button>
-        {outflowsOpen && (
-        <Tabs defaultValue="ap">
-          <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border flex-wrap">
-            <TabsTrigger value="ap" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              A pagar ({accountsPayable.length})
-            </TabsTrigger>
-            <TabsTrigger value="exp" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              Todas as despesas ({expenses.length})
-            </TabsTrigger>
-            <TabsTrigger value="done" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              Realizadas ({paidOutList.length})
-            </TabsTrigger>
-            <TabsTrigger value="pro" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              Pró-labore
-            </TabsTrigger>
-            <TabsTrigger value="inv" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
-              Investimentos ({investorEntries.length})
-            </TabsTrigger>
-          </TabsList>
-
-        <TabsContent value="ap" className="m-0">
-          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-            {accountsPayable.length === 0 && (
-              <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a pagar 🎉</div>
-            )}
-            {accountsPayable.map((e: any) => {
-              const cm = catMeta(e.category);
-              return (
-                <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${cm.color}22`, color: cm.color }}>
-                      <Calendar className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {cm.label} · Vence {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
-                        {e.supplier && ` · ${e.supplier}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {e.overdue ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">{Math.abs(e.daysUntil)}d atrasado</span>
-                    ) : e.daysUntil <= 7 ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">{e.daysUntil}d</span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{e.daysUntil}d</span>
-                    )}
-                    <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
-                    <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-success/15 text-success hover:bg-success/25 cursor-pointer border-none">Pagar</button>
-                    <button onClick={() => setExpenseModal({ mode: isInvestor(e) ? "investment" : "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="exp" className="m-0">
-          <div className="max-h-[420px] overflow-y-auto">
-            {expenses.length === 0 && (
-              <div className="p-10 text-center text-[12px] text-muted-foreground">
-                Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
+                {abaEntradas === "received" && (
+                  receivedList.length === 0 ? (
+                    <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nenhuma entrada recebida ainda." /></div>
+                  ) : (
+                    <RegiaoRolavel memoria="financeiro:fluxo:recebidas" rotulo="Recebidas" sobre="cartao" className="lg:max-h-[420px]">
+                      <ul className="divide-y divide-border border-t border-border">
+                        {receivedList.map((r: any) => (
+                          <li key={r.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                            <div className="mr-3 min-w-0 flex-1 basis-48">
+                              <p className="truncate text-[13px] font-medium text-foreground">{r.description}</p>
+                              <p className={juntar(texto.auxiliar, "truncate")}>
+                                {r.client} · Recebido em {parseDate(r.date)?.toLocaleDateString("pt-BR")}
+                                {r.partial && ` · parcial (${fmt(r.amount)} de ${fmt(r.total)})`}
+                              </p>
+                            </div>
+                            <span className="ml-auto shrink-0 py-0.5 text-[13px] font-semibold tabular-nums text-success">{fmt(r.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </RegiaoRolavel>
+                  )
+                )}
               </div>
             )}
-            {/* Organização pedida: tudo por MÊS, e dentro do mês as FIXAS
-                (mensal/anual) separadas das PONTUAIS, cada grupo com o seu
-                subtotal. Acabou a lista única misturando tudo. */}
-            {(() => {
-              const renderExpenseRow = (e: any) => {
-                const cm = catMeta(e.category);
-                return (
-                  <div key={e.id} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/30 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${cm.color}22`, color: cm.color }}>
-                        {e.status === "paid" ? <TrendingDown className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+          </Painel>
+
+          {/* SAÍDAS */}
+          <Painel semEspaco as="section" aria-label="Saídas">
+            <CabecalhoDoBloco
+              aberto={outflowsOpen}
+              onAlternar={() => setOutflowsOpen((v) => !v)}
+              controla="financeiro-saidas"
+              titulo="Saídas"
+              valores={[
+                { rotulo: "A pagar", valor: fmt(aPagar), tom: "aviso" },
+                { rotulo: "Pago (histórico)", valor: fmt(allTimePaidOut), tom: "perigo" },
+              ]}
+            />
+            {outflowsOpen && (
+              <div id="financeiro-saidas" className="border-t border-border">
+                {/* Cinco listas: mais de quatro opções vira seletor. */}
+                <div className="px-4 py-2.5">
+                  <SeletorCompacto
+                    opcoes={opcoesDasSaidas}
+                    valor={abaSaidas}
+                    onEscolher={(v) => setAbaSaidas(v as AbaDasSaidas)}
+                    rotulo="Lista de saídas"
+                    icone={<ListFilter className="h-3.5 w-3.5" />}
+                    modo="lista"
+                  />
+                </div>
+
+                {estadoDasSaidas}
+
+                {!estadoDasSaidas && abaSaidas === "ap" && (
+                  accountsPayable.length === 0 ? (
+                    <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nada a pagar." /></div>
+                  ) : (
+                    <RegiaoRolavel memoria="financeiro:fluxo:a-pagar" rotulo="A pagar" sobre="cartao" className="lg:max-h-[420px]">
+                      <ul className="divide-y divide-border border-t border-border">
+                        {accountsPayable.map((e: any) => {
+                          const cm = catMeta(e.category);
+                          return (
+                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                              <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                              <div className="mr-3 min-w-0 flex-1 basis-48">
+                                <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                                <p className={juntar(texto.auxiliar, "truncate")}>
+                                  {cm.label} · Vence {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+                                  {e.supplier && ` · ${e.supplier}`}
+                                </p>
+                              </div>
+                              <div className="ml-auto flex shrink-0 items-center py-0.5">
+                                {prazo(e.overdue, e.daysUntil)}
+                                <span className="mx-3 text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
+                                <button type="button" onClick={() => togglePaid(e)} className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}>Pagar</button>
+                                {acoesDaLinha(e, isInvestor(e) ? "investment" : "expense")}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </RegiaoRolavel>
+                  )
+                )}
+
+                {!estadoDasSaidas && abaSaidas === "exp" && (
+                  expenses.length === 0 ? (
+                    <div className="border-t border-border p-4">
+                      <EstadoVazio compacto titulo="Nenhuma despesa cadastrada." descricao='Use "Lançamento" e escolha Despesa.' />
+                    </div>
+                  ) : (
+                    <RegiaoRolavel memoria="financeiro:fluxo:despesas" rotulo="Todas as despesas" sobre="cartao" className="lg:max-h-[420px]">
+                      {/* Organização pedida: tudo por MÊS, e dentro do mês as FIXAS
+                          (mensal/anual) separadas das PONTUAIS, cada grupo com o seu
+                          subtotal. Acabou a lista única misturando tudo. */}
+                      {(() => {
+                        const byMonth = new Map<string, { fixed: any[]; oneOff: any[] }>();
+                        for (const e of expenses) {
+                          const due = parseDate(e.due_date);
+                          const key = due ? monthKey(due) : "0000-00";
+                          if (!byMonth.has(key)) byMonth.set(key, { fixed: [], oneOff: [] });
+                          const bucket = byMonth.get(key)!;
+                          if (e.recurrence === "monthly" || e.recurrence === "yearly") bucket.fixed.push(e);
+                          else bucket.oneOff.push(e);
+                        }
+                        const sum = (list: any[]) => list.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                        const keys = [...byMonth.keys()].sort().reverse();
+
+                        return keys.map((key) => {
+                          const bucket = byMonth.get(key)!;
+                          const fixedTotal = sum(bucket.fixed);
+                          const oneOffTotal = sum(bucket.oneOff);
+                          return (
+                            <div key={key} className="border-t border-border">
+                              <div className="flex min-w-0 flex-wrap items-center justify-between border-b border-border bg-card px-4 py-2 lg:sticky lg:top-0 lg:z-10">
+                                <p className="mr-3 text-[13px] font-semibold text-foreground">
+                                  {key === "0000-00" ? "Sem data" : monthLabel(key)}
+                                </p>
+                                <p className={juntar(texto.auxiliar, "tabular-nums")}>
+                                  Fixas {fmt(fixedTotal)} · Pontuais {fmt(oneOffTotal)} ·{" "}
+                                  <span className="font-semibold text-foreground">Total {fmt(fixedTotal + oneOffTotal)}</span>
+                                </p>
+                              </div>
+                              {bucket.fixed.length > 0 && (
+                                <>
+                                  <p className={juntar(texto.rotulo, "px-4 pt-2")}>Fixas do mês</p>
+                                  <ul className="divide-y divide-border">{bucket.fixed.map(renderExpenseRow)}</ul>
+                                </>
+                              )}
+                              {bucket.oneOff.length > 0 && (
+                                <>
+                                  <p className={juntar(texto.rotulo, "px-4 pt-2")}>Pontuais do mês</p>
+                                  <ul className="divide-y divide-border">{bucket.oneOff.map(renderExpenseRow)}</ul>
+                                </>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </RegiaoRolavel>
+                  )
+                )}
+
+                {/* SAÍDAS JÁ REALIZADAS · o espelho de "Recebidas" */}
+                {!estadoDasSaidas && abaSaidas === "done" && (
+                  <>
+                    <div className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center justify-between border-t border-border px-4 py-2")}>
+                      <span className="mr-3">
+                        Neste mês saiu <strong className="font-semibold tabular-nums text-destructive">{fmt(paidOutThisMonth)}</strong>
                       </span>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
-                          {e.recurrence === "monthly" && " · Fixa mensal"}
-                          {e.recurrence === "yearly" && " · Fixa anual"}
-                        </p>
+                      <span>
+                        Histórico completo <strong className="font-semibold tabular-nums text-foreground">{fmt(allTimePaidOut)}</strong>
+                      </span>
+                    </div>
+                    {paidOutList.length === 0 ? (
+                      <div className="border-t border-border p-4">
+                        <EstadoVazio compacto titulo="Nenhuma saída realizada ainda." descricao="Pagar um custo em Custos Fixos registra a saída aqui." />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === "paid" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-                        {e.status === "paid" ? "Pago" : "Pendente"}
-                      </span>
-                      <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
-                      <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground cursor-pointer border border-border">
-                        {e.status === "paid" ? "Reabrir" : "Pagar"}
-                      </button>
-                      <button onClick={() => setExpenseModal({ mode: "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  </div>
-                );
-              };
-
-              const byMonth = new Map<string, { fixed: any[]; oneOff: any[] }>();
-              for (const e of expenses) {
-                const due = parseDate(e.due_date);
-                const key = due ? monthKey(due) : "0000-00";
-                if (!byMonth.has(key)) byMonth.set(key, { fixed: [], oneOff: [] });
-                const bucket = byMonth.get(key)!;
-                if (e.recurrence === "monthly" || e.recurrence === "yearly") bucket.fixed.push(e);
-                else bucket.oneOff.push(e);
-              }
-              const sum = (list: any[]) => list.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-              const keys = [...byMonth.keys()].sort().reverse();
-
-              return keys.map((key) => {
-                const bucket = byMonth.get(key)!;
-                const fixedTotal = sum(bucket.fixed);
-                const oneOffTotal = sum(bucket.oneOff);
-                return (
-                  <div key={key} className="border-b border-border last:border-0">
-                    <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-secondary/60 px-4 py-2 backdrop-blur-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-                        {key === "0000-00" ? "Sem data" : monthLabel(key)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Fixas {fmt(fixedTotal)} · Pontuais {fmt(oneOffTotal)} ·{" "}
-                        <span className="font-semibold text-foreground">Total {fmt(fixedTotal + oneOffTotal)}</span>
-                      </p>
-                    </div>
-                    {bucket.fixed.length > 0 && (
-                      <>
-                        <p className="px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                          Fixas do mês
-                        </p>
-                        <div className="divide-y divide-border/60">{bucket.fixed.map(renderExpenseRow)}</div>
-                      </>
+                    ) : (
+                      <RegiaoRolavel memoria="financeiro:fluxo:realizadas" rotulo="Saídas realizadas" sobre="cartao" className="lg:max-h-[420px]">
+                        <ul className="divide-y divide-border border-t border-border">
+                          {paidOutList.map((e: any) => {
+                            const cm = catMeta(e.category);
+                            return (
+                              <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                                <span className="mr-3 h-2 w-2 shrink-0 rounded-full" style={{ background: cm.color }} aria-hidden="true" />
+                                <div className="mr-3 min-w-0 flex-1 basis-48">
+                                  <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                                  <p className={juntar(texto.auxiliar, "truncate")}>
+                                    {cm.label} · pago em {parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}
+                                    {e.due_date && ` · venc. ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
+                                    {e.parent_expense_id && " · custo fixo"}
+                                  </p>
+                                </div>
+                                <div className="ml-auto flex shrink-0 items-center py-0.5">
+                                  <span className="mr-3 text-[13px] font-semibold tabular-nums text-destructive">{fmt(Number(e.amount))}</span>
+                                  <button type="button" onClick={() => togglePaid(e)}
+                                    title="Estornar: apaga a saída e devolve o vencimento ao mês pago"
+                                    className={botaoDeLinha}>
+                                    Estornar
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </RegiaoRolavel>
                     )}
-                    {bucket.oneOff.length > 0 && (
-                      <>
-                        <p className="px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                          Pontuais do mês
-                        </p>
-                        <div className="divide-y divide-border/60">{bucket.oneOff.map(renderExpenseRow)}</div>
-                      </>
+                  </>
+                )}
+
+                {/* PRÓ-LABORE · já configurado pelo proporcional ao faturamento */}
+                {!estadoDasSaidas && abaSaidas === "pro" && (
+                  <div className="min-w-0 border-t border-border">
+                    <div className="space-y-3 p-4">
+                      <GradeDeKpis colunas={3}>
+                        <Kpi emPoco rotulo="Receita operacional do mês" valor={fmt(proLaboreView.operacional)} apoio={`${fmt(monthReceivedGross)} bruto − imposto`} />
+                        <Kpi
+                          emPoco
+                          rotulo="Proporcional pela escada"
+                          valor={fmt(proLaboreView.proporcional)}
+                          apoio={proLaboreView.proximoDegrau ? `próximo degrau ${fmt(proLaboreView.proximoDegrau.proLabore)} em ${fmt(proLaboreView.proximoDegrau.revenue)}` : "topo da escada"}
+                          tom="sucesso"
+                        />
+                        <Kpi
+                          emPoco
+                          rotulo="Configurado hoje"
+                          valor={fmt(proLaboreView.atual)}
+                          apoio={proLaboreView.molde ? `lançado, vence ${parseDate(proLaboreView.molde.due_date)?.toLocaleDateString("pt-BR")}` : "ainda não lançado como saída"}
+                          tom="info"
+                        />
+                      </GradeDeKpis>
+
+                      {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
+                        <div className="flex min-w-0 flex-wrap items-center rounded-md border border-success/30 px-3 py-2">
+                          <p className="mr-3 min-w-0 flex-1 py-1 text-[13px] leading-5 text-muted-foreground">
+                            O pró-labore ainda não é saída recorrente. Lançar no proporcional coloca ele no fluxo, vencendo no dia 10.
+                          </p>
+                          <button type="button" onClick={lancarProLaboreProporcional}
+                            className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}>
+                            Lançar {fmt(proLaboreView.proporcional)}/mês
+                          </button>
+                        </div>
+                      )}
+
+                      <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                        <span className="mr-1 truncate">
+                          Retirado no ano: <strong className="font-semibold tabular-nums text-foreground">{fmt(proLaboreView.realizadoNoAno)}</strong>
+                        </span>
+                        <AjudaRecolhida rotulo="Como o proporcional é calculado">
+                          A escada lê a receita operacional: o bruto menos o imposto. Usar o bruto inflaria a retirada em toda a faixa, porque a
+                          parte do governo nunca foi receita da agência. O reajuste nunca é automático: o valor só muda quando você confirma.
+                        </AjudaRecolhida>
+                      </p>
+                    </div>
+
+                    {proLaboreView.linhas.length === 0 ? (
+                      <div className="border-t border-border p-4"><EstadoVazio compacto titulo="Nenhuma retirada registrada ainda." /></div>
+                    ) : (
+                      <RegiaoRolavel memoria="financeiro:fluxo:prolabore" rotulo="Retiradas de pró-labore" sobre="cartao" className="lg:max-h-[300px]">
+                        <ul className="divide-y divide-border border-t border-border">
+                          {proLaboreView.linhas.map((e: any) => (
+                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                              <div className="mr-3 min-w-0 flex-1 basis-48">
+                                <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                                <p className={juntar(texto.auxiliar, "truncate")}>
+                                  {e.status === "paid"
+                                    ? `retirado em ${parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}`
+                                    : `previsto para ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
+                                  {e.recurrence === "monthly" && " · mensal"}
+                                </p>
+                              </div>
+                              <div className="ml-auto flex shrink-0 items-center py-0.5">
+                                <Etiqueta tom={e.status === "paid" ? "sucesso" : "aviso"} className="mr-3">
+                                  {e.status === "paid" ? "Retirado" : "Previsto"}
+                                </Etiqueta>
+                                <span className="mr-3 text-[13px] font-semibold tabular-nums text-foreground">{fmt(Number(e.amount))}</span>
+                                <button type="button" onClick={() => togglePaid(e)} className={botaoDeLinha}>
+                                  {e.status === "paid" ? "Estornar" : "Pagar"}
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </RegiaoRolavel>
                     )}
                   </div>
-                );
-              });
-            })()}
-          </div>
-        </TabsContent>
+                )}
 
-        {/* SAÍDAS JÁ REALIZADAS · o espelho de "Recebidas" */}
-        <TabsContent value="done" className="m-0">
-          <div className="flex flex-wrap items-center gap-3 border-b border-border bg-secondary/40 px-4 py-2">
-            <p className="text-[11px] text-muted-foreground">
-              Neste mês saiu <strong className="font-mono text-destructive">{fmt(paidOutThisMonth)}</strong>
-            </p>
-            <p className="ml-auto text-[11px] text-muted-foreground">
-              Histórico completo <strong className="font-mono text-foreground">{fmt(allTimePaidOut)}</strong>
-            </p>
-          </div>
-          <div className="max-h-[420px] divide-y divide-border overflow-y-auto">
-            {paidOutList.length === 0 && (
-              <div className="p-10 text-center text-[12px] text-muted-foreground">
-                Nenhuma saída realizada ainda. Pagar um custo em Custos Fixos registra a saída aqui.
-              </div>
-            )}
-            {paidOutList.map((e: any) => {
-              const cm = catMeta(e.category);
-              return (
-                <div key={e.id} className="flex items-center justify-between p-4 transition-colors hover:bg-secondary/30">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
-                      style={{ background: `${cm.color}22`, color: cm.color }}>
-                      <TrendingDown className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {cm.label} · pago em {parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}
-                        {e.due_date && ` · venc. ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
-                        {e.parent_expense_id && " · custo fixo"}
-                      </p>
+                {!estadoDasSaidas && abaSaidas === "inv" && (
+                  investorEntries.length === 0 ? (
+                    <div className="border-t border-border p-4">
+                      <EstadoVazio compacto titulo="Nenhum investimento registrado." descricao='Use "Lançamento" e escolha Investimento.' />
                     </div>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-3">
-                    <span className="font-mono text-[13px] font-semibold text-destructive">{fmt(Number(e.amount))}</span>
-                    <button onClick={() => togglePaid(e)}
-                      title="Estornar: apaga a saída e devolve o vencimento ao mês pago"
-                      className="cursor-pointer rounded-md border border-border bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground">
-                      Estornar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </TabsContent>
-
-        {/* PRÓ-LABORE · já configurado pelo proporcional ao faturamento */}
-        <TabsContent value="pro" className="m-0">
-          <div className="space-y-3 p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {[
-                { l: "Receita operacional do mês", v: fmt(proLaboreView.operacional), s: `${fmt(monthReceivedGross)} bruto − imposto`, c: "text-foreground" },
-                { l: "Proporcional pela escada", v: fmt(proLaboreView.proporcional), s: proLaboreView.proximoDegrau ? `próximo degrau ${fmt(proLaboreView.proximoDegrau.proLabore)} em ${fmt(proLaboreView.proximoDegrau.revenue)}` : "topo da escada", c: "text-success" },
-                { l: "Configurado hoje", v: fmt(proLaboreView.atual), s: proLaboreView.molde ? `lançado, vence ${parseDate(proLaboreView.molde.due_date)?.toLocaleDateString("pt-BR")}` : "ainda não lançado como saída", c: "text-info" },
-              ].map((k) => (
-                <div key={k.l} className="rounded-xl border border-border bg-secondary/30 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{k.l}</p>
-                  <p className={`mt-1 font-mono text-lg font-semibold ${k.c}`}>{k.v}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{k.s}</p>
-                </div>
-              ))}
-            </div>
-
-            {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-success/30 bg-success/5 p-3">
-                <p className="flex-1 text-[12px] text-muted-foreground">
-                  O pró-labore ainda não é uma saída recorrente. Lançar já no proporcional
-                  de <strong className="font-mono text-foreground">{fmt(proLaboreView.proporcional)}</strong> coloca ele no fluxo,
-                  com vencimento no dia 10.
-                </p>
-                <button onClick={lancarProLaboreProporcional}
-                  className="cursor-pointer rounded-lg border-none bg-success/15 px-3 py-1.5 text-[11px] font-semibold text-success hover:bg-success/25">
-                  Lançar {fmt(proLaboreView.proporcional)}/mês
-                </button>
+                  ) : (
+                    <RegiaoRolavel memoria="financeiro:fluxo:investimentos" rotulo="Investimentos" sobre="cartao" className="lg:max-h-[420px]">
+                      <ul className="divide-y divide-border border-t border-border">
+                        {investorEntries.map((e: any) => {
+                          const cm = catMeta(e.category);
+                          return (
+                            <li key={e.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5 hover:bg-muted/40">
+                              <Briefcase className="mr-3 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                              <div className="mr-3 min-w-0 flex-1 basis-48">
+                                <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                                <p className={juntar(texto.auxiliar, "truncate")}>
+                                  {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+                                  {e.supplier && ` · ${e.supplier}`}
+                                </p>
+                              </div>
+                              <div className="ml-auto flex shrink-0 items-center py-0.5">
+                                <Etiqueta tom="primario" className="mr-3">Capital</Etiqueta>
+                                <span className="text-[13px] font-semibold tabular-nums text-primary">{fmt(Number(e.amount))}</span>
+                                {acoesDaLinha(e, "investment")}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </RegiaoRolavel>
+                  )
+                )}
               </div>
             )}
+          </Painel>
+        </div>
+      </Secao>
 
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              A escada lê a receita <strong>operacional</strong> — o bruto menos o imposto. Usar o bruto
-              inflaria a retirada em toda a faixa, porque a parte do governo nunca foi receita da agência.
-              O reajuste nunca é automático: o valor só muda quando você confirma.
-              {" "}Retirado no ano: <strong className="font-mono text-foreground">{fmt(proLaboreView.realizadoNoAno)}</strong>.
-            </p>
-
-            <div className="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border">
-              {proLaboreView.linhas.length === 0 && (
-                <div className="p-8 text-center text-[12px] text-muted-foreground">
-                  Nenhuma retirada registrada ainda.
-                </div>
-              )}
-              {proLaboreView.linhas.map((e: any) => (
-                <div key={e.id} className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-secondary/30">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {e.status === "paid"
-                        ? `retirado em ${parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}`
-                        : `previsto para ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
-                      {e.recurrence === "monthly" && " · mensal"}
-                    </p>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] ${e.status === "paid" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-                      {e.status === "paid" ? "Retirado" : "Previsto"}
-                    </span>
-                    <span className="font-mono text-[13px] font-semibold text-foreground">{fmt(Number(e.amount))}</span>
-                    <button onClick={() => togglePaid(e)}
-                      className="cursor-pointer rounded-md border border-border bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground">
-                      {e.status === "paid" ? "Estornar" : "Pagar"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* Modal conciliar saldo */}
+      <Dialog open={reconcileOpen} onOpenChange={setReconcileOpen}>
+        <DialogContent className="max-w-md border-border bg-card">
+          <DialogHeader><DialogTitle className="text-foreground">Conciliar saldo em caixa</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <dl className={juntar(superficie.poco, "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-3 py-2.5 text-[13px]")}>
+              <dt className="text-muted-foreground">Saldo calculado pelo painel</dt>
+              <dd className="text-right tabular-nums text-foreground">{fmt(cashBalance)}</dd>
+              <dt className="text-muted-foreground">Entradas</dt>
+              <dd className="text-right tabular-nums text-muted-foreground">{fmt(allTimeReceived)}</dd>
+              <dt className="text-muted-foreground">Saídas</dt>
+              <dd className="text-right tabular-nums text-muted-foreground">− {fmt(allTimePaidOut)}</dd>
+              <dt className="text-muted-foreground">Base anterior</dt>
+              <dd className="text-right tabular-nums text-muted-foreground">{fmt(openingBalance)}</dd>
+            </dl>
+            <GrupoDeCampos colunas={1}>
+              <CampoDeFormulario
+                rotulo="Saldo real na conta hoje (R$)"
+                ajuda={'A diferença (custos antigos não lançados, tarifas etc.) vai para a "base de meses anteriores". Nenhum lançamento é alterado ou apagado. Repita a conciliação sempre que quiser bater o painel com o extrato.'}
+              >
+                <input type="number" step="0.01" inputMode="decimal" value={reconcileInput} onChange={(e) => setReconcileInput(e.target.value)} className={campo} placeholder="Ex.: 5882.07" />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <AcoesDoDialogo>
+              <button type="button" onClick={() => setReconcileOpen(false)} className={botao.discreto}>Cancelar</button>
+              <button type="button" onClick={reconcileBalance} disabled={updateSettings.isPending} className={botao.primario}>
+                Conciliar com este saldo
+              </button>
+            </AcoesDoDialogo>
           </div>
-        </TabsContent>
-
-        <TabsContent value="inv" className="m-0">
-          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
-            {investorEntries.length === 0 && (
-              <div className="p-10 text-center text-[12px] text-muted-foreground">
-                Nenhum investimento registrado. Use "+ Lançamento" e escolha Investimento.
-              </div>
-            )}
-            {investorEntries.map((e: any) => {
-              const cm = catMeta(e.category);
-              return (
-                <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15 text-primary">
-                      <Briefcase className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
-                        {e.supplier && ` · ${e.supplier}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary">Capital</span>
-                    <span className="text-[13px] font-mono font-semibold text-primary">{fmt(Number(e.amount))}</span>
-                    <button onClick={() => setExpenseModal({ mode: "investment", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </TabsContent>
-        </Tabs>
-        )}
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {/* LAUNCHER · escolha do tipo de lançamento */}
       <Dialog open={launcherOpen} onOpenChange={setLauncherOpen}>
-        <DialogContent className="bg-card border-border max-w-md">
+        <DialogContent className="max-w-md border-border bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground">Novo lançamento</DialogTitle>
           </DialogHeader>
-          <p className="text-[12px] text-muted-foreground -mt-1">Escolha onde esse valor entra. Cada tipo é tratado de forma diferente no fluxo.</p>
-          <div className="grid gap-2 mt-3">
+          <ul className="divide-y divide-border rounded-md border border-border">
             <LauncherChoice
-              icon={<ArrowUpRight className="w-4 h-4" />}
+              icon={<ArrowUpRight className="h-4 w-4" />}
               tone="success"
               title="Entrada"
               desc="Receita avulsa de projeto. Conta como receita no fluxo."
               onClick={() => { setLauncherOpen(false); setIncomeModalOpen(true); }}
             />
             <LauncherChoice
-              icon={<ArrowDownRight className="w-4 h-4" />}
+              icon={<ArrowDownRight className="h-4 w-4" />}
               tone="danger"
               title="Despesa"
               desc="Custo operacional recorrente ou avulso. Conta como despesa no DRE."
@@ -1505,32 +1513,32 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
             {/* O pró-labore em um clique: o valor já sai calculado pela
                 escada, e a ação sabe se é para criar ou só ajustar. */}
             <LauncherChoice
-              icon={<PiggyBank className="w-4 h-4" />}
+              icon={<PiggyBank className="h-4 w-4" />}
               tone="success"
               title={proLaboreView.molde
                 ? `Ajustar pró-labore para ${fmt(proLaboreView.proporcional)}`
                 : `Lançar pró-labore proporcional · ${fmt(proLaboreView.proporcional)}`}
               desc={proLaboreView.molde
-                ? `Hoje está em ${fmt(proLaboreView.atual)}. Ajusta o valor da retirada que já existe, sem criar uma segunda.`
-                : `Calculado pela escada sobre ${fmt(proLaboreView.operacional)} de receita operacional. Entra como saída mensal, vencendo no dia 10.`}
+                ? `Hoje está em ${fmt(proLaboreView.atual)}. Ajusta a retirada que já existe, sem criar uma segunda.`
+                : `Pela escada sobre ${fmt(proLaboreView.operacional)} operacionais. Entra como saída mensal, vencendo no dia 10.`}
               onClick={() => { setLauncherOpen(false); void lancarProLaboreProporcional(); }}
             />
-            <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 flex items-start gap-2 mt-1">
-              <Briefcase className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Para registrar <span className="text-primary font-semibold">capital de investidor</span> (aportes de sócios), use a aba <span className="text-foreground font-medium">Capital</span>. Capital fica isolado do fluxo operacional.
-              </p>
-            </div>
-          </div>
+          </ul>
+          <p className={juntar(superficie.poco, "flex items-start px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
+            <Briefcase className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span>Capital de investidor (aporte de sócio) entra pela aba Capital, fora do fluxo operacional.</span>
+          </p>
         </DialogContent>
       </Dialog>
 
       {/* MODAL DESPESA / INVESTIMENTO */}
       <Dialog open={!!expenseModal} onOpenChange={(o) => !o && setExpenseModal(null)}>
-        <DialogContent className="bg-card border-border max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-border bg-card">
           <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              {expenseModal?.mode === "investment" ? <Briefcase className="w-4 h-4 text-primary" /> : <ArrowDownRight className="w-4 h-4 text-destructive" />}
+            <DialogTitle className="flex items-center text-foreground">
+              {expenseModal?.mode === "investment"
+                ? <Briefcase className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+                : <ArrowDownRight className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />}
               {expenseModal?.data?.id
                 ? (expenseModal.mode === "investment" ? "Editar investimento" : "Editar despesa")
                 : (expenseModal?.mode === "investment" ? "Novo investimento" : "Nova despesa")}
@@ -1548,13 +1556,13 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
       </Dialog>
 
       <Dialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
-        <DialogContent className="bg-card border-border max-w-sm">
+        <DialogContent className="max-w-sm border-border bg-card">
           <DialogHeader><DialogTitle className="text-foreground">Remover lançamento?</DialogTitle></DialogHeader>
-          <p className="text-[13px] text-muted-foreground">Essa ação não pode ser desfeita.</p>
-          <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setConfirmDel(null)} className="px-3 py-1.5 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
-            <button onClick={() => confirmDel && deleteExpense(confirmDel)} className="px-3 py-1.5 rounded-lg text-[12px] bg-destructive text-destructive-foreground border-none cursor-pointer">Remover</button>
-          </div>
+          <p className="text-[13px] text-muted-foreground">Não dá para desfazer.</p>
+          <AcoesDoDialogo>
+            <button type="button" onClick={() => setConfirmDel(null)} className={botao.discreto}>Cancelar</button>
+            <button type="button" onClick={() => confirmDel && deleteExpense(confirmDel)} className={botao.perigo}>Remover</button>
+          </AcoesDoDialogo>
         </DialogContent>
       </Dialog>
 
@@ -1563,30 +1571,49 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
   );
 }
 
-function KpiCard({ icon, label, value, hint, tone }: any) {
-  const tones: any = {
-    success: "from-success/15 to-success/0 text-success border-success/20",
-    danger: "from-destructive/15 to-destructive/0 text-destructive border-destructive/20",
-    primary: "from-primary/15 to-primary/0 text-primary border-primary/20",
-    warning: "from-warning/15 to-warning/0 text-warning border-warning/20",
-  };
+/** Cabeçalho de um bloco recolhível (Entradas, Saídas): título e os totais à direita. */
+function CabecalhoDoBloco({
+  aberto,
+  onAlternar,
+  controla,
+  titulo,
+  valores,
+}: {
+  aberto: boolean;
+  onAlternar: () => void;
+  controla: string;
+  titulo: string;
+  valores: { rotulo: string; valor: string; tom: Tom }[];
+}) {
   return (
-    <div className={`relative rounded-2xl border bg-gradient-to-br ${tones[tone] || tones.primary} p-4 overflow-hidden`}>
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</span>
-        <span className="opacity-70">{icon}</span>
-      </div>
-      <p className="mt-2 text-2xl font-mono font-semibold text-foreground tracking-tight">{value}</p>
-      <p className="text-[11px] text-muted-foreground mt-1">{hint}</p>
-    </div>
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-expanded={aberto}
+      aria-controls={controla}
+      className={juntar("flex w-full min-w-0 flex-wrap items-center rounded-lg px-4 py-3 text-left hover:bg-muted/40", foco)}
+    >
+      <span className="mr-3 flex min-w-0 flex-1 items-center">
+        <ChevronDown className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
+        <span className={juntar(texto.tituloSecao, "truncate")}>{titulo}</span>
+      </span>
+      <span className="ml-auto flex shrink-0 items-center">
+        {valores.map((v, i) => (
+          <span key={v.rotulo} className={juntar("text-right", i > 0 && "ml-4")}>
+            <span className={juntar(texto.rotulo, "block")}>{v.rotulo}</span>
+            <span className={juntar("block text-[13px] font-semibold tabular-nums", corDoTom[v.tom])}>{v.valor}</span>
+          </span>
+        ))}
+      </span>
+    </button>
   );
 }
 
 function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
   const cats = mode === "investment" ? INVESTMENT_CATEGORIES : EXPENSE_CATEGORIES;
   const defaultCat = mode === "investment" ? "inv_outros" : "outros";
-  const placeholder = mode === "investment" ? "Ex: Campanha Meta Ads · junho" : "Ex: Aluguel escritório";
-  const supplierLabel = mode === "investment" ? "Plataforma / Origem" : "Fornecedor";
+  const placeholder = mode === "investment" ? "Ex.: Campanha Meta Ads · junho" : "Ex.: Aluguel escritório";
+  const supplierLabel = mode === "investment" ? "Plataforma / origem" : "Fornecedor";
 
   const [form, setForm] = useState({
     id: initial.id || null,
@@ -1603,55 +1630,39 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {mode === "investment" && (
-        <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
-          <p className="text-[11px] text-foreground">
-            <span className="text-primary font-semibold">Investimento</span> não conta como despesa no DRE. Vai pro bloco de Capital e gera retorno medido contra ele.
-          </p>
-        </div>
+        <p className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
+          <span className="font-semibold text-primary">Investimento</span> não conta como despesa no DRE. Vai para o bloco de Capital e o retorno é medido contra ele.
+        </p>
       )}
-      <div>
-        <label className="text-[11px] text-muted-foreground">Descrição *</label>
-        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder={placeholder} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground">Categoria</label>
-          <select value={form.category} onChange={e => set("category", e.target.value)}
-            className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+      <GrupoDeCampos>
+        <CampoDeFormulario rotulo="Descrição" obrigatorio largo>
+          <input value={form.description} onChange={e => set("description", e.target.value)} className={campo} placeholder={placeholder} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Categoria">
+          <select value={form.category} onChange={e => set("category", e.target.value)} className={campo}>
             {cats.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-        </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">Valor (R$) *</label>
-          <Input type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} className="mt-1" placeholder="0,00" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground">Vencimento *</label>
-          <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="mt-1" />
-        </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">Recorrência</label>
-          <select value={form.recurrence} onChange={e => set("recurrence", e.target.value)}
-            className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Valor (R$)" obrigatorio>
+          <input type="number" step="0.01" inputMode="decimal" value={form.amount} onChange={e => set("amount", e.target.value)} className={campo} placeholder="0,00" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Vencimento" obrigatorio>
+          <input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className={campo} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Recorrência">
+          <select value={form.recurrence} onChange={e => set("recurrence", e.target.value)} className={campo}>
             <option value="none">Única</option>
             <option value="monthly">Mensal</option>
             <option value="yearly">Anual</option>
           </select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground">{supplierLabel}</label>
-          <Input value={form.supplier} onChange={e => set("supplier", e.target.value)} className="mt-1" placeholder="Opcional" />
-        </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">Forma de pagamento</label>
-          <select value={form.payment_method} onChange={e => set("payment_method", e.target.value)}
-            className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo={supplierLabel}>
+          <input value={form.supplier} onChange={e => set("supplier", e.target.value)} className={campo} placeholder="Opcional" />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo="Forma de pagamento">
+          <select value={form.payment_method} onChange={e => set("payment_method", e.target.value)} className={campo}>
             <option value="">-</option>
             <option value="pix">Pix</option>
             <option value="boleto">Boleto</option>
@@ -1659,88 +1670,53 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
             <option value="transferencia">Transferência</option>
             <option value="dinheiro">Dinheiro</option>
           </select>
+        </CampoDeFormulario>
+        <div className="min-w-0 sm:col-span-full">
+          <p className={juntar(texto.rotulo, "mb-1.5")}>Status</p>
+          <SeletorCompacto
+            opcoes={[{ valor: "pending", rotulo: "Pendente" }, { valor: "paid", rotulo: "Pago" }]}
+            valor={form.status}
+            onEscolher={(v) => set("status", v)}
+            rotulo="Status do lançamento"
+            modo="segmentado"
+            larguraTotal
+          />
         </div>
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground">Status</label>
-        <div className="flex gap-2 mt-1">
-          {["pending", "paid"].map(s => (
-            <button key={s} type="button" onClick={() => set("status", s)}
-              className={`flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer ${form.status === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-muted-foreground border-border"}`}>
-              {s === "paid" ? "Pago" : "Pendente"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="text-[11px] text-muted-foreground">Observações</label>
-        <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2}
-          className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" />
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
-        <button onClick={() => onSave(form)} className="px-4 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground border-none cursor-pointer">
+        <CampoDeFormulario rotulo="Observações" largo>
+          <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2} className={juntar(campoTexto, "resize-none")} />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
+      <AcoesDoDialogo>
+        <button type="button" onClick={onCancel} className={botao.discreto}>Cancelar</button>
+        <button type="button" onClick={() => onSave(form)} className={botao.primario}>
           {form.id ? "Salvar" : "Criar"}
         </button>
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value, hint, tone = "primary" }: any) {
-  const toneCls: any = {
-    primary: "text-primary",
-    success: "text-success",
-    danger: "text-destructive",
-  };
-  return (
-    <div className="rounded-xl border border-border bg-card/60 backdrop-blur px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`mt-0.5 text-base font-mono font-semibold ${toneCls[tone] || toneCls.primary}`}>{value}</p>
-      {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
+      </AcoesDoDialogo>
     </div>
   );
 }
 
 function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
-  const tones: any = {
-    success: "border-success/30 hover:border-success/60 hover:bg-success/5",
-    danger: "border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5",
-    primary: "border-primary/30 hover:border-primary/60 hover:bg-primary/5",
-  };
   const iconTone: any = {
     success: "bg-success/15 text-success",
     danger: "bg-destructive/15 text-destructive",
     primary: "bg-primary/15 text-primary",
   };
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border bg-card transition-colors cursor-pointer ${tones[tone] || tones.primary}`}
-    >
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconTone[tone] || iconTone.primary}`}>
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-[13px] font-semibold text-foreground">{title}</p>
-        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{desc}</p>
-      </div>
-    </button>
-  );
-}
-
-function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-end justify-between gap-3 pt-2">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="w-1 h-4 rounded-full bg-primary" />
-          <h3 className="text-[13px] font-semibold text-foreground tracking-tight uppercase">{title}</h3>
-        </div>
-        {subtitle && <p className="text-[11px] text-muted-foreground mt-1 ml-3">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={juntar("flex w-full min-w-0 items-start px-3 py-3 text-left transition-colors hover:bg-muted/60", foco)}
+      >
+        <span className={juntar("mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md", iconTone[tone] || iconTone.primary)}>
+          {icon}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-foreground">{title}</span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 block leading-5")}>{desc}</span>
+        </span>
+      </button>
+    </li>
   );
 }

@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, Eye, EyeOff, ArrowRight, Check, ShieldCheck, AlertTriangle } from "lucide-react";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { Loader2 } from "lucide-react";
+import { CampoDeFormulario, Carregando, GrupoDeCampos, botao, juntar, superficie, texto } from "@/components/sistema";
+import CascaPublica, { CampoDeSenha, campoPublico } from "@/components/publico/CascaPublica";
 
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
   if (pw.length < 12) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
@@ -55,6 +56,8 @@ export default function FirstAccess() {
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Onde o erro aparece: no lugar do apoio do campo da senha ou da confirmação.
+  const [errorField, setErrorField] = useState<"senha" | "confirmar">("confirmar");
   const [accountEmail, setAccountEmail] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [resendEmail, setResendEmail] = useState("");
@@ -80,32 +83,39 @@ export default function FirstAccess() {
     }
   };
 
+  // Um primário por área: no "link inválido" o reenvio é a saída principal;
+  // em "demorou" e "já usado" o principal é outro e o reenvio fica secundário.
+  const reenvioPrincipal = phase === "invalid";
   const reenviar = (
-    <form onSubmit={handleResend} className="w-full mt-4 pt-4 border-t border-border space-y-2 text-left">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Receber o link de novo</p>
+    <form onSubmit={handleResend} className={juntar(superficie.divisoria, "mt-8 min-w-0 pt-6")}>
       {resendState === "sent" ? (
-        <p className="text-xs text-foreground leading-relaxed">
+        <p className={juntar(texto.corpo, "text-muted-foreground")} role="status">
           Se este e-mail estiver cadastrado, o link chega em instantes. Confira também a caixa de spam.
         </p>
       ) : (
         <>
-          <input
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            value={resendEmail}
-            onChange={(e) => { setResendEmail(e.target.value); if (resendState === "error") setResendState("idle"); }}
-            placeholder="Seu e-mail cadastrado"
-            style={{ fontSize: "16px" }}
-            className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
-          />
+          <label htmlFor="primeiro-acesso-reenvio" className={juntar(texto.rotulo, "mb-1.5 block")}>Receber o link de novo</label>
+          <div className="flex min-w-0 items-start">
+            <input
+              id="primeiro-acesso-reenvio"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={resendEmail}
+              onChange={(e) => { setResendEmail(e.target.value); if (resendState === "error") setResendState("idle"); }}
+              placeholder="Seu e-mail cadastrado"
+              aria-invalid={resendState === "error" || undefined}
+              aria-describedby={resendState === "error" ? "primeiro-acesso-reenvio-erro" : undefined}
+              className={juntar(campoPublico, "flex-1")}
+            />
+            <button type="submit" disabled={resendState === "sending"}
+              className={juntar(reenvioPrincipal ? botao.primario : botao.secundario, "ml-2")}>
+              {resendState === "sending" ? "Enviando..." : "Enviar link"}
+            </button>
+          </div>
           {resendState === "error" && (
-            <p className="text-xs text-destructive">Confira o e-mail e tente de novo.</p>
+            <p id="primeiro-acesso-reenvio-erro" role="alert" className="mt-1.5 text-[12px] leading-4 text-destructive">Confira o e-mail e tente de novo.</p>
           )}
-          <button type="submit" disabled={resendState === "sending"}
-            className="w-full py-2.5 rounded-[10px] text-[13px] font-semibold bg-secondary text-foreground border border-border hover:border-primary/50 transition-colors cursor-pointer disabled:opacity-60">
-            {resendState === "sending" ? "Enviando..." : "Enviar o link para meu e-mail"}
-          </button>
         </>
       )}
     </form>
@@ -159,9 +169,11 @@ export default function FirstAccess() {
       || !/[0-9]/.test(password)
       || !/[^A-Za-z0-9]/.test(password)
     ) {
+      setErrorField("senha");
       setError("Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.");
       return;
     }
+    setErrorField("confirmar");
     if (password !== confirm) {
       setError("As senhas não coincidem.");
       return;
@@ -205,146 +217,92 @@ export default function FirstAccess() {
     }
   };
 
+  const textos: Record<Phase, { titulo: string; descricao: string }> = {
+    loading: { titulo: "Primeiro acesso", descricao: "Validando seu acesso..." },
+    form: { titulo: "Bem-vindo", descricao: "Crie a senha que você vai usar no portal Aceleriq." },
+    invalid: { titulo: "Link inválido ou expirado", descricao: "Peça o link de novo abaixo ou entre, se já tem senha." },
+    slow: { titulo: "A conexão demorou demais", descricao: "Confira a internet e tente de novo. O link continua valendo." },
+    used: { titulo: "Senha já criada", descricao: "É só entrar com seu e-mail e a senha que você escolheu." },
+    done: { titulo: "Tudo pronto", descricao: "Senha criada. Entrando no portal..." },
+  };
+  const erroDaSenha = error && errorField === "senha" ? error : undefined;
+  const erroDaConfirmacao = error && errorField === "confirmar" ? error : undefined;
+  const linkDiscreto = "rounded-sm text-[13px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
   return (
-    <div className="dark min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-[420px]">
-        <div className="flex justify-center mb-8">
-          <img src={aceleriqLogo} alt="AcelerIQ" className="h-16 w-auto" />
+    <CascaPublica titulo={textos[phase].titulo} descricao={textos[phase].descricao}>
+      {phase === "loading" && <Carregando linhas={3} rotulo="Validando seu acesso" />}
+
+      {phase === "invalid" && (
+        <div className="min-w-0">
+          <button type="button" onClick={() => navigate("/login")} className={linkDiscreto}>
+            Ir para o login
+          </button>
+          {reenviar}
         </div>
+      )}
 
-        <div className="bg-card border border-border rounded-2xl p-7" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.45)" }}>
-          {phase === "loading" && (
-            <div className="flex flex-col items-center gap-3 py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <p className="text-xs text-muted-foreground">Validando seu acesso...</p>
-            </div>
-          )}
-
-          {phase === "invalid" && (
-            <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-destructive" />
-              </div>
-              <h1 className="text-base font-semibold text-foreground">Link inválido ou expirado</h1>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Este link de primeiro acesso não é mais válido. Fale com a equipe AcelerIQ
-                para receber um novo, ou faça login se já tiver uma senha.
-              </p>
-              <button onClick={() => navigate("/login")}
-                className="mt-2 text-[13px] font-medium text-primary hover:underline cursor-pointer bg-transparent border-none">
-                Ir para o login
-              </button>
-              {reenviar}
-            </div>
-          )}
-
-          {phase === "slow" && (
-            <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-warning" />
-              </div>
-              <h1 className="text-base font-semibold text-foreground">A conexão demorou demais</h1>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Não conseguimos validar o seu link agora. Confira a internet e tente de novo — o link continua valendo.
-              </p>
-              <button onClick={() => setAttempt((n) => n + 1)}
-                className="mt-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-                Tentar novamente
-              </button>
-              {reenviar}
-            </div>
-          )}
-
-          {phase === "used" && (
-            <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-warning" />
-              </div>
-              <h1 className="text-base font-semibold text-foreground">Senha já criada</h1>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Você já definiu sua senha anteriormente. É só fazer login com seu e-mail
-                e a senha que escolheu.
-              </p>
-              <button onClick={() => navigate("/login")}
-                className="mt-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-                Fazer login
-              </button>
-              {reenviar}
-            </div>
-          )}
-
-          {phase === "done" && (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
-                <Check className="w-6 h-6 text-success" />
-              </div>
-              <h1 className="text-base font-semibold text-foreground">Tudo pronto!</h1>
-              <p className="text-xs text-muted-foreground">Senha criada com sucesso. Entrando no portal...</p>
-              <Loader2 className="w-4 h-4 animate-spin text-primary mt-1" />
-              <button onClick={() => navigate("/login", { replace: true, state: { email: accountEmail, passwordJustCreated: true } })}
-                className="mt-3 text-[12px] font-medium text-primary hover:underline cursor-pointer bg-transparent border-none">
-                Ir para o login agora
-              </button>
-            </div>
-          )}
-
-          {phase === "form" && (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="text-center space-y-1">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-primary font-semibold">Primeiro acesso</p>
-                <h1 className="text-xl font-semibold text-foreground">
-                  Bem-vindo!
-                </h1>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Crie a senha que você vai usar para entrar no Portal AcelerIQ.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Crie sua senha</label>
-                <div className="relative">
-                  <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPw ? "text" : "password"}
-                    placeholder="Mínimo 12 caracteres" autoFocus
-                    style={{ fontSize: "16px" }}
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 pr-10 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                  <button type="button" onClick={() => setShowPw(!showPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer p-0">
-                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {password.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-300"
-                        style={{ width: `${strength.level}%`, backgroundColor: strength.color }} />
-                    </div>
-                    <span className="text-[10px]" style={{ color: strength.color }}>{strength.label}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Confirme a senha</label>
-                <input value={confirm} onChange={(e) => setConfirm(e.target.value)} type={showPw ? "text" : "password"}
-                  placeholder="Repita a senha"
-                  style={{ fontSize: "16px" }}
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-              </div>
-
-              {error && <p className="text-xs text-destructive">{error}</p>}
-
-              <button type="submit" disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-[10px] text-[14px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60">
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Criar senha e entrar <ArrowRight className="w-4 h-4" /></>}
-              </button>
-            </form>
-          )}
+      {phase === "slow" && (
+        <div className="min-w-0">
+          <button type="button" onClick={() => setAttempt((n) => n + 1)} className={botao.primario}>
+            Tentar novamente
+          </button>
+          {reenviar}
         </div>
+      )}
 
-        <p className="text-center text-[11px] text-muted-foreground mt-6">
-          AcelerIQ · Performance OS
-        </p>
-      </div>
-    </div>
+      {phase === "used" && (
+        <div className="min-w-0">
+          <button type="button" onClick={() => navigate("/login")} className={botao.primario}>
+            Fazer login
+          </button>
+          {reenviar}
+        </div>
+      )}
+
+      {phase === "done" && (
+        <div className="min-w-0">
+          <button type="button" onClick={() => navigate("/login", { replace: true, state: { email: accountEmail, passwordJustCreated: true } })}
+            className={linkDiscreto}>
+            Ir para o login agora
+          </button>
+        </div>
+      )}
+
+      {phase === "form" && (
+        <form onSubmit={handleSubmit} className="min-w-0">
+          <GrupoDeCampos colunas={1}>
+            <CampoDeFormulario
+              rotulo="Crie sua senha"
+              erro={erroDaSenha}
+              apoio={password.length > 0 ? (
+                <span className="flex min-w-0 items-center">
+                  <span className="mr-2 block h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                    <span className="block h-full rounded-full transition-[width] duration-300"
+                      style={{ width: `${strength.level}%`, backgroundColor: strength.color }} />
+                  </span>
+                  <span className="shrink-0" style={{ color: strength.color }}>{strength.label}</span>
+                </span>
+              ) : "Maiúscula, minúscula, número e símbolo."}
+            >
+              <CampoDeSenha value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mínimo 12 caracteres" autoFocus autoComplete="new-password"
+                mostrar={showPw} aoAlternar={() => setShowPw(!showPw)} />
+            </CampoDeFormulario>
+
+            <CampoDeFormulario rotulo="Confirme a senha" erro={erroDaConfirmacao}>
+              <CampoDeSenha value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Repita a senha" autoComplete="new-password"
+                mostrar={showPw} aoAlternar={() => setShowPw(!showPw)} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+
+          <button type="submit" disabled={submitting} className={juntar(botao.primario, "mt-6 w-full")}>
+            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {submitting ? "Criando a senha..." : "Criar senha e entrar"}
+          </button>
+        </form>
+      )}
+    </CascaPublica>
   );
 }

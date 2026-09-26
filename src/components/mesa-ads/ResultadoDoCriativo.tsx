@@ -55,7 +55,7 @@ export default function ResultadoDoCriativo({ criativo, angulo }: { criativo: Cr
   if (!criativo.ad_id && !angulo) return null;
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-3" aria-label="Resultado do criativo">
+    <section className="min-w-0 rounded-lg border border-border bg-card px-4 py-3" aria-label="Resultado do criativo">
       <div className="flex min-w-0 flex-wrap items-center">
         <Target className="mb-1 mr-1.5 mt-1 h-4 w-4 shrink-0 text-primary" />
         <h3 className="mb-1 mr-3 mt-1 text-[13px] font-semibold">Resultado</h3>

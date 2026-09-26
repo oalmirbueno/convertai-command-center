@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ClipboardCheck, Loader2, Megaphone, PenTool } from "lucide-react";
+import { ArrowUpRight, ClipboardCheck, Filter, Megaphone, PenTool } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotoesDeUso } from "./AcoesDeUso";
-import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
+import { Cartao, MiniaturaDaFoto, Moldura, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
+import { Carregando } from "@/components/sistema/Estados";
 import { DecisaoRapida, MenuDeUso, useLevarParaAsMesas } from "./UsoDaFoto";
 import { classeDaFoto, fotosParaRevisar, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
 
@@ -19,6 +22,10 @@ import { classeDaFoto, fotosParaRevisar, proporcaoDoFormato, useEnsaios, useFoto
  * origem mesa_foto): "Usar na Mesa" abre o Estúdio com as fotos no endereço
  * (&fotos=), que as mostra em "Fotos que vieram da Mesa Foto". Aprovar a foto
  * não aprova a arte ou o anúncio feito com ela.
+ *
+ * 26/09 (sistema de design): blocos sem caixa, "Quais fotos" num seletor na
+ * linha do título, as ações do grupo marcado numa barra só (Mesa, Mesa Ads,
+ * baixar, aprovação, Arquivos) e rolagem própria só no computador.
  */
 
 export { chaveDasFotosParaUsar, enderecoParaUsar, guardarFotosParaUsar } from "./UsoDaFoto";
@@ -43,10 +50,10 @@ function ParaRevisar() {
         </Button>
       }
     >
-      <div className="max-h-[60vh] min-w-0 overflow-y-auto pr-0.5" data-rolagem-propria="">
+      <div className="min-w-0 lg:max-h-[60vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
         <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="">
           {pendentes.map((p, i) => (
-            <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className="min-w-0 rounded-xl border border-border bg-card p-1.5" data-pendente={p.tomada.id}>
+            <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className="min-w-0 rounded-lg border border-border bg-card p-1.5" data-pendente={p.tomada.id}>
               <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${p.tomada.nome}`}>
                 <Moldura proporcao={proporcaoDoFormato(p.tomada.formato)} className="border border-border">
                   <ImagemDaMesa caminho={p.versao.storage_path || ""} alt={p.tomada.nome} className="h-full w-full !object-contain" />
@@ -119,19 +126,15 @@ export default function EtapaUsar() {
   opcoes.push({ valor: "todas_tratadas", rotulo: "Aprovadas e tratadas" });
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
+    <div className="min-w-0 space-y-5">
       <ParaRevisar />
 
       <Cartao
         titulo="Prontas para usar"
         dica="Cada foto tem o menu Usar. Marque várias para levar juntas. Aprovar a foto não aprova a arte ou o anúncio feito com ela; foto gerada sai sempre marcada."
-        acao={<Pilulas rotulo="Quais fotos" opcoes={opcoes} valor={origem} onEscolher={setOrigem} />}
+        acao={<SeletorCompacto modo="lista" rotulo="Quais fotos" icone={<Filter className="h-4 w-4" />} opcoes={opcoes} valor={origem} onEscolher={(v) => setOrigem(v as Origem)} />}
       >
-        {fotos.isLoading && (
-          <p className="flex items-center text-[12px] text-muted-foreground">
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo o acervo...
-          </p>
-        )}
+        {fotos.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo o acervo" />}
         {fotos.isError && <AvisoDeErro erro={fotos.error} />}
         {fotos.isSuccess && lista.length === 0 && (
           <Vazio
@@ -148,7 +151,7 @@ export default function EtapaUsar() {
         {lista.length > 0 && (
           <>
             <div className="mb-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
-              <span className="mr-3">
+              <span className="mr-3 tabular-nums">
                 {escolhidas.length} de {lista.length} {lista.length === 1 ? "marcada" : "marcadas"}
                 {geradas ? ` · ${geradas} ${geradas === 1 ? "gerada" : "geradas"}` : ""}
               </span>
@@ -159,12 +162,12 @@ export default function EtapaUsar() {
                 Desmarcar
               </button>
             </div>
-            <div className="max-h-[70vh] min-w-0 overflow-y-auto pr-0.5" data-rolagem-propria="">
+            <div className="min-w-0 lg:max-h-[70vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
               <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
                 {lista.map((f, i) => {
                   const marcada = escolhidasIds.indexOf(f.id) >= 0;
                   return (
-                    <li key={f.id} className={`relative min-w-0 rounded-xl border bg-card p-1.5 ${marcada ? "border-primary" : "border-border"}`} data-pronta={f.id}>
+                    <li key={f.id} className={`relative min-w-0 rounded-lg border bg-card p-1.5 ${marcada ? "border-primary" : "border-border"}`} data-pronta={f.id}>
                       <button type="button" className="block w-full min-w-0 text-left" onClick={() => setAmpliada(i)} aria-label={`Ver ${f.nome} grande`}>
                         <MiniaturaDaFoto foto={f} />
                       </button>
@@ -188,21 +191,25 @@ export default function EtapaUsar() {
       </Cartao>
 
       {lista.length > 0 && (
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-          <Cartao titulo={`Usar nas mesas · ${escolhidas.length} ${escolhidas.length === 1 ? "marcada" : "marcadas"}`} dica="A foto entra no Estúdio pelo acervo, sem upload de novo.">
-            <div className="flex min-w-0 flex-wrap">
-              <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)}>
-                <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa <ArrowUpRight className="ml-1 h-3 w-3" />
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="mb-1.5 h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("ads", escolhidas)}>
-                <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa Ads <ArrowUpRight className="ml-1 h-3 w-3" />
-              </Button>
-            </div>
-          </Cartao>
-          <Cartao titulo="Levar para fora">
+        // Ações do grupo marcado numa barra só: Mesa, Mesa Ads e as saídas (baixar, aprovação, Arquivos).
+        <BarraDeAcoes
+          className="border-t border-border pt-3"
+          inicio={
+            <span className="tabular-nums" title="A foto entra no Estúdio pelo acervo, sem upload de novo.">
+              Usar {escolhidas.length} {escolhidas.length === 1 ? "marcada" : "marcadas"}
+            </span>
+          }
+        >
+          <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)}>
+            <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa <ArrowUpRight className="ml-1 h-3 w-3" />
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("ads", escolhidas)}>
+            <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa Ads <ArrowUpRight className="ml-1 h-3 w-3" />
+          </Button>
+          <div className="flex min-w-0 flex-wrap items-center" data-levar-para-fora="">
             <BotoesDeUso fotos={escolhidas} />
-          </Cartao>
-        </div>
+          </div>
+        </BarraDeAcoes>
       )}
 
       <Ampliar

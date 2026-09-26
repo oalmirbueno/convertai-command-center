@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Aperture, Check, ImagePlus, Loader2, Megaphone, PackageOpen, PackageSearch, Paperclip, Send, Sparkles, Wand2, X } from "lucide-react";
+import { Aperture, Check, ImagePlus, Loader2, Megaphone, MessageSquarePlus, PackageOpen, PackageSearch, Paperclip, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
@@ -27,6 +26,7 @@ import {
   lerPlanoDeCampanha,
   lerPlanoDeVariacoes,
   limitarQuantidade,
+  partesDaLeitura,
   MAX_ANEXOS_DO_DIRETOR,
   partesDaConversa,
   partesDaGeracao,
@@ -42,15 +42,21 @@ import {
   type SugestaoDoAgente,
 } from "./fotoApi";
 import { lerDaSessao } from "./sessao";
+import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { botao, foco, juntar } from "@/components/sistema/estilos";
+import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
-import { chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { chamarAcaoDoAgente, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import CartaoDaGeracao from "./CartaoDaGeracao";
+import { atualizarTelasDepoisDoDiretor, CHAVES_DO_ABERTO, focoDaTela, useContextoDoDiretor, useFocoDoDiretor } from "./diretorApi";
 
 /**
- * O diretor de fotografia, à mão em qualquer etapa: botão flutuante no
- * centro da base da tela (acima da barra do celular) que abre a conversa num
- * pop-up grande e centralizado. Ele conhece o cliente, o produto (kit) e o
- * ensaio abertos; as fotos marcadas no Acervo e os prints de referência de
- * estilo anexados vão junto.
+ * O diretor de fotografia, fixo na lateral da área de trabalho da Mesa Foto
+ * (26/09, sistema de design: antes era um botão flutuante que abria um
+ * pop-up). Ele conhece o cliente, o produto (kit) e o ensaio abertos; as
+ * fotos marcadas no Acervo e os prints de referência de estilo anexados vão
+ * junto.
  *
  * v2 (pedido do dono: "está confuso, meio burro, uma linha"): a resposta vem
  * organizada (o que entendeu, parágrafos, listas e o próximo passo), e as
@@ -234,7 +240,7 @@ function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
     }
   };
   return (
-    <li className="min-w-0 rounded-xl border border-primary/30 bg-card p-2.5" data-sugestao={sugestao.chave}>
+    <li className="min-w-0 rounded-md border border-primary/30 p-2.5" data-sugestao={sugestao.chave}>
       <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <div className="mt-2 flex items-center">
@@ -294,7 +300,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
   };
 
   return (
-    <li className="min-w-0 space-y-2 rounded-xl border border-primary/40 bg-card p-3 sm:col-span-2" data-sugestao={sugestao.chave} data-plano-de-variacoes="">
+    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-plano-de-variacoes="">
       <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {variacoes.length > 0 && (
@@ -399,7 +405,7 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
     }
   };
   return (
-    <li className="min-w-0 space-y-2 rounded-xl border border-primary/40 bg-card p-3 sm:col-span-2" data-sugestao={sugestao.chave} data-campanha="">
+    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-campanha="">
       <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <GuiaDeEstiloNaTela guia={plano.guia_de_estilo} modelo={plano.modelo} compacto />
@@ -465,7 +471,7 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
   const ids = indicadas.length ? indicadas : anexos;
   const [resultado, setResultado] = useState<IdentificacaoDoProduto | null>(null);
   return (
-    <li className="min-w-0 space-y-2 rounded-xl border border-primary/40 bg-card p-3 sm:col-span-2" data-sugestao={sugestao.chave} data-identificar-produto="">
+    <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-identificar-produto="">
       <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {resultado ? (
@@ -501,11 +507,11 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
   const queryClient = useQueryClient();
   if (m.papel === "usuario") {
     return (
-      <div className="ml-10 min-w-0">
-        <div className="min-w-0 whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-[13px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">
+      <div className="ml-6 min-w-0">
+        <div className="min-w-0 whitespace-pre-wrap rounded-lg bg-primary/10 px-3 py-2 text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
           {m.texto}
           {m.anexos > 0 && (
-            <span className="mt-1 block text-[11px] opacity-80">
+            <span className="mt-1 block text-[11px] text-muted-foreground">
               {m.anexos} {m.anexos === 1 ? "foto junto" : "fotos junto"}
               {m.estilos ? `, ${m.estilos} como referência de estilo` : ""}
             </span>
@@ -515,17 +521,17 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
     );
   }
   return (
-    <div className="mr-6 min-w-0">
-      <div className="min-w-0 space-y-2 rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
+    <div className="mr-3 min-w-0">
+      <div className="min-w-0 space-y-2 rounded-lg bg-muted/60 px-3 py-2 text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
         {m.entendi && (
-          <p className="rounded-lg bg-card px-2.5 py-1.5 text-[12px]" data-entendi="">
+          <p className="rounded-md bg-background/60 px-2.5 py-1.5 text-[12px]" data-entendi="">
             <span className="font-semibold">Entendi: </span>
             {m.entendi}
           </p>
         )}
         <TextoOrganizado texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} />
         {m.proximo_passo && (
-          <p className="rounded-lg border border-primary/30 bg-card px-2.5 py-1.5 text-[12.5px]" data-proximo-do-diretor="">
+          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[12.5px]" data-proximo-do-diretor="">
             <span className="font-semibold text-primary">Próximo passo: </span>
             {m.proximo_passo}
           </p>
@@ -542,7 +548,7 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
         </div>
       )}
       {m.sugestoes.length > 0 && (
-        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2">
           {m.sugestoes.map((s) =>
             s.tipo === "plano_de_variacoes" ? (
               <CartaoDoPlanoDeVariacoes key={s.chave} sugestao={s} />
@@ -563,10 +569,23 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
             titulo="O diretor vai fazer nas fotos"
             observacao="Sem custo. Nenhuma foto é apagada, e dá para desfazer."
             onPedido={(p) => chamarAcaoDoAgente("mesa-foto", String(m.mensagemId), m.acao ? m.acao.id : "", p)}
-            onFeito={(p) => {
-              if (p !== "descartar") invalidarFotos(queryClient, clientId);
+            onFeito={(p, resposta) => {
+              if (p === "descartar") return;
+              invalidarFotos(queryClient, clientId);
+              // Diretor agêntico: clone, book e Canvas também releem (o resultado aparece na etapa aberta).
+              if (m.acao && m.acao.agente === "diretor") atualizarTelasDepoisDoDiretor(queryClient, clientId, (resposta && (resposta.anexo as AcaoDoAgente)) || m.acao);
+              const canvasId = resposta && (resposta as { canvas_id?: unknown }).canvas_id;
+              if (p === "confirmar" && typeof canvasId === "string" && canvasId) {
+                gravarEstadoDaTela(CHAVES_DO_ABERTO.canvas(clientId), canvasId);
+                toast.success("Fotos no Canvas", { description: "Estão num canvas novo, já ligadas a um resultado.", action: { label: "Abrir", onClick: () => irPara("canvas") } });
+              }
             }}
           />
+        </div>
+      )}
+      {m.geracao && m.mensagemId && (
+        <div className="mt-2">
+          <CartaoDaGeracao acao={m.geracao} mensagemId={String(m.mensagemId)} />
         </div>
       )}
       {m.custo_usd !== null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
@@ -574,96 +593,150 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
   );
 }
 
-function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDiretor[]; pendente: string | null; anexos: string[] }) {
-  const fim = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = fim.current;
-    if (el && typeof el.scrollIntoView === "function") {
-      try {
-        el.scrollIntoView({ block: "end" });
-      } catch {
-        /* navegador antigo */
-      }
+/**
+ * A conversa do diretor fica guardada fora do componente, por cliente: a
+ * lateral pode remontar (gaveta do celular que vira coluna ao girar, Canvas
+ * com a lateral própria) e a conversa não some. Vale enquanto a aba do
+ * navegador estiver aberta (a mesma vida do id da conversa, no sessionStorage).
+ * A resposta que chega com o painel fechado cai aqui e aparece ao reabrir.
+ */
+interface EstadoDaConversa {
+  mensagens: MensagemDoDiretor[];
+  conversaId: string | null;
+  novaConversa: boolean;
+  pendente: string | null;
+}
+
+const conversas: Record<string, EstadoDaConversa> = {};
+const ouvintes: Record<string, Array<() => void>> = {};
+const chaveViva = (clientId: string) => `mesa-foto:conversa-viva:${clientId}`;
+
+function conversaGuardada(clientId: string): EstadoDaConversa {
+  let viva = false;
+  try {
+    viva = window.sessionStorage.getItem(chaveViva(clientId)) === "1";
+  } catch {
+    viva = !!conversas[clientId];
+  }
+  if (!conversas[clientId] || !viva) {
+    conversas[clientId] = { mensagens: [], conversaId: lerConversa(clientId), novaConversa: false, pendente: null };
+    try {
+      window.sessionStorage.setItem(chaveViva(clientId), "1");
+    } catch {
+      /* sem armazenamento: vale só enquanto a tela estiver aberta */
     }
-  }, [mensagens.length, pendente]);
+  }
+  return conversas[clientId];
+}
+
+function mudarConversa(clientId: string, mudar: (e: EstadoDaConversa) => Partial<EstadoDaConversa>) {
+  const atual = conversaGuardada(clientId);
+  conversas[clientId] = { ...atual, ...mudar(atual) };
+  (ouvintes[clientId] || []).slice().forEach((o) => o());
+}
+
+function useConversaGuardada(clientId: string): EstadoDaConversa {
+  const [, setVersao] = useState(0);
+  useEffect(() => {
+    const ouvir = () => setVersao((n) => n + 1);
+    ouvintes[clientId] = (ouvintes[clientId] || []).concat([ouvir]);
+    return () => {
+      ouvintes[clientId] = (ouvintes[clientId] || []).filter((o) => o !== ouvir);
+    };
+  }, [clientId]);
+  return conversaGuardada(clientId);
+}
+
+/** Último pedido de outra etapa já posto no rascunho (remontar a lateral não repõe o mesmo pedido). */
+const pedidosVistos: Record<string, number> = {};
+
+function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDiretor[]; pendente: string | null; anexos: string[] }) {
   return (
-    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
+    <>
       {mensagens.length === 0 && !pendente && (
-        <div className="mx-auto max-w-md py-6 text-center">
-          <Aperture className="mx-auto h-8 w-8 text-primary" />
-          <p className="mt-2 text-[14px] font-semibold">Diretor de fotografia</p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-            Peça o que quer fazer: identificar o produto pela caixa, tirar da caixa, 8 variações, campanha com modelo. Ele propõe e você gera com um clique, com o custo antes.
-          </p>
-        </div>
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground" data-diretor-vazio="">
+          Ele já conhece o cliente e o que está aberto na tela. Peça o que quer: gerar fotos do clone, variações, campanha, book. Ele propõe, mostra o custo e faz quando você confirma.
+        </p>
       )}
       {mensagens.map((m) => (
         <Mensagem key={m.id} m={m} anexosDaConversa={anexos} />
       ))}
       {pendente && (
-        <p role="status" className="mr-6 inline-flex items-center rounded-2xl rounded-bl-md bg-muted px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
+        <p role="status" className="mr-6 inline-flex items-center rounded-lg bg-muted px-3 py-2 text-[12.5px] text-muted-foreground">
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O diretor está pensando...
         </p>
       )}
-      <div ref={fim} />
-    </div>
+    </>
   );
 }
 
+/**
+ * O diretor de fotografia, fixo na lateral da área de trabalho da Mesa Foto
+ * (PainelDoAgente do sistema de design): cabeçalho parado, a conversa rolando
+ * por dentro e o campo sempre à vista embaixo. No celular, a gaveta aberta
+ * pelo botão de baixo. O rascunho fica guardado por cliente (sair e voltar
+ * mantém). Pedido de outra etapa (ex.: Criar, "8 variações") vai direto ao diretor.
+ */
 export default function AgenteDiretor({
-  aberto,
-  onAberto,
   pedido,
 }: {
-  aberto: boolean;
-  onAberto: (v: boolean) => void;
-  /** Pedido vindo de outra etapa (atalho): entra e vai direto. */
+  /** Pedido vindo de outra etapa (atalho): vai direto ao diretor (no rascunho se ele ainda pensa). */
   pedido?: { mensagem: string; em: number } | null;
-}) {
+} = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { kitId, ensaioId, selecionadas } = useMesaFoto();
+  const { kitId, ensaioId, selecionadas, etapa } = useMesaFoto();
   const fotos = useFotos(clientId);
+  // Contexto automático: o que está aberto na tela e o pacote do cliente (sem IA; a página já carrega com a lateral recolhida).
+  const focoNaTela = useFocoDoDiretor(clientId, etapa || "acervo", selecionadas, kitId, ensaioId);
+  const contextoDoDiretor = useContextoDoDiretor(clientId, focoNaTela);
   const aoGravarKits = useAoGravarKits();
-  const [mensagens, setMensagens] = useState<MensagemDoDiretor[]>([]);
-  const [texto, setTexto] = useState("");
-  const [pendente, setPendente] = useState<string | null>(null);
+  const conversa = useConversaGuardada(clientId);
+  const { mensagens, conversaId, novaConversa, pendente } = conversa;
+  const [texto, setTexto] = useEstadoDaTela<string>(`mesa-foto:diretor:rascunho:${clientId}`, "");
   const [erro, setErro] = useState<unknown>(null);
   const [comFotos, setComFotos] = useState(true);
-  const [conversaId, setConversaId] = useState<string | null>(() => lerConversa(clientId));
   const [estilos, setEstilos] = useState<string[]>([]);
-  const [novaConversa, setNovaConversa] = useState(false);
   const [subindo, setSubindo] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
+  const campo = useRef<HTMLTextAreaElement>(null);
+  const lista = useRef<HTMLDivElement>(null);
 
   // A função lê até 4 anexos por mensagem: as fotos marcadas primeiro, depois os prints de estilo.
   const anexos = comFotos ? selecionadas.slice(0, MAX_ANEXOS_DO_DIRETOR) : [];
   const estilosQueCabem = estilos.slice(0, Math.max(0, MAX_ANEXOS_DO_DIRETOR - anexos.length));
   const fotosDosEstilos = (fotos.data || []).filter((f) => estilos.indexOf(f.id) >= 0);
 
+  // A conversa desce até a última mensagem (só a lista rola; a página não se mexe).
+  useEffect(() => {
+    const el = lista.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [mensagens.length, pendente]);
+
   const mandar = async (mensagem?: string) => {
     const msg = (mensagem !== undefined ? mensagem : texto).trim();
     if (!msg || pendente) return;
+    const alvo = clientId;
     setErro(null);
     if (mensagem === undefined) setTexto("");
-    setPendente(msg);
-    setMensagens((l) =>
-      l.concat([{ id: idLocal(), papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
-    );
+    mudarConversa(alvo, (e) => ({
+      pendente: msg,
+      mensagens: e.mensagens.concat([{ id: idLocal(), papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
+    }));
     try {
       // A campanha da Mesa escolhida (sessão) vai junto: o diretor fala dentro dela.
-      const campanhaId = lerDaSessao<string>(clientId, "campanha");
-      const r = await conversarComDiretor({ clientId, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa, campanhaId });
-      setNovaConversa(false);
-      if (r.conversa_id) {
-        setConversaId(r.conversa_id);
-        gravarConversa(clientId, r.conversa_id);
-      }
+      const campanhaId = lerDaSessao<string>(alvo, "campanha");
+      // O foco da tela vai junto (etapa, clone, book, produto e o que está marcado): o diretor trabalha nisso.
+      const focoAgora = focoDaTela({ clientId: alvo, etapa: etapa || "acervo", selecionadas: comFotos ? selecionadas : [], kitId, ensaioId });
+      const r = await conversarComDiretor({ clientId: alvo, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa, campanhaId, foco: { ...focoAgora } });
+      if (r.conversa_id) gravarConversa(alvo, r.conversa_id);
       if (r.kit_ids.length) aoGravarKits(r.kit_ids);
-      if (r.identificacao) invalidarFotos(queryClient, clientId);
-      setMensagens((l) =>
-        l.concat([
+      if (r.identificacao) invalidarFotos(queryClient, alvo);
+      mudarConversa(alvo, (e) => ({
+        novaConversa: false,
+        conversaId: r.conversa_id || e.conversaId,
+        mensagens: e.mensagens.concat([
           {
             id: idLocal(),
             papel: "agente",
@@ -676,28 +749,47 @@ export default function AgenteDiretor({
             kit_ids: r.kit_ids,
             identificacao: r.identificacao,
             acao: r.acao,
+            geracao: r.geracao,
             mensagemId: r.mensagem_id,
           },
         ]),
-      );
+      }));
       if (estilosQueCabem.length) setEstilos((l) => l.filter((id) => estilosQueCabem.indexOf(id) < 0));
     } catch (e) {
       setErro(e);
-      if (mensagem === undefined) setTexto(msg);
+      if (mensagem === undefined) setTexto((t) => t || msg);
     } finally {
-      setPendente(null);
+      mudarConversa(alvo, () => ({ pendente: null }));
       atualizarCusto();
     }
   };
 
-  // Pedido de outra etapa (ex.: Criar > "8 variações"): manda assim que abre.
-  const ultimoPedido = useRef<number>(0);
+  // Pedido de outra etapa (ex.: Criar, "8 variações"): vai direto ao diretor,
+  // como antes (a janela abria e mandava). Com o diretor ainda pensando, entra
+  // no rascunho, com o campo em foco.
   useEffect(() => {
-    if (!pedido || !aberto || pedido.em === ultimoPedido.current) return;
-    ultimoPedido.current = pedido.em;
-    void mandar(pedido.mensagem);
+    if (!pedido || pedidosVistos[clientId] === pedido.em) return;
+    pedidosVistos[clientId] = pedido.em;
+    if (!pendente) {
+      void mandar(pedido.mensagem);
+      return;
+    }
+    setTexto(pedido.mensagem);
+    window.setTimeout(() => {
+      const el = campo.current;
+      if (el && typeof el.focus === "function") el.focus();
+    }, 60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedido ? pedido.em : 0, aberto]);
+  }, [pedido ? pedido.em : 0, clientId]);
+
+  const comecarDeNovo = () => {
+    mudarConversa(clientId, () => ({ mensagens: [], conversaId: null, novaConversa: true }));
+    try {
+      window.sessionStorage.removeItem(chaveDaConversa(clientId));
+    } catch {
+      /* nada guardado */
+    }
+  };
 
   const anexarPrints = async (arquivos: File[]) => {
     if (!arquivos.length || subindo) return;
@@ -716,56 +808,41 @@ export default function AgenteDiretor({
     }
   };
 
+  const qtdMarcadas = Math.min(selecionadas.length, MAX_ANEXOS_DO_DIRETOR);
+  // Fotos que a próxima mensagem lê por visão (uma vez por imagem): entram no preço à vista.
+  const leiturasDaProxima = Math.min(MAX_ANEXOS_DO_DIRETOR, (contextoDoDiretor.data ? contextoDoDiretor.data.sem_leitura : 0) + estilosQueCabem.length);
+
   return (
-    <>
-      {!aberto && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[72px] z-40 flex justify-center px-4 md:bottom-6" data-agente-diretor="">
-          <button
-            type="button"
-            onClick={() => onAberto(true)}
-            className="pointer-events-auto inline-flex h-12 max-w-full items-center rounded-full bg-primary px-5 text-[13.5px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
-            aria-label="Abrir o diretor de fotografia"
-          >
-            {pendente ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" /> : <Aperture className="mr-2 h-4 w-4 shrink-0" />}
-            <span className="truncate">Diretor de fotografia</span>
-            <span className="ml-2 hidden rounded-full bg-primary-foreground/15 px-2 py-0.5 text-[11px] font-medium sm:inline">conversar</span>
-          </button>
-        </div>
-      )}
-      <Dialog open={aberto} onOpenChange={onAberto}>
-        <DialogContent className="flex h-[92vh] w-[calc(100vw-16px)] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:h-[86vh] sm:w-[calc(100vw-48px)]">
-          <DialogTitle className="sr-only">Diretor de fotografia</DialogTitle>
-          <DialogDescription className="sr-only">Converse com o diretor de fotografia sobre o produto, o ensaio e as fotos do cliente.</DialogDescription>
-          <div className="flex min-w-0 items-center border-b border-border px-4 py-3 pr-12">
-            <Aperture className="mr-2 h-4 w-4 shrink-0 text-primary" />
-            <p className="min-w-0 flex-1 truncate text-[14px] font-semibold">Diretor de fotografia</p>
+    <div className="flex h-full min-h-0 min-w-0 flex-col" data-agente-diretor="">
+      <PainelDoAgente
+        titulo="Diretor de fotografia"
+        icone={<Aperture className="h-4 w-4" />}
+        descricao={
+          contextoDoDiretor.data && contextoDoDiretor.data.resumo
+            ? <span data-contexto-do-diretor="">{contextoDoDiretor.data.foco_rotulo ? `${contextoDoDiretor.data.foco_rotulo} · ` : ""}{contextoDoDiretor.data.resumo}</span>
+            : kitId || ensaioId
+              ? "Com o produto e o ensaio abertos"
+              : "Com o contexto do cliente"
+        }
+        acoes={
+          <>
             {mensagens.length > 0 && (
-              <button
-                type="button"
-                className="shrink-0 text-[11.5px] text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setMensagens([]);
-                  setConversaId(null);
-                  setNovaConversa(true);
-                  try {
-                    window.sessionStorage.removeItem(chaveDaConversa(clientId));
-                  } catch {
-                    /* nada guardado */
-                  }
-                }}
-              >
-                Nova conversa
+              <button type="button" onClick={comecarDeNovo} aria-label="Nova conversa" title="Nova conversa" className={botao.icone}>
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
-          </div>
-          <Conversa mensagens={mensagens} pendente={pendente} anexos={anexos.concat(estilosQueCabem)} />
-          <div className="border-t border-border p-3">
-            {!!erro && <AvisoDeErro erro={erro} className="mb-2" />}
-            <OQuePossoFazer
-              className="mb-1.5"
-              capacidades={["aprovar e arquivar fotos em lote", "organizar em pastas e etiquetas", "mandar fotos aprovadas para uma campanha"]}
-            />
-            <div className="mb-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
+            <AjudaRecolhida rotulo="Como o diretor funciona">
+              Ele já carrega o cliente sozinho: marca, histórico, campanha da Mesa, fotos, clones, books, produtos e o que está aberto e marcado na etapa. Lê cada foto nova uma vez e guarda. Propõe, mostra o custo e só faz quando você confirma: gera ali mesmo, uma foto por vez, e dá para desfazer.
+            </AjudaRecolhida>
+          </>
+        }
+        refDasMensagens={lista}
+        rotuloDasMensagens="Conversa com o diretor de fotografia"
+        avisos={erro ? <AvisoDeErro erro={erro} /> : null}
+        compositor={
+          <>
+            <OQuePossoFazer capacidades={["gerar fotos do clone, variações e fotos do prompt ou do book", "aprovar, arquivar, organizar e mandar para Arquivos", "trocar fotos do clone, montar book e levar ao Canvas"]} />
+            <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
               {ATALHOS_DO_DIRETOR.map((a) => {
                 const Icone = a.icone;
                 return (
@@ -774,18 +851,21 @@ export default function AgenteDiretor({
                     type="button"
                     disabled={!!pendente}
                     onClick={() => void mandar(a.mensagem)}
-                    className="mb-1 mr-1.5 inline-flex h-7 max-w-full items-center rounded-full border border-border bg-background px-2.5 text-[11.5px] font-medium hover:border-primary/50 disabled:opacity-60"
+                    className={juntar(
+                      "mb-1 mr-1 inline-flex h-7 max-w-full items-center rounded-md border border-border bg-background px-2 text-[11.5px] font-medium transition-colors hover:border-primary/50 disabled:opacity-60",
+                      foco,
+                    )}
                   >
-                    <Icone className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <Icone className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                     <span className="truncate">{a.rotulo}</span>
                   </button>
                 );
               })}
             </div>
             {fotosDosEstilos.length > 0 && (
-              <div className="mb-2 flex min-w-0 flex-wrap items-center" aria-label="Prints de referência anexados">
+              <div className="flex min-w-0 flex-wrap items-center" aria-label="Prints de referência anexados">
                 {fotosDosEstilos.map((f) => (
-                  <span key={f.id} className="relative mb-1 mr-1.5 w-10">
+                  <span key={f.id} className="relative mb-1 mr-1.5 w-9">
                     <MiniaturaDaFoto foto={f} selo={false} />
                     <button
                       type="button"
@@ -797,7 +877,7 @@ export default function AgenteDiretor({
                     </button>
                   </span>
                 ))}
-                <span className="mb-1 text-[11px] text-muted-foreground">referência de estilo (não é o produto)</span>
+                <span className="mb-1 text-[11px] text-muted-foreground">estilo, não é o produto</span>
               </div>
             )}
             <form
@@ -805,9 +885,10 @@ export default function AgenteDiretor({
                 e.preventDefault();
                 void mandar();
               }}
-              className="relative"
+              className="min-w-0"
             >
               <Textarea
+                ref={campo}
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => {
@@ -816,26 +897,32 @@ export default function AgenteDiretor({
                     void mandar();
                   }
                 }}
-                rows={2}
-                placeholder="Ex.: 8 variações do mouse, uma com fundo verde da marca. Ou: campanha com modelo no estilo do print."
+                rows={3}
+                placeholder="Ex.: 8 variações do mouse, uma com fundo verde da marca."
                 aria-label="Mensagem ao diretor"
-                className="pr-32 text-[13px]"
+                className="resize-none text-[13px]"
               />
-              <div className="absolute bottom-1.5 right-1.5 flex items-center">
-                <button
-                  type="button"
-                  className="mr-0.5 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
-                  aria-label="Anexar print de referência de estilo"
-                  title="Anexar print de perfil ou moodboard (referência de estilo)"
-                  disabled={subindo || !!pendente}
-                  onClick={() => entrada.current && entrada.current.click()}
-                >
-                  {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                </button>
-                <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} />
-                <Button type="submit" size="sm" className="ml-1 h-8 w-8 p-0" disabled={!texto.trim() || !!pendente} aria-label="Mandar">
-                  {pendente ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
+              <div className="mt-2 flex min-w-0 items-center justify-between">
+                <div className="mr-2 min-w-0 flex-1">
+                  <EstimativaInline partes={partesDaConversa(catalogo).concat(leiturasDaProxima ? partesDaLeitura(catalogo, leiturasDaProxima) : [])} />
+                </div>
+                <div className="flex shrink-0 items-center">
+                  <button
+                    type="button"
+                    className={juntar(botao.icone, "mr-0.5 disabled:opacity-60")}
+                    aria-label="Anexar print de referência de estilo"
+                    title="Anexar print de perfil ou moodboard (referência de estilo)"
+                    disabled={subindo || !!pendente}
+                    onClick={() => entrada.current && entrada.current.click()}
+                  >
+                    {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  </button>
+                  <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1" />
+                  <Button type="submit" size="sm" className="h-8 px-3 text-[12.5px]" disabled={!texto.trim() || !!pendente} aria-label="Mandar">
+                    {pendente ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+                    Mandar
+                  </Button>
+                </div>
               </div>
               <input
                 ref={entrada}
@@ -845,30 +932,26 @@ export default function AgenteDiretor({
                 className="hidden"
                 aria-label="Escolher prints de referência"
                 onChange={(e) => {
-                  const lista = e.target.files;
+                  const listaDeArquivos = e.target.files;
                   const arquivos: File[] = [];
-                  if (lista) for (let i = 0; i < lista.length; i++) arquivos.push(lista[i]);
+                  if (listaDeArquivos) for (let i = 0; i < listaDeArquivos.length; i++) arquivos.push(listaDeArquivos[i]);
                   e.target.value = "";
                   void anexarPrints(arquivos);
                 }}
               />
             </form>
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
-              {selecionadas.length > 0 && (
-                <label className="mr-3 inline-flex items-center">
-                  <input type="checkbox" checked={comFotos} onChange={(e) => setComFotos(e.target.checked)} className="mr-1 h-3 w-3" />
-                  <Paperclip className="mr-0.5 h-3 w-3" /> mandar {Math.min(selecionadas.length, MAX_ANEXOS_DO_DIRETOR) === 1 ? "a foto marcada" : `as ${Math.min(selecionadas.length, MAX_ANEXOS_DO_DIRETOR)} primeiras fotos marcadas`} no Acervo
-                </label>
-              )}
-              <span className="mr-3 inline-flex items-center">
-                <Wand2 className="mr-1 h-3 w-3" />
-                {kitId || ensaioId ? "Com o produto e o ensaio abertos" : "Com o contexto do cliente"}
-              </span>
-              <EstimativaInline partes={partesDaConversa(catalogo)} />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+            {selecionadas.length > 0 && (
+              <label className="flex min-w-0 items-center text-[11px] text-muted-foreground">
+                <input type="checkbox" checked={comFotos} onChange={(e) => setComFotos(e.target.checked)} className="mr-1.5 h-3 w-3 shrink-0" />
+                <Paperclip className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">Mandar {qtdMarcadas === 1 ? "a foto marcada" : `as ${qtdMarcadas} primeiras fotos marcadas`}</span>
+              </label>
+            )}
+          </>
+        }
+      >
+        <Conversa mensagens={mensagens} pendente={pendente} anexos={anexos.concat(estilosQueCabem)} />
+      </PainelDoAgente>
+    </div>
   );
 }

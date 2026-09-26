@@ -74,7 +74,7 @@ describe("a etapa baixa junto com a mesa", () => {
   });
 
   it("as chaves da pré-carga são as mesmas das páginas (mesmo download, mesmo módulo)", () => {
-    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx", "/mesa-videos": "src/pages/MesaVideos.tsx", "/mesa-publicidade": "src/pages/MesaPublicidade.tsx", "/mesa-roteiros": "src/pages/MesaRoteiros.tsx" };
+    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx", "/mesa-videos": "src/pages/MesaVideos.tsx", "/mesa-edicao": "src/pages/MesaEdicao.tsx", "/mesa-publicidade": "src/pages/MesaPublicidade.tsx", "/mesa-roteiros": "src/pages/MesaRoteiros.tsx" };
     for (const caminho of Object.keys(MESAS_DO_PAINEL) as Array<keyof typeof MESAS_DO_PAINEL>) {
       const fonte = ler(paginas[caminho]);
       const pre = ler("src/lib/mesa/preCarga.ts");
@@ -83,7 +83,8 @@ describe("a etapa baixa junto com a mesa", () => {
       }
       // O mesmo arquivo nos dois lados: cada import da página aparece na pré-carga.
       const imports = fonte.match(/import\("@\/components\/mesa[^"]*\/(Aba|Etapa)[A-Za-z]+"\)/g) || [];
-      expect(imports.length).toBeGreaterThan(4);
+      // Mesa Vídeos e Mesa Edição têm 3 etapas cada (frente E2); as outras, 5 ou mais.
+      expect(imports.length).toBeGreaterThanOrEqual(3);
       for (const i of imports) expect(pre).toContain(i);
     }
   });
@@ -95,7 +96,7 @@ describe("a etapa baixa junto com a mesa", () => {
     const layout = ler("src/components/AppLayout.tsx");
     expect(layout).toContain('usePreCargaOciosaDasMesas(["admin", "manager", "design"].includes(role));');
     // Link entre mesas: mouse em cima já baixa.
-    expect(ler("src/components/mesa-foto/TrocaDeMesas.tsx")).toContain("{...propsDePreCarga(enderecoDaMesa(m.valor, clientId, marcaId))}");
+    expect(ler("src/components/sistema/SeletorDeMesa.tsx")).toContain("{...propsDePreCarga(enderecoDaMesa(m.valor, clientId, marcaId))}");
   });
 });
 
@@ -177,14 +178,20 @@ describe("tela cheia padrão das mesas", () => {
   });
 
   it("as três mesas usam a mesma peça; o CSS esconde a casca em qualquer largura", () => {
-    for (const p of ["src/pages/MesaDoCliente.tsx", "src/pages/MesaAds.tsx", "src/pages/MesaFoto.tsx", "src/pages/MesaVideos.tsx", "src/pages/MesaPublicidade.tsx", "src/pages/MesaRoteiros.tsx"]) {
+    // Mesa Vídeos e Mesa Edição (frente E2) usam a casca comum delas, MesaDeVideo.tsx.
+    for (const p of ["src/pages/MesaVideos.tsx", "src/pages/MesaEdicao.tsx"]) expect(ler(p)).toContain("<MesaDeVideo");
+    for (const p of ["src/pages/MesaDoCliente.tsx", "src/pages/MesaAds.tsx", "src/pages/MesaFoto.tsx", "src/components/mesa-videos/MesaDeVideo.tsx", "src/pages/MesaPublicidade.tsx", "src/pages/MesaRoteiros.tsx"]) {
       const fonte = ler(p);
       expect(fonte).toContain("const telaCheia = useTelaCheiaDaMesa();");
-      expect(fonte).toContain("<BotaoDeTelaCheia tela={telaCheia}");
-      expect(fonte).toContain("${classeDaRaiz(telaCheia.cheia)}");
-      // Celular: o cabeçalho da mesa não gruda (a Mesa Foto passava de 250 px presos no topo).
-      expect(fonte).toContain('<header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky');
+      // Casca padrão das mesas: o botão, a classe da raiz e o cabeçalho moram nela.
+      expect(fonte).toContain("<CascaDaMesa");
+      expect(fonte).toContain("telaCheia={telaCheia}");
     }
+    const casca = ler("src/components/sistema/CascaDaMesa.tsx");
+    expect(casca).toContain("<BotaoDeTelaCheia tela={telaCheia}");
+    expect(casca).toContain("classeDaRaiz(telaCheia.cheia)");
+    // Celular: o cabeçalho da mesa não gruda (a Mesa Foto passava de 250 px presos no topo).
+    expect(casca).toContain('<header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 pt-2 md:sticky');
     const css = ler("src/index.css");
     expect(css).toContain('body[data-tela-cheia-da-mesa] [data-casca="rodape"]');
     expect(css).toContain('body[data-tela-cheia-da-mesa] [data-casca="topo"]');

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,8 +21,7 @@ import {
   type RequestTaskPriority,
 } from "@/lib/requestTaskWorkflow";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, X } from "lucide-react";
+import { Building2, Flag, Inbox, ListTodo, Loader2, Search, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+  useLargo,
+} from "@/components/sistema";
 
 const statusOptions = [
   { value: "new", label: "Novo", cls: "bg-info/10 text-info" },
@@ -53,17 +71,33 @@ const priorityBadge: Record<string, { cls: string; label: string }> = {
   urgent: { cls: "bg-destructive/10 text-destructive", label: "Urgente" },
 };
 
+/** Filtro de prioridade: normal e média contam juntas (o cliente escolhe "normal"). */
+const PRIORIDADES = ["todas", "urgent", "high", "normal", "low"];
+const grupoDaPrioridade = (p: string) => (p === "medium" ? "normal" : p || "normal");
+
 export default function AdminRequests() {
   const { user, profile } = useAuth();
-  const { data: requests, isLoading } = useClientRequests();
+  const { data: requests, isLoading, isError, refetch } = useClientRequests();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // Computador (>= 1024): lista e detalhe lado a lado. Celular e tablet: o
+  // detalhe abre numa janela por cima, como antes.
+  const largo = useLargo();
 
   const [selected, setSelected] = useState<any>(null);
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState("all");
+  // Filtros, busca e o pedido aberto ficam guardados: sair e voltar mantém.
+  const [filter, setFilter] = useEstadoDaTela<string>("pedidos:status", "all", {
+    validar: (v) => typeof v === "string" && ["all", "new", "in_progress", "completed"].indexOf(v) >= 0,
+  });
+  const [filtroCliente, setFiltroCliente] = useEstadoDaTela<string>("pedidos:cliente", "todos", { validar: (v) => typeof v === "string" });
+  const [filtroPrioridade, setFiltroPrioridade] = useEstadoDaTela<string>("pedidos:prioridade", "todas", {
+    validar: (v) => typeof v === "string" && PRIORIDADES.indexOf(v) >= 0,
+  });
+  const [busca, setBusca] = useEstadoDaTela<string>("pedidos:busca", "");
+  const [abertoId, setAbertoId] = useEstadoDaTela<string>("pedidos:aberto", "");
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [taskProjectId, setTaskProjectId] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState("");
@@ -163,18 +197,65 @@ export default function AdminRequests() {
   const filters = [
     { value: "all", label: "Todos" },
     { value: "new", label: "Novos" },
-    { value: "in_progress", label: "Em Andamento" },
+    { value: "in_progress", label: "Em andamento" },
     { value: "completed", label: "Concluídos" },
   ];
-
-  const filteredRequests = (requests || []).filter(
-    (request: any) => filter === "all" || request.status === filter,
-  );
 
   const getClient = (id: string) =>
     (clients || []).find((client: any) => client.id === id);
   const getProject = (id: string) =>
     (projects || []).find((project: any) => project.id === id);
+  const nomeDoCliente = (id: string) => {
+    const c = getClient(id);
+    return c?.company_name || c?.full_name || "";
+  };
+
+  const todos = requests || [];
+  const termo = busca.trim().toLowerCase();
+  // Cliente, prioridade e busca recortam antes do status: o número de cada
+  // opção de status conta o que a lista mostra.
+  const recorte = todos.filter((request: any) => {
+    if (filtroCliente !== "todos" && request.client_id !== filtroCliente) return false;
+    if (filtroPrioridade !== "todas" && grupoDaPrioridade(request.priority) !== filtroPrioridade) return false;
+    if (termo) {
+      const alvo = `${request.title || ""} ${request.description || ""} ${nomeDoCliente(request.client_id)}`.toLowerCase();
+      if (alvo.indexOf(termo) < 0) return false;
+    }
+    return true;
+  });
+  const filteredRequests = recorte.filter(
+    (request: any) => filter === "all" || request.status === filter,
+  );
+  const contagemStatus = (valor: string) => (valor === "all" ? recorte.length : recorte.filter((r: any) => r.status === valor).length);
+  const emAberto = todos.filter((r: any) => r.status !== "completed").length;
+  const clientesComPedido = useMemo(() => {
+    const ids: string[] = [];
+    (requests || []).forEach((r: any) => {
+      if (r.client_id && ids.indexOf(r.client_id) < 0) ids.push(r.client_id);
+    });
+    return ids
+      .map((id) => ({ id, nome: nomeDoCliente(id) || "Cliente" }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, clients]);
+  const filtrosAtivos = filtroCliente !== "todos" || filtroPrioridade !== "todas" || !!termo;
+
+  // O pedido aberto volta ao reabrir a tela (no computador, onde ele fica ao
+  // lado da lista; no celular a janela não abre sozinha).
+  useEffect(() => {
+    if (!largo || selected || !abertoId || !requests) return;
+    const achado = (requests || []).find((r: any) => r.id === abertoId);
+    if (achado) setSelected(achado);
+  }, [largo, selected, abertoId, requests]);
+
+  const abrirPedido = (request: any) => {
+    setSelected(request);
+    setAbertoId(request.id);
+  };
+  const fecharPedido = () => {
+    setSelected(null);
+    setAbertoId("");
+  };
 
   const selectedClientProjects = useMemo(
     () =>
@@ -374,241 +455,311 @@ export default function AdminRequests() {
       year: "numeric",
     });
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="heading-page">Pedidos de Clientes</h1>
-          {!roleCanMutate ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Acompanhamento em modo leitura. Admin ou manager gerencia os
-              pedidos.
-            </p>
-          ) : null}
+  const statusDe = (valor: string) =>
+    statusOptions.find((option) => option.value === valor) || statusOptions[0];
+
+  /** O detalhe do pedido: o mesmo conteúdo ao lado da lista ou na janela do celular. */
+  const detalhe = selected ? (
+    <div className="space-y-4">
+      <div>
+        <p className={texto.rotulo}>Título</p>
+        <p className={juntar(texto.corpo, "mt-1 [overflow-wrap:anywhere]")}>{selected.title}</p>
+      </div>
+      <div>
+        <p className={texto.rotulo}>Descrição</p>
+        <p className={juntar(texto.corpo, "mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]")}>{selected.description}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="min-w-0">
+          <p className={texto.rotulo}>Cliente</p>
+          <p className={juntar(texto.corpo, "mt-1 truncate")}>
+            {getClient(selected.client_id)?.company_name ||
+              getClient(selected.client_id)?.full_name ||
+              "-"}
+          </p>
         </div>
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hidden">
-          {filters.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setFilter(item.value)}
-              className={`px-3 py-1.5 rounded-full text-[12px] transition-colors cursor-pointer border flex-shrink-0 whitespace-nowrap ${
-                filter === item.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-border text-muted-foreground hover:text-foreground bg-transparent"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className="min-w-0">
+          <p className={texto.rotulo}>Projeto</p>
+          <p className={juntar(texto.corpo, "mt-1 truncate")}>
+            {getProject(selected.project_id)?.name || "Sem projeto"}
+          </p>
         </div>
       </div>
+      <div>
+        <p className={juntar(texto.rotulo, "mb-2")}>Status</p>
+        <SeletorCompacto
+          rotulo="Status do pedido"
+          valor={selected.status}
+          onEscolher={(valor) => void handleStatusChange(valor)}
+          modo="segmentado"
+          listaQuandoNaoCabe
+          opcoes={statusOptions.map((status) => ({
+            valor: status.value,
+            rotulo: status.label,
+            desativada:
+              saving ||
+              checkingClientPermission ||
+              checkingLinkedTask ||
+              linkedTaskReadFailed ||
+              !canMutateSelected,
+          }))}
+        />
+        {roleCanMutate &&
+        !checkingClientPermission &&
+        !canMutateSelected ? (
+          <p className="mt-2 text-[12px] text-warning">
+            Este pedido pertence a um cliente fora da sua gestão.
+          </p>
+        ) : null}
+        {linkedRequestTask ? (
+          <p className="mt-2 text-[12px] text-primary">
+            Status sincronizado pelo Kanban da tarefa vinculada.
+          </p>
+        ) : null}
+        {linkedTaskReadFailed ? (
+          <p className="mt-2 text-[12px] text-destructive">
+            Não foi possível confirmar o vínculo com o Kanban. Atualize a tela antes de alterar o status.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((item) => (
-            <Skeleton key={item} className="h-20 rounded-xl" />
-          ))}
-        </div>
-      ) : (requests || []).length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">
-          Nenhum pedido recebido.
-        </div>
-      ) : (
-        <div className="space-y-2 stagger-children">
-          {filteredRequests.map((request: any) => {
-            const client = getClient(request.client_id);
-            const project = getProject(request.project_id);
-            const status =
-              statusOptions.find(
-                (option) => option.value === request.status,
-              ) || statusOptions[0];
-            const priority =
-              priorityBadge[request.priority] || priorityBadge.normal;
-            return (
-              <button
-                key={request.id}
-                type="button"
-                onClick={() => setSelected(request)}
-                className="w-full bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors text-left"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      {request.title}
-                    </p>
-                    <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-1">
-                      {request.description}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
-                      <span>
-                        {client?.company_name || client?.full_name || "-"}
-                      </span>
-                      <span>•</span>
-                      <span>{project?.name || "Sem projeto"}</span>
-                      <span>•</span>
-                      <span className="font-mono">
-                        {formatDate(request.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${priority.cls}`}
-                  >
-                    {priority.label}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${status.cls}`}
-                  >
-                    {status.label}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {selected ? (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+  /** As ações do pedido: um primário, o resto secundário. */
+  const acoesDoPedido: ReactNode =
+    selected && selected.status !== "completed" && canMutateSelected ? (
+      <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border px-4 py-3 sm:px-5">
+        {selectedClientProjects.length === 0 ? (
+          <p className="mr-auto min-w-0 flex-1 py-1 pr-2 text-[12px] text-warning">
+            Cadastre um projeto ativo para este cliente.
+          </p>
+        ) : null}
+        <div className="-m-1 flex flex-wrap items-center justify-end [&>*]:m-1">
           <button
             type="button"
-            aria-label="Fechar detalhes do pedido"
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setSelected(null)}
-          />
-          <div
-            className="relative bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-[520px] sm:mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-hidden"
-            style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
+            onClick={() => handleStatusChange("completed")}
+            disabled={
+              saving ||
+              checkingLinkedTask ||
+              linkedTaskReadFailed
+            }
+            className={juntar(botao.secundario, "text-success")}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">
-                Detalhes do Pedido
-              </h2>
+            Marcar como concluído
+          </button>
+          <button
+            type="button"
+            onClick={openTaskForm}
+            disabled={saving || selectedClientProjects.length === 0}
+            className={botao.primario}
+          >
+            <ListTodo className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            Transformar em tarefa
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+  const lista = isLoading ? (
+    <div className="p-3">
+      <Carregando linhas={5} rotulo="Carregando pedidos" />
+    </div>
+  ) : isError && todos.length === 0 ? (
+    <div className="p-3">
+      <EstadoDeErro
+        titulo="Não foi possível carregar os pedidos."
+        acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+      />
+    </div>
+  ) : todos.length === 0 ? (
+    <EstadoVazio icone={<Inbox className="h-5 w-5" />} titulo="Nenhum pedido recebido." descricao="Quando um cliente pedir algo pelo portal, aparece aqui." />
+  ) : filteredRequests.length === 0 ? (
+    <div className="p-3">
+      <EstadoVazio
+        compacto
+        titulo="Nenhum pedido neste filtro."
+        acao={
+          <button
+            type="button"
+            className={botao.discreto}
+            onClick={() => {
+              setFilter("all");
+              setFiltroCliente("todos");
+              setFiltroPrioridade("todas");
+              setBusca("");
+            }}
+          >
+            Limpar filtros
+          </button>
+        }
+      />
+    </div>
+  ) : (
+    <RegiaoRolavel modo="lg" rotulo="Pedidos" sobre="cartao" memoria="pedidos:lista">
+      <ul className="divide-y divide-border" aria-label="Pedidos dos clientes">
+        {filteredRequests.map((request: any) => {
+          const client = getClient(request.client_id);
+          const project = getProject(request.project_id);
+          const status = statusDe(request.status);
+          const priority =
+            priorityBadge[request.priority] || priorityBadge.normal;
+          const aberto = selected?.id === request.id;
+          return (
+            <li key={request.id} className="min-w-0">
               <button
                 type="button"
-                onClick={() => setSelected(null)}
-                aria-label="Fechar"
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1"
+                onClick={() => abrirPedido(request)}
+                aria-current={aberto ? "true" : undefined}
+                className={juntar(
+                  "flex w-full min-w-0 items-start px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
+                  aberto && "bg-muted/70",
+                )}
               >
-                <X className="w-4 h-4" />
+                <span className="mr-3 min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">
+                    {request.title}
+                  </span>
+                  {request.description && (
+                    <span className={juntar(texto.corpo, "mt-0.5 block truncate text-muted-foreground")}>
+                      {request.description}
+                    </span>
+                  )}
+                  <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>
+                    {client?.company_name || client?.full_name || "-"}
+                    <span className="mx-1.5" aria-hidden="true">·</span>
+                    {project?.name || "Sem projeto"}
+                    <span className="mx-1.5" aria-hidden="true">·</span>
+                    <span className="tabular-nums">{formatDate(request.created_at)}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end [&>*+*]:mt-1 sm:flex-row sm:items-center sm:[&>*+*]:ml-1.5 sm:[&>*+*]:mt-0">
+                  <span className={juntar(etiqueta, priority.cls)}>{priority.label}</span>
+                  <span className={juntar(etiqueta, status.cls)}>{status.label}</span>
+                </span>
               </button>
-            </div>
-            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Título
-                </p>
-                <p className="text-sm text-foreground mt-1">
-                  {selected.title}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Descrição
-                </p>
-                <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">
-                  {selected.description}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Cliente
-                  </p>
-                  <p className="text-sm text-foreground mt-1">
-                    {getClient(selected.client_id)?.company_name ||
-                      getClient(selected.client_id)?.full_name ||
-                      "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Projeto
-                  </p>
-                  <p className="text-sm text-foreground mt-1">
-                    {getProject(selected.project_id)?.name || "Sem projeto"}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
-                  Status
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {statusOptions.map((status) => (
-                    <button
-                      key={status.value}
-                      type="button"
-                      disabled={
-                        saving ||
-                        checkingClientPermission ||
-                        checkingLinkedTask ||
-                        linkedTaskReadFailed ||
-                        !canMutateSelected
-                      }
-                      onClick={() => handleStatusChange(status.value)}
-                      className={`text-[11px] px-3 py-1 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                        selected.status === status.value
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border text-muted-foreground hover:text-foreground bg-transparent"
-                      }`}
-                    >
-                      {status.label}
-                    </button>
-                  ))}
-                </div>
-                {roleCanMutate &&
-                !checkingClientPermission &&
-                !canMutateSelected ? (
-                  <p className="mt-2 text-[11px] text-warning">
-                    Este pedido pertence a um cliente fora da sua gestão.
-                  </p>
-                ) : null}
-                {linkedRequestTask ? (
-                  <p className="mt-2 text-[11px] text-primary">
-                    Status sincronizado pelo Kanban da tarefa vinculada.
-                  </p>
-                ) : null}
-                {linkedTaskReadFailed ? (
-                  <p className="mt-2 text-[11px] text-destructive">
-                    Não foi possível confirmar o vínculo com o Kanban. Atualize a tela antes de alterar o status.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            {selected.status !== "completed" && canMutateSelected ? (
-              <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+            </li>
+          );
+        })}
+      </ul>
+    </RegiaoRolavel>
+  );
+
+  return (
+    <div className="min-w-0">
+      {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
+          altura da janela, a lista e o detalhe rolam cada um por conta própria.
+          No celular a página rola normal e o detalhe abre numa janela. */}
+      <AreaDeTrabalho principalRolavel={false}>
+        <CabecalhoDePagina
+          titulo="Pedidos"
+          className="shrink-0"
+          descricao={
+            !roleCanMutate
+              ? "Modo leitura. Admin ou manager gerencia os pedidos."
+              : todos.length
+                ? `${emAberto} em aberto de ${todos.length}`
+                : undefined
+          }
+          ajuda="Pedidos que os clientes fazem pelo portal. Abra um pedido para mudar o status ou transformar em tarefa no Kanban. Pedido que já virou tarefa muda de status pelo Kanban."
+        />
+
+        {todos.length > 0 && (
+          <div className="mt-4 shrink-0">
+            <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+              <SeletorCompacto
+                rotulo="Status"
+                valor={filter}
+                onEscolher={setFilter}
+                modo="segmentado"
+          listaQuandoNaoCabe
+                opcoes={filters.map((item) => ({ valor: item.value, rotulo: item.label, contador: contagemStatus(item.value) }))}
+              />
+              <SeletorCompacto
+                rotulo="Cliente"
+                icone={<Building2 className="h-3.5 w-3.5" />}
+                valor={filtroCliente}
+                onEscolher={setFiltroCliente}
+                modo="lista"
+                opcoes={[{ valor: "todos", rotulo: "Todos os clientes" }].concat(
+                  clientesComPedido.map((c) => ({ valor: c.id, rotulo: c.nome })),
+                )}
+              />
+              <SeletorCompacto
+                rotulo="Prioridade"
+                icone={<Flag className="h-3.5 w-3.5" />}
+                valor={filtroPrioridade}
+                onEscolher={setFiltroPrioridade}
+                modo="lista"
+                opcoes={[
+                  { valor: "todas", rotulo: "Toda prioridade" },
+                  { valor: "urgent", rotulo: "Urgente" },
+                  { valor: "high", rotulo: "Alta" },
+                  { valor: "normal", rotulo: "Normal" },
+                  { valor: "low", rotulo: "Baixa" },
+                ]}
+              />
+              <label className="relative block w-full min-w-0 sm:w-56">
+                <span className="sr-only">Buscar pedido</span>
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <input
+                  value={busca}
+                  onChange={(event) => setBusca(event.target.value)}
+                  placeholder="Buscar pedido ou cliente"
+                  className={juntar(campo, "pl-8")}
+                />
+              </label>
+              {filtrosAtivos && (
                 <button
                   type="button"
-                  onClick={openTaskForm}
-                  disabled={saving || selectedClientProjects.length === 0}
-                  className="px-4 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+                  className={botao.discreto}
+                  onClick={() => {
+                    setFiltroCliente("todos");
+                    setFiltroPrioridade("todas");
+                    setBusca("");
+                  }}
                 >
-                  Transformar em Tarefa
+                  Limpar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange("completed")}
-                  disabled={
-                    saving ||
-                    checkingLinkedTask ||
-                    linkedTaskReadFailed
-                  }
-                  className="px-4 py-2 rounded-[10px] text-[13px] text-success border border-success/30 hover:bg-success/10 transition-colors cursor-pointer bg-transparent disabled:opacity-50"
-                >
-                  Marcar como Concluído
-                </button>
-                {selectedClientProjects.length === 0 ? (
-                  <p className="text-[11px] text-warning sm:self-center">
-                    Cadastre um projeto ativo para este cliente.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+              )}
+            </div>
           </div>
+        )}
+
+        <div className="mt-4 min-w-0 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-5 desk:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
+          <section className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:min-h-0")} aria-label="Lista de pedidos">
+            {lista}
+          </section>
+
+          {largo && (
+            <section className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:min-h-0")} aria-label="Detalhes do pedido">
+              {selected ? (
+                <>
+                  <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
+                    <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Detalhes do pedido</h2>
+                    <span className="ml-3 flex shrink-0 items-center">
+                      <span className={juntar(etiqueta, "mr-1", statusDe(selected.status).cls)}>{statusDe(selected.status).label}</span>
+                      <button type="button" onClick={fecharPedido} aria-label="Fechar detalhes do pedido" className={botao.icone}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </span>
+                  </div>
+                  <RegiaoRolavel modo="lg" rotulo="Detalhes do pedido" sobre="cartao" memoria={`pedidos:detalhe:${selected.id}`}>
+                    <div className="px-4 py-4 sm:px-5">{detalhe}</div>
+                  </RegiaoRolavel>
+                  <div className="shrink-0">{acoesDoPedido}</div>
+                </>
+              ) : (
+                <EstadoVazio icone={<Inbox className="h-5 w-5" />} titulo="Escolha um pedido" descricao="O detalhe aparece aqui." />
+              )}
+            </section>
+          )}
         </div>
-      ) : null}
+      </AreaDeTrabalho>
+
+      {/* Janela do celular e tablet (sistema: nasce no body, por cima da barra de baixo). */}
+      <JanelaDoCelular aberta={!!selected && !largo} titulo="Detalhes do pedido" onFechar={fecharPedido} rotuloDoFundo="Fechar detalhes do pedido" rodape={acoesDoPedido} larga>
+        {detalhe}
+      </JanelaDoCelular>
 
       <Dialog
         open={taskFormOpen && !!selected}
@@ -619,128 +770,104 @@ export default function AdminRequests() {
         <DialogContent className="w-[calc(100%-2rem)] max-w-[520px] gap-0 overflow-hidden border-border bg-card p-0">
           {selected ? (
             <>
-              <DialogHeader className="border-b border-border px-6 py-4 pr-12">
-                <DialogTitle className="text-sm font-semibold text-foreground">
+              <DialogHeader className="border-b border-border px-5 py-4 pr-12">
+                <DialogTitle className={texto.tituloSecao}>
                   Transformar pedido em tarefa
                 </DialogTitle>
-                <DialogDescription className="line-clamp-1 text-[11px] text-muted-foreground">
+                <DialogDescription className={juntar(texto.auxiliar, "line-clamp-1")}>
                   {selected.title}
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 px-6 py-5">
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="request-task-project"
-                  className="text-[11px] uppercase tracking-wider text-muted-foreground"
-                >
-                  Projeto do cliente *
-                </label>
-                <select
-                  id="request-task-project"
-                  value={taskProjectId}
-                  onChange={(event) => setTaskProjectId(event.target.value)}
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-                >
-                  <option value="">Selecionar projeto...</option>
-                  {selectedClientProjects.map((project: any) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="request-task-assignee"
-                  className="text-[11px] uppercase tracking-wider text-muted-foreground"
-                >
-                  Responsável autorizado
-                </label>
-                <select
-                  id="request-task-assignee"
-                  value={taskAssigneeId}
-                  onChange={(event) => setTaskAssigneeId(event.target.value)}
-                  disabled={
-                    loadingEligibleAssignees || !!eligibleAssigneesError
-                  }
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-                >
-                  <option value="">
-                    {loadingEligibleAssignees
-                      ? "Carregando responsáveis..."
-                      : "Sem responsável"}
-                  </option>
-                  {eligibleAssignees.map((member: any) => (
-                    <option key={member.id} value={member.id}>
-                      {member.full_name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-muted-foreground">
-                  A lista inclui admins e membros já vinculados a este cliente.
-                </p>
-                {eligibleAssigneesError ? (
-                  <button
-                    type="button"
-                    onClick={() => void refetchEligibleAssignees()}
-                    className="text-[10px] text-destructive underline underline-offset-2"
-                  >
-                    Não foi possível carregar. Tentar novamente.
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="request-task-priority"
-                    className="text-[11px] uppercase tracking-wider text-muted-foreground"
-                  >
-                    Prioridade
-                  </label>
+              <div className="space-y-4 px-5 py-4">
+                <CampoDeFormulario rotulo="Projeto do cliente" obrigatorio>
                   <select
-                    id="request-task-priority"
-                    value={taskPriority}
-                    onChange={(event) =>
-                      setTaskPriority(
-                        event.target.value as RequestTaskPriority,
-                      )
-                    }
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                    id="request-task-project"
+                    value={taskProjectId}
+                    onChange={(event) => setTaskProjectId(event.target.value)}
+                    className={campo}
                   >
-                    {taskPriorityOptions.map((priority) => (
-                      <option key={priority.value} value={priority.value}>
-                        {priority.label}
+                    <option value="">Selecionar projeto...</option>
+                    {selectedClientProjects.map((project: any) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="request-task-due-date"
-                    className="text-[11px] uppercase tracking-wider text-muted-foreground"
+                </CampoDeFormulario>
+
+                <CampoDeFormulario
+                  rotulo="Responsável autorizado"
+                  ajuda="A lista inclui admins e membros já vinculados a este cliente."
+                  erro={eligibleAssigneesError ? (
+                    <button
+                      type="button"
+                      onClick={() => void refetchEligibleAssignees()}
+                      className="text-destructive underline underline-offset-2"
+                    >
+                      Não foi possível carregar. Tentar novamente.
+                    </button>
+                  ) : undefined}
+                >
+                  <select
+                    id="request-task-assignee"
+                    value={taskAssigneeId}
+                    onChange={(event) => setTaskAssigneeId(event.target.value)}
+                    disabled={
+                      loadingEligibleAssignees || !!eligibleAssigneesError
+                    }
+                    className={campo}
                   >
-                    Prazo
-                  </label>
-                  <input
-                    id="request-task-due-date"
-                    type="date"
-                    value={taskDueDate}
-                    onChange={(event) => setTaskDueDate(event.target.value)}
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
-                  />
+                    <option value="">
+                      {loadingEligibleAssignees
+                        ? "Carregando responsáveis..."
+                        : "Sem responsável"}
+                    </option>
+                    {eligibleAssignees.map((member: any) => (
+                      <option key={member.id} value={member.id}>
+                        {member.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </CampoDeFormulario>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <CampoDeFormulario rotulo="Prioridade">
+                    <select
+                      id="request-task-priority"
+                      value={taskPriority}
+                      onChange={(event) =>
+                        setTaskPriority(
+                          event.target.value as RequestTaskPriority,
+                        )
+                      }
+                      className={campo}
+                    >
+                      {taskPriorityOptions.map((priority) => (
+                        <option key={priority.value} value={priority.value}>
+                          {priority.label}
+                        </option>
+                      ))}
+                    </select>
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Prazo">
+                    <input
+                      id="request-task-due-date"
+                      type="date"
+                      value={taskDueDate}
+                      onChange={(event) => setTaskDueDate(event.target.value)}
+                      className={campo}
+                    />
+                  </CampoDeFormulario>
                 </div>
-              </div>
               </div>
 
-              <DialogFooter className="border-t border-border px-6 py-4">
+              <DialogFooter className="border-t border-border px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setTaskFormOpen(false)}
                   disabled={saving}
-                  className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground border border-border hover:text-foreground disabled:opacity-50"
+                  className={botao.secundario}
                 >
                   Cancelar
                 </button>
@@ -748,10 +875,10 @@ export default function AdminRequests() {
                   type="button"
                   onClick={handleCreateTask}
                   disabled={saving || !taskProjectId}
-                  className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+                  className={botao.primario}
                 >
                   {saving ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   {saving ? "Criando..." : "Criar e abrir no Kanban"}
                 </button>

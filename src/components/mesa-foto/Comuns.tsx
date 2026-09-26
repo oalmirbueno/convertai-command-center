@@ -1,6 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Check, Globe, Sparkles } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type ProximoPasso } from "./fotoApi";
 
@@ -128,7 +131,12 @@ export function useMesaFoto(): MesaFotoValor {
   return useContext(Contexto) || SEM_PAGINA;
 }
 
-/** Cartão das etapas: título pequeno em caixa alta, ação à direita, corpo livre. */
+/**
+ * Bloco das etapas (sistema de design, docs/design/SISTEMA.md: "nada de caixa
+ * dentro de caixa"): título curto, a explicação no "?" ao lado (AjudaRecolhida),
+ * ação na linha do título e o corpo livre. Sem moldura: blocos vizinhos se
+ * separam por espaço e por uma linha fina em cima.
+ */
 export function Cartao({
   titulo,
   dica,
@@ -137,19 +145,20 @@ export function Cartao({
   className = "",
 }: {
   titulo: ReactNode;
+  /** Explicação longa: vai para o "?" ao lado do título. */
   dica?: ReactNode;
   acao?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={`min-w-0 rounded-xl border border-border bg-card p-4 ${className}`}>
-      <div className="mb-3 flex min-w-0 flex-wrap items-start">
-        <div className="mr-2 min-w-0 flex-1">
-          <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</h3>
-          {dica && <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{dica}</p>}
+    <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="">
+      <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between">
+        <div className="mr-2 flex min-w-0 flex-1 items-center">
+          <h3 className="min-w-0 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">{titulo}</h3>
+          {dica && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
         </div>
-        {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center">{acao}</div>}
+        {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end">{acao}</div>}
       </div>
       {children}
     </section>
@@ -293,14 +302,16 @@ export function ListaCurta({ titulo, itens, vazio, tom = "normal" }: { titulo: s
   );
 }
 
-/** Estado vazio de uma etapa: frase curta e o próximo passo. */
-export function Vazio({ titulo, children, acao }: { titulo: string; children?: ReactNode; acao?: ReactNode }) {
+/** Estado vazio de uma etapa (EstadoVazio do sistema): frase curta, uma linha e o próximo passo. */
+export function Vazio({ titulo, children, acao, icone }: { titulo: string; children?: ReactNode; acao?: ReactNode; icone?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
-      <p className="text-[13.5px] font-medium">{titulo}</p>
-      {children && <div className="mx-auto mt-1 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">{children}</div>}
-      {acao && <div className="mt-3 flex flex-wrap items-center justify-center">{acao}</div>}
-    </div>
+    <EstadoVazio
+      className="py-8"
+      icone={icone}
+      titulo={titulo}
+      descricao={children ? <span className="block [overflow-wrap:anywhere]">{children}</span> : undefined}
+      acao={acao ? <div className="flex flex-wrap items-center justify-center">{acao}</div> : undefined}
+    />
   );
 }
 

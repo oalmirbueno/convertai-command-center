@@ -96,7 +96,7 @@ export default function VinculoAutomatico() {
   );
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-4" aria-label="Vínculo automático">
+    <section className="min-w-0 rounded-lg border border-border bg-card p-4" aria-label="Vínculo automático">
       <div className="flex min-w-0 flex-wrap items-start">
         <Link2 className="mb-1 mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="mb-1 mr-3 min-w-0 flex-1">
@@ -132,9 +132,9 @@ export default function VinculoAutomatico() {
 
           {confirmar.length > 0 && (
             <div className="mt-3 min-w-0 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-warning">Confirme ({confirmar.length})</p>
+              <p className="text-[12px] font-semibold text-warning">Confirme ({confirmar.length})</p>
               {confirmar.map((i) => (
-                <div key={i.peca} className="min-w-0 rounded-lg border border-border p-2.5">
+                <div key={i.peca} className="min-w-0 rounded-md bg-muted/50 p-2.5">
                   <div className="flex min-w-0 items-start">
                     <Miniatura src={i.anuncio.imagem_url} alt={i.anuncio.nome} />
                     <div className="ml-2.5 min-w-0 flex-1">
@@ -153,10 +153,10 @@ export default function VinculoAutomatico() {
 
           {novos.length > 0 && (
             <details className="mt-3 min-w-0" open={confirmar.length === 0}>
-              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-success">Ligados agora ({novos.length})</summary>
+              <summary className="cursor-pointer text-[12px] font-semibold text-success">Ligados agora ({novos.length})</summary>
               <ul className="mt-2 space-y-1.5">
                 {novos.map((i) => (
-                  <li key={i.peca} className="flex min-w-0 items-center rounded-lg border border-border px-2.5 py-1.5">
+                  <li key={i.peca} className="flex min-w-0 items-center rounded-md bg-muted/50 px-2.5 py-1.5">
                     <Miniatura src={i.anuncio.imagem_url} alt={i.anuncio.nome} />
                     <span className="ml-2.5 mr-2 min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-medium">{i.anuncio.nome}</span>

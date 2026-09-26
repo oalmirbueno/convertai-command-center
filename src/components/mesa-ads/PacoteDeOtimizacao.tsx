@@ -163,7 +163,7 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
             </div>
             {erro && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{erro}</p>}
             {entendido && (
-              <div className="min-w-0 space-y-2 rounded-xl border border-border p-3" aria-label="O que a Mesa Ads entendeu">
+              <div className="min-w-0 space-y-2 rounded-lg border border-border p-3" aria-label="O que a Mesa Ads entendeu">
                 <p className="text-[12.5px] font-semibold">
                   Entendi {entendido.aceitos.length} criativo{entendido.aceitos.length === 1 ? "" : "s"}
                   {entendido.recusados.length ? ` e recusei ${entendido.recusados.length}` : ""}

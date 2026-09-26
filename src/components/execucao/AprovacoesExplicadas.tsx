@@ -6,7 +6,7 @@ import {
   AlertTriangle, Ban, CheckCircle2, ChevronDown, Clock, HandCoins,
   Loader2, PencilLine, ShieldAlert, Timer, UserCheck,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Carregando, EstadoDeErro, Secao, botao, campo, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * A aprovação explicada: o selo genérico vira um dossiê de decisão.
@@ -72,8 +72,8 @@ const quando = (iso?: string | null) =>
 function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
   if (!children) return null;
   return (
-    <div className="text-[11px]">
-      <span className="font-semibold uppercase tracking-wide text-muted-foreground">{rotulo}: </span>
+    <div className="text-[12px] leading-5 [overflow-wrap:anywhere]">
+      <span className="font-medium text-muted-foreground">{rotulo}: </span>
       <span className="text-foreground/90">{children}</span>
     </div>
   );
@@ -94,7 +94,7 @@ export default function AprovacoesExplicadas({
   const [notaPor, setNotaPor] = useState<Record<string, string>>({});
   const [payloadAberto, setPayloadAberto] = useState<Record<string, boolean>>({});
 
-  const { data: aprovacoes = [], error, isLoading } = useQuery({
+  const { data: aprovacoes = [], error, isLoading, refetch } = useQuery({
     queryKey: ["aprovacoes-explicadas"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -139,165 +139,178 @@ export default function AprovacoesExplicadas({
     // Falha de leitura NÃO é fila vazia: fila vazia diz "nada esperando
     // você", e isso seria mentira aqui.
     return (
-      <p className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[11.5px] text-destructive">
-        Não consegui ler as aprovações: {error instanceof Error ? error.message : String(error)}.
-        A lista NÃO está vazia — está ilegível.
-      </p>
+      <EstadoDeErro
+        titulo="Não consegui ler as aprovações."
+        descricao={<>{error instanceof Error ? error.message : String(error)}. A lista NÃO está vazia, está ilegível.</>}
+        acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void refetch()}>Tentar de novo</button>}
+      />
     );
   }
   if (isLoading) {
-    return <p className="py-4 text-center text-[11px] text-muted-foreground">carregando aprovações…</p>;
+    return <Carregando linhas={2} rotulo="Carregando aprovações" />;
   }
   if (aprovacoes.length === 0) return null;
 
   return (
-    <div className="space-y-2.5">
-      {aprovacoes.map((a) => {
-        const destacada = a.id === destaqueId;
-        const temPayload = a.payload && Object.keys(a.payload).length > 0;
-        return (
-          <div
-            key={a.id}
-            className={cn(
-              "rounded-xl border bg-card p-3.5",
-              destacada ? "border-primary ring-2 ring-primary/40" : "border-warning/40",
-            )}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-bold text-warning">
-                <ShieldAlert className="h-3 w-3" />
-                {ROTULO_ACAO[a.action_kind] || a.action_kind}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                pedido por <strong className="text-foreground/90">{nomesDeAgentes.get(a.operator_id) || "operador"}</strong>
-                {" · "}{quando(a.created_at)}
-              </span>
-              {a.status === "adiado" && (
-                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">adiada</span>
-              )}
-              {!a.reversivel && (
-                <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> irreversível
+    <Secao
+      nivel={3}
+      titulo="Pedidos de aprovação"
+      descricao={`${aprovacoes.length} ${aprovacoes.length === 1 ? "pedido" : "pedidos"}`}
+      ajuda="Cada pedido chega com o que vai acontecer, o porquê, os dados, o destino, o risco e o custo. O que for executado depois do sim é exatamente o que está aqui; mudou o plano, nasce outra versão."
+    >
+      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
+        {aprovacoes.map((a) => {
+          const destacada = a.id === destaqueId;
+          const temPayload = a.payload && Object.keys(a.payload).length > 0;
+          return (
+            <li
+              key={a.id}
+              className={juntar("min-w-0 px-4 py-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
+            >
+              <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
+                <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
+                  <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" />
+                  {ROTULO_ACAO[a.action_kind] || a.action_kind}
                 </span>
-              )}
-            </div>
-
-            <p className="mt-2 text-[13px] font-semibold leading-snug text-foreground">{a.o_que}</p>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-foreground/85">{a.por_que}</p>
-
-            <div className="mt-2 space-y-1 rounded-lg bg-secondary/60 p-2.5">
-              <Campo rotulo="Tarefa">{a.kanban_task_id ? titulosDeTarefas.get(a.kanban_task_id) : null}</Campo>
-              <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
-              <Campo rotulo="Para onde vai">{a.destino}</Campo>
-              <Campo rotulo="Impacto">{a.impacto}</Campo>
-              <Campo rotulo="Risco">{a.risco}</Campo>
-              <Campo rotulo="Evidência">
-                {a.evidencia
-                  ? (/^https?:\/\//.test(a.evidencia)
-                    ? <a className="text-primary underline" href={a.evidencia} target="_blank" rel="noopener noreferrer">{a.evidencia}</a>
-                    : a.evidencia)
-                  : null}
-              </Campo>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
-                {typeof a.custo_previsto === "number" && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-foreground">
-                    <HandCoins className="h-3 w-3 text-warning" />
-                    {a.custo_previsto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                {a.status === "adiado" && (
+                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>adiada</span>
+                )}
+                {!a.reversivel && (
+                  <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>
+                    <AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" /> irreversível
                   </span>
                 )}
-                {a.prazo && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Clock className="h-3 w-3" /> prazo {a.prazo}
-                  </span>
-                )}
-                {a.valid_until && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Timer className="h-3 w-3" /> válida até {quando(a.valid_until)}
-                  </span>
+                <span className={juntar(texto.auxiliar, "min-w-0")}>
+                  pedido por <strong className="font-medium text-foreground/90">{nomesDeAgentes.get(a.operator_id) || "operador"}</strong>
+                  {" · "}{quando(a.created_at)}
+                </span>
+              </div>
+
+              <p className="mt-2 text-[14px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{a.o_que}</p>
+              {a.por_que && <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{a.por_que}</p>}
+
+              <div className={juntar(superficie.poco, "mt-2.5 space-y-1 p-3")}>
+                <Campo rotulo="Tarefa">{a.kanban_task_id ? titulosDeTarefas.get(a.kanban_task_id) : null}</Campo>
+                <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
+                <Campo rotulo="Para onde vai">{a.destino}</Campo>
+                <Campo rotulo="Impacto">{a.impacto}</Campo>
+                <Campo rotulo="Risco">{a.risco}</Campo>
+                <Campo rotulo="Evidência">
+                  {a.evidencia
+                    ? (/^https?:\/\//.test(a.evidencia)
+                      ? <a className="break-all text-primary underline" href={a.evidencia} target="_blank" rel="noopener noreferrer">{a.evidencia}</a>
+                      : a.evidencia)
+                    : null}
+                </Campo>
+                {(typeof a.custo_previsto === "number" || a.prazo || a.valid_until) && (
+                  <div className="-mx-2 flex flex-wrap pt-0.5 [&>*]:mx-2">
+                    {typeof a.custo_previsto === "number" && (
+                      <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-foreground">
+                        <HandCoins className="mr-1 h-3 w-3 text-warning" aria-hidden="true" />
+                        {a.custo_previsto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                    )}
+                    {a.prazo && (
+                      <span className="inline-flex items-center text-[12px] text-muted-foreground">
+                        <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> prazo {a.prazo}
+                      </span>
+                    )}
+                    {a.valid_until && (
+                      <span className="inline-flex items-center text-[12px] text-muted-foreground">
+                        <Timer className="mr-1 h-3 w-3" aria-hidden="true" /> válida até {quando(a.valid_until)}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {temPayload && (
-              <div className="mt-2">
-                <button
-                  type="button"
-                  onClick={() => setPayloadAberto((s) => ({ ...s, [a.id]: !s[a.id] }))}
-                  className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronDown className={cn("h-3 w-3 transition-transform", payloadAberto[a.id] && "rotate-180")} />
-                  ver exatamente o que será executado se você aprovar (uso técnico)
-                </button>
-                {payloadAberto[a.id] && (
-                  <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-secondary p-2 text-[10px] leading-relaxed text-foreground/90">
-                    {JSON.stringify(a.payload, null, 2)}
-                  </pre>
-                )}
+              {temPayload && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayloadAberto((s) => ({ ...s, [a.id]: !s[a.id] }))}
+                    aria-expanded={Boolean(payloadAberto[a.id])}
+                    className={juntar("inline-flex items-center rounded text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)}
+                  >
+                    <ChevronDown className={juntar("mr-1 h-3 w-3 transition-transform", payloadAberto[a.id] && "rotate-180")} aria-hidden="true" />
+                    ver exatamente o que será executado se você aprovar (uso técnico)
+                  </button>
+                  {payloadAberto[a.id] && (
+                    <pre className={juntar(superficie.poco, "mt-1 overflow-x-auto p-2 text-[11px] leading-relaxed text-foreground/90")}>
+                      {JSON.stringify(a.payload, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              <label className="mt-3 block">
+                <span className="sr-only">Nota da decisão</span>
+                <input
+                  value={notaPor[a.id] || ""}
+                  onChange={(e) => setNotaPor((s) => ({ ...s, [a.id]: e.target.value }))}
+                  placeholder="Nota da decisão (opcional; obrigatória em pedido de alterações)"
+                  className={campo}
+                />
+              </label>
+
+              <div className="mt-2.5">
+                <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+                  <button
+                    type="button"
+                    disabled={decidir.isPending}
+                    onClick={() => decidir.mutate({ id: a.id, decisao: "aprovado" })}
+                    className={botao.primario}
+                  >
+                    {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
+                    Aprovar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={decidir.isPending}
+                    onClick={() => decidir.mutate({ id: a.id, decisao: "rejeitado" })}
+                    className={botao.perigo}
+                  >
+                    <Ban className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Rejeitar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={decidir.isPending}
+                    onClick={() => {
+                      if (!notaPor[a.id]?.trim()) {
+                        toast.error("Diga O QUE alterar na nota. Pedido de alterações sem direção só devolve o problema.");
+                        return;
+                      }
+                      decidir.mutate({ id: a.id, decisao: "alteracoes_pedidas" });
+                    }}
+                    className={botao.secundario}
+                  >
+                    <PencilLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pedir alterações
+                  </button>
+                  {a.status !== "adiado" && (
+                    <button
+                      type="button"
+                      disabled={decidir.isPending}
+                      onClick={() => decidir.mutate({ id: a.id, decisao: "adiado" })}
+                      className={botao.discreto}
+                    >
+                      Adiar
+                    </button>
+                  )}
+                  {a.task_link_id && (
+                    <button
+                      type="button"
+                      onClick={() => aoAbrirDiario(a.task_link_id!)}
+                      className={juntar(botao.discreto, "sm:ml-auto")}
+                    >
+                      <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Responder no diário
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-
-            <input
-              value={notaPor[a.id] || ""}
-              onChange={(e) => setNotaPor((s) => ({ ...s, [a.id]: e.target.value }))}
-              placeholder="Nota da decisão (opcional; obrigatória em pedido de alterações)"
-              className="mt-2.5 w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11.5px] text-foreground placeholder:text-muted-foreground/60"
-            />
-
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                disabled={decidir.isPending}
-                onClick={() => decidir.mutate({ id: a.id, decisao: "aprovado" })}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-success px-3 text-[11.5px] font-semibold text-white disabled:opacity-50"
-              >
-                {decidir.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Aprovar
-              </button>
-              <button
-                type="button"
-                disabled={decidir.isPending}
-                onClick={() => decidir.mutate({ id: a.id, decisao: "rejeitado" })}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-destructive/50 px-3 text-[11.5px] font-semibold text-destructive disabled:opacity-50"
-              >
-                <Ban className="h-3.5 w-3.5" /> Rejeitar
-              </button>
-              <button
-                type="button"
-                disabled={decidir.isPending}
-                onClick={() => {
-                  if (!notaPor[a.id]?.trim()) {
-                    toast.error("Diga O QUE alterar na nota — pedido de alterações sem direção só devolve o problema.");
-                    return;
-                  }
-                  decidir.mutate({ id: a.id, decisao: "alteracoes_pedidas" });
-                }}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
-              >
-                <PencilLine className="h-3.5 w-3.5" /> Pedir alterações
-              </button>
-              {a.status !== "adiado" && (
-                <button
-                  type="button"
-                  disabled={decidir.isPending}
-                  onClick={() => decidir.mutate({ id: a.id, decisao: "adiado" })}
-                  className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground disabled:opacity-50"
-                >
-                  Adiar
-                </button>
-              )}
-              {a.task_link_id && (
-                <button
-                  type="button"
-                  onClick={() => aoAbrirDiario(a.task_link_id!)}
-                  className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <UserCheck className="h-3.5 w-3.5" /> Responder no diário
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Secao>
   );
 }

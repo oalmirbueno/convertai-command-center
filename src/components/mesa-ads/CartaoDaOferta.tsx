@@ -7,6 +7,8 @@ import { BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { partesDoPlanoV2, ROTULOS_DAS_FONTES, type Oferta, type StatusDaOferta } from "./adsApi";
 import { BarraDeNota, BarraDePolitica } from "./Comuns";
+import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
+import { texto } from "@/components/sistema/estilos";
 
 /**
  * Uma oferta proposta pelo agente (ou editada pela equipe): promessa em
@@ -20,7 +22,7 @@ const linhas = (t: string) => t.split("\n").map((x) => x.trim()).filter(Boolean)
 function Bloco({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{rotulo}</p>
+      <p className={texto.rotulo}>{rotulo}</p>
       <div className="mt-0.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
@@ -140,24 +142,19 @@ export default function CartaoDaOferta({
 
   if (editando) {
     return (
-      <article className="min-w-0 rounded-xl border border-primary/50 bg-card p-4" aria-label={`Editar a oferta ${o.nome}`}>
-        <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Editar oferta</p>
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      <article className="min-w-0 rounded-lg border border-primary/50 bg-card p-4" aria-label={`Editar a oferta ${o.nome}`}>
+        <GrupoDeCampos titulo="Editar oferta">
           {CAMPOS.map((c) => (
-            <label key={c.chave} className={`block min-w-0 ${c.longo ? "sm:col-span-2" : ""}`}>
-              <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">
-                {c.rotulo}
-                {c.dica && <span className="ml-1.5 font-normal text-muted-foreground">({c.dica})</span>}
-              </span>
+            <CampoDeFormulario key={c.chave} rotulo={c.rotulo} apoio={c.dica} largo={c.longo}>
               {c.longo ? (
-                <Textarea aria-label={c.rotulo} className="min-h-[60px] text-[12.5px]" value={editando[c.chave]} onChange={(e) => { const v = e.target.value; setEditando((r) => (r ? { ...r, [c.chave]: v } : r)); }} />
+                <Textarea aria-label={c.rotulo} className="min-h-[60px] text-[13px]" value={editando[c.chave]} onChange={(e) => { const v = e.target.value; setEditando((r) => (r ? { ...r, [c.chave]: v } : r)); }} />
               ) : (
-                <Input aria-label={c.rotulo} className="h-9 text-[12.5px]" value={editando[c.chave]} onChange={(e) => { const v = e.target.value; setEditando((r) => (r ? { ...r, [c.chave]: v } : r)); }} />
+                <Input aria-label={c.rotulo} className="h-9 text-[13px]" value={editando[c.chave]} onChange={(e) => { const v = e.target.value; setEditando((r) => (r ? { ...r, [c.chave]: v } : r)); }} />
               )}
-            </label>
+            </CampoDeFormulario>
           ))}
-        </div>
-        <div className="mt-3 flex justify-end">
+        </GrupoDeCampos>
+        <div className="mt-4 flex justify-end">
           <Button type="button" size="sm" variant="ghost" className="mr-1 h-8" onClick={() => setEditando(null)} disabled={salvando}>
             Cancelar
           </Button>
@@ -188,7 +185,7 @@ export default function CartaoDaOferta({
 
   return (
     <article
-      className={`min-w-0 rounded-xl border bg-card p-4 transition-colors ${o.status === "escolhida" ? "border-success/50 ring-1 ring-success/30" : nova ? "border-primary/50" : "border-border"} ${arquivada ? "opacity-70" : ""}`}
+      className={`min-w-0 rounded-lg border bg-card p-4 transition-colors ${o.status === "escolhida" ? "border-success/50 ring-1 ring-success/30" : nova ? "border-primary/50" : "border-border"} ${arquivada ? "opacity-70" : ""}`}
       aria-label={`Oferta ${o.nome}`}
     >
       <div className="flex min-w-0 items-start">
@@ -246,7 +243,7 @@ export default function CartaoDaOferta({
       )}
 
       {jev && jev.alerta_politica && (
-        <p className="mt-3 flex items-start rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[12px]" role="note">
+        <p className="mt-3 flex items-start rounded-md bg-warning/10 px-3 py-2 text-[12px]" role="note">
           <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <span className="min-w-0 [overflow-wrap:anywhere]">{jev.alerta_politica}</span>
         </p>

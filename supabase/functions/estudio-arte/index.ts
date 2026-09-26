@@ -93,6 +93,7 @@ import {
   carregarModelo,
   cobrarJev,
   IaMotorErro,
+  limiteDeReferencias,
   modeloPadrao,
   TAMANHO_2X3,
   TAMANHO_4X5,
@@ -191,6 +192,15 @@ import {
 import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
 import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import {
+  type DependenciasDaFila,
+  type EtapaDaFila,
+  type ItemDaFila,
+  LIMITES_DA_FILA,
+  ordensDoPedido,
+  processarItem,
+  type ResultadoDoPasso,
+} from "./fila-de-geracao.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   type AcaoDoAgente,
@@ -232,6 +242,30 @@ import {
   regraProibeCaixa,
   SEM_FOTO,
 } from "./conversa-do-diretor.ts";
+import { blocoDoEstiloParaOGerador, estiloNaGeracao, ROTULO_DA_REFERENCIA_DO_ESTILO, templateNaLamina } from "./estilo-na-geracao.ts";
+import {
+  adaptacaoDaReferencia,
+  type ContextoDaLamina,
+  copyDaLamina,
+  type DepsDaAdaptacao,
+  ESQUEMA_DA_CENA,
+  ESQUEMA_LEITURA_DO_CONTEUDO,
+  leituraDoConteudo,
+  SISTEMA_DA_CENA,
+  SISTEMA_LEITURA_DO_CONTEUDO,
+  tentaAdaptar,
+} from "./referencia-adapta-copy.ts";
+import {
+  autorizacaoDoCloneValida,
+  blocoDoRosto,
+  ehUuid,
+  lerRostoDoTrabalho,
+  MAX_FOTOS_DO_ROSTO,
+  normalizarRosto,
+  ROTULO_DA_FOTO_DO_ROSTO,
+  type RostoEscolhido,
+  vagasDoRosto,
+} from "./rosto-na-geracao.ts";
 import {
   acabamentoDaLamina,
   ampliar,
@@ -514,6 +548,13 @@ type Direcao = {
   fidelidade_referencia?: FidelidadeDaReferencia | null;
   /** Papéis dos quadros das referências prancha marcados pela equipe (capa, sequencia, fora), por referência. */
   pranchas?: Record<string, { papeis: PapelDoQuadro[] }> | null;
+  /**
+   * Frente R (26/09): "Adaptar conteúdo à copy" no modo replicar referência.
+   * Ausente = ligado (estética da referência, conteúdo da copy); false = o de hoje.
+   */
+  adaptar_conteudo_a_copy?: boolean;
+  /** Frente R (26/09): rosto escolhido para a pessoa da referência (rosto-na-geracao.ts). Ausente = nenhum. */
+  rosto?: RostoEscolhido | null;
 };
 
 type Reabertura = {
@@ -1234,6 +1275,166 @@ async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEnt
   } catch {
     return null;
   }
+}
+
+// ------------------------------------ estética da referência, conteúdo da copy (frente R)
+//
+// referencia-adapta-copy.ts: uma leitura por visão por referência (guardada),
+// um julgamento do Jev e uma cena do diretor por lâmina e texto (guardados).
+// Custos pelo motor (leitura e cena) e por cobrarJev, na carteira do cliente.
+
+function depsDaAdaptacao(t: Trabalho, imagem: ImagemEntrada | null, criadoPor: string): DepsDaAdaptacao {
+  return {
+    pasta: pastaDasLeituras(t.client_id),
+    lerGuardado: leituraGuardada,
+    guardar: guardarLeitura,
+    lerPorVisao: async () => {
+      if (!imagem) return null;
+      const leitor = await modeloDoPapel("leitura");
+      const r = await chamarTexto({
+        clientId: t.client_id,
+        tarefa: "leitura_referencia",
+        agente: "leitor",
+        modeloId: leitor.id,
+        sistema: SISTEMA_LEITURA_DO_CONTEUDO,
+        mensagens: [{ papel: "usuario", conteudo: "Separe a estética e o conteúdo desta referência.", imagens: [imagem] }],
+        esquemaJson: ESQUEMA_LEITURA_DO_CONTEUDO,
+        maxTokensSaida: 2_500,
+        referencia: { tipo: "estudio_trabalho", id: t.id },
+        criadoPor,
+      });
+      return r.json;
+    },
+    perguntarJev: (state, questions) => jevPerguntar({ state, questions }),
+    cobrarJev: (res) => cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }),
+    escreverCena: async (pedido) => {
+      const diretor = await modeloDoPapel("diretor_arte");
+      const r = await chamarTexto({
+        clientId: t.client_id,
+        tarefa: "estudio",
+        agente: "diretor_arte",
+        modeloId: diretor.id,
+        raciocinio: raciocinioPara(diretor, ["low", "medium"]),
+        sistema: SISTEMA_DA_CENA,
+        mensagens: [{ papel: "usuario", conteudo: pedido }],
+        esquemaJson: ESQUEMA_DA_CENA,
+        maxTokensSaida: 2_000,
+        timeoutMs: 90_000,
+        referencia: { tipo: "estudio_trabalho", id: t.id },
+        criadoPor,
+      });
+      return r.json;
+    },
+  };
+}
+
+/** Contexto da lâmina para o julgamento e a cena: copy, roteiro do item, ideia do diretor e o negócio do cliente. */
+async function contextoDaAdaptacao(t: Trabalho, card: CardDirecao, total: number, nomeCliente: string): Promise<ContextoDaLamina> {
+  const [ctx, tarefa] = await Promise.all([
+    lerContextoConsolidado(servico(), t.client_id).catch(() => ({} as Awaited<ReturnType<typeof lerContextoConsolidado>>)),
+    t.task_id && UUID.test(t.task_id)
+      ? servico().from("tasks").select("title, description").eq("id", t.task_id).maybeSingle().then((r) => r.data as { title: string | null; description: string | null } | null, () => null)
+      : Promise.resolve(null),
+  ]);
+  return {
+    copy: copyDaLamina(card),
+    funcao: texto(card.funcao, 60),
+    ordem: card.ordem,
+    total,
+    conceito: texto(t.direcao.conceito, 600),
+    roteiro: texto([tarefa?.title, tarefa?.description].filter(Boolean).join("\n"), 1500),
+    ideia_da_imagem: texto(card.layout?.imagem || card.ilustracao, 400),
+    cliente: { nome: nomeCliente, negocio: texto(ctx.negocio, 400), publico: texto(ctx.publico, 300), oferta: texto(ctx.oferta, 300) },
+  };
+}
+
+// ------------------------------------ rosto escolhido (frente R, acréscimo do dono)
+
+type FotoDoRosto = { bucket: string; caminho: string; nome: string };
+
+/** Clientes internos (a casa: profiles.services_config.internal_company): de onde vêm os rostos do dono e da equipe. */
+async function clientesDaCasa(): Promise<string[]> {
+  const { data } = await servico().from("profiles").select("id, services_config").is("deleted_at", null).limit(2000);
+  return ((data as { id: string; services_config: Record<string, unknown> | null }[] | null) ?? [])
+    .filter((p) => !!p.services_config && p.services_config.internal_company === true)
+    .map((p) => p.id);
+}
+
+/** Rostos autorizados (contexto) e clones com autorização válida dos clientes dados, para a tela escolher. */
+async function rostosDosClientes(clientIds: string[]): Promise<{ id: string; nome: string; bucket: string; caminho: string }[]> {
+  if (!clientIds.length) return [];
+  const db = servico();
+  const [rostos, clones] = await Promise.all([
+    db.from("cliente_rostos").select("id, pessoa, storage_path, ativa").in("client_id", clientIds).eq("ativa", true).order("criado_em", { ascending: false }).limit(40)
+      .then((r) => (r.data as { id: string; pessoa: string; storage_path: string }[] | null) ?? [], () => []),
+    db.from("foto_modelos").select("id, nome, status, autorizacao, identidade_real").in("client_id", clientIds).eq("origem", "clone_de_foto_real").neq("status", "arquivada").limit(40)
+      .then((r) => (r.data as { id: string; nome: string; autorizacao: unknown; identidade_real: { imagem_id: string; principal?: boolean }[] | null }[] | null) ?? [], () => []),
+  ]);
+  const validos = clones.filter((c) => autorizacaoDoCloneValida(c.autorizacao) && Array.isArray(c.identidade_real) && c.identidade_real.length > 0);
+  const principais = validos.map((c) => (c.identidade_real!.find((r) => r.principal) ?? c.identidade_real![0]).imagem_id).filter(ehUuid);
+  const { data: imgs } = principais.length
+    ? await db.from("cliente_imagens").select("id, storage_bucket, storage_path").in("id", principais)
+    : { data: [] };
+  const porId = new Map(((imgs as { id: string; storage_bucket: string; storage_path: string }[] | null) ?? []).map((i) => [i.id, i]));
+  return [
+    ...rostos.map((r) => ({ id: `r:${r.id}`, nome: texto(r.pessoa, 80) || "Rosto", bucket: "mesa", caminho: r.storage_path })),
+    ...validos.flatMap((c) => {
+      const i = porId.get((c.identidade_real!.find((r) => r.principal) ?? c.identidade_real![0]).imagem_id);
+      return i ? [{ id: `c:${c.id}`, nome: texto(c.nome, 80) || "Clone", bucket: i.storage_bucket, caminho: i.storage_path }] : [];
+    }),
+  ];
+}
+
+/**
+ * As fotos do rosto escolhido (até 2), conferidas de novo na geração: rosto do
+ * contexto ativo, clone com autorização válida (as fotos reais, a principal
+ * primeiro) ou fotos na hora na pasta do cliente. Nada achado: lista vazia.
+ */
+async function fotosDoRostoEscolhido(t: Trabalho, rosto: RostoEscolhido): Promise<FotoDoRosto[]> {
+  if (rosto.fonte === "fotos") return (rosto.fotos ?? []).slice(0, MAX_FOTOS_DO_ROSTO).map((c, i) => ({ bucket: "mesa", caminho: c, nome: `rosto-${i + 1}` }));
+  const donos = rosto.fonte === "cliente" ? [t.client_id] : await clientesDaCasa();
+  if (!donos.length || !rosto.id) return [];
+  const id = rosto.id.slice(2);
+  const db = servico();
+  if (rosto.id.startsWith("r:")) {
+    const { data } = await db.from("cliente_rostos").select("id, storage_path, ativa").eq("id", id).in("client_id", donos).maybeSingle();
+    const r = data as { storage_path: string; ativa: boolean } | null;
+    return r && r.ativa ? [{ bucket: "mesa", caminho: r.storage_path, nome: "rosto-1" }] : [];
+  }
+  const { data } = await db.from("foto_modelos").select("id, status, autorizacao, identidade_real, origem").eq("id", id).in("client_id", donos).maybeSingle();
+  const c = data as { status: string; autorizacao: unknown; identidade_real: { imagem_id: string; principal?: boolean }[] | null; origem: string } | null;
+  if (!c || c.origem !== "clone_de_foto_real" || c.status === "arquivada" || !autorizacaoDoCloneValida(c.autorizacao)) return [];
+  const ids = (Array.isArray(c.identidade_real) ? c.identidade_real : []).slice().sort((a, b) => Number(!!b.principal) - Number(!!a.principal)).map((r) => r.imagem_id).filter(ehUuid).slice(0, MAX_FOTOS_DO_ROSTO);
+  if (!ids.length) return [];
+  const { data: imgs } = await db.from("cliente_imagens").select("id, storage_bucket, storage_path").in("id", ids);
+  const lidas = (imgs as { id: string; storage_bucket: string; storage_path: string }[] | null) ?? [];
+  return ids.flatMap((x, i) => {
+    const l = lidas.find((y) => y.id === x);
+    return l ? [{ bucket: l.storage_bucket, caminho: l.storage_path, nome: `rosto-${i + 1}` }] : [];
+  });
+}
+
+/** rostos { trabalho_id }: os rostos que a tela pode escolher (do cliente e da casa), sem custo. */
+async function rostosDisponiveis(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const casa = await clientesDaCasa().catch(() => [] as string[]);
+  const [doCliente, daCasa] = await Promise.all([
+    rostosDosClientes([t.client_id]).catch(() => []),
+    rostosDosClientes(casa.filter((id) => id !== t.client_id)).catch(() => []),
+  ]);
+  // Miniatura própria (<caminho>.mini.jpg) quando existe, senão o original; nunca a transformação do Storage.
+  const comUrl = async (l: { id: string; nome: string; bucket: string; caminho: string }[]) =>
+    await Promise.all(l.map(async (r) => {
+      try {
+        const { data } = await servico().storage.from(r.bucket).createSignedUrls([`${r.caminho}.mini.jpg`, r.caminho], 3600);
+        const linhas = (data ?? []) as { path: string | null; signedUrl?: string | null; error?: string | null }[];
+        const achar = (p: string) => linhas.find((x) => x.path === p && !!x.signedUrl && !x.error)?.signedUrl ?? null;
+        return { id: r.id, nome: r.nome, url: achar(`${r.caminho}.mini.jpg`) || achar(r.caminho) };
+      } catch {
+        return { id: r.id, nome: r.nome, url: null };
+      }
+    }));
+  return json({ cliente: await comUrl(doCliente), equipe: await comUrl(daCasa), escolhido: lerRostoDoTrabalho(t.direcao, t.client_id), custo_usd: 0 });
 }
 
 // ------------------------------------------------ prancha de referências (frente E)
@@ -3312,6 +3513,21 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const q = quadrosDaPrancha.get(r.id);
     return q && q.quadro ? { ...r, id: `${r.id}-q${q.quadro.indice + 1}` } : r;
   };
+  // Frente R (26/09): estética da referência, conteúdo da copy. Só no replicar,
+  // com o interruptor ligado (padrão), com copy e sem foto do cliente na lâmina.
+  // A leitura (uma vez por referência, guardada) começa já, junto com o molde;
+  // o julgamento e a cena vêm depois do promptDoReplicar. Fora disso: nada muda.
+  // Criativo de anúncio (Mesa Ads) fica como está: a tela de lá não tem o interruptor.
+  const querAdaptar = tentaAdaptar({
+    replicar: replicar && !ads,
+    direcao: t.direcao,
+    copy: copyDaLamina(card),
+    fotosDoCliente: candidatos.filter((c) => !!c.fotoReplicar).length,
+    temImagemDaReferencia: !!imagensDasRefs[0],
+  });
+  const refDaAdaptacao = querAdaptar ? refDoMolde(refsDaEquipe[0]) : null;
+  const depsDaCopia = querAdaptar ? depsDaAdaptacao(t, imagensDasRefs[0], ch.userId) : null;
+  const leituraDoConteudoP = refDaAdaptacao && depsDaCopia ? leituraDoConteudo(refDaAdaptacao.id, depsDaCopia) : Promise.resolve(null);
   const [anexoLogo, moldes] = await Promise.all([
     logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),
     Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId) : Promise.resolve(null)))),
@@ -3422,6 +3638,51 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       refsNoPrompt.push({ indice, molde: k >= 0 ? moldes[k] ?? null : null, id: c.ref.id });
     }
   }
+  // Frente R (26/09, acréscimo do dono): rosto escolhido para a pessoa da referência.
+  // Sem rosto (o padrão) nada é lido e nada entra. Com rosto: até 2 fotos depois
+  // dos anexos da lâmina (antes das do estilo), no limite de imagens do modelo.
+  const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
+  const indicesDoRosto: number[] = [];
+  if (rostoEscolhido) {
+    const fotosDoRosto = await fotosDoRostoEscolhido(t, rostoEscolhido).catch(() => [] as FotoDoRosto[]);
+    if (!fotosDoRosto.length) {
+      throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
+    }
+    const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDoRosto.length });
+    // Baixadas juntas; a que não abre fica de fora (a numeração segue contínua).
+    const baixadas = await Promise.all(fotosDoRosto.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(() => null)));
+    baixadas.forEach((img) => {
+      if (!img) return;
+      imagens.push(img);
+      rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);
+      indicesDoRosto.push(imagens.length + deslocamento);
+    });
+  }
+  // Frente S2 (26/09): estilo do cliente, só com o interruptor do trabalho ligado e o estilo ativo.
+  // Desligado (o padrão): null sem ler o banco, e nada abaixo muda. Ligado: as referências do
+  // estilo entram DEPOIS das da lâmina e o bloco curto vai no fim do texto, antes das regras de render.
+  const estiloDoCliente = await estiloNaGeracao(t, {
+    db: servico() as never,
+    marca: () => marcaDe(t.client_id, t),
+    baixar: baixarImagem,
+    anexosDaLamina: imagens.length + deslocamento,
+  });
+  const indicesDoEstilo: number[] = [];
+  (estiloDoCliente ? estiloDoCliente.imagens : []).forEach((img) => {
+    imagens.push(img);
+    rotulos.push(ROTULO_DA_REFERENCIA_DO_ESTILO);
+    indicesDoEstilo.push(imagens.length + deslocamento);
+  });
+  const blocoDoEstilo = estiloDoCliente ? blocoDoEstiloParaOGerador(estiloDoCliente.guia, { ordem, total, indices: indicesDoEstilo }) : "";
+  // Frente T (26/09): template de design escolhido no trabalho. "Nenhum" (o padrão) devolve ""
+  // sem ler o banco e sem mexer nas listas; escolhido, as âncoras entram depois das do estilo.
+  const blocoDoTemplate = await templateNaLamina(t, { ordem, total, imagens, rotulos, deslocamento }, {
+    db: servico() as never,
+    baixar: baixarImagem,
+    modelo: modeloImagem,
+    panorama,
+    marca: { fontes: marca.fontes, paleta: marca.paleta },
+  });
   const legendas = rotulos.map((r, i) => `imagem ${i + 1 + deslocamento}: ${r}`);
   if (replicar && !refsNoPrompt.length) {
     throw new ErroEstudio(409, "referencia_sem_imagem", "A imagem da referência escolhida não foi encontrada. Escolha outra referência para esta lâmina.");
@@ -3461,6 +3722,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
     replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
     blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1),
+    blocoDoEstilo,
+    blocoDoTemplate,
   ].filter(Boolean).join("\n\n");
   const comum = {
     clientId: t.client_id,
@@ -3482,6 +3745,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     // Formato em que a versão nasceu: a entrega recusa lâmina em formato diferente do conjunto.
     formato_post: quadro.post,
     anexos: imagens.length + deslocamento,
+    ...(estiloDoCliente ? { estilo_do_cliente: { versao: estiloDoCliente.versao, referencias: indicesDoEstilo.length } } : {}),
   };
 
   // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
@@ -3526,12 +3790,33 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const continuidade = quadroDeSequencia && quadroDeSequencia.quadro
       ? continuidadeDaPrancha({ ordem, total, capa: indiceDaCapa, quadro: quadroDeSequencia.quadro })
       : serieNaFidelidade({ fidelidade, ordem, total, capa: indiceDaCapa });
+    // Frente R: um julgamento (Jev) e, se o assunto da referência não serve à copy, uma cena
+    // do diretor; bloco curto logo depois do promptDoReplicar. Serve ou falha: bloco vazio (o de hoje).
+    const adaptacao = querAdaptar && refDaAdaptacao && depsDaCopia && fotosReplicar.length === 0
+      ? await adaptacaoDaReferencia({
+        refId: refDaAdaptacao.id,
+        fidelidade,
+        indice: refsNoPrompt[0].indice,
+        ctx: await contextoDaAdaptacao(t, card, total, marca.nomeCliente),
+        molde: refsNoPrompt[0].molde,
+        leitura: await leituraDoConteudoP,
+        // Trava da marca (regra dura do dono): a cena só pode citar a letra e as cores do kit.
+        kit: { fontes: marca.fontes, paleta: marca.paleta },
+      }, depsDaCopia)
+      : null;
+    const blocoDoRostoAqui = indicesDoRosto.length
+      ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!(rostoEscolhido && rostoEscolhido.destacar), pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa") })
+      : "";
     const prompt = [
       replica.prompt,
+      adaptacao ? adaptacao.bloco : "",
+      blocoDoRostoAqui,
       preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
       variedade ? variedade.bloco : "",
       continuidade,
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
+      blocoDoEstilo,
+      blocoDoTemplate,
       regrasDeRender(t, { ...card, texto_exato: replica.textoExato }, legendas, regraDaLogo, true),
     ].filter(Boolean).join("\n\n");
     const qualidadeDoReplicar: Qualidade = "alta";
@@ -3564,6 +3849,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
             })),
           }
           : {}),
+        // Frente R: o que o julgamento decidiu (serve, adaptou, a cena) e o rosto usado (só com rosto escolhido).
+        ...(adaptacao ? { adaptacao_da_copy: adaptacao.registro } : {}),
+        ...(rostoEscolhido ? { rosto: { fonte: rostoEscolhido.fonte, id: rostoEscolhido.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoEscolhido.destacar } } : {}),
         molde_editado: !!molde,
         // Molde medido por visão (layout da referência como especificação): quais referências tinham.
         molde_lido: refsNoPrompt.map((r) => ({ referencia_id: r.id, lido: !!r.molde })),
@@ -5026,6 +5314,13 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
     if (!refId || !(UUID.test(refId) || (refId.startsWith("g:") && UUID.test(refId.slice(2))))) throw new ErroEstudio(400, "referencia_invalida", "Referência inválida.");
     pranchaPedida = { refId, papeis: p.papeis === null ? null : papeisDaEquipe(p.papeis) };
   }
+  // Frente R (26/09): "Adaptar conteúdo à copy" (true volta ao padrão, que é ligado) e o rosto escolhido (null tira).
+  const adaptarConteudo = conjunto && typeof conjunto.adaptar_conteudo_a_copy === "boolean" ? conjunto.adaptar_conteudo_a_copy : undefined;
+  let rostoPedido: RostoEscolhido | null | undefined;
+  if (conjunto && conjunto.rosto !== undefined) {
+    rostoPedido = conjunto.rosto === null ? null : normalizarRosto(conjunto.rosto, t.client_id);
+    if (conjunto.rosto !== null && !rostoPedido) throw new ErroEstudio(400, "rosto_invalido", "Rosto inválido. Escolha um rosto do cliente, da equipe ou fotos desta pasta.");
+  }
   const infinito = conjunto && typeof conjunto.carrossel_infinito === "boolean" ? conjunto.carrossel_infinito : undefined;
   // Formato do post orgânico (4:5, 3:4, 1:1 ou 9:16), para o conjunto inteiro. O anúncio tem formato por card.
   let formatoNovo: FormatoDoPost | undefined;
@@ -5087,10 +5382,16 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       }
       return mudou;
     });
+    // Frente R: ligado é o padrão (sem o campo); rosto null tira a escolha.
+    const direcaoAntes: Direcao = { ...x.direcao };
+    if (adaptarConteudo === true) delete direcaoAntes.adaptar_conteudo_a_copy;
+    if (rostoPedido === null) delete direcaoAntes.rosto;
     return {
       direcao: {
-        ...x.direcao,
+        ...direcaoAntes,
         cards,
+        ...(adaptarConteudo === false ? { adaptar_conteudo_a_copy: false } : {}),
+        ...(rostoPedido ? { rosto: rostoPedido } : {}),
         ...(refsConjunto !== undefined ? { referencias_ids: refsConjunto } : {}),
         // Ligar, desligar ou pedir para refazer apaga o panorama (e sobe a geração:
         // um trecho que termina depois é descartado): o próximo gerar faz outro.
@@ -5881,6 +6182,231 @@ async function desfazerAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, trabalho: await lerTrabalho(t.id) });
 }
 
+// ------------------------------------------------ fila de geração (frente G)
+//
+// "Gerar" vira trabalho no servidor (public.estudio_fila, SQL G-01): a tela
+// pede (enfileirar), a função responde na hora e roda um passo por invocação
+// em segundo plano (EdgeRuntime.waitUntil). Ao fim de cada passo, chama o
+// próximo com o login de quem pediu: a conferência de acesso ao cliente roda
+// em todo passo, igual à chamada direta. Regra dos passos e tetos em
+// fila-de-geracao.ts. Sem a tabela, fila_indisponivel e a tela gera como antes.
+
+const TABELA_DA_FILA = "estudio_fila";
+const COLUNAS_DA_FILA =
+  "id, client_id, trabalho_id, ordem, lote_id, status, etapa, paralelo, corrigir_sozinho, rodadas, tentativas, max_tentativas, passos, versoes_antes, trava_token, custo_usd, pedido_por, marca_id, proxima_em, criado_em, iniciado_em, concluido_em, erro_codigo, erro_mensagem, aviso";
+
+function filaAusente(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === "42P01" || error.code === "42883" || error.code === "PGRST202" || error.code === "PGRST205" ||
+    /estudio_fila|schema cache|does not exist/i.test(String(error.message || ""));
+}
+
+const erroDaFila = (error: { code?: string; message?: string } | null | undefined) =>
+  filaAusente(error)
+    ? new ErroEstudio(503, "fila_indisponivel", "A fila de geração ainda não foi ativada no banco.")
+    : new ErroEstudio(503, "fila_fora_do_ar", "Não foi possível usar a fila de geração agora. Tente de novo.");
+
+/** Trabalho depois da resposta; sem EdgeRuntime (teste local), devolve false e quem chamou espera. */
+function emSegundoPlano(p: Promise<unknown>): boolean {
+  const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (er && typeof er.waitUntil === "function") {
+    er.waitUntil(p.catch(() => null));
+    return true;
+  }
+  return false;
+}
+
+/** Chama processar_fila de novo com o login de quem pediu (no máximo o teto global de vezes). */
+function chutarFila(token: string, vezes: number) {
+  const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/estudio-arte`;
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const n = Math.max(0, Math.min(vezes, LIMITES_DA_FILA.GLOBAL));
+  for (let i = 0; i < n; i++) {
+    const p = fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(anon ? { apikey: anon } : {}) },
+      body: JSON.stringify({ acao: "processar_fila" }),
+      signal: AbortSignal.timeout(20_000),
+    }).then((r) => r.body?.cancel()).catch(() => null);
+    emSegundoPlano(p);
+  }
+}
+
+function itemDaFila(linha: Record<string, unknown>): ItemDaFila {
+  const n = (v: unknown, padrao = 0) => {
+    if (v === null || v === undefined || v === "") return padrao;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : padrao;
+  };
+  return {
+    id: String(linha.id),
+    client_id: String(linha.client_id),
+    trabalho_id: String(linha.trabalho_id),
+    ordem: n(linha.ordem),
+    lote_id: String(linha.lote_id),
+    status: String(linha.status) as ItemDaFila["status"],
+    etapa: String(linha.etapa) as EtapaDaFila,
+    paralelo: n(linha.paralelo, 1),
+    corrigir_sozinho: linha.corrigir_sozinho === true,
+    rodadas: n(linha.rodadas),
+    tentativas: n(linha.tentativas),
+    max_tentativas: n(linha.max_tentativas, LIMITES_DA_FILA.MAX_TENTATIVAS),
+    passos: n(linha.passos),
+    versoes_antes: linha.versoes_antes === null || linha.versoes_antes === undefined ? null : n(linha.versoes_antes),
+    trava_token: typeof linha.trava_token === "string" ? linha.trava_token : null,
+    custo_usd: n(linha.custo_usd),
+    pedido_por: typeof linha.pedido_por === "string" ? linha.pedido_por : null,
+    marca_id: typeof linha.marca_id === "string" ? linha.marca_id : null,
+  };
+}
+
+const PASSOS_DA_FILA: Record<EtapaDaFila, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  fundo: prepararFundo,
+  gerar: gerarCard,
+  conferir: conferirCard,
+  corrigir: corrigirCard,
+};
+
+/** Roda a mesma ação da chamada direta (gerar_card etc.), com o login de quem pediu. */
+async function executarPassoDaFila(ch: Chamador, etapa: EtapaDaFila, item: ItemDaFila): Promise<ResultadoDoPasso> {
+  const corpo: Record<string, unknown> = { trabalho_id: item.trabalho_id, ordem: item.ordem };
+  if (item.marca_id) corpo.marca_id = item.marca_id;
+  try {
+    const r = await PASSOS_DA_FILA[etapa](ch, corpo);
+    const body = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok || typeof body.error === "string") {
+      return { ok: false, codigo: String(body.error ?? "erro_interno"), mensagem: texto(body.mensagem, 500) || "Falha no estúdio." };
+    }
+    return { ok: true, corpo: body };
+  } catch (e) {
+    if (e instanceof ErroEstudio) return { ok: false, codigo: e.codigo, mensagem: e.message };
+    if (e instanceof IaMotorErro) return { ok: false, codigo: e.codigo, mensagem: MENSAGEM_MOTOR[e.codigo] ?? e.message };
+    if (e instanceof JevErro) return { ok: false, codigo: "jev_indisponivel", mensagem: "A conferência do Jev não respondeu." };
+    console.error("estudio-arte: falha na fila", { etapa, erro: e instanceof Error ? e.name : "desconhecido" });
+    return { ok: false, codigo: "erro_interno", mensagem: "Erro inesperado no estúdio." };
+  }
+}
+
+function dependenciasDaFila(ch: Chamador): DependenciasDaFila {
+  const db = servico();
+  return {
+    pegar: async (token) => {
+      const { data, error } = await db.rpc("estudio_fila_pegar", {
+        _token: token,
+        _pedido_por: ch.userId,
+        _global: LIMITES_DA_FILA.GLOBAL,
+        _trava_segundos: LIMITES_DA_FILA.TRAVA_SEGUNDOS,
+      });
+      if (error) throw erroDaFila(error);
+      const linha = Array.isArray(data) ? data[0] : data;
+      return linha && typeof linha === "object" ? itemDaFila(linha as Record<string, unknown>) : null;
+    },
+    versoes: async (item) => (await lerTrabalho(item.trabalho_id)).cards.filter((c) => c.ordem === item.ordem).length,
+    gravar: async (item, token, campos) => {
+      const { data, error } = await db.from(TABELA_DA_FILA).update(campos).eq("id", item.id).eq("trava_token", token).select("id").maybeSingle();
+      return !error && !!data;
+    },
+    executar: (etapa, item) => executarPassoDaFila(ch, etapa, item),
+    pararLote: async (item, codigo) => {
+      const agora = new Date().toISOString();
+      await db.from(TABELA_DA_FILA)
+        .update({ status: "cancelado", erro_codigo: codigo, erro_mensagem: MENSAGEM_MOTOR[codigo] ?? "O lote parou.", concluido_em: agora, atualizado_em: agora })
+        .eq("lote_id", item.lote_id)
+        .eq("status", "fila")
+        .in("etapa", ["gerar", "fundo"]);
+    },
+    agora: () => new Date(),
+  };
+}
+
+/**
+ * enfileirar { trabalho_id, ordens[], corrigir_sozinho? }: as lâminas entram
+ * na fila do servidor e a função responde na hora. Lâmina que já está na
+ * fila não entra de novo. A geração segue sem a tela aberta.
+ */
+async function enfileirar(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  garantirEditavel(t);
+  const ordens = ordensDoPedido(corpo.ordens, t.direcao.cards.map((c) => c.ordem));
+  if (!ordens.length) throw new ErroEstudio(400, "sem_laminas", "Escolha ao menos uma lâmina da direção.");
+  const db = servico();
+  const { data: ativos, error: erroAtivos } = await db.from(TABELA_DA_FILA).select("ordem").eq("trabalho_id", t.id).in("status", ["fila", "rodando"]);
+  if (erroAtivos) throw erroDaFila(erroAtivos);
+  const jaNaFila = (ativos ?? []).map((a) => Number((a as { ordem: unknown }).ordem));
+  const novas = ordens.filter((o) => jaNaFila.indexOf(o) < 0);
+  const paralelo = !ehAds(t) && t.direcao.carrossel_infinito ? LIMITES_DA_FILA.PARALELO_CONTINUO : LIMITES_DA_FILA.PARALELO_NORMAL;
+  const marca = texto(corpo.marca_id, 64);
+  const agora = Date.now();
+  const lote = crypto.randomUUID();
+  const linhas = novas.map((ordem, i) => ({
+    client_id: t.client_id,
+    trabalho_id: t.id,
+    ordem,
+    lote_id: lote,
+    paralelo,
+    corrigir_sozinho: corpo.corrigir_sozinho === true,
+    max_tentativas: LIMITES_DA_FILA.MAX_TENTATIVAS,
+    pedido_por: ch.userId,
+    marca_id: UUID.test(marca) ? marca : null,
+    // Um milissegundo entre elas: a fila anda na ordem das lâminas (o contínuo depende disso).
+    proxima_em: new Date(agora + i).toISOString(),
+  }));
+  const itens: Record<string, unknown>[] = [];
+  if (linhas.length) {
+    const { data, error } = await db.from(TABELA_DA_FILA).insert(linhas).select(COLUNAS_DA_FILA);
+    if (error && error.code === "23505") {
+      // Corrida com outra aba pedindo a mesma lâmina: entra uma a uma, a repetida fica de fora.
+      for (const l of linhas) {
+        const r = await db.from(TABELA_DA_FILA).insert(l).select(COLUNAS_DA_FILA).maybeSingle();
+        if (r.data) itens.push(r.data as Record<string, unknown>);
+      }
+    } else if (error) {
+      throw erroDaFila(error);
+    } else {
+      itens.push(...((data ?? []) as Record<string, unknown>[]));
+    }
+  }
+  if (itens.length) chutarFila(ch.token, Math.min(itens.length, paralelo));
+  return json({ lote_id: lote, itens, ja_na_fila: jaNaFila.filter((o) => ordens.indexOf(o) >= 0) });
+}
+
+/**
+ * cancelar_fila { trabalho_id, ordens? }: tira da fila o que ainda não
+ * começou a gerar. A lâmina que já está gerando termina e é conferida (como o
+ * "Parar" de antes).
+ */
+async function cancelarFila(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const agora = new Date().toISOString();
+  let q = servico().from(TABELA_DA_FILA)
+    .update({ status: "cancelado", erro_codigo: "cancelado_pela_equipe", erro_mensagem: "Parado pela equipe.", concluido_em: agora, atualizado_em: agora })
+    .eq("trabalho_id", t.id)
+    .eq("status", "fila")
+    .in("etapa", ["gerar", "fundo"]);
+  const ordens = Array.isArray(corpo.ordens) ? ordensDoPedido(corpo.ordens, t.direcao.cards.map((c) => c.ordem)) : [];
+  if (ordens.length) q = q.in("ordem", ordens);
+  const { data, error } = await q.select("ordem");
+  if (error) throw erroDaFila(error);
+  return json({ canceladas: (data ?? []).map((d) => Number((d as { ordem: unknown }).ordem)) });
+}
+
+/**
+ * processar_fila {}: pega UM passo de quem chamou (pela trava do banco) e
+ * responde na hora; o passo roda em segundo plano e, no fim, chama o próximo.
+ * Chamado pela própria função (corrente) e pela vigia do painel de quem pediu.
+ */
+async function processarFila(ch: Chamador, _corpo: Record<string, unknown>) {
+  const deps = dependenciasDaFila(ch);
+  const token = crypto.randomUUID();
+  const item = await deps.pegar(token);
+  if (!item) return json({ processando: null });
+  const passo = processarItem(deps, item, token)
+    .catch((e) => console.error("estudio-arte: passo da fila falhou", { erro: e instanceof Error ? e.name : "desconhecido" }))
+    .finally(() => chutarFila(ch.token, 1));
+  if (!emSegundoPlano(passo)) await passo;
+  return json({ processando: item.id, ordem: item.ordem, etapa: item.etapa }, 202);
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   preparar,
   configurar,
@@ -5897,9 +6423,13 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   reabrir,
   logos: logosDoTrabalho,
   prancha: pranchaDaReferencia,
+  rostos: rostosDisponiveis,
   refinar_texto: refinarTexto,
   executar_acao_agente: executarAcaoDoDiretor,
   desfazer_acao_agente: desfazerAcaoDoDiretor,
+  enfileirar,
+  cancelar_fila: cancelarFila,
+  processar_fila: processarFila,
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */

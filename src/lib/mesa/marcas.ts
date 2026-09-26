@@ -181,7 +181,7 @@ export function marcaAtual(): { clientId: string; marcaId: string } | null {
 }
 
 /** Funções que entendem marca_id (supabase/functions/_shared/marca.ts). */
-const FUNCOES_COM_MARCA = ["estudio-arte", "agente-calendario", "mesa-ads", "mesa-foto"];
+const FUNCOES_COM_MARCA = ["estudio-arte", "agente-calendario", "mesa-ads", "mesa-foto", "agente-estilo"];
 
 /**
  * Corpo com marca_id quando há marca escolhida e a função entende: não troca

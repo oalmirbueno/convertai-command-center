@@ -202,9 +202,11 @@ describe("rota e casca", () => {
     const botoes = within(nav).getAllByRole("button");
     expect(botoes.map((b) => b.textContent)).toEqual(["1Oferta", "2Referências", "3Plano de teste", "4Estúdio Ads", "5Conta", "6Resultados"]);
     expect(ETAPAS_DA_MESA_ADS.map((e) => e.valor)).toEqual(["oferta", "referencias", "plano", "estudio", "conta", "resultados"]);
-    // No celular, as etapas quebram em duas linhas de três (sem rolagem lateral).
-    expect(nav.className).toContain("grid-cols-3");
-    expect(nav.className).toContain("sm:grid-cols-6");
+    // Etapas do sistema (src/components/sistema/Etapas.tsx): o texto nunca é cortado;
+    // no celular a linha rola para o lado por dentro, sem empurrar a página.
+    const trilho = nav.firstElementChild as HTMLElement;
+    expect(trilho.className).toContain("overflow-x-auto");
+    for (const b of botoes) expect(b.className).toContain("whitespace-nowrap");
     expect(botoes[0].getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("combobox", { name: /Cliente: Clínica Sintética/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Saldo e gasto do mês" })).toBeTruthy();
@@ -500,19 +502,23 @@ describe("etapa 6, resultados (v5: claros e com vínculo automático)", () => {
     expect(chamadasDe("conta_ao_vivo")[0]).toEqual({ acao: "conta_ao_vivo", client_id: CLIENTE, dias: 14 });
     expect(screen.getByText("+25%")).toBeTruthy();
     expect(screen.getByText(/70% do investimento está em engajamento/)).toBeTruthy();
-    // Abas simples: Ativos agora mostra só o ativo.
-    expect(screen.getByRole("tab", { name: "Ativos agora (1)" }).getAttribute("aria-selected")).toBe("true");
+    // Listas num seletor compacto (sistema de design: 5 opções viram lista): Ativos agora mostra só o ativo.
+    const escolherLista = async (nome: RegExp) => {
+      fireEvent.click(screen.getByRole("button", { name: /^Ver anúncios:/ }));
+      fireEvent.click(await screen.findByRole("option", { name: nome }));
+    };
+    expect(screen.getByRole("button", { name: "Ver anúncios: Ativos agora (1)" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Anúncio Conversa pelo WhatsApp" })).toBeTruthy();
     expect(screen.queryByRole("article", { name: "Anúncio Post impulsionado" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "Para descartar (1)" }));
+    await escolherLista(/^Para descartar \(1\)/);
     expect(screen.getByRole("article", { name: "Anúncio Post impulsionado" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Melhores criativos (2)" }));
+    await escolherLista(/^Melhores criativos \(2\)/);
     expect(screen.getByRole("article", { name: "Criativo A dor da espera | V1 | feed_4x5" })).toBeTruthy();
-    // Objetivo: só mensagem, com o rótulo e o custo daquele objetivo.
-    fireEvent.click(screen.getByRole("button", { name: "Mensagem (1)" }));
+    // Objetivo (segmentado, até 4 opções): só mensagem, com o rótulo e o custo daquele objetivo.
+    fireEvent.click(screen.getByRole("tab", { name: "Mensagem (1)" }));
     expect(screen.getAllByText("Conversas iniciadas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("R$ 5,00").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("tab", { name: "Ativos agora (1)" }));
+    await escolherLista(/^Ativos agora \(1\)/);
 
     // Aprendizado só no anúncio ligado a criativo da Mesa Ads, com o período da conta.
     const cartao = screen.getByRole("article", { name: "Anúncio Conversa pelo WhatsApp" });

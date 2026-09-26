@@ -1,6 +1,22 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert, Brain } from "lucide-react";
+import { Mic, MicOff, Sparkles, X, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, Brain, MessageSquare } from "lucide-react";
+import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import type { AcaoDoAgente, PedidoDaAcao, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
+import { botao, campoTexto, juntar } from "@/components/sistema/estilos";
+import { AtalhosDoAgente, SeletorDeCliente, SeletorDeServico, nomeDoCliente } from "@/components/admin/agente/SeletoresDoAgente";
+import {
+  ATALHO_DO_AGENTE,
+  clienteDaRota,
+  comandoDoProjetoDoContrato,
+  enderecoDoNovoContrato,
+  preContextoDoAgente,
+  servicoPelaChave,
+  servicosParaEscolha,
+  type AtalhoDoAgente,
+  type PedidoParaAbrirAgente,
+} from "@/lib/lancador";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { createFileRecord } from "@/lib/fileRecordActions";
@@ -117,10 +133,51 @@ interface LastAction {
 
 const emptyRefs = (): CreatedRefs => ({ projectIds: [], milestoneIds: [], taskIds: [], checklistItemIds: [], fileIds: [] });
 
-export default function VoiceAssistant() {
+/** Resposta do modo conversa (resumo, próximos passos, pergunta livre). */
+interface RespostaDaConversa {
+  id: string;
+  pergunta: string;
+  resposta: string | null;
+  passos: string[];
+  carregando: boolean;
+  aviso?: string | null;
+}
+
+/** Classes do painel: gaveta em tela cheia no celular, coluna fixa à direita no computador (abaixo da barra do topo). */
+export const CLASSES_DO_PAINEL_DO_AGENTE =
+  "fixed inset-0 z-[70] flex flex-col bg-card pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0 md:inset-auto md:right-3 md:bottom-3 md:top-[calc(env(safe-area-inset-top)+76px)] md:z-[45] md:w-[420px] md:rounded-lg md:border md:border-border md:shadow-xl";
+
+export default function VoiceAssistant({
+  aberto,
+  onAbertoChange,
+  pedido,
+}: {
+  /** Aberto/fechado controlado pelo lançador do AppLayout. Sem isso, o componente cuida sozinho. */
+  aberto?: boolean;
+  onAbertoChange?: (v: boolean) => void;
+  /** Pedido de abertura com contexto (EVENTO_ABRIR_AGENTE): cliente, serviço, texto. */
+  pedido?: (PedidoParaAbrirAgente & { vez: number }) | null;
+} = {}) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [openInterno, setOpenInterno] = useState(false);
+  const open = aberto !== undefined ? aberto : openInterno;
+  const setOpen = useCallback((v: boolean) => {
+    if (onAbertoChange) onAbertoChange(v);
+    else setOpenInterno(v);
+  }, [onAbertoChange]);
+  // Pré-contexto escolhido no topo: serviço (o cliente mora em answers.client_id).
+  const [servico, setServico] = useState<string>("geral");
+  const [respostas, setRespostas] = useState<RespostaDaConversa[]>([]);
+  // Proposta aberta no cartão de confirmação (padrão CartaoDeAcao).
+  const [acaoAberta, setAcaoAberta] = useState<AcaoDoAgente | null>(null);
+  // Cliente vindo da tela (?client=): escolhe sozinho, mas sem disparar a IA.
+  const semAnaliseAutomaticaRef = useRef(false);
+  const ultimoClienteDaTelaRef = useRef<string | null>(null);
+  const campoRef = useRef<HTMLTextAreaElement>(null);
+  const fimDaConversaRef = useRef<HTMLDivElement>(null);
   const [listening, setListening] = useState(false);
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
@@ -194,11 +251,50 @@ export default function VoiceAssistant() {
       const ids = (roles || []).map((r: any) => r.user_id);
       if (!ids.length) return;
       const { data: profs } = await supabase
-        .from("profiles").select("id, full_name, company_name, email")
+        .from("profiles").select("id, full_name, company_name, email, services_config")
         .in("id", ids).is("deleted_at", null);
       setClientList(profs || []);
     })();
   }, [open, clientList.length]);
+
+  // Esc fecha o agente (a lista aberta de um seletor fecha antes, sozinha).
+  useEffect(() => {
+    if (!open) return;
+    const tecla = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [open, setOpen]);
+
+  // Cliente da tela (?client= ou /clientes/<id>) vira o padrão ao abrir.
+  // Só escolhe: a leitura dos documentos acontece, a análise da IA espera
+  // o pedido da pessoa (abrir o agente não gasta IA).
+  useEffect(() => {
+    if (!open || !clientList.length || phaseRef.current !== "input") return;
+    const daTela = clienteDaRota(location.pathname, location.search);
+    if (!daTela || daTela === ultimoClienteDaTelaRef.current) return;
+    ultimoClienteDaTelaRef.current = daTela;
+    if (!clientList.some((c) => c.id === daTela)) return;
+    semAnaliseAutomaticaRef.current = true;
+    setAnswers((a) => (a.client_id === daTela ? a : { ...a, client_id: daTela, project_id: undefined }));
+  }, [open, clientList, location.pathname, location.search]);
+
+  // Pedido de outra tela (EVENTO_ABRIR_AGENTE): cliente, serviço e texto prontos.
+  useEffect(() => {
+    if (!pedido) return;
+    if (pedido.clientId) {
+      semAnaliseAutomaticaRef.current = true;
+      setAnswers((a) => (a.client_id === pedido.clientId ? a : { ...a, client_id: pedido.clientId as string, project_id: undefined }));
+    }
+    if (pedido.servico) escolherServico(pedido.servico);
+    if (pedido.texto) setFinalText(String(pedido.texto).slice(0, 4000));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido?.vez]);
+
+  // A conversa desce até a última resposta.
+  useEffect(() => {
+    const el = fimDaConversaRef.current;
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "end" });
+  }, [respostas]);
 
   useEffect(() => {
     if (!open) return;
@@ -296,6 +392,7 @@ export default function VoiceAssistant() {
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null); setAiClientSummary(null);
+    setAcaoAberta(null);
     aiAttemptedRef.current = false;
     setRefineVoice(false); setRefineText(""); setRefineInterim("");
     lastSttRef.current = "";
@@ -303,6 +400,7 @@ export default function VoiceAssistant() {
 
   const returnToDraft = useCallback(() => {
     stopListening();
+    setAcaoAberta(null);
     setConfirmAck(false);
     setStageIdx(0);
     setStageAck(false);
@@ -341,6 +439,9 @@ export default function VoiceAssistant() {
           attachment: attachments[0] || null,
           attachments,
           clientId: answers.client_id || null,
+          // Pré-contexto escolhido no topo (cliente + serviço + tela): o
+          // servidor junta o dossiê e a memória resumidos do cliente.
+          ...preContextoAtual(),
           // Se o componente já carregou docs do sistema, sinaliza pro edge skip recarregar.
           skipSystemContractAutoLoad: systemDocs.length > 0,
           clients: clientList.map((c) => ({
@@ -385,12 +486,14 @@ export default function VoiceAssistant() {
       setAiThinking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalText, interim, fileCtxs, systemDocs, clientList, answers.client_id, aiThinking]);
+  }, [finalText, interim, fileCtxs, systemDocs, clientList, answers.client_id, aiThinking, servico, location.pathname]);
 
   // Auto-trigger IA quando há contexto novo (arquivo ou cliente).
   useEffect(() => {
     if (aiAttemptedRef.current) return;
     if (aiThinking) return;
+    // Cliente escolhido pela tela: a análise espera a pessoa pedir.
+    if (semAnaliseAutomaticaRef.current && !fileCtxs.some((c) => c.text)) return;
     if (!(fileCtxs.some((c) => c.text) || answers.client_id || systemDocs.length)) return;
     aiAttemptedRef.current = true;
     runAgent({ silent: true });
@@ -669,15 +772,16 @@ export default function VoiceAssistant() {
     }
   };
 
-  const runStage = async (idx: number) => {
-    if (!parsed || !user || executing) return;
+  // Devolve o que criou (para o Desfazer do cartão) ou o motivo da falha.
+  const runStage = async (idx: number, opcoes: { semAviso?: boolean } = {}): Promise<{ refs: CreatedRefs } | { erro: string }> => {
+    if (!parsed || !user || executing) return { erro: "O agente ainda está trabalhando. Espere um instante." };
     const stage = stages[idx];
-    if (!stage) return;
+    if (!stage) return { erro: "Nada para fazer." };
     const blocked = isForbiddenRequest((finalText + " " + interim).trim());
     if (blocked) {
       appendLog({ kind: "error", text: `Bloqueado: ${blocked}` });
-      toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
-      return;
+      if (!opcoes.semAviso) toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
+      return { erro: blocked };
     }
     setExecuting(true);
     const refs: CreatedRefs = {
@@ -723,13 +827,34 @@ export default function VoiceAssistant() {
       const next = idx + 1;
       setStageIdx(next);
       if (next >= stages.length) await stagedFinalize(refs);
+      return { refs };
     } catch (err: any) {
       const msg = err?.message || "Falha";
       appendLog({ kind: "error", text: `Fase "${stage.label}": ${msg}` });
-      toast({ title: "Falha na fase", description: msg, variant: "destructive" });
+      if (!opcoes.semAviso) toast({ title: "Falha na fase", description: msg, variant: "destructive" });
+      return { erro: msg };
     } finally {
       setExecuting(false);
     }
+  };
+
+  /** Apaga o que o agente criou, na ordem inversa das dependências. Devolve quantos itens voltaram. */
+  const desfazerRefs = async (refs: CreatedRefs): Promise<number> => {
+    const passos: Array<[string, string[]]> = [
+      ["task_checklist_items", refs.checklistItemIds],
+      ["tasks", refs.taskIds],
+      ["milestones", refs.milestoneIds],
+      ["projects", refs.projectIds],
+      ["files", refs.fileIds],
+    ];
+    let total = 0;
+    for (const [tabela, ids] of passos) {
+      if (!ids.length) continue;
+      const { error } = await supabase.from(tabela as any).delete().in("id", ids);
+      if (error) throw error;
+      total += ids.length;
+    }
+    return total;
   };
 
 
@@ -738,17 +863,7 @@ export default function VoiceAssistant() {
     setUndoing(true);
     const { refs, label } = lastAction;
     try {
-      // Delete in reverse dependency order
-      if (refs.checklistItemIds.length)
-        await supabase.from("task_checklist_items").delete().in("id", refs.checklistItemIds);
-      if (refs.taskIds.length)
-        await supabase.from("tasks").delete().in("id", refs.taskIds);
-      if (refs.milestoneIds.length)
-        await supabase.from("milestones").delete().in("id", refs.milestoneIds);
-      if (refs.projectIds.length)
-        await supabase.from("projects").delete().in("id", refs.projectIds);
-      if (refs.fileIds.length)
-        await supabase.from("files").delete().in("id", refs.fileIds);
+      await desfazerRefs(refs);
       appendLog({ kind: "info", text: `↶ Desfeito: ${label}` });
       toast({ title: "Ação revertida", description: label });
       setLastAction(null);
@@ -975,6 +1090,173 @@ export default function VoiceAssistant() {
     appendLog({ kind: "ok", text: `Arquivo "${f.name}" enviado` });
   }
 
+  // ------------ Pré-contexto (topo do agente) ------------
+  const clienteEscolhido = clientList.find((c) => c.id === answers.client_id) || null;
+
+  function preContextoAtual() {
+    const p = preContextoDoAgente({
+      clienteId: answers.client_id,
+      clienteNome: nomeDoCliente(clienteEscolhido),
+      servico,
+      tela: location.pathname,
+    });
+    return { servico: p.servico, tela: p.tela };
+  }
+
+  function escolherServico(chave: string) {
+    const novo = servicoPelaChave(chave);
+    const velho = servicoPelaChave(servico);
+    setServico(novo.chave);
+    setAnswers((a) => {
+      if (novo.tipoDeProjeto) {
+        return { ...a, project_type: novo.tipoDeProjeto, deadline: a.deadline ?? suggestDeadline(novo.tipoDeProjeto) };
+      }
+      if (velho.tipoDeProjeto && a.project_type === velho.tipoDeProjeto) {
+        const resto = { ...a };
+        delete resto.project_type;
+        return resto;
+      }
+      return a;
+    });
+  }
+
+  function escolherCliente(id: string | null) {
+    semAnaliseAutomaticaRef.current = false;
+    aiAttemptedRef.current = false;
+    setClientSearch("");
+    if (!id) {
+      lastClientDocsRef.current = null;
+      setSystemDocs([]);
+      setAnswers((a) => {
+        const resto = { ...a };
+        delete resto.client_id;
+        delete resto.project_id;
+        return resto;
+      });
+      return;
+    }
+    setAnswers((a) => (a.client_id === id ? a : { ...a, client_id: id, project_id: undefined }));
+  }
+
+  // Modo conversa: resumo, próximos passos ou pergunta livre, com o pré-contexto.
+  async function perguntar(pergunta: string, rotulo: string) {
+    const id = crypto.randomUUID();
+    setRespostas((r) => [...r.slice(-7), { id, pergunta: rotulo, resposta: null, passos: [], carregando: true }]);
+    try {
+      const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
+        body: { modo: "conversa", pergunta, text: "", clientId: answers.client_id || null, ...preContextoAtual() },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = (data || {}) as { resposta?: string; passos?: unknown[]; _degraded?: boolean };
+      setRespostas((r) => r.map((x) => (x.id === id ? {
+        ...x,
+        carregando: false,
+        resposta: String(d.resposta || ""),
+        passos: Array.isArray(d.passos) ? d.passos.map(String) : [],
+        aviso: d._degraded ? "Sem IA agora: mostrei o que o painel tem." : null,
+      } : x)));
+    } catch (err: any) {
+      setRespostas((r) => r.map((x) => (x.id === id ? { ...x, carregando: false, aviso: `Não consegui responder: ${err?.message || "tente de novo"}` } : x)));
+    }
+  }
+
+  function usarAtalho(chave: AtalhoDoAgente) {
+    if (chave === "novo_contrato") {
+      setOpen(false);
+      navigate(enderecoDoNovoContrato(answers.client_id));
+      return;
+    }
+    if (!clienteEscolhido) return;
+    if (chave === "projeto_do_contrato") {
+      const texto = comandoDoProjetoDoContrato(nomeDoCliente(clienteEscolhido), servicoPelaChave(servico));
+      setFinalText(texto);
+      lastSttRef.current = "";
+      semAnaliseAutomaticaRef.current = false;
+      aiAttemptedRef.current = true;
+      void runAgent({ textOverride: texto });
+      return;
+    }
+    const nome = nomeDoCliente(clienteEscolhido);
+    void perguntar(chave, chave === "resumo" ? `Resumo de ${nome}` : `Próximos passos de ${nome}`);
+  }
+
+  // ------------ Cartão de confirmação (padrão das ações dos agentes) ------------
+  function montarAcao(): AcaoDoAgente | null {
+    if (!parsed) return null;
+    const cliente = nomeDoCliente(clientList.find((c) => c.id === answers.client_id) || resolvedClient);
+    const itens: AcaoDoAgente["itens"] = [];
+    let resumo = "";
+    if (parsed.kind === "create_project") {
+      const existente = clientProjects.find((p) => p.id === answers.project_id);
+      itens.push({
+        ref: "a1", alvo_id: existente?.id || "", titulo: `Projeto: ${answers.project_name || "sem nome"}`,
+        detalhe: [cliente, answers.project_type, `${answers.deadline || 30} dias`].filter(Boolean).join(" · "),
+        operacao: existente ? "atualizar_projeto" : "criar_projeto", rotulo: existente ? "Atualizar" : "Criar", para: null,
+      });
+      if (answers.apply_template) {
+        const ms: any[] = aiPlan?.milestones?.length ? aiPlan.milestones : (projectTemplates[answers.project_type] || projectTemplates.other || []);
+        ms.forEach((m: any, i: number) => itens.push({
+          ref: `a${i + 2}`, alvo_id: "", titulo: `Etapa: ${m.title}`,
+          detalhe: `${m.tasks?.length || 0} tarefas com checklist`, operacao: "criar_etapa", rotulo: "Criar", para: null,
+        }));
+      }
+      resumo = existente
+        ? `Atualizo o projeto de ${cliente} e completo a estrutura só se ele ainda não tiver etapas.`
+        : `Crio o projeto de ${cliente} com etapas, tarefas e checklists, nesta ordem.`;
+    } else if (parsed.kind === "create_task") {
+      itens.push({ ref: "a1", alvo_id: "", titulo: `Tarefa: ${answers.task_title || ""}`, detalhe: cliente || null, operacao: "criar_tarefa", rotulo: "Criar", para: null });
+      resumo = "Crio a tarefa no projeto do cliente.";
+    } else if (parsed.kind === "create_milestone") {
+      itens.push({ ref: "a1", alvo_id: "", titulo: `Etapa: ${answers.milestone_title || ""}`, detalhe: cliente || null, operacao: "criar_etapa_avulsa", rotulo: "Criar", para: null });
+      resumo = "Crio a etapa no projeto do cliente.";
+    } else {
+      return null;
+    }
+    return { tipo: "acao_agente", agente: "aceleriq", id: crypto.randomUUID(), resumo, itens, ignorados: [], recusados: [] };
+  }
+
+  function irParaConfirmacao() {
+    setConfirmAck(false);
+    setAcaoAberta(montarAcao());
+    setPhase("confirm");
+  }
+
+  async function onPedidoDaAcao(pedidoDaAcao: PedidoDaAcao): Promise<RespostaDaAcao> {
+    const base = acaoAberta;
+    if (!base) return {};
+    const agora = new Date().toISOString();
+    if (pedidoDaAcao === "descartar") {
+      const novo = { ...base, descartada_em: agora };
+      setAcaoAberta(null);
+      returnToDraft();
+      return { anexo: novo };
+    }
+    if (pedidoDaAcao === "confirmar") {
+      const r = await runStage(0, { semAviso: true });
+      if ("erro" in r) throw new Error(r.erro);
+      const refs = r.refs;
+      const criou = refs.projectIds.length + refs.milestoneIds.length + refs.taskIds.length + refs.checklistItemIds.length + refs.fileIds.length > 0;
+      const resultados = base.itens.map((i) => {
+        const semEtapa = i.operacao === "criar_etapa" && refs.milestoneIds.length === 0;
+        return semEtapa
+          ? { ref: i.ref, alvo_id: i.alvo_id, titulo: i.titulo, operacao: i.operacao, ok: false, motivo: "O projeto já tinha etapas. Nada foi duplicado." }
+          : { ref: i.ref, alvo_id: i.alvo_id, titulo: i.titulo, operacao: i.operacao, ok: true, desfazer: criou ? { refs } : null };
+      });
+      const novo = { ...base, executada_em: agora, resultados };
+      setAcaoAberta(novo);
+      return { anexo: novo, feitos: resultados.filter((x) => x.ok).length, falhas: resultados.filter((x) => !x.ok).length };
+    }
+    const comReverso = (base.resultados || []).find((x) => x.ok && x.desfazer);
+    const refs = comReverso ? (comReverso.desfazer as { refs?: CreatedRefs }).refs : undefined;
+    const voltaram = refs ? await desfazerRefs(refs) : 0;
+    setLastAction(null);
+    appendLog({ kind: "info", text: "Desfeito: voltou como estava." });
+    const novo = { ...base, desfeita_em: agora };
+    setAcaoAberta(novo);
+    return { anexo: novo, voltaram };
+  }
+
   if (!isAdmin) return null;
 
   const scopePreview = phase === "preview" && parsed?.kind === "create_project"
@@ -997,237 +1279,152 @@ export default function VoiceAssistant() {
   const projectTemplate = answers.project_type ? projectTemplates[answers.project_type] : null;
   const previewTaskCount = (projectTemplate || []).reduce((s, m) => s + m.tasks.length, 0);
 
+  const podeAvancar = !executing && !((!parsed || parsed.kind === "unknown") && !(answers.client_id && answers.project_type));
+  const listaDeServicos = servicosParaEscolha((clienteEscolhido as any)?.services_config);
+  const linhaDeEstado = listening
+    ? "Ouvindo. Toque no microfone para parar."
+    : aiThinking
+      ? "Pensando com o contexto do cliente."
+      : systemDocsLoading
+        ? "Lendo os documentos do cliente."
+        : phase === "clarify"
+          ? "Confirme os detalhes."
+          : phase === "preview"
+            ? "Revisão do escopo."
+            : phase === "confirm"
+              ? "Confirmação final."
+              : "Voz e IA com o contexto do cliente.";
+  const conversaVazia = phase === "input" && !lastAction && !respostas.length && !aiNarrative && !parsed && !log.length
+    && !files.length && !systemDocs.length && !systemDocsLoading && !fileReading;
+
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        title="Aceleriq OS · Agente"
-        aria-label="Abrir agente"
-        className="group fixed left-4 md:left-6 z-40 h-14 w-14 md:h-[60px] md:w-[60px] rounded-full flex items-center justify-center transition-all duration-300 bottom-[calc(env(safe-area-inset-bottom)+128px)] md:bottom-8 hover:scale-[1.06] active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        style={{
-          background: "radial-gradient(circle at 30% 25%, hsl(var(--primary)) 0%, hsl(var(--primary)/0.85) 60%, hsl(var(--primary)/0.7) 100%)",
-          boxShadow: "0 10px 30px -6px hsl(var(--primary)/0.55), 0 0 0 1px hsl(var(--primary)/0.35) inset, 0 2px 0 hsl(0 0% 100% / 0.15) inset",
-        }}
-      >
-        <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 animate-ping opacity-60 group-hover:opacity-90 pointer-events-none" />
-        <span className="absolute -inset-1 rounded-full bg-primary/25 blur-md opacity-70 pointer-events-none" />
-        <Sparkles className="relative w-[22px] h-[22px] md:w-6 md:h-6 text-primary-foreground drop-shadow" />
-      </button>
-
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          >
-            <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-            <motion.div
-              className={`relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border max-h-[92vh] flex flex-col shadow-2xl transition-colors ${
-                dragOver ? "border-primary ring-2 ring-primary/40" : "border-border"
-              }`}
-              initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 220, damping: 24 }}
-              onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
-              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                const dropped = Array.from(e.dataTransfer.files || []);
-                if (dropped.length) handleAttach(dropped);
-              }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border/70 bg-gradient-to-b from-secondary/50 to-transparent">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative shrink-0">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.6)]">
-                      <Sparkles className="w-4 h-4 text-primary-foreground" />
-                    </div>
-                    {aiThinking && (
-                      <span className="absolute inset-0 rounded-full ring-2 ring-primary/50 animate-ping" />
-                    )}
+    <AnimatePresence>
+      {open && (
+        <motion.section
+          role="dialog"
+          aria-label="Aceleriq, agente com voz e IA"
+          data-painel-aceleriq=""
+          className={juntar(CLASSES_DO_PAINEL_DO_AGENTE, dragOver ? "ring-2 ring-primary/40" : "")}
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }}
+          transition={{ duration: 0.18 }}
+          onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const dropped = Array.from(e.dataTransfer.files || []);
+            if (dropped.length) handleAttach(dropped);
+          }}
+        >
+              {/* Cabeçalho: nome, estado, Cliente e Serviço (o pré-contexto) e os atalhos. */}
+              <header className="shrink-0 border-b border-border px-3 pb-2 pt-3" data-cabecalho-aceleriq="">
+                <div className="flex min-w-0 items-center">
+                  <span className="relative mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+                    <Sparkles className="h-4 w-4" />
+                    {(aiThinking || listening) && <span className="absolute inset-0 animate-pulse rounded-md ring-2 ring-primary/40" />}
+                  </span>
+                  <div className="mr-2 min-w-0 flex-1">
+                    <h2 className="truncate text-[14px] font-semibold leading-5 text-foreground">Aceleriq</h2>
+                    <p className="truncate text-[12px] leading-4 text-muted-foreground" aria-live="polite" data-estado-do-agente="">{linhaDeEstado}</p>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-foreground leading-tight tracking-tight">Aceleriq OS · Agente</p>
-                    <p className="text-[10.5px] text-muted-foreground leading-tight mt-0.5 truncate">
-                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
-                      {phase === "clarify" && "Confirme os detalhes"}
-                      {phase === "preview" && "Revisão do escopo"}
-                      {phase === "confirm" && "Confirmação final"}
-                    </p>
-                  </div>
+                  <kbd className="mr-1 hidden shrink-0 rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted-foreground md:inline" title="Atalho para abrir o agente">{ATALHO_DO_AGENTE}</kbd>
+                  <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" title="Fechar (Esc)" className={juntar(botao.icone, "h-9 w-9")}>
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
-                  aria-label="Fechar"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+                <fieldset disabled={phase === "confirm"} className="m-0 mt-2 min-w-0 border-0 p-0" data-pre-contexto="">
+                  <legend className="sr-only">Pré-contexto do agente</legend>
+                  <div className="flex min-w-0 flex-wrap items-center">
+                    <div className="mb-1.5 mr-1.5 min-w-0 max-w-full">
+                      <SeletorDeCliente clientes={clientList} valor={answers.client_id || null} onEscolher={escolherCliente} />
+                    </div>
+                    <div className="mb-1.5 min-w-0 max-w-full">
+                      <SeletorDeServico servicos={listaDeServicos} valor={servico} onEscolher={escolherServico} />
+                    </div>
+                  </div>
+                </fieldset>
+                {phase === "input" && (
+                  <AtalhosDoAgente temCliente={!!answers.client_id} ocupado={aiThinking} onAtalho={usarAtalho} />
+                )}
+              </header>
 
-
-              <div className="px-5 py-4 space-y-3 flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3" data-conversa-do-agente="">
                 {/* ---------- INPUT PHASE ---------- */}
                 {phase === "input" && (
                   <>
-                    {/* 🎯 Pré-seleção rápida: cliente + tipo ANTES de falar.
-                       Reduz ambiguidade e o agente já chega no problema certo. */}
-                    <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Pré-contexto (opcional, mas recomendado)
-                      </p>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] text-muted-foreground">
-                            Cliente {answers.client_id ? `: ${clientList.find((c) => c.id === answers.client_id)?.company_name || clientList.find((c) => c.id === answers.client_id)?.full_name}` : `(${clientList.length} disponíveis)`}
-                          </p>
-                          {answers.client_id && (
-                            <button
-                              onClick={() => setAnswers((a) => { const { client_id, ...rest } = a; return rest; })}
-                              className="text-[10px] text-muted-foreground hover:text-destructive"
-                            >
-                              trocar
-                            </button>
-                          )}
-                        </div>
-                        {clientList.length > 6 && (
-                          <input
-                            value={clientSearch}
-                            onChange={(e) => setClientSearch(e.target.value)}
-                            placeholder="Filtrar…"
-                            className="w-full text-xs bg-background border border-border rounded p-1.5"
-                          />
-                        )}
-                        <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto pr-1">
-                          {(clientSearch
-                            ? clientList.filter((c) => norm(`${c.company_name} ${c.full_name} ${c.email}`).includes(norm(clientSearch)))
-                            : clientList
-                          ).map((c) => (
-                            <button
-                              key={c.id}
-                              onClick={() => {
-                                setAnswers((a) => ({ ...a, client_id: c.id }));
-                                aiAttemptedRef.current = false;
-                                setClientSearch("");
-                              }}
-                              className={`text-[10px] px-2 py-0.5 rounded-full border transition ${
-                                answers.client_id === c.id
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
-                              }`}
-                            >
-                              {c.company_name || c.full_name}
-                            </button>
-                          ))}
-                          {clientList.length === 0 && (
-                            <p className="text-[10px] text-muted-foreground">Nenhum cliente cadastrado.</p>
-                          )}
-                        </div>
+                    {conversaVazia && (
+                      <div className="rounded-lg bg-muted/50 p-3 text-[12.5px] leading-5 text-muted-foreground">
+                        <p className="font-medium text-foreground">Diga o que precisa.</p>
+                        <p className="mt-1">
+                          Escolha o cliente e o serviço acima e fale ou escreva. Ex.: "Criar projeto de tráfego para Mirante com prazo de 30 dias". Arraste contratos para cá e eu leio.
+                        </p>
                       </div>
-                      <div className="space-y-1.5">
-                        <p className="text-[10px] text-muted-foreground">Tipo de serviço</p>
-                        <div className="flex flex-wrap gap-1">
-                          {[
-                            { v: "trafego", l: "Tráfego" },
-                            { v: "social_media", l: "Social Media" },
-                            { v: "video_ai", l: "Vídeo IA" },
-                            { v: "video", l: "Vídeo (captação)" },
-                            { v: "site", l: "Site" },
-                            { v: "landing_page", l: "Landing" },
-                            { v: "automation", l: "Automação" },
-                            { v: "event", l: "Evento" },
-                          ].map((o) => (
-                            <button
-                              key={o.v}
-                              onClick={() => setAnswers((a) => ({
-                                ...a,
-                                project_type: o.v,
-                                deadline: a.deadline ?? suggestDeadline(o.v),
-                              }))}
-                              className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                                answers.project_type === o.v
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "border-border text-muted-foreground hover:border-primary"
-                              }`}
-                            >
-                              {o.l}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    )}
 
                     {lastAction && (
-                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-wider text-primary">Última ação</p>
-                          <p className="text-xs text-foreground truncate">{lastAction.label}</p>
-                          <p className="text-[10px] text-muted-foreground">
+                      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                        <div className="mr-3 min-w-0">
+                          <p className="text-[11px] font-medium text-muted-foreground">Última ação</p>
+                          <p className="truncate text-[12.5px] text-foreground">{lastAction.label}</p>
+                          <p className="text-[11px] text-muted-foreground">
                             {lastAction.refs.projectIds.length} projeto · {lastAction.refs.milestoneIds.length} etapas · {lastAction.refs.taskIds.length} tarefas · {lastAction.refs.checklistItemIds.length} checklists
                           </p>
                         </div>
                         <button
+                          type="button"
                           onClick={undoLastAction}
                           disabled={undoing}
-                          className="shrink-0 text-xs px-3 h-8 rounded-full bg-destructive/15 text-destructive border border-destructive/30 flex items-center gap-1.5 hover:bg-destructive/25 disabled:opacity-50"
+                          className={juntar(botao.secundario, "h-8 text-[12px]")}
                         >
-                          {undoing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                          {undoing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
                           Desfazer
                         </button>
                       </div>
                     )}
-                    <div className="min-h-[88px] rounded-xl bg-secondary/50 border border-border p-3 text-sm text-foreground">
-                      {finalText || interim ? (
-                        <>
-                          <span>{finalText}</span>{" "}
-                          <span className="text-muted-foreground italic">{interim}</span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">
-                          Toque no mic e fale. Ex.: "Criar projeto de tráfego para Mirante com prazo 30 dias"
-                        </span>
-                      )}
-                    </div>
-                    <textarea
-                      value={finalText}
-                      onChange={(e) => handleTextEdit(e.target.value)}
-                      placeholder="Ou escreva o comando aqui..."
-                      className="w-full text-sm bg-background border border-border rounded-lg p-2 min-h-[60px] focus:outline-none focus:border-primary"
-                    />
-                    <div className="flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => { aiAttemptedRef.current = true; runAgent(); }}
-                        disabled={aiThinking || (!finalText.trim() && !hasAnyAttachment)}
-                        className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
-                      >
-                        {aiThinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
-                        {aiThinking ? "Analisando…" : aiPlan ? "Reanalisar com IA" : "Pensar com IA (lê contratos)"}
-                      </button>
-                      {aiConfidence !== null && (
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
-                          {Math.round(aiConfidence * 100)}% conf.
-                        </span>
-                      )}
-                    </div>
-                    {aiNarrative && (
-                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles className="w-3 h-3 text-primary" />
-                          <p className="text-[10px] uppercase tracking-wider text-primary">Plano de ação do agente</p>
+
+                    {respostas.map((r) => (
+                      <div key={r.id} className="space-y-1.5" data-resposta-do-agente="">
+                        <div className="flex justify-end">
+                          <p className="max-w-[85%] rounded-lg bg-muted px-3 py-1.5 text-[12.5px] text-foreground [overflow-wrap:anywhere]">{r.pergunta}</p>
                         </div>
-                        <p className="text-xs text-foreground leading-relaxed">{aiNarrative}</p>
+                        <div className="max-w-[92%] rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] leading-5 text-foreground">
+                          {r.carregando ? (
+                            <span className="inline-flex items-center text-muted-foreground"><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo o que o painel sabe…</span>
+                          ) : (
+                            <>
+                              {r.resposta && <p className="whitespace-pre-line [overflow-wrap:anywhere]">{r.resposta}</p>}
+                              {r.passos.length > 0 && (
+                                <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+                                  {r.passos.map((p, i) => <li key={i} className="[overflow-wrap:anywhere]">{p}</li>)}
+                                </ol>
+                              )}
+                              {r.aviso && <p className="mt-1 text-[11.5px] text-muted-foreground">{r.aviso}</p>}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {aiNarrative && (
+                      <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                        <div className="flex items-center">
+                          <Sparkles className="mr-1.5 h-3 w-3 text-primary" />
+                          <p className="text-[11px] font-medium text-primary">Plano do agente</p>
+                          {aiConfidence !== null && (
+                            <span className="ml-auto font-mono text-[10px] text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
+                          )}
+                        </div>
+                        <p className="text-[12.5px] leading-relaxed text-foreground">{aiNarrative}</p>
                         {aiPlan?.milestones?.length ? (
                           <details className="text-[11px] text-muted-foreground">
                             <summary className="cursor-pointer hover:text-foreground">
                               Ver {aiPlan.milestones.length} etapas / {aiPlan.milestones.reduce((s, m) => s + (m.tasks?.length || 0), 0)} tarefas
                             </summary>
-                            <ul className="mt-2 space-y-1.5 pl-3 border-l border-border">
+                            <ul className="mt-2 space-y-1.5 border-l border-border pl-3">
                               {aiPlan.milestones.map((m, i) => (
                                 <li key={i}>
-                                  <p className="text-foreground font-medium">{m.title} <span className="text-muted-foreground font-normal">· +{m.offsetDays}d</span></p>
-                                  <ul className="pl-3 list-disc list-outside">
+                                  <p className="font-medium text-foreground">{m.title} <span className="font-normal text-muted-foreground">· +{m.offsetDays}d</span></p>
+                                  <ul className="list-outside list-disc pl-3">
                                     {(m.tasks || []).map((t, j) => (
                                       <li key={j}>{t.title} <span className="text-[9px] uppercase">[{t.role}]</span></li>
                                     ))}
@@ -1240,8 +1437,8 @@ export default function VoiceAssistant() {
                       </div>
                     )}
                     {learnedCount > 0 && (
-                      <div className="flex items-center gap-2 text-[11px] text-primary">
-                        <Brain className="w-3.5 h-3.5" />
+                      <div className="flex items-center text-[11px] text-primary">
+                        <Brain className="mr-2 h-3.5 w-3.5" />
                         Memorizei {learnedCount} correção(ões). Não vou repetir o erro.
                       </div>
                     )}
@@ -1250,10 +1447,10 @@ export default function VoiceAssistant() {
                       const isUnknown = parsed.kind === "unknown";
                       if (isUnknown && (!meaningful || listening)) {
                         return (
-                          <div className="rounded-xl p-3 border border-border bg-secondary/30">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Ouvindo…</p>
-                            <p className="text-xs text-muted-foreground">
-                              Continue falando. Ex.: "Criar projeto de tráfego para Mirante, 30 dias" ou "Mover tarefa X para concluído".
+                          <div className="rounded-lg bg-muted/50 p-3">
+                            <p className="mb-1 text-[11px] font-medium text-muted-foreground">{listening ? "Ouvindo…" : "Continue"}</p>
+                            <p className="text-[12px] text-muted-foreground">
+                              Ex.: "Criar projeto de tráfego para Mirante, 30 dias" ou "Mover tarefa X para concluído".
                             </p>
                           </div>
                         );
@@ -1273,44 +1470,58 @@ export default function VoiceAssistant() {
                             ? "Criar projeto (vídeo)"
                             : null;
                       return (
-                        <div className={`rounded-xl p-3 border ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                            {isUnknown ? "Posso confirmar antes de fazer?" : "Interpretação"}
+                        <div className={`rounded-lg border p-3 ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
+                          <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                            {isUnknown ? "Posso confirmar antes de fazer?" : "Entendi assim"}
                           </p>
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-[13px] font-medium text-foreground">
                             {isUnknown
                               ? guessIntent
                                 ? `Achei que você quer: ${guessIntent}. Confirme o cliente:`
-                                : "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
+                                : "Não achei uma ação nisso. Posso responder como pergunta, ou tente: criar projeto, criar tarefa, mover tarefa, relatório."
                               : summarizeIntent(parsed)}
                           </p>
                           {isUnknown && proactiveMatches.length > 0 && (
                             <div className="mt-2 space-y-1.5">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                Encontrei na sua base
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
+                              <p className="text-[11px] text-muted-foreground">Encontrei na sua base</p>
+                              <div className="flex flex-wrap">
                                 {proactiveMatches.map((c: any) => {
                                   const label = c.company_name || c.full_name || c.email;
                                   return (
                                     <button
                                       key={c.id}
+                                      type="button"
                                       onClick={() => {
                                         const verb = guessIntent?.includes("tarefa") ? "Criar tarefa para" : "Criar projeto para";
                                         const rewritten = `${verb} ${label}${spokenText ? `: ${spokenText}` : ""}`;
                                         handleTextEdit(rewritten);
                                       }}
-                                      className="text-[11px] px-2.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-colors"
+                                      className="mb-1 mr-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] text-primary transition-colors hover:bg-primary/20"
                                     >
                                       {label}
                                     </button>
                                   );
                                 })}
                               </div>
-                              <p className="text-[10px] text-muted-foreground">
-                                Toque para confirmar e eu sigo daqui.
-                              </p>
+                              <p className="text-[11px] text-muted-foreground">Toque para confirmar e eu sigo daqui.</p>
                             </div>
+                          )}
+                          {isUnknown && !listening && (
+                            <button
+                              type="button"
+                              data-responder-como-pergunta=""
+                              onClick={() => {
+                                const texto = spokenText;
+                                setFinalText("");
+                                setInterim("");
+                                lastSttRef.current = "";
+                                void perguntar(texto, texto);
+                              }}
+                              className={juntar(botao.secundario, "mt-2 h-8 text-[12px]")}
+                            >
+                              <MessageSquare className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Responder como pergunta
+                            </button>
                           )}
                         </div>
                       );
@@ -1318,35 +1529,35 @@ export default function VoiceAssistant() {
                     {(files.length > 0 || fileReading || systemDocsLoading || systemDocs.length > 0) && (
                       <div className="space-y-1.5">
                         {systemDocsLoading && (
-                          <div className="rounded-xl border border-primary/30 bg-primary/5 p-2.5 text-xs flex items-center gap-2 text-primary">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                          <div className="flex items-center rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs text-primary">
+                            <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>Lendo documentos do cliente…</span>
                           </div>
                         )}
                         {systemDocs.map((d, i) => (
-                          <div key={`sys-${i}`} className="rounded-xl border border-primary/25 bg-primary/5 p-2.5 text-xs">
-                            <div className="flex items-center gap-2 text-foreground">
-                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
-                              <span className="truncate flex-1">{d.fileName}</span>
-                              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{d.source}</span>
+                          <div key={`sys-${i}`} className="rounded-lg border border-border p-2.5 text-xs">
+                            <div className="flex items-center text-foreground">
+                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                              <span className="flex-1 truncate">{d.fileName}</span>
+                              <span className="ml-2 text-[10px] text-muted-foreground">{d.source}</span>
                             </div>
                           </div>
                         ))}
                         {fileReading && (
-                          <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs flex items-center gap-2">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                          <div className="flex items-center rounded-lg border border-border bg-muted/50 p-2.5 text-xs">
+                            <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>Lendo anexos…</span>
                           </div>
                         )}
                         {fileCtxs.map((ctx, i) => (
-                          <div key={`att-${i}`} className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
-                            <div className="flex items-center gap-2 text-foreground">
-                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
-                              <span className="truncate flex-1">{describeContext(ctx)}</span>
-                              <button onClick={() => removeAttachment(i)} className="text-destructive">remover</button>
+                          <div key={`att-${i}`} className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs">
+                            <div className="flex items-center text-foreground">
+                              <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                              <span className="flex-1 truncate">{describeContext(ctx)}</span>
+                              <button type="button" onClick={() => removeAttachment(i)} className="ml-2 text-destructive">remover</button>
                             </div>
                             {ctx.text && (
-                              <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
+                              <p className="mt-1.5 line-clamp-2 text-[10px] italic text-muted-foreground">
                                 "{ctx.text.slice(0, 200).replace(/\s+/g, " ")}…"
                               </p>
                             )}
@@ -1358,15 +1569,16 @@ export default function VoiceAssistant() {
                       </div>
                     )}
                     {log.length > 0 && (
-                      <div className="space-y-1.5 pt-2 border-t border-border">
+                      <div className="space-y-1.5 border-t border-border pt-2">
                         {log.map((l) => (
-                          <div key={l.id} className={`text-xs flex gap-2 items-start whitespace-pre-line ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-primary" : "text-muted-foreground"}`}>
-                            {l.kind === "ok" ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : l.kind === "error" ? <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                          <div key={l.id} className={`flex items-start whitespace-pre-line text-xs ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-primary" : "text-muted-foreground"}`}>
+                            {l.kind === "ok" ? <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : l.kind === "error" ? <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : <FileText className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" />}
                             <span>{l.text}</span>
                           </div>
                         ))}
                       </div>
                     )}
+                    <div ref={fimDaConversaRef} />
                   </>
                 )}
 
@@ -1665,210 +1877,142 @@ export default function VoiceAssistant() {
                   </div>
                 )}
 
-                {/* ---------- CONFIRM PHASE (unified single confirmation) ---------- */}
+                {/* ---------- CONFIRM PHASE: o cartão padrão das ações dos agentes (Confirmar, Cancelar, Desfazer) ---------- */}
                 {phase === "confirm" && parsed && (
-                  <div className="space-y-3">
-                    {parsed.kind === "create_project" && (
-                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2 sticky top-0">
-                        <p className="text-[10px] uppercase tracking-wider text-primary">Vai criar</p>
-                        <h3 className="text-base font-semibold text-foreground leading-tight">
-                          {answers.project_name}
-                        </h3>
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                          <div><span className="text-muted-foreground">Cliente:</span> <span className="text-foreground font-medium">{resolvedClient?.company_name || resolvedClient?.full_name}</span></div>
-                          <div><span className="text-muted-foreground">Tipo:</span> <span className="text-foreground font-medium">{answers.project_type}</span></div>
-                          <div><span className="text-muted-foreground">Prazo:</span> <span className="text-foreground font-mono">{answers.deadline}d</span></div>
-                          <div><span className="text-muted-foreground">Estrutura:</span> <span className="text-foreground font-mono">{(aiPlan?.milestones?.length || projectTemplate?.length || 0)}m · {previewTaskCount}t</span></div>
-                        </div>
-                      </div>
+                  <div className="space-y-3" data-confirmacao-do-agente="">
+                    {acaoAberta ? (
+                      <CartaoDeAcao acao={acaoAberta} onPedido={onPedidoDaAcao} titulo="O Aceleriq vai fazer" />
+                    ) : (
+                      <p className="text-[12.5px] text-muted-foreground">Nada para confirmar. Volte e revise o pedido.</p>
                     )}
-                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
-                      <div className="flex items-start gap-2">
-                        <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">Confirmação final</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Tudo será criado em sequência · projeto, milestones, tarefas e checklists. Reversível pelo "Desfazer".
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {stages.map((s, i) => {
-                      const isDone = i < stageIdx;
-                      const isActive = i === stageIdx;
-                      const isLocked = i > stageIdx;
-                      const counts =
-                        s.key === "project" ? stageRefs.projectIds.length :
-                        s.key === "milestones" ? stageRefs.milestoneIds.length :
-                        s.key === "tasks" ? stageRefs.taskIds.length :
-                        s.key === "checklists" ? stageRefs.checklistItemIds.length :
-                        (stageRefs.taskIds.length + stageRefs.milestoneIds.length);
-                      return (
-                        <div
-                          key={s.key}
-                          className={`rounded-xl border p-3 transition ${
-                            isDone ? "border-primary/40 bg-primary/5" :
-                            isActive ? "border-primary bg-secondary/40" :
-                            "border-border bg-secondary/20 opacity-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 ${
-                              isDone ? "bg-primary text-primary-foreground" :
-                              isActive ? "border border-primary text-primary" :
-                              "border border-border text-muted-foreground"
-                            }`}>
-                              {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-foreground">{s.label}</p>
-                              <p className="text-[11px] text-muted-foreground">{s.description}</p>
-                              {isDone && counts > 0 && (
-                                <p className="text-[10px] text-primary mt-1">✓ {counts} item(s) criado(s)</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {isActive && (
-                            <div className="mt-3 space-y-2">
-                              <label className="flex items-start gap-2 cursor-pointer text-[11px] text-foreground p-2 rounded-lg border border-border bg-background">
-                                <input
-                                  type="checkbox"
-                                  checked={stageAck}
-                                  onChange={(e) => setStageAck(e.target.checked)}
-                                  className="mt-0.5 w-3.5 h-3.5 accent-primary"
-                                />
-                                <span>Confirmo criar tudo agora.</span>
-                              </label>
-                              <button
-                                onClick={() => runStage(i)}
-                                disabled={!stageAck || executing}
-                                className="w-full h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-2"
-                              >
-                                {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                Criar agora
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {stageIdx >= stages.length && stages.length > 0 && (
-                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 space-y-1.5">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                          <CheckCircle2 className="w-4 h-4 text-primary" />
-                          Criado com sucesso
-                        </div>
-                        {parsed.kind === "create_project" && (
-                          <div className="text-[11px] text-muted-foreground space-y-0.5 pl-6">
-                            <p><span className="text-foreground font-medium">{answers.project_name}</span></p>
-                            <p>{resolvedClient?.company_name || resolvedClient?.full_name}</p>
-                            <p>{stageRefs.milestoneIds.length} milestones, {stageRefs.taskIds.length} tarefas, {stageRefs.checklistItemIds.length} itens de checklist</p>
-                            <p className="text-primary pt-1">Já disponível no Kanban e no drawer do projeto.</p>
-                          </div>
-                        )}
-                      </div>
+                    {stageIdx >= stages.length && stages.length > 0 && parsed.kind === "create_project" && (
+                      <p className="text-[12px] text-muted-foreground">Já está no Kanban e na ficha do projeto.</p>
                     )}
                   </div>
                 )}
-
               </div>
 
-
-              {/* Footer */}
-              <div className="px-5 py-3 border-t border-border flex items-center gap-2">
+              {/* Pé fixo: o campo, o microfone (com estado visível), anexar, analisar e avançar. */}
+              <div className="shrink-0 border-t border-border px-3 pb-3 pt-2.5" data-compositor-aceleriq="">
                 {phase === "input" && (
                   <>
-                    <button
-                      onClick={() => listening ? stopListening() : startListening("command")}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-primary text-primary-foreground"}`}
-                    >
-                      {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
-                    <label className="w-10 h-10 rounded-full bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer">
-                      <Paperclip className="w-4 h-4" />
-                      <input type="file" multiple className="hidden" onChange={(e) => { const arr = Array.from(e.target.files || []); if (arr.length) handleAttach(arr); e.target.value = ""; }} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
-                    </label>
-                    <button
-                      onClick={advanceFromInput}
-                      disabled={executing || (!parsed || parsed.kind === "unknown") && !(answers.client_id && answers.project_type)}
-                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                      Avançar
-                    </button>
+                    <textarea
+                      ref={campoRef}
+                      value={finalText}
+                      onChange={(e) => handleTextEdit(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && podeAvancar) {
+                          e.preventDefault();
+                          advanceFromInput();
+                        }
+                      }}
+                      placeholder={listening ? "Pode falar…" : "Fale ou escreva o que precisa"}
+                      aria-label="Pedido para o Aceleriq"
+                      rows={2}
+                      className={juntar(campoTexto, "min-h-[60px] resize-none")}
+                    />
+                    {interim && <p className="mt-1 truncate text-[12px] italic text-muted-foreground">{interim}</p>}
+                    <div className="mt-2 flex min-w-0 items-center">
+                      <button
+                        type="button"
+                        onClick={() => (listening ? stopListening() : startListening("command"))}
+                        aria-pressed={listening}
+                        aria-label={listening ? "Parar de ouvir" : "Falar"}
+                        data-microfone={listening ? "ouvindo" : "parado"}
+                        className={juntar(
+                          "mr-1.5 inline-flex h-9 shrink-0 items-center rounded-full px-3 text-[12.5px] font-medium transition-colors",
+                          listening ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90",
+                        )}
+                      >
+                        {listening ? (
+                          <>
+                            <span className="mr-1.5 h-2 w-2 animate-pulse rounded-full bg-current" aria-hidden="true" />
+                            <MicOff className="mr-1 h-4 w-4" aria-hidden="true" />
+                            Parar
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="mr-1 h-4 w-4" aria-hidden="true" />
+                            Falar
+                          </>
+                        )}
+                      </button>
+                      <label title="Anexar contrato ou arquivo" aria-label="Anexar arquivo" className={juntar(botao.icone, "mr-1.5 h-9 w-9 cursor-pointer rounded-full")}>
+                        <Paperclip className="h-4 w-4" aria-hidden="true" />
+                        <input type="file" multiple className="hidden" onChange={(e) => { const arr = Array.from(e.target.files || []); if (arr.length) handleAttach(arr); e.target.value = ""; }} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
+                      </label>
+                      <span className="min-w-0 flex-1" />
+                      <button
+                        type="button"
+                        onClick={() => { aiAttemptedRef.current = true; semAnaliseAutomaticaRef.current = false; runAgent(); }}
+                        disabled={aiThinking || (!finalText.trim() && !hasAnyAttachment && !answers.client_id)}
+                        title="A IA lê o pedido, os contratos e o contexto do cliente"
+                        className={juntar(botao.discreto, "mr-1 h-9")}
+                      >
+                        {aiThinking ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
+                        {aiThinking ? "Pensando" : aiPlan ? "Reanalisar" : "Analisar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={advanceFromInput}
+                        disabled={!podeAvancar}
+                        className={juntar(botao.primario, "h-9")}
+                      >
+                        {executing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-1.5 h-4 w-4" />}
+                        Avançar
+                      </button>
+                    </div>
+                    {!supported && (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground">Voz indisponível neste navegador. Use Chrome ou Edge, ou escreva.</p>
+                    )}
                   </>
                 )}
                 {phase === "clarify" && (
-                  <>
-                    <button
-                      onClick={() => setPhase("input")}
-                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
-                    >
+                  <div className="flex items-center">
+                    <button type="button" onClick={() => setPhase("input")} className={juntar(botao.secundario, "mr-2 h-10")}>
                       Voltar
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         if (parsed?.kind === "create_project") setPhase("preview");
-                        else { setConfirmAck(false); setPhase("confirm"); }
+                        else irParaConfirmacao();
                       }}
                       disabled={parsed?.kind === "create_project" && (!answers.client_id || !answers.project_id)}
-                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                      className={juntar(botao.primario, "h-10 flex-1")}
                     >
                       {parsed?.kind === "create_project" ? "Revisar escopo" : "Revisar"}
-                      <ArrowRight className="w-4 h-4" />
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
                     </button>
-                  </>
+                  </div>
                 )}
                 {phase === "preview" && (
-                  <>
-                    <button
-                      onClick={() => setPhase("clarify")}
-                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
-                    >
+                  <div className="flex items-center">
+                    <button type="button" onClick={() => setPhase("clarify")} className={juntar(botao.secundario, "mr-2 h-10")}>
                       Editar
                     </button>
-                    <button
-                      onClick={() => { setConfirmAck(false); setPhase("confirm"); }}
-                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      <ArrowRight className="w-4 h-4" />
+                    <button type="button" onClick={irParaConfirmacao} className={juntar(botao.primario, "h-10 flex-1")}>
+                      <ArrowRight className="mr-1.5 h-4 w-4" />
                       Confirmar
                     </button>
-                  </>
+                  </div>
                 )}
                 {phase === "confirm" && (
-                  <>
-                    <button
-                      onClick={returnToDraft}
-                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm disabled:opacity-40"
-                      disabled={executing || stageIdx > 0}
-                    >
-                      Voltar
-                    </button>
-                    <button
-                      onClick={stageIdx >= stages.length && stages.length > 0 ? finishFlow : returnToDraft}
-                      disabled={executing}
-                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Manter rascunho"}
-                    </button>
-                  </>
+                  <div className="flex items-center">
+                    {stageIdx >= stages.length && stages.length > 0 ? (
+                      <button type="button" onClick={finishFlow} disabled={executing} className={juntar(botao.primario, "h-10 flex-1")}>
+                        Concluir
+                      </button>
+                    ) : (
+                      <button type="button" onClick={returnToDraft} disabled={executing} className={juntar(botao.secundario, "h-10 flex-1")}>
+                        Voltar e editar
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-
-
-              {!supported && phase === "input" && (
-                <p className="px-5 pb-3 text-[10px] text-muted-foreground">
-                  Reconhecimento de voz indisponível. Use Chrome/Edge ou digite o comando.
-                </p>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+        </motion.section>
+      )}
+    </AnimatePresence>
   );
 }

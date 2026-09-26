@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { chamarFuncao, type ModeloIa, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
 import { normalizarFoto, semearUrl, type FotoDoAcervo } from "./fotoApi";
+import { urlEstavel } from "./modelosApi";
 
 /**
  * Book (pedido do dono, 26/09): o estúdio fotográfico do produto ou da
@@ -129,7 +130,8 @@ function normalizarResumo(v: any, book: Book): ResumoDoAssunto {
     tipo: tipoDoAssunto(r.tipo || book.assunto.tipo),
     id: texto(r.id) || book.assunto.id,
     nome: texto(r.nome) || book.assunto.nome || "Assunto",
-    capa_url: texto(r.capa_url) || null,
+    // Capa e referências vêm assinadas de novo a cada book_ler: a mesma URL enquanto vale (nada pisca).
+    capa_url: urlEstavel(texto(r.capa_url)) || null,
     detalhe: texto(r.detalhe),
     categorias: lista(r.categorias),
     aviso: texto(r.aviso) || null,
@@ -145,7 +147,7 @@ export function normalizarBookAberto(data: any): BookAberto | null {
     resultados: (Array.isArray(data.resultados) ? data.resultados : []).map((i: any) => normalizarFoto(i)).filter(Boolean) as FotoDoAcervo[],
     referencias: (Array.isArray(data.referencias) ? data.referencias : [])
       .filter((r: any) => r && r.id)
-      .map((r: any) => ({ tipo: r.tipo === "biblioteca" ? "biblioteca" : "acervo", id: String(r.id), titulo: texto(r.titulo) || "Referência", storage_path: texto(r.storage_path) || null, url: texto(r.url) || null })),
+      .map((r: any) => ({ tipo: r.tipo === "biblioteca" ? "biblioteca" : "acervo", id: String(r.id), titulo: texto(r.titulo) || "Referência", storage_path: texto(r.storage_path) || null, url: urlEstavel(texto(r.url)) || null })),
   };
 }
 

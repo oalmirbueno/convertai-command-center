@@ -4,9 +4,12 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSegundos, tempoCurto } from "@/components/mesa/Cronometro";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { juntar, superficie, texto } from "@/components/sistema/estilos";
 import { AVISO_DA_EVIDENCIA, copiarTexto, ESCALA_DE_EVIDENCIA, sinalDe, type DiagnosticoDoCriativo, type Evidencia } from "./adsApi";
 
-/** Cartão das etapas: título pequeno em caixa alta, ação à direita, corpo livre. */
+/** Cartão das etapas (sistema de design): um painel, título curto, a explicação no "?" e a ação à direita. */
 export function Cartao({
   titulo,
   dica,
@@ -21,16 +24,52 @@ export function Cartao({
   className?: string;
 }) {
   return (
-    <section className={`min-w-0 rounded-xl border border-border bg-card p-4 ${className}`}>
-      <div className="mb-3 flex min-w-0 items-start">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</h3>
-          {dica && <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{dica}</p>}
-        </div>
-        {acao && <div className="ml-2 shrink-0">{acao}</div>}
+    <section className={juntar(superficie.painel, "min-w-0 p-4", className)}>
+      <div className="mb-3 flex min-w-0 items-center">
+        <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate text-[14px]")}>{titulo}</h3>
+        {dica && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
+        {acao && <div className="ml-auto shrink-0 pl-2">{acao}</div>}
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * Cabeçalho de uma parte da etapa: título curto, o "?" com a explicação, uma
+ * linha de estado e as ações na mesma linha. Diferente do `acao` da Secao do
+ * sistema, as ações aqui quebram de linha por dentro no celular (várias ações
+ * com custo não passam da borda em 375 px). A promover para o sistema.
+ */
+export function CabecalhoDaParte({
+  titulo,
+  ajuda,
+  descricao,
+  acoes,
+  nivel = 2,
+  className = "",
+}: {
+  titulo: ReactNode;
+  ajuda?: ReactNode;
+  /** Estado em uma linha (contagem, data). */
+  descricao?: ReactNode;
+  acoes?: ReactNode;
+  nivel?: 2 | 3;
+  className?: string;
+}) {
+  // O cabeçalho do sistema (título com "?", estado e ações que quebram por
+  // dentro no celular). Promovido em 26/09 (frente C); o nome local fica.
+  return (
+    <CabecalhoDeSecao
+      className={juntar("mb-3 items-center py-0.5", className)}
+      titulo={titulo}
+      ajuda={ajuda}
+      descricao={descricao}
+      acao={acoes}
+      nivel={nivel}
+      classeDoTitulo={texto.tituloSecao}
+      truncar
+    />
   );
 }
 

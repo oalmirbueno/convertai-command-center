@@ -237,13 +237,29 @@ const numero = (valor: unknown) => {
 
 /* ──────────────────────────────── Leads ─────────────────────────────────── */
 
+/**
+ * Erro ao ler uma lista do Comercial. Antes as funções listar* engoliam o
+ * erro e devolviam lista vazia: a tela mostrava "funil vazio" quando, na
+ * verdade, a leitura tinha falhado. Agora o erro sobe (a consulta do
+ * react-query fica em erro) e a tela mostra "Tentar de novo".
+ */
+export class ErroDeLeitura extends Error {
+  causa: unknown;
+  constructor(oQue: string, causa: unknown) {
+    super(`Não foi possível ler ${oQue} do Comercial.`);
+    this.name = "ErroDeLeitura";
+    this.causa = causa;
+  }
+}
+
 export async function listarLeads(): Promise<Lead[]> {
   const { data, error } = await supabase
     .from("commercial_leads")
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("os negócios", error);
+  if (!data) return [];
   return (data as Array<Record<string, unknown>>).map((linha) => ({
     ...(linha as unknown as Lead),
     monthly_value: numero(linha.monthly_value),
@@ -486,7 +502,8 @@ export async function listarMetas(periodo: string): Promise<Meta[]> {
     .from("commercial_goals")
     .select("id, period, metric, target, notes")
     .eq("period", periodo);
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("as metas", error);
+  if (!data) return [];
   return (data as Array<Record<string, unknown>>).map((linha) => ({
     ...(linha as unknown as Meta),
     target: numero(linha.target),
@@ -621,7 +638,8 @@ export async function listarCampanhas(): Promise<Campanha[]> {
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("as campanhas", error);
+  if (!data) return [];
   return (data as Array<Record<string, unknown>>).map((linha) => ({
     ...(linha as unknown as Campanha),
     budget: numero(linha.budget),
@@ -812,7 +830,8 @@ export async function listarAtividades(): Promise<Atividade[]> {
     .select("id, lead_id, kind, title, due_at, done_at, owner_id, notes")
     .order("due_at", { ascending: true })
     .limit(500);
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("as atividades", error);
+  if (!data) return [];
   return data as unknown as Atividade[];
 }
 
@@ -1034,7 +1053,8 @@ export async function listarEmpresas(): Promise<Empresa[]> {
     .select("id, name, segment, site, city, notes, client_id, owner_id, instagram, phone, address, cnpj, size")
     .is("archived_at", null)
     .order("name");
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("as empresas", error);
+  if (!data) return [];
   return data as unknown as Empresa[];
 }
 
@@ -1044,7 +1064,8 @@ export async function listarContatos(): Promise<Contato[]> {
     .select("id, organization_id, name, role, email, whatsapp, is_primary, notes")
     .is("archived_at", null)
     .order("name");
-  if (error || !data) return [];
+  if (error) throw new ErroDeLeitura("os contatos", error);
+  if (!data) return [];
   return data as unknown as Contato[];
 }
 

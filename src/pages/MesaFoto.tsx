@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Aperture, BookOpen, Camera, Library, Shapes, UserRound, UsersRound, Wrench } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,10 +23,16 @@ import {
   type MesaFotoValor,
 } from "@/components/mesa-foto/Comuns";
 import { proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
-import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
+import { useContextoDoDiretor, useFocoDoDiretor } from "@/components/mesa-foto/diretorApi";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
-import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { foco, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 
 /**
  * Mesa Foto (/mesa-foto, só equipe: admin, gestor e design): o estúdio
@@ -43,10 +50,18 @@ import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components
  * aprovação em cada foto). O próximo passo fica sempre em destaque. Depois de
  * um traço fino, as ferramentas de apoio: Biblioteca, Modelos (personas
  * sintéticas), Clones, Book (estúdio do book do produto ou da pessoa, 26/09)
- * e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md). O Canvas carrega
- * o React Flow só quando a aba abre. O diretor de fotografia fica à mão em
- * todas, no botão do centro da base. A Mesa é a principal: todo plano usa o
- * contexto do cliente e a campanha da Mesa (a escolhida ou a do mês).
+ * e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md), num seletor só ("Ferramentas").
+ * O Canvas carrega o React Flow só quando a aba abre.
+ *
+ * Sistema de design (26/09, docs/design/SISTEMA.md): o corpo é uma
+ * AreaDeTrabalho. A etapa rola na região principal (a posição fica guardada
+ * por etapa e cliente) e o diretor de fotografia é a lateral fixa, com o campo
+ * sempre à vista; no celular vira o botão de baixo que abre a gaveta. As
+ * etapas de apoio (Modelos, Clones, Book, Canvas) renderizam dentro da região
+ * principal e não criam outra AreaDeTrabalho. No Canvas a lateral usa outra
+ * memória e começa recolhida (o quadro precisa da largura toda). A Mesa é a
+ * principal: todo plano usa o contexto do cliente e a campanha da Mesa (a
+ * escolhida ou a do mês).
  *
  * Regra da fotografia: nunca escurecer a foto para dar destaque; foto
  * sintética sempre marcada como gerada.
@@ -134,12 +149,23 @@ function quandoOcioso(fn: () => void): () => void {
   return () => window.clearTimeout(id);
 }
 
-function EsqueletoDaEtapa() {
+/** Ícone e uma linha de cada ferramenta de apoio no seletor. */
+const FERRAMENTAS: Record<string, { icone: ReactNode; descricao: string }> = {
+  biblioteca: { icone: <Library className="h-4 w-4" />, descricao: "Prompts e referências" },
+  modelos: { icone: <UserRound className="h-4 w-4" />, descricao: "Pessoas sintéticas" },
+  clones: { icone: <UsersRound className="h-4 w-4" />, descricao: "Pessoa real, com autorização" },
+  book: { icone: <BookOpen className="h-4 w-4" />, descricao: "Book do produto ou da pessoa" },
+  canvas: { icone: <Shapes className="h-4 w-4" />, descricao: "Quadro livre" },
+};
+
+/** Etapas que organizam a própria coluna (a região principal não rola; a lista longa rola por dentro). */
+const ETAPAS_EM_COLUNA: string[] = ["acervo"];
+
+function EsqueletoDoDiretor() {
   return (
-    <div aria-busy="true" aria-label="Abrindo a etapa" className="space-y-3">
-      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted sm:w-1/3" />
-      <div className="h-28 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
+    <div aria-busy="true" aria-label="Abrindo o diretor" className="flex h-full min-h-[320px] flex-col rounded-lg border border-border bg-card p-3">
+      <div className="h-8 w-2/3 animate-pulse rounded-md bg-muted" />
+      <div className="mt-auto h-20 animate-pulse rounded-md bg-muted/70" />
     </div>
   );
 }
@@ -164,8 +190,6 @@ export default function MesaFoto() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
-  const [selecionadas, setSelecionadas] = useState<string[]>([]);
-  const [agenteAberto, setAgenteAberto] = useState(false);
   const [pedidoAoDiretor, setPedidoAoDiretor] = useState<{ mensagem: string; em: number } | null>(null);
   const telaCheia = useTelaCheiaDaMesa();
 
@@ -183,10 +207,18 @@ export default function MesaFoto() {
   const clienteNaLista = clientes.find((c) => c.id === clientIdUrl) || null;
   const naoEstaNaLista = clientesQuery.isSuccess && !clientesQuery.isFetching && clientes.length > 0 && !clienteNaLista;
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
+  // Fotos marcadas no passo 1: ficam ao sair e voltar (por cliente).
+  const [selecionadas, setSelecionadas] = useEstadoDaTela<string[]>(`mesa-foto:selecionadas:${clientId}`, [], {
+    validar: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+  });
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   // Marca por projeto (só a Acerbi hoje: Acerbi e CME): cores e contexto do diretor. Uma marca só: nada muda.
   const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
+  // Diretor agêntico: o contexto do cliente carrega com a página (mesmo com a lateral recolhida ou no
+  // botão do celular), na mesma chave que o diretor lê; trocar de cliente ou de etapa troca o contexto.
+  const focoDoDiretor = useFocoDoDiretor(clientId, etapa, selecionadas, kitUrl, ensaioUrl);
+  useContextoDoDiretor(clientId, focoDoDiretor);
 
   // Duas trocas no mesmo clique (ex.: escolher o kit e abrir o ensaio) se
   // somam: a segunda parte do endereço já mudado, não do que estava na tela.
@@ -206,7 +238,6 @@ export default function MesaFoto() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    setSelecionadas([]);
     mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null, marca: null });
   };
 
@@ -328,97 +359,122 @@ export default function MesaFoto() {
     },
     selecionadas,
     setSelecionadas,
-    abrirAgente: () => setAgenteAberto(true),
+    // O diretor é a lateral fixa: abrir é mostrar a lateral (ou a gaveta no
+    // celular); o pedido de outra etapa vai para o rascunho do campo dele.
+    abrirAgente: () => {
+      abrirLateralDaArea();
+    },
     etapa,
     proximo,
     pedirAoDiretor: (mensagem: string) => {
       setPedidoAoDiretor({ mensagem, em: Date.now() });
-      setAgenteAberto(true);
+      abrirLateralDaArea();
     },
   };
   const passoAtual = passoDaEtapa(etapa);
   const passoRecomendado = proximo ? passoDaEtapa(proximo.etapa) : null;
   // Ferramentas de apoio (aba com disponivel false em ABAS_FUTURAS some).
   const apoios = ETAPAS_DE_APOIO.filter((e) => ABAS_FUTURAS.every((a) => a.etapa !== e.etapa || a.disponivel));
+  const ferramentaAberta = apoios.find((e) => e.etapa === etapa) || null;
+  const ferramentaRecomendada = proximo && apoios.some((e) => e.etapa === proximo.etapa) ? proximo.etapa : null;
+  const ferramentaEmDestaque = !ferramentaAberta && !!ferramentaRecomendada;
+  // Canvas: o quadro precisa da largura toda; a lateral do diretor tem memória própria e começa recolhida.
+  const noCanvas = etapa === "canvas";
+  const memoriaDaLateral = noCanvas ? "mesa-foto-diretor-canvas" : "mesa-foto-diretor";
+  const emColuna = ETAPAS_EM_COLUNA.indexOf(etapa) >= 0;
+  const rotuloDaEtapa = (ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa) || { rotulo: "Etapa" }).rotulo;
+  // Etapa nova sem posição guardada começa no topo: a RegiaoRolavel do sistema
+  // faz isso sozinha ao trocar a chave de memória (mesa-foto:<etapa>:<cliente>).
 
   return (
-    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa Foto</h1>
-        <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
-          <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
-            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Foto</span>
-            <SeletorDeClientesDaMesa mesa="foto" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
-          </div>
-          {/* Troca rápida de marca: só no cliente com 2 ou mais marcas. */}
-          {clientId && marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} className="mr-2" />}
-          {clientId && (
-            <nav aria-label="Etapas da Mesa Foto" className="order-last mt-2 flex w-full min-w-0 flex-wrap items-center lg:order-none lg:mx-3 lg:mt-0 lg:w-auto lg:flex-1">
-              <div className="grid w-full min-w-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:w-auto sm:flex-1" data-caminho-principal="">
-                {PASSOS_PRINCIPAIS.map((p) => {
-                  const ativo = !!passoAtual && passoAtual.passo === p.passo;
-                  const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
-                  return (
-                    <button
-                      key={p.etapa}
-                      type="button"
-                      onClick={() => mudar({ etapa: p.etapa })}
-                      aria-current={ativo ? "page" : undefined}
-                      title={p.dica}
-                      data-proximo={recomendado ? "" : undefined}
-                      className={`inline-flex min-w-0 items-center justify-center rounded-md px-1 py-1.5 text-[12.5px] font-medium transition-colors ${
-                        ativo ? "bg-card text-foreground shadow-sm" : recomendado ? "text-primary hover:bg-card/60" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <span className={`mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
-                        {p.passo}
-                      </span>
-                      <span className="truncate">{p.rotulo}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-1 flex w-full min-w-0 flex-wrap items-center justify-center sm:ml-1 sm:mt-0 sm:w-auto sm:shrink-0" data-etapas-de-apoio="" aria-label="Ferramentas de apoio" role="group">
-                <span aria-hidden="true" className="mx-1 hidden h-4 w-px bg-border sm:inline-block" />
-                {apoios.map((e) => {
-                  const ativo = etapa === e.etapa;
-                  const recomendado = !ativo && !!proximo && proximo.etapa === e.etapa;
-                  return (
-                    <button
-                      key={e.etapa}
-                      type="button"
-                      onClick={() => mudar({ etapa: e.etapa })}
-                      aria-current={ativo ? "page" : undefined}
-                      data-proximo={recomendado ? "" : undefined}
-                      data-ferramenta={e.etapa}
-                      className={`h-8 rounded-md px-1.5 text-[12px] transition-colors ${
-                        ativo ? "bg-muted font-medium text-foreground" : recomendado ? "font-medium text-primary hover:bg-muted" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      {e.rotulo}
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
-          )}
-          {clientId && <TrocaDeMesas atual="foto" clientId={clientId} marcaId={marca ? marca.id : null} />}
-          {clientId && (
-            <CustoCompacto
-              saldoUsd={saldoUsd}
-              consumo={consumo.data || null}
-              previsao={previsao.data || null}
-              carregando={consumo.isLoading}
-              podeRecarregar={podeRecarregar}
-              isAdmin={isAdmin}
-              onRecarregar={() => setRecargaAberta(true)}
-              onChaves={abrirChaves}
-              onModelos={abrirModelos}
-            />
-          )}
-          <BotaoDeTelaCheia tela={telaCheia} />
-        </div>
-        {valor && (
+    // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx). O caminho
+    // em 3 passos e as ferramentas de apoio ficam numa linha própria até 1536 px.
+    <CascaDaMesa
+      mesa="foto"
+      titulo="Mesa Foto"
+      clientId={clientId}
+      marcaId={marca ? marca.id : null}
+      telaCheia={telaCheia}
+      etapasEmLinhaPropriaAte="2xl"
+      cliente={<SeletorDeClientesDaMesa mesa="foto" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
+      marca={
+        // Troca rápida de marca: só no cliente com 2 ou mais marcas.
+        clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} /> : null
+      }
+      etapas={
+        clientId ? (
+          <nav aria-label="Etapas da Mesa Foto" className="flex w-full min-w-0 items-center py-1">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5" data-caminho-principal="">
+              {PASSOS_PRINCIPAIS.map((p) => {
+                const ativo = !!passoAtual && passoAtual.passo === p.passo;
+                const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
+                return (
+                  <button
+                    key={p.etapa}
+                    type="button"
+                    onClick={() => mudar({ etapa: p.etapa })}
+                    aria-current={ativo ? "page" : undefined}
+                    title={p.dica}
+                    data-proximo={recomendado ? "" : undefined}
+                    className={juntar(
+                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md px-1 text-[12.5px] font-medium transition-colors",
+                      foco,
+                      ativo ? "bg-card text-foreground shadow-sm" : recomendado ? "text-primary hover:bg-card/60" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <span className={`mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
+                      {p.passo}
+                    </span>
+                    <span className="truncate">{p.rotulo}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Ferramentas de apoio (pedido do dono, 26/09): um seletor só, com a
+                aberta no botão e a recomendada marcada na lista. */}
+            <div
+              className="ml-1.5 min-w-0 max-w-[42%] shrink-0 sm:ml-2 sm:max-w-none"
+              data-etapas-de-apoio=""
+              data-ferramenta={ferramentaAberta ? ferramentaAberta.etapa : undefined}
+              data-proximo={ferramentaEmDestaque ? "" : undefined}
+              role="group"
+              aria-label="Ferramentas de apoio"
+            >
+              <SeletorCompacto
+                modo="lista"
+                rotulo="Ferramentas"
+                icone={<Wrench className="h-4 w-4" />}
+                opcoes={apoios.map((e) => ({
+                  valor: e.etapa,
+                  rotulo: e.rotulo,
+                  icone: FERRAMENTAS[e.etapa] ? FERRAMENTAS[e.etapa].icone : undefined,
+                  descricao: e.etapa === ferramentaRecomendada && e.etapa !== etapa ? "Recomendada agora" : FERRAMENTAS[e.etapa] ? FERRAMENTAS[e.etapa].descricao : undefined,
+                }))}
+                valor={ferramentaAberta ? ferramentaAberta.etapa : ""}
+                onEscolher={(v) => mudar({ etapa: v })}
+                className={juntar("w-full", ferramentaAberta ? "border-primary/40 bg-muted" : ferramentaEmDestaque ? "border-primary/50 text-primary" : "text-muted-foreground")}
+              />
+            </div>
+          </nav>
+        ) : null
+      }
+      acoes={
+        clientId ? (
+          <CustoCompacto
+            saldoUsd={saldoUsd}
+            consumo={consumo.data || null}
+            previsao={previsao.data || null}
+            carregando={consumo.isLoading}
+            podeRecarregar={podeRecarregar}
+            isAdmin={isAdmin}
+            onRecarregar={() => setRecargaAberta(true)}
+            onChaves={abrirChaves}
+            onModelos={abrirModelos}
+          />
+        ) : null
+      }
+      abaixo={
+        valor ? (
           <MesaProvider valor={valor}>
             <MesaFotoProvider valor={valorDaFoto}>
               <Suspense fallback={<div className="mt-2 h-5" />}>
@@ -426,42 +482,53 @@ export default function MesaFoto() {
               </Suspense>
             </MesaFotoProvider>
           </MesaProvider>
-        )}
-      </header>
+        ) : null
+      }
+    >
 
-      {!clientId && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Foto dele.</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Três passos: as fotos do produto (o produto é identificado ali), criar (variações, campanha com modelo ou ajuste fino) e usar (na Mesa, na Mesa Ads, baixar ou mandar ao cliente). Custo sempre à vista antes de gerar.
-          </p>
-        </div>
-      )}
+      {!clientId && <EstadoVazio icone={<Camera className="h-5 w-5" />} titulo="Escolha um cliente" descricao="A Mesa Foto abre com as fotos dele." />}
 
       {valor && (
         <MesaProvider valor={valor}>
           <MesaFotoProvider valor={valorDaFoto}>
-            <div key={valor.clientId} className="min-w-0">
-              {(etapa === "ensaio" || etapa === "campanha" || etapa === "preparar") && <NavDoCriar atual={etapa} />}
-              <Suspense fallback={<EsqueletoDaEtapa />}>
-                {etapa === "acervo" && <EtapaAcervo />}
-                {etapa === "kits" && <EtapaKits />}
-                {etapa === "criar" && <EtapaCriar />}
-                {etapa === "preparar" && <EtapaPreparar />}
-                {etapa === "ensaio" && <EtapaEnsaio />}
-                {etapa === "campanha" && <EtapaCampanha />}
-                {etapa === "revisar" && <EtapaRevisar />}
-                {etapa === "usar" && <EtapaUsar />}
-                {etapa === "biblioteca" && <EtapaBiblioteca />}
-                {etapa === "modelos" && <EtapaModelos />}
-                {etapa === "clones" && <EtapaClones />}
-                {etapa === "book" && <EtapaBook />}
-                {etapa === "canvas" && <EtapaCanvas />}
-              </Suspense>
-            </div>
-            <Suspense fallback={null}>
-              <AgenteDiretor key={`agente-${valor.clientId}`} aberto={agenteAberto} onAberto={setAgenteAberto} pedido={pedidoAoDiretor} />
-            </Suspense>
+            {/* Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): a etapa na
+                região principal e o diretor de fotografia fixo ao lado. O "relative"
+                da etapa prende dentro da região o que é absoluto (o select escondido
+                do Radix): sem ele, a página inteira rolava junto no computador. */}
+            <AreaDeTrabalho
+              key={memoriaDaLateral}
+              memoria={memoriaDaLateral}
+              nasceRecolhida={noCanvas}
+              memoriaDaRolagem={`mesa-foto:${etapa}:${valor.clientId}`}
+              principalRolavel={!emColuna}
+              rotuloDoPrincipal={rotuloDaEtapa}
+              rotuloDaLateral="Diretor de fotografia"
+              iconeDaLateral={<Aperture className="h-4 w-4" />}
+              lateral={
+                <Suspense fallback={<EsqueletoDoDiretor />}>
+                  <AgenteDiretor key={`agente-${valor.clientId}`} pedido={pedidoAoDiretor} />
+                </Suspense>
+              }
+            >
+              <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
+                {(etapa === "ensaio" || etapa === "campanha" || etapa === "preparar") && <NavDoCriar atual={etapa} />}
+                <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
+                  {etapa === "acervo" && <EtapaAcervo />}
+                  {etapa === "kits" && <EtapaKits />}
+                  {etapa === "criar" && <EtapaCriar />}
+                  {etapa === "preparar" && <EtapaPreparar />}
+                  {etapa === "ensaio" && <EtapaEnsaio />}
+                  {etapa === "campanha" && <EtapaCampanha />}
+                  {etapa === "revisar" && <EtapaRevisar />}
+                  {etapa === "usar" && <EtapaUsar />}
+                  {etapa === "biblioteca" && <EtapaBiblioteca />}
+                  {etapa === "modelos" && <EtapaModelos />}
+                  {etapa === "clones" && <EtapaClones />}
+                  {etapa === "book" && <EtapaBook />}
+                  {etapa === "canvas" && <EtapaCanvas />}
+                </Suspense>
+              </div>
+            </AreaDeTrabalho>
           </MesaFotoProvider>
 
           {podeRecarregar && (
@@ -489,6 +556,6 @@ export default function MesaFoto() {
           )}
         </MesaProvider>
       )}
-    </div>
+    </CascaDaMesa>
   );
 }

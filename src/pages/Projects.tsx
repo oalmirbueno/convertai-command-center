@@ -2,11 +2,26 @@ import { useState } from "react";
 import { useProjects, useTasks } from "@/hooks/useSupabaseData";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, MoreHorizontal, Clock, Sparkles } from "lucide-react";
+import { Plus, MoreHorizontal, Clock, Sparkles, FolderOpen, ListFilter } from "lucide-react";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ProjectDrawer from "@/components/admin/ProjectDrawer";
 import MeetingToProjectModal from "@/components/admin/MeetingToProjectModal";
 import ProjectView from "@/components/client/ProjectView";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoVazio,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos" },
@@ -17,8 +32,9 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Concluído" },
 ];
 
+// Sem pulse-dot: nada piscando na tela parada.
 const statusDotColors: Record<string, string> = {
-  active: "bg-info pulse-dot",
+  active: "bg-info",
   review: "bg-warning",
   planning: "bg-muted-foreground",
   paused: "bg-muted-foreground",
@@ -36,18 +52,19 @@ export default function Projects() {
   const isAdmin = profile?.role === "admin";
   const isClient = profile?.role === "client";
 
-  const [filter, setFilter] = useState("all");
+  // Filtro lembrado ao sair e voltar (docs/design/SISTEMA.md, "Estado que não se perde").
+  const [filter, setFilter] = useEstadoDaTela("filtro:status", "all", {
+    validar: (v) => STATUS_OPTIONS.some((s) => s.value === v),
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [editProject, setEditProject] = useState<any>(null);
   const [drawerProject, setDrawerProject] = useState<any>(null);
   const [clientProject, setClientProject] = useState<any>(null);
 
-  const filtered = (projects || []).filter((p: any) => {
-    if (isClient && p.client_id !== profile?.id) return false;
-    if (filter !== "all" && p.status !== filter) return false;
-    return true;
-  });
+  const visiveis = (projects || []).filter((p: any) => !(isClient && p.client_id !== profile?.id));
+  const filtered = visiveis.filter((p: any) => filter === "all" || p.status === filter);
+  const contagem = (valor: string) => (valor === "all" ? visiveis.length : visiveis.filter((p: any) => p.status === valor).length);
 
   const formatDate = (d: string) => {
     if (!d) return "";
@@ -58,100 +75,125 @@ export default function Projects() {
     return <ProjectView project={clientProject} onBack={() => setClientProject(null)} />;
   }
 
+  const abrir = (p: any) => {
+    if (isClient) setClientProject(p);
+    else if (isAdmin) setDrawerProject(p);
+  };
+  const clicavel = isClient || isAdmin;
+
   return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between">
-        <p className="heading-page">Projetos</p>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setMeetingModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium text-muted-foreground border border-border hover:border-primary/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
-              <Sparkles className="w-3.5 h-3.5" /> Gerar via Ata
-            </button>
-            <button onClick={() => setCreateOpen(true)}
-              data-tour="projects-create-btn"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-              <Plus className="w-3.5 h-3.5" /> Novo Projeto
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="min-w-0">
+      <CabecalhoDePagina
+        titulo="Projetos"
+        ajuda={isClient ? "Seus projetos com a Aceleriq. Toque num projeto para ver o andamento." : "Todos os projetos da agência, com status, andamento e prazo. Clique num projeto para abrir o detalhe."}
+        descricao={isLoading ? undefined : `${filtered.length} ${filtered.length === 1 ? "projeto" : "projetos"}`}
+        acoes={
+          <>
+            <SeletorCompacto
+              rotulo="Status"
+              icone={<ListFilter className="h-3.5 w-3.5" />}
+              opcoes={STATUS_OPTIONS.map((s) => ({ valor: s.value, rotulo: s.label, contador: isLoading ? null : contagem(s.value) }))}
+              valor={filter}
+              onEscolher={setFilter}
+            />
+            {isAdmin && (
+              <button type="button" onClick={() => setMeetingModalOpen(true)} className={botao.secundario} aria-label="Gerar projeto pela ata">
+                <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Gerar via ata</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" onClick={() => setCreateOpen(true)} data-tour="projects-create-btn" className={botao.primario} aria-label="Novo projeto">
+                <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Novo projeto</span>
+              </button>
+            )}
+          </>
+        }
+      />
 
-      {/* Filters */}
-      <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hidden md:flex-wrap md:overflow-visible md:pb-0">
-        {STATUS_OPTIONS.map(s => (
-          <button key={s.value} onClick={() => setFilter(s.value)}
-            className={`px-3 py-1.5 rounded-full text-[12px] cursor-pointer transition-colors border flex-shrink-0 whitespace-nowrap ${filter === s.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-muted-foreground border-border hover:text-foreground"}`}>
-            {s.label}
-          </button>
-        ))}
-      </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
-      ) : (
-        <div className="space-y-1 stagger-children" data-tour="projects-list">
-          {filtered.map((p: any) => (
-            <div key={p.id}
-              role={isClient ? "button" : undefined}
-              tabIndex={isClient ? 0 : undefined}
-              onClick={() => isClient && setClientProject(p)}
-              onKeyDown={(event) => {
-                if (isClient && (event.key === "Enter" || event.key === " ")) {
-                  event.preventDefault();
-                  setClientProject(p);
-                }
-              }}
-              className={`bg-card border border-border rounded-xl px-5 py-4 hover:border-muted-foreground/30 transition-colors relative ${isClient ? "cursor-pointer" : ""}`}
-            >
-              <div className="flex items-center gap-4">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground">{p.name}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{p.project_type?.replace("_", " ")}</span>
-                    <span className="text-[10px] text-muted-foreground/60">{statusLabels[p.status]}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{p.client?.company_name || p.client?.full_name}</p>
-                </div>
-                {(() => {
-                  // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
-                  const view = buildProgressView(p, (tasks || []) as any[]);
-                  return (
-                    <div className="hidden w-36 md:block">
-                      <div className="h-[3px] overflow-hidden rounded-full bg-secondary">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all"
-                          style={{ width: `${cycleFillPercent(view)}%` }}
-                        />
+      {/* A lista rola sozinha de 1024 px para cima e lembra onde estava. */}
+      <AreaDeTrabalho className="mt-4" rotuloDoPrincipal="Lista de projetos" memoriaDaRolagem="projetos:lista">
+        {isLoading ? (
+          <Carregando rotulo="Carregando projetos" linhas={6} />
+        ) : filtered.length === 0 ? (
+          <EstadoVazio
+            icone={<FolderOpen className="h-5 w-5" />}
+            titulo="Nenhum projeto encontrado."
+            descricao={filter !== "all" ? "Nenhum projeto com este status." : undefined}
+            acao={
+              filter !== "all" ? (
+                <button type="button" onClick={() => setFilter("all")} className={botao.secundario}>Ver todos</button>
+              ) : isAdmin ? (
+                <button type="button" onClick={() => setCreateOpen(true)} className={botao.primario}>Novo projeto</button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul aria-label="Projetos" data-tour="projects-list" className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+            {filtered.map((p: any) => {
+              // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
+              const view = buildProgressView(p, (tasks || []) as any[]);
+              return (
+                <li key={p.id} className="min-w-0">
+                  <div
+                    role={clicavel ? "button" : undefined}
+                    tabIndex={clicavel ? 0 : undefined}
+                    aria-label={clicavel ? `Abrir projeto ${p.name}` : undefined}
+                    onClick={() => abrir(p)}
+                    onKeyDown={(event) => {
+                      if (!clicavel || event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        abrir(p);
+                      }
+                    }}
+                    className={juntar("flex min-w-0 items-center px-4 py-3 transition-colors", clicavel && "cursor-pointer hover:bg-muted/40", clicavel && foco)}
+                  >
+                    <span aria-hidden="true" className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", statusDotColors[p.status] || "bg-muted-foreground")} />
+                    <div className="mr-3 min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center">
+                        <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{p.name}</span>
+                        {p.project_type && (
+                          <span className={juntar(etiqueta, "ml-2 hidden bg-muted capitalize text-muted-foreground sm:inline-flex")}>{p.project_type.replace("_", " ")}</span>
+                        )}
                       </div>
-                      <p className="mt-1 truncate text-right text-[11px] text-muted-foreground">
+                      <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                        {[p.client?.company_name || p.client?.full_name, statusLabels[p.status]].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <div className="mr-3 hidden w-36 shrink-0 md:block">
+                      <div className="h-[3px] overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${cycleFillPercent(view)}%` }} />
+                      </div>
+                      <p className="mt-1 truncate text-right text-[11px] tabular-nums text-muted-foreground">
                         {view.mode === "percent" ? `${view.percent}%` : view.label}
                       </p>
                     </div>
-                  );
-                })()}
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  {formatDate(p.deadline)}
-                </div>
-                {isAdmin && (
-                  <button onClick={() => setDrawerProject(p)}
-                    className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      </div>
+                    {p.deadline && (
+                      <span className={juntar(texto.auxiliar, "hidden shrink-0 items-center tabular-nums sm:flex", isAdmin && "mr-2")}>
+                        <Clock className="mr-1 h-3 w-3" aria-hidden="true" />
+                        {formatDate(p.deadline)}
+                      </span>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        aria-label={`Ações do projeto ${p.name}`}
+                        onClick={(e) => { e.stopPropagation(); setDrawerProject(p); }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className={botao.icone}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </AreaDeTrabalho>
 
       <CreateProjectModal open={createOpen || !!editProject} onClose={() => { setCreateOpen(false); setEditProject(null); }} editProject={editProject} />
       <MeetingToProjectModal open={meetingModalOpen} onClose={() => setMeetingModalOpen(false)} />

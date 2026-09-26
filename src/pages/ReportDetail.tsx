@@ -8,14 +8,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  ArrowLeft, Download, MessageCircle, TrendingUp, TrendingDown,
+  ArrowLeft, Download, MessageCircle, TrendingUp,
   BarChart3, Target, Zap, Eye, MousePointerClick, Users, DollarSign,
-  Calendar, Printer, ArrowUpRight, ArrowDownRight,
-  FileText, Layers, Activity, Award, CheckCircle2, Info,
-  PieChart as PieChartIcon, Gauge, Sparkles, Shield, Clock,
-  Hash, LayoutGrid, ArrowRight, Star, Lightbulb, AlertTriangle,
+  Printer, ArrowUpRight, ArrowDownRight,
+  FileText, Activity, Award, CheckCircle2,
+  LayoutGrid, ArrowRight, Star, Lightbulb, AlertTriangle,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -25,6 +23,20 @@ import {
 import SourceDashboard from "@/components/reports/SourceDashboard";
 import ReportComparison from "@/components/reports/ReportComparison";
 import MetricsAudit from "@/components/reports/MetricsAudit";
+import { CelulaDeNumero, FaixaDeNumeros } from "@/components/sistema";
+import {
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  Painel,
+  Secao,
+  botao,
+  etiqueta,
+  foco,
+  juntar,
+  texto,
+} from "@/components/sistema";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
 import { supportWhatsAppUrl } from "@/lib/supportContact";
 
@@ -98,6 +110,38 @@ function daysBetween(a: string, b: string) {
 }
 
 /* ── Component ────────────────────────────────────────────── */
+
+/** "2026-08-01" vira data local (sem o fuso puxar para o dia anterior). */
+function dataLocal(d: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
+}
+
+function fmtDataCurta(d: string) {
+  if (!d) return "";
+  return dataLocal(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+const fmtContagem = (v: number) =>
+  v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : Math.round(v).toLocaleString("pt-BR");
+
+/** Situação do indicador: cor e nome. */
+const SITUACAO = {
+  good: { rotulo: "Excelente", classe: "bg-primary/10 text-primary" },
+  warning: { rotulo: "Em otimização", classe: "bg-warning/10 text-warning" },
+  bad: { rotulo: "Em ajuste", classe: "bg-destructive/10 text-destructive" },
+} as const;
+
+/** Tooltip dos gráficos: a superfície do painel, sem brilho. */
+const estiloDaDica = {
+  background: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 8,
+  fontSize: 12,
+  color: "hsl(var(--foreground))",
+};
+const eixo = { fontSize: 11, fill: "hsl(var(--muted-foreground))" };
+
 export default function ReportDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -105,14 +149,17 @@ export default function ReportDetail() {
   // O cliente lê a versão em linguagem simples; a técnica fica para a equipe.
   const isClientView = profile?.role === "client";
 
-  const { data: report, isLoading } = useQuery({
+  const { data: report, isLoading, isError, refetch } = useQuery({
     queryKey: ["report-detail", id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("reports")
         .select("id, project_id, client_id, title, period_start, period_end, metrics, summary, file_url, status, created_by, created_at, highlights, next_steps, chart_type, chart_data, images, project:projects(name)")
         .eq("id", id!)
         .single();
+      // Sem linha (ou endereço com id inválido) é "não encontrado"; o resto é
+      // falha de rede e ganha "Tentar de novo".
+      if (error && error.code !== "PGRST116" && error.code !== "22P02") throw error;
       return data;
     },
     enabled: !!id,
@@ -413,132 +460,150 @@ export default function ReportDetail() {
     return { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories, spend, contact, traffic, reach: reachVal };
   }, [report, previousReport]);
 
+  // Documento: a página rola normal (nada de área com altura fixa, que
+  // cortaria a impressão). Na impressão, borda e poço ficam claros e o "?"
+  // some.
+  const raiz = "print-report min-w-0 space-y-4 print:bg-white print:[--foreground:0_0%_7%] print:[--muted-foreground:0_0%_35%] print:[--card:0_0%_100%] print:[--border:0_0%_88%] print:[--muted:0_0%_94%] print:[&_[data-ajuda-recolhida]]:hidden";
+  const voltar = () => (window.history.length > 1 ? navigate(-1) : navigate("/relatorios"));
+  const botaoVoltar = (
+    <button
+      type="button"
+      onClick={voltar}
+      className={juntar("no-print mb-1 inline-flex items-center rounded text-[12px] text-muted-foreground transition-colors hover:text-foreground", foco)}
+    >
+      <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+      Voltar
+    </button>
+  );
+
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-48 rounded-xl" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}
-        </div>
-        <Skeleton className="h-80 rounded-xl" />
+      <div className={raiz}>
+        {botaoVoltar}
+        <Carregando forma="aba" rotulo="Carregando relatório" />
+      </div>
+    );
+  }
+
+  if (isError && !report) {
+    return (
+      <div className={raiz}>
+        {botaoVoltar}
+        <EstadoDeErro
+          titulo="Não foi possível abrir o relatório."
+          acao={
+            <button type="button" onClick={() => refetch()} className={botao.secundario}>
+              Tentar de novo
+            </button>
+          }
+        />
       </div>
     );
   }
 
   if (!report || !analysis) {
     return (
-      <div className="text-center py-20">
-        <p className="text-muted-foreground">Relatório não encontrado.</p>
+      <div className={raiz}>
+        {botaoVoltar}
+        <EstadoVazio
+          icone={<FileText className="h-5 w-5" />}
+          titulo="Relatório não encontrado"
+          descricao="Ele pode ter sido removido ou não estar disponível para você."
+          acao={
+            <button type="button" onClick={() => navigate("/relatorios")} className={botao.secundario}>
+              Ver relatórios
+            </button>
+          }
+        />
       </div>
     );
   }
 
   const { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories } = analysis;
 
-  const periodLabel = report.period_start && report.period_end
-    ? `${fmtDate(report.period_start)} a ${fmtDate(report.period_end)}`
-    : "";
+  const metricas = (report.metrics || {}) as Record<string, any>;
+  const publicado = report.status === "published";
+  const descricao = [
+    !isClientView ? (publicado ? "Publicado" : "Rascunho") : null,
+    (report as any).project?.name || null,
+    report.period_start && report.period_end ? `${fmtDataCurta(report.period_start)} a ${fmtDataCurta(report.period_end)}` : null,
+    periodDays > 0 ? `${periodDays} dias` : null,
+  ].filter(Boolean).join(" · ");
 
   const whatsappMsg = `Olá! Vi o relatório "${report.title}" e gostaria de conversar sobre os resultados.`;
   const whatsappUrl = supportWhatsAppUrl(whatsappMsg);
   const handlePrint = () => window.print();
+  const temAnexo = !!report.file_url;
 
-  const parseLines = (text: string) => text.split("\n").map(l => l.trim()).filter(Boolean);
+  // Ações na linha do título (o bloco repetido do pé saiu): conversar,
+  // imprimir/salvar PDF e, se houver, baixar o anexo. Um primário só.
+  const acoes = (
+    <div className="no-print flex items-center [&>*+*]:ml-2">
+      {whatsappUrl && (
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={botao.secundario}
+          aria-label="Falar sobre os resultados no WhatsApp"
+          title="Falar sobre os resultados"
+        >
+          <MessageCircle className="h-4 w-4" aria-hidden="true" />
+          <span className="ml-1.5 hidden sm:inline">Falar sobre resultados</span>
+        </a>
+      )}
+      <button
+        type="button"
+        onClick={handlePrint}
+        className={temAnexo ? botao.secundario : botao.primario}
+        aria-label="Imprimir ou salvar em PDF"
+        title="Imprimir ou salvar em PDF"
+      >
+        <Printer className="h-4 w-4" aria-hidden="true" />
+        <span className="ml-1.5 hidden sm:inline">{temAnexo ? "Imprimir" : "Salvar PDF"}</span>
+      </button>
+      {temAnexo && (
+        <a
+          href={reportFileUrl || undefined}
+          aria-disabled={reportFileLoading || !reportFileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={juntar(botao.primario, "aria-disabled:pointer-events-none aria-disabled:opacity-50")}
+          aria-label="Baixar o relatório em PDF"
+          title="Baixar o relatório em PDF"
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          <span className="ml-1.5 hidden sm:inline">{reportFileLoading ? "Preparando" : "Baixar PDF"}</span>
+        </a>
+      )}
+    </div>
+  );
 
-  /* ── Chart renderer · Aceleriq futurist ───────────── */
+  /* ── Gráfico principal: tipo, séries e cores de sempre, sem brilho ── */
   const renderMainChart = () => {
     if (chartData.length === 0 || chartColumns.length === 0) return null;
-
-    const gradients = chartColumns.map((_, i) => ({
-      id: `grad${i}`,
-      lineId: `line${i}`,
-      barId: `bar${i}`,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-    }));
-
-    const commonProps = { data: chartData, margin: { top: 16, right: 24, left: 0, bottom: 5 } };
-
-    const sharedDefs = (
-      <defs>
-        {/* Neon glow filter */}
-        <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        {/* Soft glow filter */}
-        <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="1.4" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        {gradients.map(g => (
-          <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={g.color} stopOpacity={0.55} />
-            <stop offset="60%" stopColor={g.color} stopOpacity={0.15} />
-            <stop offset="100%" stopColor={g.color} stopOpacity={0} />
-          </linearGradient>
-        ))}
-        {gradients.map(g => (
-          <linearGradient key={g.barId} id={g.barId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={g.color} stopOpacity={1} />
-            <stop offset="100%" stopColor={g.color} stopOpacity={0.25} />
-          </linearGradient>
-        ))}
-        {gradients.map(g => (
-          <linearGradient key={g.lineId} id={g.lineId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={g.color} stopOpacity={0.6} />
-            <stop offset="50%" stopColor={g.color} stopOpacity={1} />
-            <stop offset="100%" stopColor={g.color} stopOpacity={0.6} />
-          </linearGradient>
-        ))}
-        {/* Grid pattern overlay */}
-        <pattern id="techGrid" width="32" height="32" patternUnits="userSpaceOnUse">
-          <path d="M 32 0 L 0 0 0 32" fill="none" stroke="hsl(145 100% 50% / 0.04)" strokeWidth="0.5" />
-        </pattern>
-      </defs>
-    );
-
-    const xAxis = <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} dy={6} />;
-    const yAxis = <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
+    const cor = (i: number) => CHART_COLORS[i % CHART_COLORS.length];
+    const commonProps = { data: chartData, margin: { top: 8, right: 16, left: 0, bottom: 4 } };
+    const grid = <CartesianGrid stroke="hsl(var(--border))" vertical={false} />;
+    const xAxis = <XAxis dataKey="label" tick={eixo} axisLine={false} tickLine={false} dy={6} />;
+    const yAxis = <YAxis tick={eixo} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
     const tooltip = (
       <Tooltip
-        cursor={{ stroke: "hsl(145 100% 50% / 0.4)", strokeWidth: 1, strokeDasharray: "4 4" }}
-        contentStyle={{
-          background: "hsl(var(--card))",
-          border: "1px solid hsl(var(--border))",
-          borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
-          boxShadow: "0 8px 30px hsl(var(--foreground) / 0.12)",
-        }}
+        cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
+        contentStyle={estiloDaDica}
         itemStyle={{ color: "hsl(var(--foreground))" }}
-        labelStyle={{ color: "hsl(var(--primary))", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}
+        labelStyle={{ color: "hsl(var(--muted-foreground))", fontSize: 11, marginBottom: 4 }}
         formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name]}
       />
     );
-    const grid = <CartesianGrid strokeDasharray="2 6" stroke="hsl(145 100% 50%)" opacity={0.08} vertical={false} />;
+    const legenda = <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />;
 
     if (chartType === "bar") {
       return (
         <BarChart {...commonProps}>
-          {sharedDefs}
-          {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
+          {grid}{xAxis}{yAxis}{tooltip}{legenda}
           {chartColumns.map((col, i) => (
-            <Bar
-              key={col}
-              dataKey={col}
-              fill={`url(#${gradients[i].barId})`}
-              radius={[6, 6, 0, 0]}
-              stroke={gradients[i].color}
-              strokeWidth={1}
-              animationDuration={1400}
-              animationEasing="ease-out"
-            />
+            <Bar key={col} dataKey={col} fill={cor(i)} radius={[4, 4, 0, 0]} isAnimationActive={false} />
           ))}
         </BarChart>
       );
@@ -546,21 +611,17 @@ export default function ReportDetail() {
     if (chartType === "line") {
       return (
         <LineChart {...commonProps}>
-          {sharedDefs}
-          {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
+          {grid}{xAxis}{yAxis}{tooltip}{legenda}
           {chartColumns.map((col, i) => (
             <Line
               key={col}
               type="monotone"
               dataKey={col}
-              stroke={`url(#${gradients[i].lineId})`}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 2, fill: "hsl(var(--background))", stroke: gradients[i].color }}
-              activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
-              animationDuration={1600}
-              animationEasing="ease-out"
-              filter="url(#softGlow)"
+              stroke={cor(i)}
+              strokeWidth={2}
+              dot={{ r: 2.5, strokeWidth: 0, fill: cor(i) }}
+              activeDot={{ r: 5, strokeWidth: 0, fill: cor(i) }}
+              isAnimationActive={false}
             />
           ))}
         </LineChart>
@@ -568,396 +629,245 @@ export default function ReportDetail() {
     }
     return (
       <AreaChart {...commonProps}>
-        {sharedDefs}
-        {grid}{xAxis}{yAxis}{tooltip}
-        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
+        {grid}{xAxis}{yAxis}{tooltip}{legenda}
         {chartColumns.map((col, i) => (
           <Area
             key={col}
             type="monotone"
             dataKey={col}
-            stroke={gradients[i].color}
-            fill={`url(#${gradients[i].id})`}
-            strokeWidth={2.5}
-            dot={{ r: 2.5, strokeWidth: 0, fill: gradients[i].color }}
-            activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
-            animationDuration={1600}
-            animationEasing="ease-out"
-            filter="url(#softGlow)"
+            stroke={cor(i)}
+            fill={cor(i)}
+            fillOpacity={0.12}
+            strokeWidth={2}
+            dot={{ r: 2, strokeWidth: 0, fill: cor(i) }}
+            activeDot={{ r: 5, strokeWidth: 0, fill: cor(i) }}
+            isAnimationActive={false}
           />
         ))}
       </AreaChart>
     );
   };
 
-  const statusColor = (s: "good" | "warning" | "bad") =>
-    s === "good" ? "text-primary bg-primary/10 border-primary/20" :
-    s === "warning" ? "text-warning bg-warning/10 border-warning/20" :
-    "text-destructive bg-destructive/10 border-destructive/20";
+  // Métricas agrupadas por categoria (uma faixa só, divisória entre grupos).
+  const gruposDeMetricas: Array<{ nome: string; itens: Array<{ chave: string; rotulo: string; valor: string; apoio: string; referencia: number | null }> }> = [];
+  categories.forEach((lista, nome) => {
+    gruposDeMetricas.push({
+      nome,
+      itens: lista.map((metric) => ({
+        chave: metric.key,
+        rotulo: metric.shortLabel,
+        valor: metric.format(metric.value),
+        apoio: `${metric.label} · ${metric.unit}`,
+        referencia: metric.benchmark ? Math.min((metric.value / metric.benchmark) * 100, 100) : null,
+      })),
+    });
+  });
+  if (customMetrics.length > 0) {
+    gruposDeMetricas.push({
+      nome: "Personalizada",
+      itens: customMetrics.map((cm, i) => ({
+        chave: `custom-${i}`,
+        rotulo: cm.label,
+        valor: Number.isFinite(Number(cm.value)) ? Number(cm.value).toLocaleString("pt-BR") : String(cm.value),
+        apoio: "",
+        referencia: null,
+      })),
+    });
+  }
+  const totalDeMetricas = standardMetrics.length + customMetrics.length;
+  const corDaReferencia = (pct: number) => (pct >= 80 ? "bg-primary" : pct >= 50 ? "bg-warning" : "bg-destructive");
+  const tomDaReferencia = (pct: number) => (pct >= 80 ? "text-primary" : pct >= 50 ? "text-warning" : "text-destructive");
 
-  const statusIcon = (s: "good" | "warning" | "bad") =>
-    s === "good" ? CheckCircle2 : s === "warning" ? AlertTriangle : AlertTriangle;
+  const temGraficos = chartData.length > 0 && chartColumns.length > 0;
 
   /* ── Render ─────────────────────────────────────── */
   return (
-    <div className="space-y-6 animate-fade-in print-report">
-      <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/relatorios"))} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-        <ArrowLeft className="w-4 h-4" /> Voltar
-      </button>
-
-      {/* ═══════════════ HERO HEADER ═══════════════ */}
-      <div className="relative bg-card border border-border rounded-xl overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-accent/5" />
-        <div className="absolute top-0 right-0 w-80 h-80 rounded-full bg-primary/5 blur-[80px]" />
-        <div className="absolute bottom-0 left-0 w-60 h-60 rounded-full bg-accent/5 blur-[60px]" />
-        <div className="relative px-6 py-8 sm:px-8 sm:py-10">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="space-y-3 flex-1">
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-primary" />
-                </div>
-                <span className="text-[10px] px-3 py-1.5 rounded-full bg-primary/10 text-primary font-bold border border-primary/20 uppercase tracking-widest">
-                  ● Publicado
-                </span>
-                {periodDays > 0 && (
-                  <span className="text-[10px] px-3 py-1.5 rounded-full bg-secondary text-muted-foreground border border-border flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" />
-                    {periodDays} dias analisados
-                  </span>
-                )}
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">{report.title}</h1>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5" />
-                  {(report as any).project?.name}
-                </span>
-                {periodLabel && (
-                  <>
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {periodLabel}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2 no-print shrink-0">
-              <button onClick={handlePrint} className="p-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground transition-colors cursor-pointer border border-border" title="Imprimir / PDF">
-                <Printer className="w-4 h-4" />
-              </button>
-              {whatsappUrl && (
-                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border" title="WhatsApp">
-                  <MessageCircle className="w-4 h-4" />
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Quick overview strip */}
-          {standardMetrics.length > 0 && (
-            <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 pt-5 border-t border-border/50">
-              {standardMetrics.slice(0, 6).map(metric => (
-                <div key={metric.key} className="flex items-center gap-2">
-                  <metric.icon className="w-3.5 h-3.5" style={{ color: metric.color }} />
-                  <span className="text-[11px] text-muted-foreground">{metric.shortLabel}:</span>
-                  <span className="text-[13px] font-mono font-bold text-foreground">{metric.format(metric.value)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+    <div className={raiz}>
+      <div className="min-w-0">
+        {botaoVoltar}
+        <CabecalhoDePagina
+          titulo={report.title}
+          descricao={descricao || undefined}
+          ajuda={
+            isClientView
+              ? "Leitura do período: o que aconteceu em linguagem simples, os números e os próximos passos. Para guardar, use Salvar PDF."
+              : "Relatório completo: leitura para o cliente, comparação com o anterior, auditoria das métricas, indicadores e gráficos. Comparação, auditoria e indicadores só a equipe vê."
+          }
+          acoes={acoes}
+        />
       </div>
 
-      {/* ═══════════════ DASHBOARD AUTO POR FONTE ═══════════════ */}
-      {(report.metrics as any)?.__source && Array.isArray((report.metrics as any)?.__breakdown) && (report.metrics as any).__breakdown.length > 0 && (
+      {/* Painel automático da planilha importada (Meta Ads, Google Ads, social, vendas) */}
+      {metricas.__source && Array.isArray(metricas.__breakdown) && metricas.__breakdown.length > 0 && (
         <SourceDashboard
-          source={(report.metrics as any).__source}
-          sourceLabel={(report.metrics as any).__source_label || "Detectado"}
-          rows={(report.metrics as any).__breakdown}
-          dimensionKey={(report.metrics as any).__dimension || "Item"}
-          metrics={report.metrics as any}
+          source={metricas.__source}
+          sourceLabel={metricas.__source_label || "Dados importados"}
+          rows={metricas.__breakdown}
+          dimensionKey={metricas.__dimension || "Item"}
+          metrics={metricas}
         />
       )}
-      </div>
 
-      {/* ═══════════════ LEITURA EM LINGUAGEM CLARA (cliente primeiro) ═══════════════ */}
+      {/* Leitura em linguagem clara (cliente primeiro) */}
       <ClientPlainSummary
-        metrics={(report.metrics || {}) as Record<string, any>}
+        metrics={metricas}
         previousMetrics={(previousReport?.metrics || null) as Record<string, any> | null}
         periodDays={periodDays}
         summary={report.summary}
         nextSteps={report.next_steps}
       />
 
-      {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR (equipe) ═══════════════ */}
-      {!isClientView && report.project_id && (
-        <ReportComparison
-          projectId={report.project_id}
-          currentReportId={report.id}
-          currentCreatedAt={report.created_at}
-          currentReportMetrics={report.metrics as any}
-          currentPeriod={{ start: report.period_start, end: report.period_end }}
-        />
-      )}
-
-      {/* ═══════════════ AUDITORIA DE MÉTRICAS ═══════════════ */}
-      {!isClientView && <MetricsAudit metrics={report.metrics as any} />}
-
-      {/* ═══════════════ KPI CARDS ═══════════════ */}
-      {!isClientView && kpis.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
-            <Gauge className="w-3.5 h-3.5 text-primary" />
-            Indicadores-Chave de Performance (KPIs)
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {kpis.map((kpi, i) => {
-              const StatusIcon = statusIcon(kpi.status);
-              return (
-                <div key={i} className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-primary/20 transition-all">
-                  <div className="absolute top-0 right-0 w-20 h-20 rounded-full opacity-[0.04]" style={{ background: kpi.color, transform: "translate(30%, -30%)" }} />
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${kpi.color}15`, border: `1px solid ${kpi.color}25` }}>
-                      <kpi.icon className="w-5 h-5" style={{ color: kpi.color }} />
-                    </div>
-                    <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border ${statusColor(kpi.status)}`}>
-                      <StatusIcon className="w-3 h-3" />
-                      {kpi.status === "good" ? "Excelente" : kpi.status === "warning" ? "Em otimização" : "Em ajuste"}
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold font-mono text-foreground tracking-tight">{kpi.value}</p>
-                  <p className="text-[11px] font-semibold text-foreground mt-1">{kpi.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{kpi.detail}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════════ METRICS GRID ═══════════════ */}
-      {standardMetrics.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
-            <Activity className="w-3.5 h-3.5 text-primary" />
-            Métricas de Performance Detalhadas
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {standardMetrics.map(metric => {
-              const Icon = metric.icon;
-              const pctOfBenchmark = metric.benchmark ? Math.min((metric.value / metric.benchmark) * 100, 100) : null;
-
-              return (
-                <div key={metric.key} className="group bg-card border border-border rounded-xl p-5 hover:border-primary/20 transition-all relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-28 h-28 rounded-full opacity-[0.03]" style={{ background: metric.color, transform: "translate(30%, -30%)" }} />
-
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${metric.color}12`, border: `1px solid ${metric.color}20` }}>
-                        <Icon className="w-5 h-5" style={{ color: metric.color }} />
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{metric.shortLabel}</p>
-                        <p className="text-[10px] text-muted-foreground/60">{metric.label}</p>
-                      </div>
-                    </div>
-                    <span className="text-[9px] px-2 py-0.5 rounded-md bg-secondary text-muted-foreground border border-border">
-                      {metric.category}
-                    </span>
-                  </div>
-
-                  <p className="text-3xl font-bold font-mono text-foreground tracking-tight">{metric.format(metric.value)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{metric.unit}</p>
-
-                  {/* Benchmark bar */}
-                  {pctOfBenchmark !== null && (
-                    <div className="mt-3 space-y-1">
-                      <div className="flex justify-between text-[9px] text-muted-foreground">
-                        <span>vs. benchmark</span>
-                        <span className="font-mono font-bold" style={{ color: pctOfBenchmark >= 80 ? "hsl(145, 100%, 50%)" : pctOfBenchmark >= 50 ? "hsl(38, 92%, 50%)" : "hsl(346, 87%, 60%)" }}>
-                          {pctOfBenchmark.toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{
-                            width: `${pctOfBenchmark}%`,
-                            background: pctOfBenchmark >= 80 ? "hsl(145, 100%, 50%)" : pctOfBenchmark >= 50 ? "hsl(38, 92%, 50%)" : "hsl(346, 87%, 60%)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Custom metrics */}
-      {customMetrics.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {customMetrics.map((cm, i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-5 hover:border-primary/20 transition-all">
-              <Hash className="w-4 h-4 text-muted-foreground mb-2" />
-              <p className="text-2xl font-bold font-mono text-foreground tracking-tight">{cm.value}</p>
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1.5 font-medium">{cm.label}</p>
-            </div>
-          ))}
+      {/* Conferência da equipe: comparação com o anterior e auditoria das métricas */}
+      {!isClientView && (
+        <div className="min-w-0 space-y-3 border-t border-border pt-5 empty:hidden">
+          {report.project_id && (
+            <ReportComparison
+              projectId={report.project_id}
+              currentReportId={report.id}
+              currentCreatedAt={report.created_at}
+              currentReportMetrics={report.metrics as any}
+              currentPeriod={{ start: report.period_start, end: report.period_end }}
+            />
+          )}
+          <MetricsAudit metrics={report.metrics as any} />
         </div>
       )}
 
-      {/* ═══════════════ CHARTS SECTION ═══════════════ */}
-      {chartData.length > 0 && chartColumns.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5 text-primary" />
-            Evolução e Análise Visual
-          </h2>
+      {/* Indicadores (equipe) */}
+      {!isClientView && kpis.length > 0 && (
+        <Secao
+          titulo="Indicadores"
+          descricao={`${kpis.length} ${kpis.length === 1 ? "indicador" : "indicadores"}`}
+          ajuda="Indicadores-chave calculados com o investimento e os resultados do período. A situação compara com faixas de referência do mercado."
+          divisoria
+        >
+          <Painel semEspaco>
+            <FaixaDeNumeros semMoldura grade="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+              {kpis.map((kpi, i) => (
+                <CelulaDeNumero
+                  key={i}
+                  rotulo={kpi.label}
+                  valor={kpi.value}
+                  lado={<span className={juntar(etiqueta, SITUACAO[kpi.status].classe)}>{SITUACAO[kpi.status].rotulo}</span>}
+                  apoio={kpi.detail}
+                />
+              ))}
+            </FaixaDeNumeros>
+          </Painel>
+        </Secao>
+      )}
 
-          {/* Main chart · Aceleriq futurist surface */}
-          <div className="relative bg-card border border-border rounded-xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
-            {/* Tech grid backdrop */}
-            <div className="absolute inset-0 opacity-[0.35] pointer-events-none"
-              style={{
-                backgroundImage:
-                  "linear-gradient(hsl(145 100% 50% / 0.04) 1px, transparent 1px), linear-gradient(90deg, hsl(145 100% 50% / 0.04) 1px, transparent 1px)",
-                backgroundSize: "28px 28px",
-                maskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
-                WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
-              }}
-            />
-            {/* Soft neon glow */}
-            <div className="absolute -top-32 -right-32 w-72 h-72 rounded-full pointer-events-none"
-              style={{ background: "radial-gradient(circle, hsl(145 100% 50% / 0.10), transparent 70%)" }}
-            />
-            {/* Corner brackets */}
-            {[
-              "top-2 left-2 border-t-2 border-l-2",
-              "top-2 right-2 border-t-2 border-r-2",
-              "bottom-2 left-2 border-b-2 border-l-2",
-              "bottom-2 right-2 border-b-2 border-r-2",
-            ].map((cls, i) => (
-              <span key={i} className={`absolute w-4 h-4 border-primary/40 ${cls} pointer-events-none rounded-[2px]`} />
-            ))}
+      {/* Métricas do período */}
+      {totalDeMetricas > 0 && (
+        <Secao
+          titulo="Métricas"
+          descricao={`${totalDeMetricas} ${totalDeMetricas === 1 ? "métrica" : "métricas"}`}
+          ajuda="Todas as métricas do período, por categoria. Quando existe referência de mercado, a barra mostra quanto dela foi atingido."
+          divisoria
+        >
+          <Painel semEspaco>
+            {/* Uma grade só, na ordem das categorias; a categoria vai à direita do rótulo */}
+            <FaixaDeNumeros semMoldura grade="grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              {gruposDeMetricas.map((grupo) => (
+                  grupo.itens.map((item) => (
+                    <CelulaDeNumero
+                      key={item.chave}
+                      rotulo={item.rotulo}
+                      lado={<span className="hidden text-[11px] leading-4 text-muted-foreground sm:block">{grupo.nome}</span>}
+                      valor={item.valor}
+                      apoio={
+                        <span className="block truncate">
+                          <span className="sm:hidden">{grupo.nome}{item.apoio ? " · " : ""}</span>
+                          {item.apoio}
+                        </span>
+                      }
+                    >
+                      {item.referencia !== null && (
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between text-[11px] leading-4 text-muted-foreground">
+                            <span>da referência</span>
+                            <span className={juntar("font-medium tabular-nums", tomDaReferencia(item.referencia))}>{item.referencia.toFixed(0)}%</span>
+                          </div>
+                          <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                            <div className={juntar("h-full rounded-full", corDaReferencia(item.referencia))} style={{ width: `${item.referencia}%` }} />
+                          </div>
+                        </div>
+                      )}
+                    </CelulaDeNumero>
+                  ))
+              ))}
+            </FaixaDeNumeros>
+          </Painel>
+        </Secao>
+      )}
 
-            <div className="relative flex items-center justify-between mb-5 flex-wrap gap-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="relative inline-flex w-2 h-2 rounded-full bg-primary">
-                  <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-60" />
-                </span>
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary" />
-                  Evolução do Período
-                </h3>
-                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
-                  LIVE · {chartData.length}pts
-                </span>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                {chartColumns.map((col, i) => (
-                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground font-mono">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length], boxShadow: `0 0 8px ${CHART_COLORS[i % CHART_COLORS.length]}99` }} />
-                    {col}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="relative h-72 sm:h-96">
+      {/* Evolução e análise visual */}
+      {temGraficos && (
+        <Secao
+          titulo="Evolução"
+          descricao={`${chartData.length} pontos · ${chartColumns.length} ${chartColumns.length === 1 ? "série" : "séries"}`}
+          ajuda="Como cada métrica andou ao longo do período, com o resumo por métrica, a jornada das pessoas e a distribuição dos resultados."
+          divisoria
+          corpoClassName="space-y-4"
+        >
+          <Painel className="page-break-inside-avoid">
+            <div className="h-72 sm:h-96">
               <ResponsiveContainer width="100%" height="100%">
                 {renderMainChart()!}
               </ResponsiveContainer>
             </div>
-          </div>
+          </Painel>
 
-          {/* Análise por Métrica · agora abaixo do gráfico, cards lado-a-lado (estilo Rams) */}
+          {/* Resumo por série */}
           {colStats.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2 px-1">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <LayoutGrid className="w-4 h-4 text-primary" />
-                  Análise por Métrica
-                </h3>
-                <p className="text-[10.5px] text-muted-foreground">Desempenho consolidado de cada série · {colStats.length} {colStats.length === 1 ? "métrica" : "métricas"}</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <Painel semEspaco titulo="Por métrica" descricao={`${colStats.length} ${colStats.length === 1 ? "métrica" : "métricas"}`}>
+              <FaixaDeNumeros semMoldura grade="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {colStats.map((cs) => {
                   const TrendIcon = cs.trend > 3 ? ArrowUpRight : cs.trend < -3 ? ArrowDownRight : ArrowRight;
-                  const trendBg = cs.trend > 3 ? "bg-primary/10 text-primary border-primary/20"
-                                : cs.trend < -3 ? "bg-destructive/10 text-destructive border-destructive/20"
-                                : "bg-secondary text-muted-foreground border-border";
+                  const tom = cs.trend > 3 ? "bg-primary/10 text-primary" : cs.trend < -3 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
                   const series = chartData.map((r, i) => ({ i, v: Number(r[cs.col]) || 0 }));
-                  const safeId = cs.col.replace(/[^a-zA-Z0-9]/g, "_");
                   return (
-                    <div key={cs.col} className="group relative rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all overflow-hidden">
-                      <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-[0.06] pointer-events-none" style={{ background: cs.color, transform: "translate(35%,-35%)" }} />
-                      <div className="relative flex items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-card" style={{ background: cs.color, boxShadow: `0 0 12px ${cs.color}55` }} />
-                          <span className="text-[11.5px] font-semibold text-foreground truncate">{cs.col}</span>
-                        </div>
-                        <span className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded-md border ${trendBg}`}>
-                          <TrendIcon className="w-2.5 h-2.5" />
+                    <CelulaDeNumero
+                      key={cs.col}
+                      rotulo={
+                        <>
+                          <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cs.color }} aria-hidden="true" />
+                          {cs.col}
+                        </>
+                      }
+                      lado={
+                        <span className={juntar(etiqueta, tom)}>
+                          <TrendIcon className="mr-0.5 h-3 w-3" aria-hidden="true" />
                           {Math.abs(cs.trend).toFixed(0)}%
                         </span>
-                      </div>
-
-                      <div className="relative">
-                        <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80">Total</p>
-                        <p className="text-2xl font-mono font-bold text-foreground leading-none mt-0.5">
-                          {cs.total >= 1000 ? (cs.total / 1000).toFixed(cs.total >= 10000 ? 0 : 1) + "K" : Math.round(cs.total).toLocaleString("pt-BR")}
-                        </p>
-                      </div>
-
+                      }
+                      valor={fmtContagem(cs.total)}
+                      apoio={`total · média ${fmtContagem(cs.avg)} · pico ${fmtContagem(cs.max)}`}
+                    >
                       {series.length > 2 && (
-                        <div className="relative h-12 mt-3 -mx-1">
+                        <div className="-mx-1 mt-2 h-10">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={series} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                              <defs>
-                                <linearGradient id={`spk-${safeId}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={cs.color} stopOpacity={0.55} />
-                                  <stop offset="100%" stopColor={cs.color} stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.8} fill={`url(#spk-${safeId})`} dot={false} />
+                              <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.5} fill={cs.color} fillOpacity={0.12} dot={false} isAnimationActive={false} />
                             </AreaChart>
                           </ResponsiveContainer>
                         </div>
                       )}
-
-                      <div className="relative grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/40">
-                        <div>
-                          <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Média</p>
-                          <p className="text-[12px] font-mono font-semibold text-foreground mt-0.5">
-                            {cs.avg >= 1000 ? (cs.avg / 1000).toFixed(1) + "K" : Math.round(cs.avg).toLocaleString("pt-BR")}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Pico</p>
-                          <p className="text-[12px] font-mono font-semibold text-foreground mt-0.5">
-                            {cs.max >= 1000 ? (cs.max / 1000).toFixed(1) + "K" : Math.round(cs.max).toLocaleString("pt-BR")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    </CelulaDeNumero>
                   );
                 })}
-              </div>
-            </div>
+              </FaixaDeNumeros>
+            </Painel>
           )}
 
-          {/* Smart Journey Funnel · HUD futurista de jornada */}
+          {/* Jornada: da descoberta até a ação final */}
           {funnelData && funnelData.length >= 2 && (() => {
             const top = funnelData[0].value;
             const bottom = funnelData[funnelData.length - 1].value;
             const globalRate = top > 0 ? (bottom / top) * 100 : 0;
             const totalDropoff = top - bottom;
-            const followers = Number((report.metrics as any)?.followers_gained) || 0;
-            // Localiza o "gargalo" — etapa com maior perda relativa entre passos consecutivos
+            const followers = Number(metricas.followers_gained) || 0;
+            // Localiza o "gargalo": etapa com maior perda relativa entre passos consecutivos
             let bottleneckIdx = -1;
             let bottleneckRate = 1;
             funnelData.forEach((s, i) => {
@@ -967,71 +877,20 @@ export default function ReportDetail() {
               if (r < bottleneckRate) { bottleneckRate = r; bottleneckIdx = i; }
             });
             return (
-              <div className="relative bg-[hsl(0_0%_7%)] border border-border rounded-xl p-5 sm:p-7 page-break-inside-avoid overflow-hidden">
-                {/* Tech grid backdrop */}
-                <div className="absolute inset-0 pointer-events-none opacity-[0.35]"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(hsl(145 100% 50% / 0.06) 1px, transparent 1px), linear-gradient(90deg, hsl(145 100% 50% / 0.06) 1px, transparent 1px)",
-                    backgroundSize: "32px 32px",
-                    maskImage: "radial-gradient(ellipse at center, black 30%, transparent 90%)",
-                    WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 90%)",
-                  }} />
-                <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-primary/[0.07] blur-3xl pointer-events-none" />
-                {/* Corner brackets */}
-                <span className="absolute top-3 left-3 w-3 h-3 border-t border-l border-primary/40 pointer-events-none" />
-                <span className="absolute top-3 right-3 w-3 h-3 border-t border-r border-primary/40 pointer-events-none" />
-                <span className="absolute bottom-3 left-3 w-3 h-3 border-b border-l border-primary/40 pointer-events-none" />
-                <span className="absolute bottom-3 right-3 w-3 h-3 border-b border-r border-primary/40 pointer-events-none" />
-
-                {/* Header */}
-                <div className="relative flex items-start justify-between flex-wrap gap-3 mb-5">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-primary/70">SYS · journey</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-muted-foreground">live</span>
-                    </div>
-                    <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                      <Target className="w-4 h-4 text-primary" />
-                      Jornada do Cliente
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Da descoberta até a ação final · {funnelData.length} etapas mapeadas
-                    </p>
-                  </div>
-                  {followers > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-primary/25 bg-primary/[0.06]">
-                      <Users className="w-4 h-4 text-primary" />
-                      <div className="leading-tight">
-                        <p className="font-mono text-[9px] uppercase tracking-widest text-primary/70">novos seguidores</p>
-                        <p className="font-mono text-sm font-bold text-foreground">+{followers.toLocaleString("pt-BR")}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* KPI strip */}
-                <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
-                  {[
-                    { label: "Entrada", value: top.toLocaleString("pt-BR"), sub: funnelData[0].name },
-                    { label: "Conversão final", value: bottom.toLocaleString("pt-BR"), sub: funnelData[funnelData.length - 1].name },
-                    { label: "Taxa global", value: globalRate.toFixed(2) + "%", sub: "entrada → final", accent: true },
-                    { label: "Perda total", value: totalDropoff.toLocaleString("pt-BR"), sub: "ao longo da jornada" },
-                  ].map((kpi, i) => (
-                    <div key={i} className={`rounded-xl border px-3 py-2.5 ${kpi.accent ? "border-primary/30 bg-primary/[0.06]" : "border-border/60 bg-secondary/20"}`}>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
-                      <p className={`font-mono text-lg font-bold leading-tight mt-0.5 ${kpi.accent ? "text-primary" : "text-foreground"}`}
-                        style={kpi.accent ? { textShadow: "0 0 14px hsl(145 100% 50% / 0.5)" } : undefined}>
-                        {kpi.value}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{kpi.sub}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Stages */}
-                <div className="relative space-y-2.5">
+              <Painel
+                semEspaco
+                className="page-break-inside-avoid"
+                titulo="Jornada do cliente"
+                ajuda="Da descoberta até a ação final. Cada etapa mostra quantas pessoas seguiram, quantas saíram e onde está a maior perda (gargalo)."
+                descricao={`${funnelData.length} etapas${followers > 0 ? ` · +${followers.toLocaleString("pt-BR")} novos seguidores` : ""}`}
+              >
+                <FaixaDeNumeros semMoldura grade="grid-cols-2 lg:grid-cols-4">
+                  <CelulaDeNumero rotulo="Entrada" valor={top.toLocaleString("pt-BR")} apoio={<span className="block truncate">{funnelData[0].name}</span>} />
+                  <CelulaDeNumero rotulo="Conversão final" valor={bottom.toLocaleString("pt-BR")} apoio={<span className="block truncate">{funnelData[funnelData.length - 1].name}</span>} />
+                  <CelulaDeNumero rotulo="Taxa global" valor={globalRate.toFixed(2) + "%"} apoio="da entrada ao final" destaque />
+                  <CelulaDeNumero rotulo="Perda total" valor={totalDropoff.toLocaleString("pt-BR")} apoio="ao longo da jornada" />
+                </FaixaDeNumeros>
+                <ol className="divide-y divide-border border-t border-border">
                   {funnelData.map((stage, i) => {
                     const prevVal = i > 0 ? funnelData[i - 1].value : stage.value;
                     const stepRate = prevVal > 0 ? (stage.value / prevVal) * 100 : 100;
@@ -1040,538 +899,299 @@ export default function ReportDetail() {
                     const isBottleneck = i === bottleneckIdx;
                     const isFinal = i === funnelData.length - 1;
                     return (
-                      <div key={i}>
-                        {/* Connector / step rate between stages */}
-                        {i > 0 && (
-                          <div className="flex items-center gap-2 pl-12 mb-2">
-                            <span className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-                            <span className={`font-mono text-[10px] px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${
-                              isBottleneck
-                                ? "border-warning/40 bg-warning/10 text-warning"
-                                : stepRate >= 30
-                                  ? "border-primary/30 bg-primary/10 text-primary"
-                                  : "border-border bg-secondary/40 text-muted-foreground"
-                            }`}>
-                              <ArrowDownRight className="w-2.5 h-2.5" />
-                              {stepRate.toFixed(1)}%
-                              {isBottleneck && <span className="ml-1 uppercase tracking-wider font-bold">gargalo</span>}
-                            </span>
-                            <span className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-                          </div>
-                        )}
-
-                        <div className={`relative rounded-xl border overflow-hidden transition-colors ${
-                          isFinal
-                            ? "border-primary/40 bg-primary/[0.05]"
-                            : isBottleneck
-                              ? "border-warning/30 bg-warning/[0.04]"
-                              : "border-border/60 bg-secondary/15"
-                        }`}>
-                          {/* Background fill bar */}
-                          <div
-                            className="absolute inset-y-0 left-0 transition-all duration-1000 ease-out"
-                            style={{
-                              width: `${widthPct}%`,
-                              background: `linear-gradient(90deg, ${stage.fill}22 0%, ${stage.fill}10 60%, transparent 100%)`,
-                              boxShadow: `inset 0 0 30px ${stage.fill}15`,
-                            }}
-                          />
-                          {/* Neon leading edge */}
-                          <div
-                            className="absolute inset-y-0 transition-all duration-1000 ease-out"
-                            style={{
-                              left: `calc(${widthPct}% - 2px)`,
-                              width: "2px",
-                              background: stage.fill,
-                              boxShadow: `0 0 14px ${stage.fill}, 0 0 4px ${stage.fill}`,
-                              opacity: widthPct > 1 && widthPct < 99 ? 1 : 0,
-                            }}
-                          />
-
-                          <div className="relative flex items-center gap-3 px-3 py-3">
-                            {/* Index chip */}
-                            <span
-                              className="w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-bold font-mono shrink-0 border"
-                              style={{
-                                background: `${stage.fill}14`,
-                                color: stage.fill,
-                                borderColor: `${stage.fill}40`,
-                                boxShadow: `0 0 12px ${stage.fill}33`,
-                              }}
-                            >
-                              {String(i + 1).padStart(2, "0")}
-                            </span>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[12.5px] font-semibold text-foreground truncate">{stage.name}</span>
-                                {isFinal && (
-                                  <span className="font-mono text-[8.5px] px-1.5 py-0.5 rounded uppercase tracking-widest bg-primary/15 text-primary border border-primary/30">
-                                    final
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono text-[10px] text-muted-foreground tracking-wider">
-                                  {widthPct.toFixed(1)}% do topo
+                      <li key={i} className="min-w-0 px-4 py-3">
+                        <div className="flex min-w-0 items-start">
+                          <span className="mt-0.5 w-6 shrink-0 text-[12px] tabular-nums text-muted-foreground">{i + 1}</span>
+                          <div className="mr-3 min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center">
+                              <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{stage.name}</span>
+                              {isFinal && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>final</span>}
+                              {i > 0 && (
+                                <span
+                                  className={juntar(
+                                    etiqueta,
+                                    "ml-1.5",
+                                    isBottleneck ? "bg-warning/10 text-warning" : stepRate >= 30 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                                  )}
+                                  title="Aproveitamento em relação à etapa anterior"
+                                >
+                                  {stepRate.toFixed(1)}%{isBottleneck ? " gargalo" : ""}
                                 </span>
-                                {dropOff > 0 && (
-                                  <span className="font-mono text-[10px] text-muted-foreground inline-flex items-center gap-1">
-                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                                    {dropOff.toLocaleString("pt-BR")} saíram
-                                  </span>
-                                )}
-                              </div>
+                              )}
                             </div>
-
-                            {/* Big number */}
-                            <div className="text-right shrink-0">
-                              <p
-                                className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums leading-none"
-                                style={{ textShadow: `0 0 16px ${stage.fill}55` }}
-                              >
-                                {stage.value.toLocaleString("pt-BR")}
-                              </p>
-                              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground mt-1">
-                                {i === 0 ? "entrada" : "permaneceram"}
-                              </p>
-                            </div>
+                            <p className={juntar(texto.auxiliar, "mt-0.5 tabular-nums")}>
+                              {widthPct.toFixed(1)}% do topo
+                              {dropOff > 0 && ` · ${dropOff.toLocaleString("pt-BR")} saíram`}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[16px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</p>
+                            <p className={juntar(texto.auxiliar, "mt-0.5")}>{i === 0 ? "entrada" : "permaneceram"}</p>
                           </div>
                         </div>
-                      </div>
+                        <div className="ml-6 mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full" style={{ width: `${widthPct}%`, background: stage.fill }} />
+                        </div>
+                      </li>
                     );
                   })}
-                </div>
-
-                {/* Footer insight */}
+                </ol>
                 {bottleneckIdx > 0 && (
-                  <div className="relative mt-5 rounded-xl border border-warning/25 bg-warning/[0.05] px-3.5 py-2.5 flex items-start gap-2.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0 animate-pulse" />
-                    <p className="text-[11.5px] text-foreground leading-relaxed">
-                      <span className="font-mono uppercase tracking-wider text-warning text-[10px] font-bold">Gargalo identificado · </span>
-                      maior perda relativa na etapa <span className="font-semibold">{funnelData[bottleneckIdx].name}</span>
-                      {" "}({(bottleneckRate * 100).toFixed(1)}% de aproveitamento). Otimize esse ponto para destravar o resto do funil.
-                    </p>
-                  </div>
+                  <p className="flex items-start border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
+                    <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="font-medium text-warning">Gargalo:</span> maior perda relativa na etapa{" "}
+                      <span className="font-medium">{funnelData[bottleneckIdx].name}</span> ({(bottleneckRate * 100).toFixed(1)}% de aproveitamento). Otimize esse ponto para destravar o resto do funil.
+                    </span>
+                  </p>
                 )}
-              </div>
+              </Painel>
             );
           })()}
 
-          {/* Distribuição de Resultados · full width donut com legenda lateral */}
+          {/* Distribuição dos resultados */}
           {pieData.length >= 2 && (() => {
             const totalPie = pieData.reduce((s, d) => s + d.value, 0);
             return (
-              <div className="bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid">
-                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <PieChartIcon className="w-4 h-4 text-primary" />
-                    Distribuição de Resultados
-                  </h3>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
-                    {pieData.length} métricas
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mb-4">Participação relativa de cada métrica no resultado total.</p>
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
-                  <div className="lg:col-span-2 h-72 relative">
-                    {/* Radial neon halo */}
-                    <div className="absolute inset-0 pointer-events-none"
-                      style={{ background: "radial-gradient(circle at center, hsl(145 100% 50% / 0.10), transparent 60%)" }}
-                    />
+              <Painel
+                className="page-break-inside-avoid"
+                titulo="Distribuição"
+                ajuda="Participação relativa de cada métrica no resultado total."
+                descricao={`${pieData.length} métricas`}
+              >
+                <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-5 lg:gap-6">
+                  <div className="relative h-60 lg:col-span-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <defs>
-                          <filter id="pieGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="2.5" result="b" />
-                            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                          </filter>
-                          {pieData.map((d, i) => (
-                            <radialGradient key={i} id={`pieGrad${i}`} cx="50%" cy="50%" r="65%">
-                              <stop offset="0%" stopColor={d.fill} stopOpacity={1} />
-                              <stop offset="100%" stopColor={d.fill} stopOpacity={0.55} />
-                            </radialGradient>
-                          ))}
-                        </defs>
-                        {/* Outer rim ring */}
-                        <Pie
-                          data={[{ v: 1 }]}
-                          dataKey="v"
-                          cx="50%" cy="50%"
-                          innerRadius={116} outerRadius={120}
-                          fill="hsl(145 100% 50% / 0.18)"
-                          stroke="none"
-                          isAnimationActive={false}
-                        />
                         <Pie
                           data={pieData}
                           cx="50%"
                           cy="50%"
-                          innerRadius={68}
-                          outerRadius={108}
-                          paddingAngle={4}
+                          innerRadius={64}
+                          outerRadius={100}
+                          paddingAngle={2}
                           dataKey="value"
-                          stroke="hsl(0 0% 7%)"
-                          strokeWidth={3}
-                          filter="url(#pieGlow)"
-                          animationDuration={1400}
-                          animationEasing="ease-out"
+                          stroke="hsl(var(--card))"
+                          strokeWidth={2}
+                          isAnimationActive={false}
                         >
-                          {pieData.map((_, i) => <Cell key={i} fill={`url(#pieGrad${i})`} />)}
+                          {pieData.map((d, i) => <Cell key={i} fill={d.fill} />)}
                         </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
-                            border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
-                            fontSize: 12, fontFamily: "JetBrains Mono, monospace",
-                            boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
-                          }}
-                          formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]}
-                        />
+                        <Tooltip contentStyle={estiloDaDica} formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <p className="text-[9px] uppercase tracking-[0.25em] text-primary/70 font-mono">Total</p>
-                      <p className="text-2xl font-mono font-bold text-foreground" style={{ textShadow: "0 0 18px hsl(145 100% 50% / 0.45)" }}>
-                        {totalPie >= 1000 ? (totalPie / 1000).toFixed(1) + "K" : totalPie.toLocaleString("pt-BR")}
-                      </p>
-                      <span className="mt-1 text-[9px] font-mono text-muted-foreground tracking-widest uppercase">{pieData.length} séries</span>
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <p className={texto.auxiliar}>Total</p>
+                      <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{fmtContagem(totalPie)}</p>
+                      <p className={texto.auxiliar}>{pieData.length} séries</p>
                     </div>
                   </div>
-                  <div className="lg:col-span-3 space-y-2">
+                  <ul className="min-w-0 divide-y divide-border lg:col-span-3">
                     {pieData.map((d, i) => {
                       const pct = totalPie > 0 ? (d.value / totalPie) * 100 : 0;
                       return (
-                        <div key={i} className="flex items-center gap-3 rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5">
-                          <span className="w-2.5 h-8 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 12px ${d.fill}55` }} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 mb-1.5">
-                              <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[12px] font-mono font-bold text-foreground">
-                                  {d.value.toLocaleString("pt-BR")}
-                                </span>
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground min-w-[42px] text-center">
-                                  {pct.toFixed(1)}%
-                                </span>
-                              </div>
-                            </div>
-                            <div className="h-1 rounded-full bg-secondary overflow-hidden">
-                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}99)` }} />
-                            </div>
+                        <li key={i} className="min-w-0 py-2.5">
+                          <div className="flex min-w-0 items-center">
+                            <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: d.fill }} aria-hidden="true" />
+                            <span className="mr-3 min-w-0 flex-1 truncate text-[13px] text-foreground">{d.name}</span>
+                            <span className="shrink-0 text-[13px] font-medium tabular-nums text-foreground">{d.value.toLocaleString("pt-BR")}</span>
+                            <span className={juntar(texto.auxiliar, "ml-3 w-12 shrink-0 text-right tabular-nums")}>{pct.toFixed(1)}%</span>
                           </div>
-                        </div>
+                          <div className="ml-4 mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: d.fill }} />
+                          </div>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 </div>
-              </div>
+              </Painel>
             );
           })()}
 
-          {/* Radar + Eficiência refinada */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {radarData.length >= 3 && (
-              <div className="relative bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid overflow-hidden">
-                <div className="absolute inset-0 pointer-events-none opacity-50"
-                  style={{ background: "radial-gradient(circle at 50% 60%, hsl(145 100% 50% / 0.10), transparent 70%)" }} />
-                <h3 className="relative text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-primary" />
-                  Diagnóstico de Performance
-                  <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.2em] text-primary/70 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
-                    {radarData.length} eixos
-                  </span>
-                </h3>
-                <p className="relative text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
-                <div className="relative h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData}>
-                      <defs>
-                        <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.55} />
-                          <stop offset="60%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.18} />
-                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.04} />
-                        </radialGradient>
-                        <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
-                          <feGaussianBlur stdDeviation="2.5" result="b" />
-                          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                        </filter>
-                      </defs>
-                      <PolarGrid stroke="hsl(145 100% 50%)" strokeOpacity={0.18} strokeDasharray="2 4" />
-                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600, fontFamily: "JetBrains Mono, monospace" }} />
-                      <PolarRadiusAxis tick={false} axisLine={false} />
-                      {/* Benchmark reference radar */}
-                      <Radar
-                        name="Benchmark"
-                        dataKey={() => 100}
-                        stroke="hsl(0 0% 60% / 0.4)"
-                        strokeDasharray="3 4"
-                        fill="transparent"
-                        strokeWidth={1}
-                        isAnimationActive={false}
-                      />
-                      <Radar
-                        name="Performance"
-                        dataKey="value"
-                        stroke="hsl(145, 100%, 50%)"
-                        fill="url(#radarFill)"
-                        strokeWidth={2.5}
-                        dot={{ r: 4, fill: "hsl(145, 100%, 50%)", stroke: "hsl(0 0% 7%)", strokeWidth: 2 }}
-                        filter="url(#radarGlow)"
-                        animationDuration={1600}
-                        animationEasing="ease-out"
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
-                          border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
-                          fontSize: 12, fontFamily: "JetBrains Mono, monospace",
-                          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
-                        }}
-                        formatter={(v: any) => [v + "%", "vs. benchmark"]}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
+          {/* Diagnóstico e eficiência */}
+          {(radarData.length >= 3 || efficiencyData.length > 0) && (
+            <div className={juntar("grid grid-cols-1 gap-4", radarData.length >= 3 && efficiencyData.length > 0 && "lg:grid-cols-2")}>
+              {radarData.length >= 3 && (
+                <Painel
+                  className="page-break-inside-avoid"
+                  titulo="Diagnóstico"
+                ajuda="Comparação com referências de mercado. 100% é a referência; a linha tracejada marca esse ponto."
+                  descricao={`${radarData.length} eixos`}
+                >
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={radarData}>
+                        <PolarGrid stroke="hsl(var(--border))" />
+                        <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11, fill: "hsl(var(--foreground))" }} />
+                        <PolarRadiusAxis tick={false} axisLine={false} />
+                        {/* Referência (100%) */}
+                        <Radar
+                          name="Referência"
+                          dataKey={() => 100}
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeOpacity={0.6}
+                          strokeDasharray="3 4"
+                          fill="transparent"
+                          strokeWidth={1}
+                          isAnimationActive={false}
+                        />
+                        <Radar
+                          name="Desempenho"
+                          dataKey="value"
+                          stroke="hsl(145, 100%, 50%)"
+                          fill="hsl(145, 100%, 50%)"
+                          fillOpacity={0.18}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "hsl(145, 100%, 50%)", strokeWidth: 0 }}
+                          isAnimationActive={false}
+                        />
+                        <Tooltip contentStyle={estiloDaDica} formatter={(v: any) => [v + "%", "da referência"]} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Painel>
+              )}
 
-            {efficiencyData.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid">
-                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
-                  <Gauge className="w-4 h-4 text-primary" />
-                  Índice de Eficiência
-                </h3>
-                <p className="text-[11px] text-muted-foreground mb-4">Quanto maior o índice, melhor o aproveitamento da verba.</p>
-                <div className="space-y-4">
-                  {efficiencyData.map((d, i) => {
-                    const grade = d.value >= 70 ? "Excelente" : d.value >= 45 ? "Bom" : d.value >= 25 ? "Regular" : "Crítico";
-                    const gradeColor = d.value >= 70 ? "text-primary border-primary/30 bg-primary/10"
-                                     : d.value >= 45 ? "text-foreground border-border bg-secondary"
-                                     : d.value >= 25 ? "text-warning border-warning/30 bg-warning/10"
-                                     : "text-destructive border-destructive/30 bg-destructive/10";
-                    return (
-                      <div key={i} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 10px ${d.fill}66` }} />
-                            <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
+              {efficiencyData.length > 0 && (
+                <Painel
+                  className="page-break-inside-avoid"
+                  titulo="Eficiência"
+                ajuda="Quanto maior o índice, melhor o aproveitamento da verba."
+                  descricao={`${efficiencyData.length} ${efficiencyData.length === 1 ? "índice" : "índices"}`}
+                >
+                  <ul className="divide-y divide-border">
+                    {efficiencyData.map((d, i) => {
+                      const grade = d.value >= 70 ? "Excelente" : d.value >= 45 ? "Bom" : d.value >= 25 ? "Regular" : "Crítico";
+                      const tom = d.value >= 70 ? "bg-primary/10 text-primary"
+                        : d.value >= 45 ? "bg-muted text-foreground"
+                        : d.value >= 25 ? "bg-warning/10 text-warning"
+                        : "bg-destructive/10 text-destructive";
+                      return (
+                        <li key={i} className="min-w-0 py-3 first:pt-0 last:pb-0">
+                          <div className="flex min-w-0 items-center">
+                            <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: d.fill }} aria-hidden="true" />
+                            <span className="mr-3 min-w-0 flex-1 truncate text-[13px] text-foreground">{d.name}</span>
+                            <span className={juntar(etiqueta, tom)}>{grade}</span>
+                            <span className="ml-3 w-10 shrink-0 text-right text-[13px] font-medium tabular-nums text-foreground">{d.value}%</span>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${gradeColor}`}>{grade}</span>
-                            <span className="text-[13px] font-mono font-bold text-foreground tabular-nums w-10 text-right">{d.value}%</span>
+                          <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div className="absolute inset-y-0 left-1/4 w-px bg-border" />
+                            <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                            <div className="absolute inset-y-0 left-3/4 w-px bg-border" />
+                            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${d.value}%`, background: d.fill }} />
                           </div>
-                        </div>
-                        <div className="relative h-2 rounded-full bg-secondary overflow-hidden">
-                          <div className="absolute inset-y-0 left-1/4 w-px bg-border" />
-                          <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
-                          <div className="absolute inset-y-0 left-3/4 w-px bg-border" />
-                          <div
-                            className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
-                            style={{ width: `${d.value}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}cc)`, boxShadow: `0 0 10px ${d.fill}55` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Painel>
+              )}
+            </div>
+          )}
+        </Secao>
       )}
 
-      {/* ═══════════════ DATA TABLE ═══════════════ */}
-      {chartData.length > 0 && chartColumns.length > 0 && (
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5 text-primary" />
-              Tabela de Dados Detalhados
-            </h2>
-            <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded-md">{chartData.length} períodos</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="bg-secondary/30">
-                  <th className="text-left py-3 px-4 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">Período</th>
-                  {chartColumns.map((col, i) => (
-                    <th key={col} className="text-right py-3 px-4 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+      {/* Tabela de dados por período */}
+      {temGraficos && (
+        <Secao titulo="Dados por período" descricao={`${chartData.length} períodos`} divisoria>
+          <Painel semEspaco>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th scope="col" className={juntar(texto.rotulo, "px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-left")}>Período</th>
+                    {chartColumns.map((col, i) => (
+                      <th key={col} scope="col" className={juntar(texto.rotulo, "whitespace-nowrap px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-right")}>
+                        <span className="mr-1.5 hidden h-2 w-2 sm:inline-block rounded-full align-middle" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} aria-hidden="true" />
                         {col}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {chartData.map((row, i) => (
-                  <tr key={i} className="border-b border-border/30 hover:bg-secondary/20 transition-colors">
-                    <td className="py-3 px-4 text-foreground font-medium">{row.label}</td>
-                    {chartColumns.map((col, ci) => {
-                      const val = Number(row[col]) || 0;
-                      const maxVal = colStats[ci]?.max || 1;
-                      const pct = (val / maxVal) * 100;
-                      return (
-                        <td key={col} className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden hidden sm:block">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: CHART_COLORS[ci % CHART_COLORS.length] }} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {chartData.map((row, i) => (
+                    <tr key={i}>
+                      <td className="whitespace-nowrap px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-foreground">{row.label}</td>
+                      {chartColumns.map((col, ci) => {
+                        const val = Number(row[col]) || 0;
+                        const maxVal = colStats[ci]?.max || 1;
+                        const pct = (val / maxVal) * 100;
+                        return (
+                          <td key={col} className="px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-right">
+                            <div className="flex items-center justify-end">
+                              <div className="mr-2 hidden h-1 w-16 overflow-hidden rounded-full bg-muted sm:block">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHART_COLORS[ci % CHART_COLORS.length] }} />
+                              </div>
+                              <span className="tabular-nums text-foreground">{val.toLocaleString("pt-BR")}</span>
                             </div>
-                            <span className="font-mono text-foreground font-medium">{val.toLocaleString("pt-BR")}</span>
-                          </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  <tr className="font-semibold">
+                    <td className="px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-foreground">Total</td>
+                    {chartColumns.map(col => {
+                      const total = chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0);
+                      return (
+                        <td key={col} className="px-2 py-2.5 first:pl-4 last:pr-4 sm:px-4 text-right tabular-nums text-primary">
+                          {total.toLocaleString("pt-BR")}
                         </td>
                       );
                     })}
                   </tr>
-                ))}
-                <tr className="bg-primary/5 font-semibold">
-                  <td className="py-3 px-4 text-foreground flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> Total
-                  </td>
-                  {chartColumns.map(col => {
-                    const total = chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0);
-                    return (
-                      <td key={col} className="py-3 px-4 text-right font-mono text-primary font-bold">
-                        {total.toLocaleString("pt-BR")}
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </tbody>
+              </table>
+            </div>
+          </Painel>
+        </Secao>
       )}
 
-      {/* ═══════════════ INSIGHTS ═══════════════ */}
+      {/* Análise automática */}
       {insights.length > 0 && (
-        <section className="bg-gradient-to-br from-card to-secondary/30 border border-border rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Análise Inteligente</h2>
-              <p className="text-[10px] text-muted-foreground">Insights gerados automaticamente com base nos dados do relatório</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Secao titulo="Análise" ajuda="Leituras geradas automaticamente a partir dos números do relatório." divisoria>
+          <ul className="divide-y divide-border">
             {insights.map((insight, i) => {
-              const insightIcon = insight.type === "success" ? Star : insight.type === "warning" ? AlertTriangle : Lightbulb;
-              const InsightIcon = insightIcon;
-              const borderColor = insight.type === "success" ? "border-primary/30 bg-primary/5" : insight.type === "warning" ? "border-warning/30 bg-warning/5" : "border-accent/30 bg-accent/5";
-              const iconColor = insight.type === "success" ? "text-primary bg-primary/10" : insight.type === "warning" ? "text-warning bg-warning/10" : "text-accent bg-accent/10";
+              const Icone = insight.type === "success" ? Star : insight.type === "warning" ? AlertTriangle : Lightbulb;
+              const tom = insight.type === "success" ? "text-primary" : insight.type === "warning" ? "text-warning" : "text-muted-foreground";
               return (
-                <div key={i} className={`flex items-start gap-3 rounded-xl p-4 border ${borderColor}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${iconColor}`}>
-                    <InsightIcon className="w-3.5 h-3.5" />
-                  </div>
-                  <p className="text-[13px] text-foreground/85 leading-relaxed">{insight.text}</p>
-                </div>
+                <li key={i} className="flex min-w-0 items-start py-2.5 first:pt-0 last:pb-0">
+                  <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", tom)} aria-hidden="true" />
+                  <p className={juntar(texto.corpo, "min-w-0")}>{insight.text}</p>
+                </li>
               );
             })}
-          </div>
-        </section>
+          </ul>
+        </Secao>
       )}
 
-      {/* ═══════════════ EXECUTIVE SUMMARY ═══════════════ */}
+      {/* Resumo executivo */}
       {report.summary && (
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-secondary/20">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <BarChart3 className="w-4.5 h-4.5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Resumo Executivo</h2>
-              <p className="text-[10px] text-muted-foreground">Visão geral dos resultados e desempenho do período analisado</p>
-            </div>
-          </div>
-          <div className="px-6 py-5">
-            {/* Ritual escrito em blocos de WhatsApp aparece como secoes do
-                painel, sem asteriscos; relatorio comum segue no RichText. */}
-            {estruturaDoRitual(report.summary).blocos.length > 0
-              ? <RitualEstruturado body={report.summary} nextSteps={report.next_steps} />
-              : <RichText text={report.summary} />}
-          </div>
-        </section>
+        <Secao titulo="Resumo executivo" ajuda="Visão geral dos resultados e do desempenho no período." divisoria>
+          {/* Ritual escrito em blocos de WhatsApp aparece como secoes do
+              painel, sem asteriscos; relatorio comum segue no RichText. */}
+          {estruturaDoRitual(report.summary).blocos.length > 0
+            ? <RitualEstruturado body={report.summary} nextSteps={report.next_steps} />
+            : <RichText text={report.summary} />}
+        </Secao>
       )}
 
-      {/* ═══════════════ HIGHLIGHTS + NEXT STEPS ═══════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {report.highlights && (
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-warning/5">
-              <div className="w-9 h-9 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center">
-                <Award className="w-4.5 h-4.5 text-warning" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Destaques do Período</h2>
-                <p className="text-[10px] text-muted-foreground">Pontos que merecem atenção especial</p>
-              </div>
-            </div>
-            <div className="px-6 py-5">
+      {/* Destaques e próximos passos */}
+      {(report.highlights || report.next_steps) && (
+        <div className={juntar("grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5", report.highlights && report.next_steps && "lg:grid-cols-2 lg:gap-8")}>
+          {report.highlights && (
+            <Secao titulo="Destaques" ajuda="Pontos do período que merecem atenção especial.">
               <RichText text={report.highlights} />
-            </div>
-          </section>
-        )}
-
-        {report.next_steps && (
-          <section className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-accent/5">
-              <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
-                <Target className="w-4.5 h-4.5 text-accent-foreground" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Próximos Passos</h2>
-                <p className="text-[10px] text-muted-foreground">Ações planejadas para o próximo período</p>
-              </div>
-            </div>
-            <div className="px-6 py-5">
+            </Secao>
+          )}
+          {report.next_steps && (
+            <Secao titulo="Próximos passos" ajuda="Ações planejadas para o próximo período.">
               <RichText text={report.next_steps} />
-            </div>
-          </section>
-        )}
-      </div>
-
-      {/* ═══════════════ CTA SECTION ═══════════════ */}
-      <div className="bg-card border border-border rounded-xl p-6 no-print">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">Tem dúvidas sobre os resultados?</p>
-            <p className="text-[11px] text-muted-foreground">Entre em contato com a equipe para discutir estratégias e próximos passos.</p>
-          </div>
-        </div>
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-          {report.file_url ? (
-            <a
-              href={reportFileUrl || undefined}
-              aria-disabled={reportFileLoading || !reportFileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold w-full sm:w-auto aria-disabled:opacity-50 aria-disabled:pointer-events-none"
-            >
-              <Download className="w-4 h-4" /> {reportFileLoading ? "Preparando arquivo..." : "Baixar Relatório em PDF"}
-            </a>
-          ) : (
-            <button onClick={handlePrint} className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold cursor-pointer border-none w-full sm:w-auto">
-              <Download className="w-4 h-4" /> Baixar Relatório em PDF
-            </button>
-          )}
-          {whatsappUrl && (
-            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium w-full sm:w-auto border border-border">
-              <MessageCircle className="w-4 h-4" /> Falar sobre resultados
-            </a>
+            </Secao>
           )}
         </div>
-      </div>
-
-      <div className="h-6" />
+      )}
     </div>
   );
 }

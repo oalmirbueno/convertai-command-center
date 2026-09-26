@@ -3,7 +3,8 @@
 // Aparece colapsado por padrão e fica verde quando tudo confere.
 
 import { useState, useMemo } from "react";
-import { ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, Calculator } from "lucide-react";
+import { ShieldCheck, ShieldAlert, ChevronDown, Calculator } from "lucide-react";
+import { Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 type AnyRec = Record<string, any>;
 
@@ -129,95 +130,95 @@ export default function MetricsAudit({ metrics }: Props) {
   const allOk = status.every(s => s.ok);
   const failures = status.filter(s => !s.ok);
 
+  const base_ = [
+    { l: "Investimento", v: fmtR(base.spend),     show: base.spend > 0 },
+    { l: "Impressões",   v: fmtN(base.impr),      show: base.impr > 0 },
+    { l: "Alcance",      v: fmtN(base.reach),     show: base.reach > 0 },
+    { l: "Cliques",      v: fmtN(base.useClicks), show: base.useClicks > 0 },
+    { l: "Resultados",   v: fmtN(base.results),   show: base.results > 0 },
+  ].filter(x => x.show);
+
   return (
-    <section className="bg-card border border-border rounded-2xl overflow-hidden">
+    <Painel semEspaco as="section" className="overflow-hidden" aria-label="Auditoria das métricas">
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors cursor-pointer bg-transparent border-0 text-left"
+        aria-expanded={open}
+        className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${allOk ? "bg-primary/10 border border-primary/20" : "bg-destructive/10 border border-destructive/20"}`}>
-            {allOk
-              ? <ShieldCheck className="w-4 h-4 text-primary" />
-              : <ShieldAlert className="w-4 h-4 text-destructive" />}
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              Auditoria de Métricas
-              <span className={`text-[10px] px-2 py-0.5 rounded-md border font-bold uppercase tracking-wider ${allOk ? "text-primary bg-primary/10 border-primary/20" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
-                {allOk ? "Tudo confere" : `${failures.length} divergência${failures.length > 1 ? "s" : ""}`}
-              </span>
-            </h2>
-            <p className="text-[11px] text-muted-foreground truncate">
-              Validando CTR, CPC, CPM e derivados contra investimento, impressões, cliques e resultados.
-            </p>
-          </div>
-        </div>
-        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+        {allOk
+          ? <ShieldCheck className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          : <ShieldAlert className="mr-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />}
+        <span className="mr-3 min-w-0 flex-1">
+          <span className="flex min-w-0 items-center">
+            <span className={juntar(texto.tituloSecao, "min-w-0 truncate text-[14px]")}>Auditoria das métricas</span>
+            <span className={juntar(etiqueta, "ml-2", allOk ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
+              {allOk ? "Tudo confere" : `${failures.length} divergência${failures.length > 1 ? "s" : ""}`}
+            </span>
+          </span>
+          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+            Confere CTR, CPC, CPM e derivados com investimento, impressões, cliques e resultados.
+          </span>
+        </span>
+        <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="px-5 pb-5 space-y-4 border-t border-border/50 pt-4">
-          {/* Base inputs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {[
-              { l: "Investimento", v: fmtR(base.spend),     show: base.spend > 0 },
-              { l: "Impressões",   v: fmtN(base.impr),      show: base.impr > 0 },
-              { l: "Alcance",      v: fmtN(base.reach),     show: base.reach > 0 },
-              { l: "Cliques",      v: fmtN(base.useClicks), show: base.useClicks > 0 },
-              { l: "Resultados",   v: fmtN(base.results),   show: base.results > 0 },
-            ].filter(x => x.show).map((x, i) => (
-              <div key={i} className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2">
-                <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{x.l}</p>
-                <p className="text-sm font-mono font-bold text-foreground">{x.v}</p>
+        <>
+          {/* Totais de onde saem as contas */}
+          {base_.length > 0 && (
+            <div className="overflow-hidden border-t border-border">
+              <div className="-ml-px -mt-px grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                {base_.map((x) => (
+                  <div key={x.l} className="min-w-0 border-l border-t border-border px-4 py-2.5">
+                    <p className={texto.rotulo}>{x.l}</p>
+                    <p className="mt-0.5 truncate text-[14px] font-semibold tabular-nums text-foreground">{x.v}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
-          {/* Checks */}
-          <div className="space-y-2">
+          {/* Cada conta: fórmula, entradas, calculado × armazenado */}
+          <ul className="divide-y divide-border border-t border-border">
             {status.map(({ c, ok, diff }) => (
-              <div key={c.key} className={`rounded-xl border p-3 ${ok ? "border-border bg-secondary/20" : "border-destructive/30 bg-destructive/5"}`}>
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calculator className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-[12px] font-semibold text-foreground">{c.label}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground border border-border font-mono">
-                        {c.formula}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground font-mono">{c.inputs}</p>
-                  </div>
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="text-right">
-                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Calculado</p>
-                      <p className="text-sm font-mono font-bold text-primary">{c.format(c.computed)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Armazenado</p>
-                      <p className={`text-sm font-mono font-bold ${c.stored == null ? "text-muted-foreground" : ok ? "text-foreground" : "text-destructive line-through"}`}>
-                        {c.stored == null ? "-" : c.format(Number(c.stored))}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-1 rounded-md border font-bold ${ok ? "text-primary bg-primary/10 border-primary/20" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
-                      {ok ? "OK" : `Δ ${(diff * 100).toFixed(1)}%`}
-                    </span>
-                  </div>
+              <li key={c.key} className={juntar("flex min-w-0 flex-wrap items-start px-4 py-3", !ok && "bg-destructive/5")}>
+                <div className="mb-2 mr-4 min-w-0 flex-1 basis-[220px] sm:mb-0">
+                  <p className="flex min-w-0 items-center">
+                    <Calculator className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-[13px] font-medium text-foreground">{c.label}</span>
+                    <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>{c.formula}</span>
+                  </p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 tabular-nums")}>{c.inputs}</p>
                 </div>
-              </div>
+                <div className="flex shrink-0 items-center [&>*+*]:ml-4">
+                  <div className="text-right">
+                    <p className={texto.auxiliar}>Calculado</p>
+                    <p className="text-[13px] font-semibold tabular-nums text-primary">{c.format(c.computed)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={texto.auxiliar}>Armazenado</p>
+                    <p className={juntar("text-[13px] font-semibold tabular-nums", c.stored == null ? "text-muted-foreground" : ok ? "text-foreground" : "text-destructive line-through")}>
+                      {c.stored == null ? "-" : c.format(Number(c.stored))}
+                    </p>
+                  </div>
+                  <span className={juntar(etiqueta, ok ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
+                    {ok ? "OK" : `Δ ${(diff * 100).toFixed(1)}%`}
+                  </span>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
 
           {!allOk && (
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Os valores exibidos no relatório já usam o cálculo correto (coluna <span className="text-primary font-semibold">Calculado</span>).
-              Os valores em <span className="text-destructive font-semibold line-through">vermelho</span> estavam errados na importação
-              · provavelmente o export trouxe colunas deslocadas ou somou taxas de várias campanhas.
+            <p className={juntar(texto.auxiliar, "border-t border-border px-4 py-3 leading-5")}>
+              Os valores exibidos no relatório já usam o cálculo correto (coluna <span className="font-medium text-primary">Calculado</span>).
+              Os valores em <span className="font-medium text-destructive line-through">vermelho</span> estavam errados na importação:
+              provavelmente o export trouxe colunas deslocadas ou somou taxas de várias campanhas.
             </p>
           )}
-        </div>
+        </>
       )}
-    </section>
+    </Painel>
   );
 }

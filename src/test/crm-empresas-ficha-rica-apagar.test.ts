@@ -93,15 +93,19 @@ describe("apagar um lead", () => {
 });
 
 describe("o funil no celular", () => {
-  it("mostra uma etapa por vez, escolhida por chip com a contagem", () => {
-    expect(kanban).toContain("const [etapaNoCelular, setEtapaNoCelular] = useState<EstagioId>(ESTAGIOS_ABERTOS[0]);");
-    expect(kanban).toContain('role="tablist" aria-label="Etapas do funil"');
-    expect(kanban).toContain('${visivelNoCelular ? "flex" : "hidden"}');
-    expect(kanban).toContain("sm:flex sm:max-h-[calc(100dvh-15rem)] sm:w-[270px]");
+  it("mostra uma etapa por vez, escolhida nas Etapas com a contagem", () => {
+    // A etapa escolhida fica guardada (sair e voltar mantém).
+    expect(kanban).toContain('useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0]');
+    expect(kanban).toContain('rotulo="Etapas do funil"');
+    expect(kanban).toContain('className="mb-2 border-b border-border sm:hidden"');
+    expect(kanban).toContain('visivelNoCelular ? "flex" : "hidden"');
+    expect(kanban).toContain("sm:flex sm:w-[260px] sm:shrink-0");
   });
 
   it("formulários de empresa e contato usam uma coluna no celular", () => {
+    // GrupoDeCampos do sistema: 1 coluna no celular, 2 do sm para cima.
     expect(empresas).not.toContain('className="grid grid-cols-2 gap-2"');
-    expect(empresas).toContain('className="grid gap-2.5 sm:grid-cols-2"');
+    expect(empresas).toContain("<GrupoDeCampos>");
+    expect(empresas).toContain("<CampoDeFormulario rotulo=\"Nome da empresa\" obrigatorio largo>");
   });
 });

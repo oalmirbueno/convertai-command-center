@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Loader2, Plus, Save } from "lucide-react";
+import { ArrowRight, Check, Loader2, Package, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useFotos, useKits, type KitDeFoto } from "@/components/mesa-foto/fotoApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import Painel from "@/components/sistema/Painel";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { botao, campo, campoTexto, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { RECEITAS_DE_PUBLICIDADE, receitaDaCategoria, receitaParaProduto } from "../../../supabase/functions/_shared/receitas-de-publicidade.ts";
 import {
   AvisoDoRascunho,
   CabecalhoDaEtapa,
   FontesDoProduto,
   MolduraDaFoto,
+  RotuloLargo,
   StatusDaCampanhaPilula,
   useMesaPublicidade,
 } from "./Comuns";
@@ -37,6 +42,10 @@ import {
  * briefing é versionado: cada salvar com mudança vira uma versão nova, e os
  * territórios guardam de qual versão saíram. A oferta só fica confirmada com
  * fonte.
+ *
+ * Sistema de design (26/09): campanhas num seletor, ações na linha do título,
+ * briefing em CampoDeFormulario + GrupoDeCampos e rascunho do briefing
+ * guardado por campanha e versão (sair e voltar não perde o que foi escrito).
  */
 
 const linhas = (v: string[]) => v.join("\n");
@@ -46,22 +55,12 @@ const deLinhas = (t: string) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
-  return (
-    <label className="block min-w-0">
-      <span className="text-[12px] font-medium">{rotulo}</span>
-      {dica && <span className="ml-1 text-[11px] text-muted-foreground">{dica}</span>}
-      <div className="mt-1">{children}</div>
-    </label>
-  );
-}
-
 function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () => void }) {
   const { clientId } = useMesa();
   const { aplicar, abrirCampanha } = useMesaPublicidade();
   const fotos = useFotos(clientId);
   const avisarErro = useAvisarErro();
-  const [kitId, setKitId] = useState<string>("");
+  const [kitId, setKitId] = useEstadoDaTela<string>(`mesa-publicidade:produto:${clientId}`, "", { validar: (v) => typeof v === "string" });
   const [categoria, setCategoria] = useState<string>("");
   const [criando, setCriando] = useState(false);
   const kit = kits.find((k) => k.id === kitId) || null;
@@ -75,6 +74,7 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
       aplicar(r.campanha);
       abrirCampanha(r.campanha.id || "rascunho");
       toast.success("Campanha aberta", { description: r.banco ? "Agora complete o briefing." : "Rascunho: o banco da Mesa Publicidade ainda não foi publicado." });
+      setKitId("");
       onCriado();
     } catch (e) {
       avisarErro(e, "Campanha não aberta");
@@ -84,10 +84,14 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-3.5" data-escolher-produto="">
-      <p className="text-[13px] font-semibold">Qual produto vai para a campanha?</p>
-      <p className="mt-0.5 text-[12px] text-muted-foreground">Os produtos vêm da Mesa Foto, com as fotos reais. A campanha nunca muda o produto.</p>
-      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+    <section className="min-w-0 space-y-3" data-escolher-produto="">
+      <CabecalhoDaEtapa
+        nivel={3}
+        titulo="Qual produto vai para a campanha?"
+        ajuda="Os produtos vêm da Mesa Foto, com as fotos reais. A campanha nunca muda o produto."
+        estado={`${kits.length} ${kits.length === 1 ? "produto" : "produtos"} na Mesa Foto`}
+      />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {kits.map((k) => {
           const capa = (fotos.data || []).find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id))) || null;
           const ativo = k.id === kitId;
@@ -100,7 +104,7 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
                 setCategoria("");
               }}
               aria-pressed={ativo}
-              className={`min-w-0 rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+              className={juntar("min-w-0 rounded-lg border p-1.5 text-left transition-colors", ativo ? "border-primary bg-primary/5" : "border-border hover:border-primary/50", foco)}
             >
               <MolduraDaFoto caminho={capa ? capa.storage_path : null} bucket={capa ? capa.storage_bucket : "mesa"} alt={k.nome} proporcao={1} />
               <span className="mt-1 block truncate text-[12px] font-medium">{k.nome || "Produto"}</span>
@@ -110,14 +114,9 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
         })}
       </div>
       {kit && (
-        <div className="mt-3 flex flex-wrap items-end">
-          <label className="mb-1.5 mr-2 block min-w-0">
-            <span className="text-[12px] font-medium">Categoria da receita</span>
-            <select
-              value={categoria || (sugerida ? sugerida.id : "")}
-              onChange={(e) => setCategoria(e.target.value)}
-              className="mt-1 block h-9 w-56 max-w-full rounded-md border border-input bg-background px-2 text-[12.5px]"
-            >
+        <div className="flex min-w-0 flex-wrap items-end">
+          <CampoDeFormulario rotulo="Categoria da receita" ajuda="Dado de partida do diretor. Sem receita, o diretor decide." className="mb-2 mr-2 w-full sm:w-64">
+            <select value={categoria || (sugerida ? sugerida.id : "")} onChange={(e) => setCategoria(e.target.value)} className={campo}>
               <option value="">Sem receita (o diretor decide)</option>
               {RECEITAS_DE_PUBLICIDADE.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -125,43 +124,55 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
                 </option>
               ))}
             </select>
-          </label>
-          <Button type="button" size="sm" className="mb-1.5 h-9" onClick={() => void criar()} disabled={criando}>
+          </CampoDeFormulario>
+          <button type="button" className={juntar(botao.primario, "mb-2 max-w-full")} onClick={() => void criar()} disabled={criando}>
             {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
-            Abrir a campanha deste produto
-          </Button>
+            <span className="min-w-0 truncate">Abrir a campanha deste produto</span>
+          </button>
         </div>
       )}
     </section>
   );
 }
 
+interface RascunhoDoBriefing {
+  b: Briefing;
+  nome: string;
+  categoria: string;
+}
+
 function FormularioDoBriefing() {
+  const { clientId } = useMesa();
   const { campanha, aplicar } = useMesaPublicidade();
   const avisarErro = useAvisarErro();
-  const [b, setB] = useState<Briefing>(() => normalizarBriefing(campanha ? campanha.briefing : null));
-  const [nome, setNome] = useState(campanha ? campanha.nome : "");
-  const [categoria, setCategoria] = useState<string>(campanha && campanha.categoria ? campanha.categoria : "");
+  const inicial: RascunhoDoBriefing = {
+    b: normalizarBriefing(campanha ? campanha.briefing : null),
+    nome: campanha ? campanha.nome : "",
+    categoria: campanha && campanha.categoria ? campanha.categoria : "",
+  };
+  // Rascunho do briefing por campanha e versão: sair e voltar mantém o que foi escrito.
+  const chave = campanha ? `mesa-publicidade:briefing:${clientId}:${campanha.id || "rascunho"}:${campanha.briefing_versao}` : `mesa-publicidade:briefing:${clientId}:nenhuma`;
+  const [rascunho, setRascunho] = useEstadoDaTela<RascunhoDoBriefing>(chave, inicial, {
+    validar: (v) => !!v && typeof v === "object" && typeof (v as RascunhoDoBriefing).nome === "string" && !!(v as RascunhoDoBriefing).b,
+    esperaMs: 300,
+  });
   const [salvando, setSalvando] = useState(false);
-  const chave = campanha ? `${campanha.id || "rascunho"}:${campanha.briefing_versao}` : "";
-  useEffect(() => {
-    if (!campanha) return;
-    setB(normalizarBriefing(campanha.briefing));
-    setNome(campanha.nome);
-    setCategoria(campanha.categoria || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chave]);
   if (!campanha) return null;
+  const b = normalizarBriefing(rascunho.b);
+  const nome = rascunho.nome;
+  const categoria = rascunho.categoria;
   const mudou = !briefingIgual(b, campanha.briefing) || nome !== campanha.nome || (categoria || null) !== (campanha.categoria || null);
   const lacunas = lacunasDoBriefing(b);
   const receita = receitaDaCategoria(categoria);
-  const mudar = (parcial: Partial<Briefing>) => setB((x) => ({ ...x, ...parcial }));
+  const mudar = (parcial: Partial<Briefing>) => setRascunho((x) => ({ ...x, b: { ...normalizarBriefing(x.b), ...parcial } }));
 
   const salvar = async () => {
     if (salvando) return;
     setSalvando(true);
     try {
       const r = await salvarBriefing(campanha, b, nome, categoria || null);
+      // O rascunho passa a ser o que foi salvo (a versão nova lê a chave dela).
+      setRascunho({ b, nome, categoria });
       aplicar(r.campanha);
       toast.success(r.bruto && r.bruto.versao_nova ? `Briefing salvo na versão ${r.campanha.briefing_versao}` : "Campanha salva", {
         description: lacunas.length ? `Faltam ${lacunas.length} ${lacunas.length === 1 ? "ponto" : "pontos"}; dá para propor mesmo assim.` : "Briefing completo.",
@@ -174,137 +185,156 @@ function FormularioDoBriefing() {
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-3.5" data-briefing="">
-      <div className="mb-2.5 flex flex-wrap items-center">
-        <p className="mr-2 text-[13px] font-semibold">Briefing</p>
-        <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[10.5px] text-muted-foreground">versão {campanha.briefing_versao}</span>
-        <StatusDaCampanhaPilula campanha={campanha} />
-      </div>
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-        <Campo rotulo="Nome da campanha">
-          <Input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={120} className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Receita da categoria" dica="dado de partida do diretor">
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="block h-9 w-full rounded-md border border-input bg-background px-2 text-[12.5px]">
-            <option value="">Sem receita</option>
-            {RECEITAS_DE_PUBLICIDADE.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.categoria}
-              </option>
-            ))}
-          </select>
-        </Campo>
-        <Campo rotulo="Objetivo">
-          <div className="flex min-w-0">
-            <select
-              value={b.objetivo}
-              onChange={(e) => mudar({ objetivo: e.target.value as Briefing["objetivo"] })}
-              className="mr-1.5 block h-9 w-40 shrink-0 rounded-md border border-input bg-background px-2 text-[12.5px]"
-            >
+    <Painel
+      as="section"
+      data-briefing=""
+      titulo="Briefing"
+      descricao={
+        <>
+          versão {campanha.briefing_versao} <StatusDaCampanhaPilula campanha={campanha} />
+          {!campanha.persistida ? " · rascunho nesta aba" : ""}
+        </>
+      }
+      acao={
+        <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={salvando || !mudou} data-salvar-briefing="">
+          {salvando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : mudou ? <Save className="mr-1.5 h-3.5 w-3.5" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+          {mudou ? "Salvar briefing" : "Briefing salvo"}
+        </button>
+      }
+    >
+      <div className="space-y-5">
+        <GrupoDeCampos>
+          <CampoDeFormulario rotulo="Nome da campanha">
+            <input value={nome} onChange={(e) => setRascunho((x) => ({ ...x, nome: e.target.value }))} maxLength={120} className={campo} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Receita da categoria" ajuda="Dado de partida do diretor, não campanha vencedora.">
+            <select value={categoria} onChange={(e) => setRascunho((x) => ({ ...x, categoria: e.target.value }))} className={campo}>
+              <option value="">Sem receita</option>
+              {RECEITAS_DE_PUBLICIDADE.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.categoria}
+                </option>
+              ))}
+            </select>
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Objetivo">
+            <select value={b.objetivo} onChange={(e) => mudar({ objetivo: e.target.value as Briefing["objetivo"] })} className={campo}>
               {OBJETIVOS_DA_CAMPANHA.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.rotulo}
                 </option>
               ))}
             </select>
-            <Input value={b.objetivo_texto} onChange={(e) => mudar({ objetivo_texto: e.target.value })} placeholder="Evento de sucesso (ex.: consulta no WhatsApp)" className="h-9 min-w-0 text-[12.5px]" />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Evento de sucesso">
+            <input value={b.objetivo_texto} onChange={(e) => mudar({ objetivo_texto: e.target.value })} placeholder="Ex.: consulta no WhatsApp" className={campo} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Destino" ajuda="Para onde a pessoa vai depois do anúncio.">
+            <input value={b.destino} onChange={(e) => mudar({ destino: e.target.value })} placeholder="WhatsApp, loja, site" className={campo} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Tom">
+            <input value={b.tom} onChange={(e) => mudar({ tom: e.target.value })} placeholder="Ex.: leve, urbano, confiante" className={campo} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Público e situação de compra">
+            <textarea value={b.publico} onChange={(e) => mudar({ publico: e.target.value })} rows={2} className={juntar(campoTexto, "min-h-[64px]")} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Ocasião">
+            <textarea value={b.ocasiao} onChange={(e) => mudar({ ocasiao: e.target.value })} rows={2} className={juntar(campoTexto, "min-h-[64px]")} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Oferta" ajuda="Preço e condição só com fonte. Sem fonte, a oferta não fica confirmada.">
+            <input value={b.oferta.texto} onChange={(e) => mudar({ oferta: { ...b.oferta, texto: e.target.value } })} placeholder="Ex.: 10% no Pix até 30/09" className={campo} />
+          </CampoDeFormulario>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_128px] gap-x-2">
+            <CampoDeFormulario rotulo="Fonte da oferta">
+              <input value={b.oferta.fonte} onChange={(e) => mudar({ oferta: { ...b.oferta, fonte: e.target.value } })} placeholder="Site, conversa, tabela" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Estado">
+              <select
+                value={b.oferta.status}
+                onChange={(e) => mudar({ oferta: { ...b.oferta, status: e.target.value as Briefing["oferta"]["status"] } })}
+                className={campo}
+                aria-label="Estado da oferta"
+              >
+                {STATUS_DO_FATO.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.rotulo}
+                  </option>
+                ))}
+              </select>
+            </CampoDeFormulario>
           </div>
-        </Campo>
-        <Campo rotulo="Destino" dica="para onde a pessoa vai">
-          <Input value={b.destino} onChange={(e) => mudar({ destino: e.target.value })} placeholder="WhatsApp, loja, site" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Público e situação de compra">
-          <Textarea value={b.publico} onChange={(e) => mudar({ publico: e.target.value })} rows={2} className="text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Ocasião">
-          <Textarea value={b.ocasiao} onChange={(e) => mudar({ ocasiao: e.target.value })} rows={2} className="text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Oferta" dica="preço e condição só com fonte">
-          <Input value={b.oferta.texto} onChange={(e) => mudar({ oferta: { ...b.oferta, texto: e.target.value } })} placeholder="Ex.: 10% no Pix até 30/09" className="h-9 text-[12.5px]" />
-          <div className="mt-1.5 flex min-w-0">
-            <Input value={b.oferta.fonte} onChange={(e) => mudar({ oferta: { ...b.oferta, fonte: e.target.value } })} placeholder="Fonte (site, conversa, tabela)" className="mr-1.5 h-9 min-w-0 text-[12.5px]" />
-            <select
-              value={b.oferta.status}
-              onChange={(e) => mudar({ oferta: { ...b.oferta, status: e.target.value as Briefing["oferta"]["status"] } })}
-              className="block h-9 w-32 shrink-0 rounded-md border border-input bg-background px-2 text-[12.5px]"
-              aria-label="Estado da oferta"
-            >
-              {STATUS_DO_FATO.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.rotulo}
-                </option>
-              ))}
-            </select>
+          <CampoDeFormulario rotulo="Formatos" largo>
+            <div className="flex min-w-0 flex-wrap" role="group" aria-label="Formatos">
+              {FORMATOS_DA_CAMPANHA.map((f) => {
+                const ligado = b.formatos.indexOf(f) >= 0;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={ligado}
+                    onClick={() => mudar({ formatos: ligado ? b.formatos.filter((x) => x !== f) : b.formatos.concat([f]) })}
+                    className={juntar(
+                      "mb-1 mr-1.5 inline-flex h-8 items-center rounded-md border px-3 text-[12.5px] tabular-nums transition-colors",
+                      ligado ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                      foco,
+                    )}
+                  >
+                    {f}
+                  </button>
+                );
+              })}
+            </div>
+          </CampoDeFormulario>
+        </GrupoDeCampos>
+
+        <div className="border-t border-border pt-4" data-restricoes="">
+          <div className="mb-3 flex min-w-0 items-center">
+            <h4 className={juntar(texto.tituloSecao, "text-[14px]")}>O que não pode mudar no produto</h4>
+            <AjudaRecolhida className="ml-1.5" rotulo="Sobre o que não pode mudar">
+              A revisão reprova a foto que mudar qualquer um destes, mesmo bonita.
+            </AjudaRecolhida>
           </div>
-        </Campo>
-        <Campo rotulo="Tom">
-          <Input value={b.tom} onChange={(e) => mudar({ tom: e.target.value })} placeholder="Ex.: leve, urbano, confiante" className="h-9 text-[12.5px]" />
-        </Campo>
-      </div>
-
-      <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3" data-restricoes="">
-        <p className="text-[12.5px] font-semibold">O que não pode mudar no produto</p>
-        <p className="text-[11.5px] text-muted-foreground">A revisão reprova a foto que mudar qualquer um destes, mesmo bonita.</p>
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-          <Campo rotulo="Logo e texto">
-            <Input value={b.restricoes.logo} onChange={(e) => mudar({ restricoes: { ...b.restricoes, logo: e.target.value } })} placeholder="Ex.: logo gravada na haste" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Cor da variante">
-            <Input value={b.restricoes.cor_da_variante} onChange={(e) => mudar({ restricoes: { ...b.restricoes, cor_da_variante: e.target.value } })} className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Detalhes de material" dica="um por linha">
-            <Textarea value={linhas(b.restricoes.detalhes)} onChange={(e) => mudar({ restricoes: { ...b.restricoes, detalhes: deLinhas(e.target.value) } })} rows={3} className="text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Não mostrar nem prometer">
-            <Textarea value={b.proibido} onChange={(e) => mudar({ proibido: e.target.value })} rows={3} placeholder="Ex.: resultado clínico, desconto que não existe" className="text-[12.5px]" />
-          </Campo>
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Logo e texto">
+              <input value={b.restricoes.logo} onChange={(e) => mudar({ restricoes: { ...b.restricoes, logo: e.target.value } })} placeholder="Ex.: logo gravada na haste" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Cor da variante">
+              <input value={b.restricoes.cor_da_variante} onChange={(e) => mudar({ restricoes: { ...b.restricoes, cor_da_variante: e.target.value } })} className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Detalhes de material" apoio="Um por linha.">
+              <textarea value={linhas(b.restricoes.detalhes)} onChange={(e) => mudar({ restricoes: { ...b.restricoes, detalhes: deLinhas(e.target.value) } })} rows={3} className={campoTexto} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Não mostrar nem prometer">
+              <textarea value={b.proibido} onChange={(e) => mudar({ proibido: e.target.value })} rows={3} placeholder="Ex.: resultado clínico, desconto que não existe" className={campoTexto} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
         </div>
+
+        {lacunas.length > 0 && (
+          <ul className={juntar(texto.auxiliar, "space-y-0.5 leading-5")} data-lacunas="">
+            {lacunas.map((l) => (
+              <li key={l} className="[overflow-wrap:anywhere]">
+                Falta: {l}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {receita && (
+          <div className={juntar(superficie.poco, "px-3 py-2.5 text-[12px] leading-5")} data-receita={receita.id}>
+            <div className="flex min-w-0 items-center">
+              <p className="min-w-0 truncate font-semibold">Receita de {receita.categoria}</p>
+              <AjudaRecolhida className="ml-1.5" rotulo="Sobre a receita">
+                Receita de partida, não campanha vencedora.
+              </AjudaRecolhida>
+            </div>
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">Territórios de partida: {receita.territorios.join(", ")}.</p>
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">Não pode mudar: {receita.invariantes.join(", ")}.</p>
+            <p className="text-muted-foreground [overflow-wrap:anywhere]">Foco da revisão: {receita.foco_da_revisao}</p>
+          </div>
+        )}
       </div>
-
-      <div className="mt-3 flex flex-wrap items-center">
-        <span className="mr-2 text-[12px] font-medium">Formatos</span>
-        {FORMATOS_DA_CAMPANHA.map((f) => {
-          const ligado = b.formatos.indexOf(f) >= 0;
-          return (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={ligado}
-              onClick={() => mudar({ formatos: ligado ? b.formatos.filter((x) => x !== f) : b.formatos.concat([f]) })}
-              className={`mb-1 mr-1 rounded-full border px-2.5 py-0.5 text-[11.5px] ${ligado ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"}`}
-            >
-              {f}
-            </button>
-          );
-        })}
-      </div>
-
-      {lacunas.length > 0 && (
-        <ul className="mt-2 text-[11.5px] leading-snug text-muted-foreground" data-lacunas="">
-          {lacunas.map((l) => (
-            <li key={l}>Falta: {l}</li>
-          ))}
-        </ul>
-      )}
-
-      {receita && (
-        <div className="mt-3 rounded-lg border border-border bg-background p-3 text-[12px]" data-receita={receita.id}>
-          <p className="font-semibold">Receita de {receita.categoria}</p>
-          <p className="mt-0.5 text-muted-foreground">Territórios de partida: {receita.territorios.join(", ")}.</p>
-          <p className="text-muted-foreground">Não pode mudar: {receita.invariantes.join(", ")}.</p>
-          <p className="text-muted-foreground">Foco da revisão: {receita.foco_da_revisao}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Receita de partida, não campanha vencedora.</p>
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center">
-        <Button type="button" size="sm" className="h-9" onClick={() => void salvar()} disabled={salvando || !mudou} data-salvar-briefing="">
-          {salvando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : mudou ? <Save className="mr-1.5 h-3.5 w-3.5" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-          {mudou ? "Salvar briefing" : "Briefing salvo"}
-        </Button>
-        {!campanha.persistida && <span className="ml-2 text-[11px] text-muted-foreground">Rascunho nesta aba do navegador.</span>}
-      </div>
-    </section>
+    </Painel>
   );
 }
 
@@ -318,76 +348,83 @@ export default function EtapaCampanha() {
   const listaDeKits = useMemo(() => (kits.data || []).filter((k) => k.tipo !== "pessoa" && k.status !== "arquivado" && !!k.id), [kits.data]);
   const lista = (campanhas.data && campanhas.data.campanhas) || [];
   const mostrarEscolha = nova || (!campanha && !campanhas.isLoading && lista.length === 0);
+  const opcoesDeCampanha = lista.map((c) => ({
+    valor: c.id,
+    rotulo: c.nome || c.kit_nome || "Campanha",
+    descricao: `${c.kit_nome || "sem produto"} · ${(ROTULO_DO_STATUS as Record<string, string>)[c.status] || c.status}`,
+  }));
 
   return (
-    <div className="space-y-4" data-etapa-publicidade="campanha">
+    <div className="min-w-0 space-y-5" data-etapa-publicidade="campanha">
       <CabecalhoDaEtapa
         titulo="Campanha"
-        descricao="Escolha o produto, complete o briefing e siga para a direção. A Publicidade dirige; a Mesa Foto produz; a Mesa Ads testa."
+        ajuda="Escolha o produto, complete o briefing e siga para a direção. A Publicidade dirige; a Mesa Foto produz; a Mesa Ads testa."
+        estado={campanha ? `${campanha.kit_nome || "sem produto"} · briefing versão ${campanha.briefing_versao}` : lista.length ? `${lista.length} ${lista.length === 1 ? "campanha" : "campanhas"}` : undefined}
         acoes={
-          <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setNova((v) => !v)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Nova campanha
-          </Button>
+          <>
+            {lista.length > 0 && (
+              <div className="min-w-0 max-w-[220px]" data-campanhas="">
+                <SeletorCompacto
+                  modo="lista"
+                  rotulo="Campanhas do cliente"
+                  icone={<Package className="h-3.5 w-3.5" />}
+                  opcoes={opcoesDeCampanha}
+                  valor={campanha && campanha.id ? campanha.id : ""}
+                  onEscolher={(id) => {
+                    setNova(false);
+                    abrirCampanha(id);
+                  }}
+                  className="w-full"
+                />
+              </div>
+            )}
+            <button type="button" className={botao.secundario} onClick={() => setNova((v) => !v)} aria-pressed={nova} aria-label="Nova campanha">
+              <Plus className="h-3.5 w-3.5" />
+              <RotuloLargo>Nova campanha</RotuloLargo>
+            </button>
+            {campanha && !nova && (
+              <button type="button" className={botao.primario} onClick={() => irPara("direcao")} aria-label="Seguir para a direção">
+                <ArrowRight className="h-3.5 w-3.5" />
+                <RotuloLargo>Seguir para a direção</RotuloLargo>
+              </button>
+            )}
+          </>
         }
       />
       {!banco && <AvisoDoRascunho />}
 
-      {lista.length > 0 && (
-        <div className="flex flex-wrap" role="group" aria-label="Campanhas do cliente" data-campanhas="">
-          {lista.map((c) => {
-            const ativa = !!campanha && campanha.id === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  setNova(false);
-                  abrirCampanha(c.id);
-                }}
-                aria-current={ativa ? "true" : undefined}
-                className={`mb-1.5 mr-1.5 max-w-full rounded-lg border px-2.5 py-1.5 text-left text-[12px] ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-              >
-                <span className="block truncate font-medium">{c.nome}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  {c.kit_nome || "sem produto"} · {(ROTULO_DO_STATUS as Record<string, string>)[c.status] || c.status}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {mostrarEscolha &&
         (kits.isLoading ? (
-          <div className="h-28 animate-pulse rounded-xl bg-muted/70" />
+          <Carregando forma="grade" linhas={6} rotulo="Lendo os produtos" />
         ) : listaDeKits.length ? (
           <EscolherProduto kits={listaDeKits} onCriado={() => setNova(false)} />
         ) : (
-          <div className="rounded-xl border border-dashed border-border p-6 text-center" data-sem-produto="">
-            <p className="text-[13.5px] font-medium">Este cliente ainda não tem produto na Mesa Foto.</p>
-            <p className="mt-1 text-[12px] text-muted-foreground">Suba as fotos reais do produto e identifique o produto lá. Ele aparece aqui na hora.</p>
-            <Link to={`/mesa-foto?client=${clientId}&etapa=acervo`} className="mt-2 inline-block text-[12.5px] font-medium text-primary hover:underline">
-              Abrir a Mesa Foto
-            </Link>
+          <div data-sem-produto="">
+            <EstadoVazio
+              icone={<Package className="h-5 w-5" />}
+              titulo="Este cliente ainda não tem produto na Mesa Foto."
+              descricao="Suba as fotos reais e identifique o produto lá. Ele aparece aqui na hora."
+              acao={
+                <Link to={`/mesa-foto?client=${clientId}&etapa=acervo`} className={botao.secundario}>
+                  Abrir a Mesa Foto
+                </Link>
+              }
+            />
           </div>
         ))}
 
       {campanha && !nova && (
         <>
-          <section className="rounded-xl border border-border bg-card p-3.5" data-produto-da-campanha="">
-            <div className="mb-2 flex flex-wrap items-center">
-              <p className="mr-2 text-[13px] font-semibold">Produto: {campanha.kit_nome || "sem produto"}</p>
-              <span className="text-[11.5px] text-muted-foreground">Fontes da verdade do produto ({campanha.produto_fontes.length}).</span>
-            </div>
+          <section className="min-w-0 space-y-2" data-produto-da-campanha="">
+            <CabecalhoDaEtapa
+              nivel={3}
+              titulo={`Produto: ${campanha.kit_nome || "sem produto"}`}
+              ajuda="As fotos reais do kit são a fonte da verdade do produto. A revisão compara cada foto com elas."
+              estado={`${campanha.produto_fontes.length} ${campanha.produto_fontes.length === 1 ? "fonte" : "fontes"} da verdade`}
+            />
             <FontesDoProduto ids={campanha.produto_fontes} fotos={fotos.data || []} />
           </section>
           <FormularioDoBriefing />
-          <div className="flex justify-end">
-            <Button type="button" size="sm" className="h-9" onClick={() => irPara("direcao")}>
-              Seguir para a direção
-            </Button>
-          </div>
         </>
       )}
     </div>

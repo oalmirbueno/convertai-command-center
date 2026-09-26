@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Activity, AlertTriangle, ChevronDown, Clock, Flame, Lightbulb, MousePointerClick, TrendingUp,
+  AlertTriangle, ChevronDown, Flame, Lightbulb, MousePointerClick,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
+import { Carregando, EstadoDeErro, Painel, Secao, botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import {
   recomendar, resumirCampanha,
   type CampanhaAtiva, type DiaDaCampanha, type Gravidade,
@@ -18,6 +18,10 @@ import {
  * ar neste momento nem o que eles pedem. Número sem recomendação é
  * relatório; recomendação sem número é palpite. Aqui os dois andam juntos:
  * cada aviso traz a conta que o gerou.
+ *
+ * Sistema de design (26/09): uma seção sem caixa em volta, o "agora" numa
+ * linha de estado, os avisos numa lista com divisória (nada de um cartão por
+ * aviso) e as campanhas ativas recolhidas no pé do mesmo painel.
  */
 
 const dinheiro = (v: number) =>
@@ -25,10 +29,10 @@ const dinheiro = (v: number) =>
 const pct = (v: number) => `${v.toFixed(2).replace(".", ",")}%`;
 const inteiro = (v: number) => v.toLocaleString("pt-BR");
 
-const TOM: Record<Gravidade, string> = {
-  alta: "border-destructive/50 bg-destructive/[0.06]",
-  media: "border-warning/50 bg-warning/[0.06]",
-  baixa: "border-border bg-secondary/40",
+const COR_DO_ICONE: Record<Gravidade, string> = {
+  alta: "text-destructive",
+  media: "text-warning",
+  baixa: "text-muted-foreground",
 };
 const ICONE: Record<Gravidade, typeof AlertTriangle> = {
   alta: AlertTriangle,
@@ -49,7 +53,7 @@ export default function CampanhasAtivas({
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: identidades } = useIdentidadesDosClientes();
 
-  const { data, error, isLoading, dataUpdatedAt } = useQuery({
+  const { data, error, isLoading, dataUpdatedAt, refetch } = useQuery({
     queryKey: ["campanhas-ativas", clientId ?? "todas"],
     queryFn: async () => {
       let q = (supabase as any).from("ads_campaigns")
@@ -72,7 +76,7 @@ export default function CampanhasAtivas({
     },
     // O dono pediu tempo real. Um minuto é o intervalo em que a Meta
     // realmente atualiza; pedir mais rápido gastaria chamada sem trazer
-    // número novo.
+    // número novo. A releitura mantém o dado na tela (nada pisca).
     refetchInterval: 60_000,
   });
 
@@ -135,192 +139,195 @@ export default function CampanhasAtivas({
     };
   }, [data, hoje]);
 
-  const [listaAberta, setListaAberta] = useState(false);
+  // A lista aberta ou fechada não se perde ao sair e voltar.
+  const [listaAberta, setListaAberta] = useEstadoDaTela(`anuncios:ativas:${clientId || "todas"}`, false, {
+    validar: (v) => typeof v === "boolean",
+  });
 
-  if (error) {
+  const ajuda =
+    "O que está rodando agora e o que fazer a respeito. Cada aviso traz o número que o gerou, e os avisos só aparecem com volume suficiente para não confundir ruído com sinal. Atualiza sozinho a cada minuto.";
+
+  if (error && !data) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-card p-3 text-[12px] text-destructive">
-        Não consegui ler as campanhas: {error instanceof Error ? error.message : String(error)}.
-        Nenhuma campanha está sendo dada como parada: a leitura falhou.
-      </div>
+      <Secao divisoria titulo="No ar agora" ajuda={ajuda}>
+        <EstadoDeErro
+          titulo="Não consegui ler as campanhas."
+          descricao={`${error instanceof Error ? error.message : String(error)}. Nenhuma campanha está sendo dada como parada: a leitura falhou.`}
+          acao={
+            <button type="button" onClick={() => refetch()} className={botao.secundario}>
+              Tentar de novo
+            </button>
+          }
+        />
+      </Secao>
     );
   }
   if (isLoading) {
-    return <p className="py-4 text-center text-[11px] text-muted-foreground">lendo as campanhas...</p>;
+    return (
+      <Secao divisoria titulo="No ar agora" ajuda={ajuda}>
+        <Carregando rotulo="Lendo as campanhas" linhas={2} />
+      </Secao>
+    );
   }
 
-  // Um cartão só, e não três: o agora numa linha, o que fazer logo abaixo e
-  // a lista das campanhas ativas recolhida (pedido do dono em 26/09: "está
-  // poluído, não dá para entender nada").
-  return (
-    <section className="min-w-0 rounded-2xl border border-border bg-card">
-      {/* O AGORA, numa linha. */}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-3">
-        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
-          <Activity className="h-3.5 w-3.5 text-success" /> No ar agora
-        </p>
-        {/* DE QUEM são estes números. Totais sem escopo fazem quem lê
-            achar que é de um cliente só, e decidir errado por isso. */}
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-medium text-foreground">
-          {clientId
-            ? (nomesDeClientes?.get(clientId) ?? "este cliente")
-            : `todos os clientes · ${clientesAtivos.length}`}
-        </span>
-        <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10.5px] font-semibold text-success">
-          {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"}
-        </span>
-        <span className="text-[11.5px] text-muted-foreground">
-          hoje: <span className="font-mono text-foreground">{dinheiro(totalHoje.gasto)}</span>
-          {" · "}{inteiro(totalHoje.impressoes)} exibições · {inteiro(totalHoje.cliques)} cliques
-        </span>
-        <span className="ml-auto inline-flex items-center gap-1 text-[10.5px] text-muted-foreground">
-          <Clock className="h-3 w-3" />
-          {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-        </span>
-        {totalHoje.impressoes === 0 && ativas.length > 0 && (
-          /* Zero hoje não é zero sempre: a Meta consolida o dia com atraso,
-             e chamar isso de "parado" às 9h da manhã seria alarme falso. */
-          <p className="w-full text-[10.5px] text-muted-foreground">
-            Sem números de hoje ainda: a Meta consolida o dia com algumas horas de atraso.
-          </p>
-        )}
-      </div>
+  // DE QUEM são estes números. Totais sem escopo fazem quem lê achar que é
+  // de um cliente só, e decidir errado por isso.
+  const escopo = clientId
+    ? (nomesDeClientes?.get(clientId) ?? "este cliente")
+    : `todos os clientes · ${clientesAtivos.length}`;
+  const hora = new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-      {/* O QUE FAZER, cada aviso com a conta que o gerou. */}
-      <div className="px-4 py-3">
-        <p className="mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
-          <Lightbulb className="h-3.5 w-3.5 text-warning" /> O que fazer
-          {recomendacoes.length > 0 && (
-            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
-              {recomendacoes.length}
-            </span>
-          )}
+  return (
+    <Secao
+      divisoria
+      titulo="No ar agora"
+      ajuda={ajuda}
+      descricao={
+        <span className="block truncate">
+          {escopo} · {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"} · hoje{" "}
+          <span className="tabular-nums text-foreground">{dinheiro(totalHoje.gasto)}</span>, {inteiro(totalHoje.impressoes)} exibições,{" "}
+          {inteiro(totalHoje.cliques)} cliques · {hora}
+        </span>
+      }
+    >
+      {totalHoje.impressoes === 0 && ativas.length > 0 && (
+        /* Zero hoje não é zero sempre: a Meta consolida o dia com atraso,
+           e chamar isso de "parado" às 9h da manhã seria alarme falso. */
+        <p className={juntar(texto.auxiliar, "-mt-1 mb-3 truncate")}>
+          Sem números de hoje ainda: a Meta consolida o dia com algumas horas de atraso.
         </p>
+      )}
+
+      <Painel
+        semEspaco
+        className="overflow-hidden"
+        titulo={
+          <span className="flex items-center">
+            <Lightbulb className="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" /> O que fazer
+            {recomendacoes.length > 0 && (
+              <span className="ml-2 rounded bg-warning/15 px-1.5 text-[11px] font-semibold leading-5 tabular-nums text-warning">{recomendacoes.length}</span>
+            )}
+          </span>
+        }
+      >
+        {/* O QUE FAZER, cada aviso com a conta que o gerou. */}
         {recomendacoes.length === 0 ? (
-          <p className="text-[11.5px] text-muted-foreground">
-            Nada pede ação agora. Os avisos só aparecem com volume suficiente para não confundir ruído com sinal.
-          </p>
+          <p className={juntar(texto.auxiliar, "px-4 py-3")}>Nada pede ação agora.</p>
         ) : (
-          <div className="max-h-72 min-w-0 space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+          <ul className="min-w-0 divide-y divide-border">
             {recomendacoes.map((r, i) => {
               const Icone = ICONE[r.gravidade];
+              const cliente = !clientId ? nomeDoClienteDaCampanha(r.campaign_id) : null;
               return (
-                <div key={`${r.campaign_id}-${i}`} className={cn("min-w-0 rounded-lg border px-3 py-2", TOM[r.gravidade])}>
-                  <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                    <Icone className={cn(
-                      "h-3.5 w-3.5 shrink-0",
-                      r.gravidade === "alta" ? "text-destructive"
-                        : r.gravidade === "media" ? "text-warning" : "text-muted-foreground",
-                    )} />
-                    <span className="min-w-0 truncate">{r.titulo}</span>
-                  </p>
-                  <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
-                    {!clientId && nomeDoClienteDaCampanha(r.campaign_id) && (
-                      <span className="font-semibold text-foreground/80">
-                        {nomeDoClienteDaCampanha(r.campaign_id)} ·{" "}
-                      </span>
-                    )}
-                    {r.campanha}
-                  </p>
-                  {/* O NÚMERO e a ação. Sem o número o aviso vira palpite. */}
-                  <p className="mt-1 text-[11.5px] leading-snug text-foreground/90">
-                    {r.porque} <span className="text-muted-foreground">{r.acao}</span>
-                  </p>
-                </div>
+                <li key={`${r.campaign_id}-${i}`} className="flex min-w-0 items-start px-4 py-2.5">
+                  <Icone className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", COR_DO_ICONE[r.gravidade])} aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-foreground">{r.titulo}</p>
+                    <p className={juntar(texto.auxiliar, "truncate")}>
+                      {cliente && <span className="font-medium text-foreground/80">{cliente} · </span>}
+                      {r.campanha}
+                    </p>
+                    {/* O NÚMERO e a ação. Sem o número o aviso vira palpite. */}
+                    <p className="mt-0.5 text-[12.5px] leading-5 text-foreground/90">
+                      {r.porque} <span className="text-muted-foreground">{r.acao}</span>
+                    </p>
+                  </div>
+                </li>
               );
             })}
+          </ul>
+        )}
+
+        {/* AS CAMPANHAS ATIVAS, recolhidas no pé: abrem com um clique. */}
+        {ativas.length > 0 && (
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setListaAberta((v) => !v)}
+              aria-expanded={listaAberta}
+              className={juntar("flex w-full items-center px-4 py-2.5 text-left text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground", foco)}
+            >
+              <ChevronDown className={juntar("mr-1.5 h-4 w-4 transition-transform", listaAberta ? "rotate-180" : "")} aria-hidden="true" />
+              {listaAberta ? "Esconder" : "Ver"} as campanhas ativas · últimos 14 dias
+            </button>
+            {listaAberta && (
+              <div className="min-w-0 border-t border-border">
+                {porCliente.map((grupo) => (
+                  <div key={grupo.clientId} className="min-w-0">
+                    {/* O cliente como cabeçalho do grupo, e não como etiqueta miúda. */}
+                    {!clientId && (
+                      <button
+                        type="button"
+                        onClick={() => aoAbrirCliente?.(grupo.clientId)}
+                        className={juntar("flex w-full min-w-0 items-center bg-muted/40 px-4 py-2 text-left transition-colors hover:bg-muted", foco)}
+                      >
+                        <LogoDoCliente
+                          url={identidades?.get(grupo.clientId)?.profile_picture_url}
+                          nome={grupo.nome}
+                          tamanho={22}
+                          className="mr-2"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground">
+                          {grupo.nome}
+                        </span>
+                        <span className={juntar(texto.auxiliar, "ml-2 shrink-0 tabular-nums")}>
+                          {grupo.campanhas.length} ativa{grupo.campanhas.length > 1 ? "s" : ""}
+                          {grupo.gasto > 0 && ` · ${dinheiro(grupo.gasto)} em 14 dias`}
+                        </span>
+                      </button>
+                    )}
+                    <ul className="min-w-0 divide-y divide-border">
+                      {grupo.campanhas.map((c) => {
+                        const r = resumirCampanha(data!.dias, c.campaign_id, 14, hoje);
+                        const temAviso = recomendacoes.some((x) => x.campaign_id === c.campaign_id);
+                        return (
+                          <li
+                            key={c.campaign_id}
+                            role={aoAbrirCliente ? "button" : undefined}
+                            tabIndex={aoAbrirCliente ? 0 : undefined}
+                            onClick={() => aoAbrirCliente?.((c as any).client_id)}
+                            onKeyDown={(e) => {
+                              if (!aoAbrirCliente || (e.key !== "Enter" && e.key !== " ")) return;
+                              e.preventDefault();
+                              aoAbrirCliente((c as any).client_id);
+                            }}
+                            className={juntar(
+                              "min-w-0 px-4 py-2",
+                              aoAbrirCliente && "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                            )}
+                          >
+                            <div className="flex min-w-0 items-center">
+                              <span className={juntar("mr-2 h-1.5 w-1.5 shrink-0 rounded-full", temAviso ? "bg-warning" : "bg-success")} aria-hidden="true" />
+                              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
+                                {c.name || c.campaign_id}
+                              </span>
+                              <span className="ml-2 shrink-0 text-[12.5px] tabular-nums text-foreground">{dinheiro(r.gasto)}</span>
+                            </div>
+                            <p className={juntar(texto.auxiliar, "mt-0.5 flex flex-wrap pl-3.5 tabular-nums [&>*]:mr-3")}>
+                              <span>{inteiro(r.impressoes)} exibições</span>
+                              <span className="inline-flex items-center">
+                                <MousePointerClick className="mr-1 h-3 w-3" aria-hidden="true" />
+                                {inteiro(r.cliques)} cliques · CTR {pct(r.ctr)}
+                              </span>
+                              {r.cpc > 0 && <span>CPC {dinheiro(r.cpc)}</span>}
+                              {r.frequencia > 0 && (
+                                <span className={juntar(r.frequencia >= 3.5 && "font-semibold text-warning")}>
+                                  freq. {r.frequencia.toFixed(1)}
+                                </span>
+                              )}
+                              {c.daily_budget ? <span>teto {dinheiro(Number(c.daily_budget))}/dia</span> : null}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
-      </div>
-
-      {/* AS CAMPANHAS ATIVAS, recolhidas: abrem com um clique. */}
-      {ativas.length > 0 && (
-        <div className="border-t border-border">
-          <button
-            type="button"
-            onClick={() => setListaAberta((v) => !v)}
-            aria-expanded={listaAberta}
-            className="flex w-full items-center gap-1.5 px-4 py-2.5 text-left text-[12px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", listaAberta ? "" : "-rotate-90")} />
-            <TrendingUp className="h-3.5 w-3.5 text-info" />
-            {listaAberta ? "Esconder" : "Ver"} as campanhas ativas · últimos 14 dias
-          </button>
-          {listaAberta && (
-          <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-4">
-            {porCliente.map((grupo) => (
-              <div key={grupo.clientId} className="min-w-0 space-y-1.5">
-                {/* O cliente como cabeçalho, e não como etiqueta miúda. */}
-                {!clientId && (
-                  <button
-                    type="button"
-                    onClick={() => aoAbrirCliente?.(grupo.clientId)}
-                    className="flex w-full min-w-0 items-center gap-2 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary"
-                  >
-                    <LogoDoCliente
-                      url={identidades?.get(grupo.clientId)?.profile_picture_url}
-                      nome={grupo.nome}
-                      tamanho={22}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
-                      {grupo.nome}
-                    </span>
-                    <span className="shrink-0 text-[10.5px] text-muted-foreground">
-                      {grupo.campanhas.length} ativa{grupo.campanhas.length > 1 ? "s" : ""}
-                      {grupo.gasto > 0 && ` · ${dinheiro(grupo.gasto)} em 14 dias`}
-                    </span>
-                  </button>
-                )}
-            {grupo.campanhas.map((c) => {
-              const r = resumirCampanha(data!.dias, c.campaign_id, 14, hoje);
-              const temAviso = recomendacoes.some((x) => x.campaign_id === c.campaign_id);
-              return (
-                <div
-                  key={c.campaign_id}
-                  role={aoAbrirCliente ? "button" : undefined}
-                  tabIndex={aoAbrirCliente ? 0 : undefined}
-                  onClick={() => aoAbrirCliente?.((c as any).client_id)}
-                  onKeyDown={(e) => {
-                    if (!aoAbrirCliente || (e.key !== "Enter" && e.key !== " ")) return;
-                    e.preventDefault();
-                    aoAbrirCliente((c as any).client_id);
-                  }}
-                  className={cn(
-                    "min-w-0 rounded-lg border px-3 py-2",
-                    aoAbrirCliente && "cursor-pointer transition-colors hover:border-primary/50",
-                    temAviso ? "border-warning/40 bg-warning/[0.04]" : "border-border bg-secondary/40",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
-                      {c.name || c.campaign_id}
-                    </span>
-                    <span className="shrink-0 font-mono text-[11px] text-foreground">{dinheiro(r.gasto)}</span>
-                  </div>
-                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] text-muted-foreground">
-                    <span>{inteiro(r.impressoes)} exibições</span>
-                    <span className="inline-flex items-center gap-1">
-                      <MousePointerClick className="h-2.5 w-2.5" />
-                      {inteiro(r.cliques)} cliques · CTR {pct(r.ctr)}
-                    </span>
-                    {r.cpc > 0 && <span>CPC {dinheiro(r.cpc)}</span>}
-                    {r.frequencia > 0 && (
-                      <span className={cn(r.frequencia >= 3.5 && "font-semibold text-warning")}>
-                        freq. {r.frequencia.toFixed(1)}
-                      </span>
-                    )}
-                    {c.daily_budget ? <span>teto {dinheiro(Number(c.daily_budget))}/dia</span> : null}
-                  </p>
-                </div>
-              );
-            })}
-              </div>
-            ))}
-          </div>
-          )}
-        </div>
-      )}
-    </section>
+      </Painel>
+    </Secao>
   );
 }

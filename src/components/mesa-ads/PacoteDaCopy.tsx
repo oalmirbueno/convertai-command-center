@@ -190,7 +190,7 @@ export default function PacoteDaCopy({
   const markdown = pacote ? pacoteEmMarkdown(nome, pacote) : "";
 
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4" aria-label="Pacote de copy">
+    <section className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-4" aria-label="Pacote de copy">
       <div className="flex min-w-0 flex-wrap items-center">
         <h3 className="mb-1 mr-2 flex min-w-0 flex-1 items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           <Package className="mr-1.5 h-3.5 w-3.5" /> Pacote completo de copy

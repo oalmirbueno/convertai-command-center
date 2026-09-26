@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  Brain, AlertTriangle, CheckCircle2, TrendingUp, Target, FileDown,
-  MessageSquare, Copy, Lightbulb, Landmark,
+  Brain, AlertTriangle, CheckCircle2, Target, FileDown,
+  MessageSquare, Copy, Lightbulb,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import {
+  AjudaRecolhida, CampoDeFormulario, PainelDoAgente, Secao, SeletorCompacto,
+  botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
+} from "@/components/sistema";
+import { Etiqueta, Kpi, corDoTom } from "@/components/finance/pecasDoFinanceiro";
 import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hooks/useFinanceV2";
 import {
   DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier, ONE_OFF_CATALOG,
@@ -46,6 +50,15 @@ interface Recommendation {
   detail: string;
 }
 
+// ───────── Respostas prontas (tipos) ─────────
+const TIPOS_DE_RESPOSTA: { value: string; label: string; needsClient?: boolean }[] = [
+  { value: "resumo", label: "Resumo executivo do mês" },
+  { value: "contador", label: "Fechamento para o contador" },
+  { value: "cobranca", label: "Cobrança de atrasado", needsClient: true },
+  { value: "reajuste", label: "Proposta de reajuste", needsClient: true },
+  { value: "isca", label: "Oferta de entrada (isca)", needsClient: false },
+];
+
 interface Props {
   billing: any[];
   projectPayments: any[];
@@ -56,10 +69,14 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
   const { data: settings } = useFinanceSettings();
   const { data: plans } = useFinancePlans();
   const { updateSettings } = useFinanceMutations();
-  const [responseType, setResponseType] = useState("resumo");
-  const [responseClientId, setResponseClientId] = useState("");
-  const [responseText, setResponseText] = useState("");
-  const [goalDraft, setGoalDraft] = useState("");
+  // Tipo, cliente, o texto do compositor e a meta digitada ficam lembrados
+  // (sair e voltar mantém o rascunho). O envio continua o mesmo: copiar ou WhatsApp.
+  const [responseType, setResponseType] = useEstadoDaTela<string>("financeiro:assistente:tipo", "resumo", {
+    validar: (v) => typeof v === "string" && TIPOS_DE_RESPOSTA.some((t) => t.value === v),
+  });
+  const [responseClientId, setResponseClientId] = useEstadoDaTela<string>("financeiro:assistente:cliente", "");
+  const [responseText, setResponseText] = useEstadoDaTela<string>("financeiro:assistente:rascunho", "");
+  const [goalDraft, setGoalDraft] = useEstadoDaTela<string>("financeiro:assistente:meta", "");
   const { data: financeBoxes } = useFinanceBoxes();
 
   const { data: allExpenses = [] } = useQuery({
@@ -300,13 +317,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
   }, [analysis, financeBoxes]);
 
   // ───────── Respostas prontas ─────────
-  const RESPONSE_TYPES = [
-    { value: "resumo", label: "Resumo executivo do mês" },
-    { value: "contador", label: "Fechamento para o contador" },
-    { value: "cobranca", label: "Cobrança de atrasado", needsClient: true },
-    { value: "reajuste", label: "Proposta de reajuste", needsClient: true },
-    { value: "isca", label: "Oferta de entrada (isca)", needsClient: false },
-  ];
+  const RESPONSE_TYPES = TIPOS_DE_RESPOSTA;
 
   const buildResponse = (type: string, clientId: string): string => {
     const a = analysis;
@@ -355,7 +366,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
   const copyResponse = async () => {
     try {
       await navigator.clipboard.writeText(responseText);
-      toast.success("Copiado! É só colar.");
+      toast.success("Copiado. É só colar.");
     } catch {
       toast.error("Não consegui copiar automaticamente · selecione o texto e copie.");
     }
@@ -452,10 +463,10 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
     toast.success('Na janela de impressão, escolha "Salvar como PDF".');
   };
 
-  const sevStyle: Record<Severity, { badge: string; label: string; icon: any }> = {
-    critical: { badge: "bg-destructive/15 text-destructive", label: "Agir agora", icon: AlertTriangle },
-    attention: { badge: "bg-warning/15 text-warning", label: "Atenção", icon: Lightbulb },
-    good: { badge: "bg-success/15 text-success", label: "No caminho", icon: CheckCircle2 },
+  const sevStyle: Record<Severity, { tom: "perigo" | "aviso" | "sucesso"; label: string; icon: any }> = {
+    critical: { tom: "perigo", label: "Agir agora", icon: AlertTriangle },
+    attention: { tom: "aviso", label: "Atenção", icon: Lightbulb },
+    good: { tom: "sucesso", label: "No caminho", icon: CheckCircle2 },
   };
 
   const selectedType = RESPONSE_TYPES.find((t) => t.value === responseType);
@@ -464,169 +475,145 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
     : responseType === "reajuste"
       ? analysis.belowTable.map((r: any) => r.client)
       : clients || [];
+  const precisaDeCliente = selectedType?.needsClient !== false && responseType !== "resumo" && responseType !== "contador";
+  const linkDoWhatsapp = whatsappHref();
 
   return (
-    <div className="space-y-5">
-      {/* Cabeçalho */}
-      <div className="bg-card border border-primary/25 rounded-xl p-5">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
-            <Brain className="w-5 h-5" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Assistente CFO · {analysis.monthLabel}</p>
-            <p className="text-[11px] text-muted-foreground">
-              Analisa a movimentação real do painel (financeiro, clientes e projetos) e recomenda o próximo passo para evoluir o resultado.
-            </p>
-          </div>
-          <button
-            onClick={downloadPdf}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer border-none"
-          >
-            <FileDown className="w-3.5 h-3.5" /> Resumo do mês (PDF)
-          </button>
-        </div>
-
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+      <div className="min-w-0 space-y-6">
         {/* Diagnóstico em uma linha */}
-        <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: "Operacional no mês", value: fmt(analysis.operational), color: "text-foreground" },
-            { label: "Projeção (ritmo)", value: fmt(analysis.projectedOperational), color: "text-info" },
-            { label: "Lucro do mês", value: fmt(analysis.profit), color: analysis.profit >= 0 ? "text-success" : "text-destructive" },
-            { label: "Atrasados", value: fmt(analysis.overdueTotal), color: analysis.overdueTotal > 0 ? "text-destructive" : "text-success" },
-          ].map((s) => (
-            <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-              <p className={`text-base font-mono font-semibold mt-1 ${s.color}`}>{s.value}</p>
+        <Secao
+          titulo="Diagnóstico do mês"
+          descricao={`${analysis.monthLabel} · até o dia ${analysis.dayOfMonth}`}
+          ajuda="O assistente lê a movimentação real do painel (financeiro, clientes e projetos) e recomenda o próximo passo para evoluir o resultado."
+          acao={
+            <button type="button" onClick={downloadPdf} className={botao.secundario} aria-label="Resumo do mês em PDF" title="Resumo do mês em PDF">
+              <FileDown className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">PDF do mês</span>
+            </button>
+          }
+        >
+          <div className="grid min-w-0 grid-cols-2 gap-3">
+            <Kpi rotulo="Operacional no mês" valor={fmt(analysis.operational)} />
+            <Kpi rotulo="Projeção (ritmo)" valor={fmt(analysis.projectedOperational)} tom="info" />
+            <Kpi rotulo="Lucro do mês" valor={fmt(analysis.profit)} tom={analysis.profit >= 0 ? "sucesso" : "perigo"} />
+            <Kpi rotulo="Atrasados" valor={fmt(analysis.overdueTotal)} tom={analysis.overdueTotal > 0 ? "perigo" : "sucesso"} />
+          </div>
+        </Secao>
+
+        {/* Meta sugerida */}
+        <Secao
+          divisoria
+          titulo="Meta mensal"
+          descricao={
+            analysis.monthlyGoal
+              ? `Sugerida ${fmt(analysis.suggestedGoal)} · atual ${fmt(analysis.monthlyGoal)}`
+              : `Sugerida ${fmt(analysis.suggestedGoal)} · nenhuma meta definida`
+          }
+          ajuda={
+            <>
+              Cálculo: (custos fixos {fmt(analysis.fixedCosts)} + pró-labore {fmt(analysis.proLaboreOfficial)} + reserva de clientes{" "}
+              {fmt(analysis.clientReserveTarget)}) × 1,4 de folga, arredondado. Estrutura coberta com 40% de margem. Campo vazio grava a sugerida.
+            </>
+          }
+        >
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+            <CampoDeFormulario rotulo="Nova meta (R$)">
+              <input
+                type="number"
+                inputMode="decimal"
+                value={goalDraft}
+                onChange={(e) => setGoalDraft(e.target.value)}
+                placeholder={String(analysis.suggestedGoal)}
+                className={campo}
+              />
+            </CampoDeFormulario>
+            <button type="button" onClick={applySuggestedGoal} disabled={updateSettings.isPending} className={botao.secundario}>
+              <Target className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Definir meta
+            </button>
+          </div>
+        </Secao>
+      </div>
+
+      {/* O agente: recomendações rolando por dentro, o texto pronto fixo embaixo. */}
+      <PainelDoAgente
+        titulo="Assistente CFO"
+        descricao={`${recommendations.length} ${recommendations.length === 1 ? "recomendação" : "recomendações"} de hoje`}
+        icone={<Brain className="h-4 w-4" />}
+        className="lg:h-[680px]"
+        rotuloDasMensagens="Recomendações do assistente"
+        acoes={
+          <AjudaRecolhida rotulo="Sobre as respostas prontas" lado="left">
+            Escolha o tipo de resposta e o assistente monta o texto com os números reais do mês. O texto do contador organiza os
+            números, mas alíquotas, guias e obrigações são sempre validadas por ele.
+          </AjudaRecolhida>
+        }
+        topo={
+          <div className="flex min-w-0 flex-wrap items-center [&>*]:my-0.5">
+            <SeletorCompacto
+              opcoes={RESPONSE_TYPES.map((t) => ({ valor: t.value, rotulo: t.label }))}
+              valor={responseType}
+              onEscolher={(v) => { setResponseType(v); setResponseText(buildResponse(v, responseClientId)); }}
+              rotulo="Resposta pronta"
+              icone={<MessageSquare className="h-3.5 w-3.5" />}
+              modo="lista"
+              className="mr-2"
+            />
+            {precisaDeCliente && (
+              <select
+                value={responseClientId}
+                onChange={(e) => { setResponseClientId(e.target.value); setResponseText(buildResponse(responseType, e.target.value)); }}
+                className={juntar(campo, "w-auto min-w-0 max-w-full flex-1 basis-40")}
+                aria-label="Cliente"
+              >
+                <option value="">Cliente...</option>
+                {clientOptions.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        }
+        compositor={
+          <>
+            <textarea
+              value={responseText}
+              onChange={(e) => setResponseText(e.target.value)}
+              rows={6}
+              placeholder="Escolha uma resposta pronta acima. O texto vem pronto e você ajusta o que quiser."
+              aria-label="Texto da resposta"
+              className={juntar(campoTexto, "max-h-[40vh] resize-y")}
+            />
+            <div className="flex min-w-0 flex-wrap items-center justify-end [&>*+*]:ml-2">
+              <button type="button" onClick={() => generateResponse()} className={juntar(botao.discreto, "mr-auto")}>
+                Gerar novamente
+              </button>
+              {linkDoWhatsapp && (
+                <a href={linkDoWhatsapp} target="_blank" rel="noreferrer" className={juntar(botao.secundario, "no-underline")}>
+                  WhatsApp
+                </a>
+              )}
+              <button type="button" onClick={copyResponse} disabled={!responseText} className={botao.primario}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Meta sugerida */}
-      <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 flex-wrap">
-        <Target className="w-4 h-4 text-primary shrink-0" />
-        <div className="flex-1 min-w-[200px]">
-          <p className="text-[12px] text-foreground font-medium">
-            Meta sugerida pelo assistente: {fmt(analysis.suggestedGoal)}/mês
-            {analysis.monthlyGoal ? <span className="text-muted-foreground font-normal"> · atual: {fmt(analysis.monthlyGoal)}</span> : <span className="text-warning font-normal"> · nenhuma meta definida</span>}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            Cálculo: (custos fixos {fmt(analysis.fixedCosts)} + pró-labore {fmt(analysis.proLaboreOfficial)} + reserva de clientes {fmt(analysis.clientReserveTarget)}) × 1,4 de folga, arredondado · estrutura coberta com 40% de margem.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            value={goalDraft}
-            onChange={(e) => setGoalDraft(e.target.value)}
-            placeholder={String(analysis.suggestedGoal)}
-            className="w-28 h-9"
-          />
-          <button
-            onClick={applySuggestedGoal}
-            disabled={updateSettings.isPending}
-            className="text-[12px] px-3 py-2 rounded-lg bg-success/15 text-success hover:bg-success/25 cursor-pointer border-none disabled:opacity-50 whitespace-nowrap"
-          >
-            Definir meta
-          </button>
-        </div>
-      </div>
-
-      {/* Recomendações */}
-      <div className="space-y-2">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
-          <TrendingUp className="w-3.5 h-3.5 text-primary" /> Recomendações de hoje ({recommendations.length})
-        </p>
+          </>
+        }
+      >
         {recommendations.map((r, i) => {
           const s = sevStyle[r.severity];
           return (
-            <div key={i} className="bg-card border border-border rounded-xl p-4 flex gap-3">
-              <s.icon className={`w-4 h-4 shrink-0 mt-0.5 ${r.severity === "critical" ? "text-destructive" : r.severity === "attention" ? "text-warning" : "text-success"}`} />
+            <div key={i} className={juntar(superficie.poco, "flex min-w-0 px-3 py-2.5")}>
+              <s.icon className={juntar("mr-2.5 mt-0.5 h-4 w-4 shrink-0", corDoTom[s.tom])} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-[13px] font-medium text-foreground">{r.title}</p>
-                  <span className={`text-[9px] px-2 py-0.5 rounded-full ${s.badge}`}>{s.label}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1">{r.detail}</p>
+                <Etiqueta tom={s.tom}>{s.label}</Etiqueta>
+                <p className="mt-1 text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
+                <p className={juntar(texto.auxiliar, "mt-1 leading-5 [overflow-wrap:anywhere]")}>{r.detail}</p>
               </div>
             </div>
           );
         })}
-      </div>
-
-      {/* Respostas prontas */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
-          <MessageSquare className="w-3.5 h-3.5 text-info" /> Respostas prontas · selecione e o assistente monta o texto
-        </p>
-        <div className="flex gap-1.5 flex-wrap">
-          {RESPONSE_TYPES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => { setResponseType(t.value); setResponseText(buildResponse(t.value, responseClientId)); }}
-              className={`text-[11px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
-                responseType === t.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {selectedType?.needsClient !== false && responseType !== "resumo" && responseType !== "contador" && (
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Cliente</label>
-            <select
-              value={responseClientId}
-              onChange={(e) => { setResponseClientId(e.target.value); setResponseText(buildResponse(responseType, e.target.value)); }}
-              className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
-            >
-              <option value="">Selecionar…</option>
-              {clientOptions.map((c: any) => (
-                <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <textarea
-          value={responseText}
-          onChange={(e) => setResponseText(e.target.value)}
-          rows={9}
-          placeholder="Escolha um tipo de resposta acima · o texto vem pronto e você ajusta o que quiser."
-          className="w-full bg-secondary border border-border rounded-lg px-3 py-2.5 text-[13px] text-foreground resize-y leading-relaxed"
-        />
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => generateResponse()}
-            className="text-[12px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
-          >
-            Gerar novamente
-          </button>
-          <button
-            onClick={copyResponse}
-            disabled={!responseText}
-            className="inline-flex items-center gap-1.5 text-[12px] px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 cursor-pointer border-none disabled:opacity-50"
-          >
-            <Copy className="w-3.5 h-3.5" /> Copiar
-          </button>
-          {whatsappHref() && (
-            <a
-              href={whatsappHref()!}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-[12px] px-3 py-2 rounded-lg bg-success/15 text-success hover:bg-success/25 no-underline"
-            >
-              Enviar no WhatsApp
-            </a>
-          )}
-        </div>
-        <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-          <Landmark className="w-3 h-3 shrink-0" />
-          O texto do contador traz os números reais do mês, mas alíquotas, guias e obrigações são sempre validadas por ele · o assistente organiza, o contador confirma.
-        </p>
-      </div>
+      </PainelDoAgente>
     </div>
   );
 }

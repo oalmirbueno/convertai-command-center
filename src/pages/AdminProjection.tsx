@@ -1,12 +1,16 @@
-import { useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useBilling } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getProjectBrand, matchesBrandFilter, BrandFilter, BRAND_FILTERS } from "@/lib/brandHelpers";
-import { useState, useMemo } from "react";
-import { ArrowLeft, Briefcase, TrendingUp, Lightbulb, Users, Zap, Target, BarChart3 } from "lucide-react";
+import { useMemo } from "react";
+import { Briefcase, TrendingUp, Users, Zap, Target, BarChart3 } from "lucide-react";
+import {
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela,
+  botao, etiqueta, juntar, superficie, texto,
+} from "@/components/sistema";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -21,12 +25,12 @@ const receivedOf = (row: any) => {
 };
 
 export default function AdminProjection() {
-  const navigate = useNavigate();
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const { data: clients } = useClients();
-  const { data: billing } = useBilling();
-  const { data: projectPayments } = useQuery({
+  const billingQuery = useBilling();
+  const { data: billing } = billingQuery;
+  const paymentsQuery = useQuery({
     queryKey: ["all-project-payments-projection"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -37,8 +41,12 @@ export default function AdminProjection() {
     },
     enabled: isAdmin,
   });
+  const { data: projectPayments } = paymentsQuery;
 
-  const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
+  // Marca escolhida fica guardada ao sair e voltar.
+  const [brandFilter, setBrandFilter] = useEstadoDaTela<BrandFilter>("projecao:marca", "all", {
+    validar: (v) => BRAND_FILTERS.some((f) => f.value === v),
+  });
 
   const now = new Date();
   const thisMonth = now.getMonth();
@@ -216,203 +224,193 @@ export default function AdminProjection() {
   };
 
   if (!isAdmin) {
-    navigate("/financeiro");
-    return null;
+    return <Navigate to="/financeiro" replace />;
   }
 
+  const primeiraCarga = (billingQuery.isLoading && !billing) || (paymentsQuery.isLoading && !projectPayments);
+  const erroAoLer = (billingQuery.isError && !billing) || (paymentsQuery.isError && !projectPayments);
+  const numeros = [
+    { rotulo: "Mês atual", valor: fmt(currentMonthRevenue), sub: MONTHS_FULL[thisMonth], icone: <BarChart3 className="h-3.5 w-3.5" />, cor: "text-foreground", corIcone: "text-muted-foreground" },
+    {
+      rotulo: "Projeção",
+      valor: fmt(projectedTotal),
+      sub: showMonthly && showIndiv ? `Recorrente ${fmt(recurringTotal)} · Parcelas ${fmt(indivTotal)}` : MONTHS_FULL[nextMonth],
+      icone: <Briefcase className="h-3.5 w-3.5" />,
+      cor: "text-info",
+      corIcone: "text-info",
+    },
+    { rotulo: "Meta 2x", valor: fmt(doubleTarget), sub: "Dobro da projeção", icone: <Target className="h-3.5 w-3.5" />, cor: "text-success", corIcone: "text-success" },
+    { rotulo: "Diferença", valor: fmt(gap), sub: "Falta para chegar a 2x", icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-warning", corIcone: "text-warning" },
+  ];
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/financeiro")} className="text-muted-foreground hover:text-foreground transition-colors bg-transparent border-none cursor-pointer">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="heading-page">Projeção: {MONTHS_FULL[nextMonth]} {nextYear}</h1>
-            <p className="text-[12px] text-muted-foreground">Receita projetada e recomendações para crescimento</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-          {BRAND_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setBrandFilter(f.value)}
-              className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                brandFilter === f.value
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground bg-transparent"
-              }`}
-            >
-              {f.label}
+    <div className="min-w-0 space-y-6 pb-4">
+      <CabecalhoDePagina
+        titulo={`Projeção de ${MONTHS_FULL[nextMonth]}`}
+        descricao={String(nextYear)}
+        voltar={{ para: "/financeiro", rotulo: "Financeiro" }}
+        ajuda="Receita projetada para o próximo mês (planos ativos e parcelas que vencem) e o que falta para dobrar o faturamento."
+        acoes={
+          <SeletorCompacto
+            opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
+            valor={brandFilter}
+            onEscolher={(v) => setBrandFilter(v as BrandFilter)}
+            rotulo="Marca"
+            className="hidden sm:inline-flex"
+          />
+        }
+      />
+      {/* Celular: o filtro de marca desce para a linha de baixo (o título não é cortado). */}
+      <SeletorCompacto
+        opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
+        valor={brandFilter}
+        onEscolher={(v) => setBrandFilter(v as BrandFilter)}
+        rotulo="Marca"
+        larguraTotal
+        className="sm:hidden"
+      />
+
+      {erroAoLer && (
+        <EstadoDeErro
+          titulo="Não foi possível carregar a projeção."
+          descricao="Os números podem estar incompletos."
+          acao={
+            <button type="button" onClick={() => { void billingQuery.refetch(); void paymentsQuery.refetch(); }} className={botao.secundario}>
+              Tentar de novo
             </button>
-          ))}
-        </div>
-      </div>
+          }
+        />
+      )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="w-4 h-4 text-muted-foreground" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Mês Atual</span>
-          </div>
-          <p className="text-lg font-semibold font-mono text-foreground">{fmt(currentMonthRevenue)}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{MONTHS_FULL[thisMonth]}</p>
-        </div>
-        <div className="bg-card border border-info/30 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Briefcase className="w-4 h-4 text-info" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção</span>
-          </div>
-          <p className="text-lg font-semibold font-mono text-info">{fmt(projectedTotal)}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            {showMonthly && showIndiv
-              ? `Recorrente ${fmt(recurringTotal)} · Parcelas ${fmt(indivTotal)}`
-              : MONTHS_FULL[nextMonth]}
-          </p>
-        </div>
-        <div className="bg-card border border-success/30 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-success" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Meta 2x</span>
-          </div>
-          <p className="text-lg font-semibold font-mono text-success">{fmt(doubleTarget)}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Dobro da projeção atual</p>
-        </div>
-        <div className="bg-card border border-warning/30 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-warning" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Gap</span>
-          </div>
-          <p className="text-lg font-semibold font-mono text-warning">{fmt(gap)}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Falta para atingir 2x</p>
-        </div>
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-fr">
-        {/* Comparison bar chart */}
-        <div className="bg-card border border-border rounded-xl p-5 h-full flex flex-col">
-          <h3 className="text-[13px] font-medium text-foreground mb-4">Comparativo de Receita</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={comparisonData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="valor" radius={[6, 6, 0, 0]}>
-                {comparisonData.map((_, i) => (
-                  <Cell key={i} fill={i === 0 ? "hsl(var(--muted-foreground))" : i === 1 ? "hsl(var(--info))" : "hsl(var(--success))"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Pie chart */}
-        {pieData.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5 h-full flex flex-col">
-            <h3 className="text-[13px] font-medium text-foreground mb-4">Composição da Projeção</h3>
-            <div className="flex items-center gap-6">
-              <ResponsiveContainer width="50%" height={200}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
-                    {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-3">
-                {pieData.map((d, i) => (
-                  <div key={d.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ background: PIE_COLORS[i] }} />
-                    <div>
-                      <p className="text-[12px] text-foreground font-medium">{d.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{fmt(d.value)} ({((d.value / projectedTotal) * 100).toFixed(0)}%)</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Detailed items */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Briefcase className="w-3.5 h-3.5 text-info" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Itens Projetados ({allItems.length})
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            {showMonthly && <span>Recorrente: <strong className="text-foreground">{fmt(recurringTotal)}</strong></span>}
-            {showIndiv && <span>Parcelas: <strong className="text-foreground">{fmt(indivTotal)}</strong></span>}
-          </div>
-        </div>
-        {allItems.length === 0 ? (
-          <div className="px-5 py-8 text-center text-[13px] text-muted-foreground">
-            Nenhum item projetado para {MONTHS_FULL[nextMonth]}
-          </div>
-        ) : (
-          <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-            {allItems.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 px-5 py-3">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${item.type === "recurring" ? "bg-success" : "bg-info"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-foreground truncate">{item.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{item.client}</p>
+      {primeiraCarga ? (
+        <Carregando forma="aba" rotulo="Carregando projeção" />
+      ) : (
+        <>
+          <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
+            {numeros.map((n) => (
+              <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4")}>
+                <div className="flex min-w-0 items-center">
+                  <span className={juntar("mr-1.5 inline-flex shrink-0", n.corIcone)} aria-hidden="true">{n.icone}</span>
+                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{n.rotulo}</span>
                 </div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info whitespace-nowrap">
-                  {item.type === "recurring" ? "Recorrente" : "Parcela"}
-                </span>
-                <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
-                {item.due && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground whitespace-nowrap">
-                    {new Date(item.due + "T00:00:00").toLocaleDateString("pt-BR")}
-                  </span>
-                )}
+                <p className={juntar("mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums sm:text-[18px]", n.cor)}>{n.valor}</p>
+                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={n.sub}>{n.sub}</p>
               </div>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* Recommendations */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-          <Lightbulb className="w-3.5 h-3.5 text-warning" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Recomendações para Dobrar o Faturamento
-          </span>
-        </div>
-        <div className="divide-y divide-border">
-          {recommendations.map((rec, i) => (
-            <div key={i} className="px-5 py-4 flex gap-4">
-              <div className="w-10 h-10 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0">
-                <rec.icon className="w-5 h-5 text-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-[14px] font-medium text-foreground">{rec.title}</p>
-                  <span className={`text-[9px] px-2 py-0.5 rounded-full ${priorityColor(rec.priority)}`}>
-                    {rec.priority}
-                  </span>
+          <Secao titulo="Receita" divisoria>
+            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+              <Painel titulo="Comparativo" descricao="Mês atual, projeção e meta">
+                <div className="h-[220px] min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={comparisonData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                      <Bar dataKey="valor" radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                        {comparisonData.map((_, i) => (
+                          <Cell key={i} fill={i === 0 ? "hsl(var(--muted-foreground))" : i === 1 ? "hsl(var(--info))" : "hsl(var(--success))"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-                <p className="text-[12px] text-muted-foreground leading-relaxed">{rec.description}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-[10px] text-muted-foreground uppercase">Impacto</p>
-                <p className="text-[13px] font-mono font-semibold text-success">{rec.impact}</p>
-              </div>
+              </Painel>
+
+              {pieData.length > 0 && (
+                <Painel titulo="Composição" descricao={`Projeção de ${MONTHS_FULL[nextMonth]}`}>
+                  <div className="flex min-w-0 flex-col items-center sm:flex-row">
+                    <div className="h-[180px] w-[180px] shrink-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={78} dataKey="value" stroke="none" isAnimationActive={false}>
+                            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip formatter={(v: number) => fmt(v)} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <ul className="mt-3 w-full min-w-0 flex-1 divide-y divide-border sm:ml-5 sm:mt-0">
+                      {pieData.map((d, i) => (
+                        <li key={d.name} className="flex min-w-0 items-center py-2">
+                          <span className="mr-2.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PIE_COLORS[i] }} aria-hidden="true" />
+                          <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{d.name}</span>
+                          <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{((d.value / projectedTotal) * 100).toFixed(0)}%</span>
+                          <span className="ml-3 shrink-0 text-[13px] tabular-nums text-foreground">{fmt(d.value)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </Painel>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
+          </Secao>
+
+          <Secao
+            titulo="Itens projetados"
+            descricao={[
+              `${allItems.length} ${allItems.length === 1 ? "item" : "itens"}`,
+              showMonthly ? `Recorrente ${fmt(recurringTotal)}` : "",
+              showIndiv ? `Parcelas ${fmt(indivTotal)}` : "",
+            ].filter(Boolean).join(" · ")}
+            divisoria
+          >
+            {allItems.length === 0 ? (
+              <EstadoVazio compacto titulo={`Nenhum item projetado para ${MONTHS_FULL[nextMonth]}.`} />
+            ) : (
+              <div className={juntar(superficie.painel, "overflow-hidden")}>
+                <RegiaoRolavel memoria="projecao:itens" rotulo="Itens projetados" sobre="cartao" className="lg:max-h-[60vh]">
+                  <ul className="divide-y divide-border">
+                    {allItems.map((item) => (
+                      <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                        <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.type === "recurring" ? "bg-success" : "bg-info")} aria-hidden="true" />
+                        <div className="mr-3 min-w-0 flex-1">
+                          <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
+                          <p className={juntar(texto.auxiliar, "truncate")}>
+                            {item.client}
+                            <span className="hidden sm:inline"> · {item.brand} · {item.type === "recurring" ? "Recorrente" : "Parcela"}</span>
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end">
+                          <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
+                          {item.due && (
+                            <span className="text-[11px] tabular-nums text-muted-foreground">{new Date(item.due + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </RegiaoRolavel>
+              </div>
+            )}
+          </Secao>
+
+          <Secao titulo="Como dobrar o faturamento" ajuda="Sugestões calculadas com o ticket médio dos planos e dos projetos atuais." divisoria>
+            <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+              {recommendations.map((rec, i) => (
+                <li key={i} className="flex min-w-0 items-start px-3 py-3 sm:px-4">
+                  <span className={juntar(superficie.poco, "mr-3 flex h-8 w-8 shrink-0 items-center justify-center")} aria-hidden="true">
+                    <rec.icon className="h-4 w-4 text-foreground" />
+                  </span>
+                  <div className="mr-3 min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center">
+                      <p className={juntar(texto.corpo, "mr-2 min-w-0 font-medium")}>{rec.title}</p>
+                      <span className={juntar(etiqueta, priorityColor(rec.priority))}>{rec.priority}</span>
+                    </div>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{rec.description}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={texto.rotulo}>Impacto</p>
+                    <p className="text-[13px] font-semibold tabular-nums text-success">{rec.impact}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Secao>
+        </>
+      )}
     </div>
   );
 }

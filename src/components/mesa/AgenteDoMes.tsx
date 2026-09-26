@@ -15,6 +15,8 @@ import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./A
 import { BlocoDaProposta } from "./ConteudosPropostos";
 import { Cronometro } from "./Cronometro";
 import { Ditado } from "./Ditado";
+import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   ajustarProposta,
   atualizarAgenda,
@@ -596,7 +598,8 @@ export default function AgenteDoMes({
   const anexos = useAnexos(clientId);
   const [modo, setModo] = useState<ModoDoAgente>(() => modoInicial || lerModo());
   const [mes, setMes] = useState(() => (mesInicial && /^\d{4}-\d{2}-01$/.test(mesInicial) ? mesInicial : inicioDoMes()));
-  const [texto, setTexto] = useState("");
+  // Rascunho guardado por cliente (sair e voltar não apaga o que foi escrito).
+  const [texto, setTexto] = useEstadoDaTela(`mesa:mes:agente:rascunho:${clientId}`, "");
   const [campanhaId, setCampanhaId] = useState(SEM_CAMPANHA);
   const [ajustando, setAjustando] = useState<PropostaV4 | null>(null);
   const [envio, setEnvio] = useState<PedidoEmAndamento | null>(null);
@@ -848,7 +851,8 @@ export default function AgenteDoMes({
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div ref={listaRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
+          {/* Casca fixa do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
+          <MensagensDoAgente ref={listaRef} rotulo="Conversa com o agente do mês" className="px-4 py-4">
             {conversa.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo a conversa…</p>}
             {conversa.isError && <AvisoDeErro erro={conversa.error} />}
             {conversaVazia && (
@@ -941,9 +945,9 @@ export default function AgenteDoMes({
                 </div>
               </div>
             )}
-          </div>
+          </MensagensDoAgente>
 
-          <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+          <CompositorDoAgente>
             {!ajustando && (
               <OQuePossoFazer
                 capacidades={["criar os conteúdos do mês", "apagar", "refazer", "mudar data e formato", "editar campanhas"]}
@@ -1027,7 +1031,7 @@ export default function AgenteDoMes({
                 </div>
               </div>
             </ZonaDeAnexos>
-          </div>
+          </CompositorDoAgente>
         </div>
 
         {painelDoPlano && (

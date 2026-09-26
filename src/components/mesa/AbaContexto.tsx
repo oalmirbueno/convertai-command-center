@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import AgenteDeContexto from "./AgenteDeContexto";
 import ContextoAutomatico from "./ContextoAutomatico";
 import ContextoMarca from "./ContextoMarca";
@@ -10,9 +10,17 @@ import ContextoReferencias from "./ContextoReferencias";
 import ContextoRosto from "./ContextoRosto";
 import { MemoriaDoAgente, PromptDoCliente } from "./ContextoAgente";
 import { Hub, useHubsAbertos } from "./ContextoHub";
-import { fimDoCabecalhoFixo } from "./EstudioAltura";
 import ContextoPlanoDoCliente from "./ContextoPlanoDoCliente";
 import type { ModoDoAgente } from "./planoDoClienteApi";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { useMesa } from "./MesaContexto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { Carregando } from "@/components/sistema/Estados";
+
+// Frente P: Perfis do Instagram (referências e concorrentes). Carrega só ao abrir o grupo.
+const PerfisDoInstagram = lazy(() => import("@/components/perfis/PerfisDoInstagram"));
 
 /** O editor em detalhe começa recolhido; os atalhos "Editar" abrem na parte certa. */
 const DETALHES_DE_INICIO: Record<string, boolean> = {};
@@ -37,23 +45,18 @@ function DetalhesDoContexto({ parte, onParte }: { parte: ParteDoContexto; onPart
   const outraMarca = marca && !marca.principal ? marca : null;
   return (
     <div className="min-w-0 space-y-3">
-      <div role="tablist" aria-label="Partes do contexto" className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-0.5">
-        {PARTES.map((p) => (
-          <button
-            key={p.valor}
-            type="button"
-            role="tab"
-            onClick={() => onParte(p.valor)}
-            aria-selected={parte === p.valor}
-            className={`mr-1.5 shrink-0 rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
-              parte === p.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {p.rotulo}
-          </button>
-        ))}
+      {/* Sete partes: seletor compacto (docs/design/SISTEMA.md), a explicação no "?". */}
+      <div className="flex min-w-0 items-center">
+        <SeletorCompacto
+          rotulo="Parte do contexto"
+          opcoes={PARTES.map((p) => ({ valor: p.valor, rotulo: p.rotulo, descricao: p.dica }))}
+          valor={parte}
+          onEscolher={(v) => onParte(v as ParteDoContexto)}
+        />
+        <AjudaRecolhida className="ml-2" rotulo={`O que é ${atual.rotulo}`}>
+          {atual.dica}
+        </AjudaRecolhida>
       </div>
-      <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{atual.dica}</p>
       <div className="min-w-0">
         {parte === "marca" && (outraMarca ? <ContextoKitDaMarca marca={outraMarca} /> : <ContextoMarca />)}
         {parte === "fontes" && <ContextoFontes />}
@@ -67,34 +70,6 @@ function DetalhesDoContexto({ parte, onParte }: { parte: ParteDoContexto; onPart
   );
 }
 
-/** Altura do cabeçalho fixo da Mesa (cabeçalho do painel + barra fina da Mesa). */
-const TOPO_PADRAO = 150;
-
-/**
- * Onde a coluna do agente gruda ao rolar: logo abaixo do cabeçalho fixo da
- * Mesa. Mede o cabeçalho pelo nav "Etapas da Mesa" (o mesmo que o Estúdio
- * usa) em vez de chutar, porque a barra quebra em duas linhas em telas
- * menores. Sem ResizeObserver (Safari 11): mede ao montar, ao redimensionar
- * e uma vez depois que as fontes carregam.
- */
-function useTopoFixo() {
-  const [topo, setTopo] = useState(TOPO_PADRAO);
-  useEffect(() => {
-    const medir = () => {
-      const valor = Math.round(fimDoCabecalhoFixo() + 12);
-      if (valor > 40 && valor < 600) setTopo(valor);
-    };
-    medir();
-    const t = window.setTimeout(medir, 600);
-    window.addEventListener("resize", medir);
-    return () => {
-      window.clearTimeout(t);
-      window.removeEventListener("resize", medir);
-    };
-  }, []);
-  return topo;
-}
-
 /**
  * Contexto do cliente: a Mesa puxa sozinha o que o cliente já tem (documentos,
  * dossiê, artes aprovadas, referências), monta o contexto uma vez e deixa o
@@ -103,14 +78,19 @@ function useTopoFixo() {
  * editores completos ficam no último, "Editar em detalhe".
  */
 export default function AbaContexto() {
-  const [parte, setParte] = useState<ParteDoContexto>("marca");
+  // A parte aberta e o modo do agente ficam guardados por cliente (sair e voltar mantém).
+  const { clientId } = useMesa();
+  const [parte, setParte] = useEstadoDaTela<ParteDoContexto>(`mesa:contexto:parte:${clientId}`, "marca", {
+    validar: (v) => PARTES.some((p) => p.valor === v),
+  });
   const detalhes = useRef<HTMLDivElement>(null);
-  const topo = useTopoFixo();
   const hubs = useHubsAbertos(DETALHES_DE_INICIO);
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
   const { marca } = useMarcaDaMesa();
   // Frente C: o agente ao lado vira o agente do cliente (modo plano); o Hub do plano preenche o pedido.
-  const [modoDoAgente, setModoDoAgente] = useState<ModoDoAgente>("marca");
+  const [modoDoAgente, setModoDoAgente] = useEstadoDaTela<ModoDoAgente>(`mesa:contexto:modo:${clientId}`, "marca", {
+    validar: (v) => v === "marca" || v === "plano",
+  });
   const [pedido, setPedido] = useState<{ texto: string; n: number } | null>(null);
   const pedirAoAgente = (texto: string) => {
     setModoDoAgente("plano");
@@ -127,49 +107,63 @@ export default function AbaContexto() {
   };
 
   return (
-    <div
-      className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start xl:grid-cols-[minmax(0,1fr)_360px]"
-      style={{ "--topo-da-mesa": `${topo}px` } as CSSProperties}
+    // Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no computador
+    // o contexto rola por dentro e o agente fica parado ao lado, com o campo de
+    // digitar sempre à vista; no celular a página rola normal e o agente abre
+    // em tela cheia pelo botão de baixo.
+    <AreaDeTrabalho
+      memoria="mesa-contexto"
+      rotuloDaLateral="Agente de contexto"
+      rotuloDoPrincipal="Contexto do cliente"
+      memoriaDaRolagem={`mesa:contexto:${clientId}`}
+      lateral={<AgenteDeContexto preencher modo={modoDoAgente} onModo={setModoDoAgente} pedido={pedido} />}
     >
-      <div className="min-w-0 space-y-3">
+      <div className="min-w-0 space-y-4 pb-6">
         {marca && !marca.principal && (
-          <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-primary/40 bg-primary/5 px-3 py-2 text-[12.5px]" data-aviso-da-marca="">
+          <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12.5px]" data-aviso-da-marca="">
             <p className="mr-3 min-w-0 flex-1 [overflow-wrap:anywhere]">
               Marca <strong>{marca.nome}</strong> aberta: logo, cores, estilo e referências dela ficam em Editar em detalhe, Marca. Documentos, dossiê e o agente ao lado são do cliente.
             </p>
-            <button type="button" onClick={() => irPara("marca")} className="mt-1 shrink-0 rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground sm:mt-0">
+            <button type="button" onClick={() => irPara("marca")} className="mt-1 shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground sm:mt-0">
               Editar o kit da {marca.nome}
             </button>
           </div>
         )}
         <ContextoAutomatico onIrPara={irPara} />
-        <Hub
-          id="ctx-plano"
-          titulo="Plano do cliente"
-          resumo="Começo do cliente, caminho e stack, pacote para LLM externo, identidade visual e organizar arquivos"
-          aberto={hubs.aberto("ctx-plano")}
-          onAlternar={() => hubs.alternar("ctx-plano")}
-        >
-          <ContextoPlanoDoCliente onPedirAoAgente={pedirAoAgente} />
-        </Hub>
-        <div ref={detalhes} className="min-w-0 scroll-mt-28 md:scroll-mt-40">
+        <div className="min-w-0">
           <Hub
-            id="ctx-detalhes"
-            titulo="Editar em detalhe"
-            resumo={`Marca, fontes, imagens, referências, rosto, prompt e memória · aberto em ${atual.rotulo}`}
-            aberto={hubs.aberto("ctx-detalhes")}
-            onAlternar={() => hubs.alternar("ctx-detalhes")}
+            id="ctx-plano"
+            titulo="Plano do cliente"
+            resumo="Começo do cliente, caminho e stack, pacote para LLM externo, identidade visual e organizar arquivos"
+            aberto={hubs.aberto("ctx-plano")}
+            onAlternar={() => hubs.alternar("ctx-plano")}
           >
-            <DetalhesDoContexto parte={parte} onParte={setParte} />
+            <ContextoPlanoDoCliente onPedirAoAgente={pedirAoAgente} />
           </Hub>
+          <Hub
+            id="ctx-perfis"
+            titulo="Perfis do Instagram"
+            resumo="Referências de estilo e editorial, concorrentes monitorados"
+            aberto={hubs.aberto("ctx-perfis")}
+            onAlternar={() => hubs.alternar("ctx-perfis")}
+          >
+            <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Carregando os perfis" />}>
+              <PerfisDoInstagram />
+            </Suspense>
+          </Hub>
+          <div ref={detalhes} className="min-w-0 scroll-mt-4">
+            <Hub
+              id="ctx-detalhes"
+              titulo="Editar em detalhe"
+              resumo={`Marca, fontes, imagens, referências, rosto, prompt e memória · aberto em ${atual.rotulo}`}
+              aberto={hubs.aberto("ctx-detalhes")}
+              onAlternar={() => hubs.alternar("ctx-detalhes")}
+            >
+              <DetalhesDoContexto parte={parte} onParte={setParte} />
+            </Hub>
+          </div>
         </div>
       </div>
-      <aside
-        aria-label="Agente de contexto"
-        className="min-w-0 lg:sticky lg:top-[var(--topo-da-mesa)] lg:h-[calc(100vh_-_var(--topo-da-mesa)_-_16px)] lg:min-h-[420px]"
-      >
-        <AgenteDeContexto preencher modo={modoDoAgente} onModo={setModoDoAgente} pedido={pedido} />
-      </aside>
-    </div>
+    </AreaDeTrabalho>
   );
 }

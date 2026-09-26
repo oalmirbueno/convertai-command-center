@@ -20,6 +20,7 @@ import PranchetaDoEstudio, {
 } from "@/components/mesa/PranchetaDoEstudio";
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
 import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
+import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
 import type { Area } from "@/components/mesa/estudioUtil";
@@ -229,7 +230,13 @@ export default function ArteDoCriativo({
   const f = formatoDe(criativo.formato);
   const [modeloImagem, setModeloImagem] = useState("");
   const [qualidade, setQualidade] = useState<Qualidade>("media");
-  const [andamento, setAndamento] = useState<Record<number, AndamentoDaLamina>>({});
+  const [andamentoLocal, setAndamento] = useState<Record<number, AndamentoDaLamina>>({});
+  // Fila de geração no servidor (frente G, 26/09): trocar de criativo ou de cliente não para a geração.
+  const filaDoServidor = useFilaDoTrabalho(trabalho.id, {
+    aoMudar: () => onAtualizar(),
+    aoFalhar: (i) => avisarErro(erroDoItem(i), "A arte não foi gerada"),
+  });
+  const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...andamentoLocal };
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [painel, setPainel] = useState<PainelDaLamina>("direcao");
   const [versaoVista, setVersaoVista] = useState<number | null>(null);
@@ -342,6 +349,9 @@ export default function ArteDoCriativo({
   };
 
   const gerarEConferir = async (ordem: number) => {
+    // Fila do servidor: segue sem a tela aberta. Sem ela no ar, o caminho antigo.
+    const naFila = await filaDoServidor.enfileirar([ordem], corrigirSozinho);
+    if (naFila) return { na_fila: naFila.itens.length };
     marcar(ordem, "gerando");
     let custo = 0;
     try {
@@ -356,6 +366,8 @@ export default function ArteDoCriativo({
   };
 
   const gerarVarias = async (ordens: number[]) => {
+    const naFila = await filaDoServidor.enfileirar(ordens, corrigirSozinho);
+    if (naFila) return { na_fila: naFila.itens.length };
     let total = 0;
     const falhas: unknown[] = [];
     for (const o of ordens) {
@@ -587,6 +599,10 @@ export default function ArteDoCriativo({
             partes={() => partesGerar(fila.length)}
             executar={() => gerarVarias(fila.map((c) => c.ordem))}
             aoConcluir={(data) => {
+              if (data && typeof data.na_fila === "number") {
+                toast.info(data.na_fila ? "Gerando no servidor" : "Essa arte já estava na fila", { description: "Pode trocar de tela ou de cliente: a geração continua." });
+                return;
+              }
               if (!data || !data.falhou) toast.success("Arte gerada", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
             }}
           />

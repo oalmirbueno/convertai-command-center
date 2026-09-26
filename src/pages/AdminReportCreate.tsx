@@ -6,14 +6,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart, Sparkles } from "lucide-react";
+import { Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart } from "lucide-react";
 import { parseFile, type ParsedReport } from "@/lib/adsParser";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { recordMemory } from "@/lib/clientMemory";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AreaDeTrabalho,
+  BarraDeAcoes,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  GrupoDeCampos,
+  Secao,
+  SeletorCompacto,
+  botao,
+  campo,
+  campoTexto,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
+
+const ehTexto = (v: unknown) => typeof v === "string";
+const ehLista = (v: unknown) => Array.isArray(v);
+const ehObjeto = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
 
 const defaultMetrics = [
   // Alcance e exposição
@@ -88,16 +104,29 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   // chance de erro.
   const [params] = useSearchParams();
 
-  const [clientId, setClientId] = useState(params.get("cliente") || "");
-  const [projectId, setProjectId] = useState("");
-  const [title, setTitle] = useState(params.get("titulo") || "");
-  const [periodStart, setPeriodStart] = useState(params.get("inicio") || "");
-  const [periodEnd, setPeriodEnd] = useState(params.get("fim") || "");
-  const [summary, setSummary] = useState(params.get("resumo") || "");
-  const [highlights, setHighlights] = useState(params.get("destaques") || "");
-  const [nextSteps, setNextSteps] = useState("");
-  const [internalNotes, setInternalNotes] = useState("");
-  const [metrics, setMetrics] = useState<Record<string, number>>(() => {
+  // Rascunho do relatório novo: fica guardado no navegador até salvar ou
+  // descartar (sair e voltar não perde nada). Vindo de Anúncios, o rascunho é
+  // daquela chegada (cliente e período), para não misturar com outro.
+  const origem = params.get("cliente") || params.get("metricas")
+    ? `anuncios:${params.get("cliente") || ""}:${params.get("inicio") || ""}:${params.get("fim") || ""}`
+    : "manual";
+  const esquecedores: Array<() => void> = [];
+  const useCampo = <T,>(nome: string, inicial: T, validar: (v: unknown) => boolean) => {
+    const r = useEstadoDaTela<T>(`novo:${origem}:${nome}`, inicial, { validar });
+    esquecedores.push(r[2]);
+    return r;
+  };
+
+  const [clientId, setClientId] = useCampo("cliente", params.get("cliente") || "", ehTexto);
+  const [projectId, setProjectId] = useCampo("projeto", "", ehTexto);
+  const [title, setTitle] = useCampo("titulo", params.get("titulo") || "", ehTexto);
+  const [periodStart, setPeriodStart] = useCampo("inicio", params.get("inicio") || "", ehTexto);
+  const [periodEnd, setPeriodEnd] = useCampo("fim", params.get("fim") || "", ehTexto);
+  const [summary, setSummary] = useCampo("resumo", params.get("resumo") || "", ehTexto);
+  const [highlights, setHighlights] = useCampo("destaques", params.get("destaques") || "", ehTexto);
+  const [nextSteps, setNextSteps] = useCampo("proximos", "", ehTexto);
+  const [internalNotes, setInternalNotes] = useCampo("internas", "", ehTexto);
+  const [metricasIniciais] = useState<Record<string, number>>(() => {
     // Os números chegam da área de Anúncios já nos nomes que este relatório
     // usa (ad_spend, reach, results...), então caem direto nos campos.
     try {
@@ -113,15 +142,32 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       return {};
     }
   });
-  const [customMetrics, setCustomMetrics] = useState<CustomMetric[]>([]);
+  const [metrics, setMetrics] = useCampo<Record<string, number>>("metricas", metricasIniciais, ehObjeto);
+  const [customMetrics, setCustomMetrics] = useCampo<CustomMetric[]>("personalizadas", [], ehLista);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [fileUrl, setFileUrl] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [chartData, setChartData] = useState<ChartDataRow[]>([]);
-  const [chartType, setChartType] = useState("area");
-  const [chartColumns, setChartColumns] = useState<string[]>([]);
-  const [parsedSource, setParsedSource] = useState<{ source: string; label: string; rows: any[]; dimensionKey: string } | null>(null);
+  const [fileUrl, setFileUrl] = useCampo("arquivo", "", ehTexto);
+  const [fileName, setFileName] = useCampo("nome-do-arquivo", "", ehTexto);
+  const [chartData, setChartData] = useCampo<ChartDataRow[]>("grafico", [], ehLista);
+  const [chartType, setChartType] = useCampo("tipo-do-grafico", "area", (v) => v === "area" || v === "bar" || v === "line");
+  const [chartColumns, setChartColumns] = useCampo<string[]>("colunas", [], ehLista);
+  const [parsedSource, setParsedSource] = useCampo<{ source: string; label: string; rows: any[]; dimensionKey: string } | null>("fonte", null, (v) => v === null || ehObjeto(v));
+
+  const temRascunho = [
+    clientId !== (params.get("cliente") || ""),
+    projectId,
+    title !== (params.get("titulo") || ""),
+    summary !== (params.get("resumo") || ""),
+    highlights !== (params.get("destaques") || ""),
+    nextSteps,
+    internalNotes,
+    customMetrics.length,
+    chartData.length,
+    fileUrl,
+  ].some(Boolean);
+  const descartarRascunho = () => {
+    esquecedores.forEach((esquecer) => esquecer());
+  };
 
   const filteredProjects = (projects || []).filter((p: any) => !clientId || p.client_id === clientId);
 
@@ -296,6 +342,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       // A Central e o ciclo leem a memória do cliente: recarregam junto.
       queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
       toast.success(status === "published" ? "Relatório publicado!" : "Rascunho salvo!");
+      descartarRascunho();
       navigate("/relatorios");
     } catch (err: any) {
       toast.error(err.message);
@@ -304,264 +351,223 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
     }
   };
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <button onClick={() => navigate("/relatorios")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-        <ArrowLeft className="w-4 h-4" /> Voltar aos Relatórios
+  const acoes = (
+    <>
+      <button type="button" onClick={() => handleSave("draft")} disabled={saving} className={botao.secundario}>
+        Salvar rascunho
       </button>
+      <button type="button" onClick={() => handleSave("published")} disabled={saving} className={botao.primario}>
+        {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
+        Publicar relatório
+      </button>
+    </>
+  );
 
-      <h1 className="heading-page">Novo Relatório</h1>
+  return (
+    <div className="min-w-0 space-y-4">
+      <CabecalhoDePagina
+        titulo="Novo relatório"
+        voltar={{ para: "/relatorios", rotulo: "Relatórios" }}
+        descricao={temRascunho ? "Rascunho guardado neste navegador" : undefined}
+        ajuda="Relatório de entrega: números do período, gráfico, análise e anexo. O rascunho fica guardado aqui enquanto você não salva."
+        acoes={
+          <>
+            {temRascunho && (
+              <button type="button" onClick={descartarRascunho} className={juntar(botao.discreto, "hidden sm:inline-flex")}>
+                Descartar rascunho
+              </button>
+            )}
+            <span className="hidden sm:contents [&>*]:ml-2">{acoes}</span>
+          </>
+        }
+      />
 
-      <div className="max-w-3xl space-y-6">
-      {/* INFORMAÇÕES BÁSICAS */}
-      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Informações Básicas</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente</Label>
-            <Select value={clientId} onValueChange={(v) => { setClientId(v); setProjectId(""); }}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
+      <AreaDeTrabalho memoriaDaRolagem="relatorio:novo" rotuloDoPrincipal="Formulário do relatório">
+        <div className="max-w-4xl space-y-8 pb-4">
+          {/* INFORMAÇÕES BÁSICAS */}
+          <GrupoDeCampos titulo="Informações básicas">
+            <CampoDeFormulario rotulo="Cliente" obrigatorio>
+              <select value={clientId} onChange={(e) => { setClientId(e.target.value); setProjectId(""); }} className={campo}>
+                <option value="">Selecione</option>
                 {(clients || []).map((c: any) => (
-                  <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>
+                  <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Projeto</Label>
-            <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
+              </select>
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Projeto" obrigatorio>
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={campo}>
+                <option value="">Selecione</option>
                 {filteredProjects.map((p: any) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Título</Label>
-          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Relatório Semanal de Redes Sociais" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Período Início</Label>
-            <Input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Período Fim</Label>
-            <Input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} />
-          </div>
-        </div>
-      </section>
+              </select>
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Título" obrigatorio largo>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Relatório semanal de redes sociais" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Início do período">
+              <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Fim do período">
+              <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={campo} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
 
-      {/* MÉTRICAS */}
-      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Métricas de Performance</h2>
-          <button
-            onClick={() => csvInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-primary border border-primary/30 hover:bg-primary/10 transition-colors cursor-pointer bg-transparent"
+          {/* MÉTRICAS */}
+          <Secao
+            titulo="Métricas"
+            divisoria
+            descricao={parsedSource ? `Fonte: ${parsedSource.label} · ${parsedSource.rows.length} linhas · dimensão ${parsedSource.dimensionKey}` : undefined}
+            ajuda="Importe o export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX). O sistema detecta o tipo, normaliza as colunas e preenche os números e o gráfico."
+            acao={
+              <button type="button" onClick={() => csvInputRef.current?.click()} className={botao.secundario} aria-label="Importar CSV ou XLSX">
+                <FileSpreadsheet className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Importar CSV / XLSX</span>
+              </button>
+            }
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV / XLSX
-          </button>
-          <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx" className="hidden" onChange={handleCsvImport} />
-        </div>
-
-        <p className="text-[11px] text-muted-foreground -mt-2">
-          Importe export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX). O sistema detecta o tipo, normaliza colunas e gera o dashboard automaticamente.
-        </p>
-        {parsedSource && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-[12px] text-foreground">
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            Fonte detectada: <span className="font-semibold text-primary">{parsedSource.label}</span>
-            <span className="text-muted-foreground">{parsedSource.rows.length} linhas, dimensão: {parsedSource.dimensionKey}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {defaultMetrics.map(m => (
-            <div key={m.key}>
-              <label className="text-[10px] text-muted-foreground uppercase block mb-1">
-                {m.label} {m.suffix && <span className="text-primary">{m.suffix}</span>}
-              </label>
-              <Input
-                type="number"
-                value={metrics[m.key] ?? ""}
-                onChange={e => setMetrics(prev => ({ ...prev, [m.key]: Number(e.target.value) }))}
-                placeholder="0"
-                className="bg-secondary"
-              />
+            <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx" className="hidden" onChange={handleCsvImport} />
+            <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 xl:grid-cols-4">
+              {defaultMetrics.map((m) => (
+                <CampoDeFormulario key={m.key} rotulo={m.suffix ? `${m.label} (${m.suffix})` : m.label}>
+                  <input
+                    type="number"
+                    value={metrics[m.key] ?? ""}
+                    onChange={(e) => setMetrics((prev) => ({ ...prev, [m.key]: Number(e.target.value) }))}
+                    placeholder="0"
+                    className={juntar(campo, "tabular-nums")}
+                  />
+                </CampoDeFormulario>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {customMetrics.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-border">
-            <p className="text-[10px] text-muted-foreground uppercase">Métricas Personalizadas</p>
-            {customMetrics.map((cm, idx) => (
-              <div key={idx} className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Input value={cm.label} onChange={e => updateCustomMetric(idx, "label", e.target.value)} placeholder="Nome da métrica" className="bg-secondary" />
-                </div>
-                <div className="w-28">
-                  <Input type="number" value={cm.value} onChange={e => updateCustomMetric(idx, "value", e.target.value)} placeholder="Valor" className="bg-secondary" />
-                </div>
-                <button onClick={() => removeCustomMetric(idx)} className="p-2 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none">
-                  <X className="w-4 h-4" />
+            <div className="mt-5">
+              <p className={juntar(texto.rotulo, "mb-2")}>Métricas personalizadas</p>
+              {customMetrics.length > 0 && (
+                <ul className="mb-2 space-y-2">
+                  {customMetrics.map((cm, idx) => (
+                    <li key={idx} className="flex min-w-0 items-center">
+                      <input value={cm.label} onChange={(e) => updateCustomMetric(idx, "label", e.target.value)} placeholder="Nome da métrica" aria-label="Nome da métrica" className={juntar(campo, "flex-1")} />
+                      <input type="number" value={cm.value} onChange={(e) => updateCustomMetric(idx, "value", e.target.value)} placeholder="Valor" aria-label="Valor da métrica" className={juntar(campo, "ml-2 w-28 shrink-0 tabular-nums")} />
+                      <button type="button" onClick={() => removeCustomMetric(idx)} className={juntar(botao.icone, "ml-1 hover:text-destructive")} aria-label="Remover métrica">
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button type="button" onClick={addCustomMetric} className={juntar(botao.discreto, "-ml-2.5 text-primary")}>
+                <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Adicionar métrica
+              </button>
+            </div>
+          </Secao>
+
+          {/* DADOS DO GRÁFICO */}
+          <Secao
+            titulo="Gráfico"
+            divisoria
+            descricao={chartData.length ? `${chartData.length} ${chartData.length === 1 ? "linha" : "linhas"}` : undefined}
+            ajuda="Monte a tabela que aparece no gráfico do relatório. Importe via CSV ou adicione linhas à mão."
+            acao={
+              <SeletorCompacto
+                rotulo="Tipo de gráfico"
+                opcoes={CHART_TYPES.map((ct) => ({ valor: ct.value, rotulo: ct.label, icone: <ct.icon className="h-3.5 w-3.5" /> }))}
+                valor={chartType}
+                onEscolher={setChartType}
+              />
+            }
+          >
+            {chartData.length > 0 && (
+              <div className="mb-2 overflow-x-auto">
+                <table className="w-full min-w-[420px] text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className={juntar(texto.rotulo, "px-2 py-2 text-left")}>Período</th>
+                      {chartColumns.map((col) => (
+                        <th key={col} className={juntar(texto.rotulo, "px-2 py-2 text-right")}>{col}</th>
+                      ))}
+                      <th className="w-9" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {chartData.map((row, ri) => (
+                      <tr key={ri}>
+                        <td className="px-1 py-1">
+                          <input value={row.label} onChange={(e) => updateChartCell(ri, "label", e.target.value)} placeholder="Ex.: Sem 1" aria-label="Período" className={juntar(campo, "h-8 border-transparent bg-transparent")} />
+                        </td>
+                        {chartColumns.map((col) => (
+                          <td key={col} className="px-1 py-1">
+                            <input
+                              type="number"
+                              value={row[col] ?? 0}
+                              onChange={(e) => updateChartCell(ri, col, e.target.value)}
+                              aria-label={col}
+                              className={juntar(campo, "h-8 border-transparent bg-transparent text-right tabular-nums")}
+                            />
+                          </td>
+                        ))}
+                        <td className="text-right">
+                          <button type="button" onClick={() => removeChartRow(ri)} className={juntar(botao.icone, "hover:text-destructive")} aria-label="Remover linha">
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="-ml-2.5 flex flex-wrap items-center">
+              <button type="button" onClick={addChartRow} className={juntar(botao.discreto, "text-primary")}>
+                <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Adicionar linha
+              </button>
+              <button type="button" onClick={addChartColumn} className={juntar(botao.discreto, "text-primary")}>
+                <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Adicionar coluna
+              </button>
+            </div>
+          </Secao>
+
+          {/* ANÁLISE E CONTEÚDO */}
+          <GrupoDeCampos titulo="Análise" colunas={1} className="border-t border-border pt-5">
+            <CampoDeFormulario rotulo="Resumo executivo">
+              <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={6} placeholder="Resumo geral do período analisado..." className={campoTexto} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Destaques do período">
+              <textarea value={highlights} onChange={(e) => setHighlights(e.target.value)} rows={4} placeholder={"Post com mais engajamento: ...\nMelhor dia: ...\nMeta superada: ..."} className={campoTexto} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Próximos passos">
+              <textarea value={nextSteps} onChange={(e) => setNextSteps(e.target.value)} rows={4} placeholder={"Aumentar frequência de Reels...\nTestar novos horários..."} className={campoTexto} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Observações internas" apoio="Não aparece para o cliente.">
+              <textarea value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={3} placeholder="Notas internas da equipe..." className={campoTexto} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+
+          {/* ANEXOS */}
+          <Secao titulo="Anexo" divisoria ajuda="Relatório externo em PDF, PPTX ou DOC. Escolha o cliente antes de enviar.">
+            {fileName ? (
+              <div className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2")}>
+                <Upload className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{fileName}</span>
+                <button type="button" onClick={() => { setFileUrl(""); setFileName(""); }} className={juntar(botao.discreto, "ml-2 h-8 text-destructive")}>
+                  Remover
                 </button>
               </div>
-            ))}
-          </div>
-        )}
+            ) : (
+              <label className={juntar("flex min-w-0 cursor-pointer items-center justify-center rounded-md border border-dashed border-border px-4 py-6 transition-colors hover:border-primary/50", uploading && "pointer-events-none opacity-70")}>
+                {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" /> : <Upload className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                <span className={texto.auxiliar}>{uploading ? "Enviando..." : "Clique ou arraste um arquivo"}</span>
+                <input type="file" className="hidden" accept=".pdf,.pptx,.doc,.docx" onChange={handleFileUpload} disabled={uploading} />
+              </label>
+            )}
+          </Secao>
 
-        <button onClick={addCustomMetric} className="inline-flex items-center gap-2 text-[12px] text-primary hover:text-primary/80 transition-colors cursor-pointer bg-transparent border-none p-0">
-          <Plus className="w-3 h-3" /> Adicionar métrica personalizada
-        </button>
-      </section>
-
-      {/* DADOS DO GRÁFICO */}
-      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Dados do Gráfico</h2>
-          <div className="flex gap-2">
-            {CHART_TYPES.map(ct => (
-              <button
-                key={ct.value}
-                onClick={() => setChartType(ct.value)}
-                className={`p-2 rounded-lg border transition-colors cursor-pointer ${
-                  chartType === ct.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-                }`}
-                title={ct.label}
-              >
-                <ct.icon className="w-4 h-4" />
-              </button>
-            ))}
-          </div>
+          {/* Celular: as ações ficam no pé, sempre à vista */}
+          <BarraDeAcoes fixa className="sm:hidden" inicio={temRascunho ? <button type="button" onClick={descartarRascunho} className="text-[12px] text-muted-foreground underline">Descartar</button> : undefined}>
+            {acoes}
+          </BarraDeAcoes>
         </div>
-
-        <p className="text-[11px] text-muted-foreground">
-          Monte a tabela de dados que será exibida no gráfico do relatório. Importe via CSV ou adicione linhas manualmente.
-        </p>
-
-        {chartData.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2 px-2 text-muted-foreground font-medium">Período</th>
-                  {chartColumns.map(col => (
-                    <th key={col} className="text-left py-2 px-2 text-muted-foreground font-medium">{col}</th>
-                  ))}
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {chartData.map((row, ri) => (
-                  <tr key={ri} className="border-b border-border/50 hover:bg-secondary/30">
-                    <td className="py-1.5 px-1">
-                      <Input
-                        value={row.label}
-                        onChange={e => updateChartCell(ri, "label", e.target.value)}
-                        className="h-8 text-[12px] bg-transparent border-none"
-                        placeholder="Ex: Sem 1"
-                      />
-                    </td>
-                    {chartColumns.map(col => (
-                      <td key={col} className="py-1.5 px-1">
-                        <Input
-                          type="number"
-                          value={row[col] ?? 0}
-                          onChange={e => updateChartCell(ri, col, e.target.value)}
-                          className="h-8 text-[12px] bg-transparent border-none font-mono"
-                        />
-                      </td>
-                    ))}
-                    <td>
-                      <button onClick={() => removeChartRow(ri)} className="p-1 text-muted-foreground hover:text-destructive cursor-pointer bg-transparent border-none">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button onClick={addChartRow} className="inline-flex items-center gap-2 text-[12px] text-primary hover:text-primary/80 transition-colors cursor-pointer bg-transparent border-none p-0">
-            <Plus className="w-3 h-3" /> Adicionar linha
-          </button>
-          <span className="text-muted-foreground">•</span>
-          <button onClick={addChartColumn} className="inline-flex items-center gap-2 text-[12px] text-primary hover:text-primary/80 transition-colors cursor-pointer bg-transparent border-none p-0">
-            <Plus className="w-3 h-3" /> Adicionar coluna
-          </button>
-        </div>
-      </section>
-
-      {/* ANÁLISE E CONTEÚDO */}
-      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Análise e Conteúdo</h2>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Resumo Executivo</Label>
-          <Textarea value={summary} onChange={e => setSummary(e.target.value)} rows={6} placeholder="Resumo geral do período analisado..." className="bg-secondary" />
-        </div>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Destaques do Período</Label>
-          <Textarea value={highlights} onChange={e => setHighlights(e.target.value)} rows={4} placeholder="Post com mais engajamento: ...&#10;Melhor dia: ...&#10;Meta superada: ..." className="bg-secondary" />
-        </div>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Próximos Passos</Label>
-          <Textarea value={nextSteps} onChange={e => setNextSteps(e.target.value)} rows={4} placeholder="Aumentar frequência de Reels...&#10;Testar novos horários..." className="bg-secondary" />
-        </div>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Observações Internas <span className="text-destructive text-[9px]">(não visível ao cliente)</span>
-          </Label>
-          <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)} rows={3} placeholder="Notas internas da equipe..." className="bg-secondary" />
-        </div>
-      </section>
-
-      {/* ANEXOS */}
-      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Anexos</h2>
-        <div>
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Upload de Relatório Externo (PDF/PPTX)</Label>
-          {fileName ? (
-            <div className="flex items-center gap-2 mt-2 text-sm text-foreground">
-              <span>{fileName}</span>
-              <button onClick={() => { setFileUrl(""); setFileName(""); }} className="text-destructive text-xs hover:underline cursor-pointer bg-transparent border-none">Remover</button>
-            </div>
-          ) : (
-            <label className="mt-2 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-8 cursor-pointer hover:border-primary/50 transition-colors">
-              {uploading ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
-              <span className="text-xs text-muted-foreground mt-2">{uploading ? "Enviando..." : "Clique ou arraste um arquivo"}</span>
-              <input type="file" className="hidden" accept=".pdf,.pptx,.doc,.docx" onChange={handleFileUpload} disabled={uploading} />
-            </label>
-          )}
-        </div>
-      </section>
-
-      {/* ACTIONS */}
-      <div className="flex gap-3 pb-8">
-        <button
-          onClick={() => handleSave("draft")}
-          disabled={saving}
-          className="flex-1 px-4 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border-none font-medium"
-        >
-          Salvar Rascunho
-        </button>
-        <button
-          onClick={() => handleSave("published")}
-          disabled={saving}
-          className="flex-1 px-4 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none font-medium"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Publicar Relatório"}
-        </button>
-      </div>
-      </div>
+      </AreaDeTrabalho>
     </div>
   );
 }

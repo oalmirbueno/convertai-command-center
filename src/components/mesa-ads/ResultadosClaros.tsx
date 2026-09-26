@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, Link2 } from "lucide-react";
+import { AlertTriangle, LayoutList, Link2, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { brl, inteiro, porcento } from "./adsApi";
-import { Abas, Foto, pilula, SeloDoSinal } from "./Comuns";
+import { Foto, SeloDoSinal } from "./Comuns";
 import {
   ABAS_DE_RESULTADO,
   anunciosDaAba,
@@ -24,6 +27,9 @@ import {
  * (Ativos agora, Melhores anúncios, Melhores criativos, Todos, Para
  * descartar). Usado na aba Conta e na aba Resultados. Nada aqui rola sozinho
  * dentro da página: a lista cresce no "Mostrar mais" (sem rolagem dupla).
+ *
+ * 26/09 (sistema de design): objetivo e abas viram seletores compactos (até 4
+ * opções, segmentado; mais, lista); a aba escolhida fica lembrada.
  */
 
 export const ITENS_POR_PAGINA = 12;
@@ -42,7 +48,7 @@ function Variacao({ valor, bomQuandoSobe }: { valor: number | null | undefined; 
 
 function NumeroGrande({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5" title={dica}>
+    <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5" title={dica}>
       <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 flex min-w-0 items-baseline">
         <span className="truncate text-[18px] font-semibold tabular-nums">{valor}</span>
@@ -66,12 +72,12 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
         <NumeroGrande rotulo="Ativos agora" valor={`${inteiro(r.ativos)} de ${inteiro(r.anuncios)}`} dica="Anúncios rodando agora, do total com entrega no período." />
       </dl>
       {!grupo && r.misturado && (
-        <p className="text-[11.5px] text-muted-foreground">
-          A conta mistura objetivos diferentes: o resultado e o custo acima são do objetivo com mais investimento. Escolha um objetivo abaixo para ver o número certo de cada um.
+        <p className="truncate text-[11.5px] text-muted-foreground" title="O resultado e o custo acima são do objetivo com mais investimento. Escolha um objetivo para ver o número certo de cada um.">
+          Objetivos misturados: números do objetivo com mais investimento.
         </p>
       )}
       {!grupo && mix && mix.por_grupo.length > 0 && (
-        <div className="min-w-0 rounded-xl border border-border bg-card px-3 py-2.5" aria-label="Onde está o investimento">
+        <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5" aria-label="Onde está o investimento">
           <p className="text-[11px] font-medium text-muted-foreground">Onde está o investimento</p>
           <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
             {mix.por_grupo.map((g, i) => (
@@ -97,22 +103,18 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
   );
 }
 
-/** Pílulas de objetivo: Todos e os que existem na conta, com o rótulo do resultado. */
+/** Objetivo: Todos e os que existem na conta (seletor compacto: até 4, segmentado; mais, lista). */
 export function FiltroDeObjetivo({ dados, valor, onMudar }: { dados: ResultadosDaConta; valor: GrupoDeObjetivo | ""; onMudar: (g: GrupoDeObjetivo | "") => void }) {
   const grupos = gruposPresentes(dados.anuncios);
   if (grupos.length < 1) return null;
   return (
-    <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por objetivo">
-      <span className="mb-1.5 mr-2 text-[11.5px] text-muted-foreground">Objetivo</span>
-      <button type="button" className={pilula(valor === "")} aria-pressed={valor === ""} onClick={() => onMudar("")}>
-        Todos
-      </button>
-      {grupos.map((g) => (
-        <button key={g.valor} type="button" className={pilula(valor === g.valor)} aria-pressed={valor === g.valor} title={`Resultado: ${grupoDe(g.valor)!.resultado}`} onClick={() => onMudar(valor === g.valor ? "" : g.valor)}>
-          {g.rotulo} ({g.quantos})
-        </button>
-      ))}
-    </div>
+    <SeletorCompacto
+      rotulo="Filtrar por objetivo"
+      icone={<Target className="h-3.5 w-3.5" />}
+      opcoes={[{ valor: "", rotulo: "Todos" }].concat(grupos.map((g) => ({ valor: g.valor, rotulo: `${g.rotulo} (${g.quantos})`, descricao: `Resultado: ${grupoDe(g.valor)!.resultado}` })))}
+      valor={valor}
+      onEscolher={(v) => onMudar(v as GrupoDeObjetivo | "")}
+    />
   );
 }
 
@@ -128,7 +130,7 @@ const statusCurto = (s: string) => {
 export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: ReactNode }) {
   const m = a.metricas;
   return (
-    <article className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card p-2.5" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+    <article className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card p-2.5" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="relative w-14 overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
@@ -172,7 +174,7 @@ function textoDoIndice(indice: number | null): string {
 /** Uma peça (a mesma arte em vários anúncios), somada. */
 export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
   return (
-    <article className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card p-2.5" aria-label={`Criativo ${p.nome}`}>
+    <article className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card p-2.5" aria-label={`Criativo ${p.nome}`}>
       <div className="relative w-[72px] overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={p.imagem_url} alt={p.nome} className="h-full w-full" />
@@ -210,40 +212,42 @@ export function PainelDeResultados({
   grupo,
   abaInicial = "ativos",
   renderAnuncio,
+  memoria,
   className = "",
 }: {
   dados: ResultadosDaConta;
   grupo: GrupoDeObjetivo | "";
   abaInicial?: AbaDeResultado;
   renderAnuncio?: (a: AnuncioDoResultado) => ReactNode;
+  /** Chave (com o cliente) para lembrar a aba escolhida ao sair e voltar. */
+  memoria?: string;
   className?: string;
 }) {
-  const [aba, setAba] = useState<AbaDeResultado>(abaInicial);
+  const [aba, setAba] = useEstadoDaTela<AbaDeResultado>(memoria || "mesa-ads:resultados:aba", abaInicial, {
+    validar: (v) => typeof v === "string" && ABAS_DE_RESULTADO.some((x) => x.valor === v),
+  });
   const [mostrando, setMostrando] = useState(ITENS_POR_PAGINA);
   const base = filtrarPorGrupo(dados.anuncios, grupo);
   const pecas = aba === "melhores_criativos" ? criativosAgrupados(base) : [];
   const anuncios = aba === "melhores_criativos" ? [] : anunciosDaAba(base, aba);
   const total = aba === "melhores_criativos" ? pecas.length : anuncios.length;
   const contagem = (v: AbaDeResultado) => (v === "melhores_criativos" ? criativosAgrupados(base).length : anunciosDaAba(base, v).length);
-  const dica = (ABAS_DE_RESULTADO.filter((x) => x.valor === aba)[0] || ABAS_DE_RESULTADO[0]).dica;
   const mudar = (v: AbaDeResultado) => {
     setAba(v);
     setMostrando(ITENS_POR_PAGINA);
   };
   return (
     <section className={`min-w-0 ${className}`} aria-label="Anúncios por aba">
-      <Abas
-        valor={aba}
-        onMudar={mudar}
+      <SeletorCompacto
         rotulo="Ver anúncios"
-        opcoes={ABAS_DE_RESULTADO.map((o) => ({ valor: o.valor, rotulo: `${o.rotulo} (${contagem(o.valor)})` }))}
+        icone={<LayoutList className="h-3.5 w-3.5" />}
+        className="mb-3"
+        opcoes={ABAS_DE_RESULTADO.map((o) => ({ valor: o.valor, rotulo: `${o.rotulo} (${contagem(o.valor)})`, descricao: o.dica }))}
+        valor={aba}
+        onEscolher={(v) => mudar(v as AbaDeResultado)}
       />
-      <p className="mb-2 mt-1.5 text-[11.5px] text-muted-foreground">{dica}</p>
       {total === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-6 text-center">
-          <p className="text-[13px] font-medium">Nada nesta aba</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">{base.length ? "Troque de aba ou de objetivo." : "Nenhum anúncio com entrega no período. Troque o período ou sincronize."}</p>
-        </div>
+        <EstadoVazio compacto titulo="Nada aqui." descricao={base.length ? "Troque de lista ou de objetivo." : "Nenhum anúncio com entrega no período. Troque o período ou sincronize."} />
       ) : (
         <>
           <div className="grid min-w-0 grid-cols-1 gap-2.5 xl:grid-cols-2">

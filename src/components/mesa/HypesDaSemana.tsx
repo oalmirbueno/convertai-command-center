@@ -191,11 +191,12 @@ export default function HypesDaSemana({
     : "";
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card" aria-label="Hypes da semana">
-      <div className="flex min-w-0 flex-wrap items-center px-3.5 py-2.5">
+    // Seção sem caixa (docs/design/SISTEMA.md): título de seção, ação à direita, conteúdo logo abaixo.
+    <section className="min-w-0" aria-label="Hypes da semana">
+      <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" onClick={alternar} aria-expanded={!recolhido} className="mr-2 flex min-w-0 flex-1 items-center text-left">
           <Flame className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          <span className="mr-2 shrink-0 text-[13.5px] font-semibold">Hypes da semana</span>
+          <span className="mr-2 shrink-0 text-[15px] font-semibold leading-[22px]">Hypes da semana</span>
           {itens.length > 0 && <span className="mr-2 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{itens.length}</span>}
           <span className="hidden min-w-0 truncate text-[11.5px] text-muted-foreground sm:inline">
             {dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : ""}
@@ -230,11 +231,11 @@ export default function HypesDaSemana({
         </div>
       </div>
       {buscandoDesde !== null && (
-        <div className="px-3.5 pb-2 sm:hidden"><Cronometro desde={buscandoDesde} rotulo="Pesquisando na web" previsao="~90s" /></div>
+        <div className="pb-2 pt-1 sm:hidden"><Cronometro desde={buscandoDesde} rotulo="Pesquisando na web" previsao="~90s" /></div>
       )}
 
       {!recolhido && (
-        <div className="space-y-3 border-t border-border px-3.5 pb-3.5 pt-3">
+        <div className="space-y-3 pt-3">
           {hypes.isError && <AvisoDeErro erro={hypes.error} />}
           {hypes.isLoading && <div className="h-24 animate-pulse rounded-lg bg-muted" />}
           {hypes.isSuccess && !dados && buscandoDesde === null && (

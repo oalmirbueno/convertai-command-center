@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Link2, Loader2, PackageCheck, Sparkles } from "lucide-react";
+import { Clapperboard, Filter, Link2, Loader2, PackageCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -28,13 +28,18 @@ import {
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
-import { Andamento, pilula, useAndamento } from "./Comuns";
+import { Andamento, useAndamento } from "./Comuns";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { laminasSemArte, produzirLamina, situacaoDe, situacaoDoTrabalho, SITUACOES, type EtapaDoLote, type SituacaoDoCriativo } from "./loteDoEstudio";
 import PainelDaCopy from "./PainelDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import type { CopyDoAnuncio } from "./adsApi";
 import { EnvioAoGestor } from "./PacoteDaCopy";
 import KitDeRecepcao from "./KitDeRecepcao";
+import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 
 /**
  * Etapa 4, Estúdio Ads: os criativos por plano e ângulo, cada um com a
@@ -120,7 +125,8 @@ export default function AbaEstudioAds({
   const planos = useQuery({ queryKey: chavesAds.planos(clientId), queryFn: () => lerPlanos(clientId) });
   const anuncios = useQuery({ queryKey: chavesAds.anuncios(clientId), queryFn: () => lerAnunciosDoCliente(clientId) });
   const [etapas, setEtapas] = useState<Record<string, EtapaDoLote>>({});
-  const [filtro, setFiltro] = useState<SituacaoDoCriativo | "">("");
+  // Filtro por situação lembrado por cliente (sair e voltar mantém).
+  const [filtro, setFiltro] = useEstadoDaTela<SituacaoDoCriativo | "">(`mesa-ads:estudio:situacao:${clientId}`, "", { validar: (v) => typeof v === "string", esperaMs: 0 });
   const [entregando, setEntregando] = useState<string[]>([]);
   const [armado, setArmado] = useState<string | null>(null);
   const [desdeLote, rodarLote] = useAndamento();
@@ -242,15 +248,15 @@ export default function AbaEstudioAds({
     }
   };
 
-  if (criativos.isLoading) return <div className="h-[60vh] animate-pulse rounded-xl bg-muted/70" />;
+  if (criativos.isLoading) return <Carregando forma="aba" rotulo="Lendo os criativos" />;
   if (criativos.isError) return <AvisoDeErro erro={criativos.error} />;
   if (!todos.length) {
     return (
-      <div className="rounded-xl border border-dashed border-border p-10 text-center">
-        <Clapperboard className="mx-auto h-6 w-6 text-primary" />
-        <p className="mt-3 text-[14px] font-medium">Nenhum criativo produzido ainda</p>
-        <p className="mt-1 text-[12.5px] text-muted-foreground">No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos".</p>
-      </div>
+      <EstadoVazio
+        icone={<Clapperboard className="h-5 w-5" />}
+        titulo="Nenhum criativo produzido ainda"
+        descricao={'No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos".'}
+      />
     );
   }
 
@@ -264,13 +270,18 @@ export default function AbaEstudioAds({
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-3" aria-label="Produção em lote">
+      <section className="min-w-0 rounded-lg border border-border bg-card px-4 py-3" aria-label="Produção em lote">
         <div className="flex min-w-0 flex-wrap items-center">
           <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-            <h2 className="text-[15px] font-semibold">Estúdio Ads</h2>
+            <div className="flex min-w-0 items-center">
+              <h2 className="truncate text-[15px] font-semibold">Estúdio Ads</h2>
+              <AjudaRecolhida className="ml-1.5" rotulo="Como o Estúdio Ads funciona">
+                A arte só aparece depois de conferida; se o texto, a logo ou a política estiverem errados, ela é corrigida antes. Gerar todos gera, confere e corrige cada lâmina sem arte. Entregar ao cliente pede um segundo clique: {AVISO_DA_ENTREGA}
+              </AjudaRecolhida>
+            </div>
             <p className="text-[12px] text-muted-foreground">
               {visiveis.length} criativo{visiveis.length === 1 ? "" : "s"}
-              {planoId && doPlano.length > 0 && doPlano.length < todos.length ? ` do plano em foco (de ${todos.length})` : ""}. A arte só aparece depois de conferida; se o texto, a logo ou a política estiverem errados, ela é corrigida antes.
+              {planoId && doPlano.length > 0 && doPlano.length < todos.length ? ` do plano em foco (de ${todos.length})` : ""}
               {planoId && doPlano.length > 0 && doPlano.length < todos.length && onVerTodos && (
                 <>
                   {" "}
@@ -281,6 +292,7 @@ export default function AbaEstudioAds({
               )}
             </p>
           </div>
+          <BotaoDoEstilo trabalhoIds={idsDosTrabalhos} modeloImagemId={modeloDoLote} className="mb-1 mr-2 mt-1" />
           <span className="mb-1 mr-2 mt-1 inline-flex items-center">
             <BotaoComCusto
               rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Gerar todos{laminasPendentes ? ` (${laminasPendentes})` : ""}</>}
@@ -307,15 +319,17 @@ export default function AbaEstudioAds({
           <ImportarPacote onImportado={onImportado} className="mb-1 ml-2 mt-1" />
         </div>
         {desdeLote !== null && <Andamento desde={desdeLote} rotulo="Gerando, conferindo e corrigindo as artes" />}
-        <div className="mt-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por situação">
-          <button type="button" className={pilula(filtro === "")} onClick={() => setFiltro("")}>
-            Todos ({visiveis.length})
-          </button>
-          {SITUACOES.filter((s) => contagem(s.valor) > 0).map((s) => (
-            <button key={s.valor} type="button" className={pilula(filtro === s.valor)} onClick={() => setFiltro(filtro === s.valor ? "" : s.valor)}>
-              {s.rotulo} ({contagem(s.valor)})
-            </button>
-          ))}
+        <div className="mt-2 min-w-0">
+          {/* Filtro por situação (sistema de design): até 4 opções, segmentado; mais, lista. */}
+          <SeletorCompacto
+            rotulo="Filtrar por situação"
+            icone={<Filter className="h-3.5 w-3.5" />}
+            opcoes={[{ valor: "", rotulo: `Todos (${visiveis.length})` }].concat(
+              SITUACOES.filter((s) => contagem(s.valor) > 0 || filtro === s.valor).map((s) => ({ valor: s.valor, rotulo: `${s.rotulo} (${contagem(s.valor)})` })),
+            )}
+            valor={filtro}
+            onEscolher={(v) => setFiltro(v as SituacaoDoCriativo | "")}
+          />
         </div>
         {planoEmFoco && (
           <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2">
@@ -396,7 +410,7 @@ export default function AbaEstudioAds({
 
         {aberto && (
           <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-1">
-            <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-3">
+            <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-border bg-card px-4 py-3">
               <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
                 <div className="flex min-w-0 items-center">
                   <h2 className="min-w-0 truncate text-[15px] font-semibold" title={nomeDoCriativo(aberto, listaDePlanos)}>
@@ -468,9 +482,9 @@ export default function AbaEstudioAds({
             {trabalho ? (
               <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
             ) : aberto.trabalho_id && (trabalhos.isLoading || trabalhos.isFetching) ? (
-              <div className="h-[50vh] animate-pulse rounded-xl bg-muted/70" />
+              <div className="h-[50vh] animate-pulse rounded-lg bg-muted/70" />
             ) : (
-              <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <div className="rounded-lg border border-dashed border-border p-8 text-center">
                 <p className="text-[13.5px] font-medium">Sem trabalho de arte ligado</p>
                 <p className="mt-1 text-[12.5px] text-muted-foreground">Produza este ângulo de novo pelo Plano de teste para o diretor montar a direção.</p>
               </div>
@@ -486,7 +500,7 @@ export default function AbaEstudioAds({
 
         {aberto && (
           // Posicionamentos na coluna da arte, lado a lado, em tamanho de celular.
-          <div className="min-w-0 rounded-xl border border-border bg-card p-3 lg:col-start-2 lg:row-start-3 min-[1800px]:row-start-2" data-posicionamentos="">
+          <div className="min-w-0 rounded-lg border border-border bg-card p-3 lg:col-start-2 lg:row-start-3 min-[1800px]:row-start-2" data-posicionamentos="">
             <PosicionamentosDoAnuncio
               copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
               caminho={capaDoTrabalho(trabalho)}

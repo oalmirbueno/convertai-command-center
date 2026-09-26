@@ -99,8 +99,8 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
     <>
       {/* O que a Aceleriq faz para este cliente, na língua dele. */}
       {resumo && (
-        <div className="mt-3 rounded-xl border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-primary">
+        <div className="mt-3 rounded-md border border-primary/20 bg-primary/[0.05] px-3 py-2.5">
+          <p className="text-[12px] font-medium text-primary">
             O seu time é
           </p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{resumo}</p>
@@ -108,7 +108,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
       )}
 
       <div className="mt-4 flex items-center justify-between gap-2">
-        <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <p className="text-[12px] font-medium text-muted-foreground">
           Entrega de {nomeDoServico}
         </p>
         {etapas.length > 0 && (
@@ -121,7 +121,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
       {etapas.length === 0 ? (
         // Serviço sem trilho próprio ainda aparece com nome e história; só não
         // inventa etapas que ninguém combinou.
-        <p className="mt-2 rounded-xl border border-dashed border-border px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 rounded-md border border-dashed border-border px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
           {nomeDoServico} ainda não tem etapas próprias desenhadas. O histórico e os
           trabalhos avulsos abaixo continuam registrando o que foi feito.
         </p>
@@ -136,7 +136,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                 type="button"
                 disabled={!canWrite || salvando === step}
                 onClick={() => void alternar(step, rotulo)}
-                className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                className={`flex w-full items-start gap-2.5 rounded-md border p-2.5 text-left transition-colors ${
                   done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
                 } ${salvando === step ? "opacity-50" : ""}`}
               >
@@ -191,7 +191,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                 type="button"
                 disabled={concluindo}
                 onClick={() => void alternarConclusao()}
-                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Reabrir projeto
@@ -203,7 +203,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                 type="button"
                 disabled={concluindo}
                 onClick={() => void alternarConclusao()}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-success/40 bg-success/10 text-[12.5px] font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-success/40 bg-success/10 text-[12.5px] font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50"
               >
                 <CircleCheckBig className="h-4 w-4" />
                 Concluir projeto

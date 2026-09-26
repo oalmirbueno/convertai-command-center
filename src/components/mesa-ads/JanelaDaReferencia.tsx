@@ -90,7 +90,7 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
   if (!total) {
     if (r.origem === "padrao" || r.ficha.gancho_verbal) {
       return (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-lg border border-border">
           <div className="relative w-full" style={{ paddingTop: "80%" }}>
             <div className="absolute inset-0">
               <CartaoTipografico r={r} grande />
@@ -100,7 +100,7 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
       );
     }
     return (
-      <div className="flex h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 text-center">
+      <div className="flex h-[40vh] flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 text-center">
         <p className="text-[13.5px] font-medium">Sem imagem guardada ainda</p>
         <p className="mt-1 text-[12px] text-muted-foreground">O painel busca as imagens do link ao abrir. Se a página não deixar, suba um print em Referências.</p>
       </div>
@@ -118,7 +118,7 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
         if (e.key === "ArrowLeft") ir(-1);
       }}
     >
-      <div className="relative h-[44vh] overflow-hidden rounded-xl border border-border bg-secondary/40 sm:h-[56vh]">
+      <div className="relative h-[44vh] overflow-hidden rounded-lg border border-border bg-secondary/40 sm:h-[56vh]">
         <Foto key={atual.url} src={atual.url} alt={atual.legenda || r.titulo} contain className="h-full w-full" />
         {total > 1 && (
           <>
@@ -205,7 +205,7 @@ function SerieDiaria({ serie }: { serie: PontoDaSerie[] }) {
   if (!serie.length) return null;
   const maior = Math.max.apply(null, serie.map((p) => p.gasto || 0).concat([0.0001]));
   return (
-    <section aria-label="Série diária" className="rounded-xl border border-border bg-card p-4">
+    <section aria-label="Série diária" className="rounded-lg border border-border bg-card p-4">
       <h4 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Gasto por dia e resultados</h4>
       <div className="mt-3 flex h-32 items-end">
         {serie.map((p) => (
@@ -392,7 +392,7 @@ export default function JanelaDaReferencia({
   const estilo = r ? estiloDaReferencia(r) : "";
 
   const blocoCompletar = (r && !lida) || desde !== null || lendoSozinho ? (
-    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
       <p className="text-[12.5px] font-medium">{lendoSozinho || desde !== null ? "Completando a ficha" : "Ficha ainda não lida"}</p>
       <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
         O leitor usa a galeria, a página, a copy e as métricas para preencher situação, gancho, argumento e o que transportar. Não inventa número; a evidência continua a que está.
@@ -495,17 +495,17 @@ export default function JanelaDaReferencia({
           )}
           {!r && detalhe.isLoading && (
             <div aria-busy="true" className="space-y-3">
-              <div className="h-[44vh] animate-pulse rounded-xl bg-muted/70" />
-              <div className="h-16 animate-pulse rounded-xl bg-muted/60" />
+              <div className="h-[44vh] animate-pulse rounded-lg bg-muted/70" />
+              <div className="h-16 animate-pulse rounded-lg bg-muted/60" />
             </div>
           )}
 
           {r && aba === "visao" && (
             <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-              {detalhe.isLoading && !galeria.length ? <div className="h-[44vh] animate-pulse rounded-xl bg-muted/70 sm:h-[56vh]" aria-label="Carregando as imagens" /> : <Galeria imagens={galeria} r={r} />}
+              {detalhe.isLoading && !galeria.length ? <div className="h-[44vh] animate-pulse rounded-lg bg-muted/70 sm:h-[56vh]" aria-label="Carregando as imagens" /> : <Galeria imagens={galeria} r={r} />}
               <div className="min-w-0 space-y-3">
                 {blocoCompletar}
-                <div className="rounded-xl border border-border bg-card px-4 py-1">
+                <div className="rounded-lg border border-border bg-card px-4 py-1">
                   <Linha rotulo="Mecanismo" valor={r.mecanismo || texto(r.ficha.mecanismo)} copiar={false} />
                   <Linha rotulo="Primeira fala ou headline" valor={texto(r.ficha.gancho_verbal)} />
                   <Linha rotulo="Gancho visual" valor={texto(r.ficha.gancho_visual)} copiar={false} />
@@ -516,7 +516,7 @@ export default function JanelaDaReferencia({
                   )}
                 </div>
                 {temMetricas(metricas) && (
-                  <button type="button" onClick={() => setAba("metricas")} className="w-full rounded-xl border border-border bg-card px-4 py-3 text-left hover:border-primary/40">
+                  <button type="button" onClick={() => setAba("metricas")} className="w-full rounded-lg border border-border bg-card px-4 py-3 text-left hover:border-primary/40">
                     <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">Resultado real</span>
                     <span className="mt-0.5 block text-[13px] tabular-nums">
                       {brl(metricas.gasto)} · {inteiro(metricas.resultados)} resultados · {brl(metricas.custo_por_resultado)} cada
@@ -586,12 +586,12 @@ export default function JanelaDaReferencia({
           {r && aba === "copy" && (
             <div className="mx-auto max-w-3xl">
               {semCopy ? (
-                <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
                   <p className="text-[13.5px] font-medium">Sem copy registrada</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">Complete a ficha com IA ou escreva na aba Ficha o que o anúncio diz.</p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-border bg-card px-4 py-1">
+                <div className="rounded-lg border border-border bg-card px-4 py-1">
                   <Linha rotulo="Título" valor={copy.titulo} />
                   <Linha rotulo="Texto principal" valor={copy.corpo} />
                   <Linha rotulo="Descrição" valor={copy.descricao} />
@@ -615,14 +615,14 @@ export default function JanelaDaReferencia({
                   <Indicadores m={metricas} />
                   {anuncio && <SerieDiaria serie={anuncio.serie} />}
                   {anuncio && (
-                    <section className="rounded-xl border border-border bg-card p-4" aria-label="Diagnóstico">
+                    <section className="rounded-lg border border-border bg-card p-4" aria-label="Diagnóstico">
                       <h4 className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Diagnóstico</h4>
                       <Diagnostico valor={anuncio.diagnostico} />
                     </section>
                   )}
                 </>
               ) : (
-                <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
                   <p className="text-[13.5px] font-medium">{temAnuncio ? "Sem entrega no período" : "Referência externa, sem métricas"}</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">
                     {temAnuncio ? "O anúncio não teve números recentes na conta." : "Longevidade, curtidas e bibliotecas de vencedores não são prova de retorno. Só anúncio próprio traz resultado real."}
@@ -635,7 +635,7 @@ export default function JanelaDaReferencia({
           {r && aba === "original" && (
             <div className="mx-auto max-w-3xl space-y-3">
               {pagina && (pagina.titulo || pagina.descricao) && (
-                <section className="rounded-xl border border-border bg-card px-4 py-1" aria-label="Página de origem">
+                <section className="rounded-lg border border-border bg-card px-4 py-1" aria-label="Página de origem">
                   <Linha rotulo="Título da página" valor={pagina.titulo} copiar={false} />
                   <Linha rotulo="Descrição" valor={pagina.descricao} copiar={false} />
                   <Linha rotulo="Site" valor={[pagina.site, pagina.tipo ? humanizar(pagina.tipo) : ""].filter(Boolean).join(" · ")} copiar={false} />
@@ -646,7 +646,7 @@ export default function JanelaDaReferencia({
                   })}
                 </section>
               )}
-              <section className="rounded-xl border border-border bg-card px-4 py-1">
+              <section className="rounded-lg border border-border bg-card px-4 py-1">
                 <Linha rotulo="Origem" valor={daAgencia ? "Biblioteca da agência" : rotuloDaOrigem(r.origem)} copiar={false} />
                 <Linha rotulo="Plataforma e formato" valor={[r.plataforma, r.formato].filter(Boolean).join(" · ")} copiar={false} />
                 <Linha rotulo="Anúncio no Meta" valor={r.ad_id || (anuncio ? anuncio.ad_id : "")} />

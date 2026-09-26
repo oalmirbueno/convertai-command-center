@@ -1,55 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bot, CheckCircle2, ClipboardCopy, ListPlus, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ListPlus, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { botao, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import {
   aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, salvarEPublicarRitual,
-  type Aplicado, type ClienteDoAgente, type Preparo,
+  type ClienteDoAgente,
 } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
+import {
+  etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, seloDaRodada,
+  type EtapaDoAgente, type ItemDaRodada, type Rodada, type Rodando, type Situacao,
+} from "./rodadaDoAgente";
 
 /**
  * Agente da Central: "Atualizar todos".
  *
- * Um botão: para cada cliente ativo (régua do Ciclo), o agente lê tudo,
- * atualiza o dossiê geral com a leitura organizada da semana e faz DUAS
- * perguntas. O dono responde tudo na mesma conversa (pode colar contexto),
- * o agente incorpora no dossiê, grava no diário e no cérebro, escreve o
- * ritual com memória, publica no portal e deixa pronto para copiar.
+ * Na Central fica só um botão pequeno no cabeçalho, com um selo do estado da
+ * rodada ("3 perguntas esperando"). O botão abre o agente num pop-up (grande
+ * no computador, tela cheia no celular) com quatro passos: 1 Ler, 2
+ * Responder, 3 Aplicar e publicar, 4 Copiar rituais.
  *
- * A fila anda aqui, dois clientes por vez, com progresso na tela: cada
- * chamada ao servidor trata um cliente só (limite das Edge Functions). A
- * conversa fica guardada neste navegador enquanto não termina.
+ * Para cada cliente ativo (régua do Ciclo), o agente lê tudo, atualiza o
+ * dossiê geral com a leitura organizada da semana e faz DUAS perguntas. O
+ * dono responde (pode colar contexto), o agente incorpora no dossiê, grava no
+ * diário e no cérebro, escreve o ritual com memória, publica no portal e
+ * deixa pronto para copiar.
+ *
+ * A fila anda aqui, dois clientes por vez: cada chamada ao servidor trata um
+ * cliente só (limite das Edge Functions). A rodada fica guardada neste
+ * navegador enquanto não termina; fechar o pop-up não perde nada e a leitura
+ * continua enquanto a Central estiver aberta.
  */
 
-type Situacao = "fila" | "lendo" | "perguntas" | "aplicando" | "publicando" | "pronto" | "erro" | "pulado";
-
-interface ItemDaRodada {
-  cliente: ClienteDoAgente;
-  incluir: boolean;
-  situacao: Situacao;
-  preparo: Preparo | null;
-  respostas: string[];
-  contexto: string;
-  aplicado: Aplicado | null;
-  reportId: string | null;
-  publicado: boolean;
-  tarefasCriadas: number[];
-  erro: string | null;
-}
-
-interface Rodada {
-  ritual: string;
-  publicar: boolean;
-  contextoGeral: string;
-  itens: ItemDaRodada[];
-  iniciadaEm: string;
-}
-
-const CHAVE_LOCAL = "agente-central:rodada:v1";
 const LOTE = 2;
 
 const RITUAIS = [
@@ -75,25 +64,15 @@ const ROTULO: Record<Situacao, string> = {
   publicando: "Publicando no portal", pronto: "Pronto", erro: "Não deu certo", pulado: "Fora desta rodada",
 };
 
-function lerLocal(): Rodada | null {
-  try {
-    const bruto = window.localStorage.getItem(CHAVE_LOCAL);
-    if (!bruto) return null;
-    const r = JSON.parse(bruto) as Rodada;
-    return r && Array.isArray(r.itens) ? r : null;
-  } catch {
-    return null;
-  }
-}
+const corDaSituacao = (s: Situacao) => (s === "erro" ? "text-destructive" : s === "pronto" ? "text-success" : "text-muted-foreground");
 
-function gravarLocal(r: Rodada | null) {
-  try {
-    if (r) window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify(r));
-    else window.localStorage.removeItem(CHAVE_LOCAL);
-  } catch {
-    /* navegador sem armazenamento: a rodada só vive nesta aba */
-  }
-}
+const TOM_DO_SELO = {
+  andamento: "bg-primary/10 text-primary",
+  atencao: "bg-warning/15 text-warning",
+  erro: "bg-destructive/10 text-destructive",
+  ok: "bg-success/10 text-success",
+  neutro: "bg-muted text-muted-foreground",
+} as const;
 
 async function copiar(texto: string): Promise<boolean> {
   try {
@@ -145,26 +124,21 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
     }
   };
   return (
-    <div className="mt-2 rounded-lg border border-border bg-secondary/30 p-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Tarefas para cumprir o que o ritual promete</p>
+    <div className="mt-2 rounded-md bg-muted/50 p-2.5">
+      <p className={texto.rotulo}>Tarefas para cumprir o que o ritual promete</p>
       <ul className="mt-1.5 space-y-1.5">
         {tarefas.map((t, i) => (
-          <li key={i} className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
+          <li key={i} className="flex items-start">
+            <div className="mr-2 min-w-0 flex-1">
               <p className="text-[12px] font-medium text-foreground">{t.titulo}</p>
               {t.passo && <p className="text-[11px] leading-snug text-muted-foreground">{t.passo}</p>}
-              <p className="text-[10px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
+              <p className="text-[10.5px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
             </div>
             {criadas.includes(i) ? (
-              <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Criada</span>
+              <span className="inline-flex shrink-0 items-center text-[11px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
             ) : (
-              <button
-                type="button"
-                onClick={() => void criar(i)}
-                disabled={criando !== null}
-                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] text-foreground hover:bg-secondary disabled:opacity-50"
-              >
-                {criando === i ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListPlus className="h-3 w-3" />} Criar tarefa
+              <button type="button" onClick={() => void criar(i)} disabled={criando !== null} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
+                {criando === i ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ListPlus className="mr-1 h-3 w-3" />} Criar tarefa
               </button>
             )}
           </li>
@@ -200,26 +174,28 @@ function SugestoesRecentes() {
     },
   });
   return (
-    <div className="mt-3 border-t border-border pt-2">
+    <div className="border-t border-border pt-3">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
-        className="cursor-pointer border-none bg-transparent p-0 text-[11px] font-medium text-primary hover:opacity-80"
+        aria-expanded={aberto}
+        className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-[12px] font-medium text-primary hover:opacity-80"
       >
-        {aberto ? "Fechar tarefas sugeridas pelos rituais" : "Ver tarefas sugeridas pelos rituais dos últimos 10 dias"}
+        <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", aberto ? "rotate-180" : "")} />
+        Tarefas sugeridas pelos rituais dos últimos 10 dias
       </button>
       {aberto && (
         <div className="mt-2 space-y-2">
-          <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
-            Cada sugestão nasce de uma promessa do ritual. Vira tarefa só quando alguém da equipe cria.
-            <button type="button" onClick={() => void refetch()} className="ml-auto cursor-pointer border-none bg-transparent p-1 text-muted-foreground hover:text-foreground" aria-label="Recarregar">
-              <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
+          <div className="flex items-center text-[11px] text-muted-foreground">
+            <span className="mr-2 min-w-0 flex-1">Cada sugestão nasce de uma promessa do ritual. Vira tarefa só quando alguém da equipe cria.</span>
+            <button type="button" onClick={() => void refetch()} className={botao.icone} aria-label="Recarregar">
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             </button>
           </div>
           {!isFetching && data.length === 0 && <p className="text-[11px] text-muted-foreground">Nenhuma sugestão nos rituais recentes.</p>}
           {data.map((r) => (
-            <div key={r.id} className="rounded-lg border border-border p-2">
-              <p className="text-[11.5px] font-medium text-foreground">{r.nome} <span className="font-normal text-muted-foreground">· {r.titulo} · {new Date(r.quando).toLocaleDateString("pt-BR")}</span></p>
+            <div key={r.id} className="rounded-md border border-border p-2.5">
+              <p className="text-[12px] font-medium text-foreground">{r.nome} <span className="font-normal text-muted-foreground">· {r.titulo} · {new Date(r.quando).toLocaleDateString("pt-BR")}</span></p>
               <TarefasDoRitual
                 clientId={r.clientId}
                 reportId={r.id}
@@ -235,6 +211,13 @@ function SugestoesRecentes() {
   );
 }
 
+function novoItem(c: ClienteDoAgente): ItemDaRodada {
+  return {
+    cliente: c, incluir: true, situacao: "fila", preparo: null, respostas: ["", ""], contexto: "",
+    aplicado: null, reportId: null, publicado: false, tarefasCriadas: [], erro: null,
+  };
+}
+
 export default function AgenteDaCentral() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -242,8 +225,10 @@ export default function AgenteDaCentral() {
   const [rodada, setRodada] = useState<Rodada | null>(() => (typeof window === "undefined" ? null : lerLocal()));
   const [carregandoLista, setCarregandoLista] = useState(false);
   const [erroLista, setErroLista] = useState<string | null>(null);
-  const [rodando, setRodando] = useState<"lendo" | "aplicando" | null>(null);
+  const [rodando, setRodando] = useState<Rodando>(null);
   const [ritualEscolhido, setRitualEscolhido] = useState(ritualDeHoje());
+  const [etapa, setEtapa] = useState<EtapaDoAgente>("ler");
+  const [clienteAberto, setClienteAberto] = useState<string | null>(null);
   const rodadaRef = useRef<Rodada | null>(rodada);
 
   useEffect(() => {
@@ -263,13 +248,18 @@ export default function AgenteDaCentral() {
       lidos: dentro.filter((i) => i.preparo).length,
       prontos: dentro.filter((i) => i.situacao === "pronto").length,
       erros: dentro.filter((i) => i.situacao === "erro").length,
-      emAndamento: dentro.filter((i) => ["lendo", "aplicando", "publicando"].includes(i.situacao)).length,
     };
   }, [rodada]);
 
+  const selo = seloDaRodada(rodada, rodando);
+
   const abrir = async (novaRodada = false) => {
     setAberto(true);
-    if (rodadaRef.current && !novaRodada) return;
+    if (rodadaRef.current && !novaRodada) {
+      setEtapa(etapaSugerida(rodadaRef.current, rodando));
+      return;
+    }
+    setEtapa("ler");
     setCarregandoLista(true);
     setErroLista(null);
     try {
@@ -279,10 +269,7 @@ export default function AgenteDaCentral() {
         publicar: true,
         contextoGeral: "",
         iniciadaEm: new Date().toISOString(),
-        itens: clientes.map((c) => ({
-          cliente: c, incluir: true, situacao: "fila", preparo: null, respostas: ["", ""], contexto: "",
-          aplicado: null, reportId: null, publicado: false, tarefasCriadas: [], erro: null,
-        })),
+        itens: clientes.map(novoItem),
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Não consegui ler a carteira.";
@@ -298,6 +285,7 @@ export default function AgenteDaCentral() {
     setRodada(null);
     rodadaRef.current = null;
     gravarLocal(null);
+    setClienteAberto(null);
     void abrir(true);
   };
 
@@ -320,11 +308,12 @@ export default function AgenteDaCentral() {
       }
     });
     setRodando(null);
+    setEtapa((e) => (e === "ler" && rodadaRef.current?.itens.some((i) => i.incluir && i.preparo) ? "responder" : e));
     void queryClient.invalidateQueries({ queryKey: ["dossie-cliente"] });
     toast.success("Leitura feita. Responda as perguntas e aplique.");
   };
 
-  // Passo 2: aplicar as respostas, escrever o ritual e publicar.
+  // Passo 3: aplicar as respostas, escrever o ritual e publicar.
   const aplicarTodos = async () => {
     const atual = rodadaRef.current;
     if (!atual || rodando || !user) return;
@@ -354,6 +343,7 @@ export default function AgenteDaCentral() {
       }
     });
     setRodando(null);
+    setEtapa((e) => (e === "aplicar" ? "copiar" : e));
     for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente", "agente-central-tarefas-sugeridas"]) {
       void queryClient.invalidateQueries({ queryKey: [k] });
     }
@@ -363,11 +353,22 @@ export default function AgenteDaCentral() {
   const itens = rodada?.itens ?? [];
   const lidos = itens.filter((i) => i.incluir && i.preparo);
   const prontos = itens.filter((i) => i.situacao === "pronto" && i.aplicado?.ritual);
+  const paraAplicar = lidos.filter((i) => i.situacao !== "pronto");
+  const semResposta = lidos.filter((i) => i.situacao !== "pronto").reduce((s, i) => s + perguntasSemResposta(i), 0);
+  const totalDePerguntas = paraAplicar.reduce((s, i) => s + (i.preparo?.perguntas.length ?? 0), 0);
   const progresso = rodando === "lendo"
     ? { feito: contagem.lidos, total: contagem.total }
     : rodando === "aplicando"
       ? { feito: contagem.prontos + contagem.erros, total: lidos.length }
       : null;
+
+  // Na lista de perguntas, abre o primeiro cliente com pergunta sem resposta.
+  // null = ainda não escolhido; "" = o dono fechou todos (não reabre sozinho).
+  useEffect(() => {
+    if (etapa !== "responder" || clienteAberto !== null) return;
+    const primeiro = lidos.find((i) => i.situacao !== "pronto" && perguntasSemResposta(i) > 0) ?? lidos.find((i) => i.situacao !== "pronto");
+    if (primeiro) setClienteAberto(primeiro.cliente.id);
+  }, [etapa, clienteAberto, lidos]);
 
   const copiarTodos = async () => {
     const texto = prontos.map((i) => `${i.cliente.nome}\n\n${i.aplicado!.ritual!.body}`).join("\n\n----------\n\n");
@@ -375,248 +376,390 @@ export default function AgenteDaCentral() {
     else toast.error("Não consegui copiar.");
   };
 
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Bot className="h-4 w-4 shrink-0 text-primary" /> Agente da Central
-          </p>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-            Atualiza o dossiê de todos os clientes ativos, faz duas perguntas de cada um, publica o ritual no portal e deixa pronto para copiar.
-            {rodada && ` Rodada aberta: ${contagem.lidos} de ${contagem.total} lidos, ${contagem.prontos} prontos.`}
-          </p>
+  const etapas: ItemDeEtapa[] = [
+    { valor: "ler", rotulo: "Ler" },
+    { valor: "responder", rotulo: "Responder", contador: semResposta || null, destaque: etapa === "ler" && lidos.length > 0 },
+    { valor: "aplicar", rotulo: "Aplicar e publicar" },
+    { valor: "copiar", rotulo: "Copiar rituais", contador: prontos.length || null },
+  ];
+
+  /* ---------- Conteúdo de cada etapa (rola por dentro) ---------- */
+
+  const conteudoLer = rodada && (
+    <div className="space-y-4">
+      <div>
+        <p className={texto.rotulo}>Ritual desta rodada</p>
+        <div className="mt-2 flex flex-wrap">
+          {RITUAIS.map((r) => {
+            const escolhido = (lidos.length > 0 ? rodada.ritual : ritualEscolhido) === r.value;
+            return (
+              <button
+                key={r.value}
+                type="button"
+                disabled={!!rodando || lidos.length > 0}
+                aria-pressed={escolhido}
+                onClick={() => setRitualEscolhido(r.value)}
+                className={juntar(
+                  "mb-2 mr-2 inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                  escolhido ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {r.label}
+              </button>
+            );
+          })}
         </div>
-        <button
-          type="button"
-          onClick={() => void abrir()}
-          className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border-none bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground hover:opacity-90"
-        >
-          {carregandoLista ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {rodada ? "Abrir a rodada" : "Atualizar todos"}
-        </button>
       </div>
-      <SugestoesRecentes />
+      <div>
+        <p className={texto.rotulo}>
+          {itens.length} cliente(s) ativos pela régua do Ciclo. Desmarque quem fica fora.
+        </p>
+        <ul className="mt-2 divide-y divide-border rounded-md border border-border">
+          {itens.map((i) => (
+            <li key={i.cliente.id}>
+              <label className="flex min-h-10 min-w-0 cursor-pointer items-center px-3 py-2 text-[13px] text-foreground">
+                <input
+                  type="checkbox"
+                  className="mr-2.5 h-4 w-4 shrink-0 accent-primary"
+                  checked={i.incluir}
+                  disabled={!!rodando}
+                  onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, incluir: e.target.checked, situacao: e.target.checked ? (x.preparo ? x.situacao : "fila") : "pulado" }))}
+                />
+                <span className="mr-2 min-w-0 flex-1 truncate">{i.cliente.nome}</span>
+                <span className={juntar("shrink-0 text-[11px]", corDaSituacao(i.situacao))}>
+                  {["lendo", "aplicando", "publicando"].includes(i.situacao) && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+                  {ROTULO[i.situacao]}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 
-      <Dialog open={aberto} onOpenChange={(v) => { if (!rodando) setAberto(v); }}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-border bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Agente da Central · Atualizar todos</DialogTitle>
-          </DialogHeader>
-
-          {!rodada ? (
-            erroLista && !carregandoLista ? (
-              <div className="space-y-2">
-                <p className="text-[12px] text-destructive">{erroLista}</p>
-                <button
-                  type="button"
-                  onClick={() => void abrir(true)}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Tentar de novo
-                </button>
-              </div>
-            ) : (
-              <p className="flex items-center gap-2 text-[12px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo a carteira...</p>
-            )
-          ) : (
-            <div className="space-y-4">
-              {/* Ritual e quem entra */}
-              <div className="rounded-xl border border-border p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">1. Ritual e clientes</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {RITUAIS.map((r) => (
-                    <button
-                      key={r.value}
-                      type="button"
-                      disabled={!!rodando || lidos.length > 0}
-                      onClick={() => setRitualEscolhido(r.value)}
-                      className={`cursor-pointer rounded-lg border px-3 py-1.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-60 ${
-                        (lidos.length > 0 ? rodada.ritual : ritualEscolhido) === r.value ? "border-primary bg-primary/10 text-foreground" : "border-border bg-secondary/30 text-muted-foreground"
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {itens.length} cliente(s) ativos pela régua do Ciclo (plano ativo, recorrente, com projeto). Desmarque quem fica fora desta rodada.
-                </p>
-                <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                  {itens.map((i) => (
-                    <label key={i.cliente.id} className="flex min-w-0 cursor-pointer items-center gap-2 text-[12px] text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={i.incluir}
-                        disabled={!!rodando}
-                        onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, incluir: e.target.checked, situacao: e.target.checked ? (x.preparo ? x.situacao : "fila") : "pulado" }))}
-                      />
-                      <span className="min-w-0 truncate">{i.cliente.nome}</span>
-                      <span className={`ml-auto shrink-0 text-[10px] ${i.situacao === "erro" ? "text-destructive" : i.situacao === "pronto" ? "text-success" : "text-muted-foreground"}`}>
-                        {["lendo", "aplicando", "publicando"].includes(i.situacao) && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
-                        {ROTULO[i.situacao]}
+  const conteudoResponder = lidos.length === 0 ? (
+    <EstadoVazio compacto titulo="Nenhum cliente lido ainda." descricao="Leia os clientes no passo 1 e as perguntas aparecem aqui." />
+  ) : (
+    <div className="space-y-3">
+      <p className={texto.auxiliar}>Responda o que souber. Pode colar contexto. Sua resposta é a aprovação para atualizar o dossiê e publicar.</p>
+      <textarea
+        value={rodada?.contextoGeral ?? ""}
+        onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
+        placeholder="Contexto que vale para todos (opcional)"
+        aria-label="Contexto que vale para todos"
+        rows={2}
+        className={juntar(campoTexto, "min-h-[64px]")}
+      />
+      <ul className="space-y-2">
+        {lidos.map((i) => {
+          const abertoAqui = clienteAberto === i.cliente.id;
+          const qtd = i.preparo?.perguntas.length ?? 0;
+          const faltam = perguntasSemResposta(i);
+          const travado = i.situacao === "pronto" || !!rodando;
+          return (
+            <li key={i.cliente.id} className="overflow-hidden rounded-md border border-border" data-cliente-do-agente={i.cliente.id}>
+              <button
+                type="button"
+                onClick={() => setClienteAberto(abertoAqui ? "" : i.cliente.id)}
+                aria-expanded={abertoAqui}
+                className="flex min-h-11 w-full min-w-0 cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left hover:bg-muted/60"
+              >
+                <span className="mr-2 min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-foreground">{i.cliente.nome}</span>
+                  <span className={juntar("block text-[11px]", corDaSituacao(i.situacao))}>
+                    {i.situacao === "perguntas"
+                      ? faltam === 0 ? `${qtd} de ${qtd} respondidas` : `${qtd - faltam} de ${qtd} respondidas`
+                      : ROTULO[i.situacao]}
+                  </span>
+                </span>
+                {i.preparo?.fase && (
+                  <span className={juntar(etiqueta, "mr-2 hidden bg-primary/10 text-primary sm:inline-flex")} title={i.preparo.motivo_da_fase}>
+                    Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
+                  </span>
+                )}
+                <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", abertoAqui ? "rotate-180" : "")} />
+              </button>
+              {abertoAqui && (
+                <div className="border-t border-border px-3 pb-3 pt-2">
+                  <div className="flex flex-wrap items-center">
+                    {i.preparo?.fase && (
+                      <span className={juntar(etiqueta, "mb-1 mr-2 bg-primary/10 text-primary sm:hidden")} title={i.preparo.motivo_da_fase}>
+                        Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
                       </span>
-                    </label>
+                    )}
+                    {i.preparo?.dossie_versao != null && <span className="mb-1 text-[11px] text-muted-foreground">dossiê v{i.preparo.dossie_versao}</span>}
+                  </div>
+                  {i.preparo?.leitura.onde_estamos && <p className="text-[12px] leading-relaxed text-muted-foreground">{i.preparo.leitura.onde_estamos}</p>}
+                  {i.preparo?.dossie_aviso && <p className="mt-1 text-[11px] text-warning">{i.preparo.dossie_aviso}</p>}
+                  {(i.preparo?.perguntas ?? []).map((p, k) => (
+                    <div key={k} className="mt-3">
+                      <p className="text-[13px] font-medium text-foreground">{p.pergunta}</p>
+                      {p.por_que && <p className="text-[11px] text-muted-foreground">{p.por_que}</p>}
+                      <textarea
+                        value={i.respostas[k] ?? ""}
+                        disabled={travado}
+                        aria-label={p.pergunta}
+                        onChange={(e) => atualizarItem(i.cliente.id, (x) => {
+                          const respostas = [...x.respostas];
+                          respostas[k] = e.target.value;
+                          return { ...x, respostas };
+                        })}
+                        rows={2}
+                        placeholder="Sua resposta"
+                        className={juntar(campoTexto, "mt-1 min-h-[64px]")}
+                      />
+                    </div>
                   ))}
+                  <textarea
+                    value={i.contexto}
+                    disabled={travado}
+                    aria-label={`Contexto extra de ${i.cliente.nome}`}
+                    onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, contexto: e.target.value }))}
+                    rows={2}
+                    placeholder="Contexto extra deste cliente (opcional)"
+                    className={juntar(campoTexto, "mt-3 min-h-[64px]")}
+                  />
+                  {i.erro && <p className="mt-1 text-[11px] text-destructive">{i.erro}</p>}
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
+  const conteudoAplicar = lidos.length === 0 ? (
+    <EstadoVazio compacto titulo="Nada para aplicar ainda." descricao="Leia os clientes e responda as perguntas primeiro." />
+  ) : (
+    <div className="space-y-3">
+      <p className={texto.auxiliar}>
+        O agente incorpora as respostas no dossiê, escreve o ritual de cada cliente e publica no portal. Pergunta sem resposta fica de fora.
+      </p>
+      {semResposta > 0 && (
+        <p className="rounded-md bg-warning/10 px-3 py-2 text-[12px] text-warning">
+          {semResposta} de {totalDePerguntas} pergunta(s) sem resposta.{" "}
+          <button type="button" onClick={() => setEtapa("responder")} className="cursor-pointer border-none bg-transparent p-0 font-medium text-warning underline">Responder agora</button>
+        </p>
+      )}
+      <ul className="divide-y divide-border rounded-md border border-border">
+        {lidos.map((i) => {
+          const qtd = i.preparo?.perguntas.length ?? 0;
+          return (
+            <li key={i.cliente.id} className="px-3 py-2">
+              <div className="flex min-w-0 items-center">
+                <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{i.cliente.nome}</span>
+                <span className={juntar("shrink-0 text-[11px]", corDaSituacao(i.situacao))}>
+                  {["aplicando", "publicando"].includes(i.situacao) && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+                  {i.situacao === "perguntas" ? `${qtd - perguntasSemResposta(i)} de ${qtd} respondidas` : ROTULO[i.situacao]}
+                </span>
+              </div>
+              {i.erro && <p className="mt-0.5 text-[11px] text-destructive">{i.erro}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
+  const conteudoCopiar = (
+    <div className="space-y-3">
+      {prontos.length === 0 ? (
+        <EstadoVazio compacto titulo="Nenhum ritual pronto ainda." descricao="Eles aparecem aqui depois de aplicar as respostas." />
+      ) : (
+        <ul className="space-y-3">
+          {prontos.map((i) => {
+            const r = i.aplicado!.ritual!;
+            const aviso = avisoDeRepeticao(r as unknown as Record<string, unknown>);
+            return (
+              <li key={i.cliente.id} className="rounded-md border border-border p-3">
+                <div className="flex min-w-0 flex-wrap items-center">
+                  <p className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">{i.cliente.nome}</p>
+                  <span className={juntar(etiqueta, "mr-2", i.publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+                    {i.publicado ? "Publicado no portal" : "Rascunho na fila da Central"}
+                  </span>
+                  {i.aplicado?.dossie_versao != null && <span className="text-[11px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
                   <button
                     type="button"
-                    onClick={() => void lerTodos()}
-                    disabled={!!rodando || contagem.total === 0 || contagem.lidos >= contagem.total}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    onClick={() => void copiar(r.body).then((ok) => (ok ? toast.success(`Ritual de ${i.cliente.nome} copiado.`) : toast.error("Não consegui copiar.")))}
+                    className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")}
                   >
-                    {rodando === "lendo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    {lidos.length ? "Ler os que faltam" : `Ler e atualizar ${contagem.total} dossiê(s)`}
-                  </button>
-                  <button type="button" onClick={recomecar} disabled={!!rodando} className="inline-flex cursor-pointer items-center gap-1 border-none bg-transparent px-2 py-2 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50">
-                    <X className="h-3 w-3" /> Recomeçar
+                    <ClipboardCopy className="mr-1 h-3.5 w-3.5" /> Copiar
                   </button>
                 </div>
-                {progresso && (
-                  <div className="mt-3">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.total ? Math.round((progresso.feito / progresso.total) * 100) : 0}%` }} />
-                    </div>
-                    <p className="mt-1 text-[10.5px] text-muted-foreground">
-                      {rodando === "lendo" ? "Lendo" : "Aplicando"} {progresso.feito} de {progresso.total}. Dois clientes por vez; pode começar a responder quem já chegou.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* A conversa: duas perguntas de cada um */}
-              {lidos.length > 0 && (
-                <div className="rounded-xl border border-border p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">2. Duas perguntas de cada cliente</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Responda o que souber. Pode colar contexto. Sua resposta é a aprovação para atualizar o dossiê e publicar.</p>
-                  <textarea
-                    value={rodada.contextoGeral}
-                    onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
-                    placeholder="Contexto que vale para todos (opcional)"
-                    rows={2}
-                    className="mt-2 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[12px] text-foreground"
+                {r.title && <p className="mt-1.5 text-[12px] font-medium text-foreground">{r.title}</p>}
+                {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[11px] text-warning">{aviso}</p>}
+                {i.aplicado?.dossie_aviso && <p className="mt-1 text-[11px] text-warning">{i.aplicado.dossie_aviso}</p>}
+                <p className="mt-1.5 whitespace-pre-line text-[12.5px] leading-relaxed text-foreground/90">{r.body}</p>
+                {i.reportId && (
+                  <TarefasDoRitual
+                    clientId={i.cliente.id}
+                    reportId={i.reportId}
+                    tarefas={r.tarefas_sugeridas ?? []}
+                    criadas={i.tarefasCriadas}
+                    onCriada={(k) => atualizarItem(i.cliente.id, (x) => ({ ...x, tarefasCriadas: [...x.tarefasCriadas, k] }))}
                   />
-                  <div className="mt-2 space-y-3">
-                    {lidos.map((i) => (
-                      <div key={i.cliente.id} className="rounded-lg border border-border bg-secondary/20 p-2.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-[12.5px] font-semibold text-foreground">{i.cliente.nome}</p>
-                          {i.preparo?.fase && (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary" title={i.preparo.motivo_da_fase}>
-                              Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
-                            </span>
-                          )}
-                          {i.preparo?.dossie_versao != null && <span className="text-[10px] text-muted-foreground">dossiê v{i.preparo.dossie_versao}</span>}
-                          <span className={`ml-auto text-[10px] ${i.situacao === "erro" ? "text-destructive" : i.situacao === "pronto" ? "text-success" : "text-muted-foreground"}`}>{ROTULO[i.situacao]}</span>
-                        </div>
-                        {i.preparo?.leitura.onde_estamos && <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{i.preparo.leitura.onde_estamos}</p>}
-                        {i.preparo?.dossie_aviso && <p className="mt-1 text-[10.5px] text-warning">{i.preparo.dossie_aviso}</p>}
-                        {(i.preparo?.perguntas ?? []).map((p, k) => (
-                          <div key={k} className="mt-2">
-                            <p className="text-[12px] font-medium text-foreground">{p.pergunta}</p>
-                            {p.por_que && <p className="text-[10.5px] text-muted-foreground">{p.por_que}</p>}
-                            <textarea
-                              value={i.respostas[k] ?? ""}
-                              disabled={i.situacao === "pronto" || !!rodando}
-                              onChange={(e) => atualizarItem(i.cliente.id, (x) => {
-                                const respostas = [...x.respostas];
-                                respostas[k] = e.target.value;
-                                return { ...x, respostas };
-                              })}
-                              rows={2}
-                              placeholder="Sua resposta"
-                              className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[12px] text-foreground"
-                            />
-                          </div>
-                        ))}
-                        <textarea
-                          value={i.contexto}
-                          disabled={i.situacao === "pronto" || !!rodando}
-                          onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, contexto: e.target.value }))}
-                          rows={2}
-                          placeholder="Contexto extra deste cliente (opcional)"
-                          className="mt-2 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-[12px] text-foreground"
-                        />
-                        {i.erro && <p className="mt-1 text-[11px] text-destructive">{i.erro}</p>}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <label className="flex cursor-pointer items-center gap-2 text-[12px] text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={rodada.publicar}
-                        disabled={!!rodando}
-                        onChange={(e) => setRodada((r) => (r ? { ...r, publicar: e.target.checked } : r))}
-                      />
-                      Publicar no portal ao aplicar
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => void aplicarTodos()}
-                      disabled={!!rodando || !lidos.some((i) => i.situacao !== "pronto")}
-                      className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                    >
-                      {rodando === "aplicando" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      {rodada.publicar ? "Aplicar respostas e publicar" : "Aplicar respostas"}
-                    </button>
-                  </div>
-                </div>
-              )}
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <SugestoesRecentes />
+    </div>
+  );
 
-              {/* Rituais prontos para copiar */}
-              {prontos.length > 0 && (
-                <div className="rounded-xl border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">3. Rituais prontos para copiar</p>
-                    <button type="button" onClick={() => void copiarTodos()} className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] text-foreground hover:bg-secondary">
-                      <ClipboardCopy className="h-3 w-3" /> Copiar todos
-                    </button>
-                  </div>
-                  <div className="mt-2 space-y-3">
-                    {prontos.map((i) => {
-                      const r = i.aplicado!.ritual!;
-                      const aviso = avisoDeRepeticao(r as unknown as Record<string, unknown>);
-                      return (
-                        <div key={i.cliente.id} className="rounded-lg border border-border p-2.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[12.5px] font-semibold text-foreground">{i.cliente.nome}</p>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${i.publicado ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
-                              {i.publicado ? "Publicado no portal" : "Rascunho na fila da Central"}
-                            </span>
-                            {i.aplicado?.dossie_versao != null && <span className="text-[10px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
-                            <button
-                              type="button"
-                              onClick={() => void copiar(r.body).then((ok) => (ok ? toast.success(`Ritual de ${i.cliente.nome} copiado.`) : toast.error("Não consegui copiar.")))}
-                              className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] text-foreground hover:bg-secondary"
-                            >
-                              <ClipboardCopy className="h-3 w-3" /> Copiar
-                            </button>
-                          </div>
-                          {r.title && <p className="mt-1 text-[11.5px] font-medium text-foreground">{r.title}</p>}
-                          {aviso && <p className="mt-1 rounded-md border border-warning/30 bg-warning/[0.06] px-2 py-1 text-[10.5px] text-warning">{aviso}</p>}
-                          {i.aplicado?.dossie_aviso && <p className="mt-1 text-[10.5px] text-warning">{i.aplicado.dossie_aviso}</p>}
-                          <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-foreground/90">{r.body}</p>
-                          {i.reportId && (
-                            <TarefasDoRitual
-                              clientId={i.cliente.id}
-                              reportId={i.reportId}
-                              tarefas={r.tarefas_sugeridas ?? []}
-                              criadas={i.tarefasCriadas}
-                              onCriada={(k) => atualizarItem(i.cliente.id, (x) => ({ ...x, tarefasCriadas: [...x.tarefasCriadas, k] }))}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+  /* ---------- Rodapé: o botão da etapa, sempre à vista ---------- */
+
+  const tudoLido = contagem.total > 0 && contagem.lidos >= contagem.total;
+  const rodape = rodada && (
+    <div className="flex min-w-0 flex-wrap items-center">
+      {etapa === "ler" && (
+        <>
+          <button type="button" onClick={recomecar} disabled={!!rodando} className={juntar(botao.discreto, "mr-auto")}>
+            <X className="mr-1 h-3.5 w-3.5" /> Recomeçar
+          </button>
+          {tudoLido && !rodando ? (
+            <button type="button" onClick={() => setEtapa("responder")} className={botao.primario}>
+              Responder as perguntas
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void lerTodos()}
+              disabled={!!rodando || contagem.total === 0 || tudoLido}
+              className={botao.primario}
+            >
+              {rodando === "lendo" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+              {lidos.length ? "Ler os que faltam" : `Ler e atualizar ${contagem.total} dossiê(s)`}
+            </button>
           )}
+        </>
+      )}
+      {etapa === "responder" && (
+        <>
+          <span className={juntar(texto.auxiliar, "mr-auto")}>
+            {lidos.length === 0 ? "" : semResposta === 0 ? "Tudo respondido." : `${semResposta} sem resposta`}
+          </span>
+          <button type="button" onClick={() => setEtapa("aplicar")} disabled={lidos.length === 0} className={botao.primario}>
+            Continuar para aplicar
+          </button>
+        </>
+      )}
+      {etapa === "aplicar" && (
+        <>
+          <label className="mr-auto flex cursor-pointer items-center py-1 text-[12.5px] text-foreground">
+            <input
+              type="checkbox"
+              className="mr-2 h-4 w-4 accent-primary"
+              checked={rodada.publicar}
+              disabled={!!rodando}
+              onChange={(e) => setRodada((r) => (r ? { ...r, publicar: e.target.checked } : r))}
+            />
+            Publicar no portal ao aplicar
+          </label>
+          <button
+            type="button"
+            onClick={() => void aplicarTodos()}
+            disabled={!!rodando || paraAplicar.length === 0}
+            className={botao.primario}
+          >
+            {rodando === "aplicando" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+            {rodada.publicar ? "Aplicar respostas e publicar" : "Aplicar respostas"}
+          </button>
+        </>
+      )}
+      {etapa === "copiar" && (
+        <>
+          <span className={juntar(texto.auxiliar, "mr-auto")}>{prontos.length ? `${prontos.length} ritual(is) pronto(s)` : ""}</span>
+          <button type="button" onClick={() => void copiarTodos()} disabled={prontos.length === 0} className={botao.primario}>
+            <ClipboardCopy className="mr-1.5 h-4 w-4" /> Copiar todos
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  const topo = (
+    <div className="space-y-2">
+      <Etapas itens={etapas} valor={etapa} onEscolher={(v) => setEtapa(v as EtapaDoAgente)} rotulo="Passos do Atualizar todos" numerar className="-mx-1" />
+      {progresso && (
+        <div data-progresso-do-agente="">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.total ? Math.round((progresso.feito / progresso.total) * 100) : 0}%` }} />
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {rodando === "lendo" ? "Lendo" : "Aplicando"} {progresso.feito} de {progresso.total}. Dois por vez. Pode fechar: a rodada continua.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void abrir()}
+        data-agente-central-botao=""
+        title={selo ? `Atualizar todos: ${selo.texto}` : "Atualizar o dossiê de todos os clientes ativos"}
+        // Sistema de design (E3, 26/09): mesmo botão do cabeçalho da página; no
+        // celular fica só o ícone (o nome segue para leitor de tela e no title).
+        className={juntar(botao.secundario, "px-2.5 sm:px-3.5")}
+      >
+        {carregandoLista || rodando ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1.5" /> : <Bot className="h-4 w-4 text-primary sm:mr-1.5" />}
+        <span className="sr-only sm:not-sr-only">Atualizar todos</span>
+        {selo && (
+          <span className={juntar(etiqueta, "ml-2 rounded-full", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
+            <span className="sm:hidden">{selo.curto}</span>
+            <span className="hidden sm:inline">{selo.texto}</span>
+          </span>
+        )}
+      </button>
+
+      <Dialog open={aberto} onOpenChange={setAberto}>
+        <DialogContent
+          className={juntar(
+            // Celular: tela cheia. Computador: pop-up grande com altura fixa.
+            "left-0 top-0 flex h-full max-h-none w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-border bg-card p-0",
+            "sm:left-[50%] sm:top-[50%] sm:h-[86vh] sm:max-h-[860px] sm:max-w-3xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-xl",
+            "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:pb-0 sm:pt-0",
+            "[&>button:last-child]:hidden",
+          )}
+        >
+          <DialogTitle className="sr-only">Atualizar todos</DialogTitle>
+          <DialogDescription className="sr-only">Agente da Central: ler os clientes, responder as perguntas, aplicar e publicar, copiar os rituais.</DialogDescription>
+          <PainelDoAgente
+            semMoldura
+            titulo="Atualizar todos"
+            descricao="Dossiê, duas perguntas e ritual de cada cliente ativo."
+            icone={<Bot className="h-4 w-4" />}
+            acoes={
+              <button type="button" onClick={() => setAberto(false)} aria-label="Fechar" title="Fechar" className={juntar(botao.icone, "h-9 w-9")}>
+                <X className="h-4 w-4" />
+              </button>
+            }
+            topo={rodada ? topo : undefined}
+            compositor={rodape || undefined}
+            rotuloDasMensagens="Passo do Atualizar todos"
+            className="flex-1"
+          >
+            {!rodada ? (
+              erroLista && !carregandoLista ? (
+                <div className="space-y-2">
+                  <p className="text-[12.5px] text-destructive">{erroLista}</p>
+                  <button type="button" onClick={() => void abrir(true)} className={botao.primario}>
+                    <RefreshCw className="mr-1.5 h-4 w-4" /> Tentar de novo
+                  </button>
+                </div>
+              ) : (
+                <p className="flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lendo a carteira...</p>
+              )
+            ) : etapa === "ler" ? conteudoLer : etapa === "responder" ? conteudoResponder : etapa === "aplicar" ? conteudoAplicar : conteudoCopiar}
+          </PainelDoAgente>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

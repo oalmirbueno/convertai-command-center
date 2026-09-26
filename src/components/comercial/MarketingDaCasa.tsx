@@ -1,15 +1,17 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, CalendarDays, Megaphone } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isInternalClient } from "@/lib/clientFlags";
+import { AreaDeTrabalho, EstadoVazio, Painel, Secao, botao, juntar, texto } from "@/components/sistema";
 import {
   type Campanha,
   type Lead,
   dinheiro,
   proximoMes,
 } from "@/lib/comercial";
+import { FaixaDeNumeros } from "@/components/sistema";
 
 /**
  * O marketing da propria casa.
@@ -53,6 +55,8 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
    */
   const { data: conteudo } = useQuery({
     queryKey: ["marketing-da-casa", periodo],
+    // Trocar de mês não apaga os números da tela enquanto o novo chega.
+    placeholderData: (anterior) => anterior,
     queryFn: async () => {
       const { data: perfis } = await supabase
         .from("profiles")
@@ -104,108 +108,72 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
       .sort((a, b) => b.total - a.total);
   }, [leads, periodo, fim]);
 
+  const carregando = conteudo === undefined;
+
   return (
-    <div className="space-y-2.5">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <Cartao
-          titulo="Conteúdo no ar"
-          valor={String(conteudo?.publicadas ?? 0)}
-          apoio="publicações da casa no mês"
+    <AreaDeTrabalho rotuloDoPrincipal="Marketing da casa" memoriaDaRolagem="comercial:marketing">
+      <div className="min-w-0 space-y-6">
+        <FaixaDeNumeros
+          tamanho="compacto"
+          apoioAoLado
+          rotulo="Números do marketing da casa"
+          itens={[
+            { rotulo: "Conteúdo no ar", valor: carregando ? "…" : String(conteudo.publicadas), apoio: "no mês" },
+            { rotulo: "Já agendado", valor: carregando ? "…" : String(conteudo.agendadas), apoio: "esperando a data" },
+            { rotulo: "Investido", valor: dinheiro(investido), apoio: "somando as campanhas" },
+          ]}
         />
-        <Cartao
-          titulo="Já agendado"
-          valor={String(conteudo?.agendadas ?? 0)}
-          apoio="esperando a data chegar"
-        />
-        <Cartao
-          titulo="Investido"
-          valor={dinheiro(investido)}
-          apoio="somando as campanhas"
-        />
-      </div>
 
-      <div className="rounded-2xl border border-border bg-card p-3.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-              <CalendarDays className="h-3.5 w-3.5 text-primary" />
-              O conteúdo da casa
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              {conteudo && conteudo.nomes.length > 0
-                ? `Ele vive na Agenda editorial, junto com o dos clientes: ${conteudo.nomes.join(", ")}. Aqui fica só o retrato, para não existirem dois lugares com a mesma resposta.`
-                : "Nenhuma empresa do grupo está marcada como interna no cadastro, então não há conteúdo da casa para mostrar."}
-            </p>
-          </div>
-          <Link
-            to="/calendario"
-            className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-border px-3 text-[11.5px] font-semibold text-primary hover:bg-secondary"
-          >
-            Abrir agenda
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      </div>
+        <Secao
+          titulo="O conteúdo da casa"
+          descricao={
+            carregando
+              ? "Lendo a Agenda editorial"
+              : conteudo.nomes.length > 0
+                ? `Na Agenda editorial: ${conteudo.nomes.join(", ")}`
+                : "Nenhuma empresa do grupo marcada como interna"
+          }
+          ajuda="O conteúdo da casa vive na Agenda editorial, junto com o dos clientes. Aqui fica só o retrato, para não existirem dois lugares com a mesma resposta. A empresa entra aqui quando está marcada como interna no cadastro."
+          acao={
+            <Link to="/calendario" className={botao.secundario} aria-label="Abrir a Agenda editorial">
+              <span className="hidden sm:inline">Abrir agenda</span>
+              <ArrowUpRight className="h-3.5 w-3.5 sm:ml-1.5" aria-hidden="true" />
+            </Link>
+          }
+        />
 
-      <div className="rounded-2xl border border-border bg-card p-3.5">
-        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-          <Megaphone className="h-3.5 w-3.5 text-primary" />
-          De onde as pessoas chegaram
-        </p>
         {/* A ponte entre marketing e CRM. Sai do proprio funil: a origem do
             lead foi anotada quando ele entrou, nao e palpite depois. */}
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Leads que entraram no mês, pela origem anotada no cadastro.
-        </p>
-
-        <div className="mt-2.5 space-y-1.5">
-          {porOrigem.map((linha) => (
-            <div
-              key={linha.origem}
-              className="flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2"
-            >
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
-                {ROTULO_DA_ORIGEM[linha.origem] || linha.origem}
-              </span>
-              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                {linha.total} {linha.total === 1 ? "lead" : "leads"}
-                {linha.ganhos > 0 && (
-                  <span className="ml-1.5 font-semibold text-success">
-                    {linha.ganhos} fechou
-                  </span>
-                )}
-              </span>
-            </div>
-          ))}
-          {porOrigem.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[10.5px] text-muted-foreground">
-              Nenhum lead entrou neste mês.
-            </p>
+        <Secao
+          titulo="De onde as pessoas chegaram"
+          descricao={`${porOrigem.reduce((s, l) => s + l.total, 0)} leads no mês`}
+          ajuda="Leads que entraram no mês, pela origem anotada no cadastro."
+        >
+          {porOrigem.length === 0 ? (
+            <EstadoVazio compacto titulo="Nenhum lead entrou neste mês." />
+          ) : (
+            <Painel semEspaco>
+              <ul className="divide-y divide-border">
+                {porOrigem.map((linha) => (
+                  <li key={linha.origem} className="flex min-w-0 items-center px-4 py-2.5">
+                    <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate font-medium")}>
+                      {ROTULO_DA_ORIGEM[linha.origem] || linha.origem}
+                    </span>
+                    {linha.ganhos > 0 && (
+                      <span className="mr-3 shrink-0 text-[12px] font-medium tabular-nums text-success">
+                        {linha.ganhos} fechou
+                      </span>
+                    )}
+                    <span className={juntar(texto.auxiliar, "w-16 shrink-0 text-right tabular-nums")}>
+                      {linha.total} {linha.total === 1 ? "lead" : "leads"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Painel>
           )}
-        </div>
+        </Secao>
       </div>
-    </div>
-  );
-}
-
-function Cartao({
-  titulo,
-  valor,
-  apoio,
-}: {
-  titulo: string;
-  valor: string;
-  apoio: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-2.5">
-      <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {titulo}
-      </p>
-      <p className="mt-0.5 truncate text-[15px] font-bold tabular-nums text-foreground">
-        {valor}
-      </p>
-      <p className="truncate text-[10px] text-muted-foreground">{apoio}</p>
-    </div>
+    </AreaDeTrabalho>
   );
 }

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type UIEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, ClipboardPaste, Eye, Loader2, Maximize2, MoreHorizontal, MousePointerClick, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
+import { CheckSquare, ClipboardPaste, Eye, Filter, Loader2, Maximize2, MoreHorizontal, MousePointerClick, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -12,7 +11,13 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara } from "@/lib/mesa/api";
 import { AprovarFoto, BotoesDeUso } from "./AcoesDeUso";
 import AcoesProDaFoto from "./AcoesProDaFoto";
-import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, Pilulas, SeloCurto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, SeloCurto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import ProdutoDasFotos from "./ProdutoDasFotos";
 import { MenuDeUso } from "./UsoDaFoto";
 import {
@@ -48,6 +53,11 @@ import {
  * computador (filtros fixos em cima, grade e painel da foto rolando cada um
  * no seu lugar) e o painel da foto ficou em seções (principal, ferramentas
  * pro de ampliar e tirar fundo, mais ferramentas, sobre a foto).
+ *
+ * 26/09, sistema de design: a etapa organiza a própria coluna dentro da área
+ * de trabalho (a região principal não rola); a grade e o painel usam
+ * RegiaoRolavel (rolam por dentro só de 1024 px para cima). Tipo de foto num
+ * seletor; busca, filtros, foto aberta e seleção guardados por cliente.
  */
 
 export type FiltroDaClasse = "todas" | "original" | "derivada" | "gerada" | "aprovada";
@@ -114,7 +124,7 @@ export function ZonaDeEnvio({
       onDrop={soltar}
       aria-label="Soltar fotos aqui"
       data-zona-de-envio=""
-      className={`rounded-xl border border-dashed text-center transition-colors ${compacta ? "px-3 py-3" : "px-4 py-8"} ${
+      className={`min-w-0 rounded-lg border border-dashed text-center transition-colors ${compacta ? "px-2 py-1" : "px-4 py-8"} ${
         arrastando ? "border-primary bg-primary/5" : "border-border bg-background"
       }`}
     >
@@ -124,8 +134,8 @@ export function ZonaDeEnvio({
         </p>
       ) : (
         <div className={compacta ? "flex flex-wrap items-center justify-center" : ""}>
-          <p className={`flex items-center justify-center font-medium ${compacta ? "mr-3 text-[12.5px]" : "text-[14px]"}`}>
-            <ClipboardPaste className="mr-1.5 h-4 w-4 text-primary" /> Solte as fotos aqui ou cole com Ctrl+V
+          <p className={`flex min-w-0 items-center justify-center font-medium ${compacta ? "mr-2 text-[12px] text-muted-foreground" : "text-[14px]"}`}>
+            <ClipboardPaste className="mr-1.5 h-4 w-4 shrink-0 text-primary" /> <span className="min-w-0 truncate">{compacta ? "Solte ou cole com Ctrl+V" : "Solte as fotos aqui ou cole com Ctrl+V"}</span>
           </p>
           {!compacta && (
             <p className="mt-1 text-[12px] text-muted-foreground">
@@ -165,7 +175,7 @@ export function ZonaDeEnvio({
 function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
   const q = leitura.qualidade;
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-background p-3" data-leitura-da-foto="">
+    <div className="space-y-2 rounded-md bg-muted/50 p-3" data-leitura-da-foto="">
       {leitura.descricao && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{leitura.descricao}</p>}
       <ListaCurta titulo="Observado na foto" itens={leitura.observado} />
       {leitura.texto_lido && (
@@ -233,7 +243,7 @@ export function BotaoTirarFundo({ foto, onPronta, rotulo = "Tirar fundo" }: { fo
 function SecaoDoDetalhe({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0 border-t border-border pt-2.5">
-      <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</p>
+      <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">{titulo}</p>
       {children}
     </div>
   );
@@ -280,7 +290,7 @@ function DetalheDaFoto({
         <FotoInteira foto={foto} />
       </button>
       {classeDaFoto(foto) === "gerada" && (
-        <p className="rounded-lg bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug text-foreground">
+        <p className="rounded-md bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug text-foreground">
           Imagem gerada por IA. Partes que não aparecem nas fotos originais podem ter sido criadas.
         </p>
       )}
@@ -451,8 +461,7 @@ function CartaoDaFoto({
   );
 }
 
-/** Estilo da área com rolagem própria: não passa a rolagem para a página quando chega ao fim. */
-const ROLAGEM_PROPRIA = { overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" } as const;
+const CLASSES_VALIDAS = FILTROS_DA_CLASSE.map((f) => f.valor as string);
 
 export default function EtapaAcervo() {
   const { clientId } = useMesa();
@@ -461,22 +470,33 @@ export default function EtapaAcervo() {
   const { selecionadas, setSelecionadas, imagemId } = useMesaFoto();
   const fotos = useFotos(clientId);
   const kits = useKits(clientId);
-  const [classe, setClasse] = useState<FiltroDaClasse>("todas");
-  const [kitFiltro, setKitFiltro] = useState(TODOS_OS_KITS);
-  const [busca, setBusca] = useState("");
+  // Filtros, busca e a foto aberta ficam guardados por cliente (sair e voltar mantém).
+  const [classe, setClasse] = useEstadoDaTela<FiltroDaClasse>(`mesa-foto:acervo:classe:${clientId}`, "todas", { validar: (v) => CLASSES_VALIDAS.indexOf(String(v)) >= 0 });
+  const [kitFiltro, setKitFiltro] = useEstadoDaTela(`mesa-foto:acervo:produto:${clientId}`, TODOS_OS_KITS, { validar: (v) => typeof v === "string" && !!v });
+  const [busca, setBusca] = useEstadoDaTela(`mesa-foto:acervo:busca:${clientId}`, "");
+  const [aberta, setAberta] = useEstadoDaTela<string | null>(`mesa-foto:acervo:aberta:${clientId}`, imagemId, { validar: (v) => v === null || typeof v === "string" });
   const [limite, setLimite] = useState(POR_PAGINA);
-  const [aberta, setAberta] = useState<string | null>(imagemId);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [andamento, setAndamento] = useState<string | null>(null);
   const [leituras, setLeituras] = useState<Record<string, LeituraDaFoto>>({});
-  const painel = useRef<HTMLElement | null>(null);
+  const painel = useRef<HTMLDivElement | null>(null);
+
+  // Foto pedida pelo endereço (?imagem=) abre por cima da guardada.
+  useEffect(() => {
+    if (imagemId) setAberta(imagemId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagemId]);
 
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const listaDeKits = useMemo(() => kits.data || [], [kits.data]);
-  const filtradas = useMemo(() => filtrarFotos(todas, classe, kitFiltro, listaDeKits, busca), [todas, classe, kitFiltro, listaDeKits, busca]);
+  // Produto guardado que não existe mais: volta para todos.
+  const kitValido = kitFiltro === TODOS_OS_KITS || kitFiltro === SEM_KIT || !kits.isSuccess || listaDeKits.some((k) => k.id === kitFiltro) ? kitFiltro : TODOS_OS_KITS;
+  const filtradas = useMemo(() => filtrarFotos(todas, classe, kitValido, listaDeKits, busca), [todas, classe, kitValido, listaDeKits, busca]);
   const visiveis = filtradas.slice(0, limite);
   const fotoAberta = aberta ? todas.find((f) => f.id === aberta) || null : null;
   const escolhidas = useMemo(() => todas.filter((f) => selecionadas.indexOf(f.id) >= 0), [todas, selecionadas]);
+  // Barra de seleção flutuante no celular (acima do botão do diretor): reserva o fim da página.
+  useReservaFlutuante(escolhidas.length > 0, 120);
   const contagem = useMemo(() => {
     const c = { original: 0, derivada: 0, gerada: 0, aprovada: 0 };
     for (const f of todas) {
@@ -558,55 +578,56 @@ export default function EtapaAcervo() {
   };
 
   const vazio = fotos.isSuccess && todas.length === 0;
+  const zona = <ZonaDeEnvio compacta={!vazio && todas.length > 0} destaque onArquivos={(a) => void enviar(a)} andamento={andamento} />;
 
   return (
-    <div className="min-w-0 space-y-4 pb-40">
-      <Cartao
-        titulo="1. Fotos do produto"
-        dica={
-          todas.length
-            ? `${todas.length} ${todas.length === 1 ? "foto" : "fotos"} no acervo do cliente (o mesmo da Mesa e da Mesa Ads). Suba quantas quiser de uma vez; o produto é identificado logo abaixo.`
-            : "Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Mesmo acervo da Mesa e da Mesa Ads."
-        }
-      >
-        <ZonaDeEnvio compacta={!vazio && todas.length > 0} destaque onArquivos={(a) => void enviar(a)} andamento={andamento} />
-      </Cartao>
+    /*
+     * Passo 1 em coluna (sistema de design, 26/09): no computador a página não rola; o topo
+     * (subir fotos e o produto) fica em cima e a área das fotos ocupa o resto, com a grade e o
+     * painel da foto aberta rolando cada um no seu lugar (RegiaoRolavel). No celular tudo segue
+     * a rolagem da página: caixa com rolagem própria prende o dedo.
+     */
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-etapa-fotos="">
+      <div className={todas.length > 0 ? "min-w-0 space-y-4 pb-4 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" : "min-w-0 space-y-4 pb-4"} data-topo-das-fotos="">
+        <Cartao
+          titulo="Fotos do produto"
+          dica="Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Quantas quiser de uma vez; o produto é identificado logo abaixo. É o mesmo acervo da Mesa e da Mesa Ads."
+          acao={todas.length > 0 ? zona : undefined}
+        >
+          {todas.length > 0 ? (
+            <p className="text-[12px] tabular-nums text-muted-foreground">
+              {todas.length} {todas.length === 1 ? "foto no acervo" : "fotos no acervo"}
+            </p>
+          ) : (
+            zona
+          )}
+        </Cartao>
 
-      {todas.length > 0 && <ProdutoDasFotos fotos={todas} />}
+        {todas.length > 0 && <ProdutoDasFotos fotos={todas} />}
 
-      {fotos.isLoading && (
-        <p className="flex items-center text-[12px] text-muted-foreground">
-          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo o acervo...
-        </p>
-      )}
-      {fotos.isError && <AvisoDeErro erro={fotos.error} />}
-      {vazio && (
-        <Vazio titulo="O acervo deste cliente está vazio">
-          Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Para pessoa, 6 a 12 fotos recentes e autorizadas, sem filtro de beleza. Para alimento, a porção real vista de cima, a 45 graus e de lado.
-        </Vazio>
-      )}
+        {fotos.isLoading && <Carregando forma="grade" linhas={8} rotulo="Lendo o acervo" />}
+        {fotos.isError && <AvisoDeErro erro={fotos.error} />}
+        {vazio && (
+          <Vazio titulo="O acervo deste cliente está vazio">
+            Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Para pessoa, 6 a 12 fotos recentes e autorizadas, sem filtro de beleza. Para alimento, a porção real vista de cima, a 45 graus e de lado.
+          </Vazio>
+        )}
+      </div>
 
       {todas.length > 0 && (
-        /*
-         * Área das fotos (pedido do dono, 26/09: "tem um scroll só para rodar as fotos, mas fica
-         * rodando a página inteira"). No computador a área tem a altura da tela: a barra de filtros
-         * fica fixa em cima, a grade rola sozinha e o painel da foto aberta rola sozinho do lado,
-         * sem levar a página junto. No celular (tela estreita) tudo segue a rolagem da página: caixa
-         * com rolagem própria prende o dedo (armadilha conhecida do painel).
-         */
         <section
-          className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card lg:grid lg:h-[calc(100vh-176px)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_360px]"
+          className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:grid lg:min-h-[240px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_340px]"
           aria-label="Fotos do acervo"
           data-area-das-fotos=""
         >
           <div className="flex min-w-0 flex-col lg:min-h-0 lg:border-r lg:border-border">
-            <div className="shrink-0 space-y-2 border-b border-border bg-card px-3 pb-1 pt-2.5" data-barra-das-fotos="">
-              <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
+            <div className="shrink-0 border-b border-border px-3 pb-2 pt-2.5" data-barra-das-fotos="">
+              <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center">
                 <div className="relative min-w-0">
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, descrição ou tag" className="h-9 pl-8" aria-label="Buscar no acervo" />
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, descrição ou tag" className={juntar(campo, "pl-8")} aria-label="Buscar no acervo" />
                 </div>
-                <Select value={kitFiltro} onValueChange={setKitFiltro}>
+                <Select value={kitValido} onValueChange={setKitFiltro}>
                   <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Filtrar por produto">
                     <SelectValue />
                   </SelectTrigger>
@@ -620,33 +641,35 @@ export default function EtapaAcervo() {
                     ))}
                   </SelectContent>
                 </Select>
+                <SeletorCompacto
+                  modo="lista"
+                  rotulo="Tipo de foto"
+                  icone={<Filter className="h-4 w-4" />}
+                  opcoes={FILTROS_DA_CLASSE.map((f) => ({ valor: f.valor, rotulo: f.rotulo, contador: f.valor === "todas" ? todas.length : contagem[f.valor] }))}
+                  valor={classe}
+                  onEscolher={(v) => {
+                    setClasse(v as FiltroDaClasse);
+                    setLimite(POR_PAGINA);
+                  }}
+                />
               </div>
-              <Pilulas
-                rotulo="Filtrar por tipo de foto"
-                opcoes={FILTROS_DA_CLASSE.map((f) => ({ ...f, rotulo: `${f.rotulo} · ${f.valor === "todas" ? todas.length : contagem[f.valor]}` }))}
-                valor={classe}
-                onEscolher={(v) => {
-                  setClasse(v);
-                  setLimite(POR_PAGINA);
-                }}
-              />
-              <div className="flex min-w-0 flex-wrap items-center pb-1 text-[12px] text-muted-foreground">
+              <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                 <span className="mr-3 tabular-nums">
                   {filtradas.length} {filtradas.length === 1 ? "foto" : "fotos"}
                   {escolhidas.length ? ` · ${escolhidas.length} ${escolhidas.length === 1 ? "marcada" : "marcadas"}` : ""}
                 </span>
                 {visiveis.length > 0 && (
-                  <button type="button" className="font-medium text-primary hover:underline" onClick={marcarVisiveis}>
+                  <button type="button" className={juntar("rounded font-medium text-primary hover:underline", foco)} onClick={marcarVisiveis}>
                     {todasVisiveisMarcadas ? "Desmarcar as visíveis" : "Selecionar as visíveis"}
                   </button>
                 )}
               </div>
             </div>
-            <div className={`min-w-0 p-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto ${escolhidas.length ? "lg:pb-24" : ""}`} style={ROLAGEM_PROPRIA} onScroll={aoRolarAGrade} data-rolagem-das-fotos="">
+            <RegiaoRolavel modo="lg" sobre="cartao" memoria={`mesa-foto:acervo:grade:${clientId}`} onScroll={aoRolarAGrade} className="p-2" data-rolagem-das-fotos="">
               {filtradas.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
+                <EstadoVazio compacto titulo="Nenhuma foto com esse filtro." />
               ) : (
-                <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+                <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-3 xl:grid-cols-4 desk:grid-cols-5">
                   {visiveis.map((f) => (
                     <CartaoDaFoto
                       key={f.id}
@@ -665,13 +688,42 @@ export default function EtapaAcervo() {
                   Ver mais {Math.min(POR_PAGINA, filtradas.length - limite)}
                 </Button>
               )}
-            </div>
+            </RegiaoRolavel>
+            {escolhidas.length > 0 && (
+              /* Celular: barra flutuante acima do botão do diretor. Computador: pé da grade, sem cobrir o diretor. */
+              <div
+                className="pointer-events-none fixed inset-x-0 bottom-[132px] z-30 flex justify-center px-3 md:bottom-[84px] lg:pointer-events-auto lg:static lg:z-auto lg:block lg:shrink-0 lg:border-t lg:border-border lg:px-2 lg:pt-1.5"
+                data-barra-de-selecao=""
+              >
+                <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center rounded-lg border border-border bg-card px-3 pt-1.5 shadow-xl lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none">
+                  <span className="mb-1.5 mr-2 text-[12.5px] font-semibold tabular-nums">
+                    {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mb-1.5 mr-1.5 h-8 text-[12px]"
+                    onClick={() => {
+                      const alvo = document.querySelector("[data-produto-das-fotos]");
+                      if (alvo && typeof (alvo as HTMLElement).scrollIntoView === "function") (alvo as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                  >
+                    <PackageSearch className="mr-1.5 h-3.5 w-3.5" /> Identificar o produto
+                  </Button>
+                  <BotoesDeUso fotos={escolhidas} compacto />
+                  <button type="button" className={juntar("mb-1.5 h-8 rounded-md px-2 text-[12px] text-muted-foreground hover:bg-muted", foco)} onClick={() => setSelecionadas([])}>
+                    Limpar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          <aside
+          <RegiaoRolavel
             ref={painel}
-            className="order-first min-w-0 border-b border-border lg:order-none lg:min-h-0 lg:overflow-y-auto lg:border-b-0"
-            style={ROLAGEM_PROPRIA}
-            aria-label="Foto aberta"
+            modo="lg"
+            sobre="cartao"
+            rotulo="Foto aberta"
+            classeDeFora="order-first border-b border-border lg:order-none lg:border-b-0"
             data-painel-da-foto=""
           >
             {fotoAberta ? (
@@ -690,33 +742,8 @@ export default function EtapaAcervo() {
                 <GuiaDaArea />
               </div>
             )}
-          </aside>
+          </RegiaoRolavel>
         </section>
-      )}
-
-      {escolhidas.length > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[132px] z-30 flex justify-center px-3 md:bottom-[84px]" data-barra-de-selecao="">
-          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center rounded-2xl border border-border bg-card px-3 pt-1.5 shadow-xl">
-            <span className="mb-1.5 mr-2 text-[12.5px] font-semibold tabular-nums">
-              {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              className="mb-1.5 mr-1.5 h-8 text-[12px]"
-              onClick={() => {
-                const alvo = document.querySelector("[data-produto-das-fotos]");
-                if (alvo && typeof (alvo as HTMLElement).scrollIntoView === "function") (alvo as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            >
-              <PackageSearch className="mr-1.5 h-3.5 w-3.5" /> Identificar o produto
-            </Button>
-            <BotoesDeUso fotos={escolhidas} compacto />
-            <button type="button" className="mb-1.5 h-8 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-muted" onClick={() => setSelecionadas([])}>
-              Limpar
-            </button>
-          </div>
-        </div>
       )}
 
       <Ampliar

@@ -4,10 +4,9 @@ import { useFiles, useProjects } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -84,12 +83,22 @@ export default function ClientDocuments() {
   const { toast } = useToast();
 
   const [searchParams] = useSearchParams();
-  const [activeFolder, setActiveFolder] = useState<FolderId | "todos">("todos");
-  const [activeKind, setActiveKind] = useState<FileKindId | null>(null);
+  // Pasta, tipo e projeto ficam lembrados ao sair e voltar (por cliente).
+  const lembrar = (k: string) => `documentos:${k}:${clientId || ""}`;
+  const ehTexto = (v: unknown) => typeof v === "string";
+  const [activeFolder, setActiveFolder] = useEstadoDaTela<FolderId | "todos">(lembrar("pasta"), "todos", { validar: ehTexto });
+  const [activeKind, setActiveKind] = useEstadoDaTela<FileKindId | null>(lembrar("tipo"), null, { validar: (v) => v === null || ehTexto(v) });
   // A aba Entregas do projeto aponta para ca com ?project=: uma area so.
-  const [filterProject, setFilterProject] = useState(
-    searchParams.get("project") || "all",
-  );
+  const [projetoGuardado, setFilterProject] = useEstadoDaTela<string>(lembrar("projeto"), "all", { validar: ehTexto });
+  const [projetoDoEndereco] = useState(() => searchParams.get("project"));
+  const [usouEndereco, setUsouEndereco] = useState(false);
+  const filterProject = projetoDoEndereco && !usouEndereco ? projetoDoEndereco : projetoGuardado;
+  useEffect(() => {
+    if (projetoDoEndereco && !usouEndereco) {
+      setFilterProject(projetoDoEndereco);
+      setUsouEndereco(true);
+    }
+  }, [projetoDoEndereco, usouEndereco, setFilterProject]);
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
@@ -141,7 +150,7 @@ export default function ClientDocuments() {
         expectedVersion: file.version,
         decision: "approved",
       });
-      toast({ title: "Aprovado com sucesso!" });
+      toast({ title: "Aprovado" });
     } catch (error: any) {
       toast({
         title: "Erro ao aprovar",
@@ -180,153 +189,138 @@ export default function ClientDocuments() {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  const opcoesDeProjeto = [{ valor: "all", rotulo: "Todos os projetos" }].concat(
+    (projects || []).map((p: any) => ({ valor: String(p.id), rotulo: p.name || "Projeto" })),
+  );
+  const opcoesDePasta = [{ valor: "todos", rotulo: "Tudo", contador: visibleFiles.length }].concat(
+    folderSummaries.map((entry) => ({ valor: entry.folder.id as string, rotulo: entry.folder.label, contador: entry.total })),
+  );
+  const abrirComTeclado = (e: { key: string; preventDefault: () => void }, f: any) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setPreviewFile(f);
+    }
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <p className="heading-page">Documentos</p>
-        <Select value={filterProject} onValueChange={setFilterProject}>
-          <SelectTrigger className="w-full sm:w-[200px] bg-card border-border rounded-xl text-sm">
-            <SelectValue placeholder="Filtrar por projeto" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os projetos</SelectItem>
-            {(projects || []).map((p: any) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Documentos"
+        descricao={visibleFiles.length ? `${visibleFiles.length} ${visibleFiles.length === 1 ? "item" : "itens"}` : undefined}
+        ajuda="Tudo o que a equipe liberou para você: materiais, entregas e documentos. Toque num item para ver, baixar ou, quando estiver pendente, aprovar ou pedir ajuste."
+        acoes={
+          (projects || []).length > 0 && (
+            <SeletorCompacto
+              modo="lista"
+              rotulo="Projeto"
+              icone={<FolderOpen className="h-3.5 w-3.5" />}
+              valor={filterProject}
+              onEscolher={setFilterProject}
+              opcoes={opcoesDeProjeto}
+              className="max-w-[180px] sm:max-w-[240px]"
+            />
+          )
+        }
+      />
       {isReadOnly && (
-        <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
-          Modo somente leitura: ações de aprovação estão bloqueadas enquanto você visualiza como cliente.
-        </div>
+        <p className={juntar(texto.auxiliar, "leading-5 text-sky-600")} role="note">
+          Somente leitura: aprovar e pedir ajuste ficam bloqueados enquanto você vê como cliente.
+        </p>
       )}
 
       {/* Pastas: o que é cada coisa, com quantos itens tem em cada uma. */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => selectFolder("todos")}
-            className={`shrink-0 rounded-lg px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors ${
-              activeFolder === "todos"
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Tudo ({visibleFiles.length})
-          </button>
-          {folderSummaries.map((entry) => (
-            <button
-              key={entry.folder.id}
-              type="button"
-              title={entry.folder.hint}
-              onClick={() => selectFolder(entry.folder.id)}
-              className={`shrink-0 rounded-lg px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeFolder === entry.folder.id
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {entry.folder.label} ({entry.total})
-            </button>
-          ))}
+      {visibleFiles.length > 0 && (
+        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+          <SeletorCompacto
+            rotulo="Pasta"
+            icone={<FolderOpen className="h-3.5 w-3.5" />}
+            valor={activeFolder}
+            onEscolher={(v) => selectFolder(v as FolderId | "todos")}
+            opcoes={opcoesDePasta}
+          />
+          {/* Dentro da pasta: carrossel, post, story, vídeo... */}
+          {kindChips.length > 0 && (
+            <SeletorCompacto
+              modo="lista"
+              rotulo="Tipo"
+              valor={activeKind || "__todos"}
+              onEscolher={(v) => setActiveKind(v === "__todos" ? null : (v as FileKindId))}
+              opcoes={[{ valor: "__todos", rotulo: "Todos os tipos" }].concat(
+                kindChips.map((entry) => ({ valor: entry.kind.id as string, rotulo: entry.kind.label, contador: entry.total } as any)),
+              )}
+            />
+          )}
+          {activeSummary && activeSummary.folder.hint && (
+            <AjudaRecolhida rotulo={`O que tem em ${activeSummary.folder.label}`}>{activeSummary.folder.hint}</AjudaRecolhida>
+          )}
         </div>
-
-        {/* Dentro da pasta: carrossel, post, story, vídeo... */}
-        {kindChips.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => setActiveKind(null)}
-              className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
-                activeKind === null
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Todos os tipos
-            </button>
-            {kindChips.map((entry) => (
-              <button
-                key={entry.kind.id}
-                type="button"
-                onClick={() => setActiveKind(entry.kind.id)}
-                className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
-                  activeKind === entry.kind.id
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {entry.kind.label} ({entry.total})
-              </button>
-            ))}
-          </div>
-        )}
-
-        {activeSummary && (
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {activeSummary.folder.hint}
-          </p>
-        )}
-      </div>
+      )}
 
       {/* File list */}
       {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+        <Carregando linhas={4} rotulo="Carregando documentos" />
       ) : filteredFiles.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-12 text-center">
-          <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
-          <p className="text-sm font-medium text-foreground">Nenhum material liberado ainda</p>
-          <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-            Assim que a equipe liberar um material ou enviar algo para sua aprovação, ele aparece aqui
-            na hora, junto com o histórico completo no Onde Estamos.
-          </p>
-        </div>
+        <EstadoVazio
+          icone={<FolderOpen className="h-5 w-5" />}
+          titulo="Nenhum material liberado ainda"
+          descricao="Quando a equipe liberar um material ou pedir sua aprovação, ele aparece aqui na hora."
+        />
       ) : (
-        <div className="space-y-2 stagger-children">
+        <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Documentos">
           {filteredFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
-                onClick={() => setPreviewFile(f)}>
-                <div className="flex items-center gap-3">
+              <li
+                key={f.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver ${f.file_name}`}
+                className={juntar("min-w-0 cursor-pointer px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4", foco)}
+                onClick={() => setPreviewFile(f)}
+                onKeyDown={(e) => abrirComTeclado(e, f)}
+              >
+                <div className="flex min-w-0 items-center">
                   <ClientFileThumb file={f} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">
+                  <div className="ml-3 min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-foreground">
                       {f.file_name}
-                      {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
+                      {f.version > 1 && <span className="ml-1 text-xs text-muted-foreground">v{f.version}</span>}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {fileLocationLabel(f)} • {f.project?.name || "Sem projeto"} •{" "}
-                      {formatDate(f.created_at)}
+                    <p className={juntar(texto.auxiliar, "truncate")}>
+                      {fileLocationLabel(f)} · {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
                     </p>
+                    {f.approval_status !== "none" && (
+                      <span className={juntar(etiqueta, "mt-1 sm:hidden", badge.cls)}>{badge.label}</span>
+                    )}
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
+                  {f.approval_status !== "none" && (
+                    <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", badge.cls)}>{badge.label}</span>
+                  )}
                   <button
                     type="button"
                     title="Baixar"
-                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={`Baixar ${f.file_name}`}
+                    className={juntar(botao.icone, "ml-1")}
                     onClick={async (e) => {
                       e.stopPropagation();
                       const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
                       downloadFile(url, f.file_name);
                     }}>
-                    <Download className="w-4 h-4" />
+                    <Download className="h-4 w-4" />
                   </button>
                 </div>
 
                 {f.approval_status === "rejected" && f.feedback && (
-                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 ml-8 mt-2">
-                    <p className="text-[11px] text-muted-foreground mb-0.5">Seu feedback:</p>
+                  <div className={juntar(superficie.poco, "ml-[68px] mt-2 px-3 py-2")}>
+                    <p className={texto.auxiliar}>Seu pedido de ajuste</p>
                     <p className="text-xs text-foreground">{f.feedback}</p>
                   </div>
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       {/* Preview Modal */}
@@ -360,25 +354,25 @@ export default function ClientDocuments() {
               </p>
               {previewFile.caption && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p>
+                  <p className={texto.rotulo}>Legenda</p>
                   <p className="text-sm text-foreground">{previewFile.caption}</p>
                 </div>
               )}
               {previewFile.carousel_text && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p>
+                  <p className={texto.rotulo}>Texto do carrossel</p>
                   <p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p>
                 </div>
               )}
               {previewFile.description && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p>
+                  <p className={texto.rotulo}>Descrição</p>
                   <p className="text-sm text-foreground">{previewFile.description}</p>
                 </div>
               )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
+                <div className="rounded-md bg-destructive/5 px-3 py-2">
+                  <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
                   <p className="text-xs text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
@@ -389,7 +383,7 @@ export default function ClientDocuments() {
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
-                Solicitar ajuste
+                Pedir ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
                 disabled={isReadOnly}
@@ -418,13 +412,13 @@ export default function ClientDocuments() {
       {/* Feedback dialog */}
       <Dialog open={!!feedbackFileId} onOpenChange={() => setFeedbackFileId(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Solicitar Ajuste</DialogTitle></DialogHeader>
-          <Textarea placeholder="Descreva as mudanças necessárias... (mínimo 10 caracteres)"
+          <DialogHeader><DialogTitle>Pedir ajuste</DialogTitle></DialogHeader>
+          <Textarea placeholder="O que precisa mudar? (mínimo 10 caracteres)"
             value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setFeedbackFileId(null)}>Cancelar</Button>
             <Button onClick={handleReject} disabled={submitting || isReadOnly || feedbackText.trim().length < 10}>
-              {submitting ? "Enviando..." : "Enviar Feedback"}
+              {submitting ? "Enviando..." : "Enviar pedido de ajuste"}
             </Button>
           </DialogFooter>
         </DialogContent>

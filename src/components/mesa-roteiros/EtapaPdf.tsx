@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, Loader2, Send } from "lucide-react";
+import { Download, ExternalLink, FileText, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { AvisoDeErro, useAvisarErro } from "@/components/mesa/Custo";
+import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { botao, foco, juntar, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { paginasDoPdf } from "../../../supabase/functions/_shared/pdf-roteiro";
 import { type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, Cabecalho, SeloDoStatus } from "./Comuns";
 import { baixarBytes, itemDoPdf, montarPdf, urlDoPdf } from "./pdfNoNavegador";
 
 /**
@@ -17,6 +20,9 @@ import { baixarBytes, itemDoPdf, montarPdf, urlDoPdf } from "./pdfNoNavegador";
  * navegador, na hora. Compartilhar com o cliente monta de novo na função, só
  * com roteiros aprovados, e usa o caminho de Arquivos: revisão da agência e
  * depois aprovação do cliente. Exportar não aprova nem muda o roteiro.
+ *
+ * Sistema de design (26/09): a escolha dos roteiros e a opção de versão ficam
+ * guardadas por cliente; abrir o PDF de um roteiro põe ele na escolha.
  */
 export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
   const mesa = useMesa();
@@ -24,16 +30,28 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
   const avisarErro = useAvisarErro();
   const roteirosQ = useRoteiros(mesa.clientId);
   const vivos = useMemo(() => (roteirosQ.data ? roteirosQ.data.lista.filter((r) => !r.arquivado_em && r.versoes.length) : []), [roteirosQ.data]);
-  const [escolhidos, setEscolhidos] = useState<string[]>([]);
-  const [usarAprovada, setUsarAprovada] = useState(true);
+  const [escolhidos, setEscolhidos] = useEstadoDaTela<string[]>(`mesa-roteiros:pdf:escolhidos:${mesa.clientId}`, [], {
+    validar: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+  });
+  const [usarAprovada, setUsarAprovada] = useEstadoDaTela<boolean>(`mesa-roteiros:pdf:aprovada:${mesa.clientId}`, true, { validar: (v) => typeof v === "boolean" });
   const [url, setUrl] = useState<string | null>(null);
   const [erro, setErro] = useState<unknown>(null);
   const [enviando, setEnviando] = useState(false);
 
-  // Começa pelo roteiro aberto; sem ele, pelos aprovados.
+  // Começa pelo roteiro aberto; sem ele, pelos aprovados. Escolha guardada que não
+  // tem mais roteiro (arquivado, apagado) começa de novo.
   useEffect(() => {
-    if (escolhidos.length || !vivos.length) return;
-    const inicial = roteiroId && vivos.some((r) => r.id === roteiroId) ? [roteiroId] : vivos.filter((r) => r.status !== "rascunho").slice(0, 6).map((r) => r.id);
+    if (!vivos.length) return;
+    const validos = escolhidos.filter((id) => vivos.some((r) => r.id === id));
+    if (roteiroId && vivos.some((r) => r.id === roteiroId) && validos.indexOf(roteiroId) < 0) {
+      setEscolhidos(validos.concat([roteiroId]).slice(-12));
+      return;
+    }
+    if (validos.length) {
+      if (validos.length !== escolhidos.length) setEscolhidos(validos);
+      return;
+    }
+    const inicial = vivos.filter((r) => r.status !== "rascunho").slice(0, 6).map((r) => r.id);
     setEscolhidos(inicial.length ? inicial : [vivos[0].id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vivos.length, roteiroId]);
@@ -85,49 +103,59 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
   if (roteirosQ.data && roteirosQ.data.indisponivel) return <AvisoDoBanco />;
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]" data-etapa-pdf="">
-      <aside className="min-w-0 space-y-3 rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-[14px] font-semibold">Roteiros no PDF</h2>
-        <p className="text-[11.5px] text-muted-foreground">Um documento com capa, uma página de fala por vídeo, técnico, direção, publicação e captação.</p>
-        {roteirosQ.isLoading && <p className="text-[12px] text-muted-foreground">Carregando...</p>}
-        {!roteirosQ.isLoading && !vivos.length && <p className="text-[12px] text-muted-foreground">Nenhum roteiro ainda.</p>}
-        <ul className="max-h-[340px] space-y-1 overflow-y-auto">
-          {vivos.map((r) => (
-            <li key={r.id}>
-              <label className="flex min-w-0 cursor-pointer items-center rounded-lg px-1.5 py-1 hover:bg-muted">
-                <input type="checkbox" className="mr-2" checked={escolhidos.indexOf(r.id) >= 0} onChange={() => alternar(r.id)} aria-label={`Incluir ${r.titulo}`} />
-                <span className="min-w-0 flex-1 truncate text-[12.5px]">{r.titulo}</span>
-                <SeloDoStatus status={r.status} />
-              </label>
-            </li>
-          ))}
-        </ul>
-        <label className="flex items-start text-[12px]">
-          <input type="checkbox" className="mr-2 mt-0.5" checked={usarAprovada} onChange={(e) => setUsarAprovada(e.target.checked)} />
-          <span>Usar a versão aprovada quando houver (senão, a atual sai marcada como rascunho)</span>
+    <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" data-etapa-pdf="">
+      <aside className="min-w-0 space-y-3">
+        <Cabecalho
+          titulo="Roteiros no PDF"
+          ajuda="Um documento com capa, uma página de fala por vídeo, técnico, direção, publicação e captação. Exportar não aprova nem muda o roteiro."
+          estado={`${linhas.length} de ${vivos.length} escolhidos`}
+        />
+        {roteirosQ.isLoading && <Carregando forma="lista" linhas={3} rotulo="Lendo os roteiros" />}
+        {!roteirosQ.isLoading && !vivos.length && <EstadoVazio compacto titulo="Nenhum roteiro ainda." />}
+        {vivos.length > 0 && (
+          <ul className="divide-y divide-border border-y border-border xl:max-h-[340px] xl:overflow-y-auto xl:overscroll-contain">
+            {vivos.map((r) => (
+              <li key={r.id}>
+                <label className="flex min-w-0 cursor-pointer items-center px-1 py-2 hover:bg-muted/50">
+                  <input type="checkbox" className="mr-2 shrink-0" checked={escolhidos.indexOf(r.id) >= 0} onChange={() => alternar(r.id)} aria-label={`Incluir ${r.titulo}`} />
+                  <span className="mr-2 min-w-0 flex-1 truncate text-[13px]">{r.titulo}</span>
+                  <SeloDoStatus status={r.status} />
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label className="flex items-start text-[12.5px]">
+          <input type="checkbox" className="mr-2 mt-0.5 shrink-0" checked={usarAprovada} onChange={(e) => setUsarAprovada(e.target.checked)} />
+          <span className="min-w-0">Usar a versão aprovada quando houver (senão, a atual sai como rascunho)</span>
         </label>
-        <div className="flex flex-wrap">
-          <Button type="button" size="sm" className="mb-1 mr-2 h-8 text-[12px]" disabled={!pdf} onClick={() => pdf && baixarBytes(pdf.bytes, pdf.nome)}>
-            <Download className="mr-1 h-3.5 w-3.5" />Baixar
-          </Button>
+        <BarraDeAcoes inicio={pdf ? <span className="block truncate">{paginasDoPdf(pdf.bytes)} páginas · {Math.max(1, Math.round(pdf.bytes.length / 1024))} KB</span> : null}>
+          <button type="button" className={botao.primario} disabled={!pdf} onClick={() => pdf && baixarBytes(pdf.bytes, pdf.nome)}>
+            <Download className="mr-1 h-3.5 w-3.5" />
+            Baixar
+          </button>
           {url && (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="mb-1 mr-2 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12px] hover:bg-muted">
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />Abrir
+            <a href={url} target="_blank" rel="noopener noreferrer" className={juntar(botao.secundario, foco)}>
+              <ExternalLink className="mr-1 h-3.5 w-3.5" />
+              Abrir
             </a>
           )}
-          <Button type="button" size="sm" variant="outline" className="mb-1 h-8 text-[12px]" disabled={!podeCompartilhar || enviando} onClick={() => void compartilhar()}>
-            {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}Compartilhar com o cliente
-          </Button>
-        </div>
-        {!podeCompartilhar && linhas.length > 0 && <p className="text-[11.5px] text-muted-foreground">Só roteiro aprovado vai para o cliente. Falta aprovar: {semAprovacao.map((l) => l.titulo).join(", ")}.</p>}
+          <button type="button" className={botao.secundario} disabled={!podeCompartilhar || enviando} onClick={() => void compartilhar()}>
+            {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+            Compartilhar com o cliente
+          </button>
+        </BarraDeAcoes>
+        {!podeCompartilhar && linhas.length > 0 && (
+          <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Só roteiro aprovado vai para o cliente. Falta aprovar: {semAprovacao.map((l) => l.titulo).join(", ")}.</p>
+        )}
         {erro ? <AvisoDeErro erro={erro} /> : null}
-        {pdf && <p className="text-[11px] text-muted-foreground">{paginasDoPdf(pdf.bytes)} páginas · {Math.max(1, Math.round(pdf.bytes.length / 1024))} KB · {pdf.nome}</p>}
+        {pdf && <p className={juntar(texto.auxiliar, "truncate")}>{pdf.nome}</p>}
       </aside>
-      <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-muted/40" data-previa-do-pdf="">
+      <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/40" data-previa-do-pdf="">
         {url ? (
-          <iframe title="Prévia do PDF do roteiro" src={url} className="h-[78vh] w-full bg-white" />
+          <iframe title="Prévia do PDF do roteiro" src={url} className="block h-[70vh] w-full bg-white lg:h-[78vh]" />
         ) : (
-          <p className="p-8 text-center text-[12.5px] text-muted-foreground">Escolha ao menos um roteiro para ver o PDF.</p>
+          <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Escolha ao menos um roteiro para ver o PDF." />
         )}
       </section>
     </div>

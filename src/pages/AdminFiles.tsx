@@ -7,22 +7,39 @@ import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List, RefreshCw, Send,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, FolderInput, Grid2X2, List, Send, Search, MoreHorizontal, Users, Folder, Tag, CircleDot,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
+import {
+  AjudaRecolhida,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  GrupoDeCampos,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  campoTexto,
+  etiqueta,
+  juntar,
+  lerEstadoDaTela,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
@@ -118,7 +135,13 @@ const isEditableFile = (file?: EditableFileState | null) =>
   && (file.agency_approval_status || "not_requested") === "not_requested"
   && (file.approval_status || "none") === "none";
 
-function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: string }) {
+/**
+ * Capa do arquivo: a peça INTEIRA, sem zoom nem corte, sem moldura extra e sem
+ * escurecer nada. Preenche a caixa de quem chama (a proporção vem de fora, por
+ * padding-bottom). O resto ganha o ícone do tipo e a extensão, para o olho
+ * achar PDF, planilha ou documento de longe.
+ */
+function FileThumb({ file, compacto = false }: { file: any; compacto?: boolean }) {
   const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
   const Icon = fileIcon(file.file_name);
   const { url } = useResolvedFileUrl({
@@ -128,118 +151,241 @@ function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: s
     miniatura: kind === "image",
     expiresIn: 3600,
   });
-  // A capa mostra a peca INTEIRA: nada de zoom nem corte. Imagem e video
-  // entram encaixados num fundo neutro; o resto ganha o icone do tipo e a
-  // extensao, para o olho achar PDF, planilha ou documento de longe.
   const ext = (fileExtension(file.file_name, file.file_url, file.extension) || "").toUpperCase().slice(0, 5);
-  const compacto = /w-(?:8|9|10|12|14|16|20)/.test(className);
 
   return (
-    <div className={`${className} rounded-lg bg-secondary/70 border border-border overflow-hidden flex items-center justify-center shrink-0 relative`}>
+    <span className="absolute inset-0 flex items-center justify-center overflow-hidden bg-muted">
       {url && kind === "image" ? (
-        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className={`h-full w-full object-contain ${compacto ? "" : "p-2"}`} />
+        <img src={url} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
       ) : url && kind === "video" ? (
         <>
-          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="h-full w-full bg-black object-contain" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="rounded-full bg-black/45 p-2"><Film className="w-5 h-5 text-white drop-shadow" /></span>
-          </div>
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="h-full w-full object-contain" />
+          <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-background/85 text-foreground">
+              <Film className="h-4 w-4" />
+            </span>
+          </span>
         </>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-1.5">
-          <Icon className={`${compacto ? "w-6 h-6" : "w-9 h-9"} text-muted-foreground`} />
-          {!compacto && ext && <span className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-muted-foreground">{ext}</span>}
-        </div>
+        <span className="flex flex-col items-center justify-center" aria-hidden="true">
+          <Icon className={compacto ? "h-5 w-5 text-muted-foreground" : "h-8 w-8 text-muted-foreground"} />
+          {!compacto && ext && <span className={juntar(etiqueta, "mt-1.5 bg-card text-muted-foreground")}>{ext}</span>}
+        </span>
       )}
       {!compacto && ext && (kind === "image" || kind === "video") && (
-        <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-white">{ext}</span>
+        <span className={juntar(etiqueta, "absolute bottom-1.5 right-1.5 bg-background/90 text-foreground")} aria-hidden="true">{ext}</span>
+      )}
+    </span>
+  );
+}
+
+type FiltroDeStatus = "todos" | "interno" | "revisao" | "ajustes" | "cliente";
+
+const FILTROS_DE_STATUS: { valor: FiltroDeStatus; rotulo: string }[] = [
+  { valor: "todos", rotulo: "Todos os status" },
+  { valor: "interno", rotulo: "Cliente não vê" },
+  { valor: "revisao", rotulo: "Em revisão interna" },
+  { valor: "ajustes", rotulo: "Ajustes pedidos" },
+  { valor: "cliente", rotulo: "Visível ao cliente" },
+];
+const STATUS_IDS = new Set<string>(FILTROS_DE_STATUS.map((f) => f.valor));
+
+const bateStatus = (file: any, filtro: FiltroDeStatus) => {
+  if (filtro === "todos") return true;
+  if (filtro === "interno") return file.visibility === "internal";
+  if (filtro === "revisao") return file.agency_approval_status === "pending";
+  if (filtro === "ajustes") return file.agency_approval_status === "rejected" || file.approval_status === "rejected";
+  return file.visibility !== "internal";
+};
+
+type AcoesDoArquivoProps = {
+  file: any;
+  podeLiberar: boolean;
+  podeMover: boolean;
+  podeExcluir: boolean;
+  onLiberar: () => void;
+  onMover: (pasta: string) => void;
+  onBaixar: () => void;
+  onExcluir: () => void;
+  /** Botões sobre a imagem (fundo claro por trás) ou na linha da lista. */
+  sobreImagem?: boolean;
+  onMenu?: (aberto: boolean) => void;
+};
+
+/** Ações de um arquivo: liberar, mover de pasta, baixar e excluir (cada uma só quando vale). */
+function AcoesDoArquivo({ file, podeLiberar, podeMover, podeExcluir, onLiberar, onMover, onBaixar, onExcluir, sobreImagem = false, onMenu }: AcoesDoArquivoProps) {
+  const base = sobreImagem
+    ? "inline-flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    : botao.icone;
+  return (
+    <div className={juntar("flex shrink-0 items-center", sobreImagem && "[&>*+*]:ml-1")}>
+      {podeLiberar && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onLiberar(); }}
+          title="Liberar ao cliente agora (revisão interna registrada junto)"
+          aria-label={`Liberar ${file.file_name} ao cliente`}
+          className={juntar(base, "text-warning hover:text-success")}
+        >
+          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+      {podeMover && (
+        <DropdownMenu onOpenChange={onMenu}>
+          <DropdownMenuTrigger asChild>
+            <button type="button" onClick={(e) => e.stopPropagation()} className={base} title="Mover de pasta" aria-label={`Mover ${file.file_name} de pasta`}>
+              <FolderInput className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {FOLDERS.filter(fo => fo.id !== (file.folder || "estrategicos")).map(fo => (
+              <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); onMover(fo.id); }}>
+                {fo.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onBaixar(); }}
+        className={base}
+        title="Baixar"
+        aria-label={`Baixar ${file.file_name}`}
+      >
+        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      {podeExcluir && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onExcluir(); }}
+          className={juntar(base, "hover:text-destructive")}
+          title="Excluir"
+          aria-label={`Excluir ${file.file_name}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       )}
     </div>
   );
 }
 
-function CarouselSlider({ files }: { files: any[] }) {
-  const [idx, setIdx] = useState(0);
-  const current = files[idx];
+type ItemDoArquivoProps = Omit<AcoesDoArquivoProps, "sobreImagem" | "onMenu"> & {
+  itensNoCarrossel: number;
+  onAbrir: () => void;
+  formatDate: (d: string) => string;
+};
 
-  useEffect(() => {
-    prefetchImages(files.map((f) => f?.file_url).filter(Boolean));
-    setIdx(0);
-  }, [files]);
+const seloDeVisibilidade = (file: any) =>
+  file.visibility === "internal"
+    ? { cor: "text-warning", fundo: "bg-warning/15", label: "Cliente não vê" }
+    : { cor: "text-success", fundo: "bg-success/10", label: "Visível ao cliente" };
 
-  useEffect(() => {
-    if (files.length <= 1) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + files.length) % files.length);
-      if (e.key === "ArrowRight") setIdx((i) => (i + 1) % files.length);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [files.length]);
-
-  if (!current) return null;
-  if (files.length === 1) {
-    return (
-      <FilePreviewContent
-        fileName={current.file_name}
-        fileUrl={current.file_url}
-        fileId={current.id}
-        storageBucket={current.storage_bucket}
-        storagePath={current.storage_path}
-        mimeType={current.mime_type || current.file_type}
-        extension={current.extension}
-      />
-    );
-  }
-
+/** Cartão de mídia: a imagem manda, legenda em uma linha, ações no hover (sempre visíveis no celular). */
+function CartaoDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: ItemDoArquivoProps) {
+  const { file } = acoes;
+  const [menuAberto, setMenuAberto] = useState(false);
+  const revisao = agencyBadge[file.agency_approval_status] || agencyBadge.not_requested;
+  // A raiz das reclamações: upload nasce interno e o cliente NÃO vê. Fica na cara.
+  const visibilidade = seloDeVisibilidade(file);
   return (
-    <div className="relative group">
-      <FilePreviewContent
-        fileName={current.file_name}
-        fileUrl={current.file_url}
-        fileId={current.id}
-        storageBucket={current.storage_bucket}
-        storagePath={current.storage_path}
-        mimeType={current.mime_type || current.file_type}
-        extension={current.extension}
-      />
+    <div className="group relative min-w-0">
       <button
         type="button"
-        className="absolute z-10 left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIdx((idx - 1 + files.length) % files.length);
-        }}
+        onClick={onAbrir}
+        className="block w-full min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        title={`${file.file_name} · ${kindLabel(resolveKind(file))} · ${file.project?.name || "Sem projeto"}`}
       >
-        <ChevronLeft className="w-4 h-4" />
+        <span className="relative block overflow-hidden rounded-md" style={{ paddingBottom: "100%" }}>
+          <FileThumb file={file} />
+          <span className={juntar(etiqueta, "absolute bottom-1.5 left-1.5 bg-background/90", visibilidade.cor)}>{visibilidade.label}</span>
+          {itensNoCarrossel > 1 && (
+            <span className={juntar(etiqueta, "absolute left-1.5 top-1.5 bg-background/90 text-primary")} title="Imagens no carrossel">{itensNoCarrossel}</span>
+          )}
+        </span>
+        <span className="mt-2 flex min-w-0 items-baseline">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{file.file_name}</span>
+          {file.version > 1 && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">v{file.version}</span>}
+        </span>
+        <span className={juntar(texto.auxiliar, "block truncate")}>
+          {revisao.label} · {formatDate(file.created_at)}
+        </span>
       </button>
-      <button
-        type="button"
-        className="absolute z-10 right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIdx((idx + 1) % files.length);
-        }}
+      <div
+        className={juntar(
+          "absolute right-1.5 top-1.5 transition-opacity",
+          menuAberto ? "opacity-100" : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
+        )}
       >
-        <ChevronRight className="w-4 h-4" />
-      </button>
-      <div className="absolute z-10 bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-        {files.map((_: any, i: number) => (
-          <button
-            key={i}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIdx(i);
-            }}
-            className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
-          />
-        ))}
+        <AcoesDoArquivo {...acoes} sobreImagem onMenu={setMenuAberto} />
       </div>
-      <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
-        {idx + 1}/{files.length}
-      </span>
     </div>
+  );
+}
+
+/** Linha da lista: miniatura pequena, nome, uma linha de estado e as ações à direita. */
+function LinhaDoArquivo({ itensNoCarrossel, onAbrir, formatDate, ...acoes }: ItemDoArquivoProps) {
+  const { file } = acoes;
+  const revisao = agencyBadge[file.agency_approval_status] || agencyBadge.not_requested;
+  const visibilidade = seloDeVisibilidade(file);
+  return (
+    <li className="flex min-w-0 items-center py-2">
+      <button
+        type="button"
+        onClick={onAbrir}
+        className="flex min-w-0 flex-1 items-center rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="relative mr-3 block h-12 w-12 shrink-0 overflow-hidden rounded-md">
+          <FileThumb file={file} compacto />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-baseline">
+            <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{file.file_name}</span>
+            {file.version > 1 && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">v{file.version}</span>}
+            {itensNoCarrossel > 1 && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>{itensNoCarrossel}</span>}
+          </span>
+          <span className={juntar(texto.auxiliar, "block truncate")}>
+            {kindLabel(resolveKind(file))} · {file.project?.name || "Sem projeto"} · {formatDate(file.created_at)}
+            {file.uploader?.full_name ? ` · ${file.uploader.full_name}` : ""}
+          </span>
+        </span>
+        <span className={juntar(etiqueta, "ml-2 hidden md:inline-flex", revisao.cls)}>{revisao.label}</span>
+        <span className={juntar(etiqueta, "ml-2", visibilidade.fundo, visibilidade.cor, file.visibility === "internal" ? "" : "hidden sm:inline-flex")}>
+          {visibilidade.label}
+        </span>
+      </button>
+      <div className="ml-1">
+        <AcoesDoArquivo {...acoes} />
+      </div>
+    </li>
+  );
+}
+
+/** Select do shadcn que aceita o id/aria do CampoDeFormulario (o rótulo aponta para o gatilho). */
+function SelectDeCampo({
+  value,
+  onValueChange,
+  placeholder,
+  children,
+  id,
+  "aria-describedby": descrito,
+  "aria-invalid": invalido,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder?: string;
+  children: React.ReactNode;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger id={id} aria-describedby={descrito} aria-invalid={invalido} className="h-9 rounded-md text-[13px]">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
   );
 }
 
@@ -280,9 +426,17 @@ export default function AdminFiles() {
   const activeFolder = requestedFolderId && FOLDER_IDS.has(requestedFolderId)
     ? requestedFolderId
     : "estrategicos";
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [activeKind, setActiveKind] = useState<FileKindId | null>(null);
-  const [search, setSearch] = useState("");
+  // Visualização, filtros e busca ficam guardados (sair e voltar mantém).
+  const [viewMode, setViewMode] = useEstadoDaTela<"grid" | "list">("arquivos:visualizacao", "grid", {
+    validar: (v) => v === "grid" || v === "list",
+  });
+  const [activeKind, setActiveKind] = useEstadoDaTela<FileKindId | null>("arquivos:tipo", null, {
+    validar: (v) => v === null || (typeof v === "string" && (FILE_TYPES as string[]).indexOf(v) >= 0),
+  });
+  const [statusFilter, setStatusFilter] = useEstadoDaTela<FiltroDeStatus>("arquivos:status", "todos", {
+    validar: (v) => typeof v === "string" && STATUS_IDS.has(v),
+  });
+  const [search, setSearch] = useEstadoDaTela<string>("arquivos:busca", "");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -320,6 +474,48 @@ export default function AdminFiles() {
     ? (allFiles || []).find((file: any) => file.id === requestedRevisionId) || null
     : null;
   const revisionVersion = revisionSource ? Number(revisionSource.version || 1) + 1 : 1;
+
+  // Cliente escolhido e pasta atual moram no endereço (links de revisão e de
+  // "novo conteúdo" dependem disso). Aqui eles também ficam guardados: abrir
+  // /arquivos sem nada no endereço volta para o último cliente e pasta.
+  const guardadosAoAbrir = useRef<{ cliente: string; pasta: string } | null>(null);
+  if (guardadosAoAbrir.current === null) {
+    guardadosAoAbrir.current = {
+      cliente: lerEstadoDaTela<string>("arquivos:cliente", "all", (v) => typeof v === "string" && v.length > 0),
+      pasta: lerEstadoDaTela<string>("arquivos:pasta", "", (v) => typeof v === "string" && FOLDER_IDS.has(v)),
+    };
+  }
+  const [, setClienteGuardado] = useEstadoDaTela<string>("arquivos:cliente", "all");
+  const [, setPastaGuardada] = useEstadoDaTela<string>("arquivos:pasta", "");
+  const restaurouRef = useRef(false);
+  useEffect(() => {
+    if (restaurouRef.current) return;
+    restaurouRef.current = true;
+    const guardado = guardadosAoAbrir.current;
+    if (!guardado) return;
+    // Link com destino (novo conteúdo, correção) manda: nada é restaurado.
+    if (searchParams.get("novo") || searchParams.get("revisionOf")) return;
+    const next = new URLSearchParams(searchParams);
+    let mudou = false;
+    if (!searchParams.get("client") && guardado.cliente && guardado.cliente !== "all") {
+      next.set("client", guardado.cliente);
+      mudou = true;
+    }
+    if (!searchParams.get("folder") && guardado.pasta) {
+      next.set("folder", guardado.pasta);
+      mudou = true;
+    }
+    if (mudou) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!restaurouRef.current) return;
+    setClienteGuardado(selectedClient);
+  }, [selectedClient, setClienteGuardado]);
+  useEffect(() => {
+    if (!restaurouRef.current) return;
+    setPastaGuardada(activeFolder);
+  }, [activeFolder, setPastaGuardada]);
 
   const invalidateFileViews = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ["all-files"] }),
@@ -585,9 +781,23 @@ export default function AdminFiles() {
   const activeSummary = folderSummaries.find((entry) => entry.folder.id === activeFolder) || null;
   const kindChips = activeSummary && activeSummary.byKind.length > 1 ? activeSummary.byKind : [];
   const searchTerm = search.trim().toLowerCase();
+  // Tipo guardado que não existe nesta pasta (ou nos dados de agora) não filtra nada.
+  const kindEfetivo = activeKind && kindChips.some((entry) => entry.kind.id === activeKind) ? activeKind : null;
+  const folderFiles = scopedFiles.filter((f: any) => matchesFolderFilter(f, activeFolder as FolderId, kindEfetivo));
+  const statusCounts = FILTROS_DE_STATUS.reduce<Record<string, number>>((acc, filtro) => {
+    acc[filtro.valor] = folderFiles.filter((f: any) => bateStatus(f, filtro.valor)).length;
+    return acc;
+  }, {});
+  const filtrosAtivos = !!searchTerm || !!kindEfetivo || statusFilter !== "todos";
+  const limparFiltros = () => {
+    setSearch("");
+    setActiveKind(null);
+    setStatusFilter("todos");
+  };
 
   const filteredFiles = scopedFiles.filter((f: any) => {
-    if (!matchesFolderFilter(f, activeFolder as FolderId, activeKind)) return false;
+    if (!matchesFolderFilter(f, activeFolder as FolderId, kindEfetivo)) return false;
+    if (!bateStatus(f, statusFilter)) return false;
     if (!searchTerm) return true;
     return [f.file_name, f.description, f.caption, f.project?.name, f.client?.company_name]
       .filter(Boolean)
@@ -1169,380 +1379,316 @@ export default function AdminFiles() {
   // formatDate already defined above
 
   if (loadingAuth) {
-    return <div className="py-8 text-center text-sm text-muted-foreground">Carregando...</div>;
+    return <Carregando forma="grade" linhas={8} rotulo="Carregando Arquivos" />;
   }
 
   if (!isStaff) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <p className="heading-page">Conteúdos e arquivos</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Organize entregas, legendas e materiais do cliente.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={selectedClient} onValueChange={handleClientChange}>
-            <SelectTrigger className="w-full sm:w-[220px] bg-card border-border rounded-xl text-sm">
-              <SelectValue placeholder="Todos os clientes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os clientes</SelectItem>
-              {(clients || []).map((c: any) => (
-                <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  // Enviar pede um cliente escolhido e, em correção, a versão anterior confirmada.
+  const envioBloqueado = selectedClient === "all"
+    || (!!requestedRevisionId && !revisionSource);
+  const abrirEnvio = () => { setUploadFolder(activeFolder); setUploadOpen(true); };
+  const dicaDoEnvio = selectedClient === "all"
+    ? "Escolha um cliente para enviar"
+    : envioBloqueado
+      ? "Esperando a versão anterior carregar"
+      : "Novo conteúdo";
+  const emContratos = activeFolder === "contratos";
+  const primeiraCarga = loadingFiles && !allFiles;
+  const linkDeAprovacoes = `/aprovacoes?client=${encodeURIComponent(selectedClient)}`;
+  const nomeDoCliente = (c: any) => c.company_name || c.full_name;
 
+  const baixarArquivo = async (f: any) => {
+    const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
+    downloadFile(url, f.file_name);
+  };
+
+  const propsDoItem = (f: any) => {
+    const carouselChildren = childrenMap.get(f.id) || [];
+    const isCarousel = isCarouselAssetGroup(f, carouselChildren);
+    const isEditable = isEditableFile(f);
+    return {
+      file: f,
+      itensNoCarrossel: isCarousel ? carouselChildren.length + 1 : 0,
+      podeLiberar: canReviewAndRelease && f.visibility === "internal" && isEditable,
+      podeMover: isEditable,
+      podeExcluir: isEditable || isAdmin,
+      onAbrir: () => setPreviewFile(f),
+      onLiberar: () => { void handleDirectReleaseToClient(f, "client_shared"); },
+      onMover: (pasta: string) => { void handleMoveFolder(f.id, pasta); },
+      onBaixar: () => { void baixarArquivo(f); },
+      onExcluir: () => setConfirmDeleteFile({ id: f.id, name: f.file_name }),
+      formatDate,
+    };
+  };
+
+  // Uma linha de estado: quantos arquivos a tela mostra agora.
+  const estadoDaLista = emContratos || primeiraCarga || !activeSummary
+    ? undefined
+    : filtrosAtivos
+      ? `${filteredFiles.length} de ${activeSummary.total} arquivos`
+      : `${filteredFiles.length} ${filteredFiles.length === 1 ? "arquivo" : "arquivos"}`;
+
+  const tentarDeNovo = (
+    <button type="button" className={botao.secundario} onClick={() => void refetchFiles()} disabled={refreshingFiles}>
+      Tentar de novo
+    </button>
+  );
+
+  const acoesDoTopo = (
+    <>
       {selectedClientProfile && (
-        <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Cliente selecionado
-            </p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">
-              {selectedClientProfile.company_name || selectedClientProfile.full_name}
-            </p>
-          </div>
-          <Link
-            to={`/aprovacoes?client=${encodeURIComponent(selectedClient)}`}
-            className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
-          >
-            Acompanhar aprovações
-          </Link>
-        </div>
+        <Link to={linkDeAprovacoes} className={juntar(botao.secundario, "hidden sm:inline-flex")}>
+          Aprovações
+        </Link>
       )}
-
-      {/* Pastas, com quantos itens tem em cada uma */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
-          {folderSummaries.map((entry) => (
-            <button
-              key={entry.folder.id}
-              onClick={() => handleFolderChange(entry.folder.id)}
-              title={entry.folder.hint}
-              className={`shrink-0 px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
-                activeFolder === entry.folder.id
-                  ? "text-foreground border-b-2 border-primary bg-secondary/50"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {entry.folder.label}
-              {entry.total > 0 && (
-                <span className="ml-1.5 text-[10px] text-muted-foreground">{entry.total}</span>
-              )}
+      {selectedClientProfile && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={juntar(botao.icone, "sm:hidden")} aria-label="Mais ações">
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
             </button>
-          ))}
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link to={linkDeAprovacoes}>Acompanhar aprovações</Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {!emContratos && (
+        <>
+          <button
+            type="button"
+            onClick={abrirEnvio}
+            disabled={envioBloqueado}
+            title={dicaDoEnvio}
+            className={juntar(botao.primario, "hidden sm:inline-flex")}
+          >
+            <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Novo conteúdo
+          </button>
+          <button
+            type="button"
+            onClick={abrirEnvio}
+            disabled={envioBloqueado}
+            aria-label={dicaDoEnvio}
+            title={dicaDoEnvio}
+            className={juntar(botao.primario, "w-9 px-0 sm:hidden")}
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </>
+      )}
+    </>
+  );
 
-        {activeFolder !== "contratos" && (
-          <div className="flex flex-wrap items-center gap-2">
-            {kindChips.length > 0 && (
-              <div className="flex items-center gap-1.5 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setActiveKind(null)}
-                  className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
-                    activeKind === null
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Todos os tipos
-                </button>
-                {kindChips.map((entry) => (
-                  <button
-                    key={entry.kind.id}
-                    type="button"
-                    onClick={() => setActiveKind(entry.kind.id)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
-                      activeKind === entry.kind.id
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {entry.kind.label} ({entry.total})
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="ml-auto w-full sm:w-56">
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar pelo nome..."
-                className="h-9 rounded-lg bg-card text-xs"
-              />
-            </div>
+  return (
+    <div className="min-w-0 space-y-4">
+      <CabecalhoDePagina
+        titulo="Arquivos"
+        descricao={estadoDaLista}
+        ajuda="Entregas, legendas e materiais de cada cliente, por pasta. Tudo nasce interno: o cliente só vê depois de liberado."
+        acoes={acoesDoTopo}
+      />
+
+      {/* Filtros numa barra só: cliente, pasta, tipo, status, busca e visualização. */}
+      <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" role="group" aria-label="Filtros de arquivos">
+        <SeletorCompacto
+          modo="lista"
+          rotulo="Cliente"
+          icone={<Users className="h-3.5 w-3.5" />}
+          className="max-w-[220px]"
+          valor={selectedClient}
+          onEscolher={handleClientChange}
+          opcoes={[
+            { valor: "all", rotulo: "Todos os clientes" },
+            ...(clients || []).map((c: any) => ({ valor: c.id, rotulo: nomeDoCliente(c) })),
+          ]}
+        />
+        <SeletorCompacto
+          modo="lista"
+          rotulo="Pasta"
+          icone={<Folder className="h-3.5 w-3.5" />}
+          className="max-w-[240px]"
+          valor={activeFolder}
+          onEscolher={handleFolderChange}
+          opcoes={folderSummaries.map((entry) => ({
+            valor: entry.folder.id,
+            rotulo: entry.folder.label,
+            contador: allFiles ? entry.total : null,
+            descricao: entry.folder.hint,
+          }))}
+        />
+        {!emContratos && kindChips.length > 0 && (
+          <SeletorCompacto
+            rotulo="Tipo"
+            icone={<Tag className="h-3.5 w-3.5" />}
+            valor={kindEfetivo || "todos"}
+            onEscolher={(v) => setActiveKind(v === "todos" ? null : (v as FileKindId))}
+            opcoes={[
+              { valor: "todos", rotulo: "Todos os tipos" },
+              ...kindChips.map((entry) => ({ valor: entry.kind.id, rotulo: entry.kind.label, contador: entry.total })),
+            ]}
+          />
+        )}
+        {!emContratos && (
+          <SeletorCompacto
+            modo="lista"
+            rotulo="Status"
+            icone={<CircleDot className="h-3.5 w-3.5" />}
+            valor={statusFilter}
+            onEscolher={(v) => setStatusFilter(v as FiltroDeStatus)}
+            opcoes={FILTROS_DE_STATUS.map((filtro) => ({
+              valor: filtro.valor,
+              rotulo: filtro.rotulo,
+              contador: allFiles ? statusCounts[filtro.valor] : null,
+            }))}
+          />
+        )}
+        {!emContratos && (
+          <div className="relative w-full min-w-0 sm:w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar pelo nome"
+              aria-label="Buscar arquivos"
+              className={juntar(campo, "pl-8")}
+            />
           </div>
         )}
-
-        {activeSummary && (
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {activeSummary.folder.hint}
-          </p>
+        {!emContratos && (
+          <SeletorCompacto
+            rotulo="Visualização"
+            valor={viewMode}
+            onEscolher={(v) => setViewMode(v === "list" ? "list" : "grid")}
+            opcoes={[
+              { valor: "grid", rotulo: "Grade", icone: <Grid2X2 className="h-3.5 w-3.5" /> },
+              { valor: "list", rotulo: "Lista", icone: <List className="h-3.5 w-3.5" /> },
+            ]}
+          />
         )}
       </div>
 
-      {activeFolder === "contratos" ? (
+      {emContratos ? (
         selectedClient === "all" ? (
-          <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
-            <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
-            Selecione um cliente para ver e enviar contratos.
-          </div>
+          <EstadoVazio
+            icone={<FolderOpen className="h-5 w-5" />}
+            titulo="Escolha um cliente"
+            descricao="Os contratos aparecem e são enviados por cliente."
+          />
         ) : (
           <div className="-mx-4 md:-mx-6">
             <AdminContracts clientId={selectedClient} />
           </div>
         )
+      ) : primeiraCarga ? (
+        <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
+      ) : filesReadFailed && !allFiles ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar os arquivos."
+          descricao={`A pasta não está vazia. Houve uma falha de leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
+          acao={tentarDeNovo}
+        />
       ) : (
         <>
-          <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-center rounded-xl border border-border bg-card p-1">
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors ${viewMode === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                title="Blocos"
-              >
-                <Grid2X2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors ${viewMode === "list" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                title="Lista"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-            <Button
-              onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true); }}
-              className="rounded-xl gap-2"
-              disabled={
-                selectedClient === "all"
-                || (!!requestedRevisionId && !revisionSource)
-              }
-            >
-              <Upload className="w-4 h-4" />
-              Novo conteúdo
-            </Button>
-          </div>
-
-          {/* File list */}
-          {loadingFiles || loadingClients ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-          ) : filesReadFailed ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
-              <FolderOpen className="mx-auto mb-3 h-8 w-8 text-destructive/70" />
-              <p className="text-sm font-medium text-foreground">Não foi possível carregar Arquivos</p>
-              <p className="mx-auto mt-1 max-w-lg text-xs text-muted-foreground">
-                A pasta não está vazia. Houve uma falha de leitura
-                {filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-4 gap-2"
-                onClick={() => void refetchFiles()}
-                disabled={refreshingFiles}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshingFiles ? "animate-spin" : ""}`} />
-                Tentar novamente
-              </Button>
-            </div>
-          ) : filteredFiles.length === 0 ? (
-            <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
-              <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
-              Nenhum arquivo nesta pasta
-            </div>
-          ) : viewMode === "grid" ? (
-            <div className="grid auto-rows-fr grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
-              {filteredFiles.map((f: any) => {
-                const reviewBadge = agencyBadge[f.agency_approval_status] || agencyBadge.not_requested;
-                const carouselChildren = childrenMap.get(f.id) || [];
-                const isCarousel = isCarouselAssetGroup(f, carouselChildren);
-                const isEditable = isEditableFile(f);
-                return (
-                  <div key={f.id} className="flex h-full flex-col bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
-                    onClick={() => setPreviewFile(f)}>
-                    <FileThumb file={f} className="w-full aspect-square rounded-none border-0" />
-                    <div className="flex flex-1 flex-col gap-2 p-3">
-                      <div className="flex items-start gap-2">
-                        <p className="flex-1 text-[13px] font-medium text-foreground line-clamp-2">
-                          {f.file_name}
-                          {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                        </p>
-                        {isCarousel && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{carouselChildren.length + 1}</span>}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{kindLabel(resolveKind(f))} • {f.project?.name || "Sem projeto"} • {formatDate(f.created_at)}</p>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
-                          {/* A raiz das reclamações: upload nasce interno e o
-                              cliente NÃO vê. Agora isso fica na cara. */}
-                          {f.visibility === "internal" ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Cliente não vê</span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success">Visível ao cliente</span>
-                          )}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {canReviewAndRelease && f.visibility === "internal" && isEditable && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); void handleDirectReleaseToClient(f, "client_shared"); }}
-                              title="Liberar ao cliente agora (revisão interna registrada junto)"
-                              className="text-warning hover:text-success transition-colors"
-                            >
-                              <Send className="w-4 h-4" />
-                            </button>
-                          )}
-                          {(isEditable || isAdmin) && (
-                            <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
-                              className="text-muted-foreground hover:text-destructive transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {filesReadFailed && (
+            <EstadoDeErro
+              titulo="Não foi possível atualizar a lista."
+              descricao={`Mostrando a última leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
+              acao={tentarDeNovo}
+            />
+          )}
+          {filteredFiles.length === 0 ? (
+            filtrosAtivos ? (
+              <EstadoVazio
+                icone={<Search className="h-5 w-5" />}
+                titulo="Nada com esses filtros"
+                descricao="Troque o tipo, o status ou a busca."
+                acao={
+                  <button type="button" className={botao.secundario} onClick={limparFiltros}>
+                    Limpar filtros
+                  </button>
+                }
+              />
+            ) : (
+              <EstadoVazio
+                icone={<FolderOpen className="h-5 w-5" />}
+                titulo="Nenhum arquivo nesta pasta"
+                descricao={selectedClient === "all" ? "Escolha um cliente para enviar." : undefined}
+                acao={
+                  envioBloqueado ? undefined : (
+                    <button type="button" className={botao.primario} onClick={abrirEnvio}>
+                      <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                      Novo conteúdo
+                    </button>
+                  )
+                }
+              />
+            )
           ) : (
-            <div className="space-y-2 stagger-children">
-              {filteredFiles.map((f: any) => {
-                const reviewBadge = agencyBadge[f.agency_approval_status] || agencyBadge.not_requested;
-                const carouselChildren = childrenMap.get(f.id) || [];
-                const isCarousel = isCarouselAssetGroup(f, carouselChildren);
-                const isEditable = isEditableFile(f);
-                return (
-                  <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
-                    onClick={() => setPreviewFile(f)}>
-                    <div className="flex items-center gap-3">
-                      <FileThumb file={f} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-medium text-foreground truncate">
-                            {f.file_name}
-                            {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                          </p>
-                          {isCarousel && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
-                              {carouselChildren.length + 1}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {kindLabel(resolveKind(f))} • {f.project?.name || "Sem projeto"} •{" "}
-                          {formatDate(f.created_at)}
-                        </p>
-                      </div>
-                      <div className="hidden md:flex items-center gap-2">
-                        <Avatar className="w-5 h-5">
-                          <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
-                            {f.uploader?.full_name?.charAt(0) || "?"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${reviewBadge.cls}`}>{reviewBadge.label}</span>
-                      {f.visibility === "internal" ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0 bg-warning/15 text-warning">Cliente não vê</span>
-                      ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline bg-success/10 text-success">Visível ao cliente</span>
-                      )}
-                      {canReviewAndRelease && f.visibility === "internal" && isEditable && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void handleDirectReleaseToClient(f, "client_shared"); }}
-                          title="Liberar ao cliente agora"
-                          className="text-warning hover:text-success transition-colors"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      )}
-                      {isEditable && <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
-                            <FolderInput className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {FOLDERS.filter(fo => fo.id !== (f.folder || "estrategicos")).map(fo => (
-                            <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); handleMoveFolder(f.id, fo.id); }}>
-                              {fo.label}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>}
-                      <button type="button"
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
-                          downloadFile(url, f.file_name);
-                        }}>
-                        <Download className="w-4 h-4" />
-                      </button>
-                      {(isEditable || isAdmin) && (
-                        <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
-                          className="text-muted-foreground hover:text-destructive transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="sm:hidden mt-2 ml-[92px]">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <RegiaoRolavel memoria="arquivos:lista" rotulo="Lista de arquivos" className="lg:max-h-[70vh]">
+              {viewMode === "grid" ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-4 p-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+                  {filteredFiles.map((f: any) => (
+                    <CartaoDoArquivo key={f.id} {...propsDoItem(f)} />
+                  ))}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border border-y border-border">
+                  {filteredFiles.map((f: any) => (
+                    <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
+                  ))}
+                </ul>
+              )}
+            </RegiaoRolavel>
           )}
         </>
       )}
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={(o) => { if (!o) { setPreviewFile(null); setEditingName(false); } }}>
-        <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
-          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-0 p-0">
+          <DialogHeader className="shrink-0 space-y-0.5 border-b border-border px-5 py-4 text-left">
             {editingName ? (
-              <div className="flex items-center gap-2 pr-6">
+              <div className="flex min-w-0 items-center pr-8">
                 <Input
                   value={editNameValue}
                   onChange={(e) => setEditNameValue(e.target.value)}
-                  className="h-8 text-sm bg-secondary border-border rounded-lg flex-1"
+                  aria-label="Novo nome do arquivo"
+                  className="h-9 min-w-0 flex-1 rounded-md text-[13px]"
                   autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setEditingName(false); }}
                 />
-                <button onClick={handleRename} className="text-success hover:text-success/80 transition-colors"><Check className="w-4 h-4" /></button>
-                <button onClick={() => setEditingName(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
+                <button type="button" onClick={handleRename} className={juntar(botao.icone, "ml-1 text-success")} aria-label="Salvar nome"><Check className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" onClick={() => setEditingName(false)} className={botao.icone} aria-label="Cancelar renomear"><X className="h-4 w-4" aria-hidden="true" /></button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 pr-6">
-                <DialogTitle className="truncate text-base">{previewFile?.file_name}</DialogTitle>
+              <div className="flex min-w-0 items-center pr-8">
+                <DialogTitle className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{previewFile?.file_name}</DialogTitle>
                 {!previewFile?.locked_at && (
                   <button
+                    type="button"
                     onClick={() => { setEditNameValue(previewFile?.file_name || ""); setEditingName(true); }}
-                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    className={juntar(botao.icone, "ml-1")}
                     title="Renomear"
+                    aria-label="Renomear"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
               </div>
             )}
+            <DialogDescription className={juntar(texto.auxiliar, "truncate")}>
+              Enviado por {previewFile?.uploader?.full_name || "-"}{previewFile?.created_at ? ` · ${formatDate(previewFile.created_at)}` : ""}
+            </DialogDescription>
           </DialogHeader>
           {previewFile && (
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
               {isCarouselAssetGroup(previewFile, childrenMap.get(previewFile.id) || []) ? (
                 <SharedCarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
               ) : (
@@ -1556,177 +1702,173 @@ export default function AdminFiles() {
                   extension={previewFile.extension}
                 />
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(agencyBadge[previewFile.agency_approval_status] || agencyBadge.not_requested).cls}`}>
+              <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+                <span className={juntar(etiqueta, (agencyBadge[previewFile.agency_approval_status] || agencyBadge.not_requested).cls)}>
                   {(agencyBadge[previewFile.agency_approval_status] || agencyBadge.not_requested).label}
                 </span>
-                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
+                <span className={juntar(etiqueta, (approvalBadge[previewFile.approval_status] || approvalBadge.none).cls)}>
                   Cliente: {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
+                <span className={juntar(etiqueta, seloDeVisibilidade(previewFile).fundo, seloDeVisibilidade(previewFile).cor)}>
+                  {seloDeVisibilidade(previewFile).label}
                 </span>
               </div>
               {previewFile.caption && (
-                <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p>
-                  <p className="text-sm text-foreground">{previewFile.caption}</p>
+                <div>
+                  <p className={juntar(texto.rotulo, "mb-0.5")}>Legenda</p>
+                  <p className={juntar(texto.corpo, "whitespace-pre-wrap [overflow-wrap:anywhere]")}>{previewFile.caption}</p>
                 </div>
               )}
               {previewFile.carousel_text && (
-                <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p>
+                <div>
+                  <p className={juntar(texto.rotulo, "mb-0.5")}>Texto do carrossel</p>
+                  <p className={juntar(texto.corpo, "whitespace-pre-wrap [overflow-wrap:anywhere]")}>{previewFile.carousel_text}</p>
                 </div>
               )}
               {previewFile.description && (
-                <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p>
-                  <p className="text-sm text-foreground">{previewFile.description}</p>
+                <div>
+                  <p className={juntar(texto.rotulo, "mb-0.5")}>Descrição</p>
+                  <p className={juntar(texto.corpo, "whitespace-pre-wrap [overflow-wrap:anywhere]")}>{previewFile.description}</p>
                 </div>
               )}
               {previewFile.feedback && (
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
-                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                <div className={juntar(superficie.poco, "border-l-2 border-destructive px-3 py-2")}>
+                  <p className={juntar(texto.rotulo, "mb-0.5")}>Feedback do cliente</p>
+                  <p className={texto.corpo}>{previewFile.feedback}</p>
                 </div>
               )}
               {previewFile.agency_feedback && (
-                <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
-                  <p className="mb-0.5 text-[11px] text-muted-foreground">Feedback da revisão interna:</p>
-                  <p className="text-xs text-foreground">{previewFile.agency_feedback}</p>
+                <div className={juntar(superficie.poco, "border-l-2 border-warning px-3 py-2")}>
+                  <p className={juntar(texto.rotulo, "mb-0.5")}>Feedback da revisão interna</p>
+                  <p className={texto.corpo}>{previewFile.agency_feedback}</p>
                 </div>
               )}
               {/* Mover de pasta e de projeto: organização vale para qualquer
-                  arquivo — a trava antiga (só antes da revisão) prendia
+                  arquivo; a trava antiga (só antes da revisão) prendia
                   exatamente os que mais precisavam de arrumação. */}
-              <div className="flex items-center gap-2">
-                <FolderInput className="w-4 h-4 text-muted-foreground shrink-0" />
-                <Select
-                  value={previewFile.folder || "estrategicos"}
-                  onValueChange={(v) => handleMoveFolder(previewFile.id, v)}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+              <GrupoDeCampos className="border-t border-border pt-4">
+                <CampoDeFormulario rotulo="Pasta">
+                  <SelectDeCampo
+                    value={previewFile.folder || "estrategicos"}
+                    onValueChange={(v) => handleMoveFolder(previewFile.id, v)}
+                  >
                     {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={previewFile.project_id || ""}
-                  onValueChange={async (v) => {
-                    try {
-                      const { error } = await (supabase as any).rpc("move_file", {
-                        _file_id: previewFile.id,
-                        _project_id: v,
-                      });
-                      if (error) throw error;
-                      void invalidateFileViews();
-                      setPreviewFile((prev: any) =>
-                        prev ? { ...prev, project_id: v } : null,
-                      );
-                      toast({ title: "Projeto do arquivo atualizado" });
-                    } catch (e: any) {
-                      toast({
-                        title: "Não foi possível mudar o projeto",
-                        description: e?.message || "Tente de novo.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
-                    <SelectValue placeholder="Projeto" />
-                  </SelectTrigger>
-                  <SelectContent>
+                  </SelectDeCampo>
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Projeto">
+                  <SelectDeCampo
+                    value={previewFile.project_id || ""}
+                    placeholder="Escolher projeto"
+                    onValueChange={async (v) => {
+                      try {
+                        const { error } = await (supabase as any).rpc("move_file", {
+                          _file_id: previewFile.id,
+                          _project_id: v,
+                        });
+                        if (error) throw error;
+                        void invalidateFileViews();
+                        setPreviewFile((prev: any) =>
+                          prev ? { ...prev, project_id: v } : null,
+                        );
+                        toast({ title: "Projeto do arquivo atualizado" });
+                      } catch (e: any) {
+                        toast({
+                          title: "Não foi possível mudar o projeto",
+                          description: e?.message || "Tente de novo.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
                     {(projects || [])
                       .filter((pj: any) => pj.client_id === previewFile.client_id)
                       .map((pj: any) => (
                         <SelectItem key={pj.id} value={pj.id}>{pj.name}</SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  </SelectDeCampo>
+                </CampoDeFormulario>
+              </GrupoDeCampos>
             </div>
           )}
-          <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
-            {isEditableFile(previewFile) && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={acting}
-                  onClick={() => runActing(() => handleRequestAgencyReview(previewFile))}
-                >
-                  Solicitar revisão interna
-                </Button>
-                {canReviewAndRelease && (
-                  <>
-                    {/* Disponibilizar é o caminho padrão: revisão interna já
-                        basta. Aprovação do cliente é a exceção explícita. */}
-                    <Button
-                      size="sm"
-                      disabled={acting}
-                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "client_shared"))}
-                    >
-                      Disponibilizar ao cliente
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={acting}
-                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "approval"))}
-                    >
-                      Pedir aprovação do cliente
-                    </Button>
-                  </>
-                )}
-              </>
-            )}
-            {previewFile?.agency_approval_status === "pending" && canReviewAndRelease && (
-              <Button
-                size="sm"
-                disabled={acting}
-                onClick={() => runActing(() => handleAgencyApproval(previewFile))}
-              >
-                Aprovar internamente
-              </Button>
-            )}
-            {previewFile?.agency_approval_status === "approved"
-              && previewFile?.visibility === "internal"
-              && canReviewAndRelease && (
-                <>
-                  <Button
-                    size="sm"
-                    disabled={acting}
-                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "client_shared"))}
-                  >
-                    Disponibilizar ao cliente
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={acting}
-                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "approval"))}
-                  >
-                    Pedir aprovação do cliente
-                  </Button>
-                </>
-              )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
+          <div className="flex shrink-0 flex-wrap items-center justify-end border-t border-border px-4 py-2">
+            <button
+              type="button"
+              className={juntar(botao.discreto, "m-1")}
               onClick={async () => {
                 if (!previewFile) return;
                 const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
                 downloadFile(url, previewFile.file_name);
               }}
             >
-              <Download className="w-3.5 h-3.5" /> Baixar
-            </Button>
-          </DialogFooter>
+              <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Baixar
+            </button>
+            {isEditableFile(previewFile) && (
+              <>
+                <button
+                  type="button"
+                  className={juntar(botao.secundario, "m-1")}
+                  disabled={acting}
+                  onClick={() => runActing(() => handleRequestAgencyReview(previewFile))}
+                >
+                  Solicitar revisão interna
+                </button>
+                {canReviewAndRelease && (
+                  <>
+                    <button
+                      type="button"
+                      className={juntar(botao.secundario, "m-1")}
+                      disabled={acting}
+                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "approval"))}
+                    >
+                      Pedir aprovação do cliente
+                    </button>
+                    {/* Disponibilizar é o caminho padrão: revisão interna já
+                        basta. Aprovação do cliente é a exceção explícita. */}
+                    <button
+                      type="button"
+                      className={juntar(botao.primario, "m-1")}
+                      disabled={acting}
+                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "client_shared"))}
+                    >
+                      Disponibilizar ao cliente
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            {previewFile?.agency_approval_status === "pending" && canReviewAndRelease && (
+              <button
+                type="button"
+                className={juntar(botao.primario, "m-1")}
+                disabled={acting}
+                onClick={() => runActing(() => handleAgencyApproval(previewFile))}
+              >
+                Aprovar internamente
+              </button>
+            )}
+            {previewFile?.agency_approval_status === "approved"
+              && previewFile?.visibility === "internal"
+              && canReviewAndRelease && (
+                <>
+                  <button
+                    type="button"
+                    className={juntar(botao.secundario, "m-1")}
+                    disabled={acting}
+                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "approval"))}
+                  >
+                    Pedir aprovação do cliente
+                  </button>
+                  <button
+                    type="button"
+                    className={juntar(botao.primario, "m-1")}
+                    disabled={acting}
+                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "client_shared"))}
+                  >
+                    Disponibilizar ao cliente
+                  </button>
+                </>
+              )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1742,102 +1884,90 @@ export default function AdminFiles() {
           }
         }}
       >
-        <DialogContent className="max-w-lg p-0 gap-0 flex flex-col max-h-[85vh]">
-          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
-            <DialogTitle>Novo conteúdo</DialogTitle>
-            {selectedClientProfile && (
-              <p className="text-xs text-muted-foreground">
-                Cliente: {selectedClientProfile.company_name || selectedClientProfile.full_name}
-              </p>
-            )}
+        <DialogContent className="flex max-h-[88vh] max-w-xl flex-col gap-0 p-0">
+          <DialogHeader className="shrink-0 space-y-0.5 border-b border-border px-5 py-4 text-left">
+            <DialogTitle className={texto.tituloSecao}>Novo conteúdo</DialogTitle>
+            <DialogDescription className={juntar(texto.auxiliar, "truncate")}>
+              {selectedClientProfile ? `Cliente: ${nomeDoCliente(selectedClientProfile)}` : "Escolha um cliente"}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 overflow-y-auto flex-1 px-6 py-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
             {revisionSource && (
-              <div className="rounded-xl border border-warning/25 bg-warning/[0.06] px-3 py-2.5">
-                <p className="text-xs font-medium text-foreground">
+              <div className={juntar(superficie.poco, "border-l-2 border-warning px-3 py-2")}>
+                <p className="text-[13px] font-medium text-foreground">
                   Nova correção · versão {revisionVersion}
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>
                   A versão {revisionSource.version || 1} de “{revisionSource.file_name}” e o feedback anterior serão preservados.
                 </p>
               </div>
             )}
 
-            {/* Mode selector */}
+            {/* Modo de envio */}
             <div>
-              <Label className="label-sm mb-1.5 block">Modo de envio</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => { setUploadMode("single"); setUploadFiles(prev => prev.slice(0, 1)); }}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
-                    uploadMode === "single"
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-                  }`}
-                >
-                  Arquivo único
-                </button>
-                <button
-                  onClick={() => setUploadMode("carousel")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
-                    uploadMode === "carousel"
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-                  }`}
-                >
-                  Carrossel
-                </button>
-                <button
-                  onClick={() => { setUploadMode("video_link"); setUploadFiles([]); }}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
-                    uploadMode === "video_link"
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-                  }`}
-                >
-                  Vídeo
-                </button>
-              </div>
-              {uploadMode === "video_link" && (
-                <p className="text-[11px] text-muted-foreground/70 mt-2">
-                  Cole link do YouTube, Vimeo, Loom, Drive, Wistia ou MP4 direto. Sem limite de tamanho, nada vai para o storage.
-                </p>
-              )}
+              <p className={juntar(texto.rotulo, "mb-1.5")}>Modo de envio</p>
+              <SeletorCompacto
+                rotulo="Modo de envio"
+                larguraTotal
+                valor={uploadMode}
+                onEscolher={(modo) => {
+                  if (modo === "single") { setUploadMode("single"); setUploadFiles(prev => prev.slice(0, 1)); }
+                  else if (modo === "carousel") setUploadMode("carousel");
+                  else { setUploadMode("video_link"); setUploadFiles([]); }
+                }}
+                opcoes={[
+                  { valor: "single", rotulo: "Arquivo único" },
+                  { valor: "carousel", rotulo: "Carrossel" },
+                  { valor: "video_link", rotulo: "Vídeo" },
+                ]}
+              />
             </div>
 
             {uploadMode === "video_link" ? (
-              <div>
-                <Label className="label-sm">URL do vídeo</Label>
-                <Input
+              <CampoDeFormulario
+                rotulo="URL do vídeo"
+                obrigatorio
+                ajuda="Link do YouTube, Vimeo, Loom, Drive, Wistia ou MP4 direto. Sem limite de tamanho: nada vai para o armazenamento."
+              >
+                <input
                   value={uploadVideoUrl}
                   onChange={(e) => setUploadVideoUrl(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
-                  className="mt-1 bg-secondary border-border rounded-xl"
+                  placeholder="https://youtube.com/watch?v=..."
+                  inputMode="url"
+                  className={campo}
                 />
-              </div>
+              </CampoDeFormulario>
             ) : (
               <>
-                {/* Drag & Drop zone */}
+                {/* Arrastar e soltar */}
                 <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={uploadMode === "carousel" ? "Escolher imagens do carrossel" : "Escolher arquivo"}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-2xl min-h-[100px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                    dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-                  } ${uploadFiles.length > 0 ? "py-3" : "h-36"}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  className={juntar(
+                    "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground",
+                    uploadFiles.length > 0 ? "py-4" : "py-8",
+                  )}
                 >
-                  <Upload className="w-7 h-7 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <Upload className="mb-2 h-6 w-6 text-muted-foreground" aria-hidden="true" />
+                  <p className={juntar(texto.corpo, "text-muted-foreground")}>
                     {uploadFiles.length === 0
                       ? uploadMode === "carousel"
-                        ? "Arraste ou clique para selecionar múltiplas imagens"
-                        : "Arraste ou clique para selecionar"
+                        ? "Arraste ou clique para escolher as imagens"
+                        : "Arraste ou clique para escolher"
                       : `${uploadFiles.length} arquivo(s) selecionado(s)`}
                   </p>
-                  {uploadMode === "carousel" && (
-                    <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione várias imagens para montar o carrossel</p>
-                  )}
                 </div>
                 <input
                   ref={fileInputRef}
@@ -1855,173 +1985,127 @@ export default function AdminFiles() {
             )}
 
             {uploadFiles.length > 0 && (
-              <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+              <ul className={juntar(superficie.poco, "max-h-[140px] divide-y divide-border overflow-y-auto overscroll-contain px-3")}>
                 {uploadFiles.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg px-3 py-1.5">
-                    <FileImage className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-foreground truncate flex-1">{f.name}</span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                    <button onClick={(e) => { e.stopPropagation(); removeUploadFile(i); }}
-                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-0.5">
-                      <Trash2 className="w-3 h-3" />
+                  <li key={i} className="flex min-w-0 items-center py-1.5">
+                    <FileImage className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{f.name}</span>
+                    <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeUploadFile(i); }}
+                      className={juntar(botao.icone, "ml-1 h-7 w-7 hover:text-destructive")}
+                      aria-label={`Tirar ${f.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
 
-            <div className="space-y-3">
-              <div>
-                <Label className="label-sm">Nome do arquivo</Label>
-                <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)}
-                  className="mt-1 bg-secondary border-border rounded-xl" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="label-sm">Pasta</Label>
-                  <Select
-                    value={uploadFolder}
-                    onValueChange={(folder) => {
-                      setUploadFolder(folder);
-                      // Trocou de pasta: o tipo acompanha, para nunca gravar
-                      // "contrato" dentro de Materiais gráficos.
-                      const definition = folderDefinition(folder);
-                      if (!definition.kinds.includes(uploadType as FileKindId)) {
-                        setUploadType(definition.defaultKind);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="mt-1 bg-secondary border-border rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="label-sm">Tipo</Label>
-                  {/* Só os tipos que fazem sentido na pasta escolhida: dentro de
-                      Materiais gráficos vem carrossel, post, story e vídeo. */}
-                  <Select value={uploadType} onValueChange={setUploadType}>
-                    <SelectTrigger className="mt-1 bg-secondary border-border rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {folderDefinition(uploadFolder).kinds.map((kind) => (
-                        <SelectItem key={kind} value={kind}>{kindLabel(kind)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {folderDefinition(uploadFolder).hint}
-              </p>
-              <div>
-                <Label className="label-sm">Projeto vinculado (opcional)</Label>
-                <Select value={uploadProject} onValueChange={setUploadProject}>
-                  <SelectTrigger className="mt-1 bg-secondary border-border rounded-xl"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {clientProjects.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="label-sm">Legenda (opcional)</Label>
-                <textarea value={uploadCaption} onChange={(e) => setUploadCaption(e.target.value)} rows={2} placeholder="Legenda do post..."
-                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-              </div>
-              {uploadMode === "carousel" && (
-                <div>
-                  <Label className="label-sm">Texto do Carrossel (opcional)</Label>
-                  <textarea value={uploadCarousel} onChange={(e) => setUploadCarousel(e.target.value)} rows={2} placeholder="Texto para carrossel multi-slide..."
-                    className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-                </div>
-              )}
-              <div>
-                <Label className="label-sm">Descrição da entrega (opcional)</Label>
-                <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Contexto ou orientação que o cliente poderá ler..."
-                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-              </div>
-              <div>
-                <Label className="label-sm mb-1.5 block">O que fazer depois de salvar?</Label>
-                <RadioGroup
-                  value={uploadPostSaveAction}
-                  onValueChange={(value) => setUploadPostSaveAction(value as UploadPostSaveAction)}
-                  className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Nome do arquivo" largo>
+                <input value={uploadName} onChange={(e) => setUploadName(e.target.value)} className={campo} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Pasta" apoio={folderDefinition(uploadFolder).hint}>
+                <SelectDeCampo
+                  value={uploadFolder}
+                  onValueChange={(folder) => {
+                    setUploadFolder(folder);
+                    // Trocou de pasta: o tipo acompanha, para nunca gravar
+                    // "contrato" dentro de Materiais gráficos.
+                    const definition = folderDefinition(folder);
+                    if (!definition.kinds.includes(uploadType as FileKindId)) {
+                      setUploadType(definition.defaultKind);
+                    }
+                  }}
                 >
-                  <Label
-                    htmlFor="save-internal-draft"
-                    className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      uploadPostSaveAction === "draft"
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <RadioGroupItem id="save-internal-draft" value="draft" className="mt-0.5 shrink-0" />
-                    <span>
-                      <span className="block font-medium">Salvar internamente</span>
-                      <span className="mt-0.5 block text-[10px] opacity-75">Só a equipe vê e pode continuar editando.</span>
-                    </span>
-                  </Label>
-                  <Label
-                    htmlFor="request-agency-review"
-                    className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      uploadPostSaveAction === "internal_review"
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <RadioGroupItem id="request-agency-review" value="internal_review" className="mt-0.5 shrink-0" />
-                    <span>
-                      <span className="block font-medium">Solicitar revisão interna</span>
-                      <span className="mt-0.5 block text-[10px] opacity-75">Admin ou manager revisa antes do cliente receber.</span>
-                    </span>
-                  </Label>
-                  {canReviewAndRelease && (
-                    <>
-                      <Label
-                        htmlFor="release-client-shared"
-                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                          uploadPostSaveAction === "client_shared"
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <RadioGroupItem id="release-client-shared" value="client_shared" className="mt-0.5 shrink-0" />
-                        <span>
-                          <span className="block font-medium">Disponibilizar ao cliente</span>
-                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova internamente e o cliente só visualiza.</span>
-                        </span>
-                      </Label>
-                      <Label
-                        htmlFor="release-for-approval"
-                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                          uploadPostSaveAction === "approval"
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <RadioGroupItem id="release-for-approval" value="approval" className="mt-0.5 shrink-0" />
-                        <span>
-                          <span className="block font-medium">Enviar para aprovação</span>
-                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova e o cliente decide no painel.</span>
-                        </span>
-                      </Label>
-                    </>
-                  )}
-                </RadioGroup>
-                <p className="mt-2 text-[10px] text-muted-foreground">
+                  {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+                </SelectDeCampo>
+              </CampoDeFormulario>
+              {/* Só os tipos que fazem sentido na pasta escolhida: dentro de
+                  Materiais gráficos vem carrossel, post, story e vídeo. */}
+              <CampoDeFormulario rotulo="Tipo">
+                <SelectDeCampo value={uploadType} onValueChange={setUploadType}>
+                  {folderDefinition(uploadFolder).kinds.map((kind) => (
+                    <SelectItem key={kind} value={kind}>{kindLabel(kind)}</SelectItem>
+                  ))}
+                </SelectDeCampo>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Projeto" apoio="Opcional.">
+                <SelectDeCampo value={uploadProject} onValueChange={setUploadProject} placeholder="Nenhum">
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {clientProjects.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectDeCampo>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Legenda" apoio="Opcional." largo>
+                <textarea value={uploadCaption} onChange={(e) => setUploadCaption(e.target.value)} rows={2} placeholder="Legenda do post"
+                  className={juntar(campoTexto, "min-h-[64px] resize-none")} />
+              </CampoDeFormulario>
+              {uploadMode === "carousel" && (
+                <CampoDeFormulario rotulo="Texto do carrossel" apoio="Opcional." largo>
+                  <textarea value={uploadCarousel} onChange={(e) => setUploadCarousel(e.target.value)} rows={2} placeholder="Texto dos slides"
+                    className={juntar(campoTexto, "min-h-[64px] resize-none")} />
+                </CampoDeFormulario>
+              )}
+              <CampoDeFormulario rotulo="Descrição da entrega" apoio="Opcional. O cliente poderá ler." largo>
+                <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Contexto ou orientação"
+                  className={juntar(campoTexto, "min-h-[64px] resize-none")} />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+
+            <div>
+              <div className="mb-1.5 flex items-center">
+                <p className={texto.rotulo} id="depois-de-salvar">Depois de salvar</p>
+                <AjudaRecolhida className="ml-1">
                   Para enviar ao cliente, escolha se precisa de aprovação final ou se será apenas disponibilizado.
-                </p>
+                </AjudaRecolhida>
               </div>
+              <RadioGroup
+                value={uploadPostSaveAction}
+                onValueChange={(value) => setUploadPostSaveAction(value as UploadPostSaveAction)}
+                aria-labelledby="depois-de-salvar"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                {([
+                  { id: "save-internal-draft", valor: "draft", titulo: "Salvar internamente", apoio: "Só a equipe vê e pode continuar editando.", mostrar: true },
+                  { id: "request-agency-review", valor: "internal_review", titulo: "Solicitar revisão interna", apoio: "Admin ou manager revisa antes do cliente.", mostrar: true },
+                  { id: "release-client-shared", valor: "client_shared", titulo: "Disponibilizar ao cliente", apoio: "O cliente só visualiza.", mostrar: canReviewAndRelease },
+                  { id: "release-for-approval", valor: "approval", titulo: "Enviar para aprovação", apoio: "O cliente decide no painel.", mostrar: canReviewAndRelease },
+                ] as const).filter((opcao) => opcao.mostrar).map((opcao) => (
+                  <Label
+                    key={opcao.id}
+                    htmlFor={opcao.id}
+                    className={juntar(
+                      "flex min-w-0 cursor-pointer items-start rounded-md border px-3 py-2.5 text-left font-normal transition-colors",
+                      uploadPostSaveAction === opcao.valor
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <RadioGroupItem id={opcao.id} value={opcao.valor} className="mr-2 mt-0.5 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">{opcao.titulo}</span>
+                      <span className="mt-0.5 block text-[12px] leading-4 opacity-80">{opcao.apoio}</span>
+                    </span>
+                  </Label>
+                ))}
+              </RadioGroup>
             </div>
 
             {uploading && <Progress value={uploadProgress} className="h-2 rounded-full" />}
           </div>
-          <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
-            <Button variant="outline" onClick={closeUploadForm} disabled={uploading}>Cancelar</Button>
-            <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
+          <div className="flex shrink-0 flex-wrap items-center justify-end border-t border-border px-5 py-3 [&>*+*]:ml-2">
+            <button type="button" className={botao.discreto} onClick={closeUploadForm} disabled={uploading}>Cancelar</button>
+            <button
+              type="button"
+              className={botao.primario}
+              onClick={handleUpload}
+              disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}
+            >
               {uploading
                 ? "Salvando..."
                 : uploadPostSaveAction === "approval"
@@ -2031,8 +2115,8 @@ export default function AdminFiles() {
                     : uploadPostSaveAction === "internal_review"
                       ? "Salvar e solicitar revisão"
                       : "Salvar internamente"}
-            </Button>
-          </DialogFooter>
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Loader2, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { CampoDeFormulario, Carregando, GrupoDeCampos, botao, foco, juntar, superficie, texto } from "@/components/sistema";
+import CascaPublica, { campoPublico, campoTextoPublico } from "@/components/publico/CascaPublica";
 import { supportWhatsAppUrl } from "@/lib/supportContact";
 
 // ============== Constants ==============
@@ -351,111 +347,96 @@ export default function QuizPublicPage() {
 
   // ============== Render ==============
 
-  return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      {/* Background gradient blobs */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-40 -left-40 w-[36rem] h-[36rem] rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute top-1/2 -right-40 w-[36rem] h-[36rem] rounded-full bg-violet-500/10 blur-3xl" />
-      </div>
-
-      {/* Header (compact during quiz) */}
-      {phase !== "lead" && phase !== "done" && phase !== "invalid" && (
-        <header className="px-5 md:px-8 py-5 flex items-center justify-between max-w-2xl mx-auto">
-          <img src={aceleriqLogo} alt="Aceleriq" className="h-[60px] md:h-20 w-auto" />
-          {phase === "quiz" && (
-            <div className="text-[10px] md:text-xs font-mono text-muted-foreground">
-              {savingHint ? "Salvando…" : "Salvo automaticamente"}
-            </div>
-          )}
-        </header>
-      )}
-
-      {/* Progress bar (during quiz) */}
-      {phase === "quiz" && (
-        <div className="max-w-2xl mx-auto px-5 md:px-8">
-          <div className="flex items-center justify-between mb-2 text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-            <span className={CATEGORY_META[current.category].accent}>
-              {CATEGORY_META[current.category].label}
-            </span>
-            <span>{stepIdx + 1} / {totalSteps}</span>
-          </div>
-          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-primary"
-              initial={false}
-              animate={{ width: `${progress}%` }}
-              transition={{ type: "spring", stiffness: 120, damping: 20 }}
-              style={{ boxShadow: "0 0 12px hsl(var(--primary) / 0.6)" }}
-            />
-          </div>
-        </div>
-      )}
-
-      <main className="max-w-2xl mx-auto px-5 md:px-8 py-8 md:py-14">
-        <AnimatePresence mode="wait">
-          {phase === "loading" && (
-            <motion.div key="loading" className="flex flex-col items-center gap-3 py-32"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Carregando seu diagnóstico…</p>
-            </motion.div>
-          )}
-
-          {phase === "invalid" && (
-            <InvalidScreen
-              key="invalid"
-              reason={invalidReason}
-              onRetry={() => setLoadAttempt((n) => n + 1)}
-            />
-          )}
-
-          {phase === "lead" && (
-            <LeadForm
-              key="lead"
-              lead={lead}
-              onChange={(next) => { setLead(next); persist(next, answers); }}
-              onSubmit={submitLead}
-              valid={leadValid}
-            />
-          )}
-
-          {phase === "quiz" && current && (
-            <QuestionScreen
-              key={current.id}
-              q={current}
-              value={answers[current.id] ?? ""}
-              onChange={(v) => setAnswer(current.id, v)}
-              onNext={goNext}
-              onPrev={goPrev}
-              isFirst={stepIdx === 0}
-              isLast={stepIdx === totalSteps - 1}
-              isValid={isCurrentValid}
-            />
-          )}
-
-          {phase === "submitting" && (
-            <motion.div key="submitting" className="flex flex-col items-center gap-3 py-32"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Calculando seu ICP-Fit…</p>
-            </motion.div>
-          )}
-
-          {phase === "done" && result && (
-            <ResultScreen key="done" score={result.score} plan={result.plan} leadName={lead.lead_name} />
-          )}
-        </AnimatePresence>
-      </main>
-
-      <footer className="text-center text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-muted-foreground py-8">
-        Powered by Aceleriq · Performance OS
-      </footer>
-    </div>
+  const salvo = (
+    <span className={texto.auxiliar} aria-live="polite">{savingHint ? "Salvando..." : "Salvo automaticamente"}</span>
   );
+
+  if (phase === "loading") {
+    return (
+      <CascaPublica titulo="Diagnóstico" descricao="Carregando seu diagnóstico..." largura="media" centralizar={false}>
+        <Carregando linhas={4} rotulo="Carregando seu diagnóstico" />
+      </CascaPublica>
+    );
+  }
+
+  if (phase === "invalid") {
+    return <InvalidScreen reason={invalidReason} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+  }
+
+  if (phase === "lead") {
+    return (
+      <LeadForm
+        lead={lead}
+        onChange={(next) => { setLead(next); persist(next, answers); }}
+        onSubmit={submitLead}
+        valid={leadValid}
+      />
+    );
+  }
+
+  if (phase === "submitting") {
+    return (
+      <CascaPublica titulo="Calculando seu resultado" descricao="Calculando seu ICP-Fit..." largura="media" centralizar={false}>
+        <Carregando linhas={3} rotulo="Calculando seu ICP-Fit" />
+      </CascaPublica>
+    );
+  }
+
+  if (phase === "done" && result) {
+    return <ResultScreen score={result.score} plan={result.plan} leadName={lead.lead_name} />;
+  }
+
+  if (phase === "quiz" && current) {
+    return (
+      <CascaPublica
+        titulo={current.label}
+        descricao={current.helper}
+        aoLadoDaMarca={salvo}
+        acimaDoTitulo={<Progresso categoria={CATEGORY_META[current.category].label} passo={stepIdx} total={totalSteps} />}
+        largura="media"
+        centralizar={false}
+      >
+        <QuestionScreen
+          key={current.id}
+          q={current}
+          value={answers[current.id] ?? ""}
+          onChange={(v) => setAnswer(current.id, v)}
+          onNext={goNext}
+          onPrev={goPrev}
+          isFirst={stepIdx === 0}
+          isLast={stepIdx === totalSteps - 1}
+          isValid={isCurrentValid}
+        />
+      </CascaPublica>
+    );
+  }
+
+  return <CascaPublica largura="media" centralizar={false} />;
 }
 
 // ============== Sub-components ==============
+
+/** Indicador simples: bloco da pergunta, "3 de 10" e uma barra fina. */
+function Progresso({ categoria, passo, total }: { categoria: string; passo: number; total: number }) {
+  return (
+    <div className="mb-6 min-w-0">
+      <div className="mb-2 flex min-w-0 items-center justify-between">
+        <span className={juntar(texto.rotulo, "truncate text-primary")}>{categoria}</span>
+        <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{passo + 1} de {total}</span>
+      </div>
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Progresso do diagnóstico"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={passo}
+      >
+        <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${(passo / total) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
 
 /**
  * Tela de convite inválido, espelho da do primeiro acesso (FirstAccess):
@@ -468,43 +449,25 @@ function InvalidScreen({ reason, onRetry }: { reason: InvalidReason; onRetry: ()
   const canRetry = reason === "network" || reason === "rate_limited" || reason === "unknown";
   const waUrl = supportWhatsAppUrl("Olá! Tentei abrir o link do diagnóstico e ele não funcionou. Podem me ajudar?");
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -16 }}
-      transition={{ type: "spring", stiffness: 120, damping: 20 }}
-      className="pt-6 md:pt-12"
-    >
-      <div className="text-center mb-8">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-20 md:h-[100px] w-auto mx-auto mb-8" />
-      </div>
-      <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-xl shadow-2xl shadow-primary/5 p-6 md:p-8 flex flex-col items-center gap-3 text-center">
-        <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-          <span aria-hidden="true" className="text-destructive text-xl font-bold">!</span>
-        </div>
-        <h1 className="text-lg font-semibold text-foreground">{copy.title}</h1>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-md">{copy.text}</p>
-        <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+    <CascaPublica titulo={copy.title} descricao={copy.text} largura="media">
+      {waUrl || canRetry ? (
+        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
           {canRetry && (
-            <Button type="button" onClick={onRetry} className="w-full sm:w-auto">
+            <button type="button" onClick={onRetry} className={botao.primario}>
               Tentar de novo
-            </Button>
+            </button>
           )}
-          {waUrl ? (
-            <a
-              href={waUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-primary/50 transition-colors"
-            >
-              <MessageCircle className="h-4 w-4" /> Falar com a Aceleriq
+          {waUrl && (
+            <a href={waUrl} target="_blank" rel="noreferrer" className={canRetry ? botao.secundario : botao.primario}>
+              <MessageCircle className="mr-2 h-4 w-4" aria-hidden="true" /> Falar com a Aceleriq
             </a>
-          ) : (
-            <p className="text-xs text-muted-foreground">Fale com a equipe Aceleriq pelo canal em que recebeu este link.</p>
           )}
         </div>
-      </div>
-    </motion.div>
+      ) : null}
+      {!waUrl && (
+        <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>Fale com a equipe Aceleriq pelo canal em que recebeu este link.</p>
+      )}
+    </CascaPublica>
   );
 }
 
@@ -517,95 +480,71 @@ function LeadForm({
   valid: boolean;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -16 }}
-      transition={{ type: "spring", stiffness: 120, damping: 20 }}
-      className="pt-6 md:pt-12"
+    <CascaPublica
+      titulo="Diagnóstico AI-First"
+      descricao="10 perguntas, cerca de 8 minutos."
+      ajuda="Vamos descobrir se somos o parceiro certo para a sua operação. As respostas ficam salvas enquanto você responde."
+      largura="media"
     >
-      <div className="text-center mb-8 md:mb-10">
-        <img
-          src={aceleriqLogo}
-          alt="Aceleriq"
-          className="h-20 md:h-[100px] w-auto mx-auto mb-8"
-        />
-        <span className="inline-flex items-center gap-2 text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-primary mb-4">
-          <Sparkles className="h-3.5 w-3.5" /> Diagnóstico Aceleriq
-        </span>
-        <h1 className="text-2xl md:text-4xl font-semibold tracking-tight mb-3 leading-tight">
-          Diagnóstico Acelerado AI-First
-        </h1>
-        <p className="text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
-          10 perguntas. 8 minutos. Vamos descobrir se somos o parceiro certo pra sua operação.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-xl shadow-2xl shadow-primary/5 p-5 md:p-8">
-        <div className="grid gap-5">
-          <Field label="Seu nome *">
-            <Input
+      <form
+        className="min-w-0"
+        onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
+      >
+        <GrupoDeCampos>
+          <CampoDeFormulario rotulo="Seu nome" obrigatorio>
+            <input
               value={lead.lead_name}
               onChange={(e) => onChange({ ...lead, lead_name: e.target.value })}
               placeholder="Como podemos te chamar?"
               maxLength={120}
-              className="h-12 text-base"
+              autoComplete="name"
+              className={campoPublico}
               autoFocus
             />
-          </Field>
-          <Field label="WhatsApp">
-            <Input
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="WhatsApp">
+            <input
               type="tel"
               inputMode="numeric"
               value={lead.lead_whatsapp}
               onChange={(e) => onChange({ ...lead, lead_whatsapp: maskWhatsapp(e.target.value) })}
               placeholder="+55 11 99999-9999"
               maxLength={20}
-              className="h-12 text-base"
+              autoComplete="tel"
+              className={campoPublico}
             />
-          </Field>
-          <Field label="E-mail (opcional)">
-            <Input
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="E-mail (opcional)">
+            <input
               type="email"
+              inputMode="email"
               value={lead.lead_email}
               onChange={(e) => onChange({ ...lead, lead_email: e.target.value })}
               placeholder="voce@empresa.com"
               maxLength={200}
-              className="h-12 text-base"
+              autoComplete="email"
+              className={campoPublico}
             />
-          </Field>
-          <Field label="Empresa (opcional)">
-            <Input
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Empresa (opcional)">
+            <input
               value={lead.lead_company}
               onChange={(e) => onChange({ ...lead, lead_company: e.target.value })}
               placeholder="Nome da empresa"
               maxLength={150}
-              className="h-12 text-base"
+              autoComplete="organization"
+              className={campoPublico}
             />
-          </Field>
+          </CampoDeFormulario>
+        </GrupoDeCampos>
+
+        <div className="mt-6 flex min-w-0 justify-end">
+          <button type="submit" disabled={!valid} className={juntar(botao.primario, "w-full sm:w-auto")}>
+            Começar diagnóstico <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
-
-        <Button
-          size="lg"
-          className="mt-7 w-full h-14 text-base font-semibold"
-          disabled={!valid}
-          onClick={onSubmit}
-        >
-          Começar diagnóstico <ArrowRight className="ml-2 h-5 w-5" />
-        </Button>
-      </div>
-    </motion.div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <Label className="text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-muted-foreground mb-2 block">
-        {label}
-      </Label>
-      {children}
-    </div>
+      </form>
+    </CascaPublica>
   );
 }
 
@@ -631,88 +570,75 @@ function QuestionScreen({
   }, [q.id, q.type]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -24 }}
-      transition={{ type: "spring", stiffness: 120, damping: 22 }}
-      className="space-y-6 md:space-y-8"
-    >
-      <div>
-        <h2 className="text-xl md:text-2xl font-bold tracking-tight leading-snug mb-2">
-          {q.label}
-        </h2>
-        {q.helper && (
-          <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-            {q.helper}
-          </p>
-        )}
-      </div>
-
+    <div className="min-w-0">
       {q.type === "text" ? (
-        <div>
-          <Textarea
+        <div className="min-w-0">
+          <textarea
             ref={inputRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={q.placeholder}
-            className="min-h-[120px] md:min-h-[140px] text-base leading-relaxed resize-none"
+            aria-label={q.label}
+            aria-describedby={q.minLength ? `quiz-${q.id}-contagem` : undefined}
+            className={juntar(campoTextoPublico, "min-h-[140px] resize-none")}
             maxLength={2000}
           />
           {q.minLength && (
-            <div className="mt-2 text-[11px] font-mono text-muted-foreground text-right">
-              {remaining > 0 ? `Faltam ${remaining} caracteres` : "✓ Pronto"}
-            </div>
+            <p id={`quiz-${q.id}-contagem`} className={juntar(texto.auxiliar, "mt-1.5 text-right tabular-nums", remaining === 0 && "text-primary")}>
+              {remaining > 0 ? `Faltam ${remaining} caracteres` : "Pronto"}
+            </p>
           )}
         </div>
       ) : (
-        <div className="grid gap-2.5">
+        <div role="radiogroup" aria-label={q.label} className="min-w-0 space-y-2">
           {q.options?.map((opt) => {
             const selected = value === opt.value;
             return (
               <button
                 key={opt.value}
                 type="button"
+                role="radio"
+                aria-checked={selected}
                 onClick={() => onChange(opt.value)}
-                className={`text-left p-4 rounded-xl border-2 transition-all min-h-[56px] flex items-center ${
-                  selected
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border/60 bg-card/30 hover:border-border hover:bg-card/60 text-foreground/90"
-                }`}
+                className={juntar(
+                  "flex min-h-[44px] w-full min-w-0 items-center rounded-md border px-3 py-2.5 text-left text-[14px] leading-5 transition-colors",
+                  foco,
+                  selected ? "border-primary bg-primary/10 text-foreground" : "border-border text-foreground/90 hover:bg-muted",
+                )}
               >
-                <span className="text-base font-medium">{opt.label}</span>
+                <span
+                  aria-hidden="true"
+                  className={juntar(
+                    "mr-3 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                    selected ? "border-primary" : "border-muted-foreground/60",
+                  )}
+                >
+                  {selected && <span className="h-2 w-2 rounded-full bg-primary" />}
+                </span>
+                <span className="min-w-0 flex-1">{opt.label}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="flex flex-col-reverse md:flex-row gap-3 pt-2">
-        <Button
-          variant="ghost"
-          onClick={onPrev}
-          disabled={isFirst}
-          className="h-12 px-6 w-full md:w-auto"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
-        </Button>
-        <Button
-          onClick={onNext}
-          disabled={!isValid}
-          className="h-12 px-6 w-full md:flex-1 text-base font-semibold"
-        >
+      <div className="mt-8 flex min-w-0 items-center justify-between">
+        <button type="button" onClick={onPrev} disabled={isFirst} className={botao.discreto}>
+          <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" /> Voltar
+        </button>
+        <button type="button" onClick={onNext} disabled={!isValid} className={juntar(botao.primario, "ml-3")}>
           {isLast ? "Finalizar diagnóstico" : "Próxima"}
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+          <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function ResultScreen({ score, plan, leadName }: { score: number; plan: string; leadName: string }) {
   const planInfo = PLAN_INFO[plan] ?? PLAN_INFO.starter;
-  const size = 200;
-  const stroke = 14;
+  const size = 112;
+  const stroke = 10;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c - (Math.max(0, Math.min(100, score)) / 100) * c;
@@ -723,42 +649,18 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
   const firstName = (leadName || "").trim().split(" ")[0];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 120, damping: 22 }}
-      className="pt-6 md:pt-10 text-center"
+    <CascaPublica
+      titulo={firstName ? `Pronto, ${firstName}` : "Diagnóstico concluído"}
+      descricao="Seu ICP-Fit e o plano mais aderente ao momento da sua operação."
+      largura="media"
+      centralizar={false}
     >
-      <img
-        src={aceleriqLogo}
-        alt="Aceleriq"
-        className="h-16 md:h-20 w-auto mx-auto mb-8"
-      />
-
-      <span className="inline-flex items-center gap-2 text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-primary mb-4">
-        <Sparkles className="h-3.5 w-3.5" /> Diagnóstico concluído
-      </span>
-
-      <h1 className="text-2xl md:text-4xl font-semibold tracking-tight mb-3 leading-tight">
-        {firstName ? `Pronto, ${firstName}.` : "Pronto."} Seu diagnóstico está aqui.
-      </h1>
-      <p className="text-base text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
-        Calculamos seu ICP-Fit e o plano mais aderente ao momento da sua operação.
-      </p>
-
-      {/* ICP Ring */}
-      <div className="flex flex-col items-center mb-10">
-        <div className="relative" style={{ width: size, height: size }}>
-          <svg width={size} height={size} className="-rotate-90">
+      <div className="flex min-w-0 items-center">
+        {/* Anel parado (sem contagem animada): o número já nasce certo. */}
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth={stroke} />
             <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="hsl(var(--secondary))"
-              strokeWidth={stroke}
-            />
-            <motion.circle
               cx={size / 2}
               cy={size / 2}
               r={r}
@@ -767,63 +669,32 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
               strokeWidth={stroke}
               strokeLinecap="round"
               strokeDasharray={c}
-              initial={{ strokeDashoffset: c }}
-              animate={{ strokeDashoffset: offset }}
-              transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
-              style={{ filter: "drop-shadow(0 0 12px hsl(var(--primary) / 0.7))" }}
+              strokeDashoffset={offset}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <motion.span
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-              className="text-5xl font-mono font-light text-primary tabular-nums"
-            >
-              {Math.round(score)}
-            </motion.span>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono mt-1">
-              ICP Score
-            </span>
+            <span className="text-[28px] font-semibold leading-8 tabular-nums text-primary">{Math.round(score)}</span>
+            <span className={texto.auxiliar}>ICP Score</span>
           </div>
         </div>
-      </div>
-
-      {/* Plan card */}
-      <div className="rounded-2xl border border-primary/30 bg-card/40 backdrop-blur-xl p-6 md:p-8 text-left mb-8 shadow-2xl shadow-primary/10">
-        <div className="text-[10px] md:text-[11px] font-mono uppercase tracking-widest text-primary mb-2">
-          Plano recomendado
+        <div className="ml-5 min-w-0 flex-1">
+          <p className={texto.rotulo}>Plano recomendado</p>
+          <p className="mt-1 text-[20px] font-semibold leading-7 tracking-[-0.01em] text-foreground">{planInfo.name}</p>
+          <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{planInfo.tagline}</p>
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold tracking-tight mb-1">
-          {planInfo.name}
-        </h3>
-        <p className="text-sm md:text-base text-muted-foreground italic mb-4">
-          {planInfo.tagline}
-        </p>
-        <p className="text-base text-foreground/90 leading-relaxed">
-          {planInfo.description}
-        </p>
       </div>
 
-      {/* Single CTA */}
-      {waUrl && (
-        <>
-          <Button
-            asChild
-            size="lg"
-            className="w-full h-14 text-base font-semibold"
-          >
-            <a href={waUrl} target="_blank" rel="noopener noreferrer">
-              <MessageCircle className="mr-2 h-5 w-5" />
-              Falar com o time no WhatsApp
-            </a>
-          </Button>
+      <p className={juntar(texto.corpo, superficie.divisoria, "mt-6 pt-6 text-foreground/90")}>{planInfo.description}</p>
 
-          <p className="mt-4 text-sm text-muted-foreground">
-            Alguém do time responde em até 2 horas em dias úteis.
-          </p>
-        </>
+      {waUrl && (
+        <div className="mt-6 min-w-0">
+          <a href={waUrl} target="_blank" rel="noopener noreferrer" className={juntar(botao.primario, "w-full sm:w-auto")}>
+            <MessageCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+            Falar com o time no WhatsApp
+          </a>
+          <p className={juntar(texto.auxiliar, "mt-2")}>Alguém do time responde em até 2 horas em dias úteis.</p>
+        </div>
       )}
-    </motion.div>
+    </CascaPublica>
   );
 }

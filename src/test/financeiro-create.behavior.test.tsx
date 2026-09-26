@@ -30,8 +30,8 @@ afterEach(cleanup);
 
 function fillBilling() {
   render(<MemoryRouter><AdminFinanceiro /></MemoryRouter>);
-  fireEvent.click(screen.getByRole("button", { name: "Nova Cobrança" }));
-  const dialog = screen.getByRole("dialog", { name: "Nova Cobrança" });
+  fireEvent.click(screen.getByRole("button", { name: /^nova cobrança$/i }));
+  const dialog = screen.getByRole("dialog", { name: /^nova cobrança$/i });
   fireEvent.change(within(dialog).getByLabelText("Cliente"), { target: { value: "client" } });
   fireEvent.change(within(dialog).getByLabelText("Valor (R$)"), { target: { value: "50" } });
   fireEvent.change(within(dialog).getByLabelText("Vencimento"), { target: { value: "2026-09-30" } });
@@ -43,7 +43,7 @@ describe("Financeiro: confirmacao e rascunho de cobranca", () => {
   it("confirma a cobranca salva e mostra aviso separado quando a notificacao falha", async () => {
     state.create.mockResolvedValue({ notificationFailed: true });
     const dialog = fillBilling();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Criar Cobrança" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^criar cobrança$/i }));
     await waitFor(() => expect(state.warning).toHaveBeenCalledWith("A cobrança foi criada, mas não consegui avisar o cliente."));
     expect(state.success).toHaveBeenCalledWith("Cobrança criada");
     expect(state.error).not.toHaveBeenCalled();
@@ -54,23 +54,23 @@ describe("Financeiro: confirmacao e rascunho de cobranca", () => {
   it("mantem o modal e os valores quando a persistencia falha, sem toast de sucesso", async () => {
     state.create.mockRejectedValue(new Error("Falha sintética ao gravar"));
     const dialog = fillBilling();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Criar Cobrança" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^criar cobrança$/i }));
     await waitFor(() => expect(state.error).toHaveBeenCalledWith("Falha sintética ao gravar"));
     expect(state.success).not.toHaveBeenCalled();
     expect(state.invalidate).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Nova Cobrança" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /^nova cobrança$/i })).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Cliente")).toHaveValue("client");
     expect(within(dialog).getByLabelText("Valor (R$)")).toHaveValue(50);
     expect(within(dialog).getByLabelText("Vencimento")).toHaveValue("2026-09-30");
     expect(within(dialog).getByLabelText("Descrição")).toHaveValue("Rascunho preservado");
-    expect(within(dialog).getByRole("button", { name: "Criar Cobrança" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /^criar cobrança$/i })).toBeEnabled();
   });
 
   it("aguarda a confirmacao, bloqueia clique duplicado e limpa o rascunho so apos sucesso", async () => {
     let finish: (value: { notificationFailed: boolean }) => void;
     state.create.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const dialog = fillBilling();
-    const button = within(dialog).getByRole("button", { name: "Criar Cobrança" });
+    const button = within(dialog).getByRole("button", { name: /^criar cobrança$/i });
     fireEvent.click(button);
     fireEvent.click(button);
     expect(state.create).toHaveBeenCalledOnce();
@@ -80,7 +80,7 @@ describe("Financeiro: confirmacao e rascunho de cobranca", () => {
     await act(async () => { finish!({ notificationFailed: false }); });
     expect(state.success).toHaveBeenCalledWith("Cobrança criada");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Nova Cobrança" }));
+    fireEvent.click(screen.getByRole("button", { name: /^nova cobrança$/i }));
     expect(screen.getByLabelText("Descrição")).toHaveValue("");
   });
 });

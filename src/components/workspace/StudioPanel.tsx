@@ -22,6 +22,11 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import aceleriqLogo from "@/assets/logo-aceleriq-640.png";
 import { APP_PUBLIC_URL } from "@/lib/publicUrl";
+import {
+  AjudaRecolhida, SeletorCompacto, Secao, RegiaoRolavel, CampoDeFormulario, GrupoDeCampos, EstadoVazio, Carregando, EstadoDeErro,
+  botao, campo, campoTexto, superficie, texto, etiqueta, foco, useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela,
+} from "@/components/sistema";
+import { CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente } from "@/components/sistema/PainelDoAgente";
 
 
 /**
@@ -37,6 +42,7 @@ const APP_PUBLIC_HOST = new URL(APP_PUBLIC_URL).hostname;
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null; meta?: string | null };
 
 type Mode = "context" | "notes" | "gpt";
+const MODOS: Mode[] = ["context", "notes", "gpt"];
 
 
 type StudioState = {
@@ -268,9 +274,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!v || v === "br" || v === "bl") return "bc";
     return v;
   });
-  const [mode, setMode] = useState<Mode>("context");
+  // Modo interno e aba do editor no celular ficam lembrados (sair e voltar mantém).
+  const [mode, setMode] = useEstadoDaTela<Mode>("workspace:estudio:modo", "context", {
+    validar: (v) => typeof v === "string" && (MODOS as string[]).indexOf(v) >= 0,
+  });
   const isMobile = useIsMobile();
-  const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
+  const [mobileNotesTab, setMobileNotesTab] = useEstadoDaTela<"editor" | "preview">("workspace:estudio:notas-aba", "editor", {
+    validar: (v) => v === "editor" || v === "preview",
+  });
   // Mobile: só reseta o estado UMA vez (primeira detecção). Reset a cada mudança
   // deixava o Studio fechando sozinho quando o evento "studio:open" chegava durante o mount.
   const mobileResetRef = useRef(false);
@@ -835,11 +846,16 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   if (!open) {
     return (
       <button
+        type="button"
         onClick={() => { setOpen(true); setMinimized(false); }}
-        className="hidden md:flex fixed bottom-4 left-1/2 -translate-x-1/2 z-40 h-11 px-4 rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 items-center gap-2 text-sm font-medium"
-        title="Abrir Studio (notas, mapa mental, roteiro)"
+        className={cn(
+          "fixed bottom-4 left-1/2 z-40 hidden h-10 -translate-x-1/2 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 md:flex",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        )}
+        title="Abrir o Studio"
+        aria-label="Abrir o Studio"
       >
-        <Sparkles className="w-4 h-4" /> Studio
+        <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" /> Studio
       </button>
     );
   }
@@ -853,21 +869,50 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     : dock === "br" ? "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:left-auto sm:right-4 sm:bottom-4"
     : dock === "bl" ? "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:right-auto sm:left-4 sm:bottom-4"
     :                 "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
+  // Sem min()/dvh em classe (Safari 11): altura relativa com teto em px dá o mesmo resultado.
   const dockSize = isFull
     ? ""
     : minimized
       ? "h-[52px] sm:w-[280px]"
       : dock === "bc"
-        ? "h-[min(72dvh,620px)] max-h-[calc(100dvh-80px)] sm:w-[min(96vw,880px)] sm:h-[min(72vh,620px)] sm:max-h-none"
-        : "h-[min(78dvh,680px)] max-h-[calc(100dvh-80px)] sm:w-[min(96vw,480px)] sm:h-[min(78vh,680px)] sm:max-h-none";
+        ? "h-[72vh] max-h-[620px] sm:w-[96vw] sm:max-w-[880px]"
+        : "h-[78vh] max-h-[680px] sm:w-[96vw] sm:max-w-[480px]";
 
+  const opcoesDeModo = [
+    { valor: "context", rotulo: "Contexto", icone: isMobile ? undefined : <Brain className="h-3.5 w-3.5" /> },
+    { valor: "notes", rotulo: "Notas", icone: isMobile ? undefined : <NotebookPen className="h-3.5 w-3.5" /> },
+    { valor: "gpt", rotulo: "GPT", icone: isMobile ? undefined : <ExternalLink className="h-3.5 w-3.5" /> },
+  ];
+  const posicoesDeDock: Array<{ valor: "bl" | "bc" | "br"; rotulo: string; simbolo: string }> = [
+    { valor: "bl", rotulo: "Encostar à esquerda", simbolo: "◧" },
+    { valor: "bc", rotulo: "Centralizar embaixo", simbolo: "▬" },
+    { valor: "br", rotulo: "Encostar à direita", simbolo: "◨" },
+  ];
+  const statusDaSincronia =
+    docSyncing === "saving" ? "Salvando" : docSyncing === "saved" ? "Sincronizado" : docSyncing === "error" ? "Erro ao salvar" : "Sincronia automática";
+
+
+  const comandosDasNotas = slashMenu?.where === "notes"
+    ? buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))
+    : [];
+  const aoDigitarNasNotas = {
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => handleTextChange("notes", e.target.value, e.target.selectionStart),
+    onKeyUp: (e: React.KeyboardEvent<HTMLTextAreaElement>) => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart),
+    onClick: (e: React.MouseEvent<HTMLTextAreaElement>) => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart),
+    onPaste: onNotesPaste,
+  };
+  const classeDoEditor = cn(
+    "block h-full w-full min-w-0 resize-none rounded-md border border-input bg-background px-4 py-3 font-sans text-[13.5px] leading-[1.8] text-foreground placeholder:text-muted-foreground transition-colors",
+    foco,
+  );
 
   return (
     <div
+      aria-label="Studio"
       className={cn(
         "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
         isMobile && isFull ? "z-[120]" : "z-40",
-        isFull ? "rounded-none border-t" : "rounded-2xl border",
+        isFull ? "rounded-none border-t" : "rounded-lg border",
         dockPos, dockSize
       )}
       style={
@@ -878,168 +923,179 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             }
           : undefined
       }
-
     >
-      {/* Header unificado: nome + tabs (centralizadas) + controles */}
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 sm:px-3 h-[52px] sm:h-[48px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
-        {/* Esquerda: voltar/ícone + Studio */}
-        <div className="flex items-center gap-2 min-w-0">
-          {isMobile && !minimized ? (
-            <button
-              onClick={() => setOpen(false)}
-              title="Voltar"
-              className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground shrink-0"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-          ) : (
-            <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-            </div>
+      {/* Cabeçalho fixo: nome e "?", os modos (3: segmentado), posição e minimizar. */}
+      <div className="flex h-[52px] min-w-0 shrink-0 items-center border-b border-border px-2 sm:h-12 sm:px-3">
+        {isMobile && !minimized ? (
+          <button type="button" onClick={() => setOpen(false)} aria-label="Voltar" title="Voltar" className={cn(botao.icone, "-ml-1 mr-1 h-9 w-9 text-foreground")}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : (
+          <span className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+        )}
+        <h2 className={cn("mr-1 shrink-0 text-[14px] font-semibold leading-5 text-foreground", isMobile && !minimized && "sr-only")}>Studio</h2>
+        {!minimized && (
+          <AjudaRecolhida rotulo="O que é o Studio" className="mr-2">
+            Contexto: converse com o agente; as notas do projeto são a memória dele. Notas: o editor, com / para estruturar, @ para anexar arquivo, imagem colada vira texto e link de vídeo vira player. GPT: copia o contexto para o GPT externo e traz a resposta de volta.
+          </AjudaRecolhida>
+        )}
+        <div className="flex min-w-0 flex-1 justify-center">
+          {!minimized && (
+            <SeletorCompacto
+              opcoes={opcoesDeModo}
+              valor={mode}
+              onEscolher={(v) => setMode(v as Mode)}
+              rotulo="Modo do Studio"
+              modo="segmentado"
+              larguraTotal={isMobile}
+            />
           )}
-          <p className="text-[13px] font-semibold leading-tight shrink-0 tracking-tight">Studio</p>
         </div>
-
-        {/* Centro: tabs segmentadas centralizadas */}
-        {!minimized ? (
-          <div className="flex justify-center">
-            <div className="flex items-center gap-0.5 border border-border/70 rounded-full p-0.5 bg-background/70 shadow-sm">
-              {[
-                { k: "context", icon: Brain,        label: "Contexto" },
-                { k: "notes",   icon: NotebookPen,  label: "Notas" },
-                { k: "gpt",     icon: ExternalLink, label: "GPT" },
-              ].map(t => {
-                const active = mode === t.k;
-                const Icon = t.icon;
-                return (
-                  <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                    title={t.label}
-                    className={cn("flex items-center gap-1.5 h-7 px-2.5 sm:px-3 rounded-full text-[11.5px] font-medium transition-all",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}>
-                    <Icon className="w-3.5 h-3.5" />
-                    <span className={cn(active ? "inline" : "hidden sm:inline")}>{t.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : <div />}
-
-        {/* Direita: dock + minimizar */}
-        <div className="flex items-center gap-1 justify-end">
+        <div className="ml-2 flex shrink-0 items-center">
           {!minimized && !isMobile && (
-            <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
-              <button onClick={() => setDock("bl")} title="Dock esquerda"
-                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
-              <button onClick={() => setDock("bc")} title="Centralizar embaixo"
-                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
-              <button onClick={() => setDock("br")} title="Dock direita"
-                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
-              <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
-                className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
-                {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            <>
+              <div role="group" aria-label="Posição do Studio" className="mr-1 inline-flex h-8 items-center rounded-md bg-muted p-0.5">
+                {posicoesDeDock.map((p) => (
+                  <button
+                    key={p.valor}
+                    type="button"
+                    onClick={() => setDock(p.valor)}
+                    aria-pressed={dock === p.valor}
+                    aria-label={p.rotulo}
+                    title={p.rotulo}
+                    className={cn(
+                      "inline-flex h-7 w-7 items-center justify-center rounded text-[11px] transition-colors",
+                      dock === p.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      foco,
+                    )}
+                  >
+                    <span aria-hidden="true">{p.simbolo}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDock(isFull ? "bc" : "full")}
+                aria-pressed={isFull}
+                aria-label={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+                title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+                className={cn(botao.icone, isFull && "bg-muted text-foreground")}
+              >
+                {isFull ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
               </button>
-            </div>
+            </>
           )}
-          <button onClick={() => setMinimized(m => !m)} className="h-9 w-9 sm:h-8 sm:w-8 flex items-center justify-center rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
-            {minimized ? <ChevronDown className="w-4 h-4 rotate-180" /> : <Minus className="w-4 h-4" />}
+          <button
+            type="button"
+            onClick={() => setMinimized(m => !m)}
+            aria-label={minimized ? "Expandir" : "Minimizar"}
+            title={minimized ? "Expandir" : "Minimizar"}
+            className={cn(botao.icone, "h-9 w-9 sm:h-8 sm:w-8")}
+          >
+            {minimized ? <ChevronDown className="h-4 w-4 rotate-180" aria-hidden="true" /> : <Minus className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {!minimized && (
         <>
-          {/* Barra de contexto: chip único de escopo + projeto + ações */}
-          <div className="border-b border-border/70 bg-muted/20 shrink-0 px-2 sm:px-3 py-2 sm:py-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px]">
-            {/* Escopo · label limpo + 2 ações inline (recarregar / copiar contexto) */}
-            <div className="flex items-center h-8 sm:h-7 rounded-full border border-border/70 bg-background/70 pl-2.5 pr-1 shrink-0 max-w-full">
-              <Globe2 className="w-3.5 h-3.5 text-primary/80 shrink-0" />
-              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[240px] sm:max-w-[300px]" title={scopeChipLabel}>
+          {/* Linha de contexto: escopo, projeto vinculado e as ações do documento. Sem caixa dentro de caixa. */}
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-2 py-1 sm:px-3">
+            <div className="mr-2 flex min-w-0 max-w-full items-center py-0.5">
+              <Globe2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="min-w-0 truncate text-[12.5px] font-medium text-foreground sm:max-w-[300px]" title={scopeChipLabel}>
                 {scopeChipLabel}
               </span>
-              <span className="mx-1.5 h-4 w-px bg-border/70 shrink-0" />
               <button
+                type="button"
                 onClick={() => { try { window.dispatchEvent(new CustomEvent("studio:pull-context")); } catch {} toast({ title: "Contexto atualizado", description: "Recarreguei os dados do escopo." }); }}
-                title="Puxar contexto (recarregar dados do escopo)"
-                className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Puxar contexto"
+                title="Puxar contexto (recarregar os dados do escopo)"
+                className={cn(botao.icone, "ml-1 h-7 w-7")}
               >
-                <Brain className="w-3.5 h-3.5" />
+                <Brain className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
               <button
+                type="button"
                 onClick={async () => {
                   const project = projects.find(p => p.id === projectId)?.name;
                   const payload = `${contextLabel}${project ? ` › ${project}` : ""}`;
                   try { await navigator.clipboard.writeText(payload); toast({ title: "Contexto copiado", description: payload }); } catch { /* ignore */ }
                 }}
-                title="Enviar contexto (copiar caminho para colar em outro lugar)"
-                className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Copiar o caminho do contexto"
+                title="Copiar o caminho do contexto para colar em outro lugar"
+                className={cn(botao.icone, "h-7 w-7")}
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
 
-            {/* Projeto (pill combobox) · largura contida, não estoura */}
-            <div className="relative min-w-0 flex-1 sm:flex-none sm:w-[220px] max-w-full">
-              <FolderIcon className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative mr-2 min-w-0 flex-1 py-0.5 sm:w-[220px] sm:flex-none">
+              <FolderIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <select
                 value={projectId ?? ""}
                 onChange={e => setProjectId(e.target.value || null)}
-                className="w-full appearance-none bg-background/70 border border-border/70 rounded-full pl-8 pr-7 h-8 sm:h-7 text-[11.5px] font-medium text-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 truncate"
-                title="Vincule um projeto para publicar/espelhar ao cliente"
+                aria-label="Projeto vinculado"
+                title="Vincule um projeto para publicar e espelhar ao cliente"
+                className={cn(campo, "appearance-none truncate pl-8 pr-7")}
               >
                 <option value="">Sem projeto</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             </div>
 
             {projectId && (
-              <span className={cn("hidden sm:flex text-[10px] items-center gap-1 shrink-0 px-1",
-                docSyncing === "saving" && "text-amber-500",
-                docSyncing === "saved" && "text-primary",
-                docSyncing === "error" && "text-destructive",
-                docSyncing === "idle" && "text-muted-foreground")}
-                title={docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}>
-                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
-                {docSyncing === "saved" && <Check className="w-3 h-3" />}
-                {docSyncing === "error" && <X className="w-3 h-3" />}
+              <span
+                className={cn("hidden h-7 w-5 shrink-0 items-center justify-center sm:flex",
+                  docSyncing === "saving" && "text-amber-500",
+                  docSyncing === "saved" && "text-primary",
+                  docSyncing === "error" && "text-destructive",
+                  docSyncing === "idle" && "text-muted-foreground")}
+                title={statusDaSincronia}
+                role="status"
+              >
+                <span className="sr-only">{statusDaSincronia}</span>
+                {docSyncing === "saving" && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                {docSyncing === "saved" && <Check className="h-3 w-3" aria-hidden="true" />}
+                {docSyncing === "error" && <X className="h-3 w-3" aria-hidden="true" />}
               </span>
             )}
 
-            {/* Ações agrupadas · sem ml-auto pra não deixar buraco visual */}
-            <div className="flex items-center shrink-0 rounded-full border border-border/70 bg-background/70 overflow-hidden h-8 sm:h-7 divide-x divide-border/70 ml-auto sm:ml-0">
+            <div className="ml-auto flex shrink-0 items-center py-0.5 [&>*+*]:ml-0.5">
               <button
+                type="button"
                 onClick={() => setAutoFix(v => !v)}
-                title={`Auto-fix ${autoFix ? "ativo" : "inativo"}`}
-                className={cn("h-full w-8 sm:w-7 flex items-center justify-center transition-colors",
-                  autoFix ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}
+                aria-pressed={autoFix}
+                aria-label={`Organizar sozinho: ${autoFix ? "ligado" : "desligado"}`}
+                title={`Organizar sozinho ${autoFix ? "ligado" : "desligado"}`}
+                className={cn(botao.icone, autoFix && "bg-primary/10 text-primary hover:text-primary")}
               >
-                {reflowBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                {reflowBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />}
               </button>
-              <button onClick={togglePublish}
+              <button
+                type="button"
+                onClick={togglePublish}
+                aria-pressed={docPublished}
+                aria-label={docPublished ? "Publicado ao vivo (tirar a publicação)" : "Publicar para o cliente"}
                 title={docPublished ? "Publicado ao vivo" : "Publicar para o cliente"}
-                className={cn("h-full w-8 sm:w-7 flex items-center justify-center transition-colors",
-                  docPublished ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}>
-                <Radio className="w-3.5 h-3.5" />
+                className={cn(botao.icone, docPublished && "bg-primary/10 text-primary hover:text-primary")}
+              >
+                <Radio className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
-              <button onClick={downloadPDF}
-                title="Exportar PDF"
-                className="h-full w-8 sm:w-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors">
-                <Download className="w-3.5 h-3.5" />
+              <button type="button" onClick={downloadPDF} aria-label="Exportar PDF" title="Exportar PDF" className={botao.icone}>
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>
 
-
-
-
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
             {mode === "context" && (
-              <div className="grid h-full min-h-0 gap-3 p-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
-                <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-background/65">
+              <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
+                <section aria-label="Agente" className="min-h-0 min-w-0 overflow-hidden">
                   <AgentChat
                     clientId={effectiveClientId}
                     clientName={effectiveClientName}
@@ -1095,14 +1151,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   />
                 </section>
 
-                <aside className="min-h-0 hidden lg:flex flex-col overflow-hidden rounded-xl border border-border bg-card/45">
-                  <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-                    <NotebookPen className="h-4 w-4 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-medium text-foreground">Notas do projeto</p>
-                      <p className="truncate text-[11px] text-muted-foreground">O agente usa este conteúdo como memória de trabalho.</p>
-                    </div>
-                    <button onClick={() => setMode("notes")} className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+                <aside aria-label="Notas do projeto" className="hidden min-h-0 min-w-0 flex-col overflow-hidden border-l border-border lg:flex">
+                  <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
+                    <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Notas do projeto</h3>
+                    <AjudaRecolhida rotulo="Sobre as notas do projeto" className="ml-1.5">
+                      O agente usa este conteúdo como memória de trabalho. Use / para estruturar e @ para anexar arquivos.
+                    </AjudaRecolhida>
+                    <button type="button" onClick={() => setMode("notes")} className={cn(botao.discreto, "ml-auto h-8")}>
                       Abrir editor
                     </button>
                   </div>
@@ -1110,96 +1166,97 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     <textarea
                       ref={notesRef}
                       value={state.notes}
-                      onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
-                      onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                      onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                      onPaste={onNotesPaste}
-                      placeholder="Anote decisões, respostas e próximos passos. Use / para estruturar e @ para anexar arquivos."
-                      className="h-full min-h-[280px] w-full resize-none rounded-lg border border-border bg-background/75 p-5 font-sans text-[14px] leading-[1.85] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                      {...aoDigitarNasNotas}
+                      aria-label="Notas do projeto"
+                      placeholder="Decisões, respostas e próximos passos."
+                      className={cn(classeDoEditor, "min-h-[280px]")}
                     />
                     {mentionQuery?.where === "notes" && mentionMatches.length > 0 && <MentionList items={mentionMatches} onPick={insertMention} />}
-                    {slashMenu?.where === "notes" && (
-                      <SlashList
-                        items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
-                        onPick={insertSlash}
-                      />
-                    )}
+                    {slashMenu?.where === "notes" && <SlashList items={comandosDasNotas} onPick={insertSlash} />}
                   </div>
                 </aside>
               </div>
             )}
             {mode === "notes" && (
-              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="flex h-full min-h-0 flex-col">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
                 {isMobile && (
-                  <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background/60 p-1 text-[12px]">
-                    <button
-                      onClick={() => setMobileNotesTab("editor")}
-                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
-                    >Notas</button>
-                    <button
-                      onClick={() => setMobileNotesTab("preview")}
-                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
-                    >Preview</button>
+                  <div className="shrink-0 border-b border-border px-3 py-2">
+                    <SeletorCompacto
+                      opcoes={[{ valor: "editor", rotulo: "Notas" }, { valor: "preview", rotulo: "Preview" }]}
+                      valor={mobileNotesTab}
+                      onEscolher={(v) => setMobileNotesTab(v as "editor" | "preview")}
+                      rotulo="Ver"
+                      modo="segmentado"
+                      larguraTotal
+                    />
                   </div>
                 )}
 
                 <div className={cn(
-                  "grid flex-1 min-h-0 gap-3",
+                  "grid min-h-0 flex-1",
                   isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
                 )}>
-                  <section className={cn(
-                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70",
-                    isMobile && mobileNotesTab !== "editor" && "hidden"
-                  )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground shrink-0">
-                      <NotebookPen className="h-3.5 w-3.5 text-primary" />
-                      <span className="font-medium text-foreground/80">Notas de trabalho</span>
-                      <span className="hidden sm:inline">/ comandos · @ arquivos · imagem ou link de vídeo</span>
-                      {ocrBusy && <span className="ml-auto text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR</span>}
+                  <section
+                    aria-label="Notas de trabalho"
+                    className={cn(
+                      "flex min-h-0 min-w-0 flex-col overflow-hidden",
+                      isMobile && mobileNotesTab !== "editor" && "hidden"
+                    )}
+                  >
+                    <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
+                      <NotebookPen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Notas de trabalho</h3>
+                      <AjudaRecolhida rotulo="Comandos das notas" className="ml-1.5">
+                        / abre os comandos, @ anexa um arquivo da pasta, imagem colada vira texto e link de vídeo colado vira player.
+                      </AjudaRecolhida>
+                      {ocrBusy && (
+                        <span className="ml-3 inline-flex shrink-0 items-center text-[12px] text-primary" role="status">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> Lendo a imagem
+                        </span>
+                      )}
                       <button
+                        type="button"
                         onClick={() => setState(s => ({ ...s, notes: (s.notes ? s.notes.replace(/\n?@help\n?/g, "") : "") + "\n@help\n" }))}
-                        className="ml-auto text-[10px] px-2 py-1 rounded-md border border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
-                        title="Mostrar guia de comandos inline"
-                      >Ajuda</button>
+                        className={cn(botao.discreto, "ml-auto h-8")}
+                        title="Mostrar o guia de comandos dentro da nota"
+                      >
+                        Guia
+                      </button>
                     </div>
-                    <div className="relative flex-1 min-h-0 p-3">
+                    <div className="relative min-h-0 flex-1 p-3">
                       <textarea
                         ref={notesRef}
                         value={state.notes}
-                        onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
-                        onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                        onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                        onPaste={onNotesPaste}
-                        placeholder="Escreva ou cole o material aqui. Use / para estruturar e @ para anexar arquivos."
-                        className="h-full w-full resize-none overflow-y-auto rounded-lg border border-border bg-card/70 p-4 sm:p-5 font-sans text-[14px] leading-[1.7] sm:leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 sm:min-h-[360px]"
+                        {...aoDigitarNasNotas}
+                        aria-label="Notas de trabalho"
+                        placeholder="Escreva ou cole o material aqui."
+                        className={cn(classeDoEditor, "overflow-y-auto sm:min-h-[360px]")}
                       />
                       {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                         <MentionList items={mentionMatches} onPick={insertMention} />
                       )}
-                      {slashMenu?.where === "notes" && (
-                        <SlashList
-                          items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
-                          onPick={insertSlash}
-                        />
-                      )}
+                      {slashMenu?.where === "notes" && <SlashList items={comandosDasNotas} onPick={insertSlash} />}
                     </div>
                   </section>
 
-                  <aside className={cn(
-                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50",
-                    isMobile && mobileNotesTab !== "preview" && "hidden"
-                  )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
-                      <FileText className="h-3.5 w-3.5 text-primary" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-medium text-foreground/85">Documento estruturado</p>
-                        <p className="truncate text-[10px] text-muted-foreground">Preview, chips e publicação no mesmo fluxo.</p>
-                      </div>
+                  <aside
+                    aria-label="Documento estruturado"
+                    className={cn(
+                      "flex min-h-0 min-w-0 flex-col overflow-hidden md:border-l md:border-border",
+                      isMobile && mobileNotesTab !== "preview" && "hidden"
+                    )}
+                  >
+                    <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-2">
+                      <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">Documento</h3>
+                      <AjudaRecolhida rotulo="Sobre o documento" className="ml-1.5">
+                        Preview das notas: marque as caixas, veja vídeos e o Kanban vivo. Publicado, é isto que o cliente vê na aba Documento.
+                      </AjudaRecolhida>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
                       {state.notes.trim().length > 0 ? (
                         <NotesPreview
                           src={state.notes}
@@ -1208,41 +1265,40 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                           onChange={(next) => setState(s => ({ ...s, notes: next }))}
                         />
                       ) : (
-                        <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border text-center text-[12px] leading-relaxed text-muted-foreground">
-                          O preview aparece aqui conforme você escreve.
-                        </div>
+                        <EstadoVazio compacto titulo="Nada para mostrar." descricao="O preview aparece conforme você escreve." />
                       )}
                     </div>
 
                     {!!state.mentions.length && (
-                      <div className="flex flex-wrap gap-1 border-t border-border px-3 py-2">
+                      <div className="flex shrink-0 flex-wrap border-t border-border px-3 pb-1 pt-2" aria-label="Arquivos citados">
                         {state.mentions.map(m => (
-                          <button key={m.id} onClick={() => onOpenFile?.(m.id)}
-                            className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1">
-                            <Link2 className="w-2.5 h-2.5" /> {m.name}
+                          <button key={m.id} type="button" onClick={() => onOpenFile?.(m.id)}
+                            className={cn(etiqueta, "mb-1 mr-1 max-w-full bg-primary/10 text-primary hover:bg-primary/20", foco)}>
+                            <Link2 className="mr-1 h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{m.name}</span>
                           </button>
                         ))}
                       </div>
                     )}
                     {(enrichBusy || enrichData) && (
-                      <div className="border-t border-border bg-background/60 p-3 space-y-2">
-                        <div className="text-[10px] uppercase tracking-wider text-primary flex items-center gap-1">
-                          <Zap className="w-3 h-3" /> Enriquecimento{enrichBusy && " em andamento"}
-                        </div>
-                        {enrichData?.suggestion && <div className="text-[11px] leading-relaxed text-foreground/80">{enrichData.suggestion}</div>}
-                        <div className="flex flex-wrap gap-1">
+                      <div className="shrink-0 space-y-2 border-t border-border px-3 py-2.5">
+                        <p className={cn(texto.rotulo, "flex items-center text-primary")}>
+                          <Zap className="mr-1 h-3 w-3" aria-hidden="true" /> Sugestões do agente{enrichBusy && ": lendo"}
+                        </p>
+                        {enrichData?.suggestion && <p className="text-[12px] leading-5 text-foreground/85">{enrichData.suggestion}</p>}
+                        <div className="-mb-1 flex flex-wrap">
                           {enrichData?.checklist?.length ? (
-                            <button onClick={acceptEnrichChecklist} className="text-[10px] px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                            <button type="button" onClick={acceptEnrichChecklist} className={cn(botao.secundario, "mb-1 mr-1 h-8 text-[12px]")}>
                               Adicionar checklist ({enrichData.checklist.length})
                             </button>
                           ) : null}
                           {enrichData?.next_actions?.length ? (
-                            <button onClick={acceptEnrichActions} className="text-[10px] px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                            <button type="button" onClick={acceptEnrichActions} className={cn(botao.secundario, "mb-1 mr-1 h-8 text-[12px]")}>
                               Adicionar ações ({enrichData.next_actions.length})
                             </button>
                           ) : null}
                           {enrichData && !enrichData.checklist?.length && !enrichData.next_actions?.length && (
-                            <span className="text-[10px] text-muted-foreground">sem sugestões novas</span>
+                            <span className={cn(texto.auxiliar, "mb-1")}>Sem sugestões novas.</span>
                           )}
                         </div>
                       </div>
@@ -1340,17 +1396,17 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
       paddingTop: "env(safe-area-inset-top)",
       paddingBottom: "env(safe-area-inset-bottom)",
     }}>
-      <div className="flex items-center justify-between gap-2 px-2 sm:px-3 h-14 border-b border-border shrink-0 bg-card">
-        <button onClick={onClose} className="flex items-center gap-1.5 h-10 px-3 rounded-md hover:bg-secondary text-foreground text-[13px] font-medium">
-          <ArrowLeft className="w-4 h-4" /> Voltar
+      <div className="flex h-14 min-w-0 shrink-0 items-center justify-between border-b border-border bg-card px-2 sm:px-3">
+        <button type="button" onClick={onClose} className={cn(botao.discreto, "text-foreground")}>
+          <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" /> Voltar
         </button>
-        <p className="text-[12px] font-semibold truncate flex-1 text-center hidden sm:block">Pré-visualização do PDF</p>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={doDownload} className="flex items-center gap-1.5 h-10 px-3 rounded-md border border-border hover:bg-secondary text-foreground text-[13px] font-medium">
-            <Download className="w-4 h-4" /> Salvar
+        <h2 className="mx-2 hidden min-w-0 flex-1 truncate text-center text-[13px] font-semibold sm:block">Pré-visualização do PDF</h2>
+        <div className="flex shrink-0 items-center [&>*+*]:ml-2">
+          <button type="button" onClick={doDownload} className={botao.secundario}>
+            <Download className="mr-1.5 h-4 w-4" aria-hidden="true" /> Salvar
           </button>
-          <button onClick={doPrint} className="flex items-center gap-1.5 h-10 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium">
-            <Download className="w-4 h-4" /> Imprimir
+          <button type="button" onClick={doPrint} className={botao.primario}>
+            <Download className="mr-1.5 h-4 w-4" aria-hidden="true" /> Imprimir
           </button>
         </div>
       </div>
@@ -1669,8 +1725,11 @@ export function NotesPreview({ src, clientId, clientName, onChange }: { src: str
     const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
     if (v) {
       out.push(
-        <div key={i} className="my-2 aspect-video w-full max-w-md rounded overflow-hidden border border-border">
-          <iframe src={v[2]} className="w-full h-full" allow="autoplay; encrypted-media" allowFullScreen title={v[1]} />
+        // Proporção 16:9 por padding-bottom (sem aspect-ratio, Safari 11).
+        <div key={i} className="my-2 w-full max-w-md overflow-hidden rounded border border-border">
+          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+            <iframe src={v[2]} className="absolute inset-0 h-full w-full" allow="autoplay; encrypted-media" allowFullScreen title={v[1]} />
+          </div>
         </div>
       );
       return;
@@ -1690,10 +1749,10 @@ export function NotesPreview({ src, clientId, clientName, onChange }: { src: str
           key={i}
           type="button"
           onClick={() => toggleAt(i)}
-          className="flex items-start gap-2 text-[13px] py-1 w-full text-left bg-transparent border-0 hover:bg-secondary/40 rounded px-1 -mx-1 cursor-pointer touch-manipulation"
+          className="flex items-start text-[13px] py-1 w-full text-left bg-transparent border-0 hover:bg-secondary/40 rounded px-1 -mx-1 cursor-pointer touch-manipulation"
           style={{ paddingLeft: cb[1].length * 6 + 4 }}
         >
-          <span className={cn("mt-[3px] w-4 h-4 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/50")}>
+          <span className={cn("mr-2 mt-[3px] w-4 h-4 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/50")}>
             {checked && <Check className="w-3 h-3 text-primary-foreground" />}
           </span>
           <span className={checked ? "line-through text-muted-foreground" : "text-foreground"}>{cb[3]}</span>
@@ -1805,7 +1864,7 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
           <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
             {cols.map(col => (
               <div key={col.key} className="bg-secondary/30 rounded-lg p-2 space-y-1.5">
-                <div className="text-[10px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
+                <div className="text-[11px] font-semibold text-muted-foreground px-1 flex items-center justify-between">
                   <span>{col.title}</span>
                   <span className="text-[9px] opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
                 </div>
@@ -1964,8 +2023,8 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
       </div>
       {!clientId ? (
         <p className="p-3 text-[11px] text-muted-foreground">Selecione um cliente no Workspace para ver o Kanban.</p>
-      ) : loading ? (
-        <div className="p-4 flex items-center justify-center text-muted-foreground text-[11px]"><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> carregando…</div>
+      ) : loading && tasks.length === 0 ? (
+        <Carregando rotulo="Carregando o Kanban" linhas={2} className="p-3" />
       ) : !projectId ? (
         <p className="p-3 text-[11px] text-muted-foreground">Este cliente ainda não tem projeto ativo.</p>
       ) : (
@@ -1989,7 +2048,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                   dropCol === col.key ? "bg-primary/10 ring-1 ring-primary/40" : "bg-background/60"
                 )}
               >
-                <div className="text-[9px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
+                <div className="text-[11px] font-semibold text-muted-foreground px-1 flex items-center justify-between">
                   <span>{col.title}</span>
                   <span className="opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
                 </div>
@@ -2064,12 +2123,12 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
   return (
-    <div className="absolute bottom-2 left-2 right-2 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-10">
+    <div className="absolute bottom-2 left-2 right-2 z-10 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl" aria-label="Arquivos para anexar">
       {items.map(f => (
-        <button key={f.id} onClick={() => onPick(f)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
-          <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="truncate">{f.name}</span>
+        <button key={f.id} type="button" onClick={() => onPick(f)}
+          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="min-w-0 truncate">{f.name}</span>
         </button>
       ))}
     </div>
@@ -2079,16 +2138,14 @@ function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef)
 function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd) => void }) {
   if (!items.length) return null;
   return (
-    <div className="absolute bottom-2 left-2 right-2 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-10 max-h-[240px] overflow-y-auto">
-      <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
-        Comandos
-      </div>
+    <div className="absolute bottom-2 left-2 right-2 z-10 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+      <p className={cn(texto.rotulo, "border-b border-border px-3 py-1.5")}>Comandos</p>
       {items.map(c => (
-        <button key={c.key} onClick={() => onPick(c)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
-          <Sparkles className="w-3 h-3 text-primary shrink-0" />
-          <span className="font-medium">{c.label}</span>
-          <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
+        <button key={c.key} type="button" onClick={() => onPick(c)}
+          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+          <span className="shrink-0 font-medium">{c.label}</span>
+          <span className="ml-auto min-w-0 truncate pl-2 text-[11px] text-muted-foreground">{c.hint}</span>
         </button>
       ))}
     </div>
@@ -2197,23 +2254,29 @@ function GroupedThreadList({
   });
 
   if (!threads.length) {
-    return <div className="flex-1 min-h-0 overflow-y-auto"><p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p></div>;
+    return (
+      <div className="min-h-0 flex-1 p-2">
+        <EstadoVazio compacto titulo="Nenhuma conversa ainda." />
+      </div>
+    );
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
+    <RegiaoRolavel modo="sempre" sobre="cartao" rotulo="Lista de conversas" memoria="workspace:estudio:conversas">
       {orderedClients.map(([cid, group]) => {
         const clientKey = `c:${cid}`;
         const clientCollapsed = collapsed[clientKey] === true;
         const totalInClient = Array.from(group.folders.values()).reduce((n, arr) => n + arr.length, 0);
         return (
-          <div key={cid} className="border-b border-border/60 last:border-b-0">
+          <div key={cid} className="border-b border-border last:border-b-0">
             <button
+              type="button"
               onClick={() => toggle(clientKey)}
-              className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-secondary/60 bg-secondary/25">
-              <ChevronRight className={cn("w-3 h-3 text-muted-foreground transition-transform", !clientCollapsed && "rotate-90")} />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/90 flex-1 truncate">{group.name}</span>
-              <span className="text-[9px] text-muted-foreground tabular-nums">{totalInClient}</span>
+              aria-expanded={!clientCollapsed}
+              className={cn("flex w-full min-w-0 items-center px-2 py-1.5 text-left hover:bg-muted", foco)}>
+              <ChevronRight className={cn("mr-1.5 h-3 w-3 shrink-0 text-muted-foreground transition-transform", !clientCollapsed && "rotate-90")} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">{group.name}</span>
+              <span className="ml-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">{totalInClient}</span>
             </button>
             {!clientCollapsed && Array.from(group.folders.entries())
               .sort(([a], [b]) => (a === "_root" ? -1 : b === "_root" ? 1 : a.localeCompare(b)))
@@ -2224,22 +2287,34 @@ function GroupedThreadList({
                 return (
                   <div key={fkey}>
                     <button
+                      type="button"
                       onClick={() => toggle(folderKey)}
-                      className="w-full flex items-center gap-1.5 pl-4 pr-2 py-1 text-left hover:bg-secondary/40">
-                      <ChevronRight className={cn("w-3 h-3 text-muted-foreground/70 transition-transform", !folderCollapsed && "rotate-90")} />
-                      <span className="text-[10px] text-muted-foreground truncate flex-1">{label}</span>
-                      <span className="text-[9px] text-muted-foreground/70 tabular-nums">{list.length}</span>
+                      aria-expanded={!folderCollapsed}
+                      className={cn("flex w-full min-w-0 items-center py-1 pl-4 pr-2 text-left hover:bg-muted", foco)}>
+                      <ChevronRight className={cn("mr-1.5 h-3 w-3 shrink-0 text-muted-foreground transition-transform", !folderCollapsed && "rotate-90")} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">{label}</span>
+                      <span className="ml-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">{list.length}</span>
                     </button>
                     {!folderCollapsed && list.map(t => (
                       <div key={t.id}
-                        className={cn("group flex items-center gap-1 pl-7 pr-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
-                          activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
-                        onClick={() => onSelect(t.id)}>
-                        <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="text-[11px] truncate flex-1">{t.title}</span>
-                        <button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
-                          className="p-0.5 hover:text-destructive opacity-0 group-hover:opacity-100">
-                          <Trash2 className="w-3 h-3" />
+                        className={cn("group flex min-w-0 items-center border-l-2 py-1 pl-7 pr-1 hover:bg-muted",
+                          activeId === t.id ? "border-primary bg-muted" : "border-transparent")}>
+                        <button
+                          type="button"
+                          onClick={() => onSelect(t.id)}
+                          aria-current={activeId === t.id ? "true" : undefined}
+                          className={cn("flex min-w-0 flex-1 items-center rounded-sm py-0.5 text-left", foco)}
+                        >
+                          <MessageSquare className="mr-1.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate text-[12px]">{t.title}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                          aria-label={`Apagar a conversa ${t.title}`}
+                          title="Apagar a conversa"
+                          className={cn("ml-1 shrink-0 rounded p-1 text-muted-foreground hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100", foco)}>
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
                         </button>
                       </div>
                     ))}
@@ -2249,7 +2324,7 @@ function GroupedThreadList({
           </div>
         );
       })}
-    </div>
+    </RegiaoRolavel>
   );
 }
 
@@ -2263,7 +2338,8 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
   onAppendToNotes: (text: string) => void;
 }) {
   const { toast } = useToast();
-  const [pasted, setPasted] = useState("");
+  // Rascunho da resposta colada: sair e voltar mantém.
+  const [pasted, setPasted] = useEstadoDaTela<string>("workspace:estudio:gpt-retorno", "", { validar: (v) => typeof v === "string" });
 
   const contextText = useMemo(() => [
     `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
@@ -2288,74 +2364,61 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
   };
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Agente GPT</div>
-          <div className="text-sm font-semibold truncate">{clientName || "Contexto global"}</div>
-          <div className="text-[10px] text-muted-foreground truncate">/{folderPath || "raiz"}</div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={copyContext}
-            className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-1"
-            title="Copiar contexto para usar no GPT"
-          >
-            <Copy className="w-3 h-3" /> Copiar
-          </button>
-          <button
-            onClick={openGpt}
-            className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 flex items-center gap-1"
-            title="Abrir GPT externo com o contexto copiado"
-          >
-            <ExternalLink className="w-3 h-3" /> Abrir GPT
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border bg-background overflow-hidden">
-        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
-          <Brain className="w-3 h-3" /> Contexto preparado
-        </div>
-        <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words p-3 text-[10.5px] leading-relaxed text-foreground/80 font-mono">
+    <div className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4">
+      <Secao
+        titulo="GPT externo"
+        descricao={<span className="block truncate">{clientName || "Contexto global"} · /{folderPath || "raiz"}</span>}
+        ajuda="Copia o contexto do Studio (notas, roteiro e arquivos da pasta) e abre o Prepro Director GPT. Cole a resposta dele abaixo para mandar às Notas."
+        acao={
+          <>
+            <button type="button" onClick={copyContext} className={cn(botao.secundario, "h-8")} title="Copiar contexto para usar no GPT">
+              <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar
+            </button>
+            <button type="button" onClick={openGpt} className={cn(botao.primario, "h-8")} title="Abrir o GPT externo com o contexto copiado">
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Abrir GPT
+            </button>
+          </>
+        }
+      >
+        <p className={cn(texto.rotulo, "mb-1.5")}>Contexto preparado</p>
+        <pre className={cn(superficie.poco, "max-h-[220px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-foreground/80")}>
           {contextText}
         </pre>
-      </div>
+      </Secao>
 
-      <div className="rounded-lg border border-border bg-background overflow-hidden">
-        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
-          <ClipboardPaste className="w-3 h-3" /> Retorno do GPT
-        </div>
-        <div className="p-2 space-y-2">
+      <Secao divisoria className="mt-5" titulo="Retorno do GPT" nivel={3}>
+        <CampoDeFormulario rotulo="Resposta do GPT" apoio="Vai para o fim das Notas.">
           <textarea
             value={pasted}
             onChange={e => setPasted(e.target.value)}
-            placeholder="Cole aqui a resposta do GPT externo para enviar às Notas."
-            className="w-full min-h-[180px] resize-y bg-background border border-border rounded-md p-2 text-[12px] leading-relaxed focus:outline-none focus:border-primary/50"
+            placeholder="Cole aqui a resposta do GPT externo."
+            className={cn(campoTexto, "min-h-[180px] resize-y")}
           />
-          <div className="flex items-center justify-end gap-1">
-            <button
-              onClick={() => setPasted("")}
-              disabled={!pasted.trim()}
-              className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40"
-            >
-              Limpar
-            </button>
-            <button
-              onClick={() => {
-                if (!pasted.trim()) return;
-                onAppendToNotes(pasted);
-                setPasted("");
-                toast({ title: "Enviado para Notas", description: "Resposta adicionada ao documento." });
-              }}
-              disabled={!pasted.trim()}
-              className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 disabled:opacity-40 flex items-center gap-1"
-            >
-              <ArrowRight className="w-3 h-3" /> Enviar para Notas
-            </button>
-          </div>
+        </CampoDeFormulario>
+        <div className="mt-3 flex items-center justify-end [&>*+*]:ml-2">
+          <button
+            type="button"
+            onClick={() => setPasted("")}
+            disabled={!pasted.trim()}
+            className={botao.discreto}
+          >
+            Limpar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!pasted.trim()) return;
+              onAppendToNotes(pasted);
+              setPasted("");
+              toast({ title: "Enviado para Notas", description: "Resposta adicionada ao documento." });
+            }}
+            disabled={!pasted.trim()}
+            className={botao.primario}
+          >
+            <ArrowRight className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Enviar para Notas
+          </button>
         </div>
-      </div>
+      </Secao>
     </div>
   );
 }
@@ -2373,8 +2436,12 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<AgentMsg[]>([]);
-  const [input, setInput] = useState("");
+  // Rascunho do campo, por cliente: sair e voltar (ou minimizar o Studio) mantém o texto.
+  const [input, setInput] = useEstadoDaTela<string>(`workspace:estudio:rascunho:${clientId || "global"}`, "", { validar: (v) => typeof v === "string" });
   const [streaming, setStreaming] = useState(false);
+  // Conversa lida (esqueleto só na primeira carga de cada conversa) e erro de leitura.
+  const [carregadoPara, setCarregadoPara] = useState<string | null>(null);
+  const [erroMsgs, setErroMsgs] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -2494,12 +2561,58 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
   async function loadMsgs(id: string) {
-    const { data } = await supabase.from("workspace_agent_messages")
+    setErroMsgs(false);
+    const { data, error } = await supabase.from("workspace_agent_messages")
       .select("id,role,content,created_at").eq("thread_id", id).order("created_at", { ascending: true });
+    if (error) setErroMsgs(true);
+    restaurarRolagem.current = id;
     setMsgs((data as AgentMsg[]) || []);
+    setCarregadoPara(id);
   }
 
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, streamBuf]);
+  // Rolagem com memória por conversa: ao abrir uma conversa volta onde parou;
+  // mensagem nova só desce até o fim se a pessoa já estava no fim.
+  const coladoNoFim = useRef(true);
+  const restaurarRolagem = useRef<string | null>(null);
+  const conversaAtiva = useRef<string | null>(activeId);
+  conversaAtiva.current = activeId;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const id = restaurarRolagem.current;
+    if (id) {
+      restaurarRolagem.current = null;
+      coladoNoFim.current = true;
+      const pos = lerEstadoDaTela<number | null>(`workspace:estudio:rolagem:${id}`, null, (v) => typeof v === "number" && v >= 0);
+      if (pos !== null && pos + el.clientHeight < el.scrollHeight - 24) {
+        el.scrollTop = pos;
+        coladoNoFim.current = false;
+        return;
+      }
+    }
+    if (coladoNoFim.current) el.scrollTop = el.scrollHeight;
+  }, [msgs, streamBuf]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let espera: number | null = null;
+    const aoRolar = () => {
+      coladoNoFim.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+      const id = conversaAtiva.current;
+      if (!id) return;
+      const pos = Math.round(el.scrollTop);
+      if (espera !== null) window.clearTimeout(espera);
+      espera = window.setTimeout(() => {
+        espera = null;
+        gravarEstadoDaTela(`workspace:estudio:rolagem:${id}`, pos);
+      }, 250);
+    };
+    el.addEventListener("scroll", aoRolar, { passive: true } as AddEventListenerOptions);
+    return () => {
+      el.removeEventListener("scroll", aoRolar);
+      if (espera !== null) window.clearTimeout(espera);
+    };
+  }, []);
 
   // Atalhos de teclado: Alt+↑/↓ alterna threads, Alt+N nova, Alt+B toggle sidebar, Esc fecha overlay mobile
   useEffect(() => {
@@ -2842,6 +2955,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     const currentAttachments = attached;
     setInput("");
     setAttached([]);
+    coladoNoFim.current = true;
     setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: visibleText, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamBuf("");
 
@@ -2918,35 +3032,180 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     } finally { setStreaming(false); }
   }
 
+  async function abrirGptExterno() {
+    const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
+    if (!active?.gpt_url) return;
+    const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
+    const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
+    const ctx = [
+      `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+      notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
+      script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+      availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
+      lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
+      lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
+      `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
+    ].filter(Boolean).join("\n");
+    try { await navigator.clipboard.writeText(ctx); toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." }); } catch { /* ignore */ }
+    window.open(active.gpt_url, "_blank", "noopener,noreferrer");
+  }
+
+  // Empacota a conversa inteira (mensagens, anexos, mídia, kanban, links e timeline) e manda para as Notas.
+  async function enviarConversaParaNotas() {
+    if (!onStructureToNotes) return;
+    if (!msgs.length) { toast({ title: "Nada para enviar", description: "Comece uma conversa primeiro." }); return; }
+    toast({ title: "Empacotando", description: "Reunindo conversa, anexos, mídia, kanban e timeline…" });
+
+    // ─── Cabeçalho ───
+    const header = [
+      `# Conversa do Studio`,
+      `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "raiz"}`,
+      `Exportado em ${new Date().toLocaleString("pt-BR")}`,
+      "",
+    ].join("\n");
+
+    // ─── Diálogo completo ───
+    const convo = msgs.map(m => {
+      const who = m.role === "user" ? "**Eu**" : "**Agente**";
+      return `### ${who}\n\n${(m.content || "").trim()}`;
+    }).join("\n\n---\n\n");
+
+    // ─── Anexos com miniaturas / players ───
+    const isImg = (s: string) => /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(s) || /^image\//i.test(s);
+    const isVid = (s: string) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s) || /^video\//i.test(s);
+    const attsLines = attached.map(a => {
+      const url = a.url || "";
+      const mime = a.meta || "";
+      if (url && (isImg(url) || isImg(mime))) return `- ![${a.name}](${url})\n  [Baixar](${url})`;
+      if (url && (isVid(url) || isVid(mime))) return `- 🎬 **${a.name}** · [Reproduzir](${url}) · [Baixar](${url})`;
+      if (url) return `- 📎 [${a.name}](${url})`;
+      return `- 📎 ${a.name} · ref \`wsfile:${a.id}\``;
+    });
+    const atts = attsLines.length ? `\n\n---\n\n## Anexos e mídia\n${attsLines.join("\n")}` : "";
+
+    // ─── Kanban do projeto (se houver projectId) ───
+    let kanbanBlock = "";
+    if (projectId) {
+      try {
+        const { data: tasks } = await supabase
+          .from("tasks")
+          .select("title,status,priority,due_date,description,assignee_id")
+          .eq("project_id", projectId)
+          .order("updated_at", { ascending: false })
+          .limit(120);
+        const rows = (tasks as any[]) || [];
+        if (rows.length) {
+          const ids = Array.from(new Set(rows.map(r => r.assignee_id).filter(Boolean)));
+          const names: Record<string, string> = {};
+          if (ids.length) {
+            const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", ids);
+            (profs as any[] || []).forEach(p => { names[p.id] = p.full_name || p.email || "-"; });
+          }
+          const cols: Record<string, any[]> = {};
+          rows.forEach(r => { const k = r.status || "sem-status"; (cols[k] ||= []).push(r); });
+          const order = ["todo", "doing", "review", "done", "sem-status"];
+          const sortedKeys = Object.keys(cols).sort((a, b) => (order.indexOf(a) + 100) - (order.indexOf(b) + 100));
+          const colBlocks = sortedKeys.map(k => {
+            const items = cols[k].slice(0, 20).map(t => {
+              const parts = [`**${t.title}**`];
+              if (t.priority) parts.push(`prioridade ${t.priority}`);
+              if (t.due_date) parts.push(`prazo ${t.due_date}`);
+              if (t.assignee_id && names[t.assignee_id]) parts.push(`resp. ${names[t.assignee_id]}`);
+              return `  - ${parts.join(" · ")}${t.description ? `\n    ${String(t.description).slice(0, 140)}` : ""}`;
+            }).join("\n");
+            return `### Coluna: ${k} (${cols[k].length})\n${items}`;
+          }).join("\n\n");
+          kanbanBlock = `\n\n---\n\n## Kanban do projeto\n${colBlocks}`;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // ─── Board log do Kanban recente ───
+    const boardBlock = boardLog?.length
+      ? `\n\n## Atividade recente do Kanban\n${boardLog.slice(0, 20).map(l => `- ${l}`).join("\n")}`
+      : "";
+
+    // ─── URLs citados na conversa ───
+    const urls = Array.from(new Set((msgs.map(m => m.content).join("\n").match(/https?:\/\/[^\s)]+/g) || [])));
+    const links = urls.length ? `\n\n## Links citados na conversa\n${urls.slice(0, 40).map(u => `- ${u}`).join("\n")}` : "";
+
+    // ─── Timeline cronológica: navegação, buscas web (/web, /abrir), decisões, ações do agente ───
+    const timelineItems: string[] = [];
+    msgs.forEach(m => {
+      const ts = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+      const c = (m.content || "").trim();
+      if (!c) return;
+      if (m.role === "user") {
+        const mWeb = c.match(/^\/web\s+(.+)/i);
+        const mAbr = c.match(/^\/abrir\s+(https?:\/\/\S+)/i);
+        if (mWeb) { timelineItems.push(`- **${ts}** · 🔎 Busca web: "${mWeb[1].slice(0, 120)}"`); return; }
+        if (mAbr) { timelineItems.push(`- **${ts}** · 🌐 Navegou até ${mAbr[1]}`); return; }
+        timelineItems.push(`- **${ts}** · 💬 Eu: ${c.slice(0, 160).replace(/\n/g, " ")}`);
+      } else {
+        const urlsIn = c.match(/https?:\/\/[^\s)]+/g) || [];
+        const label = urlsIn.length ? `Agente respondeu com ${urlsIn.length} referência(s)` : `Agente respondeu`;
+        timelineItems.push(`- **${ts}** · 🤖 ${label}: ${c.slice(0, 140).replace(/\n/g, " ")}${c.length > 140 ? "…" : ""}`);
+      }
+    });
+    const timeline = timelineItems.length ? `\n\n## Timeline\n${timelineItems.join("\n")}` : "";
+
+    const pkg = header + convo + atts + kanbanBlock + boardBlock + links + timeline;
+    onStructureToNotes(pkg);
+  }
+
+  const personaDoBotaoGpt = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
+  const arquivosNoContexto = contextStats ? contextStats.systemFiles + contextStats.workspaceFiles : availableFiles.filter(f => f.kind === "file").length;
+  const subpastas = availableFiles.filter(f => f.kind === "folder").length;
+  const pastaCurta = folderPath ? folderPath.split("/").slice(-2).join("/") : "";
+  const lendoConversa = !!activeId && carregadoPara !== activeId && msgs.length === 0 && !streaming;
+  const classeDaResposta = cn(
+    "max-w-none text-foreground text-[13px] leading-[1.7] break-words",
+    "prose prose-sm prose-invert",
+    "prose-p:my-2.5 prose-p:leading-[1.7]",
+    "prose-headings:font-semibold prose-headings:tracking-normal prose-headings:text-foreground",
+    "prose-h1:text-[14px] prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
+    "prose-h2:text-[13.5px] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
+    "prose-h3:text-[13px] prose-h3:mt-4 prose-h3:mb-1.5",
+    "prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1.5",
+    "prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1.5",
+    "prose-li:my-0 prose-li:leading-[1.65] prose-li:marker:text-primary/60",
+    "prose-strong:font-semibold prose-strong:text-foreground",
+    "prose-code:text-[11.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:before:content-none prose-code:after:content-none",
+    "prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-[11.5px]",
+    "prose-table:my-4 prose-table:text-[12px] prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
+    "prose-hr:my-4 prose-hr:border-border/50",
+    "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
+    "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
+  );
+
   return (
-    <div className="flex h-full min-h-0 relative">
-      {/* Backdrop mobile */}
+    <div className="relative flex h-full min-h-0 min-w-0">
+      {/* Fundo do celular com as conversas abertas por cima */}
       {sidebarOpen && isMobile && (
         <div
-          className="absolute inset-0 bg-background/70 backdrop-blur-sm z-20 animate-in fade-in"
+          className="absolute inset-0 z-20 bg-background/70 animate-in fade-in"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
-      {/* Sidebar de threads (overlay no mobile, inline no desktop) */}
+      {/* Conversas: por cima no celular, coluna no computador */}
       {sidebarOpen && (
         <aside
+          aria-label="Conversas"
           className={cn(
-            "border-r border-border bg-background flex flex-col min-h-0",
+            "flex min-h-0 flex-col border-r border-border bg-card",
             isMobile
               ? "absolute inset-y-0 left-0 z-30 w-[78%] max-w-[280px] shadow-2xl animate-in slide-in-from-left"
-              : "w-[180px] shrink-0 bg-background/60"
+              : "w-[180px] shrink-0"
           )}
         >
-          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
-            <MessageSquare className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1 truncate">
-              {clientName ? clientName : "Global"}
-            </span>
-            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa (Alt+N)">
-              <Plus className="w-3 h-3" />
+          <div className="flex min-w-0 shrink-0 items-center border-b border-border py-1.5 pl-3 pr-1.5">
+            <span className={cn(texto.rotulo, "min-w-0 flex-1 truncate")}>{clientName ? clientName : "Global"}</span>
+            <button type="button" onClick={newThread} aria-label="Nova conversa" title="Nova conversa (Alt+N)" className={cn(botao.icone, "h-7 w-7")}>
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher (Alt+B / Esc)">
-              <X className="w-3 h-3" />
+            <button type="button" onClick={() => setSidebarOpen(false)} aria-label="Recolher as conversas" title="Recolher (Alt+B / Esc)" className={cn(botao.icone, "h-7 w-7")}>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
           <GroupedThreadList
@@ -2958,473 +3217,330 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             onSelect={(id) => { setActiveId(id); if (isMobile) setSidebarOpen(false); }}
             onDelete={(id) => deleteThread(id)}
           />
-          <div className="px-2 py-1 border-t border-border text-[9px] text-muted-foreground/70 hidden md:block">
-            Alt+↑↓ alternar · Alt+N nova · Alt+B recolher
-          </div>
         </aside>
       )}
 
-
-      <div className="flex flex-col h-full flex-1 min-w-0">
-        {/* Header: cliente + toggle sidebar + nova · no mobile empilha em 2 linhas */}
-        <div className="flex flex-wrap items-center gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 border-b border-border bg-secondary/30">
-          {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)}
-              className="h-8 w-8 sm:h-6 sm:w-6 rounded hover:bg-secondary text-muted-foreground flex items-center justify-center shrink-0" title="Mostrar conversas (Alt+B)">
-              <History className="w-4 h-4 sm:w-3 sm:h-3" />
-            </button>
-          )}
-          <Bot className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-primary shrink-0" />
-          <span className="text-[11px] sm:text-[10px] font-medium text-foreground/80 truncate min-w-0 flex-1 sm:flex-none">
-            {clientName ? `${label} · ${clientName}` : `${label} · Global`}
-            {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
-          </span>
-
-          {/* Seletor de persona: Auto ou manual */}
-          <div className="flex items-center justify-end gap-1.5 flex-1 basis-full sm:basis-auto sm:flex-1 min-w-0">
-            {showExternalTools && (
-              <select
-                value={persona.forcedId || "__auto__"}
-                onChange={e => {
-                  const v = e.target.value;
-                  setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
-                }}
-                className="flex-1 min-w-0 sm:flex-none sm:max-w-[180px] text-[11px] sm:text-[10px] h-8 sm:h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
-                title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
-                <option value="__auto__">
-                  Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
-                </option>
-                {persona.list.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.gpt_name || "Sem nome"} {p.folder_path ? "· Pasta" : p.client_id ? "· Cliente" : "· Global"}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {showExternalTools && (persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
+      {/* Casca do agente do sistema: cabeçalho fixo, mensagens rolando por dentro, compositor fixo embaixo. */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <CabecalhoDoAgente
+          icone={<Bot className="h-4 w-4" />}
+          titulo={`Agente de ${label.toLowerCase()}`}
+          descricao={`${clientName || "Global"}${pastaCurta ? ` · /${pastaCurta}` : ""} · ${arquivosNoContexto} arq`}
+          acoes={
+            <>
+              <AjudaRecolhida rotulo="Como o agente funciona" className="mr-0.5">
+                <span className="block">
+                  Converse sobre {clientName || "este escopo"}: ele lê cliente, projetos, tarefas, briefing e a pasta. @ anexa arquivo, / abre as ações, /abrir seguido de um link abre o link aqui e /anexar abre as pastas.
+                </span>
+                <span className="mt-1.5 block">
+                  No contexto: /{folderPath || "raiz"}, {arquivosNoContexto} arquivo(s), {subpastas} subpasta(s){contextStats ? ", base completa" : ""}{notes?.trim() ? ", notas" : ""}{script?.trim() ? ", roteiro" : ""}.
+                </span>
+                <span className="mt-1.5 block">Atalhos: Alt+↑↓ troca de conversa, Alt+N abre uma nova, Alt+B mostra ou recolhe as conversas.</span>
+              </AjudaRecolhida>
+              {!sidebarOpen && (
+                <button type="button" onClick={() => setSidebarOpen(true)} aria-label="Mostrar conversas" title="Mostrar conversas (Alt+B)" className={botao.icone}>
+                  <History className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+              {showExternalTools && personaDoBotaoGpt?.gpt_url && (
+                <button type="button" onClick={abrirGptExterno} aria-label="Abrir no GPT" title="Copia o contexto e abre este GPT no ChatGPT" className={botao.icone}>
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
               <button
-                onClick={async () => {
-                  const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
-                  if (!active?.gpt_url) return;
-                  const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
-                  const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
-                  const ctx = [
-                    `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
-                    notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
-                    script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
-                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
-                    lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
-                    lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
-                    `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
-                  ].filter(Boolean).join("\n");
-                  try { await navigator.clipboard.writeText(ctx); toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." }); } catch { /* ignore */ }
-                  window.open(active.gpt_url, "_blank", "noopener,noreferrer");
-                }}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-                title="Copia contexto e abre este GPT no ChatGPT">
-                <ExternalLink className="w-3 h-3" /> GPT
-              </button>
-            )}
-            <button
-              onClick={() => pullDeepContext({ silent: false })}
-              disabled={pulling || streaming}
-              className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50 shrink-0"
-              title="Puxar contexto: reunir cliente, projetos, tasks, briefing e pasta em um dossiê"
-            >
-              {pulling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
-            </button>
-            {onStructureToNotes && (
-              <button
-                onClick={async () => {
-                  if (!msgs.length) { toast({ title: "Nada para enviar", description: "Comece uma conversa primeiro." }); return; }
-                  toast({ title: "Empacotando", description: "Reunindo conversa, anexos, mídia, kanban e timeline…" });
-
-                  // ─── Cabeçalho ───
-                  const header = [
-                    `# Conversa do Studio`,
-                    `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "raiz"}`,
-                    `Exportado em ${new Date().toLocaleString("pt-BR")}`,
-                    "",
-                  ].join("\n");
-
-                  // ─── Diálogo completo ───
-                  const convo = msgs.map(m => {
-                    const who = m.role === "user" ? "**Eu**" : "**Agente**";
-                    return `### ${who}\n\n${(m.content || "").trim()}`;
-                  }).join("\n\n---\n\n");
-
-                  // ─── Anexos com miniaturas / players ───
-                  const isImg = (s: string) => /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(s) || /^image\//i.test(s);
-                  const isVid = (s: string) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s) || /^video\//i.test(s);
-                  const attsLines = attached.map(a => {
-                    const url = a.url || "";
-                    const mime = a.meta || "";
-                    if (url && (isImg(url) || isImg(mime))) return `- ![${a.name}](${url})\n  [Baixar](${url})`;
-                    if (url && (isVid(url) || isVid(mime))) return `- 🎬 **${a.name}** · [Reproduzir](${url}) · [Baixar](${url})`;
-                    if (url) return `- 📎 [${a.name}](${url})`;
-                    return `- 📎 ${a.name} · ref \`wsfile:${a.id}\``;
-                  });
-                  const atts = attsLines.length ? `\n\n---\n\n## Anexos e mídia\n${attsLines.join("\n")}` : "";
-
-                  // ─── Kanban do projeto (se houver projectId) ───
-                  let kanbanBlock = "";
-                  if (projectId) {
-                    try {
-                      const { data: tasks } = await supabase
-                        .from("tasks")
-                        .select("title,status,priority,due_date,description,assignee_id")
-                        .eq("project_id", projectId)
-                        .order("updated_at", { ascending: false })
-                        .limit(120);
-                      const rows = (tasks as any[]) || [];
-                      if (rows.length) {
-                        const ids = Array.from(new Set(rows.map(r => r.assignee_id).filter(Boolean)));
-                        const names: Record<string, string> = {};
-                        if (ids.length) {
-                          const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", ids);
-                          (profs as any[] || []).forEach(p => { names[p.id] = p.full_name || p.email || "-"; });
-                        }
-                        const cols: Record<string, any[]> = {};
-                        rows.forEach(r => { const k = r.status || "sem-status"; (cols[k] ||= []).push(r); });
-                        const order = ["todo", "doing", "review", "done", "sem-status"];
-                        const sortedKeys = Object.keys(cols).sort((a, b) => (order.indexOf(a) + 100) - (order.indexOf(b) + 100));
-                        const colBlocks = sortedKeys.map(k => {
-                          const items = cols[k].slice(0, 20).map(t => {
-                            const parts = [`**${t.title}**`];
-                            if (t.priority) parts.push(`prioridade ${t.priority}`);
-                            if (t.due_date) parts.push(`prazo ${t.due_date}`);
-                            if (t.assignee_id && names[t.assignee_id]) parts.push(`resp. ${names[t.assignee_id]}`);
-                            return `  - ${parts.join(" · ")}${t.description ? `\n    ${String(t.description).slice(0, 140)}` : ""}`;
-                          }).join("\n");
-                          return `### Coluna: ${k} (${cols[k].length})\n${items}`;
-                        }).join("\n\n");
-                        kanbanBlock = `\n\n---\n\n## Kanban do projeto\n${colBlocks}`;
-                      }
-                    } catch { /* ignore */ }
-                  }
-
-                  // ─── Board log do Kanban recente ───
-                  const boardBlock = boardLog?.length
-                    ? `\n\n## Atividade recente do Kanban\n${boardLog.slice(0, 20).map(l => `- ${l}`).join("\n")}`
-                    : "";
-
-                  // ─── URLs citados na conversa ───
-                  const urls = Array.from(new Set((msgs.map(m => m.content).join("\n").match(/https?:\/\/[^\s)]+/g) || [])));
-                  const links = urls.length ? `\n\n## Links citados na conversa\n${urls.slice(0, 40).map(u => `- ${u}`).join("\n")}` : "";
-
-                  // ─── Timeline cronológica: navegação, buscas web (/web, /abrir), decisões, ações do agente ───
-                  const timelineItems: string[] = [];
-                  msgs.forEach(m => {
-                    const ts = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
-                    const c = (m.content || "").trim();
-                    if (!c) return;
-                    if (m.role === "user") {
-                      const mWeb = c.match(/^\/web\s+(.+)/i);
-                      const mAbr = c.match(/^\/abrir\s+(https?:\/\/\S+)/i);
-                      if (mWeb) { timelineItems.push(`- **${ts}** · 🔎 Busca web: "${mWeb[1].slice(0, 120)}"`); return; }
-                      if (mAbr) { timelineItems.push(`- **${ts}** · 🌐 Navegou até ${mAbr[1]}`); return; }
-                      timelineItems.push(`- **${ts}** · 💬 Eu: ${c.slice(0, 160).replace(/\n/g, " ")}`);
-                    } else {
-                      const urlsIn = c.match(/https?:\/\/[^\s)]+/g) || [];
-                      const label = urlsIn.length ? `Agente respondeu com ${urlsIn.length} referência(s)` : `Agente respondeu`;
-                      timelineItems.push(`- **${ts}** · 🤖 ${label}: ${c.slice(0, 140).replace(/\n/g, " ")}${c.length > 140 ? "…" : ""}`);
-                    }
-                  });
-                  const timeline = timelineItems.length ? `\n\n## Timeline\n${timelineItems.join("\n")}` : "";
-
-                  const pkg = header + convo + atts + kanbanBlock + boardBlock + links + timeline;
-                  onStructureToNotes(pkg);
-                }}
-                className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shrink-0"
-                title="Enviar conversa completa (mensagens, mídia, kanban, links, timeline) para as Notas"
+                type="button"
+                onClick={() => pullDeepContext({ silent: false })}
+                disabled={pulling || streaming}
+                aria-label="Puxar contexto"
+                title="Puxar contexto: reunir cliente, projetos, tarefas, briefing e pasta num dossiê"
+                className={cn(botao.icone, "text-primary hover:text-primary disabled:opacity-50")}
               >
-                <ArrowRight className="w-3.5 h-3.5" />
+                {pulling ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Brain className="h-4 w-4" aria-hidden="true" />}
               </button>
-            )}
-
-
-
-
-            {showExternalTools && <PasteBackButton
-              disabled={!activeId}
-              onPaste={async (text) => {
-                if (!activeId || !text.trim()) return;
-                const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
-                const { data: inserted, error } = await supabase.from("workspace_agent_messages")
-                  .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
-                  .select("id, role, content, created_at").single();
-                if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
-                if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
-                toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
+              {onStructureToNotes && (
+                <button
+                  type="button"
+                  onClick={enviarConversaParaNotas}
+                  aria-label="Enviar a conversa para as Notas"
+                  title="Enviar a conversa completa (mensagens, mídia, kanban, links, timeline) para as Notas"
+                  className={botao.icone}
+                >
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+              {showExternalTools && <PasteBackButton
+                disabled={!activeId}
+                onPaste={async (text) => {
+                  if (!activeId || !text.trim()) return;
+                  const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
+                  const { data: inserted, error } = await supabase.from("workspace_agent_messages")
+                    .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
+                    .select("id, role, content, created_at").single();
+                  if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
+                  if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
+                  toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
+                }}
+              />}
+              {showExternalTools && (
+                <button type="button" onClick={() => setPersonaOpen(true)} aria-label="Personas do agente" title="Gerenciar personas (adicionar ou remover)" className={botao.icone}>
+                  <Settings className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+              <button type="button" onClick={newThread} aria-label="Nova conversa" title="Nova conversa (Alt+N)" className={botao.icone}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          }
+        >
+          {showExternalTools ? (
+            <select
+              value={persona.forcedId || "__auto__"}
+              onChange={e => {
+                const v = e.target.value;
+                setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
               }}
-            />}
-            {showExternalTools && <button onClick={() => setPersonaOpen(true)}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Gerenciar personas (adicionar / remover)">
-              <Settings className="w-3 h-3" />
-            </button>}
-            <button onClick={newThread}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
-              <Plus className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
+              aria-label="Persona do agente"
+              className={cn(campo, "sm:max-w-[260px]")}
+              title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
+              <option value="__auto__">
+                Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
+              </option>
+              {persona.list.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.gpt_name || "Sem nome"} {p.folder_path ? "· Pasta" : p.client_id ? "· Cliente" : "· Global"}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </CabecalhoDoAgente>
         {showExternalTools && <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
           list={persona.list}
           clientId={clientId} clientName={clientName} folderPath={folderPath}
           onSaved={reloadPersona} />}
-        {/* Chip de contexto auto por pasta */}
-        <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
-          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />/{folderPath || "raiz"}</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileIcon className="w-2.5 h-2.5" />{contextStats ? contextStats.systemFiles + contextStats.workspaceFiles : availableFiles.filter(f=>f.kind==="file").length} arq</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="folder").length} sub</span>
-          {contextStats && <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary flex items-center gap-1"><Brain className="w-2.5 h-2.5" />base completa</span>}
-          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><NotebookPen className="w-2.5 h-2.5" />notas</span>}
-          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileText className="w-2.5 h-2.5" />roteiro</span>}
-          <span className="ml-auto opacity-60">contexto auto</span>
-        </div>
 
-
-      {/* Mensagens */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
-        {msgs.length === 0 && !streaming && (
-          <div className="max-w-md mx-auto text-center py-10 space-y-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
-              <Bot className="w-4 h-4 text-primary" />
-            </div>
-            <p className="text-[12px] leading-relaxed text-muted-foreground">
-              O orquestrador vai reunir contexto de <span className="text-foreground font-medium">{clientName || "este escopo"}</span> e devolver diagnóstico e perguntas.
-            </p>
-          </div>
-        )}
-        {msgs.map(m => (
-          m.role === "user" ? (
-            <div key={m.id} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2 text-[12.5px] leading-[1.55] bg-primary text-primary-foreground whitespace-pre-wrap break-words shadow-sm">
-                {m.content}
-              </div>
-            </div>
-          ) : (
-            <article
-              key={m.id}
-              className={cn(
-                "max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words",
-                "prose prose-sm prose-invert max-w-none",
-                "prose-p:my-2.5 prose-p:leading-[1.7]",
-                "prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-foreground",
-                "prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
-                "prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
-                "prose-h3:text-[12px] prose-h3:uppercase prose-h3:tracking-[0.12em] prose-h3:text-muted-foreground prose-h3:mt-4 prose-h3:mb-1.5",
-                "prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1.5",
-                "prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1.5",
-                "prose-li:my-0 prose-li:leading-[1.65] prose-li:marker:text-primary/60",
-                "prose-strong:font-semibold prose-strong:text-foreground",
-                "prose-code:text-[11.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-secondary/60 prose-code:before:content-none prose-code:after:content-none",
-                "prose-pre:bg-secondary/60 prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:text-[11.5px]",
-                "prose-table:my-4 prose-table:text-[12px] prose-th:border prose-th:border-border prose-th:bg-secondary/50 prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
-                "prose-hr:my-4 prose-hr:border-border/50",
-                "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
-                "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
-              )}
-            >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{
-                  a: ({ href, children, ...rest }) => {
-                    const url = String(href || "");
-                    if (!/^https?:\/\//i.test(url)) return <a href={url} {...rest}>{children}</a>;
-                    return (
-                      <a
-                        href={url}
-                        onClick={(e) => { e.preventDefault(); setLinkPreview(url); }}
-                        className="text-primary hover:underline cursor-pointer"
-                        title="Abrir dentro do chat"
-                      >{children}</a>
-                    );
-                  },
-                }}
-              >{m.content}</ReactMarkdown>
-            </article>
-          )
-        ))}
-
-        {streaming && streamBuf && (
-          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words prose prose-sm prose-invert max-w-none prose-p:my-2.5 prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-ol:pl-5 prose-ol:space-y-1.5 prose-ul:pl-5 prose-ul:space-y-1.5 prose-li:leading-[1.65] prose-li:marker:text-primary/60">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{streamBuf}</ReactMarkdown>
-            <span className="inline-block w-[3px] h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
-          </article>
-        )}
-        {streaming && !streamBuf && (
-          <div className="flex items-center gap-2 text-muted-foreground text-[11.5px]">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/50 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
-            </span>
-            reunindo contexto
-          </div>
-        )}
-      </div>
-
-
-      {/* Composer */}
-      <div className="border-t border-border bg-secondary/30">
-        {attached.length > 0 && (
-          <div className="flex flex-wrap gap-1 px-2 pt-2">
-            {attached.map(a => (
-              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full pl-2 pr-1 py-0.5">
-                {a.kind === "folder" ? <FolderIcon className="w-2.5 h-2.5" /> : <FileIcon className="w-2.5 h-2.5" />}
-                <span className="max-w-[140px] truncate">{a.name}</span>
-                <button onClick={() => removeAttached(a.id)} className="hover:bg-primary/20 rounded-full p-0.5">
-                  <X className="w-2.5 h-2.5" />
+        {/* Mensagens: rolam por dentro, com memória por conversa */}
+        <MensagensDoAgente ref={scrollRef} rotulo="Conversa com o agente" className="space-y-5 px-4 py-4 sm:px-5">
+          {erroMsgs && (
+            <EstadoDeErro
+              titulo="Não foi possível ler a conversa."
+              acao={
+                <button type="button" onClick={() => { if (activeId) void loadMsgs(activeId); }} className={cn(botao.secundario, "h-8")}>
+                  Tentar de novo
                 </button>
+              }
+            />
+          )}
+          {lendoConversa && !erroMsgs && <Carregando rotulo="Lendo a conversa" linhas={3} />}
+          {msgs.length === 0 && !streaming && !lendoConversa && !erroMsgs && (
+            <div className="mx-auto max-w-sm px-2 py-8 text-center">
+              <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+                <Bot className="h-4 w-4" />
               </span>
-            ))}
-          </div>
-        )}
-        <div className="relative p-2.5 sm:p-2 pb-3 sm:pb-2 flex items-end gap-1.5 sm:gap-1">
-          {/* Popover @ arquivos: busca fuzzy + navegação por teclado */}
-          {mention && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
-              <div className="px-3 py-1 flex items-center gap-2 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
-                <span>Anexar do workspace</span>
-                <span className="ml-auto normal-case tracking-normal text-[10px] text-muted-foreground/70">
-                  {mention.q ? `"${mention.q}"` : "digite para filtrar"} · ↑↓ ⏎
+              <p className="text-[14px] font-semibold leading-5 text-foreground">Converse com o agente</p>
+              <p className={cn(texto.auxiliar, "mt-1 leading-5")}>
+                Ele reúne o contexto de {clientName || "este escopo"} e devolve diagnóstico e perguntas.
+              </p>
+            </div>
+          )}
+          {msgs.map(m => (
+            m.role === "user" ? (
+              <div key={m.id} className="flex justify-end">
+                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-[13px] leading-[1.55] text-primary-foreground">
+                  {m.content}
+                </div>
+              </div>
+            ) : (
+              <article key={m.id} className={classeDaResposta}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    a: ({ href, children, ...rest }) => {
+                      const url = String(href || "");
+                      if (!/^https?:\/\//i.test(url)) return <a href={url} {...rest}>{children}</a>;
+                      return (
+                        <a
+                          href={url}
+                          onClick={(e) => { e.preventDefault(); setLinkPreview(url); }}
+                          className="text-primary hover:underline cursor-pointer"
+                          title="Abrir dentro do chat"
+                        >{children}</a>
+                      );
+                    },
+                  }}
+                >{m.content}</ReactMarkdown>
+              </article>
+            )
+          ))}
+
+          {streaming && streamBuf && (
+            <article className={classeDaResposta}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{streamBuf}</ReactMarkdown>
+              <span className="ml-0.5 inline-block h-3.5 w-[3px] bg-primary/70 align-middle" aria-hidden="true" />
+            </article>
+          )}
+          {streaming && !streamBuf && (
+            <p className="flex items-center text-[12px] text-muted-foreground" role="status">
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
+              Reunindo contexto
+            </p>
+          )}
+        </MensagensDoAgente>
+
+        {/* Compositor fixo: anexos, campo sempre visível, anexar e enviar */}
+        <CompositorDoAgente>
+          {attached.length > 0 && (
+            <div className="-mb-1 flex flex-wrap" aria-label="Anexos da próxima mensagem">
+              {attached.map(a => (
+                <span key={a.id} className="mb-1 mr-1 inline-flex max-w-full items-center rounded-full bg-primary/10 py-0.5 pl-2 pr-1 text-[11px] text-primary">
+                  {a.kind === "folder" ? <FolderIcon className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" /> : <FileIcon className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />}
+                  <span className="max-w-[160px] truncate">{a.name}</span>
+                  <button type="button" onClick={() => removeAttached(a.id)} aria-label={`Tirar ${a.name}`} className={cn("ml-1 rounded-full p-0.5 hover:bg-primary/20", foco)}>
+                    <X className="h-3 w-3" aria-hidden="true" />
+                  </button>
                 </span>
-              </div>
-              {mentionMatches.length === 0 ? (
-                <div className="px-3 py-3 text-[11px] text-muted-foreground text-center">Nenhum arquivo encontrado</div>
-              ) : mentionMatches.map((f, i) => (
-                <button key={f.id}
-                  onMouseEnter={() => setMentionIdx(i)}
-                  onClick={() => pickMention(f)}
-                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
-                    i === mentionIdx ? "bg-primary/15 text-foreground" : "hover:bg-secondary")}>
-                  {f.kind === "folder"
-                    ? <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    : <FileIcon className="w-3.5 h-3.5 text-primary shrink-0" />}
-                  <span className="truncate flex-1">{highlightRanges(f.name, f._ranges)}</span>
-                  {f._recent && <span className="text-[9px] uppercase tracking-wider text-primary/70 shrink-0">recente</span>}
-                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 shrink-0">
-                    {f.kind === "folder" ? "pasta" : "arquivo"}
-                  </span>
-                </button>
               ))}
             </div>
           )}
-          {/* Popover / ações */}
-          {slash && slashMatches.length > 0 && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[240px] overflow-y-auto">
-              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
-                Ações do agente
+          <div className="relative">
+            {/* Lista do @: busca por aproximação, setas e Enter */}
+            {mention && (
+              <div className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[260px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+                <div className="flex items-center border-b border-border px-3 py-1.5">
+                  <span className={cn(texto.rotulo, "min-w-0 flex-1 truncate")}>Anexar do workspace</span>
+                  <span className={cn(texto.auxiliar, "ml-2 shrink-0")}>{mention.q ? `"${mention.q}"` : "digite para filtrar"} · ↑↓ ⏎</span>
+                </div>
+                {mentionMatches.length === 0 ? (
+                  <p className={cn(texto.auxiliar, "px-3 py-3 text-center")}>Nenhum arquivo encontrado.</p>
+                ) : mentionMatches.map((f, i) => (
+                  <button key={f.id}
+                    type="button"
+                    onMouseEnter={() => setMentionIdx(i)}
+                    onClick={() => pickMention(f)}
+                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px]",
+                      i === mentionIdx ? "bg-primary/15 text-foreground" : "hover:bg-muted")}>
+                    {f.kind === "folder"
+                      ? <FolderIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
+                      : <FileIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+                    <span className="min-w-0 flex-1 truncate">{highlightRanges(f.name, f._ranges)}</span>
+                    {f._recent && <span className="ml-2 shrink-0 text-[11px] text-primary/80">recente</span>}
+                    <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">
+                      {f.kind === "folder" ? "pasta" : "arquivo"}
+                    </span>
+                  </button>
+                ))}
               </div>
-              {slashMatches.map((c, i) => (
-                <button key={c.key}
-                  onMouseEnter={() => setSlashIdx(i)}
-                  onClick={() => pickSlash(c)}
-                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
-                    i === slashIdx ? "bg-primary/15" : "hover:bg-secondary")}>
-                  <Sparkles className="w-3 h-3 text-primary shrink-0" />
-                  <span className="font-medium">{c.label}</span>
-                  <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
-                </button>
-              ))}
+            )}
+            {/* Lista do /: ações do agente */}
+            {slash && slashMatches.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+                <p className={cn(texto.rotulo, "border-b border-border px-3 py-1.5")}>Ações do agente</p>
+                {slashMatches.map((c, i) => (
+                  <button key={c.key}
+                    type="button"
+                    onMouseEnter={() => setSlashIdx(i)}
+                    onClick={() => pickSlash(c)}
+                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px]",
+                      i === slashIdx ? "bg-primary/15" : "hover:bg-muted")}>
+                    <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="shrink-0 font-medium">{c.label}</span>
+                    <span className="ml-auto min-w-0 truncate pl-2 text-[11px] text-muted-foreground">{c.hint}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="rounded-lg border border-border bg-background p-2 focus-within:border-primary/60">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => onInputChange(e.target.value, e.target.selectionStart)}
+                onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+                onKeyDown={e => {
+                  if (e.key === "Escape") { setMention(null); setSlash(null); return; }
+                  if (mention && mentionMatches.length > 0) {
+                    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIdx(i => (i + 1) % mentionMatches.length); return; }
+                    if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIdx(i => (i - 1 + mentionMatches.length) % mentionMatches.length); return; }
+                    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionMatches[mentionIdx]); return; }
+                  }
+                  if (slash && slashMatches.length > 0) {
+                    if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx(i => (i + 1) % slashMatches.length); return; }
+                    if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIdx(i => (i - 1 + slashMatches.length) % slashMatches.length); return; }
+                    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickSlash(slashMatches[slashIdx]); return; }
+                  }
+                  if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
+                }}
+                aria-label="Mensagem ao agente"
+                placeholder="Mensagem ao agente. @ anexa, / abre as ações."
+                rows={3}
+                className="block max-h-40 min-h-[64px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[13px] leading-[1.55] text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+              <div className="mt-1 flex min-w-0 items-center">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" aria-label="Anexar" title="Anexar (arquivo, link, workspace)" className={botao.icone}>
+                      <Paperclip className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" side="top" className="w-60 p-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = inputRef.current;
+                        if (!el) return;
+                        const caret = el.selectionStart ?? input.length;
+                        const next = input.slice(0, caret) + "@" + input.slice(caret);
+                        setInput(next);
+                        setMention({ q: "", start: caret });
+                        setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
+                      }}
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                    >
+                      <Paperclip className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-foreground">Arquivo do workspace</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">busca rápida com @</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
+                        if (!url) return;
+                        const clean = url.trim();
+                        if (!/^https?:\/\//i.test(clean)) { alert("URL inválida · use http:// ou https://"); return; }
+                        const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
+                        const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
+                        setAttached(prev => [...prev, ref]);
+                        setInput(prev => (prev ? prev + " " : "") + clean + " ");
+                        setTimeout(() => inputRef.current?.focus(), 10);
+                      }}
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                    >
+                      <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-foreground">Link externo</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">o agente lê o conteúdo</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(true)}
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                    >
+                      <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-foreground">Navegar pastas</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">seleção múltipla</span>
+                      </span>
+                    </button>
+                  </PopoverContent>
+                </Popover>
+                <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} aria-label="Enviar" className="ml-auto h-8 shrink-0 px-3">
+                  {streaming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+                </Button>
+              </div>
             </div>
-          )}
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={e => onInputChange(e.target.value, e.target.selectionStart)}
-            onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-            onKeyDown={e => {
-              if (e.key === "Escape") { setMention(null); setSlash(null); return; }
-              if (mention && mentionMatches.length > 0) {
-                if (e.key === "ArrowDown") { e.preventDefault(); setMentionIdx(i => (i + 1) % mentionMatches.length); return; }
-                if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIdx(i => (i - 1 + mentionMatches.length) % mentionMatches.length); return; }
-                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionMatches[mentionIdx]); return; }
-              }
-              if (slash && slashMatches.length > 0) {
-                if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx(i => (i + 1) % slashMatches.length); return; }
-                if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIdx(i => (i - 1 + slashMatches.length) % slashMatches.length); return; }
-                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickSlash(slashMatches[slashIdx]); return; }
-              }
-              if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
-            }}
-            placeholder="Converse com o agente. @ anexa arquivo · / dispara ação · cole um link que ele lê"
-            rows={3}
-            className="flex-1 resize-none bg-background border border-border rounded-lg px-3 py-2 text-[13px] leading-[1.55] min-h-[68px] focus:outline-none focus:border-primary/50"
-          />
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                title="Anexar (arquivo, link, workspace)"
-                className="h-10 w-10 sm:h-8 sm:w-8 flex items-center justify-center rounded-md border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground shrink-0"
-              >
-                <Paperclip className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" side="top" className="w-56 p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const el = inputRef.current;
-                  if (!el) return;
-                  const caret = el.selectionStart ?? input.length;
-                  const next = input.slice(0, caret) + "@" + input.slice(caret);
-                  setInput(next);
-                  setMention({ q: "", start: caret });
-                  setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
-                }}
-                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
-              >
-                <Paperclip className="w-3.5 h-3.5 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">Arquivo do workspace</p>
-                  <p className="text-[10px] text-muted-foreground">busca rápida com @</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
-                  if (!url) return;
-                  const clean = url.trim();
-                  if (!/^https?:\/\//i.test(clean)) { alert("URL inválida · use http:// ou https://"); return; }
-                  const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
-                  const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
-                  setAttached(prev => [...prev, ref]);
-                  setInput(prev => (prev ? prev + " " : "") + clean + " ");
-                  setTimeout(() => inputRef.current?.focus(), 10);
-                }}
-                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
-              >
-                <Link2 className="w-3.5 h-3.5 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">Link externo</p>
-                  <p className="text-[10px] text-muted-foreground">o agente lê o conteúdo</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
-              >
-                <Columns3 className="w-3.5 h-3.5 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">Navegar pastas</p>
-                  <p className="text-[10px] text-muted-foreground">seleção múltipla</p>
-                </div>
-              </button>
-            </PopoverContent>
-          </Popover>
-
-          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-10 sm:h-8 px-3 sm:px-2 shrink-0">
-            {streaming ? <Loader2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Send className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
-          </Button>
-
-        </div>
-      </div>
+          </div>
+        </CompositorDoAgente>
       </div>
 
       <AttachPicker
@@ -3449,25 +3565,24 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         }}
       />
 
-      {/* Modal iframe: abre links dentro do chat sem sair da conversa */}
+      {/* Janela com o link: abre dentro do chat sem sair da conversa */}
       <Dialog open={!!linkPreview} onOpenChange={(v) => { if (!v) setLinkPreview(null); }}>
-        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden h-[85vh] flex flex-col">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
-            <Link2 className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="truncate flex-1 text-muted-foreground">{linkPreview}</span>
+        <DialogContent className="flex h-[85vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+          <DialogTitle className="sr-only">Link aberto no chat</DialogTitle>
+          <div className="flex min-w-0 items-center border-b border-border px-3 py-2 pr-12">
+            <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span className={cn(texto.auxiliar, "min-w-0 flex-1 truncate")}>{linkPreview}</span>
             <button
+              type="button"
               onClick={() => linkPreview && window.open(linkPreview, "_blank", "noopener,noreferrer")}
-              className="px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-              title="Abrir em nova aba (alguns sites bloqueiam iframe)"
+              className={cn(botao.secundario, "ml-2 h-8")}
+              title="Abrir em nova aba (alguns sites bloqueiam a abertura aqui)"
             >Nova aba</button>
-            <button
-              onClick={() => setLinkPreview(null)}
-              className="px-2 py-1 rounded hover:bg-secondary text-muted-foreground border border-border"
-            >Fechar</button>
+            <button type="button" onClick={() => setLinkPreview(null)} className={cn(botao.discreto, "ml-1 h-8")}>Fechar</button>
           </div>
           <iframe
             src={linkPreview || "about:blank"}
-            className="flex-1 w-full bg-background"
+            className="w-full flex-1 bg-background"
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             referrerPolicy="no-referrer"
             title="Preview de link"
@@ -3583,98 +3698,103 @@ function AttachPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 pt-4 pb-2 border-b border-border">
-          <DialogTitle className="text-sm font-medium">Anexar arquivos ao contexto</DialogTitle>
-          <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground mt-1">
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b border-border px-4 pb-3 pt-4 pr-12 text-left">
+          <DialogTitle className="text-[15px]">Anexar ao contexto</DialogTitle>
+          <nav aria-label="Caminho" className="-mb-0.5 mt-1 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
             {crumbs.map((c, i) => (
-              <span key={i} className="flex items-center gap-1">
-                {i > 0 && <ChevronDown className="w-3 h-3 -rotate-90 opacity-50" />}
+              <span key={i} className="mb-0.5 flex min-w-0 items-center">
+                {i > 0 && <ChevronRight className="mx-0.5 h-3 w-3 shrink-0 opacity-50" aria-hidden="true" />}
                 <button
+                  type="button"
                   onClick={() => goTo(i)}
-                  className={cn("hover:text-foreground truncate max-w-[180px]",
-                    i === crumbs.length - 1 ? "text-foreground font-medium" : "")}
+                  aria-current={i === crumbs.length - 1 ? "page" : undefined}
+                  className={cn("max-w-[180px] truncate rounded hover:text-foreground", foco,
+                    i === crumbs.length - 1 ? "font-medium text-foreground" : "")}
                 >
                   {c.name}
                 </button>
               </span>
             ))}
-          </div>
+          </nav>
         </DialogHeader>
 
-        <div className="px-4 py-2 border-b border-border flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={globalSearch ? "Buscar em todo o workspace..." : "Filtrar nesta pasta..."}
-              className="h-8 text-[12px] pl-2"
-            />
-          </div>
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+        <div className="flex min-w-0 items-center border-b border-border px-4 py-2.5">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label={globalSearch ? "Buscar em todo o workspace" : "Filtrar nesta pasta"}
+            placeholder={globalSearch ? "Buscar em todo o workspace..." : "Filtrar nesta pasta..."}
+            className={cn(campo, "mr-3 min-w-0 flex-1")}
+          />
+          <label className="flex shrink-0 cursor-pointer select-none items-center text-[12px] text-muted-foreground">
             <input
               type="checkbox"
               checked={globalSearch}
               onChange={(e) => setGlobalSearch(e.target.checked)}
-              className="accent-primary"
+              className="mr-1.5 accent-primary"
             />
             Buscar em tudo
           </label>
         </div>
 
-        <div className="px-4 py-2 flex items-center justify-between text-[11px] text-muted-foreground border-b border-border">
+        <div className="flex min-w-0 items-center justify-between border-b border-border px-4 py-2 text-[12px] text-muted-foreground">
           <button
+            type="button"
             onClick={toggleAllVisible}
             disabled={filtered.length === 0}
-            className="flex items-center gap-1.5 hover:text-foreground disabled:opacity-40"
+            className={cn("flex items-center rounded hover:text-foreground disabled:opacity-40", foco)}
           >
-            <span className={cn("w-3.5 h-3.5 rounded border border-border flex items-center justify-center",
-              allVisibleChecked ? "bg-primary border-primary" : "bg-background")}>
-              {allVisibleChecked && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+            <span className={cn("mr-1.5 flex h-3.5 w-3.5 items-center justify-center rounded border border-border",
+              allVisibleChecked ? "border-primary bg-primary" : "bg-background")} aria-hidden="true">
+              {allVisibleChecked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
             </span>
             {allVisibleChecked ? "Desmarcar visíveis" : "Selecionar visíveis"}
           </button>
-          <span>{selected.size} selecionado(s)</span>
+          <span className="tabular-nums" role="status">{selected.size} selecionado(s)</span>
         </div>
 
-        <div className="max-h-[380px] overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-10 text-[11px] text-muted-foreground">
-              <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> carregando
-            </div>
+        <div className="max-h-[380px] overflow-y-auto overscroll-contain">
+          {loading && nodes.length === 0 ? (
+            <Carregando rotulo="Carregando a pasta" linhas={5} className="p-4" />
           ) : filtered.length === 0 ? (
-            <div className="py-10 text-center text-[11px] text-muted-foreground">
-              {globalSearch && !query.trim() ? "Digite algo para buscar." : "Pasta vazia."}
+            <div className="p-4">
+              <EstadoVazio compacto titulo={globalSearch && !query.trim() ? "Digite algo para buscar." : "Pasta vazia."} />
             </div>
           ) : (
-            <ul>
+            <ul className={cn("divide-y divide-border", loading && "opacity-60")} aria-busy={loading || undefined}>
               {filtered.map(n => {
                 const already = alreadyAttachedIds.has(n.id);
                 const checked = selected.has(n.id);
                 return (
                   <li key={n.id}
-                    className={cn("flex items-center gap-2 px-4 py-1.5 border-b border-border/40 hover:bg-secondary/40",
+                    className={cn("flex min-w-0 items-center px-4 py-1.5 hover:bg-muted",
                       checked && "bg-primary/5")}>
                     <button
+                      type="button"
                       onClick={() => toggle(n)}
                       disabled={already}
+                      role="checkbox"
+                      aria-checked={checked || already}
+                      aria-label={already ? `${n.name}: já anexado` : `Selecionar ${n.name}`}
                       title={already ? "Já anexado" : ""}
-                      className={cn("w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0",
-                        checked ? "bg-primary border-primary" : "bg-background border-border",
-                        already && "opacity-40 cursor-not-allowed")}
+                      className={cn("mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border", foco,
+                        checked ? "border-primary bg-primary" : "border-border bg-background",
+                        already && "cursor-not-allowed opacity-40")}
                     >
-                      {(checked || already) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                      {(checked || already) && <Check className="h-2.5 w-2.5 text-primary-foreground" aria-hidden="true" />}
                     </button>
                     <button
+                      type="button"
                       onClick={() => n.kind === "folder" ? openFolder(n) : toggle(n)}
-                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                      className={cn("flex min-w-0 flex-1 items-center rounded py-0.5 text-left", foco)}
                     >
                       {n.kind === "folder"
-                        ? <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        : <FileIcon className="w-3.5 h-3.5 text-primary shrink-0" />}
-                      <span className="truncate text-[12px]">{n.name}</span>
+                        ? <FolderIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
+                        : <FileIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+                      <span className="min-w-0 truncate text-[13px]">{n.name}</span>
                       {n.kind === "folder" && (
-                        <ChevronDown className="w-3 h-3 -rotate-90 opacity-40 ml-auto" />
+                        <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-40" aria-hidden="true" />
                       )}
                     </button>
                   </li>
@@ -3684,11 +3804,11 @@ function AttachPicker({
           )}
         </div>
 
-        <DialogFooter className="px-4 py-3 border-t border-border">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button size="sm" onClick={confirm} disabled={selected.size === 0}>
+        <DialogFooter className="flex-row justify-end border-t border-border px-4 py-3 sm:space-x-0 [&>*+*]:ml-2">
+          <button type="button" onClick={() => onOpenChange(false)} className={botao.discreto}>Cancelar</button>
+          <button type="button" onClick={confirm} disabled={selected.size === 0} className={botao.primario}>
             Anexar {selected.size > 0 ? `(${selected.size})` : ""}
-          </Button>
+          </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -3979,68 +4099,59 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-sm">
-            Nova tarefa {clientName ? `· ${clientName}` : ""}
+          <DialogTitle className="flex min-w-0 items-center pr-6 text-[15px]">
+            <span className="min-w-0 truncate">Nova tarefa{clientName ? ` · ${clientName}` : ""}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2.5">
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Atalho</label>
-            <Input value={raw} onChange={e => setRaw(e.target.value)}
+        <GrupoDeCampos>
+          <CampoDeFormulario
+            largo
+            rotulo="Atalho"
+            apoio="!alta · @nome · 15/07, hoje, +3d"
+            ajuda="Prioridade com !baixa, !media, !alta ou !urgente. Responsável com @nome. Prazo com 15/07, hoje, amanhã ou +3d."
+          >
+            <input value={raw} onChange={e => setRaw(e.target.value)}
               placeholder="Editar hook !alta @maria 15/07"
-              className="h-8 text-[12px] font-mono" autoFocus />
-            <p className="text-[9px] text-muted-foreground mt-1">
-              <code>!alta/!media/!baixa/!urgente</code> · <code>@nome</code> · <code>15/07</code>, <code>hoje</code>, <code>+3d</code>
-            </p>
-          </div>
+              className={cn(campo, "font-mono")} autoFocus />
+          </CampoDeFormulario>
 
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Título</label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-[12px]" />
-          </div>
+          <CampoDeFormulario largo rotulo="Título" obrigatorio>
+            <input value={title} onChange={e => setTitle(e.target.value)} className={campo} />
+          </CampoDeFormulario>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</label>
-              <select value={projectId} onChange={e => setProjectId(e.target.value)}
-                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                {projects.length === 0 && <option value="">sem projeto</option>}
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prioridade</label>
-              <select value={priority} onChange={e => setPriority(e.target.value as any)}
-                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                <option value="low">Baixa</option>
-                <option value="medium">Média</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</label>
-              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
-                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                <option value="">ninguém</option>
-                {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prazo</label>
-              <Input type="date" value={dueISO} onChange={e => setDueISO(e.target.value)} className="h-8 text-[12px]" />
-            </div>
-          </div>
-        </div>
+          <CampoDeFormulario rotulo="Projeto" obrigatorio>
+            <select value={projectId} onChange={e => setProjectId(e.target.value)} className={campo}>
+              {projects.length === 0 && <option value="">sem projeto</option>}
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Prioridade">
+            <select value={priority} onChange={e => setPriority(e.target.value as any)} className={campo}>
+              <option value="low">Baixa</option>
+              <option value="medium">Média</option>
+              <option value="high">Alta</option>
+              <option value="urgent">Urgente</option>
+            </select>
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Responsável">
+            <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={campo}>
+              <option value="">ninguém</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
+            </select>
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Prazo">
+            <input type="date" value={dueISO} onChange={e => setDueISO(e.target.value)} className={campo} />
+          </CampoDeFormulario>
+        </GrupoDeCampos>
 
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button size="sm" onClick={submit} disabled={saving || !title.trim() || !projectId}>
+        <DialogFooter className="flex-row justify-end sm:space-x-0 [&>*+*]:ml-2">
+          <button type="button" onClick={onClose} disabled={saving} className={botao.discreto}>Cancelar</button>
+          <button type="button" onClick={submit} disabled={saving || !title.trim() || !projectId} className={botao.primario}>
             {saving ? "Criando…" : "Criar tarefa"}
-          </Button>
+          </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -4104,62 +4215,65 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <Bot className="w-4 h-4 text-primary" /> Personas do agente ({list.length})
+          <DialogTitle className="flex min-w-0 items-center pr-6 text-[15px]">
+            <Bot className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="min-w-0 truncate">Personas do agente</span>
+            <span className="ml-1.5 shrink-0 text-[13px] font-normal tabular-nums text-muted-foreground">{list.length}</span>
+            <AjudaRecolhida rotulo="Sobre as personas" className="ml-1.5">
+              Adicione quantos Custom GPTs quiser. O roteador interno escolhe qual usar em cada mensagem, ou você trava um pelo seletor no cabeçalho do agente.
+            </AjudaRecolhida>
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-[11px] text-muted-foreground">
-            Adicione quantos Custom GPTs quiser. O <b>roteador interno</b> escolhe qual usar em cada mensagem, ou você trava manualmente pelo seletor no cabeçalho.
-          </p>
-
-          {/* Lista */}
-          {list.length > 0 && (
-            <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-md border border-border bg-background/40 p-2">
+        <div className="min-w-0 space-y-4">
+          {list.length > 0 ? (
+            <ul className="max-h-56 divide-y divide-border overflow-y-auto overscroll-contain" aria-label="Personas">
               {list.map(p => (
-                <div key={p.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded hover:bg-secondary/40">
-                  <span className="pt-0.5 text-primary/80">
-                    {p.folder_path ? <FolderIcon className="w-3.5 h-3.5" /> : p.client_id ? <Bot className="w-3.5 h-3.5" /> : <GitBranch className="w-3.5 h-3.5" />}
+                <li key={p.id} className="flex min-w-0 items-center py-2">
+                  <span className="mr-2 shrink-0 text-primary/80" aria-hidden="true">
+                    {p.folder_path ? <FolderIcon className="h-3.5 w-3.5" /> : p.client_id ? <Bot className="h-3.5 w-3.5" /> : <GitBranch className="h-3.5 w-3.5" />}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-foreground/90 truncate">{p.gpt_name || "Sem nome"}</div>
-                    <div className="text-muted-foreground text-[10px] truncate">{scopeText(p)} · {p.gpt_description || p.gpt_url}</div>
+                  <div className="mr-2 min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-foreground">{p.gpt_name || "Sem nome"}</p>
+                    <p className={cn(texto.auxiliar, "truncate")}>{scopeText(p)} · {p.gpt_description || p.gpt_url}</p>
                   </div>
-                  <button onClick={() => deleteOne(p.id, p.gpt_name)}
+                  <button type="button" onClick={() => deleteOne(p.id, p.gpt_name)}
                     disabled={loading}
-                    className="text-[10px] text-destructive/70 hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10">
+                    className={cn(botao.discreto, "h-8 text-destructive hover:text-destructive")}>
                     Remover
                   </button>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
+          ) : (
+            <EstadoVazio compacto titulo="Nenhuma persona ainda." />
           )}
 
-          {/* Nova */}
-          <div className="space-y-2 pt-1 border-t border-border">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Adicionar nova persona</label>
-            <div className="grid grid-cols-3 gap-1">
-              {(["folder", "client", "global"] as Scope[]).map(s => {
-                const disabled = (s !== "global" && !clientId) || (s === "folder" && !folderPath);
-                return (
-                  <button key={s} type="button" disabled={disabled} onClick={() => setScope(s)}
-                    className={cn("text-[10px] px-2 py-1.5 rounded border transition",
-                      scope === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/40 border-border hover:bg-secondary",
-                      disabled && "opacity-40 cursor-not-allowed")}>
-                    {s === "folder" ? "Pasta" : s === "client" ? "Cliente" : "Global"}
-                  </button>
-                );
-              })}
-            </div>
-            <Input value={url} onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
-          </div>
+          <GrupoDeCampos titulo="Adicionar persona" colunas={1} className="border-t border-border pt-4">
+            <CampoDeFormulario rotulo="Vale para">
+              <SeletorCompacto
+                opcoes={(["folder", "client", "global"] as Scope[]).map(s => ({
+                  valor: s,
+                  rotulo: s === "folder" ? "Pasta" : s === "client" ? "Cliente" : "Global",
+                  desativada: (s !== "global" && !clientId) || (s === "folder" && !folderPath),
+                }))}
+                valor={scope}
+                onEscolher={(v) => setScope(v as Scope)}
+                rotulo="Vale para"
+                modo="segmentado"
+                larguraTotal
+              />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Link do GPT">
+              <input value={url} onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className={campo} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
         </div>
-        <DialogFooter>
-          <Button size="sm" onClick={importGpt} disabled={loading || !url}>
-            {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+        <DialogFooter className="flex-row justify-end">
+          <button type="button" onClick={importGpt} disabled={loading || !url} className={botao.primario}>
+            {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
             Adicionar persona
-          </Button>
+          </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -4173,39 +4287,43 @@ function PasteBackButton({ onPaste, disabled }: { onPaste: (text: string) => voi
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
         disabled={disabled}
-        className="p-1 rounded hover:bg-secondary text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
-        title="Colar resposta do ChatGPT">
-        <ClipboardPaste className="w-3 h-3" />
+        aria-label="Colar resposta do ChatGPT"
+        title="Colar resposta do ChatGPT"
+        className={cn(botao.icone, "disabled:cursor-not-allowed disabled:opacity-40")}>
+        <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-sm">Colar resposta do ChatGPT</DialogTitle>
+            <DialogTitle className="flex min-w-0 items-center pr-6 text-[15px]">
+              <span className="min-w-0 truncate">Colar resposta do ChatGPT</span>
+              <AjudaRecolhida rotulo="Sobre colar a resposta" className="ml-1.5">
+                Copie a resposta do seu GPT externo e cole aqui. Ela entra na conversa como mensagem do agente e vira contexto para as próximas.
+              </AjudaRecolhida>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">
-              Copie a resposta do seu GPT externo e cole abaixo. Ela entra na conversa como mensagem do agente e vira contexto para as próximas.
-            </p>
+          <CampoDeFormulario rotulo="Resposta">
             <textarea
               autoFocus
               value={txt}
               onChange={e => setTxt(e.target.value)}
               placeholder="Cole aqui..."
-              className="w-full min-h-[220px] max-h-[50vh] rounded-md border border-border bg-background px-3 py-2 text-[12px] leading-relaxed resize-y"
+              className={cn(campoTexto, "min-h-[220px] max-h-[50vh] resize-y")}
             />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button size="sm" disabled={!txt.trim() || busy} onClick={async () => {
+          </CampoDeFormulario>
+          <DialogFooter className="flex-row justify-end sm:space-x-0 [&>*+*]:ml-2">
+            <button type="button" onClick={() => setOpen(false)} className={botao.discreto}>Cancelar</button>
+            <button type="button" disabled={!txt.trim() || busy} className={botao.primario} onClick={async () => {
               setBusy(true);
               try { await onPaste(txt); setTxt(""); setOpen(false); }
               finally { setBusy(false); }
             }}>
-              {busy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ClipboardPaste className="w-3 h-3 mr-1" />}
+              {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ClipboardPaste className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
               Importar para conversa
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

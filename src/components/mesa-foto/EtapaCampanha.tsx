@@ -19,6 +19,10 @@ import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from ".
 import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import { GuiaDeEstiloNaTela } from "./GuiaDeEstilo";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { campo, campoTexto, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeFotos from "./SeletorDeFotos";
 import {
   acrescentarFotos,
@@ -157,7 +161,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
         <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={cheio} onClick={() => setDaBiblioteca(!daBiblioteca)} aria-expanded={daBiblioteca}>
           <BookImage className="mr-1.5 h-3.5 w-3.5" /> Da biblioteca
         </Button>
-        <span className="mb-1 text-[11px] text-muted-foreground">
+        <span className="mb-1 text-[12px] tabular-nums text-muted-foreground">
           {refs.length} de {MAX_REFERENCIAS_DA_CAMPANHA}
         </span>
       </div>
@@ -178,8 +182,8 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
       {daBiblioteca && (
         <div className="mt-2 min-w-0">
           {biblioteca.isError && <AvisoDeErro erro={biblioteca.error} />}
-          {biblioteca.isSuccess && referencias.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma referência de imagem na biblioteca ainda.</p>}
-          <div className="grid max-h-56 min-w-0 grid-cols-4 gap-1.5 overflow-y-auto sm:grid-cols-6" aria-label="Referências da biblioteca">
+          {biblioteca.isSuccess && referencias.length === 0 && <EstadoVazio compacto titulo="Nenhuma referência de imagem na biblioteca ainda." />}
+          <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6 lg:max-h-56 lg:overflow-y-auto lg:overscroll-contain" aria-label="Referências da biblioteca">
             {referencias.slice(0, 60).map((i) => {
               const marcada = refs.some((r) => r.id === i.id);
               return (
@@ -190,7 +194,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
                   aria-label={`Referência ${i.titulo}`}
                   disabled={!marcada && cheio}
                   onClick={() => (marcada ? onMudar(refs.filter((r) => r.id !== i.id)) : somar([{ id: i.id, origem: "biblioteca" }]))}
-                  className={`relative min-w-0 rounded-lg border p-0.5 disabled:opacity-40 ${marcada ? "border-primary" : "border-transparent hover:border-border"}`}
+                  className={`relative min-w-0 rounded-md border p-0.5 disabled:opacity-40 ${marcada ? "border-primary" : "border-transparent hover:border-border"}`}
                 >
                   <Moldura proporcao={1}>
                     <ImagemDaBiblioteca item={i} />
@@ -213,14 +217,13 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
 function BlocoDoModelo({ modelo, onMudar }: { modelo: PerfilDoModelo; onMudar: (m: PerfilDoModelo) => void }) {
   return (
     <Cartao titulo="4. Modelo sintético" dica="Pessoa criada pela IA: adulta, sem parecer com ninguém real, sem sexualização. Sempre marcada como gerada.">
-      <p className="mb-1 text-[11.5px] text-muted-foreground">Perfil</p>
+      <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Perfil</p>
       <Pilulas rotulo="Perfil do modelo" opcoes={PERFIS} valor={PERFIS.some((p) => p.valor === modelo.perfil) ? modelo.perfil : null} onEscolher={(v) => onMudar({ ...modelo, perfil: v })} />
-      <p className="mb-1 mt-1 text-[11.5px] text-muted-foreground">Idade aproximada</p>
+      <p className="mb-1.5 mt-1 text-[12px] font-medium text-muted-foreground">Idade aproximada</p>
       <Pilulas rotulo="Idade aproximada do modelo" opcoes={IDADES} valor={modelo.idade_aprox || null} onEscolher={(v) => onMudar({ ...modelo, idade_aprox: v })} />
-      <label className="mt-1 block">
-        <span className="mb-1 block text-[11.5px] text-muted-foreground">Estilo (opcional)</span>
-        <Input value={modelo.estilo} onChange={(e) => onMudar({ ...modelo, estilo: e.target.value })} placeholder="Ex.: urbano, minimalista, roupa neutra" aria-label="Estilo do modelo" className="h-9 text-[12.5px]" />
-      </label>
+      <CampoDeFormulario rotulo="Estilo (opcional)" className="mt-1">
+        <input value={modelo.estilo} onChange={(e) => onMudar({ ...modelo, estilo: e.target.value })} placeholder="Ex.: urbano, minimalista, roupa neutra" aria-label="Estilo do modelo" className={campo} />
+      </CampoDeFormulario>
     </Cartao>
   );
 }
@@ -238,7 +241,7 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
   const fotoAprovada = aprovadaV ? fotoDaVersao(fotos.data || [], aprovadaV) : null;
   const gerando = tomada.status === "gerando";
   return (
-    <li className={`min-w-0 rounded-xl border bg-card p-1.5 ${aprovadaV ? "border-success/50" : "border-border"}`} data-foto-da-campanha={tomada.id}>
+    <li className={`min-w-0 rounded-lg border bg-card p-1.5 ${aprovadaV ? "border-success/50" : "border-border"}`} data-foto-da-campanha={tomada.id}>
       <button type="button" className="block w-full cursor-zoom-in text-left disabled:cursor-default" disabled={!mostrada} onClick={onAmpliar} aria-label={`Ver grande: ${tomada.nome}`}>
         <Moldura proporcao={proporcaoDoFormato(tomada.formato)} className="border border-border">
           {mostrada && mostrada.storage_path ? (
@@ -311,7 +314,7 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
       <AndamentoDoLote ensaioId={ensaio.id} />
       <Cartao
         titulo={`Fotos da campanha · ${r.total}`}
-        dica={`${r.aprovadas} aprovadas · ${r.paraRevisar} para revisar · ${usd(r.custo)} gasto${ensaio.direcao.campanha_mesa ? ` · campanha ${ensaio.direcao.campanha_mesa.nome}` : ""}. Aprove, refaça ou use cada foto aqui mesmo.`}
+        dica="Aprove, refaça ou use cada foto aqui mesmo: Mesa, Mesa Ads, baixar ou aprovação."
         acao={
           r.versoes > 0 ? (
             <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: ensaio.id })}>
@@ -320,10 +323,15 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
           ) : undefined
         }
       >
+        <p className="mb-2 truncate text-[12px] tabular-nums text-muted-foreground" data-resumo-da-campanha="">
+          {r.aprovadas} aprovadas · {r.paraRevisar} para revisar · {usd(r.custo)} gasto
+          {ensaio.direcao.campanha_mesa ? ` · campanha ${ensaio.direcao.campanha_mesa.nome}` : ""}
+        </p>
         {ensaio.tomadas.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">O diretor não montou fotos. Planeje de novo com outro pedido.</p>
+          <EstadoVazio compacto titulo="O diretor não montou fotos." descricao="Planeje de novo com outro pedido." />
         ) : (
-          <div className="max-h-[75vh] min-w-0 overflow-y-auto pr-0.5" data-rolagem-propria="">
+          // Rolagem própria só no computador (no celular a página rola).
+          <div className="min-w-0 lg:max-h-[75vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
             <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {ensaio.tomadas.map((t) => (
                 <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
@@ -370,7 +378,7 @@ export default function EtapaCampanha() {
   const [refs, setRefs] = useState<RefDeEstilo[]>([]);
   const [modelo, setModelo] = useState<PerfilDoModelo>({ perfil: "Variar os perfis", idade_aprox: "25 a 35", estilo: "" });
   const [quantidade, setQuantidade] = useState(6);
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:campanha:pedido:${clientId}`, "");
   const campanhaDaMesa = useCampanhaEscolhida();
 
   if (kits.isSuccess && !listaDeKits.length) {
@@ -389,7 +397,7 @@ export default function EtapaCampanha() {
   }
 
   return (
-    <div className="min-w-0 space-y-4 pb-24">
+    <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-center">
         <Select
           value={aberta ? aberta.id : ""}
@@ -432,8 +440,8 @@ export default function EtapaCampanha() {
       {aberta ? (
         <CampanhaAberta key={aberta.id} ensaio={aberta} />
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="min-w-0 space-y-4">
+        <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-2">
+          <div className="min-w-0 space-y-5">
             <Cartao titulo="1. Produto">
               <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
                 <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Produto da campanha">
@@ -447,29 +455,28 @@ export default function EtapaCampanha() {
                   ))}
                 </SelectContent>
               </Select>
-              {kit && kit.invariantes.length > 0 && <p className="mt-2 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Não muda: {kit.invariantes.join(", ")}.</p>}
+              {kit && kit.invariantes.length > 0 && <p className="mt-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Não muda: {kit.invariantes.join(", ")}.</p>}
             </Cartao>
             <SeletorDaCampanha escolhida={campanhaDaMesa} titulo="2. Campanha da Mesa" />
             <BlocoDoEstilo refs={refs} onMudar={setRefs} />
           </div>
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-5">
             <BlocoDoModelo modelo={modelo} onMudar={setModelo} />
-            <Cartao titulo="5. Fotos">
+            <Cartao titulo="5. Fotos" dica="O diretor lê as referências, escreve o guia de estilo e monta as fotos. Cada foto gerada se aprova, refaz ou usa no próprio resultado: Mesa, Mesa Ads, baixar ou aprovação.">
               <Pilulas rotulo="Quantas fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
-              <label className="mt-1 block">
-                <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
-                <div className="relative">
-                  <Textarea
+              <div className="relative mt-1 min-w-0">
+                <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
+                  <textarea
                     value={pedido}
                     onChange={(e) => setPedido(e.target.value)}
                     rows={3}
                     placeholder="Ex.: céu azul com nuvens, retratos de perto, lifestyle na rua, produto flutuando"
-                    className="pr-10 text-[12.5px]"
+                    className={juntar(campoTexto, "pr-10")}
                     aria-label="Pedido da campanha"
                   />
-                  <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
-                </div>
-              </label>
+                </CampoDeFormulario>
+                <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+              </div>
               <BotaoComCusto
                 rotulo={
                   <>
@@ -503,10 +510,7 @@ export default function EtapaCampanha() {
                   }
                 }}
               />
-              {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o produto.</p>}
-              <p className="mt-2 flex items-start text-[11px] leading-snug text-muted-foreground">
-                <Upload className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Cada foto gerada se aprova, refaz ou usa no próprio resultado: Mesa, Mesa Ads, baixar ou aprovação.
-              </p>
+              {!kit && <p className="mt-2 text-[12px] text-muted-foreground">Escolha o produto.</p>}
             </Cartao>
           </div>
         </div>

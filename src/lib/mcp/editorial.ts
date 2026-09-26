@@ -204,7 +204,8 @@ export function buildPageMeta(
 
 function numericOrder(value?: string | null) {
   if (!value) return null;
-  const lastSegment = value.split(/[\\/]/).filter(Boolean).at(-1) || value;
+  const partes = value.split(/[\\/]/).filter(Boolean);
+  const lastSegment = partes[partes.length - 1] || value;
   const fraction = lastSegment.match(/\((\d+)\s*\/\s*\d+\)/);
   if (fraction) return Number(fraction[1]);
   const labelled = lastSegment.match(

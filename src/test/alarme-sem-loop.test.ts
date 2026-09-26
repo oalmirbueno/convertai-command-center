@@ -55,12 +55,20 @@ describe("rascunho abandonado para de cobrar", () => {
 describe("as listas longas ganham rolagem", () => {
   const pagina = readFileSync(resolve(raiz, "src/pages/AdminExecucao.tsx"), "utf8");
 
+  // Sistema de design (E3): a caixa com max-h fixo virou a região que rola
+  // por conta própria (RegiaoRolavel) no computador, com a posição
+  // guardada; no celular a página rola normal (sem rolagem presa).
   it("concluídas e revisão não empurram a página", () => {
-    expect(pagina).toContain('max-h-[60vh] space-y-2 overflow-y-auto');
+    expect(pagina).toContain("<RegiaoRolavel");
+    expect(pagina).toContain('rotulo="Trabalho dos agentes"');
+    expect(pagina).toContain("memoria={`execucao:${aba === \"feito\" ? \"feito\" : visao}`}");
   });
 
   it("a fila por operador também", () => {
-    expect(pagina).toContain('max-h-[46vh] space-y-2 overflow-y-auto');
+    // A fila por operador mora dentro da mesma região rolável da visão.
+    const regiao = pagina.slice(pagina.indexOf('rotulo="Trabalho dos agentes"'));
+    expect(regiao).toContain("conteudoDaVisao");
+    expect(pagina).toContain('visao === "fila" ? (');
   });
 });
 

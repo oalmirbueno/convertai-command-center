@@ -1,5 +1,19 @@
 import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, X, Loader2 } from "lucide-react";
+import {
+  AjudaRecolhida,
+  CampoDeFormulario,
+  EstadoDeErro,
+  GrupoDeCampos,
+  Secao,
+  SeletorCompacto,
+  botao,
+  campo,
+  juntar,
+  superficie,
+  texto,
+} from "@/components/sistema";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -307,371 +321,280 @@ export default function CreateClientModal({ open, onClose }: Props) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-card border border-border rounded-2xl w-full max-w-[520px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">
-            {createdSuccess ? "Cliente Criado" : "Novo Cliente"}
+  const reenviarConvite = async () => {
+    setResendingInvite(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+        body: { profile_id: createdUserId, new_email: email.trim().toLowerCase(), new_full_name: fullName.trim() },
+      });
+      const res = rpcRecord(data);
+      if (error || res?.error) throw new Error();
+      if (typeof res?.firstAccessUrl === "string") setInviteUrl(res.firstAccessUrl);
+      setEmailWarning(false);
+      toast.success("Convite reenviado por e-mail!");
+    } catch {
+      toast.error("Ainda não foi possível enviar. Copie o link abaixo e mande direto ao cliente.");
+    } finally {
+      setResendingInvite(false);
+    }
+  };
+
+  const copiarConvite = async (mensagem: string) => {
+    try { await navigator.clipboard.writeText(inviteUrl); toast.success(mensagem); }
+    catch { toast.error("Selecione e copie o link manualmente."); }
+  };
+
+  /** Escolha em dois cartões (recebida / vai pagar, integral / parcelado): segmentado com uma linha de apoio. */
+  const escolha = (
+    rotulo: string,
+    valor: string | boolean,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mudar: (v: any) => void,
+    opcoes: { v: string | boolean; label: string; hint: string }[],
+  ) => (
+    <CampoDeFormulario rotulo={rotulo} largo apoio={(opcoes.find((o) => o.v === valor) || opcoes[0]).hint}>
+      <SeletorCompacto
+        rotulo={rotulo}
+        larguraTotal
+        modo="segmentado"
+        opcoes={opcoes.map((o) => ({ valor: String(o.v), rotulo: o.label }))}
+        valor={String(valor)}
+        onEscolher={(v) => {
+          const achada = opcoes.find((o) => String(o.v) === v);
+          if (achada) mudar(achada.v);
+        }}
+      />
+    </CampoDeFormulario>
+  );
+
+  const parcelaTexto = (() => {
+    const v = parseFloat(projectValue) || 0;
+    const n = Math.max(parseInt(installmentsCount) || 1, 1);
+    return v > 0 ? `${n}× R$ ${(v / n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : undefined;
+  })();
+
+  // Portal no body: no celular o conteúdo do painel é uma camada própria e a janela ficava por baixo das barras.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <div className="absolute inset-0 bg-black/60" onClick={handleClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="novo-cliente-titulo"
+        className="relative flex max-h-full w-full max-w-[640px] flex-col overflow-hidden border-border bg-card sm:max-h-[90vh] sm:rounded-lg sm:border"
+      >
+        <div className="flex min-w-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
+          <h2 id="novo-cliente-titulo" className={texto.tituloSecao}>
+            {createdSuccess ? "Cliente criado" : "Novo cliente"}
           </h2>
-          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
-            <X className="w-4 h-4" />
+          <button type="button" onClick={handleClose} aria-label="Fechar" className={botao.icone}>
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
         {createdSuccess ? (
           <>
-            <div className="px-6 py-6 space-y-5">
-              <div className="text-center space-y-1">
-                <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-3">
-                  <span className="text-success text-xl">✓</span>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+              <div className="flex min-w-0 items-center">
+                <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10 text-success" aria-hidden="true">
+                  <Check className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className={juntar(texto.corpo, "truncate font-semibold")}>{fullName}</p>
+                  <p className={juntar(texto.auxiliar, "truncate")}>{email}</p>
                 </div>
-                <p className="text-sm font-semibold text-foreground">{fullName}</p>
-                <p className="text-xs text-muted-foreground">{email}</p>
               </div>
 
               {emailWarning ? (
-                <div className="bg-destructive/5 border border-destructive/30 rounded-xl p-4 space-y-3">
-                  <p className="text-[11px] uppercase tracking-wider text-destructive font-medium">E-mail de convite não foi enviado</p>
-                  <p className="text-[13px] text-foreground leading-relaxed">
-                    O cliente foi criado, mas o e-mail de boas-vindas falhou. Você tem dois caminhos, use qualquer um:
-                  </p>
-                  <button
-                    onClick={async () => {
-                      setResendingInvite(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
-                          body: { profile_id: createdUserId, new_email: email.trim().toLowerCase(), new_full_name: fullName.trim() },
-                        });
-                        const res = rpcRecord(data);
-                        if (error || res?.error) throw new Error();
-                        if (typeof res?.firstAccessUrl === "string") setInviteUrl(res.firstAccessUrl);
-                        setEmailWarning(false);
-                        toast.success("Convite reenviado por e-mail!");
-                      } catch {
-                        toast.error("Ainda não foi possível enviar. Copie o link abaixo e mande direto ao cliente.");
-                      } finally {
-                        setResendingInvite(false);
-                      }
-                    }}
-                    disabled={resendingInvite}
-                    className="w-full py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    {resendingInvite ? "Reenviando…" : "1. Reenviar e-mail de convite"}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try { await navigator.clipboard.writeText(inviteUrl); toast.success("Link copiado! Envie ao cliente pelo WhatsApp."); }
-                      catch { toast.error("Selecione e copie o link manualmente."); }
-                    }}
-                    className="w-full py-2 rounded-[10px] text-[13px] font-medium bg-secondary text-foreground border border-border hover:border-primary/40 transition-colors cursor-pointer"
-                  >
-                    2. Copiar link de primeiro acesso
-                  </button>
-                  <p className="text-[10px] text-muted-foreground break-all">{inviteUrl}</p>
-                </div>
+                <EstadoDeErro
+                  titulo="O e-mail de convite não foi enviado."
+                  descricao="O cliente foi criado. Reenvie o convite ou copie o link e mande direto."
+                  acao={
+                    <div className="flex flex-col items-end [&>*+*]:mt-2">
+                      <button type="button" onClick={reenviarConvite} disabled={resendingInvite} className={botao.primario}>
+                        {resendingInvite ? "Reenviando…" : "Reenviar e-mail"}
+                      </button>
+                      <button type="button" onClick={() => copiarConvite("Link copiado! Envie ao cliente pelo WhatsApp.")} className={botao.secundario}>
+                        Copiar link
+                      </button>
+                    </div>
+                  }
+                />
               ) : (
-                <div className="bg-secondary border border-border rounded-xl p-4 space-y-2">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</p>
-                  <p className="text-[13px] text-foreground leading-relaxed">
-                    Enviamos um e-mail de boas-vindas com um botão de <strong>primeiro acesso</strong>.
-                    O cliente clica, cria a própria senha e já entra no portal.
-                  </p>
-                  {inviteUrl && (
-                    <button
-                      onClick={async () => {
-                        try { await navigator.clipboard.writeText(inviteUrl); toast.success("Link copiado!"); }
-                        catch { toast.error("Selecione e copie o link manualmente."); }
-                      }}
-                      className="text-[11px] px-3 py-1.5 rounded-lg bg-card text-muted-foreground hover:text-foreground border border-border cursor-pointer"
-                    >
-                      Copiar link de primeiro acesso (backup)
-                    </button>
-                  )}
-                </div>
+                <Secao
+                  titulo="Convite de primeiro acesso"
+                  descricao="Enviado por e-mail"
+                  ajuda="Enviamos um e-mail de boas-vindas com um botão de primeiro acesso. O cliente clica, cria a própria senha e já entra no portal."
+                  acao={
+                    inviteUrl ? (
+                      <button type="button" onClick={() => copiarConvite("Link copiado!")} className={botao.secundario}>
+                        Copiar link
+                      </button>
+                    ) : undefined
+                  }
+                />
               )}
+              {emailWarning && inviteUrl && <p className={juntar(texto.auxiliar, "break-all")}>{inviteUrl}</p>}
 
-              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+              <p className={texto.auxiliar}>
                 A senha criada pelo cliente permanece privada e protegida. Se necessário,
                 um administrador pode definir uma nova senha no cadastro, sem visualizar a atual.
               </p>
-
             </div>
 
-            <div className="px-6 py-4 border-t border-border flex justify-end">
-              <button onClick={handleClose}
-                className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+            <div className="flex justify-end border-t border-border px-4 py-3 sm:px-5">
+              <button type="button" onClick={handleClose} className={botao.primario}>
                 Fechar
               </button>
             </div>
           </>
         ) : (
           <>
-            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo *</label>
-                <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nome do cliente"
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Empresa *</label>
-                <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Nome da empresa"
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Email *</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="email@empresa.com"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Telefone</label>
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-              </div>
-
-              {/* Tipo de relacionamento + Brand */}
-              <div className="pt-2 space-y-3">
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Tipo de Cliente *</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { v: "recurring", label: "Recorrente", hint: "Mensalidade" },
-                      { v: "one_off", label: "Avulso", hint: "Projeto único" },
-                      { v: "hybrid", label: "Híbrido", hint: "Os dois" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => setClientType(opt.v as typeof clientType)}
-                        className={`px-3 py-2.5 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
-                          clientType === opt.v
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
-                        }`}
-                      >
-                        <p className="font-semibold leading-tight">{opt.label}</p>
-                        <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
-                      </button>
-                    ))}
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+              <GrupoDeCampos titulo="Dados">
+                <CampoDeFormulario rotulo="Nome completo" obrigatorio>
+                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nome do cliente" className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Empresa" obrigatorio>
+                  <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Nome da empresa" className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="E-mail" obrigatorio>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="email@empresa.com" className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Telefone">
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000" inputMode="tel" className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Tipo de cliente" obrigatorio apoio={clientType === "recurring" ? "Mensalidade" : clientType === "one_off" ? "Projeto único" : "Mensalidade e projeto"}>
+                  <SeletorCompacto
+                    rotulo="Tipo de cliente"
+                    larguraTotal
+                    opcoes={[
+                      { valor: "recurring", rotulo: "Recorrente" },
+                      { valor: "one_off", rotulo: "Avulso" },
+                      { valor: "hybrid", rotulo: "Híbrido" },
+                    ]}
+                    valor={clientType}
+                    onEscolher={(v) => setClientType(v as typeof clientType)}
+                  />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Marca">
+                  <SeletorCompacto
+                    rotulo="Marca"
+                    larguraTotal
+                    opcoes={[
+                      { valor: "", rotulo: "Depois" },
+                      { valor: "aceleriq", rotulo: "AcelerIQ" },
+                      { valor: "sitebolt", rotulo: "SiteBolt" },
+                    ]}
+                    valor={brand}
+                    onEscolher={(v) => setBrand(v as typeof brand)}
+                  />
+                </CampoDeFormulario>
+                <div className={juntar(superficie.poco, "flex min-w-0 items-center justify-between px-3 py-2.5 sm:col-span-full")}>
+                  <div className="mr-3 flex min-w-0 items-center">
+                    <span className={juntar(texto.corpo, "font-medium")} id="novo-empresa-do-grupo">
+                      Empresa do grupo (interna)
+                    </span>
+                    <AjudaRecolhida className="ml-1.5">Cadastro só para organização. Sem mensalidade, fora de cobranças e alertas.</AjudaRecolhida>
                   </div>
+                  <Switch aria-labelledby="novo-empresa-do-grupo" checked={internalCompany} onCheckedChange={setInternalCompany} />
                 </div>
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Brand</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { v: "", label: "Definir depois" },
-                      { v: "aceleriq", label: "AcelerIQ" },
-                      { v: "sitebolt", label: "SiteBolt" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.v}
-                        type="button"
-                        onClick={() => setBrand(opt.v as typeof brand)}
-                        className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
-                          brand === opt.v
-                            ? "border-primary bg-primary/10 text-foreground font-semibold"
-                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              </GrupoDeCampos>
 
-              {/* Empresa do grupo */}
-              <div className="flex items-center justify-between gap-3 bg-secondary/40 border border-border rounded-xl px-3.5 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
-                  <p className="text-[10px] text-muted-foreground">Cadastro só para organização · sem mensalidade, fora de cobranças e alertas.</p>
-                </div>
-                <Switch checked={internalCompany} onCheckedChange={setInternalCompany} />
-              </div>
+              {showRecurring && (
+                <GrupoDeCampos titulo="Mensalidade" className="border-t border-border pt-5">
+                  <CampoDeFormulario rotulo="Plano" largo apoio="Escolher um plano preenche o valor, que segue editável.">
+                    <select
+                      value={(catalogPlans || []).find((p) => p.name.trim().toLowerCase() === planName.trim().toLowerCase())?.id || ""}
+                      onChange={(e) => {
+                        const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
+                        if (!plan) { setPlanName(""); return; }
+                        const v = plan.currentVersion || plan.versions[0] || null;
+                        setPlanName(plan.name);
+                        if (v) setPlanValue(String(v.finalAmount || v.amount));
+                      }}
+                      className={campo}
+                    >
+                      <option value="">Mensalidade (sem plano do catálogo)</option>
+                      {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
+                        const v = p.currentVersion || p.versions[0] || null;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Valor mensal (R$)">
+                    <input value={planValue} onChange={(e) => setPlanValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00" className={juntar(campo, "tabular-nums")} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Próxima renovação" ajuda="Gera a 1ª fatura mensal nesta data. As próximas são criadas automaticamente.">
+                    <input value={planRenewalDate} onChange={(e) => setPlanRenewalDate(e.target.value)} type="date" className={campo} />
+                  </CampoDeFormulario>
+                  {escolha("Primeira mensalidade", mensalidadeRecebida, setMensalidadeRecebida, [
+                    { v: true, label: "Recebida no cadastro", hint: "O dinheiro já caiu" },
+                    { v: false, label: "Vai pagar", hint: "Fica pendente no financeiro" },
+                  ])}
+                </GrupoDeCampos>
+              )}
 
-              {/* Plano & Cobrança */}
-              <div className="pt-2 space-y-4">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block">Plano & Cobrança</label>
+              {showOneOff && (
+                <GrupoDeCampos titulo="Projeto avulso" className="border-t border-border pt-5">
+                  <CampoDeFormulario rotulo="Valor total (R$)">
+                    <input value={projectValue} onChange={(e) => setProjectValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00" className={juntar(campo, "tabular-nums")} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Vencimento 1ª parcela" ajuda="Cria uma cobrança para cada parcela, com vencimento mensal a partir desta data.">
+                    <input value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} type="date" className={campo} />
+                  </CampoDeFormulario>
+                  {escolha("Pagamento", payMode, setPayMode, [
+                    { v: "integral", label: "Integral", hint: "Pagamento à vista" },
+                    { v: "installments", label: "Parcelado", hint: "Em N vezes" },
+                  ])}
+                  {payMode === "installments" && (
+                    <>
+                      <CampoDeFormulario rotulo="Valor da entrada (R$)">
+                        <input value={entradaValor} onChange={(e) => setEntradaValor(e.target.value)} type="number" step="0.01" min="0" placeholder="vazio = parcelas iguais" className={juntar(campo, "tabular-nums")} />
+                      </CampoDeFormulario>
+                      <CampoDeFormulario rotulo="Nº de parcelas" apoio={parcelaTexto}>
+                        <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="2" max="36" className={juntar(campo, "tabular-nums")} />
+                      </CampoDeFormulario>
+                    </>
+                  )}
+                  {escolha("Primeira parcela", entradaRecebida, setEntradaRecebida, [
+                    { v: true, label: "1ª parcela recebida", hint: "O valor já caiu no cadastro" },
+                    { v: false, label: "1ª a receber", hint: "Vence na data informada" },
+                  ])}
+                </GrupoDeCampos>
+              )}
 
-                {showRecurring && (
-                  <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-3">
-                    <p className="text-[11px] font-semibold text-foreground/80">Mensalidade (recorrente)</p>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Plano</label>
-                      <select
-                        value={(catalogPlans || []).find((p) => p.name.trim().toLowerCase() === planName.trim().toLowerCase())?.id || ""}
-                        onChange={(e) => {
-                          const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
-                          if (!plan) { setPlanName(""); return; }
-                          const v = plan.currentVersion || plan.versions[0] || null;
-                          setPlanName(plan.name);
-                          if (v) setPlanValue(String(v.finalAmount || v.amount));
-                        }}
-                        className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
-                      >
-                        <option value="">Mensalidade (sem plano do catálogo)</option>
-                        {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
-                          const v = p.currentVersion || p.versions[0] || null;
-                          return (
-                            <option key={p.id} value={p.id}>
-                              {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche o valor automaticamente · e ele continua editável.</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor mensal (R$)</label>
-                        <input value={planValue} onChange={(e) => setPlanValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00"
-                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Próxima renovação</label>
-                        <input value={planRenewalDate} onChange={(e) => setPlanRenewalDate(e.target.value)} type="date"
-                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { v: true, label: "Recebida no cadastro", hint: "O dinheiro já caiu" },
-                        { v: false, label: "Vai pagar", hint: "Fica pendente no financeiro" },
-                      ].map((opt) => (
-                        <button
-                          key={String(opt.v)}
-                          type="button"
-                          onClick={() => setMensalidadeRecebida(opt.v)}
-                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
-                            mensalidadeRecebida === opt.v
-                              ? "border-primary bg-primary/10 text-foreground"
-                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
-                          }`}
-                        >
-                          <p className="font-semibold leading-tight">{opt.label}</p>
-                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Gera a 1ª fatura mensal na data informada. As próximas são criadas automaticamente.</p>
-                  </div>
-                )}
-
-                {showOneOff && (
-                  <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-3">
-                    <p className="text-[11px] font-semibold text-foreground/80">Projeto avulso</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total (R$)</label>
-                        <input value={projectValue} onChange={(e) => setProjectValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00"
-                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencimento 1ª parcela</label>
-                        <input value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} type="date"
-                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { v: "integral", label: "Integral", hint: "Pagamento à vista" },
-                        { v: "installments", label: "Parcelado", hint: "Em N vezes" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.v}
-                          type="button"
-                          onClick={() => setPayMode(opt.v as typeof payMode)}
-                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
-                            payMode === opt.v
-                              ? "border-primary bg-primary/10 text-foreground"
-                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
-                          }`}
-                        >
-                          <p className="font-semibold leading-tight">{opt.label}</p>
-                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
-                        </button>
-                      ))}
-                    </div>
-                    {payMode === "installments" && (
-                      <div className="grid grid-cols-2 gap-3 items-end">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor da entrada (R$)</label>
-                          <input value={entradaValor} onChange={(e) => setEntradaValor(e.target.value)} type="number" step="0.01" min="0"
-                            placeholder="vazio = parcelas iguais"
-                            className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nº de parcelas</label>
-                          <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="2" max="36"
-                            className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-                        </div>
-                        <p className="text-[11px] text-muted-foreground pb-2.5 font-mono">
-                          {(() => {
-                            const v = parseFloat(projectValue) || 0;
-                            const n = Math.max(parseInt(installmentsCount) || 1, 1);
-                            return v > 0 ? `${n}× R$ ${(v / n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-";
-                          })()}
-                        </p>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { v: true, label: "1ª parcela recebida", hint: "O valor já caiu no cadastro" },
-                        { v: false, label: "1ª a receber", hint: "Vence na data informada" },
-                      ].map((opt) => (
-                        <button
-                          key={String(opt.v)}
-                          type="button"
-                          onClick={() => setEntradaRecebida(opt.v)}
-                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
-                            entradaRecebida === opt.v
-                              ? "border-primary bg-primary/10 text-foreground"
-                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
-                          }`}
-                        >
-                          <p className="font-semibold leading-tight">{opt.label}</p>
-                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Cria uma cobrança para cada parcela com vencimento mensal a partir da data escolhida.</p>
-                  </div>
-                )}
-
-                {!showRecurring && !showOneOff && (
-                  <p className="text-[11px] text-muted-foreground italic">Defina o tipo de cliente acima para configurar a cobrança.</p>
-                )}
-              </div>
-
-
-              <div className="pt-2">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 block">Serviços Ativos</label>
-                <div className="space-y-3">
+              <Secao titulo="Serviços ativos" divisoria descricao={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length}`}>
+                <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
                   {SERVICES.map((s) => (
-                    <div key={s.key} className="flex items-center justify-between">
-                      <span className="text-sm text-foreground">{s.label}</span>
-                      <Switch checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
-                    </div>
+                    <li key={s.key} className="flex min-w-0 items-center justify-between border-b border-border py-2">
+                      <span className={juntar(texto.corpo, "min-w-0 truncate")} id={`novo-servico-${s.key}`}>
+                        {s.label}
+                      </span>
+                      <Switch aria-labelledby={`novo-servico-${s.key}`} checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
+                    </li>
                   ))}
-                </div>
-              </div>
+                </ul>
+              </Secao>
             </div>
 
-            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-              <button onClick={handleClose} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border">
+            <div className="flex justify-end border-t border-border px-4 py-3 sm:px-5 [&>*+*]:ml-2">
+              <button type="button" onClick={handleClose} disabled={saving} className={botao.secundario}>
                 Cancelar
               </button>
-              <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-2">
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {saving ? "Criando..." : "Criar Cliente"}
+              <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
+                {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
+                {saving ? "Criando..." : "Criar cliente"}
               </button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

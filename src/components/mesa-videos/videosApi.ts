@@ -13,6 +13,10 @@ import type { EstadoDaTarefa } from "../../../supabase/functions/_shared/computa
  * das tabelas (RLS: equipe lê) e escreve só pela função mesa-videos. Sem o SQL
  * V2-01, o acervo de vídeo cai para a pasta do Storage (modo degradado) e as
  * demais listas avisam que falta ativar o banco. Nada aqui gasta.
+ *
+ * Frente E2 (26/09): a Mesa Edição (/mesa-edicao) usa as mesmas leituras e a
+ * mesma função. Vídeo gerado aparece na Edição só depois de aprovado na Mesa
+ * Vídeos (edicao_desde); gravação de fora aparece sempre (naEntradaDaEdicao).
  */
 
 export const BUCKET_DOS_VIDEOS = "mesa";
@@ -59,9 +63,18 @@ export interface ArquivoDeVideo {
   nota: string | null;
   estado: string;
   criado_em: string;
+  /** Vídeo gerado aprovado e mandado para a Mesa Edição (SQL E2-01). */
+  edicao_desde?: string | null;
   /** Veio só da pasta do Storage (sem o SQL V2-01): não dá para organizar. */
   so_no_storage?: boolean;
 }
+
+/** O que a Mesa Edição mostra: tudo que veio de fora e o gerado que foi aprovado para ela. */
+export const naEntradaDaEdicao = (a: ArquivoDeVideo) =>
+  a.estado !== "arquivado" && (a.tipo !== "gerado" || !!a.edicao_desde) && (TIPOS_SO_DO_GERADOR.indexOf(a.tipo) < 0 || !!a.edicao_desde);
+
+/** Imagens do gerador (frente V-A): ficam na Mesa Vídeos; não entram na Edição sozinhas. */
+export const TIPOS_SO_DO_GERADOR = ["angulo", "quadro"];
 
 export interface CenaDaHistoriaNoBanco {
   canvas_id: string;
@@ -155,6 +168,7 @@ export function normalizarArquivo(v: unknown): ArquivoDeVideo | null {
     nota: o.nota ? String(o.nota) : null,
     estado: texto(o.estado) || "ativo",
     criado_em: texto(o.criado_em),
+    edicao_desde: o.edicao_desde ? String(o.edicao_desde) : null,
     so_no_storage: o.so_no_storage === true ? true : undefined,
   };
 }
@@ -481,11 +495,22 @@ export interface ResultadoDoEnvioDeVideo {
   aviso: string | null;
 }
 
+/** Falha passageira de rede (vale uma nova tentativa do mesmo envio). */
+export const falhaDeRede = (m: string) => /network|fetch|timeout|timed out|abort|ECONN|503|502|504|Failed to/i.test(m || "");
+
 /**
  * Sobe gravações brutas (duas de cada vez) para <cliente>/video/brutos/ e
  * registra no acervo pela função (lotes de 20). O arquivo vai como veio.
+ * Falha de rede no envio tenta uma vez mais o mesmo arquivo (o caminho é novo
+ * e o registro não duplica: o mesmo conteúdo vira "já estava").
+ * `tipo`: "gerado" para vídeo gerado fora (Resultados da Mesa Vídeos).
  */
-export async function subirVideos(clientId: string, arquivos: File[], aoAvancar: (feitos: number, total: number) => void): Promise<ResultadoDoEnvioDeVideo> {
+export async function subirVideos(
+  clientId: string,
+  arquivos: File[],
+  aoAvancar: (feitos: number, total: number) => void,
+  opcoes: { tipo?: "bruto" | "gerado" } = {},
+): Promise<ResultadoDoEnvioDeVideo> {
   const recusados: { nome: string; motivo: string }[] = [];
   const validos: { arquivo: File; ext: string }[] = [];
   for (const a of arquivos) {
@@ -501,12 +526,18 @@ export async function subirVideos(clientId: string, arquivos: File[], aoAvancar:
   const trabalhar = async () => {
     while (proximo < validos.length) {
       const item = validos[proximo++];
-      const caminho = `${pastaDosBrutos(clientId)}/${novoIdDoArquivo()}.${item.ext}`;
+      let caminho = `${pastaDosBrutos(clientId)}/${novoIdDoArquivo()}.${item.ext}`;
       try {
         const [meta, sha] = await Promise.all([metadadosDoVideo(item.arquivo), hashDoArquivo(item.arquivo)]);
-        const { error } = await supabase.storage.from(BUCKET_DOS_VIDEOS).upload(caminho, item.arquivo, { contentType: item.arquivo.type || EXTENSOES[item.ext], upsert: false });
-        if (error) throw error;
+        const enviar = (destino: string) => supabase.storage.from(BUCKET_DOS_VIDEOS).upload(destino, item.arquivo, { contentType: item.arquivo.type || EXTENSOES[item.ext], upsert: false });
+        let r = await enviar(caminho);
+        if (r.error && falhaDeRede(String((r.error as { message?: string }).message || ""))) {
+          caminho = `${pastaDosBrutos(clientId)}/${novoIdDoArquivo()}.${item.ext}`;
+          r = await enviar(caminho);
+        }
+        if (r.error) throw r.error;
         subidos.push({
+          ...(opcoes.tipo === "gerado" ? { tipo: "gerado" } : {}),
           storage_path: caminho,
           nome_original: item.arquivo.name || caminho.split("/").pop(),
           mime: item.arquivo.type || EXTENSOES[item.ext],

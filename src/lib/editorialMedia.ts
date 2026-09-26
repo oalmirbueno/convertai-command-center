@@ -66,7 +66,8 @@ function sameAssetScope(root: EditorialMediaFile, child: EditorialMediaFile) {
 
 function numericOrderFromPath(value?: string | null) {
   if (!value) return null;
-  const lastSegment = value.split(/[\\/]/).filter(Boolean).at(-1) || value;
+  const partes = value.split(/[\\/]/).filter(Boolean);
+  const lastSegment = partes[partes.length - 1] || value;
   const leading = lastSegment.match(/^(\d+)(?=[\s._-])/);
   if (leading) return Number(leading[1]);
   return null;

@@ -3,15 +3,17 @@ import { resolve } from "node:path";
 import { createElement as h } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Mesa Vídeos (frente V2, 25/09/2026; docs/mesa-videos/CONTRATO.md): filtro do
- * acervo, organizador de takes (normalização e desfazer), pacote para editar,
- * memória de versões, pedidos preparados, fila do computador do agente
- * (desligada) e a tela básica. A função mesa-videos, o Storage e as tabelas
- * são simulados.
+ * Mesa Vídeos (frente V2, 25/09/2026; docs/mesa-videos/CONTRATO.md) e Mesa
+ * Edição (frente E2, 26/09): filtro do acervo, organizador de takes
+ * (normalização, melhores e desfazer), pacote para editar (a partir do projeto
+ * de edição), memória de versões, pedidos preparados (com o modelo de vídeo),
+ * fila do computador do agente (desligada), o agente das duas mesas, o fluxo
+ * Vídeos -> Edição e a tela básica das duas mesas. A função mesa-videos, o
+ * Storage e as tabelas são simulados.
  */
 
 const mock = vi.hoisted(() => ({
@@ -68,10 +70,16 @@ vi.mock("@/hooks/useSupabaseData", () => ({
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import MesaVideos from "@/pages/MesaVideos";
-import EtapaEdicao, { entradaDoPacote } from "@/components/mesa-videos/EtapaEdicao";
-import { segundosDoTexto } from "@/components/mesa-videos/EtapaMemoria";
-import { ETAPAS_DA_MESA_VIDEOS, etapaValida } from "@/components/mesa-videos/Comuns";
-import { extensaoDoVideo, fotosParaVideo, historiasDasLinhas, normalizarArquivo, novoIdDoArquivo } from "@/components/mesa-videos/videosApi";
+import MesaEdicao from "@/pages/MesaEdicao";
+import EtapaOrganizar from "@/components/mesa-edicao/EtapaOrganizar";
+import EtapaEditar from "@/components/mesa-edicao/EtapaEditar";
+import EtapaEntrada from "@/components/mesa-edicao/EtapaEntrada";
+import EtapaResultados from "@/components/mesa-videos/EtapaResultados";
+import { entradaDoPacote, projetoDaEntrada } from "@/components/mesa-edicao/pacote";
+import { segundosDoTexto } from "@/components/mesa-edicao/Versoes";
+import { ETAPAS_DA_MESA_EDICAO, etapaValidaDaEdicao } from "@/components/mesa-edicao/Comuns";
+import { ETAPAS_DA_MESA_VIDEOS, etapaAntigaDaEdicao, etapaValida } from "@/components/mesa-videos/Comuns";
+import { extensaoDoVideo, fotosParaVideo, historiasDasLinhas, naEntradaDaEdicao, normalizarArquivo, novoIdDoArquivo } from "@/components/mesa-videos/videosApi";
 import { normalizarFotos } from "@/components/mesa-foto/fotoApi";
 import { MESAS_DO_PAINEL, cargasDaMesa, etapaQueVaiAbrir } from "@/lib/mesa/preCarga";
 import { MESAS, enderecoDaMesa } from "@/components/mesa-foto/TrocaDeMesas";
@@ -94,6 +102,9 @@ import { comFeedback, decidir, motivoParaNaoMudar, normalizarVersao, proximoNume
 import { chaveDoPedido, estimarPedido, executorDoPedido, normalizarParametros, textoDaEstimativa } from "../../supabase/functions/_shared/pedidos-de-video";
 import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, pareceCredencial, podeMudarEstado } from "../../supabase/functions/_shared/computador-do-agente";
 import { normalizarRoteiroAprovado } from "../../supabase/functions/_shared/roteiros-para-video";
+import { duracaoNoModelo, duracoesDoModelo, modeloDeVideo, modelosDeVideo, textoDasDuracoes, travaDePessoaReal } from "../../supabase/functions/_shared/modelos-de-video";
+import { edlDoProjeto, normalizarProjeto, projetoDosTakes, proximaRevisao, duracaoDoProjeto } from "../../supabase/functions/_shared/projeto-de-edicao";
+import { acaoDoEnvioParaEdicao, camposDoEnvio, INTENCOES, intencaoPorPalavras, perguntaDaIntencao } from "../../supabase/functions/_shared/agente-de-video";
 
 const raiz = process.cwd();
 const ler = (p: string) => readFileSync(resolve(raiz, p), "utf8").replace(/\r\n/g, "\n");
@@ -253,6 +264,22 @@ describe("organizador de takes: normalização", () => {
     expect(acao.recusados).toEqual([expect.objectContaining({ ref: "t2", operacao: "arquivar", motivo: expect.stringContaining("melhor take") })]);
   });
 
+  it("com melhores (Mesa Edição), sugere o último take de cada cena sem melhor e trava o que já é melhor", () => {
+    const takes = [
+      take(A1, { roteiro_id: ROTEIRO, cena_ref: "produto", nome: "tk1.mov", nome_original: "take 1.mov" }),
+      take(A2, { roteiro_id: ROTEIRO, cena_ref: "produto", nome: "tk2.mov", nome_original: "take 2.mov" }),
+      take(A3, { roteiro_id: ROTEIRO, cena_ref: "abertura", nome: "A.mp4", nome_original: "A.mp4", melhor: true }),
+    ];
+    // Sem a opção, nada de melhor (o organizador de antes continua igual).
+    expect(proporOrganizacao(takes, ROTEIROS).some((i) => i.operacao === "marcar_melhor")).toBe(false);
+    const itens = proporOrganizacao(takes, ROTEIROS, { melhores: true });
+    expect(itens.filter((i) => i.operacao === "marcar_melhor")).toEqual([{ arquivo_id: A2, operacao: "marcar_melhor", para: "" }]);
+    const acao = acaoDaOrganizacao(takes, itens, ROTEIROS)!;
+    expect(acao.itens.some((i) => i.operacao === "marcar_melhor" && i.rotulo === "Marcar como melhor")).toBe(true);
+    const travada = acaoDaOrganizacao(takes, [{ arquivo_id: A3, operacao: "marcar_melhor", para: "" }], ROTEIROS)!;
+    expect(travada.recusados[0].motivo).toMatch(/Já é o melhor/);
+  });
+
   it("desfazer volta exatamente como estava", () => {
     const antes = take(A1, { nome: "IMG_1.MOV", grupo: "Rascunho", roteiro_id: null, cena_ref: null, melhor: false });
     for (const [op, para] of [
@@ -337,6 +364,25 @@ describe("pacote para editar", () => {
     expect(JSON.parse(vazio.arquivos["edl.json"]).note).toContain("FPS 25 provisório");
   });
 
+  it("o edl.json e o projeto.json saem do projeto de edição (o que o editor vai abrir)", () => {
+    const p = montarPacote(entrada);
+    const projeto = JSON.parse(p.arquivos["projeto.json"]);
+    expect(projeto.trilhas.map((t: { tipo: string }) => t.tipo)).toEqual(["video", "texto", "legenda", "audio", "sobreposicao"]);
+    expect(projeto.trilhas[0].clipes).toEqual([expect.objectContaining({ fonte: "cafe-c01-t02", inicio_s: 0, entrada_s: 0, saida_s: 7.5 })]);
+    // Projeto editado (corte e texto): o edl.json segue o projeto.
+    const editado = normalizarProjeto({
+      ...projeto,
+      trilhas: [
+        { ...projeto.trilhas[0], clipes: [{ ...projeto.trilhas[0].clipes[0], entrada_s: 1, saida_s: 5 }] },
+        { tipo: "texto", clipes: [{ id: "t1", inicio_s: 0.5, entrada_s: 0, saida_s: 2, texto: "Bom dia" }] },
+      ],
+    })!;
+    const edl = JSON.parse(montarPacote({ ...entrada, projeto: editado }).arquivos["edl.json"]);
+    expect(edl.ranges).toEqual([{ source: "cafe-c01-t02", start: 1, end: 5 }]);
+    expect(edl.overlays).toEqual([{ tipo: "texto", start: 0.5, end: 2.5, texto: "Bom dia", source: null }]);
+    expect(edl.total_duration_s).toBe(4);
+  });
+
   it("CSV protege vírgula, aspas e quebra de linha", () => {
     expect(celula('a,"b"\nc')).toBe('"a,""b""\nc"');
     expect(celula(null)).toBe("");
@@ -349,6 +395,13 @@ describe("pacote para editar", () => {
     expect(entradaDoPacote({ ...base, quais: "todos" }).takes).toHaveLength(3);
     const semMelhor = arquivos.map((a) => ({ ...a, melhor: false }));
     expect(entradaDoPacote({ ...base, arquivos: semMelhor, quais: "melhores" }).takes).toHaveLength(3);
+    // O projeto da tela: os melhores; sem melhor, todos (com duração) na ordem das cenas.
+    expect(entradaDoPacote({ ...base, quais: "todos" }).projeto!.trilhas[0].clipes.map((c) => c.fonte)).toEqual(["cafe-c01-t02"]);
+    expect(projetoDaEntrada({ ...entradaDoPacote({ ...base, arquivos: semMelhor, quais: "todos" }) }).trilhas[0].clipes).toHaveLength(2);
+    // Gerado só entra depois de aprovado para a Edição.
+    const gerado = normalizarArquivo({ ...takes[0], id: A4, tipo: "gerado", estado: "ativo", criado_em: "", melhor: false })!;
+    expect(entradaDoPacote({ ...base, arquivos: [gerado], roteiro: null, quais: "todos" }).takes).toHaveLength(0);
+    expect(entradaDoPacote({ ...base, arquivos: [{ ...gerado, edicao_desde: "2026-09-26T00:00:00Z" }], roteiro: null, quais: "todos" }).takes).toHaveLength(1);
   });
 });
 
@@ -441,6 +494,120 @@ describe("pedidos preparados e o computador do agente", () => {
   });
 });
 
+// ------------------------------------------------------------------ frente E2: modelos, projeto e agente
+
+describe("modelos de vídeo (Mesa Vídeos, Gerar)", () => {
+  it("catálogo documentado, nenhum ligado sem motor no ia_modelos, e a duração presa ao que o modelo aceita", () => {
+    const lista = modelosDeVideo([{ id: "texto-1", tipo: "texto", ativo: true }]);
+    expect(lista.map((m) => m.id)).toEqual(["veo-3.1", "kling-3", "seedance-2", "runway-gen4"]);
+    expect(lista.every((m) => !m.ligado)).toBe(true);
+    const veo = modeloDeVideo("veo-3.1")!;
+    expect(duracoesDoModelo(veo)).toEqual([4, 6, 8]);
+    expect(duracaoNoModelo(veo, 5)).toBe(4);
+    expect(duracaoNoModelo(veo, 15)).toBe(8);
+    expect(textoDasDuracoes(veo)).toBe("4, 6 ou 8 s");
+    expect(travaDePessoaReal(modeloDeVideo("seedance-2"), true)).toMatch(/pessoa real/);
+    expect(travaDePessoaReal(veo, true)).toBeNull();
+    // Motor ligado no catálogo aparece como ligado; motor extra entra no fim.
+    const ligados = modelosDeVideo([{ id: "google-veo-3.1", tipo: "video", ativo: true, rotulo: "Veo 3.1" }, { id: "outro", tipo: "video", ativo: true, rotulo: "Outro" }]);
+    expect(ligados.find((m) => m.id === "veo-3.1")!.motor_id).toBe("google-veo-3.1");
+    expect(ligados[ligados.length - 1]).toEqual(expect.objectContaining({ id: "outro", ligado: true }));
+  });
+
+  it("pedido com modelo: a duração segue o modelo, cena de roteiro vira gerar_cena e nunca custa US$ 0", () => {
+    const p = normalizarParametros("animar_cena", { duracao_s: 7, modelo: "veo-3.1", formato: "9:16" }) as { duracao_s: number; modelo: string; formato: string };
+    expect(p.duracao_s).toBe(6);
+    expect(p.modelo).toBe("veo-3.1");
+    const g = normalizarParametros("gerar_cena", { duracao_s: 10, modelo: "seedance-2", descricao: "Café na mesa", formato: "quadrado" }) as { duracao_s: number; descricao: string; formato: string };
+    expect(g).toEqual(expect.objectContaining({ duracao_s: 10, descricao: "Café na mesa", formato: "9:16" }));
+    const e = estimarPedido("gerar_cena", g as never);
+    expect(e.partes[1]).toEqual(expect.objectContaining({ usd: null, detalhe: expect.stringContaining("Seedance 2.0") }));
+    expect(executorDoPedido("gerar_cena", []).estado).toBe("em_breve");
+    expect(chaveDoPedido("gerar_cena", { roteiro_id: ROTEIRO, cena_ref: "a" }, g as never)).not.toBe(chaveDoPedido("gerar_cena", { roteiro_id: ROTEIRO, cena_ref: "b" }, g as never));
+  });
+});
+
+describe("projeto de edição (base do editor completo)", () => {
+  const takes = [
+    { id: A1, nome: "cafe_c01_t02.mov", tipo: "bruto", storage_bucket: "mesa", storage_path: "x/a.mov", cena_ref: "abertura", melhor: true, duracao_s: 7.5, largura: 1080, altura: 1920 },
+    { id: A2, nome: "cafe_c02_t01.mov", tipo: "bruto", storage_bucket: "mesa", storage_path: "x/b.mov", cena_ref: "produto", melhor: true, duracao_s: 3.25, largura: 1080, altura: 1920 },
+    { id: A3, nome: "sem-duracao.mov", tipo: "bruto", storage_bucket: "mesa", storage_path: "x/c.mov", cena_ref: null, melhor: true, duracao_s: null, largura: null, altura: null },
+  ];
+
+  it("primeira montagem: takes em sequência na trilha de vídeo, cinco trilhas, formato e fps", () => {
+    const p = projetoDosTakes({ titulo: "Reel", formato: "9:16", fps: null, takes });
+    expect(p.largura).toBe(1080);
+    expect(p.altura).toBe(1920);
+    expect(p.fps).toBe(25);
+    expect(p.fps_informado).toBe(false);
+    expect(Object.keys(p.fontes)).toEqual(["cafe-c01-t02", "cafe-c02-t01", "sem-duracao"]);
+    expect(p.trilhas[0].clipes.map((c) => [c.fonte, c.inicio_s, c.saida_s])).toEqual([
+      ["cafe-c01-t02", 0, 7.5],
+      ["cafe-c02-t01", 7.5, 3.25],
+    ]);
+    expect(p.duracao_s).toBe(10.75);
+    const edl = edlDoProjeto(p);
+    expect(Object.keys(edl)).toEqual(["version", "sources", "fps", "ranges", "grade", "overlays", "total_duration_s", "note"]);
+    expect(edl.total_duration_s).toBe(10.75);
+    expect(edl.note).toContain("FPS 25 provisório");
+  });
+
+  it("valida o que vem de fora: fonte desconhecida, trecho vazio, velocidade e tipos fora da lista", () => {
+    const p = normalizarProjeto({
+      formato: "16:9",
+      fps: 30,
+      fontes: { a: { nome: "a.mov", duracao_s: 10 } },
+      trilhas: [
+        { tipo: "video", clipes: [{ fonte: "a", inicio_s: 0, entrada_s: 2, saida_s: 6, velocidade: 2 }, { fonte: "zzz", inicio_s: 4, entrada_s: 0, saida_s: 1 }, { fonte: "a", entrada_s: 3, saida_s: 3 }] },
+        { tipo: "efeito_magico", clipes: [] },
+        { tipo: "legenda", clipes: [{ inicio_s: 0, entrada_s: 0, saida_s: 1.5, texto: "Oi", transicao_entrada: { tipo: "fade", duracao_s: 9 } }] },
+      ],
+    })!;
+    expect(p.largura).toBe(1920);
+    expect(p.trilhas.map((t) => t.tipo)).toEqual(["video", "legenda"]);
+    expect(p.trilhas[0].clipes).toHaveLength(2);
+    expect(p.trilhas[0].clipes[1].fonte).toBeNull();
+    expect(p.trilhas[1].clipes[0].transicao_entrada).toEqual({ tipo: "fade", duracao_s: 5 });
+    expect(duracaoDoProjeto(p.trilhas)).toBe(5);
+    expect(normalizarProjeto({ trilhas: "x" })).toBeNull();
+  });
+
+  it("revisão sobe a cada gravação e a trava otimista recusa quem leu uma revisão velha", () => {
+    const p = projetoDosTakes({ titulo: "Reel", takes });
+    const r1 = proximaRevisao(null, p, null, "t1");
+    expect(r1.revisao).toBe(1);
+    const r2 = proximaRevisao(r1, p, 1, "t2");
+    expect(r2.revisao).toBe(2);
+    expect(() => proximaRevisao(r2, p, 1, "t3")).toThrow(/mudou/);
+  });
+});
+
+describe("agente das mesas de vídeo", () => {
+  it("entende pelas palavras quando o Jev não responde, e a pergunta do Jev tem a saída nenhuma", () => {
+    expect(intencaoPorPalavras("edicao", "organiza tudo por cena")).toBe("organizar");
+    expect(intencaoPorPalavras("edicao", "quero transcrever os vídeos")).toBe("transcrever");
+    expect(intencaoPorPalavras("edicao", "abre o pacote pro Remotion")).toBe("pacote");
+    expect(intencaoPorPalavras("videos", "manda os aprovados para a edição")).toBe("enviar_para_edicao");
+    expect(intencaoPorPalavras("videos", "gera a próxima cena")).toBe("gerar");
+    expect(intencaoPorPalavras("videos", "bom dia")).toBe("nenhuma");
+    const q = perguntaDaIntencao("videos", "o que falta?");
+    expect(Object.keys(q.questions.intencao.criteria)).toEqual(INTENCOES.videos.map((i) => i.valor).concat(["nenhuma"]));
+    expect(q.questions.intencao.type).toBe("choice");
+  });
+
+  it("mandar para a Edição: só gerados fora da Edição, com apelidos e Desfazer", () => {
+    const acao = acaoDoEnvioParaEdicao([
+      { id: A1, nome: "v1.mp4", tipo: "gerado", estado: "ativo", edicao_desde: null },
+      { id: A2, nome: "v2.mp4", tipo: "gerado", estado: "ativo", edicao_desde: "2026-09-26" },
+      { id: A3, nome: "bruto.mov", tipo: "bruto", estado: "ativo", edicao_desde: null },
+    ])!;
+    expect(acao.agente).toBe("envio_para_edicao");
+    expect(acao.itens.map((i) => `${i.ref}:${i.alvo_id}:${i.operacao}`)).toEqual([`r1:${A1}:enviar_para_edicao`]);
+    expect(camposDoEnvio("enviar_para_edicao", "agora")).toEqual({ edicao_desde: "agora" });
+    expect(acaoDoEnvioParaEdicao([])).toBeNull();
+  });
+});
+
 // ------------------------------------------------------------------ conhecimento
 
 describe("conhecimento de edição (Brabo destilado)", () => {
@@ -473,32 +640,58 @@ describe("conhecimento de edição (Brabo destilado)", () => {
 
 // ------------------------------------------------------------------ esqueleto das mesas
 
-describe("Mesa Vídeos no esqueleto das mesas", () => {
-  it("rota, pré-carga, troca, seletor de clientes e etapas", () => {
+describe("Mesa Vídeos e Mesa Edição no esqueleto das mesas", () => {
+  it("rota, pré-carga, troca, seletor de clientes e etapas (7 mesas)", () => {
     expect(MESAS_DO_PAINEL["/mesa-videos"].prefixo).toBe("mesa-videos");
     expect(Object.keys(MESAS_DO_PAINEL["/mesa-videos"].etapas)).toEqual(ETAPAS_DA_MESA_VIDEOS.map((e) => e.valor));
-    expect(etapaQueVaiAbrir("/mesa-videos", `?client=${CLIENTE}&etapa=edicao`)).toBe("edicao");
-    expect(etapaQueVaiAbrir("/mesa-videos", `?client=${CLIENTE}`)).toBe("acervo");
-    expect(cargasDaMesa("/mesa-videos", `?client=${CLIENTE}&etapa=memoria`).map(([k]) => k)).toEqual(["pagina/mesa-videos", "mesa-videos/memoria"]);
-    expect(MESAS.map((m) => m.valor)).toContain("videos");
+    expect(Object.keys(MESAS_DO_PAINEL["/mesa-videos"].etapas)).toEqual(["base", "kit", "biblia", "roteiro", "gerar", "resultados"]);
+    expect(etapaQueVaiAbrir("/mesa-videos", `?client=${CLIENTE}&etapa=gerar`)).toBe("gerar");
+    expect(etapaQueVaiAbrir("/mesa-videos", `?client=${CLIENTE}`)).toBe("base");
+    expect(cargasDaMesa("/mesa-videos", `?client=${CLIENTE}&etapa=resultados`).map(([k]) => k)).toEqual(["pagina/mesa-videos", "mesa-videos/resultados", "mesa-videos/agente"]);
+    // Mesa Edição
+    expect(Object.keys(MESAS_DO_PAINEL["/mesa-edicao"].etapas)).toEqual(ETAPAS_DA_MESA_EDICAO.map((e) => e.valor));
+    expect(etapaQueVaiAbrir("/mesa-edicao", `?client=${CLIENTE}`)).toBe("entrada");
+    expect(cargasDaMesa("/mesa-edicao", `?client=${CLIENTE}&etapa=editar`).map(([k]) => k)).toEqual(["pagina/mesa-edicao", "mesa-edicao/editar", "mesa-edicao/agente"]);
+    expect(etapaValidaDaEdicao("nada")).toBe("entrada");
+    expect(MESAS.map((m) => m.valor)).toEqual(["mesa", "ads", "foto", "videos", "edicao", "publicidade", "roteiros"]);
     expect(enderecoDaMesa("videos", CLIENTE)).toBe(`/mesa-videos?client=${CLIENTE}`);
+    expect(enderecoDaMesa("edicao", CLIENTE)).toBe(`/mesa-edicao?client=${CLIENTE}`);
     expect(NOME_DA_MESA.videos).toBe("Mesa Vídeos");
+    expect(NOME_DA_MESA.edicao).toBe("Mesa Edição");
     expect(montarClientesDaMesa("videos", [{ id: CLIENTE, company_name: "A", plan_status: "active" }], []).visiveis).toHaveLength(1);
-    expect(etapaValida("nada")).toBe("acervo");
+    expect(montarClientesDaMesa("edicao", [{ id: CLIENTE, company_name: "A", plan_status: "active" }], []).visiveis).toHaveLength(1);
+    // Etapas antigas: acervo, história e roteiros viram a Base; edição e versões vão para a Mesa Edição.
+    expect(etapaValida("nada")).toBe("base");
+    expect(etapaValida("acervo")).toBe("base");
+    expect(etapaAntigaDaEdicao("edicao")).toBe("organizar");
+    expect(etapaAntigaDaEdicao("memoria")).toBe("editar");
+    expect(etapaAntigaDaEdicao("base")).toBeNull();
     const app = ler("src/App.tsx");
     expect(app).toContain('<Route path="/mesa-videos"');
     expect(app).toContain("<Suspense fallback={<EsqueletoDaMesa />}><MesaVideos /></Suspense>");
+    expect(app).toContain('<Route path="/mesa-edicao"');
+    expect(app).toContain("<Suspense fallback={<EsqueletoDaMesa />}><MesaEdicao /></Suspense>");
   });
 
   it("piso Safari 11 / Chrome 64 nos arquivos novos da tela", () => {
     for (const p of [
       "src/pages/MesaVideos.tsx",
+      "src/pages/MesaEdicao.tsx",
       "src/components/mesa-videos/videosApi.ts",
-      "src/components/mesa-videos/EtapaAcervo.tsx",
-      "src/components/mesa-videos/EtapaHistoria.tsx",
-      "src/components/mesa-videos/EtapaRoteiros.tsx",
-      "src/components/mesa-videos/EtapaEdicao.tsx",
-      "src/components/mesa-videos/EtapaMemoria.tsx",
+      "src/components/mesa-videos/MesaDeVideo.tsx",
+      "src/components/mesa-videos/EtapaBase.tsx",
+      "src/components/mesa-videos/EtapaGerar.tsx",
+      "src/components/mesa-videos/EtapaResultados.tsx",
+      "src/components/mesa-videos/AgenteDaMesaDeVideo.tsx",
+      "src/components/mesa-edicao/EtapaEntrada.tsx",
+      "src/components/mesa-edicao/EtapaOrganizar.tsx",
+      "src/components/mesa-edicao/EtapaEditar.tsx",
+      "src/components/mesa-edicao/AreaDoEditor.tsx",
+      "src/components/mesa-edicao/Versoes.tsx",
+      "src/components/mesa-edicao/pacote.ts",
+      "supabase/functions/_shared/modelos-de-video.ts",
+      "supabase/functions/_shared/projeto-de-edicao.ts",
+      "supabase/functions/_shared/agente-de-video.ts",
       "supabase/functions/_shared/organizador-de-takes.ts",
       "supabase/functions/_shared/pacote-de-edicao.ts",
       "supabase/functions/_shared/pedidos-de-video.ts",
@@ -560,26 +753,99 @@ beforeEach(() => {
   }
 });
 
-describe("tela da Mesa Vídeos", () => {
-  it("abre com as cinco etapas, a troca de mesas e sem chamar a função (nada gasta ao abrir)", async () => {
+describe("tela da Mesa Vídeos (geração)", () => {
+  it("abre com as três etapas, a troca de mesas, o agente fixo e sem chamar a função (nada gasta ao abrir)", async () => {
     montar(h(MesaVideos));
     expect(await screen.findByRole("navigation", { name: "Etapas da Mesa Vídeos" })).toBeTruthy();
     for (const e of ETAPAS_DA_MESA_VIDEOS) expect(screen.getByRole("button", { name: new RegExp(e.rotulo) })).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "Trocar de mesa" })).toBeTruthy();
-    expect(await screen.findByText("Fotos para vídeo")).toBeTruthy();
-    expect(await screen.findByText("IMG_1.MOV")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Mesa Vídeos/ }));
+    const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });
+    expect(troca.querySelectorAll("[data-item-de-mesa], a").length).toBeGreaterThanOrEqual(7);
+    fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
+    // A lista das mesas (popover) pode seguir aberta: consulta também o que ela esconde.
+    expect(await screen.findByRole("tab", { name: /Cenas/, hidden: true }, { timeout: 5000 })).toBeTruthy();
+    expect(await screen.findByText("Agente de vídeo", undefined, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Pedido para o agente", hidden: true })).toBeTruthy();
     expect(mock.invoke).not.toHaveBeenCalled();
   });
 
-  it("sem o SQL V2-01, as gravações vêm da pasta do Storage e a tela avisa", async () => {
+  it("endereço antigo de edição abre a Mesa Edição no Organizar", async () => {
+    function Onde() {
+      const l = useLocation();
+      return h("p", { "data-testid": "onde" }, `${l.pathname}${l.search}`);
+    }
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(MemoryRouter, { initialEntries: [`/mesa-videos?client=${CLIENTE}&etapa=edicao`] }, h(TooltipProvider, null, h(Routes, null, h(Route, { path: "/mesa-videos", element: h(MesaVideos) }), h(Route, { path: "*", element: h(Onde) })))),
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId("onde").textContent).toBe(`/mesa-edicao?client=${CLIENTE}&etapa=organizar`));
+  });
+
+  it("Resultados: aprovar manda o vídeo gerado para a Edição, com Desfazer", async () => {
+    mock.tabelas.video_arquivos = [...ARQUIVOS, { id: A3, client_id: CLIENTE, nome: "cena1_gerada.mp4", nome_original: "cena1_gerada.mp4", storage_bucket: "mesa", storage_path: `${CLIENTE}/video/brutos/g.mp4`, tipo: "gerado", melhor: false, estado: "ativo", criado_em: "2026-09-26T10:00:00Z", edicao_desde: null }];
+    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaResultados, { irPara: vi.fn() }) }));
+    fireEvent.click(await screen.findByRole("button", { name: "Aprovar cena1_gerada.mp4 e mandar para a Edição" }));
+    await waitFor(() => expect(chamadas("arquivo_editar")).toEqual([{ acao: "arquivo_editar", arquivo_id: A3, campos: { na_edicao: true } }]));
+    const { toast } = await import("sonner");
+    const aviso = (toast.success as any).mock.calls.find((c: any[]) => c[0] === "Aprovado e na Edição");
+    aviso[1].action.onClick();
+    await waitFor(() => expect(chamadas("arquivo_editar")[1]).toEqual({ acao: "arquivo_editar", arquivo_id: A3, campos: { na_edicao: false } }));
+    // Os brutos (gravações de fora) não aparecem nos Resultados.
+    expect(screen.queryByText("IMG_1.MOV")).toBeNull();
+  });
+});
+
+describe("tela da Mesa Edição", () => {
+  it("abre com as três etapas e o agente de edição, sem chamar a função", async () => {
+    montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
+    expect(await screen.findByRole("navigation", { name: "Etapas da Mesa Edição" })).toBeTruthy();
+    for (const e of ETAPAS_DA_MESA_EDICAO) expect(screen.getByRole("button", { name: new RegExp(e.rotulo) })).toBeTruthy();
+    expect(await screen.findByText("IMG_1.MOV")).toBeTruthy();
+    expect(await screen.findByText("Agente de edição")).toBeTruthy();
+    expect(mock.invoke).not.toHaveBeenCalled();
+  });
+
+  it("fluxo Vídeos -> Edição: o gerado aprovado entra na Entrada; o não aprovado fica só nos Resultados", async () => {
+    const gerado = { id: A3, client_id: CLIENTE, nome: "aprovado.mp4", nome_original: "aprovado.mp4", storage_bucket: "mesa", storage_path: `${CLIENTE}/video/brutos/g.mp4`, tipo: "gerado", melhor: false, estado: "ativo", criado_em: "2026-09-26T10:00:00Z", edicao_desde: "2026-09-26T11:00:00Z" };
+    const naoAprovado = { ...gerado, id: A4, nome: "pendente.mp4", edicao_desde: null };
+    expect(naEntradaDaEdicao(normalizarArquivo(gerado)!)).toBe(true);
+    expect(naEntradaDaEdicao(normalizarArquivo(naoAprovado)!)).toBe(false);
+    mock.tabelas.video_arquivos = [...ARQUIVOS, gerado, naoAprovado];
+    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaEntrada, { irPara: vi.fn() }) }));
+    expect(await screen.findByText("aprovado.mp4")).toBeTruthy();
+    expect(screen.getByText("Da Mesa Vídeos")).toBeTruthy();
+    expect(screen.queryByText("pendente.mp4")).toBeNull();
+    expect(screen.getByText("IMG_1.MOV")).toBeTruthy();
+  });
+
+  it("sem o SQL V2-01, os vídeos vêm da pasta do Storage e a tela avisa", async () => {
     mock.erros.video_arquivos = { message: 'relation "public.video_arquivos" does not exist', code: "42P01" };
     mock.lista.mockResolvedValue({ data: [{ name: "x1.mp4", created_at: "2026-09-25T10:00:00Z", metadata: { size: 2048, mimetype: "video/mp4" } }], error: null });
-    montar(h(MesaVideos));
+    montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
     expect(await screen.findByText("x1.mp4")).toBeTruthy();
     expect(document.querySelector("[data-aviso-de-ativacao]")).toBeTruthy();
   });
 
-  it("Edição: o organizador propõe, a equipe confirma no cartão e o computador do agente está desligado", async () => {
+  it("Editar: área do editor reservada com a linha do tempo, pacote com pendências e o computador do agente desligado", async () => {
+    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaEditar, { irPara: vi.fn() }) }));
+    await waitFor(() => expect(document.querySelector('[data-area-do-editor="reservada"]')).toBeTruthy());
+    expect(document.querySelectorAll("[data-trilha]").length).toBe(5);
+    expect(document.querySelector("[data-previa-do-pacote]")!.textContent).toContain("Sincronia de áudio não medida");
+    expect(document.querySelector('[data-computador-do-agente="desligado"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pedir tarefa" }).hasAttribute("disabled")).toBe(true);
+    // Salvar versão leva o projeto junto.
+    fireEvent.click(screen.getByRole("button", { name: "Salvar como versão" }));
+    await waitFor(() => expect(chamadas("versao_registrar")).toHaveLength(1));
+    const corpo = chamadas("versao_registrar")[0];
+    expect(corpo.projeto.trilhas[0].clipes.map((c: { fonte: string }) => c.fonte)).toEqual(["img-2"]);
+    expect(corpo.estado).toBe("rascunho");
+  });
+
+  it("Organizar: o organizador propõe, a equipe confirma no cartão", async () => {
     mock.invoke.mockImplementation((_f: string, { body }: any) => {
       if (body.acao === "takes_organizar_propor") {
         return Promise.resolve({
@@ -601,22 +867,18 @@ describe("tela da Mesa Vídeos", () => {
       if (body.acao === "executar_acao_agente") return Promise.resolve({ data: { anexo: { tipo: "acao_agente", agente: "organizador_de_takes", id: "org-1", resumo: "", itens: [], ignorados: [], recusados: [], executada_em: "agora", resultados: [] }, feitos: 1, falhas: 0 }, error: null });
       return Promise.resolve({ data: {}, error: null });
     });
-    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaEdicao) }));
+    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaOrganizar, { irPara: vi.fn() }) }));
     expect((await screen.findAllByText("IMG_1.MOV")).length).toBeGreaterThan(0);
-    expect(document.querySelector('[data-computador-do-agente="desligado"]')).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Pedir tarefa/ }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Organizar por roteiro e cena/ }));
     await waitFor(() => expect(chamadas("takes_organizar_propor")).toEqual([{ acao: "takes_organizar_propor", client_id: CLIENTE }]));
     expect(await screen.findByText("take_t01.mov", { exact: false })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(chamadas("executar_acao_agente")).toEqual([{ acao: "executar_acao_agente", mensagem_id: "33333333-3333-4333-8333-333333333333", acao_id: "org-1" }]));
-    // A prévia do pacote já mostra o que falta, sem gastar.
-    expect(document.querySelector("[data-previa-do-pacote]")!.textContent).toContain("Sincronia de áudio não medida");
   });
 
   it("marcar melhor take manda só o campo e oferece desfazer", async () => {
     mock.invoke.mockResolvedValue({ data: { arquivo: {}, desfazer: { melhor: false } }, error: null });
-    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaEdicao) }));
+    montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaOrganizar, { irPara: vi.fn() }) }));
     fireEvent.click(await screen.findByRole("button", { name: "Marcar IMG_1.MOV como melhor" }));
     await waitFor(() => expect(chamadas("arquivo_editar")).toEqual([{ acao: "arquivo_editar", arquivo_id: A1, campos: { melhor: true } }]));
     const { toast } = await import("sonner");
@@ -624,5 +886,38 @@ describe("tela da Mesa Vídeos", () => {
     expect(aviso && aviso[1].action.label).toBe("Desfazer");
     aviso[1].action.onClick();
     await waitFor(() => expect(chamadas("arquivo_editar")[1]).toEqual({ acao: "arquivo_editar", arquivo_id: A1, campos: { melhor: false } }));
+  });
+});
+
+describe("agente de edição na tela", () => {
+  it("atalho Organizar tudo propõe pelo contrato comum (sem Jev) e mostra o cartão para confirmar", async () => {
+    mock.invoke.mockImplementation((_f: string, { body }: any) => {
+      if (body.acao === "takes_organizar_propor") {
+        return Promise.resolve({
+          data: {
+            mensagem_id: "44444444-4444-4444-8444-444444444444",
+            acao: { tipo: "acao_agente", agente: "organizador_de_takes", id: "org-2", resumo: "Organizar 1 take.", itens: [{ ref: "t1", alvo_id: A1, titulo: "IMG_1.MOV", detalhe: null, operacao: "renomear", rotulo: "Renomear", para: "take_t01.mov" }], ignorados: [], recusados: [] },
+          },
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: {}, error: null });
+    });
+    montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Organizar tudo" }));
+    await waitFor(() => expect(chamadas("takes_organizar_propor")).toHaveLength(1));
+    expect(chamadas("agente_entender")).toHaveLength(0);
+    expect((await screen.findAllByText("Organizar 1 take.")).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Confirmar" }).length).toBeGreaterThan(0);
+  });
+
+  it("texto livre passa pela função (Jev) e abre a etapa pedida", async () => {
+    mock.invoke.mockImplementation((_f: string, { body }: any) => Promise.resolve({ data: body.acao === "agente_entender" ? { intencao: "versoes", confianca: 0.9, via: "jev" } : {}, error: null }));
+    montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
+    const campo = await screen.findByRole("textbox", { name: "Pedido para o agente" });
+    fireEvent.change(campo, { target: { value: "quero ver as versões do reel" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(chamadas("agente_entender")).toEqual([{ acao: "agente_entender", client_id: CLIENTE, mesa: "edicao", texto: "quero ver as versões do reel" }]));
+    expect(await screen.findByText("Abri as versões.")).toBeTruthy();
   });
 });

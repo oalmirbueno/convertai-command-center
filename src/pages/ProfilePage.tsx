@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Save, Lock, Camera } from "lucide-react";
 import { toast } from "sonner";
+import { CabecalhoDePagina, CampoDeFormulario, GrupoDeCampos, Painel, botao, campo, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 export default function ProfilePage() {
   const { user, profile } = useAuth();
@@ -17,6 +18,15 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // O perfil chega depois da primeira pintura: preenche os campos quando ele
+  // chega, sem apagar o que a pessoa já começou a digitar.
+  useEffect(() => {
+    if (!profile) return;
+    setFullName((v) => v || profile.full_name || "");
+    setCompany((v) => v || profile.company_name || "");
+    setAvatarUrl((v) => v || profile.avatar_url || "");
+  }, [profile]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,7 +42,7 @@ export default function ProfilePage() {
       const url = `${publicUrl}?t=${Date.now()}`;
       await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
       setAvatarUrl(url);
-      toast.success("Foto atualizada!");
+      toast.success("Foto atualizada");
     } catch (err: any) { toast.error(err.message || "Erro ao enviar foto"); }
     setUploadingAvatar(false);
   };
@@ -46,7 +56,7 @@ export default function ProfilePage() {
         company_name: company.trim() || null,
       }).eq("id", user!.id);
       if (error) throw error;
-      toast.success("Perfil atualizado!");
+      toast.success("Perfil atualizado");
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
     }
@@ -66,7 +76,7 @@ export default function ProfilePage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      toast.success("Senha alterada com sucesso!");
+      toast.success("Senha alterada");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
@@ -86,86 +96,92 @@ export default function ProfilePage() {
   };
 
   const initials = profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?";
+  const papel = profile?.role === "admin" ? "Administrador" : profile?.role === "client" ? "Cliente" : profile?.role;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <p className="heading-page">Meu Perfil</p>
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Perfil"
+        ajuda="Seus dados de acesso ao painel. O e-mail é o do login e só a equipe Aceleriq pode trocar."
+      />
 
-      <div className="max-w-3xl space-y-6">
-      <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
-              <AvatarFallback className="bg-primary/15 text-primary text-lg font-semibold">{initials}</AvatarFallback>
-            </Avatar>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer border-none"
-            >
-              {uploadingAvatar ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
+      <div className="max-w-3xl space-y-5">
+        <Painel
+          as="section"
+          aria-label="Seus dados"
+          rodape={
+            <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+              {saving ? "Salvando..." : "Salvar"}
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+          }
+        >
+          <div className="mb-5 flex min-w-0 items-center">
+            <div className="relative mr-4 h-14 w-14 shrink-0 sm:h-16 sm:w-16">
+              <Avatar className="h-full w-full">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
+                <AvatarFallback className="bg-primary/15 text-lg font-semibold text-primary">{initials}</AvatarFallback>
+              </Avatar>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                aria-label="Trocar foto"
+                title="Trocar foto"
+                className={juntar(
+                  "absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted",
+                  foco,
+                )}
+              >
+                {uploadingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={juntar(texto.tituloSecao, "truncate")}>{profile?.full_name}</p>
+              <p className={juntar(texto.auxiliar, "truncate")}>{profile?.email}</p>
+              {papel && <span className={juntar(etiqueta, "mt-1.5 bg-primary/10 text-primary")}>{papel}</span>}
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">{profile?.full_name}</p>
-            <p className="text-xs text-muted-foreground">{profile?.email}</p>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary mt-1 inline-block">
-              {profile?.role === "admin" ? "Administrador" : profile?.role === "client" ? "Cliente" : profile?.role}
+
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Nome completo" obrigatorio>
+              <input value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Empresa">
+              <input value={company} onChange={e => setCompany(e.target.value)} autoComplete="organization" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="E-mail" largo>
+              <input value={profile?.email || ""} disabled className={campo} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+        </Painel>
+
+        {/* Alterar Senha */}
+        <Painel
+          as="section"
+          aria-label="Senha"
+          titulo={
+            <span className="inline-flex items-center">
+              <Lock className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Senha
             </span>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo</label>
-            <input value={fullName} onChange={e => setFullName(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Empresa</label>
-            <input value={company} onChange={e => setCompany(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Email</label>
-            <input value={profile?.email || ""} disabled
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-muted-foreground cursor-not-allowed" />
-          </div>
-        </div>
-
-        <button onClick={handleSave} disabled={saving}
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          {saving ? "Salvando..." : "Salvar"}
-        </button>
-      </div>
-
-      {/* Alterar Senha */}
-      <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-foreground">Alterar Senha</h3>
-        </div>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nova Senha</label>
-            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Confirmar Nova Senha</label>
-            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Repita a nova senha"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
-        </div>
-        <button onClick={handleChangePassword} disabled={savingPassword}
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50">
-          {savingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
-          {savingPassword ? "Salvando..." : "Alterar Senha"}
-        </button>
-      </div>
+          }
+          rodape={
+            <button type="button" onClick={handleChangePassword} disabled={savingPassword} className={botao.secundario}>
+              {savingPassword ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Lock className="mr-1.5 h-3.5 w-3.5" />}
+              {savingPassword ? "Salvando..." : "Alterar senha"}
+            </button>
+          }
+        >
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Nova senha">
+              <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" className={campo} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Confirmar nova senha">
+              <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Repita a nova senha" className={campo} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+        </Painel>
       </div>
     </div>
   );

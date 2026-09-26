@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Loader2, ShieldCheck, X, AlertTriangle } from "lucide-react";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { Loader2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Carregando, botao, etiqueta, juntar, texto } from "@/components/sistema";
+import CascaPublica from "@/components/publico/CascaPublica";
 import { describeScope } from "@/lib/mcp-scopes";
 
 type OAuthClient = {
@@ -100,30 +100,26 @@ export default function OAuthConsent() {
 
   if (authLoading || (!details && !error)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <CascaPublica titulo="Conectar aplicativo" descricao="Buscando o pedido de conexão..." largura="media">
+        <Carregando linhas={3} rotulo="Buscando o pedido de conexão" />
+      </CascaPublica>
     );
   }
 
   if (error) {
+    // Sem isto a tela era um beco sem saída: o pedido de autorização
+    // vale uma vez só e expira, e quem chega aqui precisa recomeçar
+    // pelo aplicativo, não recarregar esta página.
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <div className="max-w-md w-full rounded-2xl border bg-card p-8 text-center space-y-3">
-          <X className="h-8 w-8 mx-auto text-destructive" />
-          <h1 className="text-lg font-semibold">Autorização indisponível</h1>
-          <p className="text-sm text-muted-foreground">{error}</p>
-          {/* Sem isto a tela era um beco sem saída: o pedido de autorização
-              vale uma vez só e expira, e quem chega aqui precisa recomeçar
-              pelo aplicativo, não recarregar esta página. */}
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Cada pedido de conexão vale uma vez e expira depois de alguns
-            minutos. Volte ao aplicativo que está conectando (ChatGPT, Claude
-            ou outro) e comece a conexão de novo. Recarregar esta página não
-            resolve, porque o pedido antigo já foi usado.
-          </p>
-        </div>
-      </div>
+      <CascaPublica
+        titulo="Autorização indisponível"
+        descricao="Cada pedido de conexão vale uma vez e expira em minutos. Volte ao aplicativo (ChatGPT, Claude ou outro) e comece a conexão de novo."
+        largura="media"
+      >
+        <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>
+          Recarregar esta página não resolve, porque o pedido antigo já foi usado. Detalhe: {error}
+        </p>
+      </CascaPublica>
     );
   }
 
@@ -131,71 +127,52 @@ export default function OAuthConsent() {
   const scopes = details?.scopes ?? (details?.client?.scope?.split(/\s+/).filter(Boolean) ?? []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="max-w-md w-full rounded-2xl border bg-card shadow-xl p-8 space-y-6">
-        <div className="flex items-center gap-3">
-          <img src={aceleriqLogo} alt="Aceleriq" className="h-10 w-auto" />
-          <div className="text-xs text-muted-foreground">Aceleriq OS · MCP</div>
-        </div>
+    <CascaPublica
+      titulo={`Conectar ${clientName}`}
+      descricao="Conexão exclusiva da equipe interna da Aceleriq."
+      ajuda="O aplicativo poderá ler ou atualizar dados operacionais conforme as permissões verificadas pelo servidor."
+      largura="media"
+    >
+      <p className={juntar(texto.corpo, "flex min-w-0 items-center text-muted-foreground")}>
+        <ShieldCheck className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 truncate">Conectado como <b className="font-medium text-foreground">{user?.email}</b></span>
+      </p>
 
-        <div className="space-y-2">
-          <h1 className="text-xl font-semibold leading-tight">
-            Conectar <span className="text-primary">{clientName}</span> à sua conta
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Esta conexão é exclusiva para a equipe interna da Aceleriq e poderá ler ou atualizar
-            dados operacionais conforme as permissões verificadas pelo servidor.
-          </p>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-foreground">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <span>Conectado como <b>{user?.email}</b></span>
-          </div>
-        </div>
-
-
-        {scopes.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Permissões solicitadas
-            </div>
-            <ul className="space-y-2">
-              {scopes.map((s) => {
-                const info = describeScope(s);
-                return (
-                  <li key={s} className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
-                    {info.sensitive ? (
-                      <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-500 shrink-0" />
-                    ) : (
-                      <ShieldCheck className="mt-0.5 h-4 w-4 text-primary shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium leading-tight">
-                        {info.title}
-                        <span className="ml-2 rounded bg-background border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                          {s}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{info.description}</div>
+      {scopes.length > 0 && (
+        <section className="mt-6 min-w-0" aria-label="Permissões pedidas">
+          <h2 className={texto.rotulo}>Permissões pedidas</h2>
+          <ul className="mt-2 divide-y divide-border border-y border-border">
+            {scopes.map((s) => {
+              const info = describeScope(s);
+              return (
+                <li key={s} className="flex min-w-0 items-start py-3">
+                  {info.sensitive ? (
+                    <AlertTriangle className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-label="Permissão sensível" />
+                  ) : (
+                    <ShieldCheck className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center">
+                      <span className={juntar(texto.corpo, "mr-2 font-medium")}>{info.title}</span>
+                      <span className={juntar(etiqueta, "max-w-full truncate bg-muted font-mono text-muted-foreground")}>{s}</span>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+                    <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{info.description}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" disabled={busy} onClick={() => decide(false)}>
-            Cancelar
-          </Button>
-          <Button className="flex-1" disabled={busy} onClick={() => decide(true)}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Autorizar"}
-          </Button>
-        </div>
+      <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-0 sm:[&>*+*]:ml-2">
+        <button type="button" className={botao.secundario} disabled={busy} onClick={() => decide(false)}>
+          Cancelar
+        </button>
+        <button type="button" className={botao.primario} disabled={busy} onClick={() => decide(true)}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-label="Autorizando" /> : "Autorizar"}
+        </button>
       </div>
-    </div>
+    </CascaPublica>
   );
 }

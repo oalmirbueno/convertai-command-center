@@ -1,24 +1,28 @@
-import { motion, type Variants } from "framer-motion";
+import { MotionConfig, motion, type Variants } from "framer-motion";
 import { type ReactNode } from "react";
 
-/* ─── Shared animation variants ─── */
+/* ─── Shared animation variants ───
+ * Só a entrada, uma vez, ao abrir a tela (docs/design/SISTEMA.md, "nada
+ * pisca"): nada em loop, nada que alterne sozinho. Quem pediu menos movimento
+ * no aparelho não vê o deslize (MotionConfig reducedMotion="user").
+ */
 
 export const staggerContainer: Variants = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.07,
+      staggerChildren: 0.05,
       delayChildren: 0.05,
     },
   },
 };
 
 export const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 8 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 };
 
@@ -50,14 +54,16 @@ export function StaggerContainer({
   className?: string;
 }) {
   return (
-    <motion.div
-      variants={staggerContainer}
-      initial="hidden"
-      animate="show"
-      className={className}
-    >
-      {children}
-    </motion.div>
+    <MotionConfig reducedMotion="user">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        className={className}
+      >
+        {children}
+      </motion.div>
+    </MotionConfig>
   );
 }
 

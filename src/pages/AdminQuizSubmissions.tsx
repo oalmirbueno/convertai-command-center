@@ -4,24 +4,31 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { motion } from "framer-motion";
 import {
   Eye, CheckCircle2, Copy, Loader2, Search, Filter,
-  Mail, Phone, Building2, Sparkles, ArrowDownToLine, Hash,
+  Mail, Phone, Building2, ArrowDownToLine, Hash, Lock, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 import { APP_PUBLIC_URL } from "@/lib/publicUrl";
 
 const APP_PUBLIC_HOST = new URL(APP_PUBLIC_URL).hostname;
@@ -93,18 +100,24 @@ function statusTone(status: string | null) {
 
 // ----------------- Page -----------------
 
+type FiltroDeStatus = "all" | "draft" | "submitted" | "processed";
+type FiltroDeScore = "all" | "80" | "60" | "40";
+type FiltroDeData = "all" | "7d" | "30d" | "90d";
+const umDe = (valores: string[]) => (v: unknown) => typeof v === "string" && valores.indexOf(v) >= 0;
+
 export default function AdminQuizSubmissions() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted" | "processed">("all");
-  const [scoreFilter, setScoreFilter] = useState<"all" | "80" | "60" | "40">("all");
-  const [dateFilter, setDateFilter] = useState<"all" | "7d" | "30d" | "90d">("all");
+  // Busca e filtros lembram ao sair e voltar (docs/design/SISTEMA.md, seção 12).
+  const [search, setSearch] = useEstadoDaTela<string>("quiz:busca", "", { validar: (v) => typeof v === "string" });
+  const [statusFilter, setStatusFilter] = useEstadoDaTela<FiltroDeStatus>("quiz:status", "all", { validar: umDe(["all", "draft", "submitted", "processed"]) });
+  const [scoreFilter, setScoreFilter] = useEstadoDaTela<FiltroDeScore>("quiz:score", "all", { validar: umDe(["all", "80", "60", "40"]) });
+  const [dateFilter, setDateFilter] = useEstadoDaTela<FiltroDeData>("quiz:periodo", "all", { validar: umDe(["all", "7d", "30d", "90d"]) });
   const [openSubmission, setOpenSubmission] = useState<Submission | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
 
-  const { data: submissions, isLoading } = useQuery({
+  const { data: submissions, isLoading, isError, refetch } = useQuery({
     queryKey: ["quiz-submissions-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -220,238 +233,242 @@ export default function AdminQuizSubmissions() {
   // Guard: only admin
   if (profile && profile.role !== "admin") {
     return (
-      <div className="max-w-2xl mx-auto py-20 text-center">
-        <h1 className="text-2xl font-semibold mb-2">Acesso restrito</h1>
-        <p className="text-muted-foreground">Esta página está disponível apenas para administradores.</p>
-      </div>
+      <EstadoVazio
+        icone={<Lock className="h-5 w-5" />}
+        titulo="Acesso restrito"
+        descricao="Esta página está disponível apenas para administradores."
+      />
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-        <div>
-          <span className="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-primary mb-2">
-            <Sparkles className="h-3.5 w-3.5" /> Quiz Aceleriq
-          </span>
-          <h1 className="heading-page">Diagnósticos recebidos</h1>
-          <p className="text-muted-foreground mt-1">
-            Leads que completaram o quiz público em <span className="text-foreground">{APP_PUBLIC_HOST}/quiz</span>.
-          </p>
-        </div>
-      </header>
+  const temFiltro = statusFilter !== "all" || scoreFilter !== "all" || dateFilter !== "all" || !!search.trim();
+  const limparFiltros = () => { setSearch(""); setStatusFilter("all"); setScoreFilter("all"); setDateFilter("all"); };
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="Total" value={stats.total} />
-        <StatCard label="Em andamento" value={stats.drafts} accent="muted" />
-        <StatCard label="Submissões novas" value={stats.submitted} accent="warning" />
-        <StatCard label="ICP ≥ 80" value={stats.high} accent="primary" />
-        <StatCard label="Score médio" value={stats.avg} mono />
+  const numeros = [
+    { rotulo: "Total", valor: stats.total, cor: "text-foreground" },
+    { rotulo: "Em andamento", valor: stats.drafts, cor: "text-muted-foreground" },
+    { rotulo: "Novas", valor: stats.submitted, cor: "text-warning" },
+    { rotulo: "ICP ≥ 80", valor: stats.high, cor: "text-primary" },
+    { rotulo: "Score médio", valor: stats.avg, cor: "text-foreground" },
+  ];
+
+  const acoesDaLinha = (s: Submission, isDraft: boolean) => (
+    <div className="inline-flex items-center [&>*+*]:ml-0.5">
+      <button type="button" className={botao.icone} title="Ver respostas completas" aria-label="Ver respostas completas" onClick={() => setOpenSubmission(s)}>
+        <Eye className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" className={juntar(botao.icone, "disabled:opacity-40")} title="Copiar JSON para o Ops" aria-label="Copiar JSON para o Ops" disabled={isDraft} onClick={() => copyOpsPayload(s)}>
+        <Copy className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={juntar(botao.icone, "disabled:opacity-40")}
+        title="Marcar como processado"
+        aria-label="Marcar como processado"
+        disabled={s.status === "processed" || isDraft || updatingId === s.id}
+        onClick={() => markProcessed(s)}
+      >
+        {updatingId === s.id
+          ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          : <CheckCircle2 className={juntar("h-4 w-4", s.status === "processed" && "text-primary")} aria-hidden="true" />}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Diagnósticos do quiz"
+        descricao={submissions ? `${stats.total} ${stats.total === 1 ? "diagnóstico" : "diagnósticos"} · ${APP_PUBLIC_HOST}/quiz` : undefined}
+        ajuda={<>Leads que responderam o quiz público em <span className="text-foreground">{APP_PUBLIC_HOST}/quiz</span>. Clique numa linha para ver as respostas.</>}
+      />
+
+      {/* Números (grade de um nível) */}
+      <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {numeros.map((n) => (
+          <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 px-4 py-3")}>
+            <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
+            <p className={juntar("mt-1 text-[22px] font-semibold leading-7 tabular-nums", n.cor)}>{submissions ? n.valor : "-"}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm p-4 flex flex-col lg:flex-row gap-3 lg:items-center">
-        <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
+      {/* Filtros (lembram ao sair e voltar) */}
+      <div className="flex min-w-0 flex-wrap items-center">
+        <div className="relative mb-2 mr-2 min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nome, e-mail, empresa ou WhatsApp"
-            className="pl-9 h-10"
+            aria-label="Buscar diagnóstico"
+            className={juntar(campo, "pl-8")}
           />
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-            <SelectTrigger className="h-10 w-[160px]">
-              <Filter className="h-3.5 w-3.5 mr-2" />
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="draft">Em andamento</SelectItem>
-              <SelectItem value="submitted">Apenas novos</SelectItem>
-              <SelectItem value="processed">Apenas processados</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={scoreFilter} onValueChange={(v: any) => setScoreFilter(v)}>
-            <SelectTrigger className="h-10 w-[150px]">
-              <SelectValue placeholder="Score" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Qualquer score</SelectItem>
-              <SelectItem value="80">Score ≥ 80</SelectItem>
-              <SelectItem value="60">Score ≥ 60</SelectItem>
-              <SelectItem value="40">Score ≥ 40</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={dateFilter} onValueChange={(v: any) => setDateFilter(v)}>
-            <SelectTrigger className="h-10 w-[150px]">
-              <SelectValue placeholder="Período" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Qualquer data</SelectItem>
-              <SelectItem value="7d">Últimos 7 dias</SelectItem>
-              <SelectItem value="30d">Últimos 30 dias</SelectItem>
-              <SelectItem value="90d">Últimos 90 dias</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="mb-2 flex min-w-0 flex-wrap items-center [&>*]:mb-0 [&>*+*]:ml-2">
+          <SeletorCompacto
+            rotulo="Status"
+            icone={<Filter className="h-3.5 w-3.5" />}
+            modo="lista"
+            valor={statusFilter}
+            onEscolher={(v) => setStatusFilter(v as FiltroDeStatus)}
+            opcoes={[
+              { valor: "all", rotulo: "Todos os status" },
+              { valor: "draft", rotulo: "Em andamento" },
+              { valor: "submitted", rotulo: "Apenas novos" },
+              { valor: "processed", rotulo: "Apenas processados" },
+            ]}
+          />
+          <SeletorCompacto
+            rotulo="Score"
+            modo="lista"
+            valor={scoreFilter}
+            onEscolher={(v) => setScoreFilter(v as FiltroDeScore)}
+            opcoes={[
+              { valor: "all", rotulo: "Qualquer score" },
+              { valor: "80", rotulo: "Score ≥ 80" },
+              { valor: "60", rotulo: "Score ≥ 60" },
+              { valor: "40", rotulo: "Score ≥ 40" },
+            ]}
+          />
+          <SeletorCompacto
+            rotulo="Período"
+            modo="lista"
+            valor={dateFilter}
+            onEscolher={(v) => setDateFilter(v as FiltroDeData)}
+            opcoes={[
+              { valor: "all", rotulo: "Qualquer data" },
+              { valor: "7d", rotulo: "Últimos 7 dias" },
+              { valor: "30d", rotulo: "Últimos 30 dias" },
+              { valor: "90d", rotulo: "Últimos 90 dias" },
+            ]}
+          />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm overflow-hidden">
-        {isLoading ? (
-          <div className="flex flex-col items-center gap-3 py-24">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Carregando submissões…</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-muted-foreground">Nenhuma submissão com os filtros aplicados.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent border-border/60">
-                  <TableHead className="w-[26%]">Lead</TableHead>
-                  <TableHead className="w-[110px]">Progresso</TableHead>
-                  <TableHead className="w-[90px] text-center">Score</TableHead>
-                  <TableHead>Plano</TableHead>
-                  <TableHead>Última atividade</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right pr-4">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((s, idx) => {
-                  const score = scoreTone(s.icp_fit_score);
-                  const status = statusTone(s.status);
-                  const planLabel = s.recommended_plan
-                    ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan)
-                    : "-";
-                  const answered = answeredCount(s);
-                  const progressPct = Math.round((answered / ANSWER_FIELDS.length) * 100);
-                  const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
-                  const isDraft = (s.status ?? "draft") === "draft";
-                  return (
-                    <motion.tr
-                      key={s.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.02, duration: 0.25 }}
-                      className="border-border/60 hover:bg-secondary/40 cursor-pointer"
-                      onClick={() => setOpenSubmission(s)}
-                    >
-                      <TableCell className="py-4">
-                        <div className="font-medium text-foreground">
-                          {s.lead_name || <span className="text-muted-foreground italic">Sem nome ainda</span>}
+      {/* Lista */}
+      {isLoading && !submissions ? (
+        <Carregando linhas={6} rotulo="Carregando submissões" />
+      ) : isError && !submissions ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar os diagnósticos."
+          acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+        />
+      ) : filtered.length === 0 ? (
+        <EstadoVazio
+          compacto
+          titulo={temFiltro ? "Nenhuma submissão com os filtros aplicados." : "Nenhum diagnóstico recebido ainda."}
+          acao={temFiltro ? <button type="button" className={botao.discreto} onClick={limparFiltros}>Limpar filtros</button> : undefined}
+        />
+      ) : (
+        <RegiaoRolavel rotulo="Diagnósticos recebidos" memoria="quiz:lista" className="lg:max-h-[65vh]">
+          {/* Computador: tabela */}
+          <table className="hidden w-full min-w-0 md:table">
+            <thead>
+              <tr className="border-b border-border">
+                <th scope="col" className={juntar(texto.rotulo, "w-[30%] py-2 pr-3 text-left")}>Lead</th>
+                <th scope="col" className={juntar(texto.rotulo, "w-[120px] py-2 pr-3 text-left")}>Progresso</th>
+                <th scope="col" className={juntar(texto.rotulo, "w-[70px] py-2 pr-3 text-right")}>Score</th>
+                <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Plano</th>
+                <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Última atividade</th>
+                <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Status</th>
+                <th scope="col" className="py-2 text-right"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map((s) => {
+                const score = scoreTone(s.icp_fit_score);
+                const status = statusTone(s.status);
+                const planLabel = s.recommended_plan
+                  ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan)
+                  : "-";
+                const answered = answeredCount(s);
+                const progressPct = Math.round((answered / ANSWER_FIELDS.length) * 100);
+                const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
+                const isDraft = (s.status ?? "draft") === "draft";
+                return (
+                  <tr key={s.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setOpenSubmission(s)}>
+                    <td className="max-w-0 py-2.5 pr-3">
+                      <p className={juntar(texto.corpo, "truncate font-medium")}>
+                        {s.lead_name || <span className="font-normal italic text-muted-foreground">Sem nome ainda</span>}
+                      </p>
+                      <p className={juntar(texto.auxiliar, "truncate")}>
+                        {[s.lead_company, s.lead_email, s.lead_whatsapp].filter(Boolean).join(" · ") ||
+                          (!s.lead_name && !s.lead_email ? <span className="inline-flex items-center font-mono"><Hash className="mr-0.5 h-3 w-3" aria-hidden="true" />{s.id.slice(0, 8)}…</span> : null)}
+                      </p>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <div className="flex items-center">
+                        <div className="mr-2 h-1.5 w-14 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                          <div className={`h-full ${isDraft ? "bg-warning/70" : "bg-primary"}`} style={{ width: `${progressPct}%` }} />
                         </div>
-                        <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                          {s.lead_company && (
-                            <span className="inline-flex items-center gap-1">
-                              <Building2 className="h-3 w-3" /> {s.lead_company}
-                            </span>
-                          )}
-                          {s.lead_email && (
-                            <span className="inline-flex items-center gap-1">
-                              <Mail className="h-3 w-3" /> {s.lead_email}
-                            </span>
-                          )}
-                          {s.lead_whatsapp && (
-                            <span className="inline-flex items-center gap-1">
-                              <Phone className="h-3 w-3" /> {s.lead_whatsapp}
-                            </span>
-                          )}
-                          {!s.lead_name && !s.lead_email && (
-                            <span className="inline-flex items-center gap-1 font-mono">
-                              <Hash className="h-3 w-3" /> {s.id.slice(0, 8)}…
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
+                        <span className="font-mono text-[12px] tabular-nums text-muted-foreground">{answered}/{ANSWER_FIELDS.length}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 text-right">
+                      <span className={juntar(etiqueta, "border font-mono", score.className)}>{score.label}</span>
+                    </td>
+                    <td className={juntar(texto.corpo, "py-2.5 pr-3")}>{planLabel}</td>
+                    <td className="whitespace-nowrap py-2.5 pr-3 text-[12.5px] tabular-nums text-muted-foreground">
+                      {lastActivity ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR }) : "-"}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <span className={juntar(etiqueta, "border", status.className)}>{status.label}</span>
+                    </td>
+                    <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      {acoesDaLinha(s, isDraft)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
 
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-16 rounded-full bg-secondary overflow-hidden">
-                            <div
-                              className={`h-full ${isDraft ? "bg-amber-400/70" : "bg-primary"}`}
-                              style={{ width: `${progressPct}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {answered}/{ANSWER_FIELDS.length}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={`font-mono px-2.5 py-1 ${score.className}`}>
-                          {score.label}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell>
-                        <span className="text-sm">{planLabel}</span>
-                      </TableCell>
-
-                      <TableCell className="text-sm text-muted-foreground">
-                        {lastActivity
-                          ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR })
-                          : "-"}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline" className={status.className}>
-                          {status.label}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right pr-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="inline-flex items-center gap-1">
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-8 w-8 p-0"
-                            title="Ver respostas completas"
-                            onClick={() => setOpenSubmission(s)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-8 w-8 p-0"
-                            title="Copiar JSON para o Ops"
-                            disabled={isDraft}
-                            onClick={() => copyOpsPayload(s)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-8 w-8 p-0"
-                            title="Marcar como processado"
-                            disabled={s.status === "processed" || isDraft || updatingId === s.id}
-                            onClick={() => markProcessed(s)}
-                          >
-                            {updatingId === s.id
-                              ? <Loader2 className="h-4 w-4 animate-spin" />
-                              : <CheckCircle2 className={`h-4 w-4 ${s.status === "processed" ? "text-primary" : ""}`} />}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
+          {/* Celular: lista */}
+          <ul className="divide-y divide-border md:hidden">
+            {filtered.map((s) => {
+              const score = scoreTone(s.icp_fit_score);
+              const status = statusTone(s.status);
+              const answered = answeredCount(s);
+              const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
+              const isDraft = (s.status ?? "draft") === "draft";
+              return (
+                <li key={s.id} className="flex min-w-0 items-center py-2.5">
+                  <button type="button" onClick={() => setOpenSubmission(s)} className={juntar("mr-2 min-w-0 flex-1 rounded text-left", foco)}>
+                    <span className={juntar(texto.corpo, "block truncate font-medium")}>
+                      {s.lead_name || <span className="font-normal italic text-muted-foreground">Sem nome ainda</span>}
+                    </span>
+                    <span className={juntar(texto.auxiliar, "block truncate tabular-nums")}>
+                      {s.lead_company ? `${s.lead_company} · ` : ""}{answered}/{ANSWER_FIELDS.length}
+                      {lastActivity ? ` · ${format(new Date(lastActivity), "dd MMM", { locale: ptBR })}` : ""}
+                    </span>
+                  </button>
+                  <span className={juntar(etiqueta, "mr-1 border font-mono", score.className)}>{score.label}</span>
+                  <span className={juntar(etiqueta, "mr-1 border", status.className)}>{status.label}</span>
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" className={botao.icone} aria-label={`Ações de ${s.lead_name || "diagnóstico"}`}>
+                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onSelect={() => setOpenSubmission(s)}>
+                        <Eye className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Ver respostas completas
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={isDraft} onSelect={() => copyOpsPayload(s)}>
+                        <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Copiar JSON para o Ops
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={s.status === "processed" || isDraft || updatingId === s.id} onSelect={() => markProcessed(s)}>
+                        <CheckCircle2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Marcar como processado
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
+          </ul>
+        </RegiaoRolavel>
+      )}
 
       {/* Drawer */}
       <SubmissionDrawer
@@ -461,29 +478,6 @@ export default function AdminQuizSubmissions() {
         onMarkProcessed={markProcessed}
         updating={updatingId === openSubmission?.id}
       />
-    </div>
-  );
-}
-
-// ----------------- Stat card -----------------
-
-function StatCard({
-  label, value, mono, accent,
-}: {
-  label: string;
-  value: number | string;
-  mono?: boolean;
-  accent?: "primary" | "warning" | "muted";
-}) {
-  const accentClass =
-    accent === "primary" ? "text-primary"
-    : accent === "warning" ? "text-amber-400"
-    : accent === "muted" ? "text-muted-foreground"
-    : "text-foreground";
-  return (
-    <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm p-4">
-      <div className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-3xl font-semibold ${mono ? "font-mono" : ""} ${accentClass}`}>{value}</div>
     </div>
   );
 }
@@ -544,12 +538,12 @@ function SubmissionDrawer({
 
   return (
     <Sheet open={!!submission} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
-        <SheetHeader className="text-left">
-          <SheetTitle className="text-2xl tracking-tight">
+      <SheetContent className="flex w-full flex-col p-0 sm:max-w-xl">
+        <SheetHeader className="shrink-0 border-b border-border px-5 pb-4 pt-5 text-left">
+          <SheetTitle className={juntar(texto.tituloPagina, "pr-10")}>
             {s.lead_name || "Sem nome"}
           </SheetTitle>
-          <SheetDescription>
+          <SheetDescription className="text-[12.5px]">
             {s.lead_company || "-"} ·{" "}
             {s.submitted_at
               ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
@@ -561,73 +555,73 @@ function SubmissionDrawer({
           </SheetDescription>
         </SheetHeader>
 
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-2 mt-6">
-          <div className="rounded-xl border border-border/60 bg-card/40 p-3">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Score</div>
-            <div className="mt-1">
-              <Badge variant="outline" className={`font-mono px-2 py-0.5 ${score.className}`}>
-                {score.label}
-              </Badge>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+          {/* Resumo e contato */}
+          <dl className="divide-y divide-border border-b border-border">
+            <div className="flex min-w-0 items-center py-2">
+              <dt className={juntar(texto.rotulo, "w-24 shrink-0")}>Score</dt>
+              <dd><span className={juntar(etiqueta, "border font-mono", score.className)}>{score.label}</span></dd>
             </div>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-card/40 p-3 col-span-2">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Plano</div>
-            <div className="mt-1 text-sm font-medium">{planLabel}</div>
-          </div>
-        </div>
-
-        {/* Contact */}
-        <div className="mt-4 rounded-xl border border-border/60 bg-card/40 p-4 text-sm space-y-1.5">
-          {s.lead_email && (
-            <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-muted-foreground" /> {s.lead_email}</div>
-          )}
-          {s.lead_whatsapp && (
-            <div className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-muted-foreground" /> {s.lead_whatsapp}</div>
-          )}
-          {s.lead_company && (
-            <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5 text-muted-foreground" /> {s.lead_company}</div>
-          )}
-        </div>
-
-        {/* Answers */}
-        <div className="mt-6 space-y-5">
-          {sections.map((section) => (
-            <div key={section.title}>
-              <div className="text-[11px] font-mono uppercase tracking-widest text-primary mb-2">
-                {section.title}
-              </div>
-              <div className="space-y-3">
-                {section.items.map((it) => (
-                  <div key={it.label} className="rounded-xl border border-border/60 bg-card/30 p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
-                      {it.label}
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap text-foreground/90">
-                      {it.value || <span className="text-muted-foreground">- sem resposta -</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="flex min-w-0 items-center py-2">
+              <dt className={juntar(texto.rotulo, "w-24 shrink-0")}>Plano</dt>
+              <dd className={juntar(texto.corpo, "font-medium")}>{planLabel}</dd>
             </div>
-          ))}
+            {s.lead_email && (
+              <div className="flex min-w-0 items-center py-2">
+                <dt className={juntar(texto.rotulo, "flex w-24 shrink-0 items-center")}><Mail className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> E-mail</dt>
+                <dd className={juntar(texto.corpo, "min-w-0 truncate")}>{s.lead_email}</dd>
+              </div>
+            )}
+            {s.lead_whatsapp && (
+              <div className="flex min-w-0 items-center py-2">
+                <dt className={juntar(texto.rotulo, "flex w-24 shrink-0 items-center")}><Phone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> WhatsApp</dt>
+                <dd className={juntar(texto.corpo, "min-w-0 truncate")}>{s.lead_whatsapp}</dd>
+              </div>
+            )}
+            {s.lead_company && (
+              <div className="flex min-w-0 items-center py-2">
+                <dt className={juntar(texto.rotulo, "flex w-24 shrink-0 items-center")}><Building2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Empresa</dt>
+                <dd className={juntar(texto.corpo, "min-w-0 truncate")}>{s.lead_company}</dd>
+              </div>
+            )}
+          </dl>
+
+          {/* Respostas */}
+          <div className="mt-5 space-y-5">
+            {sections.map((section) => (
+              <section key={section.title} className="min-w-0">
+                <h3 className={juntar(texto.tituloSecao, "mb-1 text-[14px]")}>{section.title}</h3>
+                <dl className="divide-y divide-border">
+                  {section.items.map((it) => (
+                    <div key={it.label} className="min-w-0 py-2">
+                      <dt className={texto.rotulo}>{it.label}</dt>
+                      <dd className="mt-0.5 whitespace-pre-wrap text-[13px] leading-5 text-foreground/90 [overflow-wrap:anywhere]">
+                        {it.value || <span className="text-muted-foreground">Sem resposta</span>}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="sticky bottom-0 -mx-6 px-6 pt-4 pb-2 mt-8 bg-background/95 backdrop-blur border-t border-border/60 flex flex-col sm:flex-row gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => onCopyOps(s)}>
-            <ArrowDownToLine className="mr-2 h-4 w-4" /> Copiar JSON pro Ops
-          </Button>
-          <Button
-            className="flex-1"
+        {/* Ações */}
+        <div className="flex shrink-0 flex-wrap items-center justify-end border-t border-border px-5 py-3 [&>*+*]:ml-2">
+          <button type="button" className={botao.secundario} onClick={() => onCopyOps(s)}>
+            <ArrowDownToLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar JSON pro Ops
+          </button>
+          <button
+            type="button"
+            className={botao.primario}
             disabled={s.status === "processed" || updating}
             onClick={() => onMarkProcessed(s)}
           >
             {updating
-              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
             {s.status === "processed" ? "Já processado" : "Marcar como processado"}
-          </Button>
+          </button>
         </div>
       </SheetContent>
     </Sheet>

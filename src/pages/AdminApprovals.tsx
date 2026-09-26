@@ -1,16 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAllFiles, useClients } from "@/hooks/useSupabaseData";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { AlertTriangle, FileImage, FileText, Film, Loader2, MessageSquare, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, CheckCircle2, ChevronLeft, ChevronRight, FileImage, FileText, Film, Loader2, MessageSquare, Plus, RefreshCw } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
@@ -25,6 +21,24 @@ import {
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  Etapas,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campoTexto,
+  etiqueta,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
@@ -41,17 +55,22 @@ const agencyApprovalBadge: Record<string, { cls: string; label: string }> = {
 
 const CLIENT_TABS = [
   { id: "all", label: "Todos" },
-  { id: "pending", label: "Aguardando cliente" },
+  { id: "pending", label: "Aguardando" },
   { id: "approved", label: "Aprovados" },
   { id: "rejected", label: "Pediu ajustes" },
 ];
 
 const AGENCY_TABS = [
   { id: "all", label: "Todos" },
-  { id: "pending", label: "Aguardando revisão" },
-  { id: "approved", label: "Aprovados internamente" },
+  { id: "pending", label: "Aguardando" },
+  { id: "approved", label: "Aprovados" },
   { id: "rejected", label: "Ajustes pedidos" },
 ];
+
+const ABAS_VALIDAS = ["all", "pending", "approved", "rejected"];
+
+/** Selo de estado: pílula pequena com a cor da situação. */
+const selo = "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
 
 function ApprovalThumb({ file }: { file: any }) {
   const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
@@ -77,11 +96,11 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
   const [idx, setIdx] = useState(0);
   if (images.length === 0) return null;
   const current = images[idx];
-  const maxH = small ? "h-32" : "min-h-[260px]";
+  const maxH = small ? "h-36" : "min-h-[260px]";
 
   return (
     <div className="relative group">
-      <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
+      <div className={`${maxH} bg-muted/50 flex items-center justify-center overflow-hidden`}>
         {small ? (
           <ApprovalThumb file={current} />
         ) : (
@@ -101,18 +120,22 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
       {images.length > 1 && (
         <>
           <button
-            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-1.5 shadow-md opacity-80 hover:opacity-100 transition-all"
+            type="button"
+            aria-label="Lâmina anterior"
+            className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full border border-border bg-background/80 p-1.5 opacity-80 transition-all hover:bg-background hover:opacity-100"
             onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-1.5 shadow-md opacity-80 hover:opacity-100 transition-all"
+            type="button"
+            aria-label="Próxima lâmina"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-border bg-background/80 p-1.5 opacity-80 transition-all hover:bg-background hover:opacity-100"
             onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
-          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
+          <div className="absolute bottom-1 left-1/2 flex -translate-x-1/2 space-x-1">
             {images.map((_, i) => (
               <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`} />
             ))}
@@ -120,7 +143,7 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
         </>
       )}
       {images.length > 1 && (
-        <span className="absolute top-1 right-1 bg-background/80 text-[10px] px-1.5 py-0.5 rounded-md text-muted-foreground">
+        <span className="absolute right-1 top-1 rounded-md bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
           {idx + 1}/{images.length}
         </span>
       )}
@@ -133,11 +156,15 @@ export default function AdminApprovals() {
   const confirmDialog = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClient = searchParams.get("client") || "all";
-  const [queue, setQueue] = useState<"agency" | "client">("agency");
+  // Fila, aba e cliente ficam guardados: sair e voltar mantém onde estava.
+  const [queue, setQueue] = useEstadoDaTela<"agency" | "client">("aprovacoes:fila", "agency", {
+    validar: (v) => v === "agency" || v === "client",
+  });
+  const [clienteGuardado, setClienteGuardado] = useEstadoDaTela<string>("aprovacoes:cliente", "all", { validar: (v) => typeof v === "string" });
   // Cliente e fila recortados no banco: a tela recebia a tabela inteira e
   // descartava quase tudo em JS. A aba (pendente/aprovado/ajustes) segue em
   // JS porque a contagem de pendentes precisa da fila completa.
-  const { data: allFiles, isLoading } = useAllFiles(
+  const { data: allFiles, isLoading, isError, refetch } = useAllFiles(
     selectedClient === "all" ? undefined : selectedClient,
     {
       statusIn: queue === "agency"
@@ -148,7 +175,9 @@ export default function AdminApprovals() {
   const { data: clients } = useClients();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useEstadoDaTela<string>(`aprovacoes:aba:${queue}`, "all", {
+    validar: (v) => typeof v === "string" && ABAS_VALIDAS.indexOf(v) >= 0,
+  });
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<any>(null);
@@ -189,6 +218,11 @@ export default function AdminApprovals() {
   const selectedClientProfile = (clients || []).find((client: any) => client.id === selectedClient);
   const tabs = queue === "agency" ? AGENCY_TABS : CLIENT_TABS;
   const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label || "selecionado";
+  const contagemDaAba = (id: string) =>
+    id === "all" ? approvalFiles.length : approvalFiles.filter((f: any) => (f[statusField] || "not_requested") === id).length;
+  const nomeDoClienteEscolhido = selectedClientProfile
+    ? selectedClientProfile.company_name || selectedClientProfile.full_name
+    : "";
 
   const handleClientChange = (clientId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -198,8 +232,21 @@ export default function AdminApprovals() {
       next.set("client", clientId);
     }
     setActiveTab("all");
+    setClienteGuardado(clientId);
     setSearchParams(next, { replace: true });
   };
+
+  // Volta ao cliente escolhido da última vez (quando o endereço não traz um).
+  const restaurou = useRef(false);
+  useEffect(() => {
+    if (restaurou.current || !clients) return;
+    restaurou.current = true;
+    if (searchParams.get("client") || clienteGuardado === "all") return;
+    if (!clients.some((client: any) => client.id === clienteGuardado)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("client", clienteGuardado);
+    setSearchParams(next, { replace: true });
+  }, [clients, clienteGuardado, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!clients || selectedClient === "all") return;
@@ -209,6 +256,7 @@ export default function AdminApprovals() {
     const next = new URLSearchParams(searchParams);
     next.delete("client");
     setActiveTab("all");
+    setClienteGuardado("all");
     setSearchParams(next, { replace: true });
     toast({
       title: "Cliente não encontrado",
@@ -368,334 +416,304 @@ export default function AdminApprovals() {
     }
   };
 
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const formatDate = (d: string) => {
+    const data = new Date(d);
+    return isNaN(data.getTime()) ? "" : data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  const novoConteudo = `/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`;
 
   return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="heading-page">Aprovações</h1>
-            {pendingCount > 0 && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">
-                {pendingCount} {queue === "agency" ? "aguardando revisão interna" : "aguardando cliente"}
-              </span>
-            )}
+    <div className="min-w-0">
+      {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
+          altura da janela e só a grade de entregas rola, por dentro, lembrando a
+          posição. No celular a página rola normal. */}
+      <AreaDeTrabalho principalRolavel={false}>
+        <CabecalhoDePagina
+          titulo="Aprovações"
+          className="shrink-0"
+          descricao={
+            pendingCount > 0
+              ? `${pendingCount} ${queue === "agency" ? "aguardando revisão interna" : "aguardando cliente"}${nomeDoClienteEscolhido ? ` · ${nomeDoClienteEscolhido}` : ""}`
+              : nomeDoClienteEscolhido || undefined
+          }
+          ajuda={
+            <>
+              Revise internamente antes de liberar e acompanhe a decisão do cliente em uma fila separada.
+              {!canReviewAndRelease && " Você pode acompanhar a fila. Somente admin ou manager pode revisar e liberar uma entrega."}
+            </>
+          }
+          acoes={
+            selectedClientProfile ? (
+              <Link to={novoConteudo} className={botao.primario} aria-label="Novo conteúdo">
+                <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Novo conteúdo</span>
+              </Link>
+            ) : undefined
+          }
+        />
+
+        <div className="mt-3 shrink-0 border-b border-border">
+          <Etapas
+            rotulo="Filas de aprovação"
+            valor={queue}
+            onEscolher={(v) => setQueue(v === "client" ? "client" : "agency")}
+            itens={[
+              { valor: "agency", rotulo: "Revisão interna", contador: queue === "agency" ? pendingCount : null },
+              { valor: "client", rotulo: "Decisão do cliente", contador: queue === "client" ? pendingCount : null },
+            ]}
+          />
+        </div>
+
+        <div className="mt-3 shrink-0">
+          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+            <SeletorCompacto
+              rotulo="Situação"
+              valor={activeTab}
+              onEscolher={setActiveTab}
+              modo="segmentado"
+          listaQuandoNaoCabe
+              opcoes={tabs.map((t) => ({ valor: t.id, rotulo: t.label, contador: contagemDaAba(t.id) }))}
+            />
+            <SeletorCompacto
+              rotulo="Cliente"
+              icone={<Building2 className="h-3.5 w-3.5" />}
+              valor={selectedClient}
+              onEscolher={handleClientChange}
+              modo="lista"
+              opcoes={[{ valor: "all", rotulo: "Todos os clientes" }].concat(
+                (clients || []).map((client: any) => ({ valor: client.id, rotulo: client.company_name || client.full_name })),
+              )}
+            />
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Revise internamente antes de liberar e acompanhe a decisão do cliente em uma fila separada.
-          </p>
         </div>
 
-        <Select value={selectedClient} onValueChange={handleClientChange}>
-          <SelectTrigger className="w-full bg-card border-border rounded-xl text-sm sm:w-[240px]">
-            <SelectValue placeholder="Todos os clientes" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os clientes</SelectItem>
-            {(clients || []).map((client: any) => (
-              <SelectItem key={client.id} value={client.id}>
-                {client.company_name || client.full_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+          {isLoading ? (
+            <Carregando forma="grade" linhas={6} rotulo="Carregando aprovações" />
+          ) : isError && allFilesList.length === 0 ? (
+            <EstadoDeErro
+              titulo="Não foi possível carregar as aprovações."
+              acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+            />
+          ) : filtered.length === 0 ? (
+            <EstadoVazio
+              icone={<CheckCircle2 className="h-5 w-5" />}
+              titulo={
+                activeTab !== "all"
+                  ? `Nenhum item em "${activeTabLabel}"${nomeDoClienteEscolhido ? ` para ${nomeDoClienteEscolhido}` : ""}.`
+                  : nomeDoClienteEscolhido
+                  ? `Nenhuma aprovação encontrada para ${nomeDoClienteEscolhido}.`
+                  : "Nenhuma aprovação encontrada."
+              }
+              acao={
+                activeTab !== "all" ? (
+                  <button type="button" onClick={() => setActiveTab("all")} className={botao.secundario}>
+                    Ver todas as aprovações
+                  </button>
+                ) : selectedClientProfile ? (
+                  <Link to={novoConteudo} className={botao.secundario}>
+                    Criar conteúdo
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <RegiaoRolavel modo="lg" rotulo="Entregas para aprovar" memoria={`aprovacoes:${queue}:${selectedClient}`}>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:pb-6 lg:pr-1 desk:grid-cols-4">
+                {filtered.map((f: any) => {
+                  const badge = queue === "agency"
+                    ? agencyApprovalBadge[f.agency_approval_status] || agencyApprovalBadge.not_requested
+                    : clientApprovalBadge[f.approval_status] || clientApprovalBadge.pending;
+                  const activeFeedback = queue === "agency" ? f.agency_feedback : f.feedback;
+                  const images = getCarouselImages(f);
+                  const isCarousel = images.length > 1;
+                  const meta = [f.project?.name, f.client?.company_name || f.client?.full_name, formatDate(f.created_at)].filter(Boolean).join(" · ");
+                  return (
+                    <div
+                      key={f.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Abrir ${f.file_name || "entrega"}`}
+                      onClick={() => setPreviewFile(f)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        setPreviewFile(f);
+                      }}
+                      className={juntar(
+                        superficie.painel,
+                        "flex h-full cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      <CarouselPreview images={images} small />
+                      <div className="flex min-w-0 flex-1 flex-col px-4 py-3">
+                        <div className="flex min-w-0 items-center">
+                          <p className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{f.file_name || "Sem nome"}</p>
+                          {isCarousel && (
+                            <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>
+                              Carrossel · {images.length}
+                            </span>
+                          )}
+                        </div>
+                        {meta && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{meta}</p>}
+                        <span className={juntar(selo, "mt-2 self-start", badge.cls)}>{badge.label}</span>
 
-      {selectedClientProfile && (
-        <div className="mt-3 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Cliente selecionado
-            </p>
-            <p className="mt-0.5 text-sm font-medium text-foreground">
-              {selectedClientProfile.company_name || selectedClientProfile.full_name}
-            </p>
-          </div>
-          <Link
-            to={`/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`}
-            className="inline-flex items-center justify-center rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            Novo conteúdo
-          </Link>
-        </div>
-      )}
+                        {f[statusField] === "rejected" && activeFeedback && (
+                          <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-muted-foreground">
+                            <span className="font-medium text-destructive">
+                              {queue === "agency" ? "Feedback interno: " : "Feedback do cliente: "}
+                            </span>
+                            {activeFeedback}
+                          </p>
+                        )}
 
-      <div className="mt-3 inline-flex items-center rounded-xl border border-border bg-card p-1">
-        <button
-          type="button"
-          onClick={() => { setQueue("agency"); setActiveTab("all"); }}
-          className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-            queue === "agency" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Revisão interna
-        </button>
-        <button
-          type="button"
-          onClick={() => { setQueue("client"); setActiveTab("all"); }}
-          className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-            queue === "client" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Decisão do cliente
-        </button>
-      </div>
-
-      {!canReviewAndRelease && queue === "agency" && (
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Você pode acompanhar a fila. Somente admin ou manager pode revisar e liberar uma entrega.
-        </p>
-      )}
-
-      <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hidden">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
-              activeTab === t.id
-                ? "text-foreground border-b-2 border-primary bg-secondary/50"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1,2,3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-muted-foreground">
-          <p>
-            {activeTab !== "all"
-              ? `Nenhum item em "${activeTabLabel}"${selectedClientProfile ? ` para ${selectedClientProfile.company_name || selectedClientProfile.full_name}` : ""}.`
-              : selectedClientProfile
-              ? `Nenhuma aprovação encontrada para ${selectedClientProfile.company_name || selectedClientProfile.full_name}.`
-              : "Nenhuma aprovação encontrada."}
-          </p>
-          {activeTab !== "all" ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab("all")}
-              className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
-            >
-              Ver todas as aprovações
-            </button>
-          ) : selectedClientProfile ? (
-            <Link
-              to={`/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`}
-              className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
-            >
-              Criar conteúdo
-            </Link>
-          ) : null}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr stagger-children">
-          {filtered.map((f: any) => {
-            const badge = queue === "agency"
-              ? agencyApprovalBadge[f.agency_approval_status] || agencyApprovalBadge.not_requested
-              : clientApprovalBadge[f.approval_status] || clientApprovalBadge.pending;
-            const activeFeedback = queue === "agency" ? f.agency_feedback : f.feedback;
-            const images = getCarouselImages(f);
-            const isCarousel = images.length > 1;
-            return (
-              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors h-full flex flex-col"
-                onClick={() => setPreviewFile(f)}>
-                <CarouselPreview images={images} small />
-                <div className="p-4 space-y-2 flex-1 flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
-                    {isCarousel && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap">
-                        Carrossel • {images.length}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
-                    <span className="truncate max-w-[120px]">{f.project?.name || "-"}</span>
-                    <span>•</span>
-                    <span className="truncate max-w-[120px]">{f.client?.company_name || f.client?.full_name || "-"}</span>
-                  </div>
-                  <p className="text-[11px] font-mono text-muted-foreground">{formatDate(f.created_at)}</p>
-
-                  <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border self-start ${badge.cls}`}>
-                    {badge.label}
-                  </span>
-
-                  {f[statusField] === "rejected" && activeFeedback && (
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mt-auto">
-                      <p className="text-[11px] text-muted-foreground mb-0.5">
-                        {queue === "agency" ? "Feedback interno:" : "Feedback do cliente:"}
-                      </p>
-                      <p className="text-xs text-foreground line-clamp-3">{activeFeedback}</p>
+                        {f[statusField] === "rejected" && (
+                          <div className="mt-auto pt-3">
+                            <Link
+                              to={getCorrectionUrl(f)}
+                              onClick={(event) => event.stopPropagation()}
+                              className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}
+                            >
+                              <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" /> Criar nova versão
+                            </Link>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-
-                  {f[statusField] === "rejected" && (
-                    <div className="flex gap-2 pt-1 flex-wrap">
-                      <Button asChild size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1">
-                        <Link to={getCorrectionUrl(f)} onClick={(event) => event.stopPropagation()}>
-                          <RefreshCw className="w-3 h-3" /> Criar nova versão
-                        </Link>
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </RegiaoRolavel>
+          )}
         </div>
-      )}
-      </div>
+      </AreaDeTrabalho>
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {previewFile?.file_name}
+            <DialogTitle className={juntar(texto.tituloSecao, "flex min-w-0 flex-wrap items-center pr-6 text-left")}>
+              <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">{previewFile?.file_name}</span>
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                  Carrossel • {getCarouselImages(previewFile).length} imagens
+                <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>
+                  Carrossel · {getCarouselImages(previewFile).length} imagens
                 </span>
               )}
             </DialogTitle>
           </DialogHeader>
           {previewFile && (
-            <div className="space-y-4">
-              <div className="bg-secondary rounded-xl overflow-hidden">
+            <div className="min-w-0 space-y-4">
+              <div className="overflow-hidden rounded-lg bg-muted/50">
                 <CarouselPreview images={getCarouselImages(previewFile)} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
+              <p className={texto.auxiliar}>
+                Enviado por {previewFile.uploader?.full_name || "-"}
+                {formatDate(previewFile.created_at) ? ` · ${formatDate(previewFile.created_at)}` : ""}
               </p>
-              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {previewFile.caption && <div><p className={texto.rotulo}>Legenda</p><p className={juntar(texto.corpo, "mt-1")}>{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div><p className={texto.rotulo}>Texto do carrossel</p><p className={juntar(texto.corpo, "mt-1 whitespace-pre-wrap")}>{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div><p className={texto.rotulo}>Descrição</p><p className={juntar(texto.corpo, "mt-1")}>{previewFile.description}</p></div>}
               {editorialPreview.isLoading && (
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                <p className={juntar(texto.auxiliar, "flex items-center")}>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                   Conferindo o conteúdo editorial vinculado…
-                </div>
+                </p>
               )}
               {editorialPreview.isError && (
-                <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-                  <div className="flex gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                    <div>
-                      <p className="text-xs font-medium text-destructive">
-                        Não foi possível conferir o conteúdo editorial.
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Revisão e liberação ficam bloqueadas até a prévia ser validada.
-                      </p>
-                    </div>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => editorialPreview.refetch()}>
-                    Tentar novamente
-                  </Button>
-                </div>
+                <EstadoDeErro
+                  titulo="Não foi possível conferir o conteúdo editorial."
+                  descricao="Revisão e liberação ficam bloqueadas até a prévia ser validada."
+                  acao={
+                    <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => editorialPreview.refetch()}>
+                      Tentar novamente
+                    </button>
+                  }
+                />
               )}
               {!editorialPreview.isLoading
                 && !editorialPreview.isError
                 && (editorialPreview.data || []).map((snapshot) => (
-                  <section key={snapshot.post_id} className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                  <section key={snapshot.post_id} className={juntar(superficie.poco, "space-y-3 p-3.5")}>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
-                        Conteúdo editorial vinculado
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">{snapshot.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Formato: {snapshot.content_type}</p>
+                      <p className="text-[12px] font-medium text-primary">Conteúdo editorial vinculado</p>
+                      <p className="mt-1 text-[14px] font-semibold text-foreground">{snapshot.title}</p>
+                      <p className={juntar(texto.auxiliar, "mt-0.5")}>Formato: {snapshot.content_type}</p>
                     </div>
-                    {snapshot.objective && <p className="whitespace-pre-wrap text-xs text-foreground">{snapshot.objective}</p>}
+                    {snapshot.objective && <p className="whitespace-pre-wrap text-[12px] text-foreground">{snapshot.objective}</p>}
                     {snapshot.default_caption && (
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Legenda base</p>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">{snapshot.default_caption}</p>
+                        <p className={texto.rotulo}>Legenda base</p>
+                        <p className="mt-1 whitespace-pre-wrap text-[12px] text-foreground">{snapshot.default_caption}</p>
                       </div>
                     )}
-                    {snapshot.plans.map((plan, planIndex) => (
-                      <div key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`} className="space-y-1.5 rounded-md border border-border bg-background/70 p-3">
-                        <p className="text-xs font-medium text-foreground">
-                          {PLATFORM_LABELS[plan.platform as EditorialPlatform] || plan.platform}
-                          {(plan.account_handle || plan.account_name) ? ` · ${plan.account_handle || plan.account_name}` : ""}
-                        </p>
-                        {plan.caption && <p className="whitespace-pre-wrap text-xs text-foreground">{plan.caption}</p>}
-                        {plan.first_comment && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Primeiro comentário: {plan.first_comment}</p>}
-                        {plan.alt_text && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Texto alternativo: {plan.alt_text}</p>}
+                    {snapshot.plans.length > 0 && (
+                      <div className="divide-y divide-border border-t border-border">
+                        {snapshot.plans.map((plan, planIndex) => (
+                          <div key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`} className="space-y-1.5 py-2.5">
+                            <p className="text-[12px] font-medium text-foreground">
+                              {PLATFORM_LABELS[plan.platform as EditorialPlatform] || plan.platform}
+                              {(plan.account_handle || plan.account_name) ? ` · ${plan.account_handle || plan.account_name}` : ""}
+                            </p>
+                            {plan.caption && <p className="whitespace-pre-wrap text-[12px] text-foreground">{plan.caption}</p>}
+                            {plan.first_comment && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Primeiro comentário: {plan.first_comment}</p>}
+                            {plan.alt_text && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Texto alternativo: {plan.alt_text}</p>}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </section>
                 ))}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).cls}`}>
+              <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+                <span className={juntar(selo, (agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).cls)}>
                   {(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).label}
                 </span>
                 {previewFile.approval_status !== "none" && (
-                  <span className={`text-[11px] px-2.5 py-1 rounded-full ${(clientApprovalBadge[previewFile.approval_status] || clientApprovalBadge.pending).cls}`}>
+                  <span className={juntar(selo, (clientApprovalBadge[previewFile.approval_status] || clientApprovalBadge.pending).cls)}>
                     {(clientApprovalBadge[previewFile.approval_status] || clientApprovalBadge.pending).label}
                   </span>
                 )}
                 {previewFile.version > 1 && (
-                  <span className="text-[11px] text-muted-foreground">Versão {previewFile.version}</span>
+                  <span className={texto.auxiliar}>Versão {previewFile.version}</span>
                 )}
               </div>
               {previewFile.locked_at && (
-                <div className="rounded-lg border border-success/20 bg-success/[0.05] p-3">
-                  <p className="text-xs text-foreground">
-                    Versão final protegida contra alterações.
-                  </p>
-                </div>
+                <p className="text-[12px] text-success">Versão final protegida contra alterações.</p>
               )}
               {previewFile.agency_approval_status === "rejected" && previewFile.agency_feedback && (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-                  <p className="mb-0.5 text-[11px] text-muted-foreground">Feedback interno:</p>
-                  <p className="text-xs text-foreground">{previewFile.agency_feedback}</p>
+                <div className="border-l-2 border-destructive/60 pl-3">
+                  <p className={texto.rotulo}>Feedback interno</p>
+                  <p className="mt-0.5 text-[12px] text-foreground">{previewFile.agency_feedback}</p>
                 </div>
               )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
-                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
-                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
-                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                <div className="border-l-2 border-destructive/60 pl-3">
+                  <p className={texto.rotulo}>Feedback do cliente</p>
+                  <p className="mt-0.5 text-[12px] text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
             </div>
           )}
-          <DialogFooter className="flex gap-2">
-            {queue === "agency"
-              && previewFile?.agency_approval_status === "pending"
+          <DialogFooter className="[&>*+*]:mb-2 sm:[&>*+*]:mb-0">
+            <button type="button" className={botao.secundario} onClick={() => handleDownload(previewFile)}>Baixar</button>
+            {previewFile?.[statusField] === "rejected" && (
+              <Link to={getCorrectionUrl(previewFile)} onClick={() => setPreviewFile(null)} className={botao.secundario}>
+                <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" /> Criar nova versão
+              </Link>
+            )}
+            {/* Cliente que aprova pelo grupo e não entra no painel: a equipe
+                registra o aceite aqui para nada ficar travado. */}
+            {queue === "client"
+              && previewFile?.approval_status === "pending"
               && canReviewAndRelease && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
-                    onClick={() => {
-                      setReviewTarget(previewFile);
-                      setReviewFeedback("");
-                      setPreviewFile(null);
-                    }}
-                  >
-                    Pedir ajustes internos
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
-                    onClick={() => handleAgencyReview(previewFile, "approved")}
-                  >
-                    Aprovar internamente
-                  </Button>
-                </>
+                <button
+                  type="button"
+                  className={botao.secundario}
+                  disabled={submitting}
+                  onClick={() => handleOfflineApproval(previewFile)}
+                >
+                  <MessageSquare className="mr-1.5 h-3 w-3" aria-hidden="true" /> Aprovou no grupo
+                </button>
               )}
             {queue === "agency"
               && previewFile?.agency_approval_status === "approved"
@@ -704,48 +722,50 @@ export default function AdminApprovals() {
                 <>
                   {/* Revisão interna já aconteceu: disponibilizar é o padrão.
                       Aprovação do cliente só quando pedida explicitamente. */}
-                  <Button
-                    size="sm"
-                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
-                    onClick={() => handleRelease(previewFile, "client_shared")}
-                  >
-                    Disponibilizar ao cliente
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <button
+                    type="button"
+                    className={botao.secundario}
                     disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleRelease(previewFile, "approval")}
                   >
                     Pedir aprovação do cliente
-                  </Button>
+                  </button>
+                  <button
+                    type="button"
+                    className={botao.primario}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
+                    onClick={() => handleRelease(previewFile, "client_shared")}
+                  >
+                    Disponibilizar ao cliente
+                  </button>
                 </>
               )}
-            {/* Cliente que aprova pelo grupo e não entra no painel: a equipe
-                registra o aceite aqui para nada ficar travado. */}
-            {queue === "client"
-              && previewFile?.approval_status === "pending"
+            {queue === "agency"
+              && previewFile?.agency_approval_status === "pending"
               && canReviewAndRelease && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  disabled={submitting}
-                  onClick={() => handleOfflineApproval(previewFile)}
-                >
-                  <MessageSquare className="w-3 h-3" /> Aprovou no grupo
-                </Button>
+                <>
+                  <button
+                    type="button"
+                    className={botao.perigo}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
+                    onClick={() => {
+                      setReviewTarget(previewFile);
+                      setReviewFeedback("");
+                      setPreviewFile(null);
+                    }}
+                  >
+                    Pedir ajustes internos
+                  </button>
+                  <button
+                    type="button"
+                    className={botao.primario}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
+                    onClick={() => handleAgencyReview(previewFile, "approved")}
+                  >
+                    Aprovar internamente
+                  </button>
+                </>
               )}
-            {previewFile?.[statusField] === "rejected" && (
-              <>
-                <Button asChild size="sm" variant="outline" className="gap-1">
-                  <Link to={getCorrectionUrl(previewFile)} onClick={() => setPreviewFile(null)}>
-                    <RefreshCw className="w-3 h-3" /> Criar nova versão
-                  </Link>
-                </Button>
-              </>
-            )}
-            <Button variant="outline" className="gap-2" onClick={() => handleDownload(previewFile)}>Baixar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -758,36 +778,35 @@ export default function AdminApprovals() {
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Pedir ajustes internos</DialogTitle>
+            <DialogTitle className={juntar(texto.tituloSecao, "text-left")}>Pedir ajustes internos</DialogTitle>
           </DialogHeader>
-          <div>
-            <Label htmlFor="agency-review-feedback" className="text-xs">
-              Explique o que precisa ser corrigido
-            </Label>
+          <CampoDeFormulario rotulo="O que precisa ser corrigido" apoio="Mínimo de 10 caracteres.">
             <textarea
               id="agency-review-feedback"
               value={reviewFeedback}
               onChange={(event) => setReviewFeedback(event.target.value)}
               rows={4}
-              className="mt-2 w-full resize-none rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none"
-              placeholder="Feedback interno para a equipe (mínimo 10 caracteres)..."
+              className={juntar(campoTexto, "resize-none")}
+              placeholder="Feedback interno para a equipe"
             />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
+          </CampoDeFormulario>
+          <DialogFooter className="[&>*+*]:mb-2 sm:[&>*+*]:mb-0">
+            <button
+              type="button"
+              className={botao.secundario}
               onClick={() => setReviewTarget(null)}
               disabled={submitting}
             >
               Cancelar
-            </Button>
-            <Button
-              variant="destructive"
+            </button>
+            <button
+              type="button"
+              className={juntar(botao.primario, "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
               disabled={submitting || reviewFeedback.trim().length < 10}
               onClick={() => handleAgencyReview(reviewTarget, "rejected", reviewFeedback)}
             >
               {submitting ? "Salvando..." : "Solicitar ajustes"}
-            </Button>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

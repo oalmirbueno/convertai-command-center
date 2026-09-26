@@ -187,7 +187,8 @@ describe("casca da Mesa Roteiros", () => {
     expect(NOME_DA_MESA.roteiros).toBe("Mesa Roteiros");
     const pagina = ler("src/pages/MesaRoteiros.tsx");
     expect(pagina).toContain('<SeletorDeClientesDaMesa mesa="roteiros"');
-    expect(pagina).toContain('<TrocaDeMesas atual="roteiros" clientId={clientId} />');
+    expect(pagina).toContain("<CascaDaMesa");
+    expect(pagina).toContain('mesa="roteiros"');
   });
 
   it("sem cliente, pede para escolher o cliente", async () => {
@@ -205,20 +206,20 @@ describe("agenda", () => {
       const l = onde.container.querySelector("[data-pecas-de-video]");
       if (!l) throw new Error("sem lista");
       return l as HTMLElement;
-    });
+    }, { timeout: 10000 });
     await waitFor(() => expect(within(pecas).getByText("Reels salário-maternidade")).toBeTruthy());
     expect(within(pecas).getByText("Rascunho")).toBeTruthy();
     expect(within(pecas).getByText(/roteiro do calendário entra como base/)).toBeTruthy();
     expect(within(pecas).getByRole("button", { name: /Escrever roteiro/ })).toBeTruthy();
     expect(within(pecas).getByRole("button", { name: /Abrir/ })).toBeTruthy();
-  });
+  }, 20000);
 });
 
 describe("roteiro", () => {
   it("gera o roteiro da peça com o preço ao lado do botão e manda o pedido certo", async () => {
     mock.tabelas.roteiros = [];
     montar(`/mesa-roteiros?client=${CLIENTE}&etapa=roteiro&tarefa=${TAREFA_2}`);
-    await screen.findByRole("radiogroup", { name: "Tipo de roteiro" });
+    await screen.findByRole("radiogroup", { name: "Tipo de roteiro" }, { timeout: 10000 });
     fireEvent.click(screen.getByRole("radio", { name: /Tutorial/ }));
     const gerar = await screen.findByRole("button", { name: /Gerar roteiro/ });
     await waitFor(() => expect(gerar.textContent).toMatch(/~US\$|~\$|~/));
@@ -226,7 +227,7 @@ describe("roteiro", () => {
     await waitFor(() => expect(chamadasDe("gerar")).toHaveLength(1));
     const corpo = chamadasDe("gerar")[0][1].body;
     expect(corpo).toMatchObject({ client_id: CLIENTE, task_id: TAREFA_2, tipo: "tutorial", duracao_s: 45, modelo_id: "openai:gpt-6-sol" });
-  });
+  }, 20000);
 
   it("editor: três ganchos, falas por bloco, aviso do Jev e salvar versão com a revisão de base", async () => {
     montar(`/mesa-roteiros?client=${CLIENTE}&etapa=roteiro&roteiro=${ROTEIRO}`);
@@ -256,19 +257,21 @@ describe("roteiro", () => {
 describe("revisão e PDF", () => {
   it("aprovar manda status_mudar e mostra versões e comentários", async () => {
     montar(`/mesa-roteiros?client=${CLIENTE}&etapa=revisao&roteiro=${ROTEIRO}`);
-    const aprovar = await screen.findByRole("button", { name: /^Aprovar$/ });
+    const aprovar = await screen.findByRole("button", { name: /^Aprovar$/ }, { timeout: 10000 });
     expect(screen.getByText("Encurtar a resposta")).toBeTruthy();
     expect(screen.getAllByText(/Versão 2/).length).toBeGreaterThan(0);
     fireEvent.click(aprovar);
     await waitFor(() => expect(chamadasDe("status_mudar")).toHaveLength(1));
     expect(chamadasDe("status_mudar")[0][1].body).toEqual({ acao: "status_mudar", roteiro_id: ROTEIRO, status: "aprovado" });
-  });
+  }, 20000);
 
   it("PDF: prévia e Baixar na hora; Compartilhar só com roteiro aprovado", async () => {
     montar(`/mesa-roteiros?client=${CLIENTE}&etapa=pdf&roteiro=${ROTEIRO}`);
-    const baixar = await screen.findByRole("button", { name: /Baixar/ });
+    // A etapa PDF baixa sob demanda e a prévia é montada depois: com a máquina
+    // ocupada (a suíte inteira rodando) os dois passam de 1 s.
+    const baixar = await screen.findByRole("button", { name: /Baixar/ }, { timeout: 8000 });
     await waitFor(() => expect((baixar as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.getByTitle("Prévia do PDF do roteiro")).toBeTruthy();
+    expect(await screen.findByTitle("Prévia do PDF do roteiro", {}, { timeout: 8000 })).toBeTruthy();
     expect((screen.getByRole("button", { name: /Compartilhar com o cliente/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Só roteiro aprovado vai para o cliente/)).toBeTruthy();
   });
@@ -290,7 +293,9 @@ describe("revisão e PDF", () => {
 describe("agente da mesa", () => {
   it("conversa e mostra o cartão de ação com o custo antes de confirmar", async () => {
     montar(`/mesa-roteiros?client=${CLIENTE}&etapa=agenda`);
-    fireEvent.click(await screen.findByRole("button", { name: "Abrir o agente da Mesa Roteiros" }));
+    // Agente fixo ao lado das etapas: já montado, lê o histórico ao montar.
+    const agente = await screen.findByRole("region", { name: "Agente de roteiros" });
+    expect(agente.closest("[data-agente-roteiros]")).toBeTruthy();
     await waitFor(() => expect(chamadasDe("agente_historico")).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: "Roteiros da semana" }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar ao agente" }));

@@ -7,7 +7,9 @@ import NotificationsPanel from "@/components/NotificationsPanel";
 import { avisoParaMostrar, mostrarAvisoNoNavegador } from "@/lib/avisosDoNavegador";
 import { safeInternalPath } from "@/lib/internalNavigation";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
-import HelpButton from "@/components/onboarding/HelpButton";
+import Lancador from "@/components/lancador/Lancador";
+import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
+import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot } from "lucide-react";
@@ -21,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPainel";
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
 import { quandoOcioso } from "@/lib/lazyComPreCarga";
 
@@ -126,6 +129,14 @@ const gruposPorPapel = (podeGestao: boolean) =>
     }))
     .filter((grupo) => grupo.items.length > 0);
 
+/**
+ * Barra do topo de 768 a 1023 px (notebook estreito, tablet deitado): cabem
+ * só os primeiros links; o resto entra no "...". Prioridade do lado direito:
+ * avatar sempre; lançador, sino, busca (ícone) e o indicador de gerações
+ * ficam; o tema vai para o menu do perfil. De 1024 para cima, tudo na barra.
+ */
+const LINKS_NO_TOPO_ESTREITO = 3;
+
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Onde Estamos", url: "/onde-estamos", icon: HeartPulse },
@@ -174,6 +185,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // O botão do assistente entra depois da primeira pintura, com o navegador ocioso.
   const [vozNaTela, setVozNaTela] = useState(false);
   useEffect(() => quandoOcioso(() => setVozNaTela(true), 3000), []);
+  // Lançador único (canto inferior direito): o agente abre por ele, pelo
+  // Alt+A ou pelo evento EVENTO_ABRIR_AGENTE (qualquer tela, com contexto).
+  const [agenteAberto, setAgenteAberto] = useState(false);
+  const [pedidoDoAgente, setPedidoDoAgente] = useState<(PedidoParaAbrirAgente & { vez: number }) | null>(null);
+  const abrirAgente = useCallback(() => { setVozNaTela(true); setAgenteAberto(true); }, []);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const ouvir = (e: Event) => {
+      const d = ((e as CustomEvent).detail || {}) as PedidoParaAbrirAgente;
+      setPedidoDoAgente({ ...d, vez: Date.now() });
+      abrirAgente();
+    };
+    window.addEventListener(EVENTO_ABRIR_AGENTE, ouvir);
+    return () => window.removeEventListener(EVENTO_ABRIR_AGENTE, ouvir);
+  }, [isAdmin, abrirAgente]);
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
   // Aviso do navegador para a equipe: o sino so e visto por quem olha para
@@ -227,14 +253,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
       if (userRef.current && !userRef.current.contains(e.target as Node)) setUserMenuOpen(false);
     };
+    // Esc fecha o "mais" e o menu do perfil (teclado).
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      setMoreOpen(false);
+      setUserMenuOpen(false);
+    };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", tecla);
+    };
   }, []);
+
+  // Busca de página (lupa da barra e Ctrl+K): o mesmo menu, já filtrado pelo papel.
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const paginasDaBusca: PaginaDaBusca[] = [
+    ...mainNav.map((item) => ({ title: item.title, url: item.url, icon: item.icon, grupo: "Principal" })),
+    ...(isAdminOrTeam
+      ? gruposDoMenu.flatMap((grupo) => grupo.items.map((item) => ({ title: item.title, url: item.url, icon: item.icon, grupo: grupo.label })))
+      : clientMoreNav.map((item) => ({ title: item.title, url: item.url, icon: item.icon, grupo: "Mais" }))),
+  ];
+
+  // Um lançador só, em dois lugares da casca: barra do topo (768 px para
+  // cima) e barra de baixo (celular). Nada flutua sobre o conteúdo.
+  const propsDoLancador = {
+    papel: (isAdminOrTeam ? "equipe" : "cliente") as "equipe" | "cliente",
+    podeUsarAgente: isAdmin,
+    onAbrirAgente: abrirAgente,
+    passosDaTela: pageSteps,
+    rotuloDaTela: pageTourConfig?.label,
+    onTourDaTela: pageSteps ? () => { setTourMode("page"); setTourOpen(true); } : null,
+    onTourCompleto: () => { setTourMode("full"); setTourOpen(true); },
+  };
 
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
-      <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4 text-foreground"
+      <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
         style={{
           top: 'calc(env(safe-area-inset-top) + 12px)',
           background: 'rgba(17, 17, 19, 0.85)',
@@ -251,8 +308,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Center: Nav links (desktop) */}
-        <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
-          {mainNav.map((item) => {
+        {/* De 768 a 1023 cabem os LINKS_NO_TOPO_ESTREITO primeiros; o resto vai para o "..." (sem corte nem rolagem lateral). */}
+        <div className="hidden md:flex min-w-0 items-center gap-1 flex-1 justify-center">
+          {mainNav.map((item, indice) => {
             const tourId = item.url.replace("/", "nav-");
             return (
               <NavLink
@@ -260,7 +318,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.url}
                 data-tour={tourId}
                 className={({ isActive }) => cn(
-                  "relative px-3 py-1.5 text-[13px] rounded-md transition-colors",
+                  "relative whitespace-nowrap px-2 lg:px-3 py-1.5 text-[13px] rounded-md transition-colors",
+                  indice >= LINKS_NO_TOPO_ESTREITO && "hidden lg:block",
                   isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -279,8 +338,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* More dropdown */}
           <div className="relative" ref={moreRef} data-tour="nav-more">
             <button
+              type="button"
               onClick={() => setMoreOpen(!moreOpen)}
-              className="px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Mais páginas"
+              aria-expanded={moreOpen}
+              className="rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -288,6 +350,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 max-h-[70vh] overflow-y-auto rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in"
                 style={{ transformOrigin: 'top center' }}
               >
+                {/* 768 a 1023: os links principais que não couberam na barra. */}
+                {mainNav.length > LINKS_NO_TOPO_ESTREITO && (
+                  <div className="mb-1 border-b border-border pb-1 lg:hidden" data-links-que-nao-couberam="">
+                    {mainNav.slice(LINKS_NO_TOPO_ESTREITO).map((item) => (
+                      <NavLink
+                        key={item.url}
+                        to={item.url}
+                        onClick={() => setMoreOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] transition-colors",
+                          isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        )}
+                      >
+                        <item.icon className="w-3.5 h-3.5" />
+                        {item.title}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
                 {/* Cliente não tem grupos: a lista dele é curta e direta. */}
                 {isAdminOrTeam ? (
                   gruposDoMenu.map((group) => (
@@ -363,24 +444,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Right: Icons */}
         <div className="flex items-center gap-1 shrink-0">
-          <button className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+          {/* "Gerando em N clientes": só aparece com geração na fila do servidor (frente G). */}
+          {isAdminOrTeam && <IndicadorDeGeracoes userId={user?.id} />}
+          <button
+            type="button"
+            onClick={() => setBuscaAberta(true)}
+            aria-label="Buscar página (Ctrl+K)"
+            title="Buscar página (Ctrl+K)"
+            className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <Search className="w-4 h-4" />
           </button>
+          {/* Lançador (768 px para cima): agente, ajuda da tela, tour e atalhos na barra, nunca flutuando. Cliente: o "?". */}
+          <Lancador variante="topo" className="hidden md:block" {...propsDoLancador} />
           <button
+            type="button"
             onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            data-prioridade-no-topo="tema"
+            className="w-8 h-8 flex md:hidden lg:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           >
             {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           <button
+            type="button"
             data-tour="nav-notifications"
-            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
+            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setNotifOpen(true)}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1 notif-badge">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1 tabular-nums">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -388,7 +484,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* User dropdown */}
           <div className="relative" ref={userRef} data-tour="nav-user">
-            <button onClick={() => setUserMenuOpen(!userMenuOpen)}>
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              aria-label="Menu do perfil"
+              aria-expanded={userMenuOpen}
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <Avatar className="w-7 h-7 cursor-pointer">
                 <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-semibold">
                   {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
@@ -402,6 +504,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <p className="text-[11px] text-muted-foreground">{profile?.role === "admin" ? "Administrador" : profile?.company_name}</p>
                 </div>
                 <button
+                  type="button"
+                  onClick={() => { setUserMenuOpen(false); navigate("/perfil"); }}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                >
+                  <UserCircle className="w-3.5 h-3.5" />
+                  Meu perfil
+                </button>
+                {/* 768 a 1023: o tema sai da barra e mora aqui. */}
+                <button
+                  type="button"
+                  onClick={() => { setUserMenuOpen(false); toggleTheme(); }}
+                  data-tema-no-menu=""
+                  className="hidden md:flex lg:hidden items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+                >
+                  {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                  {theme === "dark" ? "Tema claro" : "Tema escuro"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => { setUserMenuOpen(false); logout(); }}
                   className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
                 >
@@ -414,6 +535,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Mobile menu button */}
           <button
+            type="button"
+            aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileMenuOpen}
             className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
@@ -483,11 +607,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       <div data-casca="rodape">
-        <MobileBottomNav unreadCount={unreadCount} onOpenNotifications={() => setNotifOpen(true)} />
+        <MobileBottomNav
+          unreadCount={unreadCount}
+          onOpenNotifications={() => setNotifOpen(true)}
+          lancador={<Lancador variante="barra" {...propsDoLancador} />}
+        />
       </div>
 
 
       <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />
+      <BuscaDoPainel aberto={buscaAberta} onAbertoChange={setBuscaAberta} paginas={paginasDaBusca} />
 
       {/* Onboarding Tour */}
       <OnboardingTour
@@ -498,18 +627,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       />
 
       <div data-casca="flutuante">
-        {/* Help button to restart tour */}
-        {!tourOpen && (
-          <HelpButton
-            onFullTour={() => { setTourMode("full"); setTourOpen(true); }}
-            onPageTour={pageSteps ? () => { setTourMode("page"); setTourOpen(true); } : null}
-            pageTourLabel={pageTourConfig?.label}
-          />
-        )}
-
-        {vozNaTela && (
+        {/* O lançador mora nas barras (topo e barra de baixo): aqui fica só o painel do agente. */}
+        {isAdmin && vozNaTela && (
           <Suspense fallback={null}>
-            <VoiceAssistant />
+            <VoiceAssistant aberto={agenteAberto} onAbertoChange={setAgenteAberto} pedido={pedidoDoAgente} />
           </Suspense>
         )}
       </div>

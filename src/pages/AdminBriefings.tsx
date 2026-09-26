@@ -6,8 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Eye, FolderPlus, X, Loader2, Download } from "lucide-react";
+import { Eye, FolderPlus, Loader2, FileText } from "lucide-react";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, RegiaoRolavel, botao, campo, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 const typeLabels: Record<string, string> = {
   social_media: "Social Media", trafego: "Tráfego Pago", automacao: "Automação",
@@ -23,7 +25,7 @@ export default function AdminBriefings() {
   const [generating, setGenerating] = useState(false);
   const [genClientId, setGenClientId] = useState("");
 
-  const { data: briefings, isLoading } = useQuery({
+  const { data: briefings, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["briefings-admin", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -71,7 +73,7 @@ export default function AdminBriefings() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Projeto criado a partir do briefing!");
+      toast.success("Projeto criado a partir do briefing.");
       setGenerateBriefing(null);
       setGenClientId("");
     } catch (err: any) {
@@ -100,7 +102,7 @@ export default function AdminBriefings() {
       <div className="space-y-3">
         {fields.filter(f => f.value).map(f => (
           <div key={f.label}>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{f.label}</p>
+            <p className={texto.rotulo}>{f.label}</p>
             <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{f.value}</p>
           </div>
         ))}
@@ -108,53 +110,67 @@ export default function AdminBriefings() {
     );
   };
 
+  const lista = (briefings || []) as any[];
+  const nomeDo = (b: any) => b?.client?.company_name || b?.client?.full_name || (b?.responses as any)?.contato?.nome || "Sem vínculo";
+  const tiposDo = (b: any) => {
+    const r = b?.responses as any;
+    return Array.isArray(r?.tiposProjeto) ? r.tiposProjeto.map((t: string) => typeLabels[t] || t).join(", ") : "";
+  };
+
+  // Sistema de design: cabeçalho curto com o "?", a lista numa superfície só
+  // com divisória (sem caixa por linha) e as ações à direita de cada linha.
   return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-        <p className="heading-page">Briefings</p>
-      </div>
+    <div className="min-w-0 space-y-5 animate-fade-in">
+      <CabecalhoDePagina
+        titulo="Briefings"
+        descricao={isLoading ? undefined : `${lista.length} ${lista.length === 1 ? "recebido" : "recebidos"}`}
+        ajuda="Diagnósticos que os clientes enviaram pelo link público. Ver abre as respostas e o PDF; Gerar projeto cria o projeto do cliente a partir do briefing."
+      />
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {isLoading ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-      ) : (briefings || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum briefing recebido ainda.</div>
+        <Carregando linhas={4} rotulo="Carregando briefings" />
+      ) : isError ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar os briefings."
+          acao={<button type="button" onClick={() => void refetch()} disabled={isFetching} className={juntar(botao.secundario, "h-8 text-[12px]")}>Tentar de novo</button>}
+        />
+      ) : lista.length === 0 ? (
+        <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Nenhum briefing recebido ainda." descricao="Eles aparecem aqui quando o cliente envia o diagnóstico." />
       ) : (
-        <div className="space-y-2 stagger-children">
-          {(briefings || []).map((b: any) => {
-            const r = b.responses as any;
-            const tipos = Array.isArray(r?.tiposProjeto) ? r.tiposProjeto.map((t: string) => typeLabels[t] || t).join(", ") : "";
-            return (
-              <div key={b.id} className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-foreground">
-                      {b.client?.company_name || b.client?.full_name || r?.contato?.nome || "Sem vínculo"}
+        <RegiaoRolavel rotulo="Briefings recebidos" memoria="briefings:lista" className="lg:max-h-[70vh]">
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+            {lista.map((b: any) => {
+              const tipos = tiposDo(b);
+              return (
+                <li key={b.id} className="flex min-w-0 items-center px-4 py-3">
+                  <div className="mr-3 min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center">
+                      <p className="min-w-0 truncate text-[13px] font-medium text-foreground">{nomeDo(b)}</p>
+                      {tipos && <span className={juntar(etiqueta, "ml-2 hidden min-w-0 truncate bg-muted text-muted-foreground sm:inline-flex")}>{tipos}</span>}
+                    </div>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                      {b.created_at ? format(new Date(b.created_at), "dd/MM/yyyy 'às' HH:mm") : ""}
+                      {tipos && <span className="sm:hidden"> · {tipos}</span>}
                     </p>
-                    {tipos && <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{tipos}</span>}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {b.created_at ? format(new Date(b.created_at), "dd/MM/yyyy 'às' HH:mm") : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setViewBriefing(b)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground border border-border hover:text-foreground hover:border-muted-foreground/50 transition-colors cursor-pointer bg-transparent">
-                    <Eye className="w-3.5 h-3.5" /> Ver
-                  </button>
-                  <button onClick={() => { setGenerateBriefing(b); setGenClientId(b.client_id || ""); }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none">
-                    <FolderPlus className="w-3.5 h-3.5" /> Gerar Projeto
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  <div className="flex shrink-0 items-center [&>*+*]:ml-1.5">
+                    <button type="button" onClick={() => setViewBriefing(b)} aria-label={`Ver briefing de ${nomeDo(b)}`} className={juntar(botao.discreto, "px-2 sm:px-2.5")}>
+                      <Eye className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">Ver</span>
+                    </button>
+                    <button type="button" onClick={() => { setGenerateBriefing(b); setGenClientId(b.client_id || ""); }} aria-label={`Gerar projeto do briefing de ${nomeDo(b)}`} className={juntar(botao.secundario, "px-2 sm:px-3")}>
+                      <FolderPlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">Gerar projeto</span>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </RegiaoRolavel>
       )}
-      </div>
 
-      {/* View Briefing with PDF */}
+      {/* Ver o briefing, com PDF */}
       <BriefingPdfModal
         open={!!viewBriefing}
         onClose={() => setViewBriefing(null)}
@@ -162,40 +178,36 @@ export default function AdminBriefings() {
         clientName={viewBriefing?.client?.company_name || viewBriefing?.client?.full_name || (viewBriefing?.responses as any)?.contato?.nome}
       />
 
-      {/* Generate Project Modal */}
-      {generateBriefing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setGenerateBriefing(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[440px] mx-4" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">Gerar Projeto do Briefing</h2>
-              <button onClick={() => setGenerateBriefing(null)} className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente *</label>
-                <select value={genClientId} onChange={e => setGenClientId(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
-                  <option value="">Selecionar cliente...</option>
-                  {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
-                </select>
+      {/* Gerar projeto a partir do briefing */}
+      <Dialog open={!!generateBriefing} onOpenChange={(v) => { if (!v && !generating) setGenerateBriefing(null); }}>
+        <DialogContent className="max-w-[440px]">
+          <DialogHeader className="text-left">
+            <DialogTitle className={texto.tituloSecao}>Gerar projeto do briefing</DialogTitle>
+            <DialogDescription className={texto.auxiliar}>Cria o projeto com o marco de kick-off e avisa o cliente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <CampoDeFormulario rotulo="Cliente" obrigatorio>
+              <select value={genClientId} onChange={e => setGenClientId(e.target.value)} className={campo}>
+                <option value="">Selecionar cliente...</option>
+                {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+              </select>
+            </CampoDeFormulario>
+            {(generateBriefing?.responses as any)?.objetivo && (
+              <div className={juntar(superficie.poco, "px-3 py-2.5")}>
+                <p className={texto.rotulo}>Resumo</p>
+                <p className="mt-1 text-[12.5px] leading-5 text-foreground">{(generateBriefing.responses as any).objetivo.slice(0, 200)}</p>
               </div>
-              <div className="bg-secondary rounded-xl p-4">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Resumo</p>
-                <p className="text-xs text-foreground">{(generateBriefing.responses as any)?.objetivo?.slice(0, 200)}</p>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-              <button onClick={() => setGenerateBriefing(null)} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>
-              <button onClick={handleGenerate} disabled={generating || !genClientId}
-                className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer border-none disabled:opacity-50 flex items-center gap-2">
-                {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {generating ? "Criando..." : "Criar Projeto"}
-              </button>
-            </div>
+            )}
           </div>
-        </div>
-      )}
+          <DialogFooter className="[&>*+*]:mt-2 sm:[&>*+*]:mt-0">
+            <button type="button" onClick={() => setGenerateBriefing(null)} disabled={generating} className={botao.secundario}>Cancelar</button>
+            <button type="button" onClick={handleGenerate} disabled={generating || !genClientId} className={botao.primario}>
+              {generating && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {generating ? "Criando..." : "Criar projeto"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

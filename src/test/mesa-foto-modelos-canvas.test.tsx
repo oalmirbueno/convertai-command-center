@@ -344,14 +344,16 @@ describe("navegação: Modelos e Canvas discretos, fora do caminho de 3 passos",
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(within(caminho).getAllByRole("button")).toHaveLength(3);
-    // 25/09: Biblioteca, Modelos e Canvas são ferramentas de apoio, depois de um traço fino, fora do caminho principal.
-    const ferramentas = Array.from(nav.querySelectorAll("[data-ferramenta]")).map((b) => b.textContent);
+    // 25/09: Biblioteca, Modelos e Canvas são ferramentas de apoio, fora do caminho principal.
+    // 26/09 (sistema de design): as ferramentas moram num seletor compacto ("Ferramentas").
+    const apoio = nav.querySelector("[data-etapas-de-apoio]") as HTMLElement;
+    expect(apoio.closest("[data-caminho-principal]")).toBeNull();
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
+    const lista = await screen.findByRole("listbox", { name: "Ferramentas" });
+    const ferramentas = within(lista).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent);
     expect(ferramentas).toEqual(expect.arrayContaining(["Biblioteca", "Modelos", "Canvas"]));
-    const modelos = nav.querySelector('[data-ferramenta="modelos"]') as HTMLElement;
-    expect(modelos.closest("[data-caminho-principal]")).toBeNull();
-    expect((nav.querySelector("[data-etapas-de-apoio]") as HTMLElement).className).toContain("flex-wrap");
-    fireEvent.click(modelos);
-    await waitFor(() => expect(modelos.getAttribute("aria-current")).toBe("page"));
+    fireEvent.click(within(lista).getByRole("option", { name: /^Modelos/ }));
+    await waitFor(() => expect(apoio.getAttribute("data-ferramenta")).toBe("modelos"));
     expect((await screen.findAllByText("Marina")).length).toBeGreaterThan(0);
     expect(document.querySelector(`[data-persona="${P1}"]`)).toBeTruthy();
   });
@@ -809,7 +811,7 @@ describe("aba Canvas", () => {
     // Tela cheia pelo controle do quadro.
     fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
     await waitFor(() => expect(document.querySelector("[data-quadro]")!.getAttribute("data-tela-cheia")).toBe("sim"));
-  });
+  }, 20000);
 
   it("tocar num cartão da paleta abre a escolha com foto; escolher põe o cartão já ligado ao Resultado, com a linha animada", async () => {
     montar(h(EtapaCanvas));

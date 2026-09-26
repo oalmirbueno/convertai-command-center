@@ -402,7 +402,7 @@ describe("4. Referência prancha", () => {
 
 describe("5. Registro em _shared/motores.ts", () => {
   it("cada mudança do gerador aponta trechos que existem no estúdio", () => {
-    expect(MUDANCAS_DO_GERADOR_DO_ESTUDIO.map((m) => m.id)).toEqual(["fidelidade_da_referencia", "variedade_com_memoria", "prancha_de_referencias"]);
+    expect(MUDANCAS_DO_GERADOR_DO_ESTUDIO.map((m) => m.id).slice(0, 4)).toEqual(["fidelidade_da_referencia", "variedade_com_memoria", "prancha_de_referencias", "estilo_do_cliente"]);
     for (const m of MUDANCAS_DO_GERADOR_DO_ESTUDIO) {
       const fonte = ler(m.ligacao.arquivo);
       for (const t of m.ligacao.trechos) expect(fonte, `${m.id}: ${t}`).toContain(t);

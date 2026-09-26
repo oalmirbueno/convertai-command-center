@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Briefcase, Check, ChevronDown, FlaskConical, ShieldCheck, Target, Wand2 } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, ChevronDown, FlaskConical, ShieldCheck, Sparkles, Target, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Ditado } from "@/components/mesa/Ditado";
 import { custoDaResposta, dataCurta, textoDoErro, usd } from "@/lib/mesa/api";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { campo, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
 import {
   alertaDoJev,
   anguloAprovado,
@@ -42,7 +48,7 @@ import {
   type StatusDoPlano,
   type TomDoCriativo,
 } from "./adsApi";
-import { Andamento, BarraDeNota, BarraDePolitica, pilula, SeloDeEvidencia, useAndamento } from "./Comuns";
+import { Andamento, BarraDeNota, BarraDePolitica, CabecalhoDaParte, SeloDeEvidencia, useAndamento } from "./Comuns";
 import ConversaDoPlano from "./ConversaDoPlano";
 import AgenteSenior from "./AgenteSenior";
 import KitDeRecepcao from "./KitDeRecepcao";
@@ -59,7 +65,14 @@ import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
  * produzir: cada combinação vira um criativo com copy e um trabalho no
  * Estúdio Ads. Pedidos vindos da Oferta ou da Conta chegam prontos
  * (pedidoPendente) e o plano é gerado sozinho, uma vez.
+ *
+ * 26/09 (sistema de design): área de trabalho com a conversa do estrategista
+ * como lateral fixa (PainelDoAgente); o plano rola por conta própria.
+ * Explicações no "?", formulário com rótulo em cima, planos do cliente num
+ * seletor, sem caixa dentro de caixa.
  */
+
+const seletorCurto = `h-9 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-[13px] text-foreground ${foco}`;
 
 export const QUANTIDADES_DE_ANGULOS = [3, 4, 5, 6];
 
@@ -77,7 +90,7 @@ export function corpoDaProducao(plano: PlanoAds, angulos: string[], formatos: Fo
 /** Seletor dos três tons (sóbrio, direto, agressivo), com a regra de cada um no título. */
 export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoCriativo; onMudar: (t: TomDoCriativo) => void; rotulo?: string }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center" role="radiogroup" aria-label={rotulo}>
+    <div className="inline-flex h-9 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label={rotulo}>
       {TONS_DO_CRIATIVO.map((t) => (
         <button
           key={t.valor}
@@ -86,7 +99,11 @@ export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoC
           aria-checked={valor === t.valor}
           title={t.dica}
           onClick={() => onMudar(t.valor)}
-          className={pilula(valor === t.valor)}
+          className={juntar(
+            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[12.5px] font-medium transition-colors",
+            valor === t.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            foco,
+          )}
         >
           {t.rotulo}
         </button>
@@ -100,21 +117,23 @@ function TestarPrimeiro({ plano }: { plano: PlanoAds }) {
   const { itens, base } = testarPrimeiroDoPlano(plano);
   if (!itens.length) return null;
   return (
-    <section className="rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Testar primeiro">
-      <h3 className="flex items-center text-[13.5px] font-semibold">
+    <section className="rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Testar primeiro">
+      <h3 className="flex items-center text-[14px] font-semibold">
         <Target className="mr-1.5 h-4 w-4 text-primary" /> Testar primeiro
+        <AjudaRecolhida className="ml-1.5" rotulo="Como a ordem é feita">
+          Ordem pela conferência do Jev e pela prova. O corte usa o custo tolerável do briefing ou a média real da conta.
+        </AjudaRecolhida>
       </h3>
-      <p className="mt-0.5 text-[12px] text-muted-foreground">
-        Ordem pela conferência do Jev e pela prova. O corte usa o custo tolerável do briefing ou a média real da conta.
-        {base && base.custo_por_resultado !== null
-          ? ` Conta nos últimos ${base.periodo_dias} dias: ${brl(base.gasto)} investidos, ${base.resultados || 0} resultado(s), ${brl(base.custo_por_resultado)} por resultado.`
-          : base
-            ? " A conta ainda não tem resultado registrado nos últimos 90 dias."
-            : ""}
-      </p>
-      <ol className="mt-2 space-y-2">
+      {base && (
+        <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
+          {base.custo_por_resultado !== null
+            ? `Conta nos últimos ${base.periodo_dias} dias: ${brl(base.gasto)} investidos, ${base.resultados || 0} resultado(s), ${brl(base.custo_por_resultado)} por resultado.`
+            : "A conta ainda não tem resultado registrado nos últimos 90 dias."}
+        </p>
+      )}
+      <ol className="mt-2 divide-y divide-border/70">
         {itens.map((t, i) => (
-          <li key={t.angulo_id} className="min-w-0 rounded-lg border border-border bg-card p-3">
+          <li key={t.angulo_id} className="min-w-0 py-2.5">
             <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">
               <span className="mr-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground">{t.ordem || i + 1}</span>
               {t.nome}
@@ -133,7 +152,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   if (!children) return null;
   return (
     <div className="min-w-0">
-      <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{rotulo}</p>
+      <p className={texto.rotulo}>{rotulo}</p>
       <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</p>
     </div>
   );
@@ -188,7 +207,7 @@ function CartaoDoAngulo({
   const rodadas = typeof angulo.rodadas === "number" ? angulo.rodadas : 0;
   return (
     <article
-      className={`min-w-0 rounded-xl border bg-card p-4 transition-colors ${marcado ? "border-primary ring-1 ring-primary/40" : "border-border"}`}
+      className={`min-w-0 rounded-lg border bg-card p-4 transition-colors ${marcado ? "border-primary ring-1 ring-primary/40" : "border-border"}`}
       aria-label={`Ângulo ${indice + 1}: ${angulo.nome}`}
     >
       <div className="flex min-w-0 items-start">
@@ -196,7 +215,7 @@ function CartaoDoAngulo({
           <input type="checkbox" checked={marcado} onChange={onMarcar} className="h-4 w-4 accent-primary" aria-label={`Produzir o ângulo ${angulo.nome}`} />
         </label>
         <div className="min-w-0 flex-1">
-          <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Ângulo {indice + 1}</p>
+          <p className={texto.rotulo}>Ângulo {indice + 1}</p>
           <h3 className="text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{angulo.nome}</h3>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {temQualidade && (
@@ -260,7 +279,7 @@ function CartaoDoAngulo({
       )}
 
       {(alerta || (!aprovado && motivos.length > 0)) && (
-        <div className="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2" role="note">
+        <div className="mt-3 rounded-md bg-warning/10 px-3 py-2" role="note">
           {alerta && <p className="text-[12px] font-medium text-warning">{alerta}</p>}
           {!aprovado && motivos.length > 0 && (
             <ul className="mt-0.5 list-disc pl-4 text-[12px] leading-snug">
@@ -300,18 +319,21 @@ function Descartados({ angulos }: { angulos: Angulo[] }) {
   const [aberto, setAberto] = useState(false);
   if (!angulos.length) return null;
   return (
-    <section className="rounded-xl border border-dashed border-border bg-card/60" aria-label="Descartados pela conferência">
-      <button type="button" onClick={() => setAberto((v) => !v)} aria-expanded={aberto} className="flex w-full items-center px-4 py-3 text-left">
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium">Descartados pela conferência ({angulos.length})</span>
-          <span className="block text-[11.5px] text-muted-foreground">Não passaram na régua do Jev nem depois de reescritos. Ficam aqui para consulta, fora da produção.</span>
-        </span>
+    <section className="min-w-0 border-t border-border pt-3" aria-label="Descartados pela conferência">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        title="Não passaram na régua do Jev nem depois de reescritos. Ficam aqui para consulta, fora da produção."
+        className={juntar("flex w-full items-center rounded py-1 text-left", foco)}
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">Descartados pela conferência ({angulos.length})</span>
         <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
       </button>
       {aberto && (
-        <ul className="space-y-2 border-t border-border px-4 py-3">
+        <ul className="mt-1 divide-y divide-border">
           {angulos.map((a) => (
-            <li key={a.id} className="min-w-0 rounded-lg border border-border bg-background p-3">
+            <li key={a.id} className="min-w-0 py-3">
               <div className="flex min-w-0 items-start">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium [overflow-wrap:anywhere]">{a.nome}</p>
@@ -506,176 +528,175 @@ export default function AbaPlano({
   const angulosOrdenados = plano ? plano.angulos : [];
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="min-w-0 space-y-4">
-        <section className="rounded-xl border border-border bg-card p-4" aria-label="Gerar plano">
-          <div className="flex min-w-0 flex-wrap items-start">
-            <div className="mb-2 mr-3 min-w-0 flex-1">
-              <h2 className="text-[15px] font-semibold">Plano de teste</h2>
-              <p className="text-[12px] leading-snug text-muted-foreground">
-                Ângulo antes de execução: hipóteses realmente diferentes, uma variável por vez. Só chegam ângulos que passaram na conferência do Jev.
-                {briefing.data ? ` Briefing versão ${briefing.data.versao}.` : " Sem briefing salvo: o plano fica mais fraco."}
-                {` ${destaques} referência${destaques === 1 ? "" : "s"} em destaque.`}
-              </p>
-            </div>
-          </div>
-          <div className="mt-1 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
-            <label className="block min-w-0">
-              <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Oferta</span>
-              <select aria-label="Oferta do plano" value={ofertaId} onChange={(e) => setOfertaId(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-[12.5px]">
-                <option value="">Sem oferta específica (usa o briefing)</option>
-                {ofertasAtivas.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.status === "escolhida" ? "Escolhida: " : ""}
-                    {o.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="min-w-0 lg:col-span-2">
-              <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">
-                Tom <span className="font-normal text-muted-foreground">({(TONS_DO_CRIATIVO.find((t) => t.valor === tom) || TONS_DO_CRIATIVO[1]).dica})</span>
-              </span>
-              <SeletorDeTom valor={tom} onMudar={setTomEscolhido} rotulo="Tom do plano" />
-            </div>
-            <div className="min-w-0">
-              <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Objetivo</span>
-              <div className="flex min-w-0 flex-wrap" role="radiogroup" aria-label="Objetivo do plano">
-                {OBJETIVOS.map((o) => (
-                  <button key={o.valor} type="button" role="radio" aria-checked={objetivo === o.valor} title={o.dica} onClick={() => setObjetivo(objetivo === o.valor ? "" : o.valor)} className={pilula(objetivo === o.valor)}>
-                    {o.rotulo}
-                  </button>
-                ))}
+    // Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no computador
+    // o plano rola por dentro e a conversa com o estrategista fica parada ao lado,
+    // com o campo sempre à vista; no celular a página rola normal e a conversa
+    // abre em tela cheia pelo botão de baixo.
+    <AreaDeTrabalho
+      memoria="mesa-ads-plano"
+      rotuloDaLateral="Estrategista"
+      iconeDaLateral={<Sparkles className="h-4 w-4" />}
+      rotuloDoPrincipal="Plano de teste"
+      memoriaDaRolagem={`mesa-ads:plano:${clientId}`}
+      lateral={plano ? <ConversaDoPlano plano={plano} /> : undefined}
+    >
+      <div className="min-w-0 space-y-5 pb-6">
+        <section className="min-w-0" aria-label="Gerar plano">
+          <CabecalhoDaParte
+            titulo="Plano de teste"
+            ajuda="Ângulo antes de execução: hipóteses realmente diferentes, uma variável por vez. Só chegam ângulos que passaram na conferência do Jev. Sem briefing salvo, o plano fica mais fraco."
+            descricao={`${briefing.data ? `Briefing versão ${briefing.data.versao}` : "Sem briefing salvo"} · ${destaques} referência${destaques === 1 ? "" : "s"} em destaque`}
+          />
+          <div className={juntar(superficie.painel, "min-w-0 space-y-4 p-4 sm:p-5")}>
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Oferta">
+                <select aria-label="Oferta do plano" value={ofertaId} onChange={(e) => setOfertaId(e.target.value)} className={campo}>
+                  <option value="">Sem oferta específica (usa o briefing)</option>
+                  {ofertasAtivas.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.status === "escolhida" ? "Escolhida: " : ""}
+                      {o.nome}
+                    </option>
+                  ))}
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Objetivo" apoio={objetivo ? (OBJETIVOS.find((o) => o.valor === objetivo) || OBJETIVOS[0]).dica : undefined}>
+                <select aria-label="Objetivo do plano" value={objetivo} onChange={(e) => setObjetivo(e.target.value)} className={campo}>
+                  <option value="">Sem objetivo definido</option>
+                  {OBJETIVOS.map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </CampoDeFormulario>
+              <div className="min-w-0 sm:col-span-full">
+                <span className={juntar(texto.rotulo, "mb-1.5 flex min-w-0 items-center")}>
+                  Tom
+                  <AjudaRecolhida className="ml-1" rotulo="O que muda em cada tom">
+                    {TONS_DO_CRIATIVO.map((t) => `${t.rotulo}: ${t.dica}`).join(" ")}
+                  </AjudaRecolhida>
+                </span>
+                <SeletorDeTom valor={tom} onMudar={setTomEscolhido} rotulo="Tom do plano" />
               </div>
-            </div>
-          </div>
-          <div className="mt-2 rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
-            <Textarea
-              value={pedido}
-              onChange={(e) => setPedido(e.target.value)}
-              rows={2}
-              aria-label="Pedido para o plano"
-              placeholder="Pedido opcional: foco, restrição, o que já foi testado"
-              className="min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            <div className="mt-1 flex min-w-0 flex-wrap items-center">
-              <Ditado valor={pedido} onChange={setPedido} className="mb-1 mr-2" />
-              <div className="mb-1 mr-2 flex items-center rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Quantidade de ângulos">
-                {QUANTIDADES_DE_ANGULOS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    role="radio"
-                    aria-checked={quantidade === n}
-                    onClick={() => setQuantidade(n)}
-                    className={`h-7 min-w-[34px] rounded-md px-2 text-[12px] ${quantidade === n ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-                <span className="px-2 text-[11.5px] text-muted-foreground">ângulos</span>
+            </GrupoDeCampos>
+            <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+              <Textarea
+                value={pedido}
+                onChange={(e) => setPedido(e.target.value)}
+                rows={2}
+                aria-label="Pedido para o plano"
+                placeholder="Pedido opcional: foco, restrição, o que já foi testado"
+                className="min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+              <div className="mt-1 flex min-w-0 flex-wrap items-center">
+                <Ditado valor={pedido} onChange={setPedido} className="mb-1 mr-2" />
+                <div className="mb-1 mr-2 flex items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label="Quantidade de ângulos">
+                  {QUANTIDADES_DE_ANGULOS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={quantidade === n}
+                      onClick={() => setQuantidade(n)}
+                      className={juntar("h-7 min-w-[34px] rounded px-2 text-[12px]", quantidade === n ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground", foco)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <span className="px-2 text-[11.5px] text-muted-foreground">ângulos</span>
+                </div>
+                <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
+                  <Andamento desde={desdeGerar} rotulo={rotuloDoPedido ? `${rotuloDoPedido}: montando e conferindo` : "Montando e conferindo os ângulos"} />
+                  <BotaoComCusto
+                    rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> Gerar plano</>}
+                    titulo="Gerar plano de teste"
+                    descricao="O estrategista lê o briefing, a oferta e as referências em destaque; o Jev pontua cada ângulo e o que não passa é reescrito antes de chegar aqui."
+                    className="ml-2 h-9"
+                    disabled={desdeGerar !== null}
+                    partes={() => partesDoPlanoV2(catalogo, quantidade)}
+                    executar={() => rodarGerar(() => chamarPlano())}
+                    aoConcluir={aoGerar}
+                  />
+                </span>
               </div>
-              <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
-                <Andamento desde={desdeGerar} rotulo={rotuloDoPedido ? `${rotuloDoPedido}: montando e conferindo` : "Montando e conferindo os ângulos"} />
-                <BotaoComCusto
-                  rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> Gerar plano</>}
-                  titulo="Gerar plano de teste"
-                  descricao="O estrategista lê o briefing, a oferta e as referências em destaque; o Jev pontua cada ângulo e o que não passa é reescrito antes de chegar aqui."
-                  className="ml-2 h-9"
-                  disabled={desdeGerar !== null}
-                  partes={() => partesDoPlanoV2(catalogo, quantidade)}
-                  executar={() => rodarGerar(() => chamarPlano())}
-                  aoConcluir={aoGerar}
-                />
-              </span>
             </div>
           </div>
         </section>
 
-        {lista.length > 1 && (
-          <nav aria-label="Planos do cliente" className="flex min-w-0 flex-wrap">
-            {lista.slice(0, 8).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onPlano(p.id)}
-                aria-current={plano && plano.id === p.id ? "true" : undefined}
-                className={`mb-2 mr-2 min-w-0 max-w-full rounded-lg border px-3 py-1.5 text-left transition-colors ${
-                  plano && plano.id === p.id ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40"
-                }`}
-              >
-                <span className="block max-w-[220px] truncate text-[12.5px] font-medium">{p.nome}</span>
-                <span className="block text-[11px] text-muted-foreground">
-                  {dataCurta(p.criado_em)} · {p.angulos.length} ângulos · {(STATUS_DO_PLANO.find((s) => s.valor === p.status) || STATUS_DO_PLANO[0]).rotulo}
-                </span>
-              </button>
-            ))}
-          </nav>
-        )}
-
         {planos.isError && <AvisoDeErro erro={planos.error} />}
-        {planos.isLoading && <div className="h-64 animate-pulse rounded-xl bg-muted/70" />}
+        {planos.isLoading && <Carregando forma="aba" rotulo="Lendo os planos" />}
         {planos.data && !plano && desdeGerar === null && (
-          <div className="rounded-xl border border-dashed border-border p-8 text-center">
-            <FlaskConical className="mx-auto h-6 w-6 text-primary" />
-            <p className="mt-3 text-[14px] font-medium">Nenhum plano ainda</p>
-            <p className="mt-1 text-[12.5px] text-muted-foreground">Escolha uma oferta na etapa Oferta, destaque algumas referências e gere o primeiro plano.</p>
-          </div>
+          <EstadoVazio icone={<FlaskConical className="h-5 w-5" />} titulo="Nenhum plano ainda" descricao="Escolha uma oferta na etapa Oferta, destaque algumas referências e gere o primeiro plano." />
         )}
-        {desdeGerar !== null && !plano && <div className="h-64 animate-pulse rounded-xl bg-muted/70" aria-label="Gerando o plano" />}
+        {desdeGerar !== null && !plano && <div className="h-64 animate-pulse rounded-lg bg-muted/70" aria-label="Gerando o plano" />}
 
         {plano && qualidade && (
-          <>
-            <div className="flex min-w-0 flex-wrap items-center">
-              <h3 className="mb-1 mr-3 min-w-0 flex-1 truncate text-[14px] font-semibold">{plano.nome}</h3>
-              {plano.custo_usd > 0 && <span className="mb-1 mr-2 text-[11.5px] tabular-nums text-muted-foreground">{usd(plano.custo_usd)}</span>}
-              <select
-                aria-label="Status do plano"
-                value={plano.status}
-                onChange={(e) => void mudarStatus(e.target.value as StatusDoPlano)}
-                className="mb-1 h-8 rounded-md border border-input bg-background px-2 text-[12px]"
-              >
-                {STATUS_DO_PLANO.map((s) => (
-                  <option key={s.valor} value={s.valor}>
-                    {s.rotulo}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <section className="min-w-0 space-y-4 border-t border-border pt-5" aria-label="Plano aberto">
+            <CabecalhoDaParte
+              titulo={plano.nome}
+              nivel={3}
+              descricao={`${dataCurta(plano.criado_em)} · ${plano.angulos.length} ângulos${plano.custo_usd > 0 ? ` · ${usd(plano.custo_usd)}` : ""}`}
+              acoes={
+                <>
+                  {lista.length > 1 && (
+                    <SeletorCompacto
+                      rotulo="Planos do cliente"
+                      icone={<FlaskConical className="h-3.5 w-3.5" />}
+                      modo="lista"
+                      opcoes={lista.slice(0, 12).map((p) => ({
+                        valor: p.id,
+                        rotulo: p.nome,
+                        descricao: `${dataCurta(p.criado_em)} · ${p.angulos.length} ângulos · ${(STATUS_DO_PLANO.find((st) => st.valor === p.status) || STATUS_DO_PLANO[0]).rotulo}`,
+                      }))}
+                      valor={plano.id}
+                      onEscolher={(id) => onPlano(id)}
+                      className="max-w-[240px]"
+                    />
+                  )}
+                  <select aria-label="Status do plano" value={plano.status} onChange={(e) => void mudarStatus(e.target.value as StatusDoPlano)} className={seletorCurto}>
+                    {STATUS_DO_PLANO.map((s) => (
+                      <option key={s.valor} value={s.valor}>
+                        {s.rotulo}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              }
+            />
 
             {(qualidade.rodadas !== null || qualidade.aprovados !== null || qualidade.objetivo || ofertaDoPlano) && (
-              <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-2.5" aria-label="Qualidade do plano">
-                <ShieldCheck className="mb-1 mr-2 mt-1 h-4 w-4 shrink-0 text-success" />
-                <span className="mb-1 mr-3 mt-1 text-[12.5px]">
+              <div className={juntar(superficie.poco, "flex min-w-0 flex-wrap items-center px-3 py-2")} aria-label="Qualidade do plano">
+                <ShieldCheck className="mb-0.5 mr-2 mt-0.5 h-4 w-4 shrink-0 text-success" />
+                <span className="mb-0.5 mr-3 mt-0.5 text-[12.5px]">
                   Conferência do Jev
                   {qualidade.rodadas !== null ? `: ${qualidade.rodadas} rodada${qualidade.rodadas === 1 ? "" : "s"} de qualidade` : ""}
                 </span>
-                {qualidade.aprovados !== null && <span className="mb-1 mr-1.5 mt-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
+                {qualidade.aprovados !== null && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] text-success">{qualidade.aprovados} aprovados</span>}
                 {qualidade.descartados.length > 0 && (
-                  <span className="mb-1 mr-1.5 mt-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
+                  <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
                 )}
-                {qualidade.objetivo && <span className="mb-1 mr-1.5 mt-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
-                {ofertaDoPlano && <span className="mb-1 mt-1 min-w-0 truncate text-[11.5px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
+                {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
+                {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[11.5px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
               </div>
             )}
 
             <TestarPrimeiro plano={plano} />
             <TesteDoAgente plano={plano} />
 
-            {/* v5: o agente sênior revisa o plano com a conta ao vivo (abre sob demanda: não lê nada antes do clique). */}
+            {/* v5: o agente sênior revisa o plano com a conta ao vivo (abre sob demanda: não lê nada antes do clique).
+                Aqui ele abre no lugar, numa caixa de altura fixa (a conversa rola por dentro, o campo fica à vista). */}
             {agenteAberto ? (
-              <AgenteSenior planoId={plano.id} onPlanoPronto={(id) => onPlano(id)} />
+              <AgenteSenior planoId={plano.id} onPlanoPronto={(id) => onPlano(id)} className="h-[640px]" />
             ) : (
               <button
                 type="button"
                 onClick={() => setAgenteAberto(true)}
-                className="flex w-full min-w-0 items-center rounded-xl border border-dashed border-border bg-card px-4 py-2.5 text-left text-[12.5px] hover:border-primary/50"
+                className={juntar("flex w-full min-w-0 items-center rounded-lg border border-dashed border-border px-4 py-2.5 text-left text-[12.5px] transition-colors hover:border-primary/50", foco)}
+                title="Ele lê este plano junto com a conta ao vivo, a evolução e o nicho, e diz o que ajustar."
               >
                 <Briefcase className="mr-2 h-4 w-4 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">Revisar com o agente sênior de tráfego</span>
-                  <span className="block text-[11.5px] text-muted-foreground">Ele lê este plano junto com a conta ao vivo, a evolução e o nicho, e diz o que ajustar.</span>
-                </span>
+                <span className="min-w-0 flex-1 truncate font-medium">Revisar com o agente sênior de tráfego</span>
               </button>
             )}
 
@@ -690,7 +711,8 @@ export default function AbaPlano({
 
             <Descartados angulos={qualidade.descartados} />
 
-            <div className="sticky bottom-3 z-10 rounded-xl border border-border bg-card p-3 shadow-md" aria-label="Produzir criativos">
+            {/* No computador a barra gruda no pé da coluna que rola; no celular fica no fim (nada flutua sobre os campos). */}
+            <div className="border-t border-border bg-background/95 py-3 lg:sticky lg:bottom-0 lg:z-10" role="group" aria-label="Produzir criativos">
               <div className="flex min-w-0 flex-wrap items-center">
                 <div className="mb-1 mr-3 flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">
                   {FORMATOS.map((f) => {
@@ -701,9 +723,11 @@ export default function AbaPlano({
                         type="button"
                         aria-pressed={ativo}
                         onClick={() => setFormatos((l) => alternar(l, f.valor))}
-                        className={`mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors ${
-                          ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
-                        }`}
+                        className={juntar(
+                          "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
+                          ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
+                          foco,
+                        )}
                       >
                         {ativo && <Check className="mr-1 h-3 w-3" />}
                         {f.rotulo}
@@ -742,11 +766,9 @@ export default function AbaPlano({
                 </span>
               </div>
             </div>
-          </>
+          </section>
         )}
       </div>
-
-      {plano && <ConversaDoPlano plano={plano} className="xl:sticky xl:top-[140px] xl:h-[calc(100vh-170px)]" />}
-    </div>
+    </AreaDeTrabalho>
   );
 }

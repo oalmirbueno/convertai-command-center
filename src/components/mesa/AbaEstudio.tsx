@@ -78,6 +78,7 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
+import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
@@ -87,6 +88,7 @@ import { temJanelaAberta } from "./TelaCheiaDaMesa";
 import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
+import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import {
   AVISO_CONTINUO_FORA_DO_4X5,
   copiarTexto,
@@ -391,7 +393,8 @@ function DetalheDoItem({
   const [enviando, setEnviando] = useState(false);
   const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
   // O andamento de cada lâmina (fila, gerando, ajustando, conferindo): a fonte do indicador único da prancheta.
-  const [andamento, setAndamento] = useState<Record<number, AndamentoDaLamina>>({});
+  // Andamento do caminho antigo (sem a fila do servidor) e das ações diretas (ajustar, conferir).
+  const [andamentoLocal, setAndamento] = useState<Record<number, AndamentoDaLamina>>({});
   const [emLote, setEmLote] = useState(false);
   const [pedidoAoDiretor, setPedidoAoDiretor] = useState("");
   const [salvandoContinuo, setSalvandoContinuo] = useState(false);
@@ -432,6 +435,17 @@ function DetalheDoItem({
     void queryClient.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
     mesa.atualizarCusto();
   };
+
+  /**
+   * Fila de geração no servidor (frente G, 26/09): o andamento vem do banco,
+   * então tela cheia, outro card ou outro cliente não param nada; voltar
+   * mostra o que andou. Sem a fila no ar, fica vazia e vale o caminho antigo.
+   */
+  const fila = useFilaDoTrabalho(trabalho?.id, {
+    aoMudar: atualizar,
+    aoFalhar: (i) => avisarErro(erroDoItem(i), `Lâmina ${i.ordem} não foi gerada`),
+  });
+  const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...andamentoLocal };
 
   const diretor = padraoPara(catalogo, "diretor_arte");
   const leitor = padraoPara(catalogo, "leitura");
@@ -601,6 +615,9 @@ function DetalheDoItem({
   /** Uma lâmina só (ferramenta Lâmina ou barrinha da prancheta): gera e confere em seguida. */
   const gerarEConferir = async (ordem: number) => {
     if (!trabalho) return { custo_usd: 0 };
+    // Fila do servidor: segue mesmo trocando de tela ou de cliente. Sem ela, o caminho antigo.
+    const naFila = await fila.enfileirar([ordem], corrigirSozinho);
+    if (naFila) return { na_fila: naFila.itens.length };
     const custo = await gerarUma(trabalho.id, ordem);
     const custoConferencia = await conferirSemDerrubar(trabalho.id, ordem);
     return { custo_usd: custo + custoConferencia };
@@ -687,6 +704,11 @@ function DetalheDoItem({
    */
   const gerarVarias = async (ordens: number[]) => {
     if (!trabalho) return { custo_usd: 0 };
+    // Fila do servidor (frente G): o pedido vira trabalho no banco e a função
+    // gera em segundo plano (até 2 por trabalho, 1 no contínuo; custo e
+    // carteira por lâmina, como antes). Sem a fila no ar, o laço antigo abaixo.
+    const naFila = await fila.enfileirar(ordens, corrigirSozinho);
+    if (naFila) return { na_fila: naFila.itens.length };
     parar.current = false;
     setEmLote(true);
     const agora = Date.now();
@@ -1128,8 +1150,8 @@ function DetalheDoItem({
 
   const acaoPrincipal = (
     <div className="mb-1 mt-1 flex shrink-0 items-center">
-      {emLote ? (
-        <Button type="button" size="sm" variant="outline" className="h-10" onClick={() => { parar.current = true; }} title="Para depois das lâminas que já estão gerando">
+      {emLote || fila.ativos.length > 0 ? (
+        <Button type="button" size="sm" variant="outline" className="h-10" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Para depois das lâminas que já estão gerando">
           <Square className="mr-1 h-3.5 w-3.5" /> Parar
         </Button>
       ) : (
@@ -1157,6 +1179,12 @@ function DetalheDoItem({
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
           aoConcluir={(data) => {
+            if (data && typeof data.na_fila === "number") {
+              toast.info(data.na_fila ? "Gerando no servidor" : "Essas lâminas já estavam na fila", {
+                description: "Pode trocar de tela ou de cliente: a geração continua. O custo sai por lâmina, na carteira do cliente.",
+              });
+              return;
+            }
             toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
           }}
         />
@@ -1198,6 +1226,7 @@ function DetalheDoItem({
             {seletorDeGerador}
             {chaveCorrigirSozinho}
             {botaoDoDiretor}
+            {trabalho && <BotaoDoEstilo trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="mb-1 mr-2 mt-1 shrink-0" />}
             {acaoPrincipal}
           </>
         )}

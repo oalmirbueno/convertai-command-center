@@ -10,8 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ArrowUpRight, ArrowDownRight, GitCompareArrows, Minus,
-  CheckCircle2, AlertTriangle, Info, ChevronDown, ChevronUp, Sparkles,
+  CheckCircle2, AlertTriangle, Info, ChevronDown, Sparkles,
 } from "lucide-react";
+import { Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
@@ -19,7 +20,12 @@ import {
 type AnyRec = Record<string, any>;
 
 const safeDiv = (a: number, b: number) => (b > 0 && isFinite(a / b) ? a / b : 0);
-const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "";
+// "2026-08-01" é lido como data local (new Date puro jogaria para o dia anterior no Brasil).
+const dataLocal = (d: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
+};
+const fmtDate = (d?: string) => d ? dataLocal(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "";
 const daysBetween = (a?: string, b?: string) => (a && b)
   ? Math.max(1, Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / 86400000) + 1)
   : 0;
@@ -188,19 +194,19 @@ type Severity = "expected" | "gain" | "attention" | "critical" | "neutral";
 
 const SEV_STYLE: Record<Severity, { tone: string; chip: string; label: string; icon: any }> = {
   expected:  { tone: "border-border bg-secondary/30",
-               chip: "text-muted-foreground bg-secondary border-border",
+               chip: "bg-muted text-muted-foreground",
                label: "Esperado", icon: Info },
   gain:      { tone: "border-primary/25 bg-primary/5",
-               chip: "text-primary bg-primary/10 border-primary/25",
+               chip: "bg-primary/10 text-primary",
                label: "Ganho", icon: CheckCircle2 },
   attention: { tone: "border-warning/30 bg-warning/5",
-               chip: "text-warning bg-warning/10 border-warning/30",
+               chip: "bg-warning/10 text-warning",
                label: "Atenção", icon: AlertTriangle },
   critical:  { tone: "border-destructive/30 bg-destructive/5",
-               chip: "text-destructive bg-destructive/10 border-destructive/30",
+               chip: "bg-destructive/10 text-destructive",
                label: "Crítico", icon: AlertTriangle },
   neutral:   { tone: "border-border bg-card",
-               chip: "text-muted-foreground bg-secondary border-border",
+               chip: "bg-muted text-muted-foreground",
                label: "Neutro", icon: Minus },
 };
 
@@ -446,14 +452,14 @@ export default function ReportComparison({
   // ── Estado 1: não há anterior ──
   if (!previous) {
     return (
-      <div className="bg-card border border-border rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <GitCompareArrows className="w-4 h-4 text-muted-foreground shrink-0" />
-          <p className="text-[12px] text-muted-foreground">
+      <Painel semEspaco as="section" aria-label="Comparação com o relatório anterior">
+        <div className="flex min-w-0 items-center px-4 py-3">
+          <GitCompareArrows className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <p className={juntar(texto.corpo, "min-w-0 text-muted-foreground")}>
             Primeiro relatório deste projeto · sem comparação disponível.
           </p>
         </div>
-      </div>
+      </Painel>
     );
   }
 
@@ -463,37 +469,35 @@ export default function ReportComparison({
   const needNormalize = curDays > 0 && prevDays > 0 && Math.abs(curDays - prevDays) / Math.max(curDays, prevDays) > 0.2;
   const ratio = needNormalize && prevDays > 0 ? curDays / prevDays : 1;
 
-  // ── Header / toggle (sempre visível) ──
+  // ── Cabeçalho que abre e fecha (sempre visível; o estado fica lembrado) ──
   const header = (
     <button
+      type="button"
       onClick={() => setOpen(o => !o)}
-      className="w-full px-5 py-3.5 flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors cursor-pointer bg-transparent border-0 text-left"
+      aria-expanded={open}
+      className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-          <GitCompareArrows className="w-4 h-4 text-primary" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">
-            Comparar com Relatório Anterior
-          </h2>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {previous.title?.slice(0, 60) || fmtDate(previous.created_at)}
-            {prevDays > 0 && ` · ${fmtDate(previous.period_start)} → ${fmtDate(previous.period_end)}`}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-[10px] px-2.5 py-1 rounded-full bg-secondary text-muted-foreground border border-border uppercase tracking-wider font-semibold hidden sm:inline">
-          {open ? "Ocultar" : "Mostrar análise"}
+      <GitCompareArrows className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="mr-3 min-w-0 flex-1">
+        <span className={juntar(texto.tituloSecao, "block text-[14px]")}>Comparação com o anterior</span>
+        <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+          {previous.title?.slice(0, 60) || fmtDate(previous.created_at)}
+          {prevDays > 0 && ` · ${fmtDate(previous.period_start)} a ${fmtDate(previous.period_end)}`}
         </span>
-        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </div>
+      </span>
+      <span className={juntar(texto.auxiliar, "mr-1.5 hidden shrink-0 sm:inline")}>
+        {open ? "Ocultar" : "Mostrar análise"}
+      </span>
+      <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden="true" />
     </button>
   );
 
   if (!open) {
-    return <section className="bg-card border border-border rounded-2xl overflow-hidden">{header}</section>;
+    return (
+      <Painel semEspaco as="section" className="overflow-hidden" aria-label="Comparação com o relatório anterior">
+        {header}
+      </Painel>
+    );
   }
 
   // ── Análise ──
@@ -533,54 +537,64 @@ export default function ReportComparison({
       .slice(0, 10);
   })();
 
+  const periodos = [
+    {
+      rotulo: "Atual",
+      texto: currentPeriod?.start && currentPeriod?.end
+        ? `${fmtDate(currentPeriod.start)} a ${fmtDate(currentPeriod.end)}`
+        : "Período atual",
+      dias: curDays,
+    },
+    {
+      rotulo: "Anterior",
+      texto: previous.period_start && previous.period_end
+        ? `${fmtDate(previous.period_start)} a ${fmtDate(previous.period_end)}`
+        : fmtDate(previous.created_at),
+      dias: prevDays,
+    },
+  ];
+
   return (
-    <section className="bg-card border border-border rounded-2xl overflow-hidden">
+    <Painel semEspaco as="section" className="overflow-hidden" aria-label="Comparação com o relatório anterior">
       {header}
 
-      <div className="border-t border-border/50 px-5 py-5 space-y-5">
-        {/* Períodos & aviso de normalização */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Atual</p>
-            <p className="text-sm font-semibold text-foreground">
-              {currentPeriod?.start && currentPeriod?.end
-                ? `${fmtDate(currentPeriod.start)} → ${fmtDate(currentPeriod.end)}`
-                : "Período atual"}
-              {curDays > 0 && <span className="text-[11px] text-muted-foreground font-normal ml-2 font-mono">{curDays}d</span>}
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Anterior</p>
-            <p className="text-sm font-semibold text-foreground">
-              {previous.period_start && previous.period_end
-                ? `${fmtDate(previous.period_start)} → ${fmtDate(previous.period_end)}`
-                : fmtDate(previous.created_at)}
-              {prevDays > 0 && <span className="text-[11px] text-muted-foreground font-normal ml-2 font-mono">{prevDays}d</span>}
-            </p>
-          </div>
+      {/* Períodos lado a lado */}
+      <div className="overflow-hidden border-t border-border">
+        <div className="-ml-px -mt-px grid grid-cols-1 sm:grid-cols-2">
+          {periodos.map((p) => (
+            <div key={p.rotulo} className="min-w-0 border-l border-t border-border px-4 py-3">
+              <p className={texto.rotulo}>{p.rotulo}</p>
+              <p className="mt-0.5 truncate text-[13px] font-medium text-foreground">
+                {p.texto}
+                {p.dias > 0 && <span className={juntar(texto.auxiliar, "ml-2 tabular-nums")}>{p.dias} dias</span>}
+              </p>
+            </div>
+          ))}
         </div>
+      </div>
 
-        {needNormalize && (
-          <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3.5 py-2.5">
-            <Info className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
-            <p className="text-[11px] text-foreground leading-relaxed">
-              Períodos com tamanhos diferentes ({curDays}d × {prevDays}d) · volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR/CPC/CPM/ROAS) são comparadas direto.
-            </p>
-          </div>
-        )}
+      {needNormalize && (
+        <p className="flex items-start border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
+          <Info className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <span className="min-w-0">
+            Períodos com tamanhos diferentes ({curDays} × {prevDays} dias): os volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR, CPC, CPM, ROAS) são comparadas direto.
+          </span>
+        </p>
+      )}
 
-        {/* Sumário contextual: ganhos × atenções */}
-        {(gains.length > 0 || attention.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* Ganhos e pontos de atenção */}
+      {(gains.length > 0 || attention.length > 0) && (
+        <div className="overflow-hidden border-t border-border">
+          <div className={juntar("-ml-px -mt-px grid grid-cols-1", gains.length > 0 && attention.length > 0 && "md:grid-cols-2")}>
             {gains.length > 0 && (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5">
-                <p className="text-[10px] uppercase tracking-wider text-primary font-bold mb-2 flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3" /> Ganhos do período
+              <div className="min-w-0 border-l border-t border-border px-4 py-3">
+                <p className="flex items-center text-[12px] font-medium leading-4 text-primary">
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ganhos do período
                 </p>
-                <ul className="space-y-1.5">
+                <ul className="mt-2 space-y-1.5">
                   {gains.map(r => (
-                    <li key={r.key} className="text-[12px] text-foreground leading-snug">
-                      <span className="font-semibold">{META[r.key].label}</span>
+                    <li key={r.key} className="text-[12px] leading-5 text-foreground">
+                      <span className="font-medium">{META[r.key].label}</span>
                       <span className="text-muted-foreground"> · {r.narrative}</span>
                     </li>
                   ))}
@@ -588,14 +602,14 @@ export default function ReportComparison({
               </div>
             )}
             {attention.length > 0 && (
-              <div className="rounded-xl border border-warning/30 bg-warning/5 p-3.5">
-                <p className="text-[10px] uppercase tracking-wider text-warning font-bold mb-2 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3 h-3" /> Pontos de atenção
+              <div className="min-w-0 border-l border-t border-border px-4 py-3">
+                <p className="flex items-center text-[12px] font-medium leading-4 text-warning">
+                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pontos de atenção
                 </p>
-                <ul className="space-y-1.5">
+                <ul className="mt-2 space-y-1.5">
                   {attention.map(r => (
-                    <li key={r.key} className="text-[12px] text-foreground leading-snug">
-                      <span className="font-semibold">{META[r.key].label}</span>
+                    <li key={r.key} className="text-[12px] leading-5 text-foreground">
+                      <span className="font-medium">{META[r.key].label}</span>
                       <span className="text-muted-foreground"> · {r.narrative}</span>
                     </li>
                   ))}
@@ -603,70 +617,64 @@ export default function ReportComparison({
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Grid de métricas com contexto */}
-        {rows.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {rows.map(r => {
-              const sev = SEV_STYLE[r.severity];
-              const meta = META[r.key];
-              const Icon = sev.icon;
-              const TrendIcon = Math.abs(r.rawPct) < 0.5 ? Minus : r.rawPct > 0 ? ArrowUpRight : ArrowDownRight;
-              return (
-                <div key={r.key} className={`rounded-2xl border p-4 transition-colors ${sev.tone}`}>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold truncate">
-                      {meta.label}
-                    </p>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-md border font-bold flex items-center gap-1 ${sev.chip}`}>
-                      <Icon className="w-3 h-3" />
-                      {sev.label}
-                    </span>
+      {/* Cada métrica: situação, valor, variação, anterior e a leitura */}
+      {rows.length > 0 && (
+        <div className="overflow-hidden border-t border-border">
+        <ul className="-ml-px -mt-px grid grid-cols-1 lg:grid-cols-2">
+          {rows.map(r => {
+            const sev = SEV_STYLE[r.severity];
+            const meta = META[r.key];
+            const TrendIcon = Math.abs(r.rawPct) < 0.5 ? Minus : r.rawPct > 0 ? ArrowUpRight : ArrowDownRight;
+            return (
+              <li key={r.key} className="flex min-w-0 items-start border-l border-t border-border px-4 py-3">
+                <div className="mr-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center">
+                    <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{meta.label}</span>
+                    <span className={juntar(etiqueta, "ml-2", sev.chip)}>{sev.label}</span>
                   </div>
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <p className="text-xl font-bold font-mono text-foreground tracking-tight">{meta.format(r.cur)}</p>
-                    <span className="text-[11px] font-mono font-semibold text-muted-foreground flex items-center gap-0.5">
-                      <TrendIcon className="w-3 h-3" />
-                      {Math.abs(r.rawPct) < 0.5 ? "0%" : (r.rawPct > 0 ? "+" : "") + r.rawPct.toFixed(1) + "%"}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1 font-mono">
-                    Anterior: {meta.format(r.prev)}
-                  </p>
-                  <p className="text-[11px] text-foreground/80 mt-2 leading-relaxed">
-                    {r.narrative}
-                  </p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>{r.narrative}</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div className="shrink-0 text-right">
+                  <p className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{meta.format(r.cur)}</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 inline-flex items-center tabular-nums")}>
+                    <TrendIcon className="mr-0.5 h-3 w-3" aria-hidden="true" />
+                    {Math.abs(r.rawPct) < 0.5 ? "0%" : (r.rawPct > 0 ? "+" : "") + r.rawPct.toFixed(1) + "%"}
+                  </p>
+                  <p className={juntar(texto.auxiliar, "tabular-nums")}>antes {meta.format(r.prev)}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        </div>
+      )}
 
-        {/* Gráfico campanha-a-campanha */}
-        {breakdownChart.length >= 2 && (
-          <div className="rounded-2xl border border-border bg-secondary/10 p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-1">Progressão por Campanha · Investimento</h3>
-            <p className="text-[11px] text-muted-foreground mb-3">Quanto cada campanha recebeu agora vs. no período anterior.</p>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={breakdownChart} margin={{ top: 10, right: 16, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => "R$" + (v >= 1000 ? (v / 1000).toFixed(0) + "K" : v.toFixed(0))} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                    formatter={(v: any, n: any) => ["R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  <Bar dataKey="Anterior" fill="hsl(220, 15%, 55%)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Atual"    fill="hsl(145, 100%, 50%)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      {/* Investimento campanha a campanha */}
+      {breakdownChart.length >= 2 && (
+        <div className="border-t border-border px-4 py-4">
+          <h3 className="text-[13px] font-semibold leading-5 text-foreground">Investimento por campanha</h3>
+          <p className={juntar(texto.auxiliar, "mt-0.5")}>Agora e no período anterior</p>
+          <div className="mt-3 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={breakdownChart} margin={{ top: 10, right: 16, left: 0, bottom: 5 }}>
+                <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={60} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => "R$" + (v >= 1000 ? (v / 1000).toFixed(0) + "K" : v.toFixed(0))} />
+                <Tooltip
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: any, n: any) => ["R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n]}
+                />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <Bar dataKey="Anterior" fill="hsl(220, 15%, 55%)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="Atual"    fill="hsl(145, 100%, 50%)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        )}
-      </div>
-    </section>
+        </div>
+      )}
+    </Painel>
   );
 }

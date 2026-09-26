@@ -10,18 +10,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { useClients } from "@/hooks/useSupabaseData";
 import { padraoPara, textoDoErro, usd, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
 import { AprovarFoto, useAcoesDeUso } from "./AcoesDeUso";
 import AcoesProDaFoto from "./AcoesProDaFoto";
-import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
+import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
+import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto, botao, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
 import { MenuDeUso } from "./UsoDaFoto";
+import { useSelecaoParaODiretor } from "./diretorApi";
 import { acrescentarFotos, baixarDoStorage, baixarUmaAUma, classeDaFoto, invalidarFotos, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
 import { caminhoDaImagem, chaveDoAndamento, emParalelo, marcarAndamento, proporcaoDaImagem, useAndamentos, usePrecoNoServidor, type ImagemDaPersona } from "./modelosApi";
 import {
@@ -103,21 +105,23 @@ import {
  * cliente". Seletor lateral compacto, como o das personas.
  */
 
-const chaveDaEscolhida = (clientId: string) => `mesa-foto:clone:${clientId}`;
-function lerEscolhida(clientId: string): string | null {
-  try {
-    return window.sessionStorage.getItem(chaveDaEscolhida(clientId));
-  } catch {
-    return null;
-  }
-}
-function gravarEscolhida(clientId: string, id: string | null) {
-  try {
-    if (id) window.sessionStorage.setItem(chaveDaEscolhida(clientId), id);
-    else window.sessionStorage.removeItem(chaveDaEscolhida(clientId));
-  } catch {
-    /* sem armazenamento: abre o primeiro */
-  }
+const ehTextoOuNulo = (v: unknown) => v === null || typeof v === "string";
+const ehBooleano = (v: unknown) => typeof v === "boolean";
+
+/** Erro de leitura na região, com "Tentar de novo". */
+function ErroNaRegiao({ titulo, erro, onTentar, className = "" }: { titulo: string; erro: unknown; onTentar: () => void; className?: string }) {
+  return (
+    <EstadoDeErro
+      className={className}
+      titulo={titulo}
+      descricao={textoDoErro(erro)}
+      acao={
+        <button type="button" className={botao.secundario} onClick={onTentar}>
+          Tentar de novo
+        </button>
+      }
+    />
+  );
 }
 
 function SeloGerada({ texto = "gerada" }: { texto?: string }) {
@@ -128,18 +132,10 @@ function SeloGerada({ texto = "gerada" }: { texto?: string }) {
   );
 }
 
-function Campo({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
-  return (
-    <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1 block text-[11.5px] text-muted-foreground">{rotulo}</span>
-      {children}
-    </label>
-  );
-}
 
 function NotasDaSemelhanca({ c }: { c: ConferenciaDoClone }) {
   return (
-    <div className="mt-1.5 min-w-0 rounded-md border border-border bg-background p-1.5 text-[10.5px] leading-snug" data-conferencia-do-clone="">
+    <div className={juntar(superficie.poco, "mt-1.5 min-w-0 p-1.5 text-[11px] leading-snug")} data-conferencia-do-clone="">
       <p className="mb-0.5 font-medium text-muted-foreground">
         Semelhança (aviso, você decide){c.semelhanca != null ? `: ${Math.round(c.semelhanca * 100)}%` : ""}
       </p>
@@ -269,7 +265,7 @@ function MenuDoItem({ rotulo, itens, className = "" }: { rotulo: string; itens: 
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label={rotulo} title={rotulo} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground ${className}`}>
+        <button type="button" aria-label={rotulo} title={rotulo} className={juntar(botao.icone, className)}>
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </PopoverTrigger>
@@ -399,7 +395,8 @@ function ListaDeClones({ clones, escolhido, onEscolher, onNovo, novoAberto }: { 
       onNovo={onNovo}
       novoRotulo="Novo clone"
       novoAberto={novoAberto}
-      vazio="Nenhum clone ainda. Escolha fotos reais de uma pessoa do cliente e registre a autorização."
+      vazio="Nenhum clone ainda."
+      ajuda="De 1 a 4 fotos reais da mesma pessoa do cliente, com a autorização de uso de imagem registrada. Depois vêm a folha de identidade e as variações com o mesmo rosto."
     />
   );
 }
@@ -543,8 +540,8 @@ function EditorDeFotosDeOrigem({
   );
 
   const escolha = escolhendo && (
-    <div className="mt-2 min-w-0 rounded-lg border border-border bg-background p-2" data-escolha-de-foto="">
-      <p className="mb-1.5 text-[11.5px] text-muted-foreground">{escolhendo.trocar ? "Escolha a foto que entra no lugar desta (ou suba uma nova)." : "Suba fotos novas ou escolha do acervo."} Só fotos reais da mesma pessoa.</p>
+    <div className={juntar(superficie.poco, "mt-2 min-w-0 p-2")} data-escolha-de-foto="">
+      <p className={juntar(texto.auxiliar, "mb-1.5")}>{escolhendo.trocar ? "Escolha a foto que entra no lugar desta (ou suba uma nova)." : "Suba fotos novas ou escolha do acervo."}</p>
       <ZonaDeEnvio compacta onArquivos={(a) => void subir(a)} andamento={andamento} />
       <div className="mt-2">
         <SeletorDeFotos
@@ -570,18 +567,22 @@ function EditorDeFotosDeOrigem({
   }
   return (
     <div className="min-w-0" data-fotos-reais="">
-      <p className="mb-1 text-[11.5px] text-muted-foreground">
-        Fotos reais da mesma pessoa ({ids.length} de {MAX_FOTOS_DO_CLONE}): de preferência uma de frente com luz uniforme, uma de 3/4 e uma de corpo inteiro, sem filtro e sem óculos escuros. A estrela marca a principal. Dá para mudar depois.
-      </p>
+      <div className="mb-1.5 flex min-w-0 items-center">
+        <span className={texto.rotulo}>
+          Fotos reais da pessoa · {ids.length} de {MAX_FOTOS_DO_CLONE}
+        </span>
+        <AjudaRecolhida className="ml-1">De preferência uma de frente com luz uniforme, uma de 3/4 e uma de corpo inteiro, sem filtro e sem óculos escuros. A estrela marca a principal. Dá para mudar depois.</AjudaRecolhida>
+        {!escolhendo && (
+          <button type="button" className={juntar(botao.discreto, "ml-auto h-7 px-2 text-[12px]")} disabled={cheio} onClick={() => setEscolhendo({ trocar: null })}>
+            <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Escolher do acervo
+          </button>
+        )}
+      </div>
       {ids.length > 0 && miniaturas}
       {!cheio && !escolhendo && <ZonaDeEnvio compacta onArquivos={(a) => void subir(a)} andamento={andamento} />}
-      {!escolhendo && (
-        <Button type="button" size="sm" variant="outline" className="mt-2 h-8 text-[12px]" disabled={cheio} onClick={() => setEscolhendo({ trocar: null })}>
-          <Images className="mr-1.5 h-3.5 w-3.5" /> Escolher do acervo
-        </Button>
-      )}
       {escolha}
     </div>
+
   );
 }
 
@@ -589,15 +590,28 @@ function FotosReaisDoRascunho({ r, onMudar }: { r: RascunhoDoClone; onMudar: (r:
   return <EditorDeFotosDeOrigem modo="criacao" ids={r.imagem_ids} principal={r.principal_id} onMudar={(ids, principal) => onMudar({ ...r, imagem_ids: ids, principal_id: principal })} />;
 }
 
+const ehRascunhoDoClone = (v: unknown) => !!v && typeof v === "object" && typeof (v as RascunhoDoClone).nome === "string" && Array.isArray((v as RascunhoDoClone).imagem_ids) && !!(v as RascunhoDoClone).autorizacao;
+
 function NovoClone({ fotoInicial, onCriado, onCancelar }: { fotoInicial: string | null; onCriado: (c: Clone) => void; onCancelar: () => void }) {
   const { clientId } = useMesa();
   const avisarErro = useAvisarErro();
-  const [r, setR] = useState<RascunhoDoClone>(() => rascunhoDoClone(fotoInicial ? [fotoInicial] : []));
+  // Rascunho que não se perde ao sair e voltar. As confirmações da autorização voltam desmarcadas: são da equipe, na hora de criar.
+  const [r, setR, esquecerRascunho] = useEstadoDaTela<RascunhoDoClone>(`mesa-foto:clones:rascunho:${clientId}`, rascunhoDoClone(fotoInicial ? [fotoInicial] : []), { validar: ehRascunhoDoClone, esperaMs: 300 });
+  useEffect(() => {
+    setR((x) => {
+      const ids = fotoInicial && x.imagem_ids.indexOf(fotoInicial) < 0 && x.imagem_ids.length < MAX_FOTOS_DO_CLONE ? x.imagem_ids.concat([fotoInicial]) : x.imagem_ids;
+      const a = x.autorizacao;
+      if (ids === x.imagem_ids && !a.confirmada && !a.sabe_que_e_ia && !a.adulta) return x;
+      return { ...x, imagem_ids: ids, principal_id: x.principal_id || ids[0] || null, autorizacao: { ...a, confirmada: false, sabe_que_e_ia: false, adulta: false } };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tentou, setTentou] = useState(false);
   const [criando, setCriando] = useState(false);
   const problemas = problemasDoClone(r);
   const a = r.autorizacao;
   const aut = (campo: keyof RascunhoDoClone["autorizacao"], valor: string | boolean) => setR({ ...r, autorizacao: { ...a, [campo]: valor } });
+  const altura = "h-9 text-[13px]";
 
   const criar = async () => {
     setTentou(true);
@@ -607,6 +621,7 @@ function NovoClone({ fotoInicial, onCriado, onCancelar }: { fotoInicial: string 
       const c = await criarClone(clientId, r);
       if (!c) throw new Error("A função não devolveu o clone criado.");
       toast.success(`Clone de ${c.nome} criado`, { description: "Agora a folha de identidade: frente, 3/4, perfil e corpo com o mesmo rosto." });
+      esquecerRascunho();
       onCriado(c);
     } catch (e) {
       avisarErro(e, "Clone não criado");
@@ -616,70 +631,77 @@ function NovoClone({ fotoInicial, onCriado, onCancelar }: { fotoInicial: string 
   };
 
   return (
-    <Cartao titulo="Novo clone" dica="Uma pessoa REAL do cliente. Sem a autorização dela registrada aqui, nada é gerado.">
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="min-w-0 space-y-3">
-          <Campo rotulo="Nome da pessoa (como a equipe chama)">
-            <Input value={r.nome} onChange={(e) => setR({ ...r, nome: e.target.value })} placeholder="Ex.: Dra. Paula" aria-label="Nome do clone" className="h-9 text-[12.5px]" />
-          </Campo>
+    <Secao titulo="Novo clone" ajuda="Uma pessoa REAL do cliente. Sem a autorização dela registrada aqui, nada é gerado. Criar não gasta; o custo aparece antes de cada geração." data-novo-clone="">
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="min-w-0 space-y-4">
+          <CampoDeFormulario rotulo="Nome da pessoa (como a equipe chama)">
+            <Input value={r.nome} onChange={(e) => setR({ ...r, nome: e.target.value })} placeholder="Ex.: Dra. Paula" aria-label="Nome do clone" className={altura} />
+          </CampoDeFormulario>
           <FotosReaisDoRascunho r={r} onMudar={setR} />
-          <Campo rotulo="Traços que nunca mudam (um por linha, opcional)">
-            <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta acima do lábio, à esquerda dela\ncabelo cacheado na altura do ombro"} aria-label="Traços que nunca mudam" className="text-[12.5px]" />
-          </Campo>
+          <CampoDeFormulario rotulo="Traços que nunca mudam (um por linha, opcional)">
+            <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta acima do lábio, à esquerda dela\ncabelo cacheado na altura do ombro"} aria-label="Traços que nunca mudam" className="text-[13px]" />
+          </CampoDeFormulario>
         </div>
-        <div className={`min-w-0 space-y-2 rounded-lg border p-3 ${a.confirmada ? "border-success/40" : "border-warning/50"}`} data-autorizacao-do-clone="">
-          <p className="flex items-center text-[12.5px] font-semibold">
-            <ShieldCheck className="mr-1.5 h-4 w-4 text-primary" /> Autorização de uso de imagem
+        <div className={juntar("min-w-0 rounded-lg border p-4", a.confirmada ? "border-success/40" : "border-warning/50")} data-autorizacao-do-clone="">
+          <p className="mb-3 flex items-center text-[14px] font-semibold">
+            <ShieldCheck className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Autorização de uso de imagem
           </p>
-          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-            <Campo rotulo="Quem autorizou">
-              <Input value={a.quem} onChange={(e) => aut("quem", e.target.value)} placeholder="A própria pessoa" aria-label="Quem autorizou" className="h-9 text-[12.5px]" />
-            </Campo>
-            <Campo rotulo="Data (DD/MM/AAAA)">
-              <Input value={a.data} onChange={(e) => aut("data", e.target.value)} placeholder="25/09/2026" aria-label="Data da autorização" className="h-9 text-[12.5px]" />
-            </Campo>
-            <Campo rotulo="Finalidade" className="sm:col-span-2">
-              <Input value={a.finalidade} onChange={(e) => aut("finalidade", e.target.value)} placeholder="Ex.: posts e anúncios da clínica no Instagram" aria-label="Finalidade" className="h-9 text-[12.5px]" />
-            </Campo>
-            <Campo rotulo="Validade (opcional)">
-              <Input value={a.validade} onChange={(e) => aut("validade", e.target.value)} placeholder="Até revogar" aria-label="Validade" className="h-9 text-[12.5px]" />
-            </Campo>
-            <div className="min-w-0">
-              <p className="mb-1 text-[11.5px] text-muted-foreground">Como</p>
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Quem autorizou">
+              <Input value={a.quem} onChange={(e) => aut("quem", e.target.value)} placeholder="A própria pessoa" aria-label="Quem autorizou" className={altura} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Data (DD/MM/AAAA)">
+              <Input value={a.data} onChange={(e) => aut("data", e.target.value)} placeholder="25/09/2026" aria-label="Data da autorização" className={altura} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Finalidade" largo>
+              <Input value={a.finalidade} onChange={(e) => aut("finalidade", e.target.value)} placeholder="Ex.: posts e anúncios da clínica no Instagram" aria-label="Finalidade" className={altura} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Validade (opcional)">
+              <Input value={a.validade} onChange={(e) => aut("validade", e.target.value)} placeholder="Até revogar" aria-label="Validade" className={altura} />
+            </CampoDeFormulario>
+            <CampoDeEscolha rotulo="Como">
               <Pilulas rotulo="Forma da autorização" opcoes={FORMAS_DE_AUTORIZACAO} valor={a.forma} onEscolher={(v) => aut("forma", v)} />
-            </div>
+            </CampoDeEscolha>
+          </GrupoDeCampos>
+          <div className="mt-4 space-y-2 border-t border-border pt-3">
+            {[
+              { campo: "sabe_que_e_ia" as const, texto: "A pessoa sabe que as fotos dela serão recriadas por IA (roupa, cenário e pose novos, o mesmo rosto)." },
+              { campo: "adulta" as const, texto: `A pessoa tem ${IDADE_MINIMA_CLONE} anos ou mais.` },
+              { campo: "confirmada" as const, texto: "Confirmo a autorização de uso de imagem para a finalidade acima. As imagens saem marcadas como geradas." },
+            ].map((x) => (
+              <label key={x.campo} className="flex min-w-0 items-start text-[13px] leading-5">
+                <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={a[x.campo] as boolean} onChange={(e) => aut(x.campo, e.target.checked)} aria-label={x.texto} />
+                <span className="min-w-0">{x.texto}</span>
+              </label>
+            ))}
           </div>
-          {[
-            { campo: "sabe_que_e_ia" as const, texto: "A pessoa sabe que as fotos dela serão recriadas por IA (roupa, cenário e pose novos, o mesmo rosto)." },
-            { campo: "adulta" as const, texto: `A pessoa tem ${IDADE_MINIMA_CLONE} anos ou mais.` },
-            { campo: "confirmada" as const, texto: "Confirmo a autorização de uso de imagem para a finalidade acima. As imagens saem marcadas como geradas." },
-          ].map((x) => (
-            <label key={x.campo} className="flex min-w-0 items-start text-[12px] leading-snug">
-              <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={a[x.campo] as boolean} onChange={(e) => aut(x.campo, e.target.checked)} aria-label={x.texto} />
-              <span className="min-w-0">{x.texto}</span>
-            </label>
-          ))}
         </div>
       </div>
       {tentou && problemas.length > 0 && (
-        <ul className="mt-2 space-y-0.5" role="alert">
+        <ul className="mt-3 space-y-0.5" role="alert">
           {problemas.map((p) => (
-            <li key={p} className="text-[11.5px] text-warning">
+            <li key={p} className="text-[12px] text-warning">
               {p}
             </li>
           ))}
         </ul>
       )}
-      <div className="mt-3 flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" className="mb-1 mr-1.5 h-9 text-[12.5px]" onClick={() => void criar()} disabled={criando}>
-          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar clone
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="mb-1 h-9 text-[12.5px]" onClick={onCancelar}>
+      <BarraDeAcoes className="mt-4 border-t border-border pt-3" inicio="Criar não gasta.">
+        <button
+          type="button"
+          className={botao.discreto}
+          onClick={() => {
+            esquecerRascunho();
+            onCancelar();
+          }}
+        >
           Cancelar
-        </Button>
-        <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Criar não gasta. O custo aparece antes de cada geração.</span>
-      </div>
-    </Cartao>
+        </button>
+        <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando}>
+          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar clone
+        </button>
+      </BarraDeAcoes>
+    </Secao>
   );
 }
 
@@ -792,9 +814,11 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
   };
 
   return (
-    <Cartao
-      titulo={`Folha de identidade · ${aberto.folha.aprovadas} de ${aberto.folha.total} aprovadas`}
-      dica={`A mesma pessoa em 6 vistas, fundo neutro e luz uniforme: é a identidade das variações (todas as vistas aprovadas vão em cada variação) e, depois, do vídeo. Gerador: ${motor ? motor.rotulo : "padrão"}.${aberto.folha.pronto ? " Pronto." : " Aprove a frente e mais 2 para ficar pronto."}`}
+    <Secao
+      titulo="Folha de identidade"
+      descricao={`${aberto.folha.aprovadas} de ${aberto.folha.total} aprovadas${aberto.folha.pronto ? " · pronta" : ""}`}
+      ajuda={`A mesma pessoa em 6 vistas, fundo neutro e luz uniforme: é a identidade das variações (todas as vistas aprovadas vão em cada variação) e, depois, do vídeo. Gerador: ${motor ? motor.rotulo : "padrão"}.${aberto.folha.pronto ? " Pronto." : " Aprove a frente e mais 2 para ficar pronto."}`}
+      data-folha-do-clone=""
       acao={
         !bloqueado && faltam.length > 0 ? (
           <BotaoComCusto
@@ -805,7 +829,7 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
             }
             titulo="Folha de identidade"
             descricao={porVista != null ? `~${usd(porVista)} por vista pela função.` : undefined}
-            className="h-8 text-[12px]"
+            className="h-9 text-[13px]"
             disabled={gerandoAlguma}
             fecharAoConfirmar
             partes={() => partesDoClone(motorId, qualidade, refs, faltam.length)}
@@ -813,11 +837,10 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
           />
         ) : undefined
       }
-      className="h-full"
     >
       {antigas.length > 0 && (
-        <div className="mb-2 min-w-0 rounded-lg border border-warning/50 bg-warning/5 p-2" data-folha-desatualizada="" role="status">
-          <p className="text-[11.5px] leading-snug [overflow-wrap:anywhere]">
+        <div className="mb-3 min-w-0 rounded-lg border border-warning/50 bg-warning/5 p-3" data-folha-desatualizada="" role="status">
+          <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">
             {antigas.length === 1 ? "1 vista foi feita" : `${antigas.length} vistas foram feitas`} com as fotos antigas. {antigas.length === 1 ? "Ela continua guardada" : "Elas continuam guardadas"}, mas não {antigas.length === 1 ? "vai" : "vão"} mais ao gerador como identidade.
           </p>
           {!bloqueado && (
@@ -839,7 +862,7 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
           )}
         </div>
       )}
-      <div className="mb-2 w-full sm:w-56">
+      <div className="mb-3 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={bloqueado} />
       </div>
       <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Vistas da folha do clone">
@@ -934,7 +957,7 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
         })}
       </ul>
       {aberto.arquivadas.length > 0 && (
-        <details className="mt-3 min-w-0 rounded-lg border border-border bg-background px-2.5 py-1.5" data-vistas-apagadas="">
+        <details className="mt-4 min-w-0 border-t border-border pt-3" data-vistas-apagadas="">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.arquivadas.length})</summary>
           <ul className="mt-2 grid min-w-0 grid-cols-3 gap-2 pb-1 sm:grid-cols-4">
             {aberto.arquivadas.map((img) => {
@@ -968,26 +991,29 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
         indice={ampliada !== null && ampliada >= 0 ? ampliada : null}
         onFechar={() => setAmpliada(null)}
       />
-    </Cartao>
+    </Secao>
   );
 }
 
 const PEDIDO_VAZIO: PedidoDaVariacao = { preset: null, roupa: "", cenario: "", pose: "", expressao: "", livre: "" };
 
 type ModoDaVariacao = "prontas" | "contexto" | "uniforme" | "livre";
+/** O que muda na variação: sub-aba de 4 opções (seletor segmentado). A explicação de cada uma fica no "?". */
 const MODOS_DA_VARIACAO: { valor: ModoDaVariacao; rotulo: string; dica: string }[] = [
   { valor: "prontas", rotulo: "Prontas", dica: "Estilos prontos: editorial, rua, café, casa, estúdio, UGC." },
-  { valor: "contexto", rotulo: "Pelo contexto do cliente", dica: "O diretor lê o negócio do cliente e sugere fotos do trabalho da pessoa." },
-  { valor: "uniforme", rotulo: "Uniforme da marca", dica: "Roupa profissional com a logo oficial do kit da marca aplicada." },
-  { valor: "livre", rotulo: "Do meu jeito", dica: "Roupa, cenário, pose e expressão escritos pela equipe." },
+  { valor: "contexto", rotulo: "Contexto", dica: "Pelo contexto do cliente: o diretor lê o negócio do cliente e sugere fotos do trabalho da pessoa." },
+  { valor: "uniforme", rotulo: "Uniforme", dica: "Uniforme da marca: roupa profissional com a logo oficial do kit da marca aplicada." },
+  { valor: "livre", rotulo: "Livre", dica: "Do meu jeito: roupa, cenário, pose e expressão escritos pela equipe." },
 ];
+const ehModoDaVariacao = (v: unknown) => MODOS_DA_VARIACAO.some((m) => m.valor === v);
+const ehPedidoDaVariacao = (v: unknown) => !!v && typeof v === "object" && typeof (v as PedidoDaVariacao).roupa === "string" && typeof (v as PedidoDaVariacao).livre === "string";
 
 /** Campos do pedido (roupa, cenário, pose, expressão, livre), recolhíveis para a tela ficar limpa. */
 function CamposDoPedido({ pedido, onMudar, aberto }: { pedido: PedidoDaVariacao; onMudar: (p: PedidoDaVariacao) => void; aberto: boolean }) {
   return (
-    <details className="mt-2 min-w-0 rounded-lg border border-border bg-background px-2.5 py-1.5" open={aberto} data-campos-do-pedido="">
+    <details className="mt-3 min-w-0" open={aberto} data-campos-do-pedido="">
       <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Ajustar roupa, cenário, pose e expressão</summary>
-      <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 pb-1 sm:grid-cols-2">
+      <GrupoDeCampos className="mt-2">
         {(
           [
             ["roupa", "Roupa", "Ex.: blazer bege sobre camiseta branca"],
@@ -996,14 +1022,14 @@ function CamposDoPedido({ pedido, onMudar, aberto }: { pedido: PedidoDaVariacao;
             ["expressao", "Expressão", "Ex.: confiante, olhando para a câmera"],
           ] as const
         ).map(([campo, rotulo, dica]) => (
-          <Campo key={campo} rotulo={rotulo}>
-            <Input value={pedido[campo]} onChange={(e) => onMudar({ ...pedido, [campo]: e.target.value })} placeholder={dica} aria-label={rotulo} className="h-9 text-[12.5px]" />
-          </Campo>
+          <CampoDeFormulario key={campo} rotulo={rotulo}>
+            <Input value={pedido[campo]} onChange={(e) => onMudar({ ...pedido, [campo]: e.target.value })} placeholder={dica} aria-label={rotulo} className="h-9 text-[13px]" />
+          </CampoDeFormulario>
         ))}
-        <Campo rotulo="Pedido livre (opcional)" className="sm:col-span-2">
-          <Input value={pedido.livre} onChange={(e) => onMudar({ ...pedido, livre: e.target.value })} placeholder="O rosto, a idade e o corpo não mudam" aria-label="Pedido livre da variação" className="h-9 text-[12.5px]" />
-        </Campo>
-      </div>
+        <CampoDeFormulario rotulo="Pedido livre (opcional)" largo>
+          <Input value={pedido.livre} onChange={(e) => onMudar({ ...pedido, livre: e.target.value })} placeholder="O rosto, a idade e o corpo não mudam" aria-label="Pedido livre da variação" className="h-9 text-[13px]" />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
     </details>
   );
 }
@@ -1040,7 +1066,7 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
           }}
         />
       </div>
-      {negocio && <p className="mb-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{negocio}</p>}
+      {negocio && <p className="mb-1.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{negocio}</p>}
       {sugestoes && sugestoes.length > 0 ? (
         <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2" aria-label="Sugestões pelo contexto">
           {sugestoes.map((s, i) => {
@@ -1067,8 +1093,12 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
           })}
         </ul>
       ) : (
-        <p className="text-[11.5px] text-muted-foreground">O diretor já sabe o trabalho do cliente (ex.: paisagismo) e monta as fotos da pessoa em cima disso. Marque as que quiser: sai uma foto por sugestão.</p>
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Marque as que quiser: sai uma foto por sugestão.
+          <AjudaRecolhida className="ml-1">O diretor já sabe o trabalho do cliente (ex.: paisagismo) e monta as fotos da pessoa em cima disso.</AjudaRecolhida>
+        </p>
       )}
+
     </div>
   );
 }
@@ -1093,7 +1123,7 @@ function VariacaoAberta({
   const { clientId } = useMesa();
   const [conferencia, setConferencia] = useState<ConferenciaDoClone | null>(null);
   return (
-    <section className="mb-3 grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-primary/40 bg-card p-2.5 sm:grid-cols-[180px_minmax(0,1fr)]" aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
+    <section className="mb-3 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-primary/40 p-3 sm:grid-cols-[180px_minmax(0,1fr)]" aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
       <div className="min-w-0">
         <Moldura proporcao={foto.largura && foto.altura ? foto.largura / foto.altura : 0.8} className="border border-border">
           <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="h-full w-full !object-contain" />
@@ -1102,10 +1132,10 @@ function VariacaoAberta({
       </div>
       <div className="min-w-0 space-y-2">
         <div className="flex min-w-0 items-start">
-          <p className="mr-auto min-w-0 truncate text-[12.5px] font-semibold" title={foto.nome}>
+          <p className="mr-auto min-w-0 truncate text-[13px] font-semibold" title={foto.nome}>
             {foto.nome}
           </p>
-          <button type="button" onClick={onFechar} aria-label="Fechar a variação" className="ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+          <button type="button" onClick={onFechar} aria-label="Fechar a variação" className={juntar(botao.icone, "ml-2")}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -1136,11 +1166,11 @@ function VariacaoAberta({
         {foto.tags.indexOf("uniforme_da_marca") >= 0 && <p className="text-[11px] text-warning">Uniforme com a logo oficial: confira letras, cores e proporção da logo antes de aprovar.</p>}
         {foto.aprovada ? (
           <div className="min-w-0 border-t border-border pt-2">
-            <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Ampliar para enviar ao cliente</p>
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Ampliar para enviar ao cliente</p>
             <AcoesProDaFoto foto={foto} mostrarCriativo={false} />
           </div>
         ) : (
-          <p className="text-[11px] text-muted-foreground">Aprove para ampliar (fiel) e mandar ao cliente em alta.</p>
+          <p className={texto.auxiliar}>Aprove para ampliar e mandar ao cliente.</p>
         )}
       </div>
     </section>
@@ -1149,14 +1179,17 @@ function VariacaoAberta({
 
 function Variacoes({ aberto }: { aberto: CloneAberto }) {
   const { clientId, atualizarCusto } = useMesa();
+  const idDoClone = aberto.clone.id;
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const andamentos = useAndamentos();
   const { baixar, baixando } = useAcoesDeUso();
   const c = aberto.clone;
   const bloqueado = !c.autorizacao_valida.ok || c.status === "arquivada";
-  const [modo, setModo] = useState<ModoDaVariacao>("prontas");
-  const [pedido, setPedido] = useState<PedidoDaVariacao>(PEDIDO_VAZIO);
+  // O modo (sub-aba) e o pedido escrito ficam lembrados por clone: sair e voltar não perde.
+  const [modo, setModo] = useEstadoDaTela<ModoDaVariacao>(`mesa-foto:clones:modo:${idDoClone}`, "prontas", { validar: ehModoDaVariacao });
+  const [pedido, setPedido] = useEstadoDaTela<PedidoDaVariacao>(`mesa-foto:clones:pedido:${idDoClone}`, PEDIDO_VAZIO, { validar: ehPedidoDaVariacao, esperaMs: 300 });
+
   const [sugestoes, setSugestoes] = useState<SugestaoDoClone[] | null>(null);
   const [marcadasSug, setMarcadasSug] = useState<number[]>([]);
   const [formato, setFormato] = useState("4:5");
@@ -1166,6 +1199,8 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [aberta, setAberta] = useState<string | null>(null);
   const [escolhidas, setEscolhidas] = useState<string[]>([]);
+  // As variações marcadas vão ao diretor de fotografia (ele trabalha nelas sem o dono reenviar).
+  useSelecaoParaODiretor(clientId, "clones", escolhidas);
   const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
   // Identidade que vai em cada variação: a foto real principal e TODAS as vistas aprovadas (até 8).
   const refs = Math.min(8, 1 + aberto.folha.aprovadas + (modo === "uniforme" ? 1 : 0));
@@ -1236,20 +1271,30 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
   ];
 
   return (
-    <Cartao
-      titulo={`Variações · ${aberto.variacoes.length}`}
-      dica={
+    <Secao
+      className="border-t border-border pt-5 min-[1600px]:border-t-0 min-[1600px]:pt-0"
+      titulo="Variações"
+      descricao={`${aberto.variacoes.length} ${aberto.variacoes.length === 1 ? "pronta" : "prontas"}`}
+      ajuda={
         aberto.folha.aprovadas
           ? `Mesmo rosto em outra roupa, cenário, pose ou expressão. Cada variação leva a foto real e as ${aberto.folha.aprovadas} ${aberto.folha.aprovadas === 1 ? "vista aprovada" : "vistas aprovadas"} da folha, com os traços repetidos no pedido.`
           : "Dá para gerar já com as fotos reais; com a folha aprovada o rosto fica mais estável (as vistas aprovadas vão em toda variação)."
       }
-      className="h-full"
+      data-variacoes-do-clone=""
     >
-      {/* 1. O que muda */}
+      {/* 1. O que muda: sub-aba de 4 (segmentado); a explicação de cada uma no "?". */}
       <div className="min-w-0" data-plano-da-variacao="">
-        <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">1. O que muda</p>
-        <Pilulas rotulo="Como montar a variação" opcoes={MODOS_DA_VARIACAO.map((m) => ({ valor: m.valor, rotulo: m.rotulo, dica: m.dica }))} valor={modo} onEscolher={trocarModo} />
-        <div className="rounded-lg bg-muted/40 p-2.5">
+        <div className="mb-2 flex min-w-0 items-center">
+          <SeletorCompacto rotulo="Como montar a variação" opcoes={MODOS_DA_VARIACAO.map((m) => ({ valor: m.valor, rotulo: m.rotulo }))} valor={modo} onEscolher={(v) => trocarModo(v as ModoDaVariacao)} className="min-w-0 flex-1 sm:flex-none" larguraTotal />
+          <AjudaRecolhida className="ml-1.5">
+            {MODOS_DA_VARIACAO.map((m) => (
+              <span key={m.valor} className="block">
+                <strong className="text-foreground">{m.rotulo}:</strong> {m.dica}
+              </span>
+            ))}
+          </AjudaRecolhida>
+        </div>
+        <div className={juntar(superficie.poco, "min-w-0 p-3")}>
           {modo === "prontas" && (
             <>
               <Pilulas rotulo="Variação pronta" opcoes={presets.map((p) => ({ valor: p.id, rotulo: p.rotulo }))} valor={pedido.preset} onEscolher={escolherPreset} />
@@ -1270,13 +1315,14 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           )}
           {modo === "uniforme" && (
             <div className="min-w-0" data-uniforme-da-marca="">
-              <p className="flex items-start text-[12px] leading-snug">
-                <Shirt className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p className="flex items-start text-[13px] leading-5">
+                <Shirt className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                 <span className="min-w-0">
-                  Uniforme profissional nas cores da marca, com a <strong>logo oficial do kit da marca</strong> anexada ao gerador (aplicada sem redesenhar). Sem logo no kit, a função avisa antes de gastar. Confira a logo em cada foto antes de aprovar.
+                  Com a <strong>logo oficial do kit da marca</strong>, aplicada sem redesenhar.
                 </span>
+                <AjudaRecolhida className="ml-1">Uniforme profissional nas cores da marca, com a logo oficial do kit anexada ao gerador. Sem logo no kit, a função avisa antes de gastar. Confira a logo em cada foto antes de aprovar.</AjudaRecolhida>
               </p>
-              {!uniforme && <p className="mt-1 text-[11px] text-warning">A função ainda não oferece o uniforme (publique a versão nova da função mesa-foto).</p>}
+              {!uniforme && <p className="mt-1 text-[12px] text-warning">A função ainda não oferece o uniforme (publique a versão nova da função mesa-foto).</p>}
               <CamposDoPedido pedido={pedido} onMudar={setPedido} aberto={false} />
             </div>
           )}
@@ -1285,22 +1331,29 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
       </div>
 
       {/* 2. Formato, quantidade, qualidade */}
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="min-w-0">
-          <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">2. Formato</p>
+      <GrupoDeCampos colunas={3} className="mt-4">
+        <CampoDeEscolha rotulo="Formato">
           <Pilulas rotulo="Formato da variação" opcoes={FORMATOS_DO_CLONE.map((f) => ({ valor: f, rotulo: f }))} valor={formato} onEscolher={setFormato} />
-        </div>
+        </CampoDeEscolha>
         {modo !== "contexto" && (
-          <div className="min-w-0">
-            <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Quantas</p>
+          <CampoDeEscolha rotulo="Quantas">
             <Pilulas rotulo="Quantidade de variações" opcoes={[1, 2, 4].map((n) => ({ valor: n, rotulo: String(n) }))} valor={quantidade} onEscolher={setQuantidade} />
-          </div>
+          </CampoDeEscolha>
         )}
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={bloqueado} />
-      </div>
+      </GrupoDeCampos>
 
       {/* 3. Gerar (custo antes) */}
-      <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2.5">
+      <BarraDeAcoes
+        className="mt-3 border-t border-border pt-3"
+        inicio={
+          gerando > 0 ? (
+            <span className="inline-flex items-center" role="status">
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> gerando {gerando}
+            </span>
+          ) : null
+        }
+      >
         <BotaoComCusto
           rotulo={
             <>
@@ -1309,7 +1362,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           }
           titulo="Variações do clone"
           descricao={`Uma foto por chamada, ${motor ? motor.rotulo : "gerador do clone"}. Aparece aqui assim que sai; fica salva mesmo se você sair da aba.${typeof servidor.data === "number" ? ` Pela função: ~${usd(servidor.data)}.` : ""}`}
-          className="mb-1.5 mr-2 h-9 text-[12.5px]"
+          className="h-9 text-[13px]"
           disabled={bloqueado || vazio || gerando > 0 || itensDoLote.length === 0}
           fecharAoConfirmar
           partes={() => partesDoClone(motor ? motor.modelo_imagem_id : null, qualidade, refs, Math.max(1, itensDoLote.length))}
@@ -1318,32 +1371,27 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
             return Promise.resolve({});
           }}
         />
-        {gerando > 0 && (
-          <span className="mb-1.5 inline-flex items-center text-[12px] text-muted-foreground" role="status">
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> gerando {gerando}
-          </span>
-        )}
-      </div>
+      </BarraDeAcoes>
       {falhas.slice(0, 2).map((e, i) => (
-        <p key={`${i}-${e}`} className="text-[11px] text-destructive [overflow-wrap:anywhere]" role="alert">
+        <p key={`${i}-${e}`} className="text-[12px] text-destructive [overflow-wrap:anywhere]" role="alert">
           {e}
         </p>
       ))}
 
       {/* Resultados */}
       {(aberto.variacoes.length > 0 || gerando > 0) && (
-        <div className="mt-3 min-w-0 border-t border-border pt-2.5" data-resultados-do-clone="">
+        <div className="mt-4 min-w-0 border-t border-border pt-3" data-resultados-do-clone="">
           <div className="mb-2 flex min-w-0 flex-wrap items-center text-[12px]">
             <span className="mr-2 font-medium">{aberto.variacoes.length} prontas</span>
             <button
               type="button"
-              className="mr-2 text-primary hover:underline"
+              className={juntar("mr-2 rounded text-primary hover:underline", foco)}
               onClick={() => setEscolhidas(escolhidas.length === aberto.variacoes.length ? [] : aberto.variacoes.map((v) => v.id))}
             >
               {escolhidas.length === aberto.variacoes.length && escolhidas.length > 0 ? "Desmarcar todas" : "Marcar todas"}
             </button>
             {selecionadas.length > 0 && (
-              <Button type="button" size="sm" variant="outline" className="h-7 text-[11.5px]" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original">
+              <Button type="button" size="sm" variant="outline" className="ml-auto h-8 text-[12px]" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original">
                 {baixando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Download className="mr-1 h-3 w-3" />}
                 {baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : `Baixar ${selecionadas.length} (sem ZIP)`}
               </Button>
@@ -1362,7 +1410,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           )}
           <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Variações do clone">
             {Array.from({ length: gerando }, (_x, i) => (
-              <li key={`gerando-${i}`} className="min-w-0 rounded-lg border border-dashed border-primary/40 bg-card p-1" data-variacao-gerando="">
+              <li key={`gerando-${i}`} className="min-w-0 rounded-lg border border-dashed border-primary/40 p-1" data-variacao-gerando="">
                 <Moldura proporcao={1} className="animate-pulse">
                   <span className="flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground">
                     <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" /> gerando
@@ -1374,7 +1422,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
               const conf = conferencias[f.id] !== undefined ? conferencias[f.id] : null;
               const marcada = escolhidas.indexOf(f.id) >= 0;
               return (
-                <li key={f.id} className={`relative min-w-0 rounded-lg border bg-card p-1 ${aberta === f.id ? "border-primary" : marcada ? "border-primary/60" : "border-border"}`} data-variacao-do-clone={f.id}>
+                <li key={f.id} className={`relative min-w-0 rounded-lg border p-1 ${aberta === f.id ? "border-primary" : marcada ? "border-primary/60" : "border-transparent"}`} data-variacao-do-clone={f.id}>
                   <div className="relative">
                     <button type="button" className="block w-full" onClick={() => setAberta(f.id)} aria-label={`Abrir: ${f.nome}`}>
                       <MiniaturaDaFoto foto={f} />
@@ -1405,7 +1453,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
         </div>
       )}
       {aberto.variacoes_arquivadas.length > 0 && (
-        <details className="mt-3 min-w-0 rounded-lg border border-border bg-background px-2.5 py-1.5" data-variacoes-apagadas="">
+        <details className="mt-4 min-w-0 border-t border-border pt-3" data-variacoes-apagadas="">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.variacoes_arquivadas.length})</summary>
           <ul className="mt-2 grid min-w-0 grid-cols-3 gap-2 pb-1 sm:grid-cols-4">
             {aberto.variacoes_arquivadas.map((f) => (
@@ -1433,9 +1481,10 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
         indice={ampliada}
         onFechar={() => setAmpliada(null)}
       />
-    </Cartao>
+    </Secao>
   );
 }
+
 
 /**
  * Transferir o clone para outro cliente (pedido do dono, 26/09: "criei na
@@ -1571,15 +1620,17 @@ function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
     }
   };
   return (
-    <div className="mt-2 min-w-0" data-fotos-de-origem="">
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        Fotos de origem · {r.ids.length} de {MAX_FOTOS_DO_CLONE}
-        <span className="ml-1 normal-case tracking-normal">(a verdade sobre o rosto{bloqueado ? "" : "; x tira, a seta troca, + põe mais, a estrela marca a principal"})</span>
-      </p>
+    <div className="mt-4 min-w-0" data-fotos-de-origem="">
+      <div className="mb-1.5 flex min-w-0 items-center">
+        <span className={texto.rotulo}>
+          Fotos de origem · {r.ids.length} de {MAX_FOTOS_DO_CLONE}
+        </span>
+        <AjudaRecolhida className="ml-1">A verdade sobre o rosto.{bloqueado ? "" : " O x tira, a seta troca, o + põe mais e a estrela marca a principal. As mudanças só valem depois de Salvar fotos."}</AjudaRecolhida>
+      </div>
       <EditorDeFotosDeOrigem modo="faixa" ids={r.ids} principal={r.principal} onMudar={(ids, principal) => setR({ ids, principal })} bloqueado={bloqueado || salvando} conhecidas={aberto.reais} />
       {m.alguma && (
-        <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 p-2" role="status" data-fotos-mudadas="">
-          <p className="mb-1 mr-auto min-w-0 text-[11.5px] leading-snug [overflow-wrap:anywhere]">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 p-2.5" role="status" data-fotos-mudadas="">
+          <p className="mb-1 mr-auto min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
             {[m.entraram.length ? `${m.entraram.length} ${m.entraram.length === 1 ? "entra" : "entram"}` : "", m.sairam.length ? `${m.sairam.length} ${m.sairam.length === 1 ? "sai" : "saem"}` : "", m.principal ? "principal nova" : ""].filter(Boolean).join(", ")}.
             {m.entraram.length || m.sairam.length ? " A folha fica guardada; as vistas feitas com as fotos antigas ficam marcadas." : ""}
           </p>
@@ -1685,9 +1736,10 @@ function DialogoDeDuplicar({ clone, onFechar, onAbrir }: { clone: Clone; onFecha
           <DialogDescription>Um clone novo da mesma pessoa (por exemplo, outro visual), com as mesmas fotos de origem. Sem custo.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Campo rotulo="Nome do clone novo">
-            <Input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome do clone duplicado" className="h-9 text-[12.5px]" />
-          </Campo>
+          <CampoDeFormulario rotulo="Nome do clone novo">
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} aria-label="Nome do clone duplicado" className="h-9 text-[13px]" />
+          </CampoDeFormulario>
+
           <label className="flex min-w-0 items-start text-[12px] leading-snug">
             <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={levarFolha} onChange={(e) => setLevarFolha(e.target.checked)} aria-label="Levar as vistas aprovadas" />
             <span className="min-w-0">Levar as vistas aprovadas da folha (cópia dos arquivos, sem gerar de novo).</span>
@@ -1731,33 +1783,53 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
       setOcupado(false);
     }
   };
+  const autorizacao = a ? `Autorizado por ${a.quem} em ${a.data}: ${a.finalidade}.` : "Sem autorização registrada.";
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-card p-3" data-clone-aberto={c.id}>
-      <div className="flex min-w-0 flex-wrap items-center">
-        <div className="mr-auto min-w-0">
+    <div className="min-w-0" data-clone-aberto={c.id}>
+      {/* Nome e selos à esquerda; as ações na mesma linha (no celular, só o ícone). */}
+      <div className="flex min-w-0 items-start">
+        <div className="mr-3 min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center">
-            <p className="mr-2 truncate text-[15px] font-semibold">{c.nome}</p>
-            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${st.cor}`}>{st.rotulo}</span>
-            <span className="inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary">
-              <ShieldCheck className="mr-0.5 h-2.5 w-2.5" /> pessoa real autorizada
+            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate text-[18px]")}>{c.nome}</h2>
+            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[11px] font-medium ${st.cor}`}>{st.rotulo}</span>
+            <span className="inline-flex items-center rounded-full border border-primary/30 px-1.5 py-px text-[11px] font-semibold text-primary">
+              <ShieldCheck className="mr-0.5 h-2.5 w-2.5" aria-hidden="true" /> pessoa real autorizada
             </span>
+            <AjudaRecolhida className="ml-1" titulo="Pessoa real, com autorização">
+              {autorizacao}
+              {c.invariantes.length ? ` Não muda: ${c.invariantes.join("; ")}.` : ""} Pessoa real recriada por IA com autorização. Ao publicar, ligue o rótulo de IA; em anúncio, declare o conteúdo fotorrealista gerado. Se a pessoa revogar, apague o clone.
+            </AjudaRecolhida>
           </div>
-          <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
-            {a ? `Autorizado por ${a.quem} em ${a.data}: ${a.finalidade}.` : "Sem autorização registrada."}
-            {c.invariantes.length ? ` Não muda: ${c.invariantes.join("; ")}.` : ""}
+          <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={autorizacao}>
+            {autorizacao}
           </p>
-          {!c.autorizacao_valida.ok && <p className="text-[11.5px] font-medium text-warning">{c.autorizacao_valida.motivo || "Autorização inválida: nada novo pode ser gerado."}</p>}
+          {!c.autorizacao_valida.ok && <p className="mt-0.5 text-[12px] font-medium text-warning [overflow-wrap:anywhere]">{c.autorizacao_valida.motivo || "Autorização inválida: nada novo pode ser gerado."}</p>}
         </div>
-        <div className="mt-2 flex flex-wrap items-center sm:mt-0">
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={ocupado || !c.autorizacao_valida.ok} onClick={() => setDialogo("duplicar")} title="Outro clone da mesma pessoa (outro visual), com as mesmas fotos e a mesma autorização">
-            <CopyPlus className="mr-1.5 h-3.5 w-3.5" /> Duplicar
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={ocupado} onClick={() => setDialogo("transferir")} title="Mover o clone, a folha e as fotos para o cliente certo">
-            <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" /> Transferir para outro cliente
-          </Button>
+        <div className="flex shrink-0 items-center [&>*+*]:ml-1.5">
+          <button
+            type="button"
+            className={juntar(botao.secundario, "h-8 px-2 text-[12px] sm:px-3")}
+            disabled={ocupado || !c.autorizacao_valida.ok}
+            onClick={() => setDialogo("duplicar")}
+            title="Outro clone da mesma pessoa (outro visual), com as mesmas fotos e a mesma autorização"
+            aria-label="Duplicar"
+          >
+            <CopyPlus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Duplicar</span>
+          </button>
+          <button
+            type="button"
+            className={juntar(botao.secundario, "h-8 px-2 text-[12px] sm:px-3")}
+            disabled={ocupado}
+            onClick={() => setDialogo("transferir")}
+            title="Mover o clone, a folha e as fotos para o cliente certo"
+            aria-label="Transferir para outro cliente"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Transferir</span>
+          </button>
           <MenuDoItem
             rotulo={`Mais opções do clone ${c.nome}`}
-            className="mb-1"
             itens={[
               { rotulo: "Usar no Book", icone: <BookOpen className="h-3.5 w-3.5" />, acao: () => irPara("book"), desativado: c.status === "arquivada" },
               { rotulo: "Pacote para vídeo", icone: <Copy className="h-3.5 w-3.5" />, acao: () => void copiarPacote(), desativado: ocupado },
@@ -1776,31 +1848,22 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
 
 function CloneAbertoNaTela({ id, provisorio, onAbrir, onApagado }: { id: string; provisorio: CloneAberto | null; onAbrir: (c: Clone) => void; onApagado: (id: string) => void }) {
   const q = useCloneAberto(id, provisorio);
-  if (q.isError && !q.data) return <AvisoDeErro erro={q.error} />;
-  if (!q.data) {
-    return (
-      <div aria-busy="true" className="space-y-3">
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-[40vh] animate-pulse rounded-xl bg-muted/70" />
-      </div>
-    );
-  }
+  if (q.isError && !q.data) return <ErroNaRegiao titulo="Não foi possível abrir o clone." erro={q.error} onTentar={() => void q.refetch()} />;
+  // Esqueleto só na primeira carga sem provisório; depois o que já está na tela fica enquanto relê.
+  if (!q.data) return <Carregando forma="aba" rotulo="Abrindo o clone" />;
   const aberto = q.data;
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       <CabecalhoDoClone aberto={aberto} onAbrir={onAbrir} onApagado={onApagado} />
       {q.isPlaceholderData && (
-        <p className="flex items-center text-[11.5px] text-muted-foreground" role="status">
-          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo a folha e as variações
+        <p className={juntar(texto.auxiliar, "flex items-center")} role="status">
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Lendo a folha e as variações
         </p>
       )}
-      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 min-[1600px]:grid-cols-2">
         <FolhaDeIdentidade aberto={aberto} />
         <Variacoes aberto={aberto} />
       </div>
-      <p className="text-[11px] leading-snug text-muted-foreground">
-        Pessoa real recriada por IA com autorização. Ao publicar, ligue o rótulo de IA; em anúncio, declare o conteúdo fotorrealista gerado. Se a pessoa revogar, apague o clone.
-      </p>
     </div>
   );
 }
@@ -1833,25 +1896,25 @@ function ClonesArquivados({ onRestaurado }: { onRestaurado: (c: Clone) => void }
     }
   };
   return (
-    <section className="mt-2 min-w-0 rounded-xl border border-border bg-card px-2.5 py-1.5" aria-label="Clones arquivados" data-clones-arquivados="">
-      <button type="button" className="flex w-full min-w-0 items-center text-left text-[11.5px] font-medium text-muted-foreground hover:text-foreground" aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
-        <Archive className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+    <section className="mt-4 min-w-0 border-t border-border pt-3" aria-label="Clones arquivados" data-clones-arquivados="">
+      <button type="button" className={juntar("flex w-full min-w-0 items-center rounded text-left text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)} aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
+        <Archive className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="mr-auto truncate">Arquivados{q.data ? ` · ${lista.length}` : ""}</span>
         <span aria-hidden="true">{aberto ? "−" : "+"}</span>
       </button>
       {aberto && (
-        <div className="mt-1.5 min-w-0 pb-1">
-          {q.isLoading && <p className="text-[11.5px] text-muted-foreground">Carregando</p>}
-          {q.isError && <AvisoDeErro erro={q.error} />}
-          {q.isSuccess && lista.length === 0 && <p className="text-[11.5px] text-muted-foreground">Nenhum clone apagado.</p>}
-          <ul className="space-y-1">
+        <div className="mt-2 min-w-0">
+          {q.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os arquivados" />}
+          {q.isError && <ErroNaRegiao titulo="Não foi possível ler os arquivados." erro={q.error} onTentar={() => void q.refetch()} />}
+          {q.isSuccess && lista.length === 0 && <EstadoVazio compacto titulo="Nenhum clone apagado." />}
+          <ul className="divide-y divide-border">
             {lista.map((c) => (
-              <li key={c.id} className="flex min-w-0 items-center" data-clone-arquivado={c.id}>
+              <li key={c.id} className="flex min-w-0 items-center py-1" data-clone-arquivado={c.id}>
                 <span className="mr-auto min-w-0">
-                  <span className="block truncate text-[12px] font-medium">{c.nome}</span>
-                  {!c.autorizacao_valida.ok && <span className="block truncate text-[10.5px] text-warning">{c.autorizacao_valida.motivo || "autorização inválida"}</span>}
+                  <span className="block truncate text-[13px] font-medium">{c.nome}</span>
+                  {!c.autorizacao_valida.ok && <span className="block truncate text-[11px] text-warning">{c.autorizacao_valida.motivo || "autorização inválida"}</span>}
                 </span>
-                <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-[11.5px]" disabled={restaurando === c.id} onClick={() => void restaurar(c)} aria-label={`Restaurar ${c.nome}`}>
+                <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px]" disabled={restaurando === c.id} onClick={() => void restaurar(c)} aria-label={`Restaurar ${c.nome}`}>
                   {restaurando === c.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />} Restaurar
                 </Button>
               </li>
@@ -1872,8 +1935,9 @@ export default function EtapaClones() {
   const clonesQ = useClones(clientId);
   const fotosQ = useFotos(clientId);
   const clones = useMemo(() => clonesQ.data || [], [clonesQ.data]);
-  const [escolhido, setEscolhido] = useState<string | null>(() => lerEscolhida(clientId));
-  const [novo, setNovo] = useState(false);
+  // O clone aberto e o "novo clone" aberto ficam lembrados por cliente (sair e voltar não perde).
+  const [escolhido, setEscolhido] = useEstadoDaTela<string | null>(`mesa-foto:clones:aberto:${clientId}`, null, { validar: ehTextoOuNulo });
+  const [novo, setNovo] = useEstadoDaTela<boolean>(`mesa-foto:clones:novo:${clientId}`, false, { validar: ehBooleano });
   const [fotoDoPedido, setFotoDoPedido] = useState<string | null>(null);
   // Recém-criado: fica aberto mesmo antes da lista reler (sem piscar para outro clone ou para o vazio).
   const [recemCriado, setRecemCriado] = useState<Clone | null>(null);
@@ -1893,9 +1957,6 @@ export default function EtapaClones() {
   }, [imagemId, clonesQ.isSuccess]);
 
   const aberto = clones.find((c) => c.id === escolhido) || (recemCriado && recemCriado.id === escolhido ? recemCriado : null) || (novo ? null : clones[0] || null);
-  useEffect(() => {
-    gravarEscolhida(clientId, aberto ? aberto.id : null);
-  }, [clientId, aberto]);
   // O provisório do clone aberto: o da lista com as fotos reais e as variações que o acervo em cache já tem.
   const provisorio = useMemo(() => (aberto ? cloneAbertoProvisorio(aberto, fotosQ.data || []) : null), [aberto, fotosQ.data]);
   // Abrir um clone que acabou de nascer ou voltar (criado, duplicado, restaurado): já na lista e aberto, sem piscar.
@@ -1913,23 +1974,27 @@ export default function EtapaClones() {
   };
 
   return (
-    <div className="min-w-0 pb-24">
-      {clonesQ.isError && <AvisoDeErro erro={clonesQ.error} className="mb-3" />}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]" data-clones-layout="">
+    <div className="min-w-0 pb-6">
+      {clonesQ.isError && <ErroNaRegiao className="mb-4" titulo="Não foi possível ler os clones." erro={clonesQ.error} onTentar={() => void clonesQ.refetch()} />}
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]" data-clones-layout="">
         <div className="min-w-0">
-          <ListaDeClones
-            clones={clones}
-            escolhido={aberto ? aberto.id : null}
-            onEscolher={(id) => {
-              setNovo(false);
-              setEscolhido(id);
-            }}
-            onNovo={() => {
-              setFotoDoPedido(null);
-              setNovo(true);
-            }}
-            novoAberto={novo}
-          />
+          {clonesQ.isLoading ? (
+            <Carregando forma="lista" linhas={3} rotulo="Lendo os clones" />
+          ) : (
+            <ListaDeClones
+              clones={clones}
+              escolhido={aberto ? aberto.id : null}
+              onEscolher={(id) => {
+                setNovo(false);
+                setEscolhido(id);
+              }}
+              onNovo={() => {
+                setFotoDoPedido(null);
+                setNovo(true);
+              }}
+              novoAberto={novo}
+            />
+          )}
           <ClonesArquivados onRestaurado={abrirClone} />
         </div>
         <div className="min-w-0">
@@ -1943,17 +2008,19 @@ export default function EtapaClones() {
             />
           ) : aberto ? (
             <CloneAbertoNaTela key={aberto.id} id={aberto.id} provisorio={provisorio} onAbrir={abrirClone} onApagado={esquecerClone} />
+          ) : clonesQ.isLoading ? (
+            <Carregando forma="aba" rotulo="Lendo os clones" />
           ) : (
-            <Vazio
+            <EstadoVazio
+              icone={<UserRound className="h-5 w-5" />}
               titulo="Crie o primeiro clone"
+              descricao="De 1 a 4 fotos reais da pessoa e a autorização de uso de imagem."
               acao={
-                <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => setNovo(true)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Novo clone
-                </Button>
+                <button type="button" className={botao.primario} onClick={() => setNovo(true)}>
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Novo clone
+                </button>
               }
-            >
-              Escolha de 1 a 4 fotos reais da mesma pessoa do cliente e registre a autorização de uso de imagem. Depois vem a folha de identidade (frente, 3/4, perfil e corpo) e as variações com o mesmo rosto.
-            </Vazio>
+            />
           )}
         </div>
       </div>

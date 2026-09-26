@@ -10,11 +10,13 @@ import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCu
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { montarFila, useFilaDePrioridades, type AbaDaMesa } from "@/lib/mesa/fila";
-import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { botaoPequeno, CustoCompacto } from "@/components/mesa/CustoCompacto";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
-import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import Etapas from "@/components/sistema/Etapas";
+import { Carregando } from "@/components/sistema/Estados";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 
@@ -129,13 +131,7 @@ function quandoOcioso(fn: () => void): () => void {
 
 /** Espaço da aba enquanto o código dela chega: o resto da Mesa não pisca. */
 function EsqueletoDaAba() {
-  return (
-    <div aria-busy="true" aria-label="Abrindo a etapa" className="space-y-3">
-      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted sm:w-1/3" />
-      <div className="h-28 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
-    </div>
-  );
+  return <Carregando forma="aba" rotulo="Abrindo a etapa" />;
 }
 
 // ------------------------------------------------------------------ topo
@@ -489,105 +485,94 @@ export default function MesaDoCliente() {
     : null;
 
   return (
-    // Fundo sólido próprio: a grade do fundo do painel não aparece através das
-    // superfícies semitransparentes da Mesa (pedido do dono em 23/09).
-    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
-      {/* Barra fina e fixa: cliente, etapas e custo numa faixa só. No
-          celular a página rola dentro do main (top-0); no computador rola a
-          janela, abaixo do cabeçalho de 80px. O nav "Etapas da Mesa" é o que
-          o Estúdio e o Contexto medem para saber onde a barra termina. */}
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa do cliente</h1>
-        <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
-          <div className="mr-2 min-w-0 flex-1 lg:flex-none">
-            <SeletorDeClientesDaMesa
-              mesa="organica"
-              clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined}
-              valor={clientId}
-              nome={nomeDoCliente}
-              carregando={clientesQuery.isLoading}
-              onEscolher={trocarCliente}
-            />
-          </div>
-          {/* Troca rápida de marca: só aparece no cliente com 2 ou mais marcas.
-              Trocar de marca fecha o item e a campanha abertos (são de uma marca só). */}
-          {clientId && marca && (
-            <SeletorDeMarca
-              marcas={marcas}
-              valor={marca.id}
-              onEscolher={(id) => mudar({ marca: id, task: null, campanha: null, hype: null })}
-              className="mr-2"
-            />
-          )}
-          {clientId && (
-            <nav
-              aria-label="Etapas da Mesa"
-              className="order-last mt-2 grid w-full grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
-            >
-              {ABAS.map((a, i) => (
-                <button
-                  key={a.valor}
-                  type="button"
-                  onClick={() => mudar({ aba: a.valor, hype: null, painel: null })}
-                  aria-current={aba === a.valor && !painel ? "page" : undefined}
-                  className={`min-w-0 truncate rounded-md px-0.5 py-1.5 text-[11.5px] font-medium transition-colors sm:px-1 sm:text-[12px] lg:flex-1 lg:px-2 ${
-                    aba === a.valor && !painel ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline lg:hidden 2xl:inline">{i + 1}</span>
-                  {a.rotulo}
-                </button>
-              ))}
-            </nav>
-          )}
-          <div className={`flex shrink-0 items-center ${clientId ? "" : "ml-auto"}`}>
+    // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx): fundo
+    // sólido próprio (a grade do painel não aparece através da Mesa), barra
+    // fina fixa com mesa, cliente, etapas e custo, e o corpo na largura toda.
+    // O nav "Etapas da Mesa" é o que o Estúdio e o Contexto medem para saber
+    // onde a barra termina.
+    <CascaDaMesa
+      mesa="mesa"
+      titulo="Mesa do cliente"
+      clientId={clientId}
+      marcaId={marca ? marca.id : null}
+      telaCheia={telaCheia}
+      cliente={
+        <SeletorDeClientesDaMesa
+          mesa="organica"
+          clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined}
+          valor={clientId}
+          nome={nomeDoCliente}
+          carregando={clientesQuery.isLoading}
+          onEscolher={trocarCliente}
+        />
+      }
+      marca={
+        // Troca rápida de marca: só aparece no cliente com 2 ou mais marcas.
+        // Trocar de marca fecha o item e a campanha abertos (são de uma marca só).
+        clientId && marca ? (
+          <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, task: null, campanha: null, hype: null })} />
+        ) : null
+      }
+      etapas={
+        clientId ? (
+          <Etapas
+            rotulo="Etapas da Mesa"
+            numerar
+            itens={ABAS.map((a) => ({ valor: a.valor, rotulo: a.rotulo }))}
+            valor={painel ? null : aba}
+            onEscolher={(v) => mudar({ aba: v, hype: null, painel: null })}
+          />
+        ) : null
+      }
+      acoes={
+        <>
+          <button
+            type="button"
+            onClick={() => alternarPainel("prioridades")}
+            aria-pressed={mostrarFila}
+            aria-label={urgentes > 0 ? `Prioridades: ${urgentes} para agora` : "Prioridades"}
+            title="Prioridades"
+            className={`${botaoPequeno} ${mostrarFila ? "bg-muted text-foreground" : ""}`}
+          >
+            <ListOrdered className="h-3.5 w-3.5" />
+            <span className="ml-1 hidden 2xl:inline">Prioridades</span>
+            {urgentes > 0 && (
+              <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10.5px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
+            )}
+          </button>
+          {podeVerCustos && (
             <button
               type="button"
-              onClick={() => alternarPainel("prioridades")}
-              aria-pressed={mostrarFila}
-              aria-label={urgentes > 0 ? `Prioridades: ${urgentes} para agora` : "Prioridades"}
-              title="Prioridades"
-              className={`${botaoPequeno} ${mostrarFila ? "bg-muted text-foreground" : ""}`}
+              onClick={() => alternarPainel("custos")}
+              aria-pressed={painel === "custos"}
+              aria-label="Custos de produção"
+              title="Custos de produção"
+              className={`${botaoPequeno} ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
             >
-              <ListOrdered className="h-3.5 w-3.5" />
-              <span className="ml-1 hidden 2xl:inline">Prioridades</span>
-              {urgentes > 0 && (
-                <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10.5px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
-              )}
+              <Calculator className="h-3.5 w-3.5" />
+              <span className="ml-1 hidden 2xl:inline">Custos</span>
             </button>
-            {podeVerCustos && (
-              <button
-                type="button"
-                onClick={() => alternarPainel("custos")}
-                aria-pressed={painel === "custos"}
-                aria-label="Custos de produção"
-                title="Custos de produção"
-                className={`${botaoPequeno} ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
-              >
-                <Calculator className="h-3.5 w-3.5" />
-                <span className="ml-1 hidden 2xl:inline">Custos</span>
-              </button>
-            )}
-          </div>
-          {clientId && <TrocaDeMesas atual="mesa" clientId={clientId} marcaId={marca ? marca.id : null} />}
-          {clientId && (
-            <CustoCompacto
-              saldoUsd={saldoUsd}
-              consumo={consumo.data || null}
-              previsao={previsao.data || null}
-              carregando={consumo.isLoading}
-              podeRecarregar={podeRecarregar}
-              isAdmin={isAdmin}
-              onRecarregar={() => setRecargaAberta(true)}
-              onChaves={abrirChaves}
-              onModelos={abrirModelos}
-            />
           )}
-          <BotaoDeTelaCheia tela={telaCheia} className={clientId ? "" : "ml-1"} />
-        </div>
-      </header>
-
-      {!clientId && !painel && <p className="text-[12.5px] text-muted-foreground">Escolha um cliente para abrir a mesa dele.</p>}
+          {clientId && (
+            <>
+              <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
+              <CustoCompacto
+                saldoUsd={saldoUsd}
+                consumo={consumo.data || null}
+                previsao={previsao.data || null}
+                carregando={consumo.isLoading}
+                podeRecarregar={podeRecarregar}
+                isAdmin={isAdmin}
+                onRecarregar={() => setRecargaAberta(true)}
+                onChaves={abrirChaves}
+                onModelos={abrirModelos}
+              />
+            </>
+          )}
+        </>
+      }
+    >
+      {!clientId && !painel && <p className="text-[13px] text-muted-foreground">Escolha um cliente para abrir a mesa dele.</p>}
 
       {mostrarFila && (
         <Suspense fallback={<EsqueletoDaAba />}>
@@ -665,6 +650,6 @@ export default function MesaDoCliente() {
           )}
         </MesaProvider>
       )}
-    </div>
+    </CascaDaMesa>
   );
 }

@@ -11,13 +11,23 @@ import ClientReports from "@/pages/ClientReports";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import ClientRequests from "@/pages/ClientRequests";
 import EditorialCalendar from "@/pages/EditorialCalendar";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft, Eye, ChevronDown, LayoutDashboard, CheckSquare, CalendarDays,
-  FileText, BarChart3, DollarSign, ShoppingBag, KeyRound,
+  ArrowLeft, Eye, LayoutDashboard, CheckSquare, CalendarDays,
+  FileText, BarChart3, DollarSign, ShoppingBag, KeyRound, Users,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import {
+  CabecalhoDePagina,
+  Carregando,
+  EstadoVazio,
+  Etapas,
+  SeletorCompacto,
+  botao,
+  foco,
+  juntar,
+  superficie,
+  texto,
+} from "@/components/sistema";
 import ClientVaultPage from "@/pages/ClientVaultPage";
 import type { UserProfile } from "@/contexts/AuthContext";
 import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
@@ -80,7 +90,6 @@ export default function AdminViewAsClient() {
     : "dashboard";
   const { data: clients, isLoading: loadingClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [selectorOpen, setSelectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -156,7 +165,6 @@ export default function AdminViewAsClient() {
     next.delete("project");
     next.delete("content");
     setSearchParams(next);
-    setSelectorOpen(false);
     setLoading(false);
   };
 
@@ -186,66 +194,55 @@ export default function AdminViewAsClient() {
       }
     : null;
 
+  const ativos = (clients || []).filter((c: any) => c.plan_status === "active");
+  const iniciais = (c: any) => (c.full_name || c.company_name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2);
+
   // No client selected - show client picker
   if (!clientId && !projectId && !loading) {
     return (
-      <div className="space-y-6 animate-fade-in">
-        <button
-          onClick={() => navigate("/clientes")}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Voltar
-        </button>
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina
+          titulo="Ver como cliente"
+          voltar={{ para: "/clientes", rotulo: "Clientes" }}
+          descricao={ativos.length ? `${ativos.length} ${ativos.length === 1 ? "cliente ativo" : "clientes ativos"}` : undefined}
+          ajuda="Selecione um cliente para navegar pelo painel completo como se fosse ele, em modo somente leitura."
+        />
 
-        <div className="text-center py-8">
-          <Eye className="w-10 h-10 text-primary mx-auto mb-4 opacity-50" />
-          <h1 className="text-xl font-semibold text-foreground mb-2">Ver como Cliente</h1>
-          <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto">
-            Selecione um cliente para navegar pelo painel completo como se fosse ele.
-          </p>
-        </div>
-
-        {/* Centralizado e em duas colunas no desktop: a lista acompanha o
-            título, sem aquele vazio todo à direita. */}
+        {/* Lista única em duas colunas no computador (linhas finas entre os
+            clientes, sem um cartão por cliente). */}
         {loadingClients ? (
-          <div className="mx-auto grid max-w-4xl auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
-          </div>
+          <Carregando linhas={4} rotulo="Carregando clientes" />
+        ) : ativos.length === 0 ? (
+          <EstadoVazio icone={<Eye className="h-5 w-5" />} titulo="Nenhum cliente ativo" descricao="Clientes com plano ativo aparecem aqui." />
         ) : (
-          <div className="mx-auto grid max-w-4xl auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
-            {(clients || []).filter((c: any) => c.plan_status === "active").map((c: any) => (
-              <button
-                type="button"
-                key={c.id}
-                onClick={() => selectClient(c)}
-                className="flex h-full w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_4px_20px_-8px_hsl(var(--primary)/0.25)]"
-              >
-                <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                    {c.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{c.email}</p>
-                </div>
-                <Eye className="w-4 h-4 shrink-0 text-muted-foreground" />
-              </button>
+          <ul aria-label="Clientes ativos" className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+            {ativos.map((c: any) => (
+              <li key={c.id} className="min-w-0 bg-card">
+                <button
+                  type="button"
+                  onClick={() => selectClient(c)}
+                  className={juntar("group flex h-full w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                >
+                  <Avatar className="mr-3 h-8 w-8 shrink-0">
+                    <AvatarFallback className="bg-primary/15 text-[11px] font-semibold text-primary">{iniciais(c)}</AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium leading-5 text-foreground">{c.company_name || c.full_name}</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>{c.email}</span>
+                  </span>
+                  <Eye className="ml-3 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                </button>
+              </li>
             ))}
-          </div>
+            {ativos.length % 2 === 1 && <li aria-hidden="true" className="hidden bg-card sm:block" />}
+          </ul>
         )}
       </div>
     );
   }
 
   if (loading) {
-    return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </div>
-    );
+    return <Carregando forma="aba" rotulo="Carregando o portal do cliente" />;
   }
 
   const renderTabContent = () => {
@@ -276,90 +273,53 @@ export default function AdminViewAsClient() {
     }
   };
 
+  const nomeDoCliente = selectedClient?.company_name || selectedClient?.full_name || "";
+
   return (
     <ImpersonationProvider profile={impersonatedProfile} clientId={selectedClient?.id}>
-      <div className="space-y-0">
-        {/* Admin impersonation bar */}
-        <div className="bg-sky-500/[0.06] border border-sky-500/15 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap mb-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/clientes")}
-              className="flex items-center gap-1.5 text-xs text-sky-500 hover:text-sky-400 transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Voltar
-            </button>
-            <div className="w-px h-4 bg-sky-500/20" />
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-sky-500" />
-              <span className="text-xs text-sky-500 font-medium">
-                Somente leitura · visualizando como: {selectedClient?.company_name || selectedClient?.full_name}
-              </span>
-            </div>
-          </div>
-
-          {/* Client switcher */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setSelectorOpen(!selectorOpen)}
-              aria-expanded={selectorOpen}
-              aria-haspopup="listbox"
-              className="flex items-center gap-1.5 text-xs text-sky-500/70 hover:text-sky-500 transition-colors bg-transparent border border-sky-500/20 rounded-lg px-3 py-1.5"
-            >
-              Trocar cliente
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {selectorOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-popover border border-border rounded-xl shadow-lg p-2 z-50 max-h-64 overflow-y-auto animate-fade-in">
-                {(clients || []).filter((c: any) => c.plan_status === "active").map((c: any) => (
-                  <button
-                    key={c.id}
-                    onClick={() => selectClient(c)}
-                    className={cn(
-                      "w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors bg-transparent",
-                      c.id === clientId ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                    )}
-                  >
-                    <Avatar className="w-6 h-6 shrink-0">
-                      <AvatarFallback className="bg-primary/15 text-primary text-[9px] font-semibold">
-                        {c.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    {c.company_name || c.full_name}
-                  </button>
-                ))}
-              </div>
-            )}
+      <div className="min-w-0">
+        {/* Faixa do modo espelho: fina, numa linha, com a troca de cliente à direita */}
+        <div className="mb-3 flex min-w-0 items-center rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-2 py-1.5">
+          <button
+            type="button"
+            onClick={() => navigate("/clientes")}
+            className={juntar(botao.icone, "text-sky-500 hover:bg-sky-500/10 hover:text-sky-400")}
+            aria-label="Voltar para Clientes"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <Eye className="ml-1 mr-2 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
+          {/* No celular o nome do cliente fica só no seletor (sem repetir e cortar). */}
+          <p className="mr-2 shrink-0 truncate text-[12.5px] font-medium text-sky-500 sm:min-w-0 sm:flex-1 sm:shrink">
+            Somente leitura<span className="hidden sm:inline"> · visualizando como: {nomeDoCliente}</span>
+          </p>
+          <div className="ml-auto flex min-w-0 flex-1 justify-end sm:flex-none">
+          <SeletorCompacto
+            rotulo="Trocar cliente"
+            modo="lista"
+            icone={<Users className="h-3.5 w-3.5" />}
+            valor={clientId || ""}
+            onEscolher={(id) => {
+              const c = ativos.find((x: any) => x.id === id);
+              if (c) selectClient(c);
+            }}
+            opcoes={ativos.map((c: any) => ({ valor: c.id, rotulo: c.company_name || c.full_name || "Cliente", descricao: c.email || undefined }))}
+            className="h-8 max-w-full sm:max-w-[260px]"
+          />
           </div>
         </div>
 
-        {/* Client navigation tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-6 border-b border-border scrollbar-hide">
-          {clientTabs.map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              onClick={() => switchTab(tab.id)}
-              aria-pressed={activeTab === tab.id}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap transition-all relative rounded-t-lg",
-                activeTab === tab.id
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground/80"
-              )}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-primary" />
-              )}
-            </button>
-          ))}
-        </div>
+        {/* Abas do portal (as mesmas do cliente); a aba mora no endereço */}
+        <Etapas
+          rotulo="Áreas do portal do cliente"
+          valor={activeTab}
+          onEscolher={switchTab}
+          itens={clientTabs.map((tab) => ({ valor: tab.id, rotulo: tab.label, icone: <tab.icon className="h-3.5 w-3.5" /> }))}
+          className="mb-6 border-b border-border"
+        />
 
         {/* Tab content */}
-        <div className="animate-fade-in">
+        <div className="min-w-0">
           {renderTabContent()}
         </div>
       </div>

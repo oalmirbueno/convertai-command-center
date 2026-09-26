@@ -1,0 +1,25 @@
+/**
+ * Componentes base do sistema de design do painel (docs/design/SISTEMA.md).
+ * Importe daqui: `import { Secao, Painel, texto } from "@/components/sistema";`
+ * A CascaDaMesa e o SeletorDeMesa importam por caminho próprio nas mesas, para
+ * não puxar o resto junto na abertura.
+ */
+export { default as Secao, CabecalhoDeSecao } from "./Secao";
+export { default as Painel } from "./Painel";
+export { default as CabecalhoDePagina } from "./CabecalhoDePagina";
+export { CampoDeFormulario, GrupoDeCampos, CampoDeEscolha } from "./Formulario";
+export { EstadoVazio, Carregando, EstadoDeErro } from "./Estados";
+export { default as BarraDeAcoes } from "./BarraDeAcoes";
+export { default as Etapas, type ItemDeEtapa } from "./Etapas";
+export { default as AjudaRecolhida } from "./AjudaRecolhida";
+export { texto, campo, campoTexto, botao, superficie, foco, etiqueta, larguraDaMesa, juntar, toqueCompacto } from "./estilos";
+export { default as AreaDeTrabalho, useAreaDeTrabalho, useLargo, abrirLateralDaArea } from "./AreaDeTrabalho";
+export { default as RegiaoRolavel } from "./RegiaoRolavel";
+export { default as PainelDoAgente, CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente } from "./PainelDoAgente";
+export { default as SeletorCompacto, type OpcaoCompacta } from "./SeletorCompacto";
+export { useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela, apagarEstadoDaTela } from "./useEstadoDaTela";
+export { default as FaixaDeNumeros, CelulaDeNumero, type NumeroDaFaixa } from "./FaixaDeNumeros";
+export { default as CampoDeBusca } from "./CampoDeBusca";
+export { default as BotaoComIcone, RotuloLargo } from "./BotaoComIcone";
+export { useReservaFlutuante } from "./useReservaFlutuante";
+export { default as JanelaDoCelular } from "./JanelaDoCelular";

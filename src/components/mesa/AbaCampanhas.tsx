@@ -4,6 +4,7 @@ import { Loader2, Megaphone, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { AvisoDeErro } from "./Custo";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
@@ -315,6 +316,8 @@ export default function AbaCampanhas({
   ) : null;
 
   const agenteAoLado = agenteFixo && !!agente;
+  // Botão flutuante do agente (abaixo de 1280 px): o fim da página fica livre para rolar acima dele.
+  useReservaFlutuante(!agenteFixo && !!agente, 64);
   const grade = listaAoLado && agenteAoLado
     ? "lg:grid-cols-[250px_minmax(0,1fr)_360px]"
     : listaAoLado

@@ -7,7 +7,8 @@ import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
+import { Edit3, Trash2, ExternalLink, Eye, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
+import { SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { ProjectPipelineChecklist } from "./ProjectPipeline";
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
@@ -136,186 +137,175 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  const milestoneIcon = (status: string) => {
-    if (status === "done") return <CheckCircle2 className="w-3.5 h-3.5 text-success" />;
-    if (status === "in_progress") return <Clock className="w-3.5 h-3.5 text-info" />;
-    return <Circle className="w-3.5 h-3.5 text-muted-foreground" />;
-  };
+
+  const equipe = Array.from(teamMap.values()).map(({ name, count }) => `${name.split(" ")[0]} (${count})`).join(", ");
+  const resumoDasTarefas = [
+    taskCounts.backlog > 0 ? `${taskCounts.backlog} no backlog` : null,
+    taskCounts.todo > 0 ? `${taskCounts.todo} a fazer` : null,
+    taskCounts.doing > 0 ? `${taskCounts.doing} em andamento` : null,
+    taskCounts.review > 0 ? `${taskCounts.review} em revisão` : null,
+    taskCounts.done > 0 ? `${taskCounts.done} concluídas` : null,
+  ].filter(Boolean).join(" · ");
 
   return (
-    // Central, como todo pop-up do painel.
+    // Central, como todo pop-up do painel. Rola por dentro (é janela); as
+    // ações ficam presas no pé, sempre à vista.
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[88dvh] max-w-lg overflow-y-auto border-border bg-card p-0">
-        <div className="p-5 space-y-5">
+      <DialogContent className="flex max-h-[88vh] max-w-lg flex-col overflow-hidden border-border bg-card p-0">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-5">
           {/* Header */}
-          <DialogHeader className="space-y-1">
-            <DialogTitle className="pr-6 text-base font-semibold text-foreground">{project.name}</DialogTitle>
-            <p className="text-xs text-muted-foreground">{project.client?.company_name || project.client?.full_name}</p>
+          <DialogHeader className="space-y-0.5 text-left">
+            <DialogTitle className={juntar(texto.tituloPagina, "pr-8 text-[18px]")}>{project.name}</DialogTitle>
+            <p className={texto.auxiliar}>
+              {[project.client?.company_name || project.client?.full_name, project.project_type?.replace("_", " ")].filter(Boolean).join(" · ")}
+            </p>
           </DialogHeader>
 
-          {/* Status pills */}
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Status</p>
-            <div className="flex flex-wrap gap-1.5">
-              {STATUS_OPTIONS.map(s => (
-                <button key={s.value} onClick={() => handleStatusChange(s.value)}
-                  className={`text-[11px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${currentStatus === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
-                  {s.label}
-                </button>
-              ))}
+          {/* Status e progresso lado a lado: um seletor e a régua. */}
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
+              <p className={juntar(texto.rotulo, "mb-1.5")}>Status</p>
+              <SeletorCompacto
+                rotulo="Status do projeto"
+                modo="lista"
+                opcoes={STATUS_OPTIONS.map((s) => ({
+                  valor: s.value,
+                  rotulo: s.label,
+                  icone: <span className={juntar("block h-2 w-2 rounded-full", statusDotColors[s.value] || "bg-muted-foreground")} />,
+                }))}
+                valor={currentStatus}
+                onEscolher={(v) => void handleStatusChange(v)}
+                className="w-full"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className={texto.rotulo}>Progresso</p>
+                <span className="text-[12px] tabular-nums text-muted-foreground">{progress}%</span>
+              </div>
+              <div className="flex h-9 items-center">
+                <Slider
+                  defaultValue={[project.progress]}
+                  value={[progress]}
+                  max={100}
+                  step={5}
+                  onValueChange={(val) => setLocalProgress(val[0])}
+                  onValueCommit={handleProgressCommit}
+                  className="w-full"
+                  aria-label="Progresso do projeto"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Progress */}
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Progresso</p>
-            <Slider
-              defaultValue={[project.progress]}
-              value={[progress]}
-              max={100}
-              step={5}
-              onValueChange={(val) => setLocalProgress(val[0])}
-              onValueCommit={handleProgressCommit}
-              className="w-full"
-            />
-            <p className="text-xs font-mono text-muted-foreground text-right">{progress}%</p>
-          </div>
+          {/* Datas */}
+          <dl className="mt-4 grid grid-cols-2 gap-4">
+            <div className="min-w-0">
+              <dt className={texto.rotulo}>Início</dt>
+              <dd className={juntar(texto.corpo, "mt-0.5 tabular-nums")}>{formatDate(project.start_date) || "-"}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className={texto.rotulo}>Prazo</dt>
+              <dd className={juntar(texto.corpo, "mt-0.5 tabular-nums")}>{formatDate(project.deadline) || "-"}</dd>
+            </div>
+          </dl>
+
+          {/* Descrição */}
+          {project.description && (
+            <p className={juntar(texto.corpo, "mt-4 whitespace-pre-line text-muted-foreground")}>{project.description}</p>
+          )}
 
           {/* Pipeline audiovisual (opcional) */}
-          <ProjectPipelineChecklist
-            projectId={project.id}
-            projectName={project.name}
-            pipeline={project.pipeline}
-          />
-
-
-          {/* Info */}
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Informações</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <span className="text-muted-foreground">Tipo</span>
-                <p className="text-foreground capitalize">{project.project_type?.replace("_", " ")}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Início</span>
-                <p className="text-foreground">{formatDate(project.start_date)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Prazo</span>
-                <p className="text-foreground">{formatDate(project.deadline)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Status</span>
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${statusDotColors[project.status] || "bg-muted-foreground"}`} />
-                  <p className="text-foreground">{STATUS_OPTIONS.find(s => s.value === project.status)?.label}</p>
-                </div>
-              </div>
-            </div>
+          <div className="mt-5 border-t border-border pt-4">
+            <ProjectPipelineChecklist
+              projectId={project.id}
+              projectName={project.name}
+              pipeline={project.pipeline}
+            />
           </div>
 
-          {/* Description */}
-          {project.description && (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">{project.description}</p>
-            </div>
-          )}
-
-          {/* Team */}
-          {teamMap.size > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Equipe do Projeto</p>
-              <div className="space-y-1.5">
-                {Array.from(teamMap.entries()).map(([id, { name, count }]) => (
-                  <div key={id} className="flex items-center gap-2 text-xs">
-                    <Users className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-foreground">{name}</span>
-                    <span className="text-muted-foreground">- {count} task{count > 1 ? "s" : ""}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Tasks summary */}
-          {totalTasks > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Tarefas</p>
-              <div className="flex gap-3 text-xs">
-                {taskCounts.backlog > 0 && <span className="text-muted-foreground">Backlog: {taskCounts.backlog}</span>}
-                {taskCounts.todo > 0 && <span className="text-muted-foreground">To-do: {taskCounts.todo}</span>}
-                {taskCounts.doing > 0 && <span className="text-info">Doing: {taskCounts.doing}</span>}
-                {taskCounts.review > 0 && <span className="text-warning">Review: {taskCounts.review}</span>}
-                {taskCounts.done > 0 && <span className="text-success">Done: {taskCounts.done}</span>}
-              </div>
-              <button onClick={() => { onClose(); navigate("/kanban"); }}
-                className="text-[11px] text-primary hover:underline cursor-pointer flex items-center gap-1 bg-transparent border-none p-0">
-                <ExternalLink className="w-3 h-3" /> Ver no Kanban
-              </button>
+          {/* Equipe e tarefas: estado em uma linha cada. */}
+          {(teamMap.size > 0 || totalTasks > 0) && (
+            <div className="mt-5 space-y-2 border-t border-border pt-4">
+              {teamMap.size > 0 && (
+                <p className={texto.auxiliar}>
+                  <span className="text-foreground">Equipe</span> {equipe}
+                </p>
+              )}
+              {totalTasks > 0 && (
+                <div className="flex min-w-0 items-center justify-between">
+                  <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate")} title={resumoDasTarefas}>
+                    <span className="text-foreground">{totalTasks} tarefas</span> {resumoDasTarefas}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); navigate("/kanban"); }}
+                    className={juntar(botao.discreto, "h-7 shrink-0 px-2 text-[12px]")}
+                  >
+                    <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" /> Ver no Kanban
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
           {/* Milestones */}
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestones</p>
+          <div className="mt-5 border-t border-border pt-4">
+            <p className={juntar(texto.rotulo, "mb-2")}>Marcos</p>
             {(!milestones || milestones.length === 0) ? (
-              <p className="text-xs text-muted-foreground">Nenhum milestone cadastrado</p>
+              <p className={texto.auxiliar}>Nenhum milestone cadastrado</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="divide-y divide-border">
                 {(milestones || []).map((m: any) => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    {m.status === "completed" ? (
-                      <div className="w-5 h-5 rounded-full bg-success flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-3 h-3 text-success-foreground" />
-                      </div>
-                    ) : m.status === "in_progress" ? (
-                      <div className="w-5 h-5 rounded-full border-2 border-primary shrink-0" />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-secondary shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground">{m.title}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                      </p>
-                    </div>
-                  </div>
+                  <li key={m.id} className="flex min-w-0 items-center py-2">
+                    <span className="mr-2.5 shrink-0" aria-hidden="true">
+                      {m.status === "completed" ? (
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                      ) : m.status === "in_progress" ? (
+                        <Clock className="h-4 w-4 text-info" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </span>
+                    <span className={juntar(texto.corpo, "mr-3 min-w-0 flex-1 truncate")}>{m.title}</span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                      {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                    </span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="space-y-2 pt-2 border-t border-border">
-            <button onClick={() => { onClose(); onEdit(project); }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
-              <Edit3 className="w-3.5 h-3.5" /> Editar Projeto
+        {/* Ações no pé: nenhuma ocupa uma linha sozinha. */}
+        <div className="flex shrink-0 items-center border-t border-border px-5 py-3">
+          <button type="button" onClick={() => setConfirmDelete(true)} className={juntar(botao.perigo, "px-2.5")} aria-label="Excluir projeto" title="Excluir projeto">
+            <Trash2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Excluir</span>
+          </button>
+          <div className="ml-auto flex items-center [&>*+*]:ml-2">
+            <button type="button" onClick={() => { onClose(); navigate(`/ver-como-cliente?project=${project.id}`); }} className={juntar(botao.secundario, "px-2.5")} aria-label="Ver como cliente" title="Ver como cliente">
+              <Eye className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Ver como cliente</span>
             </button>
-            <button onClick={() => { onClose(); navigate(`/kanban?project=${project.id}`); }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
-              <LayoutGrid className="w-3.5 h-3.5" /> Abrir Kanban
+            <button type="button" onClick={() => { onClose(); navigate(`/kanban?project=${project.id}`); }} className={juntar(botao.secundario, "px-2.5")} aria-label="Abrir Kanban" title="Abrir Kanban">
+              <LayoutGrid className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Kanban</span>
             </button>
-            <button onClick={() => { onClose(); navigate(`/ver-como-cliente?project=${project.id}`); }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
-              <Eye className="w-3.5 h-3.5" /> Ver como Cliente
-            </button>
-            <button onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 cursor-pointer bg-transparent border-none text-left transition-colors">
-              <Trash2 className="w-3.5 h-3.5" /> Excluir Projeto
+            <button type="button" onClick={() => { onClose(); onEdit(project); }} className={botao.primario}>
+              <Edit3 className="mr-1.5 h-4 w-4" aria-hidden="true" /> Editar
             </button>
           </div>
-
-          <ConfirmModal
-            open={confirmDelete}
-            title="Excluir projeto"
-            description={`O projeto "${project.name}" e todos os dados relacionados (tarefas, milestones, atualizações) serão removidos permanentemente.`}
-            onConfirm={handleDelete}
-            onCancel={() => setConfirmDelete(false)}
-          />
-
         </div>
+
+        <ConfirmModal
+          open={confirmDelete}
+          title="Excluir projeto"
+          description={`O projeto "${project.name}" e todos os dados relacionados (tarefas, milestones, atualizações) serão removidos permanentemente.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
       </DialogContent>
     </Dialog>
   );

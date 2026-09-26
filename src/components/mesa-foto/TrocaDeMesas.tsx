@@ -1,22 +1,50 @@
 import { Link } from "react-router-dom";
+import { CalendarRange, Camera, Clapperboard, Megaphone, Package, Scissors, ScrollText, type LucideIcon } from "lucide-react";
 import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
+ * Lista das mesas (MESAS) e o endereço de cada uma (enderecoDaMesa): quem
+ * mostra a troca de mesas hoje é o SeletorDeMesa da casca padrão
+ * (src/components/sistema/SeletorDeMesa.tsx, 26/09). Mesa nova entra em MESAS
+ * e aparece lá sozinha. O componente abaixo (a fileira antiga) ficou sem uso.
+ *
  * Troca rápida entre as três mesas do mesmo cliente: Mesa (orgânico),
  * Mesa Ads (tráfego pago), Mesa Foto (estúdio fotográfico) e Mesa Vídeos. A mesa aberta
  * aparece marcada e sem link. Some no celular, onde a barra é curta.
  * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
-export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros";
+export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao";
 
-export const MESAS: { valor: QualMesa; rotulo: string; titulo: string; caminho: string }[] = [
-  { valor: "mesa", rotulo: "Mesa", titulo: "Abrir a Mesa do cliente (conteúdo orgânico)", caminho: "/mesa" },
-  { valor: "ads", rotulo: "Mesa Ads", titulo: "Abrir a Mesa Ads (criativos de anúncio)", caminho: "/mesa-ads" },
-  { valor: "foto", rotulo: "Mesa Foto", titulo: "Abrir a Mesa Foto (estúdio fotográfico)", caminho: "/mesa-foto" },
-  { valor: "videos", rotulo: "Mesa Vídeos", titulo: "Abrir a Mesa Vídeos (acervo, história, edição e versões)", caminho: "/mesa-videos" },
-  { valor: "publicidade", rotulo: "Publicidade", titulo: "Abrir a Mesa Publicidade (campanhas de produto)", caminho: "/mesa-publicidade" },
-  { valor: "roteiros", rotulo: "Roteiros", titulo: "Abrir a Mesa Roteiros (roteiros de vídeo para gravar)", caminho: "/mesa-roteiros" },
+export interface MesaDoSeletor {
+  valor: QualMesa;
+  /** Nome na lista do seletor. */
+  rotulo: string;
+  /** Nome curto no botão do seletor (quando diferente do rótulo). */
+  curto?: string;
+  titulo: string;
+  caminho: string;
+  /** Uma linha do que a mesa faz (lista do seletor). */
+  descricao?: string;
+  /** Ícone da mesa (lucide). */
+  icone?: LucideIcon;
+}
+
+/**
+ * LISTA ÚNICA DAS MESAS. Mesa nova = uma linha aqui (e a rota em App.tsx, a
+ * pré-carga em src/lib/mesa/preCarga.ts e os clientes em clientesDaMesa.ts).
+ * O seletor de mesa, o atalho de número e a pré-carga ao passar o mouse vêm
+ * daqui. A Mesa Edição (/mesa-edicao, frente E2) entrou logo depois da Mesa
+ * Vídeos: gerar com IA de um lado, subir, organizar e editar do outro.
+ */
+export const MESAS: MesaDoSeletor[] = [
+  { valor: "mesa", rotulo: "Mesa", titulo: "Abrir a Mesa do cliente (conteúdo orgânico)", caminho: "/mesa", descricao: "Conteúdo orgânico: contexto, mês, campanhas e estúdio", icone: CalendarRange },
+  { valor: "ads", rotulo: "Mesa Ads", titulo: "Abrir a Mesa Ads (criativos de anúncio)", caminho: "/mesa-ads", descricao: "Criativos de anúncio e a conta ao vivo", icone: Megaphone },
+  { valor: "foto", rotulo: "Mesa Foto", titulo: "Abrir a Mesa Foto (estúdio fotográfico)", caminho: "/mesa-foto", descricao: "Estúdio fotográfico do produto", icone: Camera },
+  { valor: "videos", rotulo: "Mesa Vídeos", titulo: "Abrir a Mesa Vídeos (gerar cenas e vídeos com IA)", caminho: "/mesa-videos", descricao: "Gerar cenas e vídeos com modelos de IA", icone: Clapperboard },
+  { valor: "edicao", rotulo: "Edição", titulo: "Abrir a Mesa Edição (vídeos de fora, organizar e editar)", caminho: "/mesa-edicao", descricao: "Subir vídeos de fora, organizar e editar", icone: Scissors },
+  { valor: "publicidade", rotulo: "Publicidade", titulo: "Abrir a Mesa Publicidade (campanhas de produto)", caminho: "/mesa-publicidade", descricao: "Campanhas de produto com direção de arte", icone: Package },
+  { valor: "roteiros", rotulo: "Roteiros", titulo: "Abrir a Mesa Roteiros (roteiros de vídeo para gravar)", caminho: "/mesa-roteiros", descricao: "Roteiros de vídeo para gravar", icone: ScrollText },
 ];
 
 /** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */

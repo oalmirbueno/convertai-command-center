@@ -68,8 +68,16 @@ describe("kanban: botao direito no cartao da tarefa", () => {
   });
 
   it("os DOIS layouts de cartao tem o gesto", () => {
+    // Redesenho E4 (26/09): o cartão virou um só (renderCartao), usado pelo
+    // celular e pelo computador. O gesto mora nele, e os dois layouts o usam.
     const usos = kanban.match(/setMenuTarefa\(\{ x: e\.clientX/g) ?? [];
-    expect(usos.length).toBe(2);
+    expect(usos.length).toBe(1);
+    const trecho = kanban.slice(kanban.indexOf("const renderCartao"), kanban.indexOf("const cabecalho"));
+    expect(trecho).toContain("setMenuTarefa({ x: e.clientX");
+    const chamadas = kanban.match(/renderCartao\(task, col, colTasks\)/g) ?? [];
+    expect(chamadas.length).toBe(2);
+    // O menu aparece nos dois layouts (antes o computador marcava e não desenhava).
+    expect((kanban.match(/\{Modals\}/g) ?? []).length).toBe(2);
   });
 });
 

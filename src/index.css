@@ -37,7 +37,10 @@
     --input: 0 0% 17%;
     --ring: 145 100% 50%;
 
-    --radius: 1.25rem;
+    /* Raio base do sistema (docs/design/SISTEMA.md): 12 px no cartão (lg),
+       10 px em botão e campo (md), 8 px em etiqueta (sm). Era 20 px e deixava
+       campo e botão com cara de pílula. */
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 40%;
@@ -474,6 +477,26 @@
   .fixed.inset-0 > .absolute.inset-0 { display: none !important; }
   .fixed.inset-0 { position: static !important; }
   .fixed.inset-0 > .relative { position: static !important; max-width: 100% !important; max-height: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
+  /* Salvar PDF no celular: abaixo de 768 px o <main> do AppLayout é uma camada
+     fixa com rolagem própria, e a impressão levava só o pedaço visível. Na
+     impressão ele volta ao fluxo normal da página, sem recuo; saem as barras,
+     o lançador, o agente e o que flutua; o fundo fica branco. */
+  html, body { height: auto !important; overflow: visible !important; }
+  [data-casca="topo"], [data-casca="rodape"], [data-casca="flutuante"],
+  [data-botao-da-lateral], [data-gaveta-da-lateral], [data-barra-de-selecao] { display: none !important; }
+  [data-casca="conteudo"] {
+    position: static !important;
+    top: auto !important; bottom: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    max-width: none !important;
+    background: white !important;
+  }
+  [data-casca="conteudo"]::after { display: none !important; }
+  .mesa-tela-cheia { position: static !important; overflow: visible !important; }
+  /* Área de trabalho (computador): altura da janela e regiões com rolagem própria viram página corrida. */
+  [data-area-de-trabalho] { height: auto !important; }
+  [data-regiao-principal] { overflow: visible !important; }
 }
 
 /* Respect reduced motion */
@@ -569,4 +592,42 @@ body[data-tela-cheia-da-mesa] [data-casca="flutuante"] {
 }
 .mesa-tela-cheia > header[data-cabecalho-da-mesa] {
   top: 0 !important;
+}
+
+/* ── Área de trabalho das mesas (docs/design/SISTEMA.md) ──
+   src/components/sistema/AreaDeTrabalho.tsx liga data-area-de-trabalho no
+   body enquanto uma área com altura da janela está na tela (de 1024 px para
+   cima). Cada região rola por dentro; a página não rola junto, então sai o
+   recuo de baixo do painel e da raiz da mesa. Abaixo de 1024 px nada muda:
+   a página rola normal. */
+@media (min-width: 1024px) {
+  body[data-area-de-trabalho] [data-casca="conteudo"] {
+    padding-bottom: 0 !important;
+  }
+  body[data-area-de-trabalho] [data-casca-da-mesa],
+  body[data-area-de-trabalho] .mesa-tela-cheia {
+    padding-bottom: 0 !important;
+  }
+}
+/* Botão flutuante na tela (celular e tablet): src/components/sistema/
+   useReservaFlutuante.ts liga data-reserva-flutuante no body com a altura em
+   --reserva-flutuante. Uma faixa vazia no fim do conteúdo deixa rolar tudo
+   para cima do botão (nada fica escondido por baixo dele). */
+@media (max-width: 1023px) {
+  body[data-reserva-flutuante] [data-casca="conteudo"]::after,
+  body[data-reserva-flutuante] .mesa-tela-cheia::after {
+    content: "";
+    display: block;
+    height: 72px;
+    height: var(--reserva-flutuante, 72px);
+  }
+}
+/* Gaveta do agente aberta no celular: o painel por baixo não rola. */
+body[data-gaveta-aberta] [data-casca="conteudo"] {
+  overflow: hidden !important;
+}
+body[data-gaveta-aberta] [data-casca="topo"],
+body[data-gaveta-aberta] [data-casca="rodape"],
+body[data-gaveta-aberta] [data-casca="flutuante"] {
+  display: none !important;
 }

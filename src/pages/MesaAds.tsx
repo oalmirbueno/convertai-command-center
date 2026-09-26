@@ -11,10 +11,12 @@ import { CustoCompacto } from "@/components/mesa/CustoCompacto";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import type { PedidoDePlano } from "@/components/mesa-ads/adsApi";
-import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
-import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import Etapas from "@/components/sistema/Etapas";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 
 /**
  * Mesa Ads (/mesa-ads, só equipe: admin, gestor e design): criativos de
@@ -99,13 +101,7 @@ function quandoOcioso(fn: () => void): () => void {
 }
 
 function EsqueletoDaEtapa() {
-  return (
-    <div aria-busy="true" aria-label="Abrindo a etapa" className="space-y-3">
-      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted sm:w-1/3" />
-      <div className="h-28 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
-    </div>
-  );
+  return <Carregando forma="aba" rotulo="Abrindo a etapa" />;
 }
 
 export default function MesaAds() {
@@ -249,65 +245,47 @@ export default function MesaAds() {
     : null;
 
   return (
-    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa Ads</h1>
-        <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
-          <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
-            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Ads</span>
-            <SeletorDeClientesDaMesa mesa="ads" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
-          </div>
-          {/* Troca rápida de marca: só no cliente com 2 ou mais marcas; fecha o plano e o criativo abertos. */}
-          {clientId && marca && (
-            <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, plano: null, criativo: null })} className="mr-2" />
-          )}
-          {clientId && (
-            <nav
-              aria-label="Etapas da Mesa Ads"
-              className="order-last mt-2 grid w-full grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:grid-cols-6 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
-            >
-              {ETAPAS_DA_MESA_ADS.map((e, i) => (
-                <button
-                  key={e.valor}
-                  type="button"
-                  onClick={() => mudar({ etapa: e.valor })}
-                  aria-current={etapa === e.valor ? "page" : undefined}
-                  className={`min-w-0 truncate rounded-md px-1 py-1.5 text-[12px] font-medium transition-colors lg:flex-auto lg:px-1.5 ${
-                    etapa === e.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline lg:hidden 2xl:inline">{i + 1}</span>
-                  {e.rotulo}
-                </button>
-              ))}
-            </nav>
-          )}
-          {clientId && <TrocaDeMesas atual="ads" clientId={clientId} marcaId={marca ? marca.id : null} />}
-          {clientId && (
-            <CustoCompacto
-              saldoUsd={saldoUsd}
-              consumo={consumo.data || null}
-              previsao={previsao.data || null}
-              carregando={consumo.isLoading}
-              podeRecarregar={podeRecarregar}
-              isAdmin={isAdmin}
-              onRecarregar={() => setRecargaAberta(true)}
-              onChaves={abrirChaves}
-              onModelos={abrirModelos}
-            />
-          )}
-          <BotaoDeTelaCheia tela={telaCheia} />
-        </div>
-      </header>
+    // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx).
+    <CascaDaMesa
+      mesa="ads"
+      titulo="Mesa Ads"
+      clientId={clientId}
+      marcaId={marca ? marca.id : null}
+      telaCheia={telaCheia}
+      cliente={<SeletorDeClientesDaMesa mesa="ads" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
+      marca={
+        // Troca rápida de marca: só no cliente com 2 ou mais marcas; fecha o plano e o criativo abertos.
+        clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, plano: null, criativo: null })} /> : null
+      }
+      etapas={
+        clientId ? (
+          <Etapas
+            rotulo="Etapas da Mesa Ads"
+            numerar
+            itens={ETAPAS_DA_MESA_ADS.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))}
+            valor={etapa}
+            onEscolher={(v) => mudar({ etapa: v })}
+          />
+        ) : null
+      }
+      acoes={
+        clientId ? (
+          <CustoCompacto
+            saldoUsd={saldoUsd}
+            consumo={consumo.data || null}
+            previsao={previsao.data || null}
+            carregando={consumo.isLoading}
+            podeRecarregar={podeRecarregar}
+            isAdmin={isAdmin}
+            onRecarregar={() => setRecargaAberta(true)}
+            onChaves={abrirChaves}
+            onModelos={abrirModelos}
+          />
+        ) : null
+      }
+    >
 
-      {!clientId && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Ads dele.</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Oferta, referências com evidência, plano de teste, criativos, a conta de anúncios ao vivo e resultados reais, com o custo de IA sempre à vista.
-          </p>
-        </div>
-      )}
+      {!clientId && <EstadoVazio titulo="Escolha um cliente para abrir a Mesa Ads dele." descricao="Oferta, referências, plano de teste, criativos, conta ao vivo e resultados." />}
 
       {valor && (
         <MesaProvider valor={valor}>
@@ -369,6 +347,6 @@ export default function MesaAds() {
           )}
         </MesaProvider>
       )}
-    </div>
+    </CascaDaMesa>
   );
 }

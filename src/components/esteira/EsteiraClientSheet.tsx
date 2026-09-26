@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -16,6 +17,7 @@ import { MEMORY_LABELS, readMemory, type MemoryEntry } from "@/lib/clientMemory"
 import EsteiraItemRow from "./EsteiraItemRow";
 import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
 import TrafegoVendas from "./TrafegoVendas";
+import { Carregando, EstadoVazio, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 
 const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
   { fontes: ["onboarding"], titulo: "Entrada do cliente" },
@@ -44,59 +46,62 @@ function Numeros({ leitura }: { leitura: Leitura }) {
   const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-primary" : t === "cai" ? "text-destructive" : "text-muted-foreground");
   const titulo = leitura.frente === "social" ? "Números do Instagram" : `Números · ${leitura.plataforma ? ROTULO_PLATAFORMA[leitura.plataforma] : "anúncios"}`;
   const colunas = leitura.numeros.length >= 5 ? "grid-cols-2 sm:grid-cols-3" : leitura.numeros.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
+  // Sistema de design: seção sem caixa; cada número num poço; subiu, parado e
+  // caiu em colunas de texto, sem caixa por grupo.
   return (
-    <section className="mt-3 rounded-2xl border border-border bg-card p-3">
-      <div className="flex items-baseline justify-between">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{titulo}</p>
-        <p className="text-[10px] text-muted-foreground/80">{leitura.periodo}</p>
-      </div>
-      <div className={`mt-2 grid gap-2 ${colunas}`}>
+    <SecaoDoSistema nivel={3} divisoria titulo={titulo} descricao={leitura.periodo}>
+      <div className={`grid gap-2 ${colunas}`}>
         {leitura.numeros.map((n) => (
-          <div key={n.rotulo} className="rounded-xl bg-secondary/60 px-2.5 py-2">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{n.rotulo}</p>
-            <p className="text-[20px] font-bold leading-tight tabular-nums text-foreground">{fmtNumero(n)}</p>
-            <p className={`flex items-center gap-1 text-[11px] tabular-nums ${cor(n.tendencia)}`}>
-              <IconeTendencia t={n.tendencia} />
+          <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+            <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
+            <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{fmtNumero(n)}</p>
+            <p className={`flex items-center text-[11.5px] tabular-nums ${cor(n.tendencia)}`}>
+              <span className="mr-1 inline-flex"><IconeTendencia t={n.tendencia} /></span>
               {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}
             </p>
           </div>
         ))}
       </div>
-      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
           { t: "Subiu", lista: leitura.subiu, cls: "text-primary" },
           { t: "Parado", lista: leitura.parado, cls: "text-muted-foreground" },
           { t: "Caiu", lista: leitura.caiu, cls: "text-destructive" },
         ].map((g) => (
-          <div key={g.t} className="rounded-xl border border-border/70 px-2.5 py-2">
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${g.cls}`}>{g.t}</p>
-            {g.lista.length === 0 ? <p className="text-[11px] text-muted-foreground/70">nada</p> : g.lista.map((x, i) => <p key={i} className="text-[11.5px] leading-snug text-foreground/90">{x}</p>)}
+          <div key={g.t} className="min-w-0">
+            <p className={`text-[12px] font-medium ${g.cls}`}>{g.t}</p>
+            {g.lista.length === 0 ? <p className="text-[12px] text-muted-foreground/70">nada</p> : g.lista.map((x, i) => <p key={i} className="text-[12px] leading-5 text-foreground/90">{x}</p>)}
           </div>
         ))}
       </div>
       {leitura.fazer.length > 0 && (
-        <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">O que fazer por causa disso</p>
+        <div className={juntar(superficie.poco, "mt-3 px-3 py-2")}>
+          <p className="text-[12px] font-medium text-primary">O que fazer por causa disso</p>
           <ul className="mt-1 space-y-1">
-            {leitura.fazer.map((x, i) => <li key={i} className="text-[12.5px] leading-snug text-foreground">• {x}</li>)}
+            {leitura.fazer.map((x, i) => <li key={i} className="text-[12.5px] leading-5 text-foreground">• {x}</li>)}
           </ul>
         </div>
       )}
-    </section>
+    </SecaoDoSistema>
   );
 }
 
-function Secao({ titulo, aberta, onToggle, children }: { titulo: string; aberta: boolean; onToggle: () => void; children: React.ReactNode }) {
+/** Linha que abre e fecha (lista com divisória, sem caixa). */
+function Recolhivel({ titulo, contador, aberta, onToggle, children }: { titulo: string; contador?: number; aberta: boolean; onToggle: () => void; children: ReactNode }) {
   return (
-    <section className="mt-4">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
-        <span>{titulo}</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${aberta ? "rotate-180" : ""}`} />
+    <div className="min-w-0">
+      <button type="button" onClick={onToggle} aria-expanded={aberta} className={juntar("flex h-11 w-full min-w-0 items-center rounded-md text-left", foco)}>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{titulo}</span>
+        {typeof contador === "number" && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>{contador}</span>}
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
-      {aberta && <div className="mt-1.5">{children}</div>}
-    </section>
+      {aberta && <div className="pb-3">{children}</div>}
+    </div>
   );
 }
+
+type Recolhidos = { lista: boolean; feitos: boolean; historia: boolean; jaTem: boolean };
+const RECOLHIDOS: Recolhidos = { lista: false, feitos: false, historia: false, jaTem: false };
 
 interface Props {
   cliente: ClienteDaEsteira | null;
@@ -111,10 +116,11 @@ interface Props {
 
 export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrite, canReview = false, aberta, onFechar, onMudou }: Props) {
   const queryClient = useQueryClient();
-  const [feitosAbertos, setFeitosAbertos] = useState(false);
-  const [jaTemAberto, setJaTemAberto] = useState(false);
-  const [historiaAberta, setHistoriaAberta] = useState(false);
-  const [listaAberta, setListaAberta] = useState(false);
+  // Partes abertas da folha: lembradas no navegador (sair e voltar mantém).
+  const [abertos, setAbertos] = useEstadoDaTela<Recolhidos>("ciclo:folha:abertos", RECOLHIDOS, {
+    validar: (v) => !!v && typeof v === "object",
+  });
+  const alternar = (k: keyof Recolhidos) => setAbertos((a) => ({ ...RECOLHIDOS, ...a, [k]: !a[k] }));
   const [pedido, setPedido] = useState("");
   const [montando, setMontando] = useState(false);
   const [plano, setPlano] = useState<PlanoDaSemana | null>(null);
@@ -206,174 +212,200 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
     } finally { setMontando(false); }
   };
 
+  const feitosNaSemana = e.feitos.length + planoFeitos.length;
+  const ritualFeitos = e.rituais.filter((r) => r.feito).length;
+
+  // Sistema de design: a folha é uma janela. Cabeçalho parado, corpo rolando
+  // por dentro (RegiaoRolavel "sempre", com a posição lembrada por cliente),
+  // seções separadas por divisória, sem caixa dentro de caixa.
   return (
     <Sheet open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
-      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-2xl px-4 pt-2.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-2xl sm:px-6 [&>button]:right-3 [&>button]:top-[1.65rem] [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100 sm:[&>button]:right-5">
-        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
-        <SheetHeader className="pr-12 text-left">
-          <SheetTitle className="text-base">{cliente.nome}</SheetTitle>
-          <SheetDescription>
-            {e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · {e.resumo.urgentes} urgente{e.resumo.urgentes === 1 ? "" : "s"}, {e.resumo.atencao} de atenção · {e.feitos.length + planoFeitos.length} feito{e.feitos.length + planoFeitos.length === 1 ? "" : "s"} na semana
-          </SheetDescription>
-        </SheetHeader>
+      <SheetContent side="bottom" className="flex max-h-[92vh] flex-col gap-0 rounded-t-xl p-0 sm:mx-auto sm:max-w-2xl [&>button]:right-3 [&>button]:top-[1.35rem] [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100 sm:[&>button]:right-5">
+        <div className="shrink-0 px-4 pb-3 pt-2.5 sm:px-6">
+          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
+          <SheetHeader className="space-y-0 pr-12 text-left">
+            <SheetTitle className={juntar(texto.tituloPagina, "truncate text-[18px]")}>{cliente.nome}</SheetTitle>
+            <SheetDescription className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+              {e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · {e.resumo.urgentes} urgente{e.resumo.urgentes === 1 ? "" : "s"} · {e.resumo.atencao} de atenção · {feitosNaSemana} feito{feitosNaSemana === 1 ? "" : "s"}
+            </SheetDescription>
+          </SheetHeader>
+        </div>
 
-        {/* Pelo dossie: foco, o que foi feito, o que vem */}
-        <section className="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5">
-          <div className="flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-primary"><Sparkles className="h-3.5 w-3.5" />Pelo dossiê e pela história</p>
-            <button type="button" onClick={() => void relerDossie()} disabled={lendoPlano} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary disabled:opacity-50">
-              <RefreshCw className={`h-3 w-3 ${lendoPlano ? "animate-spin" : ""}`} />Reler
-            </button>
-          </div>
-          {lendoPlano && !plano && <p className="mt-1.5 text-[12px] text-muted-foreground">Lendo o dossiê e os últimos 14 dias…</p>}
-          {plano && (
-            <>
-              {plano.foco && <p className="mt-1.5 text-[13px] font-medium text-foreground">{plano.foco}</p>}
-              {plano.feito.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-[11px] text-muted-foreground">Feito nesta semana</p>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {plano.feito.map((f, i) => <li key={i} className="text-[12px] text-foreground/90">• {f}</li>)}
-                  </ul>
+        <RegiaoRolavel modo="sempre" memoria={`ciclo:folha:${cliente.id}:${frente}`} className="border-t border-border px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
+          <div className="space-y-5">
+            {/* Pelo dossiê: foco, o que foi feito, o que vem */}
+            <SecaoDoSistema
+              nivel={3}
+              titulo={<span className="inline-flex items-center"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Pelo dossiê</span>}
+              ajuda="Foco da semana, o que foi feito e os próximos passos, lidos do dossiê e da história dos últimos 14 dias. Reler força uma nova leitura."
+              descricao={plano ? `${plano.source === "ai" ? "Lido pela IA" : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}` : undefined}
+              acao={
+                <button type="button" onClick={() => void relerDossie()} disabled={lendoPlano} className={juntar(botao.discreto, "h-8 text-[12px]")}>
+                  <RefreshCw className={`mr-1 h-3.5 w-3.5 ${lendoPlano ? "animate-spin" : ""}`} aria-hidden="true" />Reler
+                </button>
+              }
+            >
+              {lendoPlano && !plano && <Carregando linhas={2} rotulo="Lendo o dossiê" />}
+              {plano && (
+                <div className={juntar(superficie.poco, "space-y-3 px-3 py-2.5")}>
+                  {plano.foco && <p className="text-[13px] font-medium leading-5 text-foreground">{plano.foco}</p>}
+                  {plano.feito.length > 0 && (
+                    <div>
+                      <p className={texto.rotulo}>Feito nesta semana</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {plano.feito.map((f, i) => <li key={i} className="text-[12.5px] leading-5 text-foreground/90">• {f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {planoAbertos.length > 0 && (
+                    <div>
+                      <p className={texto.rotulo}>Próximos passos</p>
+                      <div className="divide-y divide-border">
+                        {planoAbertos.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+                      </div>
+                    </div>
+                  )}
+                  {plano.lacunas.length > 0 && (
+                    <div>
+                      <p className="text-[12px] font-medium text-warning">O que a esteira não encontrou</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {plano.lacunas.map((l, i) => <li key={i} className="text-[12px] leading-5 text-foreground/85">• {l}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {plano.proximos.length === 0 && plano.feito.length === 0 && !plano.foco && (
+                    <p className={texto.auxiliar}>O dossiê ainda não dá base para propor passos. Escreva o dossiê na Central e clique em Reler.</p>
+                  )}
                 </div>
               )}
-              {planoAbertos.length > 0 && (
-                <div className="mt-2">
-                  <p className="mb-1 text-[11px] text-muted-foreground">Próximos passos deste cliente</p>
-                  <div className="space-y-1.5">
-                    {planoAbertos.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-                  </div>
-                </div>
-              )}
-              {plano.lacunas.length > 0 && (
-                <div className="mt-2 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
-                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-warning">O que a esteira não encontrou</p>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {plano.lacunas.map((l, i) => <li key={i} className="text-[11.5px] leading-snug text-foreground/85">• {l}</li>)}
-                  </ul>
-                </div>
-              )}
-              {plano.proximos.length === 0 && plano.feito.length === 0 && !plano.foco && (
-                <p className="mt-1.5 text-[12px] text-muted-foreground">O dossiê ainda não dá base para propor passos. Escreva o dossiê na Central e clique em Reler.</p>
-              )}
-              <p className="mt-1.5 text-[10px] text-muted-foreground/70">{plano.source === "ai" ? "Lido pela IA" : "Sem IA agora, só o que o painel prova"}{plano.cached ? " · desta semana" : ""}</p>
-            </>
-          )}
-          {!lendoPlano && !plano && <p className="mt-1.5 text-[12px] text-muted-foreground">Não consegui ler o dossiê agora. Tente Reler.</p>}
-        </section>
+              {!lendoPlano && !plano && <p className={texto.auxiliar}>Não consegui ler o dossiê agora. Tente Reler.</p>}
+            </SecaoDoSistema>
 
-        {frente === "trafego" && plataformaAtual && (
-          <>
-            <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
-            {leitura ? <Numeros leitura={leitura} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
-            {plataformaAtual.estado !== "nao-configurada" && (
-              <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
-            )}
-          </>
-        )}
-        {frente === "social" && leitura && <Numeros leitura={leitura} />}
-
-        {insights.length > 0 && (
-          <section className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {insights.map((i) => (
-              <div key={i.key} className="rounded-xl border border-border bg-secondary/50 px-3 py-2">
-                <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground"><IconeTendencia t={i.tendencia} />{i.titulo}</p>
-                <p className="text-[13px] text-foreground">{i.texto}</p>
-              </div>
-            ))}
-          </section>
-        )}
-
-        <section className="mt-4">
-          <p className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">Rituais desta semana</p>
-          {canReview && <Link to={`/ciclo/revisao?client=${encodeURIComponent(cliente.id)}`} className="mb-2 inline-flex rounded-lg border border-primary/40 px-3 py-2 text-[12px] font-medium text-primary">Revisar rituais deste cliente</Link>}
-          <div className="grid grid-cols-3 gap-2">
-            {e.rituais.map((r) => (
-              <label key={r.key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-[12px] ${r.feito ? "border-primary/50 bg-primary/10" : "border-border"}`}>
-                <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} />
-                <span className="leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
-              </label>
-            ))}
-          </div>
-        </section>
-
-        {grupos.length === 0 && planoAbertos.length === 0 && (
-          <p className="mt-4 rounded-xl border border-border bg-secondary/40 px-3 py-4 text-center text-[13px] text-muted-foreground">Em dia. Nada pendente nesta frente.</p>
-        )}
-        {grupos.map((g) => (
-          <section key={g.titulo} className="mt-4">
-            <p className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">{g.titulo} · {g.itens.length}</p>
-            <div className="space-y-1.5">
-              {g.itens.map((it: EsteiraItem) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-            </div>
-          </section>
-        ))}
-
-        <Secao titulo="Lista rápida (vira itens da esteira)" aberta={listaAberta} onToggle={() => setListaAberta((v) => !v)}>
-          <textarea
-            value={pedido}
-            onChange={(ev) => setPedido(ev.target.value)}
-            placeholder="Descreva o que precisa ser feito para este cliente. Ex: gravar depoimento na loja, refazer a arte do cardápio e pedir as fotos novas."
-            rows={2}
-            className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
-          />
-          <button type="button" onClick={() => void montarLista()} disabled={pedido.trim().length < 3 || montando || !canWrite} className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-40">
-            <Sparkles className={`h-3.5 w-3.5 ${montando ? "animate-pulse" : ""}`} />{montando ? "Montando a lista…" : "Montar checklist"}
-          </button>
-        </Secao>
-
-        {(e.feitos.length > 0 || planoFeitos.length > 0) && (
-          <Secao titulo={`Feitos nesta semana · ${e.feitos.length + planoFeitos.length}`} aberta={feitosAbertos} onToggle={() => setFeitosAbertos((v) => !v)}>
-            <div className="space-y-1.5">
-              {[...e.feitos, ...planoFeitos].map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-            </div>
-          </Secao>
-        )}
-
-        <Secao titulo={`História deste cliente · ${historia.length}`} aberta={historiaAberta} onToggle={() => setHistoriaAberta((v) => !v)}>
-          {historia.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground">Nada registrado ainda.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {historia.filter((h: MemoryEntry) => h.kind !== "esteira_plano").map((h: MemoryEntry) => (
-                <div key={h.id} className="rounded-xl border border-border px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
-                  <p className="text-[13px] font-medium leading-tight text-foreground">{h.title || ""}</p>
-                  <p className="text-[12px] leading-snug text-muted-foreground line-clamp-3">{h.content}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </Secao>
-
-        {!e.onboardingCompleto && (
-          <Secao titulo="O que este cliente já tem" aberta={jaTemAberto} onToggle={() => setJaTemAberto((v) => !v)}>
-            <div className="space-y-1">
-              {ONBOARDING.filter((p) => !p.soSe || cliente.fatos.servicos[p.soSe]).map((p) => {
-                const tem = p.key in cliente.fatos.onboardingHas ? cliente.fatos.onboardingHas[p.key] : (p.auto ? p.auto(cliente.fatos) : false);
-                return (
-                  <div key={p.key} className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
-                    <span className="text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[11px] text-muted-foreground">(detectado)</span> : null}</span>
-                    <Switch checked={Boolean(tem)} disabled={!canWrite} onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
-                  </div>
-                );
-              })}
-            </div>
-          </Secao>
-        )}
-
-        {canWrite && (
-          <section className="mt-5 flex flex-wrap gap-2 border-t border-border pt-3">
-            {!oculto ? (
+            {frente === "trafego" && plataformaAtual && (
               <>
-                <button type="button" onClick={async () => { const fim = new Date(`${weekStart}T00:00:00Z`); fim.setUTCDate(fim.getUTCDate() + 6); const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: fim.toISOString().slice(0, 10) }); if (ok) { onMudou(); onFechar(); } }} className="rounded-lg border border-border px-3 py-1.5 text-[12px] text-muted-foreground hover:border-primary/50">Ocultar esta semana</button>
-                <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: null }); if (ok) { onMudou(); onFechar(); } }} className="rounded-lg border border-border px-3 py-1.5 text-[12px] text-muted-foreground hover:border-destructive/50">Tirar desta frente</button>
+                <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
+                {leitura ? <Numeros leitura={leitura} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
+                {plataformaAtual.estado !== "nao-configurada" && (
+                  <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
+                )}
               </>
-            ) : (
-              <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: false }); if (ok) onMudou(); }} className="rounded-lg border border-primary/50 px-3 py-1.5 text-[12px] text-foreground">Voltar a mostrar nesta frente</button>
             )}
-          </section>
-        )}
+            {frente === "social" && leitura && <Numeros leitura={leitura} />}
+
+            {insights.length > 0 && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {insights.map((i) => (
+                  <div key={i.key} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+                    <p className={juntar(texto.rotulo, "flex items-center")}><span className="mr-1.5 inline-flex"><IconeTendencia t={i.tendencia} /></span>{i.titulo}</p>
+                    <p className="text-[13px] leading-5 text-foreground">{i.texto}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <SecaoDoSistema
+              nivel={3}
+              divisoria
+              titulo="Rituais da semana"
+              descricao={`${ritualFeitos} de ${e.rituais.length}`}
+              acao={canReview ? (
+                <Link to={`/ciclo/revisao?client=${encodeURIComponent(cliente.id)}`} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>Revisar rituais deste cliente</Link>
+              ) : undefined}
+            >
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                {e.rituais.map((r) => (
+                  <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[12.5px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
+                    <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
+                    <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
+                  </label>
+                ))}
+              </div>
+            </SecaoDoSistema>
+
+            {grupos.length === 0 && planoAbertos.length === 0 && (
+              <EstadoVazio compacto titulo="Em dia." descricao="Nada pendente nesta frente." />
+            )}
+            {grupos.map((g) => (
+              <SecaoDoSistema key={g.titulo} nivel={3} divisoria titulo={g.titulo} descricao={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}>
+                <div className="divide-y divide-border">
+                  {g.itens.map((it: EsteiraItem) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+                </div>
+              </SecaoDoSistema>
+            ))}
+
+            <div className="divide-y divide-border border-y border-border">
+              <Recolhivel titulo="Lista rápida" aberta={abertos.lista} onToggle={() => alternar("lista")}>
+                <textarea
+                  value={pedido}
+                  onChange={(ev) => setPedido(ev.target.value)}
+                  placeholder="O que precisa ser feito para este cliente. Ex.: gravar depoimento na loja, refazer a arte do cardápio."
+                  rows={2}
+                  aria-label="Pedido da lista rápida"
+                  className={juntar(campoTexto, "min-h-[64px] resize-none")}
+                />
+                <div className="mt-2 flex min-w-0 items-center">
+                  <p className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>Vira itens da esteira.</p>
+                  <button type="button" onClick={() => void montarLista()} disabled={pedido.trim().length < 3 || montando || !canWrite} className={botao.primario}>
+                    <Sparkles className={`mr-1.5 h-3.5 w-3.5 ${montando ? "animate-pulse" : ""}`} aria-hidden="true" />{montando ? "Montando…" : "Montar checklist"}
+                  </button>
+                </div>
+              </Recolhivel>
+
+              {feitosNaSemana > 0 && (
+                <Recolhivel titulo="Feitos nesta semana" contador={feitosNaSemana} aberta={abertos.feitos} onToggle={() => alternar("feitos")}>
+                  <div className="divide-y divide-border">
+                    {[...e.feitos, ...planoFeitos].map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+                  </div>
+                </Recolhivel>
+              )}
+
+              <Recolhivel titulo="História deste cliente" contador={historia.length} aberta={abertos.historia} onToggle={() => alternar("historia")}>
+                {historia.length === 0 ? (
+                  <p className={texto.auxiliar}>Nada registrado ainda.</p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {historia.filter((h: MemoryEntry) => h.kind !== "esteira_plano").map((h: MemoryEntry) => (
+                      <li key={h.id} className="min-w-0 py-2">
+                        <p className={texto.auxiliar}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
+                        <p className="text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
+                        <p className="text-[12px] leading-5 text-muted-foreground line-clamp-3">{h.content}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Recolhivel>
+
+              {!e.onboardingCompleto && (
+                <Recolhivel titulo="O que este cliente já tem" aberta={abertos.jaTem} onToggle={() => alternar("jaTem")}>
+                  <ul className="divide-y divide-border">
+                    {ONBOARDING.filter((p) => !p.soSe || cliente.fatos.servicos[p.soSe]).map((p) => {
+                      const tem = p.key in cliente.fatos.onboardingHas ? cliente.fatos.onboardingHas[p.key] : (p.auto ? p.auto(cliente.fatos) : false);
+                      return (
+                        <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
+                          <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[11.5px] text-muted-foreground">(detectado)</span> : null}</span>
+                          <Switch checked={Boolean(tem)} disabled={!canWrite} aria-label={p.rotulo} className="min-h-0 shrink-0" onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Recolhivel>
+              )}
+            </div>
+
+            {canWrite && (
+              <div className="-m-1 flex flex-wrap items-center justify-end [&>*]:m-1">
+                {!oculto ? (
+                  <>
+                    <button type="button" onClick={async () => { const fim = new Date(`${weekStart}T00:00:00Z`); fim.setUTCDate(fim.getUTCDate() + 6); const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: fim.toISOString().slice(0, 10) }); if (ok) { onMudou(); onFechar(); } }} className={juntar(botao.secundario, "h-8 text-[12px]")}>Ocultar esta semana</button>
+                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: null }); if (ok) { onMudou(); onFechar(); } }} className={juntar(botao.perigo, "h-8 text-[12px]")}>Tirar desta frente</button>
+                  </>
+                ) : (
+                  <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: false }); if (ok) onMudou(); }} className={juntar(botao.secundario, "h-8 text-[12px]")}>Voltar a mostrar nesta frente</button>
+                )}
+              </div>
+            )}
+          </div>
+        </RegiaoRolavel>
       </SheetContent>
     </Sheet>
   );

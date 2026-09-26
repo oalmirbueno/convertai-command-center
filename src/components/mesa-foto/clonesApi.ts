@@ -1,7 +1,7 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { chamarFuncao, type ModeloIa, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
 import { normalizarFoto, semearUrl, type FotoDoAcervo } from "./fotoApi";
-import { normalizarImagemDaPersona, type ImagemDaPersona } from "./modelosApi";
+import { normalizarImagemDaPersona, urlEstavel, type ImagemDaPersona } from "./modelosApi";
 
 /**
  * Clones (pedido do dono, 25/09; docs/mesa-foto/CLONES.md): pessoa REAL do
@@ -160,7 +160,8 @@ export function normalizarClone(v: any): Clone | null {
       : [],
     autorizacao: aut,
     autorizacao_valida: val ? { ok: val.ok === true, motivo: texto(val.motivo) || null } : { ok: !!aut && aut.confirmada && !aut.revogada_em, motivo: null },
-    capa_url: texto(v.capa_url) || null,
+    // A capa vem assinada de novo a cada clones_listar: a mesma URL enquanto vale (a miniatura não pisca).
+    capa_url: urlEstavel(texto(v.capa_url)) || null,
     capa_e_real: v.capa_e_real === true,
   };
 }

@@ -136,8 +136,9 @@ describe("a Central encurta o caminho e o Hermes fica com a revisão formal", ()
   });
 
   it("o cartão dos rituais não é esticado no celular", () => {
-    expect(central).toContain('className="grid gap-4 lg:auto-rows-fr lg:grid-cols-2 xl:gap-5"');
-    expect(central).not.toContain("grid gap-4 auto-rows-fr");
+    // E3 (26/09): sem cartões para esticar; a grade só vira duas colunas no notebook.
+    expect(central).toMatch(/data-tour="central-carteira" className="grid [^"]*lg:grid-cols-2[^"]*"/);
+    expect(central).not.toMatch(/[" ]auto-rows-fr/);
   });
 
   it("ação feita entra no diário e no dossiê; ritual enviado marca o Ciclo", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   splitAmount,
 } from "@/lib/paymentInstallments";
 import { compensateNewIncome } from "@/lib/newIncomeCompensation";
+import { CampoDeFormulario, GrupoDeCampos, SeletorCompacto, botao, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 
 const PROJECT_TYPES = [
   { value: "site", label: "Site", desc: "Desenvolvimento de site institucional/landing · design, código, SEO básico, deploy." },
@@ -294,208 +295,173 @@ export default function NewIncomeModal({ open, onClose }: Props) {
 
   const willBecomeHybrid = selectedClient?.client_type === "recurring" && projectMode === "new";
 
+  const resumoDoPagamento = normalizedPreviewTotal === null
+    ? null
+    : paymentMode === "a_vista"
+      ? <>Total <span className="tabular-nums text-foreground">R$ {normalizedPreviewTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
+      : (() => {
+          const amounts = splitAmount(
+            normalizedPreviewTotal,
+            Math.max(parseInt(installmentsCount) || 1, 1),
+          );
+          const regular = amounts[0];
+          const last = amounts[amounts.length - 1];
+          return <>
+            {amounts.length}× · primeiras <span className="tabular-nums text-foreground">R$ {regular.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+            {last !== regular && <> · última <span className="tabular-nums text-foreground">R$ {last.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>}
+          </>;
+        })();
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-card border-border max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-foreground flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
-            Nova Entrada Avulsa
+          <DialogTitle className="flex items-center text-foreground">
+            <Sparkles className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            Nova entrada avulsa
           </DialogTitle>
+          <DialogDescription>Pagamento único, sem renovação.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 mt-2">
-          {/* Cliente */}
-          <div>
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente *</label>
-            <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-              className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
-              <option value="">Selecionar cliente...</option>
-              {(clients || []).map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {c.company_name || c.full_name} {c.client_type ? `· ${c.client_type === "recurring" ? "Recorrente" : c.client_type === "one_off" ? "Avulso" : "Híbrido"}` : ""}
-                </option>
-              ))}
-            </select>
-            {willBecomeHybrid && (
-              <p className="text-[11px] text-primary mt-1.5 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                Esse cliente é recorrente · ao criar um projeto avulso ele vira <b className="font-semibold">híbrido</b> automaticamente.
-              </p>
-            )}
-          </div>
+        <fieldset disabled={saving} className="min-w-0 space-y-5 border-0 p-0">
+          <GrupoDeCampos titulo="Projeto">
+            <CampoDeFormulario
+              rotulo="Cliente"
+              obrigatorio
+              largo
+              apoio={willBecomeHybrid ? "Cliente recorrente: com um projeto avulso ele vira híbrido." : undefined}
+            >
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={campo}>
+                <option value="">Selecionar cliente...</option>
+                {(clients || []).map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name || c.full_name} {c.client_type ? `· ${c.client_type === "recurring" ? "Recorrente" : c.client_type === "one_off" ? "Avulso" : "Híbrido"}` : ""}
+                  </option>
+                ))}
+              </select>
+            </CampoDeFormulario>
 
-          {/* Projeto: existing vs new */}
-          {clientId && (
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Projeto</label>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <button type="button" onClick={() => setProjectMode("new")}
-                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    projectMode === "new" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
-                  }`}>
-                  <FolderPlus className="w-3.5 h-3.5" /> Criar novo
-                </button>
-                <button type="button" onClick={() => setProjectMode("existing")} disabled={existingProjects.length === 0}
-                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                    projectMode === "existing" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
-                  }`}>
-                  Vincular existente ({existingProjects.length})
-                </button>
+            {clientId && (
+              <div className="min-w-0 sm:col-span-full">
+                <p className={juntar(texto.rotulo, "mb-1.5")}>Vínculo</p>
+                <SeletorCompacto
+                  opcoes={[
+                    { valor: "new", rotulo: "Criar novo", icone: <FolderPlus className="h-3.5 w-3.5" /> },
+                    { valor: "existing", rotulo: `Vincular existente (${existingProjects.length})`, desativada: existingProjects.length === 0 },
+                  ]}
+                  valor={projectMode}
+                  onEscolher={(v) => setProjectMode(v === "existing" ? "existing" : "new")}
+                  rotulo="Projeto novo ou existente"
+                  larguraTotal
+                />
               </div>
+            )}
 
-              {projectMode === "existing" && (
-                <select value={existingProjectId} onChange={(e) => setExistingProjectId(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
+            {clientId && projectMode === "existing" && (
+              <CampoDeFormulario rotulo="Projeto avulso" obrigatorio largo>
+                <select value={existingProjectId} onChange={(e) => setExistingProjectId(e.target.value)} className={campo}>
                   <option value="">Selecionar projeto avulso...</option>
                   {existingProjects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-              )}
-            </div>
-          )}
+              </CampoDeFormulario>
+            )}
 
-          {/* Novo projeto: tipo + nome + descrição */}
-          {clientId && projectMode === "new" && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Tipo</label>
-                  <select value={projectType} onChange={(e) => setProjectType(e.target.value)}
-                    className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
+            {clientId && projectMode === "new" && (
+              <>
+                <CampoDeFormulario rotulo="Tipo">
+                  <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={campo}>
                     {PROJECT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Brand</label>
-                  <select value={brand} onChange={(e) => setBrand(e.target.value as any)}
-                    className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Marca">
+                  <select value={brand} onChange={(e) => setBrand(e.target.value as any)} className={campo}>
                     <option value="">-</option>
                     <option value="aceleriq">AcelerIQ</option>
                     <option value="sitebolt">SiteBolt</option>
                   </select>
-                </div>
-              </div>
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Nome do projeto" obrigatorio largo>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Descrição" largo>
+                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={juntar(campoTexto, "min-h-[64px] resize-none")} />
+                </CampoDeFormulario>
+                {projectTemplates[projectType] && (
+                  <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+                    <input type="checkbox" checked={generateTasks} onChange={(e) => setGenerateTasks(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className={juntar(texto.corpo, "block font-medium")}>Gerar tarefas automaticamente</span>
+                      <span className={juntar(texto.auxiliar, "block truncate")}>
+                        {projectTemplates[projectType].length} milestones · {projectTemplates[projectType].reduce((s, m) => s + m.tasks.length, 0)} tarefas
+                      </span>
+                    </span>
+                  </label>
+                )}
+              </>
+            )}
+          </GrupoDeCampos>
 
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do projeto</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-                  className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 resize-none" />
-              </div>
-
-              {projectTemplates[projectType] && (
-                <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-primary/5 border border-primary/20 cursor-pointer">
-                  <input type="checkbox" checked={generateTasks} onChange={(e) => setGenerateTasks(e.target.checked)}
-                    className="accent-primary w-4 h-4" />
-                  <div className="text-[11px]">
-                    <p className="text-foreground font-medium">Gerar tarefas automaticamente</p>
-                    <p className="text-muted-foreground">
-                      {projectTemplates[projectType].length} milestones · {projectTemplates[projectType].reduce((s, m) => s + m.tasks.length, 0)} tarefas
-                    </p>
-                  </div>
-                </label>
-              )}
-            </>
-          )}
-
-          {/* Financeiro */}
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
-            <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro · Pagamento único (sem renovação)</p>
-
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
-              <Input type="number" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} className="mt-1" placeholder="0,00" />
+          <GrupoDeCampos titulo="Pagamento" className="border-t border-border pt-4">
+            <CampoDeFormulario rotulo="Valor total" obrigatorio>
+              <Input type="number" inputMode="decimal" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} className="h-9" placeholder="0,00" />
+            </CampoDeFormulario>
+            <div className="min-w-0">
+              <p className={juntar(texto.rotulo, "mb-1.5")}>Forma de pagamento</p>
+              <SeletorCompacto
+                opcoes={[{ valor: "a_vista", rotulo: "À vista" }, { valor: "parcelado", rotulo: "Parcelado" }]}
+                valor={paymentMode}
+                onEscolher={(v) => setPaymentMode(v === "parcelado" ? "parcelado" : "a_vista")}
+                rotulo="Forma de pagamento"
+                larguraTotal
+              />
             </div>
 
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Forma de pagamento</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setPaymentMode("a_vista")}
-                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer ${
-                    paymentMode === "a_vista" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
-                  }`}>À vista</button>
-                <button type="button" onClick={() => setPaymentMode("parcelado")}
-                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer ${
-                    paymentMode === "parcelado" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
-                  }`}>Parcelado</button>
-              </div>
-            </div>
-
-            {paymentMode === "parcelado" && (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nº parcelas</label>
-                  <Input type="number" step="1" min="2" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="mt-1" />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">1ª data</label>
-                  <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="mt-1" />
-                </div>
-              </div>
+            {paymentMode === "parcelado" ? (
+              <>
+                <CampoDeFormulario rotulo="Nº de parcelas">
+                  <Input type="number" inputMode="numeric" step="1" min="2" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="h-9" />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="1ª data">
+                  <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-9" />
+                </CampoDeFormulario>
+              </>
+            ) : (
+              <CampoDeFormulario rotulo="Data do pagamento">
+                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="h-9" />
+              </CampoDeFormulario>
             )}
 
-            {paymentMode === "a_vista" && (
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Data do pagamento</label>
-                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="mt-1" />
-              </div>
-            )}
-
-            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-secondary/50 border border-border cursor-pointer">
-              <input type="checkbox" checked={alreadyPaid} onChange={(e) => setAlreadyPaid(e.target.checked)} className="accent-primary w-4 h-4" />
-              <div className="text-[11px] flex-1">
-                <p className="text-foreground font-medium">Já foi pago</p>
-                <p className="text-muted-foreground">Marca a entrada como recebida no fluxo de caixa.</p>
-              </div>
+            <label className="flex min-w-0 cursor-pointer items-center sm:col-span-full">
+              <input type="checkbox" checked={alreadyPaid} onChange={(e) => setAlreadyPaid(e.target.checked)} className="mr-2.5 h-4 w-4 shrink-0 accent-primary" />
+              <span className="min-w-0 flex-1">
+                <span className={juntar(texto.corpo, "block font-medium")}>Já foi pago</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>Marca a entrada como recebida no fluxo de caixa.</span>
+              </span>
             </label>
 
             {alreadyPaid && paymentMode === "parcelado" && (
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas já pagas</label>
-                <Input type="number" step="1" min="0" max={installmentsCount} value={paidInstallments} onChange={(e) => setPaidInstallments(e.target.value)} className="mt-1" />
-                <p className="text-[10px] text-muted-foreground mt-1">de {installmentsCount}</p>
-              </div>
+              <CampoDeFormulario rotulo="Parcelas já pagas" apoio={`de ${installmentsCount}`}>
+                <Input type="number" inputMode="numeric" step="1" min="0" max={installmentsCount} value={paidInstallments} onChange={(e) => setPaidInstallments(e.target.value)} className="h-9" />
+              </CampoDeFormulario>
             )}
+          </GrupoDeCampos>
 
-            {normalizedPreviewTotal !== null && (
-              <p className="text-[11px] text-muted-foreground">
-                {paymentMode === "a_vista"
-                  ? <>Total: <span className="text-foreground font-mono">R$ {normalizedPreviewTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
-                  : (() => {
-                      const amounts = splitAmount(
-                        normalizedPreviewTotal,
-                        Math.max(parseInt(installmentsCount) || 1, 1),
-                      );
-                      const regular = amounts[0];
-                      const last = amounts[amounts.length - 1];
-                      return <>
-                        {amounts.length}× · primeiras <span className="text-foreground font-mono">R$ {regular.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                        {last !== regular && <> · última <span className="text-foreground font-mono">R$ {last.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>}
-                      </>;
-                    })()
-                }
-              </p>
-            )}
-          </div>
+          {resumoDoPagamento && (
+            <p className={juntar(superficie.poco, texto.auxiliar, "px-3 py-2")}>{resumoDoPagamento}</p>
+          )}
 
-          <div className="flex justify-end gap-2 pt-1">
-            <button onClick={onClose} disabled={saving}
-              className="px-4 py-2 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer disabled:opacity-50">
+          <div className="flex min-w-0 items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+            <button type="button" onClick={onClose} className={botao.secundario}>
               Cancelar
             </button>
-            <button onClick={handleSave} disabled={saving}
-              className="px-4 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground border-none cursor-pointer disabled:opacity-50 flex items-center gap-2">
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {saving ? "Registrando..." : "Registrar Entrada"}
+            <button type="button" onClick={handleSave} className={botao.primario}>
+              {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {saving ? "Registrando..." : "Registrar entrada"}
             </button>
           </div>
-        </div>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );

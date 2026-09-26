@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import { botao } from "@/components/sistema";
+import CascaPublica from "@/components/publico/CascaPublica";
 
 type State =
   | { kind: "loading" }
@@ -15,6 +16,25 @@ type State =
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+/** Título e uma linha por estado. Validar e confirmar usam o mesmo título: nada pula. */
+function textoDoEstado(state: State): { titulo: string; descricao: string } {
+  switch (state.kind) {
+    case "loading":
+      return { titulo: "Cancelar inscrição", descricao: "Validando o link..." };
+    case "valid":
+    case "confirming":
+      return { titulo: "Cancelar inscrição", descricao: "Você deixará de receber e-mails do portal Aceleriq neste endereço." };
+    case "done":
+      return { titulo: "Inscrição cancelada", descricao: "Você não receberá mais e-mails neste endereço." };
+    case "already":
+      return { titulo: "Já cancelado", descricao: "Este endereço já está fora da lista de envios." };
+    case "invalid":
+      return { titulo: "Link inválido", descricao: "O link expirou ou não é mais válido." };
+    case "error":
+      return { titulo: "Não foi possível cancelar", descricao: state.message };
+  }
+}
 
 export default function UnsubscribePage() {
   const [params] = useSearchParams();
@@ -53,58 +73,19 @@ export default function UnsubscribePage() {
     else setState({ kind: "error", message: "Não foi possível processar." });
   };
 
+  const { titulo, descricao } = textoDoEstado(state);
+  const confirmando = state.kind === "confirming";
+
   return (
-    <div className="dark min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md text-center">
-        <img src={aceleriqLogo} alt="AcelerIQ" className="h-16 w-auto mx-auto mb-8" />
-        <div className="rounded-2xl border border-border bg-card p-8">
-          {state.kind === "loading" && (
-            <p className="text-muted-foreground text-sm">Validando link…</p>
-          )}
-          {state.kind === "valid" && (
-            <>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Cancelar inscrição</h1>
-              <p className="text-sm text-muted-foreground mb-6">
-                Você deixará de receber e-mails do portal AcelerIQ neste endereço.
-              </p>
-              <Button onClick={confirm} className="w-full">Confirmar cancelamento</Button>
-            </>
-          )}
-          {state.kind === "confirming" && (
-            <p className="text-muted-foreground text-sm">Processando…</p>
-          )}
-          {state.kind === "done" && (
-            <>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Inscrição cancelada</h1>
-              <p className="text-sm text-muted-foreground">
-                Pronto. Você não receberá mais e-mails neste endereço.
-              </p>
-            </>
-          )}
-          {state.kind === "already" && (
-            <>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Já cancelado</h1>
-              <p className="text-sm text-muted-foreground">
-                Este endereço já está fora da lista de envios.
-              </p>
-            </>
-          )}
-          {state.kind === "invalid" && (
-            <>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Link inválido</h1>
-              <p className="text-sm text-muted-foreground">
-                O link expirou ou não é mais válido.
-              </p>
-            </>
-          )}
-          {state.kind === "error" && (
-            <>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Erro</h1>
-              <p className="text-sm text-muted-foreground">{state.message}</p>
-            </>
-          )}
+    <CascaPublica titulo={titulo} descricao={descricao}>
+      {(state.kind === "valid" || confirmando) && (
+        <div>
+          <button type="button" onClick={confirm} disabled={confirmando} className={botao.primario}>
+            {confirmando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {confirmando ? "Processando..." : "Confirmar cancelamento"}
+          </button>
         </div>
-      </div>
-    </div>
+      )}
+    </CascaPublica>
   );
 }

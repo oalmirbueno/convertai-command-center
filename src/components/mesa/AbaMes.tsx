@@ -48,6 +48,10 @@ import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from ".
 import { useFiltroDaMarca, useMesa } from "./MesaContexto";
 import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 
 /**
  * Aba Mês. No alto, o plano combinado do mês e os Hypes da semana
@@ -725,8 +729,9 @@ function PlanoDoMesEmDestaque({
   const corpo = doMes ? corpoDoPlano(doMes.texto) : "";
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card" aria-label={`Plano de ${nome}`}>
-      <div className="flex min-w-0 flex-col p-4 sm:flex-row sm:items-start sm:p-5">
+    // Sem caixa (docs/design/SISTEMA.md): o plano é o topo da aba, separado do resto por espaço e uma linha fina.
+    <section className="min-w-0 border-b border-border pb-5" aria-label={`Plano de ${nome}`}>
+      <div className="flex min-w-0 flex-col sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1 sm:mr-4">
           <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
@@ -743,10 +748,12 @@ function PlanoDoMesEmDestaque({
             </>
           ) : (
             <>
-              <p className="mt-1.5 text-[15px] font-semibold leading-snug">Nada combinado para {nome} ainda</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                Converse com o agente sobre estratégia, datas, campanhas, frequência e formatos. O que ficar combinado entra no gerador de meses.
-              </p>
+              <div className="mt-1.5 flex min-w-0 items-center">
+                <p className="min-w-0 text-[20px] font-semibold leading-7 tracking-[-0.01em]">Nada combinado para {nome} ainda</p>
+                <AjudaRecolhida className="ml-2" rotulo="O que é o plano do mês">
+                  Converse com o agente sobre estratégia, datas, campanhas, frequência e formatos. O que ficar combinado entra no gerador de meses.
+                </AjudaRecolhida>
+              </div>
             </>
           )}
         </div>
@@ -767,8 +774,8 @@ function PlanoDoMesEmDestaque({
           </Button>
         </div>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center border-t border-border bg-muted/40 px-4 py-2 sm:px-5">
-        <span className="mr-2 text-[11.5px] text-muted-foreground">Próximos meses</span>
+      <div className="mt-3 flex min-w-0 flex-wrap items-center">
+        <span className="mr-2 text-[12px] text-muted-foreground">Próximos meses</span>
         {proximos.map((m) => {
           const tem = lista.some((p) => p.mes === m.slice(0, 7));
           return (
@@ -777,7 +784,7 @@ function PlanoDoMesEmDestaque({
               type="button"
               onClick={() => onConversar("planejar", m)}
               className={`my-0.5 mr-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] capitalize transition-colors ${
-                tem ? "bg-success/15 text-foreground hover:bg-success/25" : "bg-card text-muted-foreground hover:text-foreground"
+                tem ? "bg-success/15 text-foreground hover:bg-success/25" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
               title={tem ? "Plano combinado. Clique para conversar sobre ele." : "Sem plano. Clique para planejar com o agente."}
             >
@@ -820,6 +827,7 @@ export default function AbaMes({
   const mesDaUrl = params.get("mes") || "";
   const mes = MES_VALIDO.test(mesDaUrl) ? mesDaUrl : inicioDoMes();
   const [rapidoAberto, setRapidoAberto] = useState(false);
+  const { clientId } = useMesa();
 
   /** Abrir no Estúdio: pela aba-mãe quando ela manda; senão pela URL, igual à Agenda do mês. */
   const abrirNoEstudio = (taskId: string, mesAlvo: string) => {
@@ -845,6 +853,8 @@ export default function AbaMes({
 
   const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
   const [agenteAberto, setAgenteAberto] = useState(false);
+  // Celular e tablet: o botão do agente flutua; o fim da página fica livre para rolar acima dele.
+  useReservaFlutuante(!agenteAberto, 64);
   const [modoAoAbrir, setModoAoAbrir] = useState<ModoDoAgente | undefined>(undefined);
   const [mesDoAgente, setMesDoAgente] = useState(mes);
   const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
@@ -865,8 +875,13 @@ export default function AbaMes({
   };
 
   return (
-    // Espaço no fim para o botão flutuante nunca cobrir o último conteúdo.
-    <div className="min-w-0 space-y-6 pb-28" data-agente="pop-up">
+    // Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no computador
+    // o mês rola por dentro, na altura da janela, e a posição fica guardada ao
+    // trocar de etapa; o agente do mês abre na janela grande (casca fixa por
+    // dentro). Espaço no fim para o botão flutuante nunca cobrir o último conteúdo.
+    <div className="min-w-0" data-agente="pop-up">
+      <AreaDeTrabalho rotuloDoPrincipal="Mês" memoriaDaRolagem={`mesa:mes:${clientId}`}>
+      <div className="min-w-0 space-y-6 pb-28">
       <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} />
 
       <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
@@ -883,33 +898,22 @@ export default function AbaMes({
       <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
 
       <section className="space-y-3 border-t border-border pt-6">
-        <TituloDeSecao>Gerador de meses</TituloDeSecao>
-        <p className="-mt-1 max-w-3xl text-[12.5px] leading-relaxed text-muted-foreground">
-          O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês.
-        </p>
-        <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-          {(
-            [
-              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
-              { valor: "proposta", rotulo: "Uma proposta por vez" },
-            ] as { valor: ModoDePlanejar; rotulo: string }[]
-          ).map((m) => (
-            <button
-              key={m.valor}
-              type="button"
-              role="tab"
-              aria-selected={modo === m.valor}
-              onClick={() => trocarModo(m.valor)}
-              className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
-                modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {m.rotulo}
-            </button>
-          ))}
-        </div>
+        <TituloDeSecao ajuda="O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês.">
+          Gerador de meses
+        </TituloDeSecao>
+        <SeletorCompacto
+          rotulo="Como planejar"
+          opcoes={[
+            { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+            { valor: "proposta", rotulo: "Uma proposta por vez" },
+          ]}
+          valor={modo}
+          onEscolher={(v) => trocarModo(v as ModoDePlanejar)}
+        />
         {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
       </section>
+      </div>
+      </AreaDeTrabalho>
 
       {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
       {!agenteAberto && (

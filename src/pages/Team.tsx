@@ -3,9 +3,30 @@ import { useTeamMembers, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle, Check, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { UserPlus, Loader2, Trash2, Edit3, AlertTriangle, Check, Search, MoreHorizontal, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
+import {
+  AjudaRecolhida,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  GrupoDeCampos,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 // Mesma regra do servidor (manage-team): 12+ com maiúscula, minúscula, número e símbolo.
 const senhaForte = (senha: string) => senha.length >= 12 && /[a-z]/.test(senha) && /[A-Z]/.test(senha) && /[0-9]/.test(senha) && /[^A-Za-z0-9]/.test(senha);
@@ -18,7 +39,7 @@ const roleBadge: Record<string, { cls: string; label: string }> = {
 };
 
 export default function Team() {
-  const { data: members, isLoading } = useTeamMembers();
+  const { data: members, isLoading, isError, refetch } = useTeamMembers();
   const { data: allTasks } = useTasks();
   const { data: clients } = useClients();
   const queryClient = useQueryClient();
@@ -35,6 +56,10 @@ export default function Team() {
   const [initialAssignedIds, setInitialAssignedIds] = useState<string[]>([]);
   const [clientSearch, setClientSearch] = useState("");
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
+  const [busca, setBusca] = useEstadoDaTela("equipe:busca", "");
+  const [papel, setPapel] = useEstadoDaTela("equipe:papel", "todos", {
+    validar: (v) => v === "todos" || (typeof v === "string" && v in roleBadge),
+  });
 
   const taskCountFor = (userId: string) => (allTasks || []).filter((t: any) => t.assigned_to === userId && t.status !== "done").length;
 
@@ -100,7 +125,7 @@ export default function Team() {
         );
         if (error) throw new Error("Membro criado, mas não foi possível atribuir os clientes");
       }
-      toast.success("Membro criado com a senha definida!");
+      toast.success("Membro criado com a senha definida.");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setCreateOpen(false);
       resetForm();
@@ -131,7 +156,7 @@ export default function Team() {
 
       await persistAssignments(editMember.id);
 
-      toast.success("Membro atualizado!");
+      toast.success("Membro atualizado.");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -212,206 +237,288 @@ export default function Team() {
   });
 
 
-  return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="heading-page">Equipe</h1>
-        <button onClick={() => { closeModal(); setCreateOpen(true); }}
-          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-          <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Novo</span> Membro
+  // ---- Filtros da lista (lembram ao sair e voltar) ----
+  const buscaNormalizada = busca.trim().toLowerCase();
+  const lista = (members || []) as any[];
+  const visiveis = lista.filter((m: any) => {
+    if (papel !== "todos" && m.role !== papel) return false;
+    if (!buscaNormalizada) return true;
+    return (m.full_name || "").toLowerCase().includes(buscaNormalizada) || (m.email || "").toLowerCase().includes(buscaNormalizada);
+  });
+  const contagemPorPapel = (valor: string) => lista.filter((m: any) => m.role === valor).length;
+  const opcoesDePapel = [
+    { valor: "todos", rotulo: "Todos os papéis", contador: lista.length },
+    ...Object.keys(roleBadge).map((valor) => ({ valor, rotulo: roleBadge[valor].label, contador: contagemPorPapel(valor) })),
+  ];
+
+  const iniciais = (nome?: string) => (nome || "").split(" ").map((n: string) => n[0]).join("").slice(0, 2);
+  const clientesDe = (m: any) => (assignments[m.id]?.length || 0);
+
+  const menuDaLinha = (m: any) => (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={botao.icone} aria-label={`Ações de ${m.full_name || "membro"}`}>
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>
-      </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onSelect={() => openEdit(m)}>
+          <Edit3 className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Editar
+        </DropdownMenuItem>
+        {m.role !== "admin" && (
+          <DropdownMenuItem
+            onSelect={() => setRemoveMember(m)}
+            className="text-destructive focus:text-destructive"
+            title="Remove da equipe. Se a pessoa tiver histórico, ela é desativada em vez de apagada."
+          >
+            <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Remover da equipe
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-      ) : (members || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum membro encontrado.</div>
-      ) : (
-        <div className="space-y-2 stagger-children">
-          {(members || []).map((m: any) => {
-            const badge = roleBadge[m.role] || roleBadge.admin;
-            return (
-              <div key={m.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                <Avatar className="w-10 h-10 shrink-0">
-                  <AvatarFallback className="bg-primary/15 text-primary text-sm font-semibold">
-                    {m.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{m.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{m.email}</p>
-                  {m.role !== "admin" && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {(assignments[m.id]?.length || 0)} {assignments[m.id]?.length === 1 ? "cliente" : "clientes"}
-                    </p>
-                  )}
-                </div>
-                <span className={`text-[10px] px-2.5 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
-                <div className="text-right hidden md:block">
-                  <p className="text-xs font-mono text-foreground">{taskCountFor(m.id)}</p>
-                  <p className="text-[10px] text-muted-foreground">tarefas</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(m)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer bg-transparent border-none">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  {m.role !== "admin" && (
-                    <button onClick={() => setRemoveMember(m)}
-                      title="Remove da equipe. Se a pessoa tiver histórico, ela é desativada em vez de apagada."
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+  const etiquetaDoPapel = (r: string) => {
+    const badge = roleBadge[r] || roleBadge.admin;
+    return <span className={juntar(etiqueta, badge.cls)}>{badge.label}</span>;
+  };
+
+  return (
+    <div className="min-w-0 space-y-5">
+      <CabecalhoDePagina
+        titulo="Equipe"
+        descricao={members ? `${lista.length} ${lista.length === 1 ? "membro" : "membros"}` : undefined}
+        ajuda="Quem trabalha no painel, o papel de cada um e os clientes que cada pessoa acessa. Admin vê todos os clientes."
+        acoes={
+          <button
+            type="button"
+            onClick={() => { closeModal(); setCreateOpen(true); }}
+            className={juntar(botao.primario, "px-2.5 sm:px-3.5")}
+            aria-label="Adicionar membro"
+          >
+            <UserPlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Adicionar membro</span>
+          </button>
+        }
+      />
+
+      <div className="flex min-w-0 flex-wrap items-center">
+        <div className="relative mb-2 mr-2 min-w-0 flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou e-mail"
+            aria-label="Buscar membro"
+            className={juntar(campo, "pl-8")}
+          />
         </div>
-      )}
+        <div className="mb-2 shrink-0">
+          <SeletorCompacto rotulo="Papel" icone={<Filter className="h-3.5 w-3.5" />} opcoes={opcoesDePapel} valor={papel} onEscolher={setPapel} />
+        </div>
       </div>
 
-      {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative bg-card border border-border rounded-xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">{editMember ? "Editar Membro" : "Novo Membro"}</h2>
-              <button onClick={closeModal} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-5 sm:px-6 py-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo</label>
-                <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Email</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} type="email" disabled={!!editMember}
-                  className={`w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm focus:outline-none focus:border-primary/50 transition-colors ${editMember ? "text-muted-foreground cursor-not-allowed" : "text-foreground"}`} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Função</label>
-                <select value={role} onChange={e => setRole(e.target.value)} className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+      {isLoading && !members ? (
+        <Carregando linhas={5} rotulo="Carregando equipe" />
+      ) : isError && !members ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar a equipe."
+          acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+        />
+      ) : lista.length === 0 ? (
+        <EstadoVazio
+          icone={<UserPlus className="h-5 w-5" />}
+          titulo="Nenhum membro ainda"
+          descricao="Adicione a primeira pessoa da equipe."
+          acao={<button type="button" className={botao.primario} onClick={() => { closeModal(); setCreateOpen(true); }}>Adicionar membro</button>}
+        />
+      ) : visiveis.length === 0 ? (
+        <EstadoVazio
+          compacto
+          titulo="Ninguém com esse filtro."
+          acao={<button type="button" className={botao.discreto} onClick={() => { setBusca(""); setPapel("todos"); }}>Limpar filtros</button>}
+        />
+      ) : (
+        <RegiaoRolavel rotulo="Membros da equipe" memoria="equipe:lista" className="lg:max-h-[70vh]">
+          {/* Computador: tabela */}
+          <table className="hidden w-full min-w-0 table-fixed md:table">
+            <thead>
+              <tr className="border-b border-border">
+                <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Membro</th>
+                <th scope="col" className={juntar(texto.rotulo, "w-28 py-2 pr-3 text-left")}>Papel</th>
+                <th scope="col" className={juntar(texto.rotulo, "w-24 py-2 pr-3 text-right")}>Clientes</th>
+                <th scope="col" className={juntar(texto.rotulo, "w-24 py-2 pr-3 text-right")}>Tarefas</th>
+                <th scope="col" className="w-12 py-2"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {visiveis.map((m: any) => (
+                <tr key={m.id} className="hover:bg-muted/40">
+                  <td className="py-2.5 pr-3">
+                    <div className="flex min-w-0 items-center">
+                      <Avatar className="mr-3 h-8 w-8 shrink-0">
+                        <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais(m.full_name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <button type="button" onClick={() => openEdit(m)} className={juntar(texto.corpo, "block max-w-full truncate rounded text-left font-medium hover:underline", foco)}>
+                          {m.full_name}
+                        </button>
+                        <p className={juntar(texto.auxiliar, "truncate")}>{m.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3">{etiquetaDoPapel(m.role)}</td>
+                  <td className={juntar(texto.corpo, "py-2.5 pr-3 text-right tabular-nums")}>{m.role === "admin" ? <span className="text-muted-foreground">Todos</span> : clientesDe(m)}</td>
+                  <td className={juntar(texto.corpo, "py-2.5 pr-3 text-right tabular-nums")}>{taskCountFor(m.id)}</td>
+                  <td className="py-2.5 text-right">{menuDaLinha(m)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Celular: lista */}
+          <ul className="divide-y divide-border md:hidden">
+            {visiveis.map((m: any) => (
+              <li key={m.id} className="flex min-w-0 items-center py-2.5">
+                <Avatar className="mr-3 h-8 w-8 shrink-0">
+                  <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais(m.full_name)}</AvatarFallback>
+                </Avatar>
+                <button type="button" onClick={() => openEdit(m)} className={juntar("mr-2 min-w-0 flex-1 rounded text-left", foco)}>
+                  <span className={juntar(texto.corpo, "block truncate font-medium")}>{m.full_name}</span>
+                  <span className={juntar(texto.auxiliar, "block truncate")}>
+                    {m.role === "admin" ? "Todos os clientes" : `${clientesDe(m)} ${clientesDe(m) === 1 ? "cliente" : "clientes"}`} · {taskCountFor(m.id)} tarefas
+                  </span>
+                </button>
+                <span className="mr-1 shrink-0">{etiquetaDoPapel(m.role)}</span>
+                {menuDaLinha(m)}
+              </li>
+            ))}
+          </ul>
+        </RegiaoRolavel>
+      )}
+
+      {/* Adicionar / editar */}
+      <Dialog open={isModalOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className={texto.tituloSecao}>{editMember ? "Editar membro" : "Novo membro"}</DialogTitle>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Nome completo" obrigatorio>
+                <input value={name} onChange={e => setName(e.target.value)} className={campo} autoComplete="off" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="E-mail" apoio={editMember ? "O e-mail não muda depois de criado." : undefined} obrigatorio={!editMember}>
+                <input value={email} onChange={e => setEmail(e.target.value)} type="email" disabled={!!editMember} className={campo} autoComplete="off" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Função">
+                <select value={role} onChange={e => setRole(e.target.value)} className={campo}>
                   <option value="admin">Admin</option>
                   <option value="design">Design</option>
                   <option value="traffic">Tráfego</option>
                   <option value="manager">Manager</option>
                 </select>
-              </div>
+              </CampoDeFormulario>
+              <CampoDeFormulario
+                rotulo={editMember ? "Nova senha" : "Senha Inicial *"}
+                apoio={editMember ? "Vazio mantém a senha atual." : "12+ caracteres, maiúscula, minúscula, número e símbolo."}
+              >
+                <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete="new-password"
+                  placeholder={editMember ? "Deixe vazio para manter atual" : "Mínimo 12 caracteres, com maiúscula, número e símbolo"}
+                  className={campo} />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
 
-              {showClientPicker && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Clientes atribuídos
-                    </label>
-                    <span className="text-[10px] text-muted-foreground">
-                      {assignedClientIds.length} selecionado{assignedClientIds.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Este membro poderá acessar apenas os clientes marcados. Sem seleção, ele só verá clientes de tarefas atribuídas a ele.
-                  </p>
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      placeholder="Buscar cliente..."
-                      className="w-full bg-secondary border border-border rounded-[10px] pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
-                    />
-                  </div>
-                  <div className="max-h-56 overflow-y-auto border border-border rounded-[10px] divide-y divide-border/60 bg-background/40">
-                    {filteredClients.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                        Nenhum cliente encontrado
-                      </div>
-                    ) : (
-                      filteredClients.map((c: any) => {
+            {showClientPicker && (
+              <div className="min-w-0">
+                <div className="mb-1.5 flex min-w-0 items-center">
+                  <span className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>Clientes atribuídos</span>
+                  <AjudaRecolhida className="ml-1 mr-2">Este membro acessa só os clientes marcados. Sem seleção, ele vê apenas clientes de tarefas atribuídas a ele.</AjudaRecolhida>
+                  <span className={juntar(texto.auxiliar, "shrink-0 tabular-nums")}>
+                    {assignedClientIds.length} selecionado{assignedClientIds.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <input
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    placeholder="Buscar cliente..."
+                    aria-label="Buscar cliente"
+                    className={juntar(campo, "pl-8")}
+                  />
+                </div>
+                <div className={juntar(superficie.poco, "mt-2 max-h-56 overflow-y-auto overscroll-contain")}>
+                  {filteredClients.length === 0 ? (
+                    <p className={juntar(texto.auxiliar, "px-3 py-4 text-center")}>Nenhum cliente encontrado</p>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {filteredClients.map((c: any) => {
                         const checked = assignedClientIds.includes(c.id);
                         return (
-                          <button
-                            type="button"
-                            key={c.id}
-                            onClick={() => toggleClient(c.id)}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-secondary/60 transition-colors cursor-pointer bg-transparent border-none"
-                          >
-                            <div className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-primary border-primary" : "border-border bg-transparent"}`}>
-                              {checked && <Check className="w-3 h-3 text-primary-foreground" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] text-foreground truncate">{c.full_name || "(sem nome)"}</p>
-                              {c.company_name && (
-                                <p className="text-[11px] text-muted-foreground truncate">{c.company_name}</p>
-                              )}
-                            </div>
-                          </button>
+                          <li key={c.id}>
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={checked}
+                              onClick={() => toggleClient(c.id)}
+                              className={juntar("flex w-full min-w-0 items-center px-3 py-2 text-left transition-colors hover:bg-muted", foco)}
+                            >
+                              <span className={`mr-3 flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${checked ? "border-primary bg-primary" : "border-border bg-transparent"}`} aria-hidden="true">
+                                {checked && <Check className="h-3 w-3 text-primary-foreground" />}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className={juntar(texto.corpo, "block truncate")}>{c.full_name || "(sem nome)"}</span>
+                                {c.company_name && <span className={juntar(texto.auxiliar, "block truncate")}>{c.company_name}</span>}
+                              </span>
+                            </button>
+                          </li>
                         );
-                      })
-                    )}
-                  </div>
+                      })}
+                    </ul>
+                  )}
                 </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {editMember ? "Nova Senha" : "Senha Inicial *"}
-                </label>
-                <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-                  placeholder={editMember ? "Deixe vazio para manter atual" : "Mínimo 12 caracteres, com maiúscula, número e símbolo"}
-                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
               </div>
-            </div>
-            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-              <button onClick={closeModal} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>
-              <button onClick={editMember ? handleEdit : handleCreate} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center gap-2">
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {saving ? "Salvando..." : editMember ? "Salvar" : "Criar"}
-              </button>
-            </div>
+            )}
           </div>
-        </div>
-      )}
+          <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+            <button type="button" onClick={closeModal} className={botao.secundario}>Cancelar</button>
+            <button type="button" onClick={editMember ? handleEdit : handleCreate} disabled={saving} className={botao.primario}>
+              {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {saving ? "Salvando..." : editMember ? "Salvar" : "Criar"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {/* Remove Confirmation Modal */}
-      {removeMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !removing && setRemoveMember(null)} />
-          <div className="relative bg-card border border-border rounded-xl w-full max-w-[400px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-            <div className="px-5 sm:px-6 pt-6 pb-4 text-center space-y-3">
-              <div className="mx-auto w-12 h-12 rounded-full bg-destructive/15 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-destructive" />
-              </div>
-              <h2 className="text-[15px] font-semibold text-foreground">Remover membro</h2>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
-                Tem certeza que deseja remover <span className="font-medium text-foreground">{removeMember.full_name}</span> da equipe?
-                Essa ação é <span className="text-destructive font-medium">permanente</span> e excluirá o usuário e todos os dados associados.
-              </p>
-            </div>
-            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-              <button
-                onClick={() => setRemoveMember(null)}
-                disabled={removing}
-                className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleRemove}
-                disabled={removing}
-                className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-destructive text-destructive-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {removing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {removing ? "Removendo..." : "Sim, remover"}
-              </button>
-            </div>
+      {/* Remover */}
+      <Dialog open={!!removeMember} onOpenChange={(o) => { if (!o && !removing) setRemoveMember(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}>
+              <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" /> Remover membro
+            </DialogTitle>
+            <DialogDescription className="text-[13px] leading-5">
+              <span className="font-medium text-foreground">{removeMember?.full_name}</span> sai da equipe e perde o acesso.
+              Sem histórico, a conta é <span className="font-medium text-destructive">excluída de vez</span>. Com histórico editorial, ela é desativada e o registro do que fez continua.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+            <button type="button" onClick={() => setRemoveMember(null)} disabled={removing} className={botao.secundario}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={removing}
+              className={juntar(botao.primario, "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+            >
+              {removing && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {removing ? "Removendo..." : "Sim, remover"}
+            </button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

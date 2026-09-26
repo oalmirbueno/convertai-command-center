@@ -2,9 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Pencil, Archive, RotateCcw, Calculator, BookOpen, Users, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Archive, RotateCcw, BookOpen, Users, AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useClients } from "@/hooks/useSupabaseData";
 import {
   useFinancePlans,
@@ -15,6 +14,11 @@ import {
 } from "@/hooks/useFinanceV2";
 import { DIRECTOR_PLAN_CATALOG, ONE_OFF_CATALOG, DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { isInternalClient } from "@/lib/clientFlags";
+import {
+  CampoDeFormulario, Carregando, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao,
+  botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
+} from "@/components/sistema";
+import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, TituloRecolhivel, botaoDeLinha, corDoTom } from "@/components/finance/pecasDoFinanceiro";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pctLabel = (v: number | null | undefined) =>
@@ -53,6 +57,11 @@ const receivedAmountOf = (row: any): number => {
   return 0;
 };
 
+const ehBooleano = (v: unknown) => typeof v === "boolean";
+const SIMULADOR_INICIAL = { amount: "1297", taxPct: "6", directCost: "275" };
+const ehSimulador = (v: unknown) =>
+  !!v && typeof v === "object" && ["amount", "taxPct", "directCost"].every((k) => typeof (v as any)[k] === "string");
+
 interface Props {
   billing?: any[];
   projectPayments?: any[];
@@ -70,10 +79,11 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
   const [planForm, setPlanForm] = useState({ name: "", description: "" });
   const [seedModal, setSeedModal] = useState(false);
   const [seeding, setSeeding] = useState(false);
-  const [simulator, setSimulator] = useState({ amount: "1297", taxPct: "6", directCost: "275" });
-  const [marginOpen, setMarginOpen] = useState(true);
-  const [oneOffOpen, setOneOffOpen] = useState(true);
-  const [pricerOpen, setPricerOpen] = useState(true);
+  // O simulador e os blocos abertos/recolhidos ficam lembrados ao sair e voltar.
+  const [simulator, setSimulator] = useEstadoDaTela("financeiro:planos:simulador", SIMULADOR_INICIAL, { validar: ehSimulador, esperaMs: 300 });
+  const [marginOpen, setMarginOpen] = useEstadoDaTela("financeiro:planos:margem:aberta", true, { validar: ehBooleano });
+  const [oneOffOpen, setOneOffOpen] = useEstadoDaTela("financeiro:planos:avulsos:aberta", true, { validar: ehBooleano });
+  const [pricerOpen, setPricerOpen] = useEstadoDaTela("financeiro:planos:precificador:aberto", true, { validar: ehBooleano });
 
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -315,337 +325,376 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
   const simDirect = parseFloat(simulator.directCost) || 0;
   const sim = breakdown(simAmount, simTax, simDirect);
 
+  const totalMargem = marginRows.reduce((s, r) => s + r.margin, 0);
+  const tomDaMargem = (r: { margin: number; marginPct: number }) =>
+    r.margin < 0 ? corDoTom.perigo : r.marginPct < 0.2 ? corDoTom.aviso : corDoTom.sucesso;
+
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-6">
       {/* Resumo do catálogo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Planos ativos", value: String(activePlans.length), color: "text-foreground" },
-          { label: "Clientes em planos", value: String([...clientsByPlanName.values()].reduce((s, v) => s + v.count, 0)), color: "text-primary" },
-          { label: "MRR dos planos", value: fmt([...clientsByPlanName.values()].reduce((s, v) => s + v.mrr, 0)), color: "text-success" },
-          { label: "Rateio fixo / cliente", value: fmt(fixedPerClient), color: "text-info" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-            <p className={`text-lg font-mono font-semibold mt-1 ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+      <GradeDeKpis>
+        <Kpi rotulo="Planos ativos" valor={String(activePlans.length)} />
+        <Kpi rotulo="Clientes em planos" valor={String([...clientsByPlanName.values()].reduce((s, v) => s + v.count, 0))} tom="primario" />
+        <Kpi rotulo="MRR dos planos" valor={fmt([...clientsByPlanName.values()].reduce((s, v) => s + v.mrr, 0))} tom="sucesso" />
+        <Kpi rotulo="Rateio fixo / cliente" valor={fmt(fixedPerClient)} tom="info" />
+      </GradeDeKpis>
 
       {/* Margem em tempo real por cliente */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <button
-          onClick={() => setMarginOpen((v) => !v)}
-          className="w-full px-4 sm:px-5 py-3 flex items-center gap-2 bg-transparent border-none cursor-pointer text-left"
-        >
-          <Users className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
-            Margem em tempo real por cliente ({marginRows.length})
-          </span>
-          <span className="text-[10px] text-muted-foreground hidden sm:inline">
-            Estrutura {fmt(allocBase)} ÷ {contributorsCount} = {fmt(fixedPerClient)}/cliente
-          </span>
-          <span className="text-[10px] text-muted-foreground">{marginOpen ? "▾" : "▸"}</span>
-        </button>
-        {marginOpen && (
+      <Secao
+        divisoria
+        titulo={
+          <TituloRecolhivel aberto={marginOpen} onAlternar={() => setMarginOpen((v) => !v)} controla="financeiro-margem">
+            Margem por cliente ({marginRows.length})
+          </TituloRecolhivel>
+        }
+        descricao={`Estrutura ${fmt(allocBase)} ÷ ${contributorsCount} = ${fmt(fixedPerClient)}/cliente`}
+        ajuda={
           <>
-            <div className="border-t border-border overflow-x-auto">
-              <div className="max-h-[420px] overflow-y-auto">
-                <table className="w-full text-[12px] min-w-[640px]">
-                  <thead className="sticky top-0 bg-card z-10">
-                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
-                      <th className="text-left px-4 sm:px-5 py-2 font-medium">Cliente</th>
-                      <th className="text-left px-3 py-2 font-medium">Plano</th>
-                      <th className="text-right px-3 py-2 font-medium">Receita/mês</th>
-                      <th className="text-right px-3 py-2 font-medium">Reserva trib.</th>
-                      <th className="text-right px-3 py-2 font-medium">Custo direto</th>
-                      <th className="text-right px-3 py-2 font-medium">Rateio fixo</th>
-                      <th className="text-right px-4 sm:px-5 py-2 font-medium">Margem</th>
+            Rateio automático e sincronizado: a estrutura ({fmt(allocBase)}) é dividida igualmente entre os {contributorsCount} clientes
+            que geram receita agora. Se um cliente sai ou entra, a margem de todos recalcula na hora. Recorrentes entram pelo valor do
+            plano; avulsos pelo que foi recebido no mês corrente. Margem abaixo de 20% aparece em amarelo (piso do Plano Diretor).
+          </>
+        }
+      >
+        {marginOpen && (
+          <div id="financeiro-margem">
+            {marginRows.length === 0 ? (
+              <EstadoVazio compacto titulo="Nenhum cliente com receita ainda." />
+            ) : (
+              <RegiaoRolavel memoria="financeiro:planos:margem" rotulo="Margem por cliente" className="lg:max-h-[420px]">
+                {/* Computador: tabela. Celular e tablet: lista. */}
+                <table className="hidden w-full text-[13px] lg:table">
+                  <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+                    <tr className="border-b border-border">
+                      <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Cliente</th>
+                      <th className={juntar(texto.rotulo, "px-3 py-2 text-left")}>Plano</th>
+                      <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Receita/mês</th>
+                      <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Reserva trib.</th>
+                      <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Custo direto</th>
+                      <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Rateio fixo</th>
+                      <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Margem</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {marginRows.length === 0 && (
-                      <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">Nenhum cliente com receita ainda.</td></tr>
-                    )}
                     {marginRows.map((r) => (
                       <tr key={r.id}>
-                        <td className="px-4 sm:px-5 py-2 text-foreground whitespace-nowrap">
-                          {r.name}
-                          <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full align-middle ${r.type === "recorrente" ? "bg-primary/10 text-primary" : "bg-info/10 text-info"}`}>
-                            {r.type === "recorrente" ? "Recorrente" : "Avulso"}
+                        <td className="max-w-[240px] py-2 pr-3 text-foreground">
+                          <span className="flex min-w-0 items-center">
+                            <span className="min-w-0 truncate">{r.name}</span>
+                            <Etiqueta tom={r.type === "recorrente" ? "primario" : "info"} className="ml-1.5">
+                              {r.type === "recorrente" ? "Recorrente" : "Avulso"}
+                            </Etiqueta>
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.plan}</td>
-                        <td className="px-3 py-2 text-right font-mono text-foreground whitespace-nowrap">{fmt(r.revenue)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.taxReserve)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.directCost)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.rateio)}</td>
-                        <td className={`px-4 sm:px-5 py-2 text-right font-mono font-medium whitespace-nowrap ${r.margin < 0 ? "text-destructive" : r.marginPct < 0.2 ? "text-warning" : "text-success"}`}>
+                        <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{r.plan}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-foreground">{fmt(r.revenue)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.taxReserve)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.directCost)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(r.rateio)}</td>
+                        <td className={juntar("whitespace-nowrap py-2 pl-3 text-right font-medium tabular-nums", tomDaMargem(r))}>
                           {fmt(r.margin)} ({Math.round(r.marginPct * 100)}%)
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                  {marginRows.length > 0 && (
-                    <tfoot className="sticky bottom-0 bg-card">
-                      <tr className="border-t border-border">
-                        <td colSpan={2} className="px-4 sm:px-5 py-2 text-[11px] font-medium text-foreground">Total ({marginRows.length} clientes)</td>
-                        <td className="px-3 py-2 text-right font-mono font-medium text-foreground whitespace-nowrap">{fmt(marginRows.reduce((s, r) => s + r.revenue, 0))}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(marginRows.reduce((s, r) => s + r.taxReserve, 0))}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(marginRows.reduce((s, r) => s + r.directCost, 0))}</td>
-                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(allocBase)}</td>
-                        <td className={`px-4 sm:px-5 py-2 text-right font-mono font-semibold whitespace-nowrap ${marginRows.reduce((s, r) => s + r.margin, 0) >= 0 ? "text-success" : "text-destructive"}`}>
-                          {fmt(marginRows.reduce((s, r) => s + r.margin, 0))}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
+                  <tfoot className="bg-background lg:sticky lg:bottom-0">
+                    <tr className="border-t border-border">
+                      <td colSpan={2} className="py-2 pr-3 text-[12px] font-medium text-foreground">Total ({marginRows.length} clientes)</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums text-foreground">{fmt(marginRows.reduce((s, r) => s + r.revenue, 0))}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(marginRows.reduce((s, r) => s + r.taxReserve, 0))}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(marginRows.reduce((s, r) => s + r.directCost, 0))}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">− {fmt(allocBase)}</td>
+                      <td className={juntar("whitespace-nowrap py-2 pl-3 text-right font-semibold tabular-nums", totalMargem >= 0 ? corDoTom.sucesso : corDoTom.perigo)}>
+                        {fmt(totalMargem)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground px-4 sm:px-5 py-2.5 border-t border-border">
-              Rateio automático e sincronizado: a estrutura ({fmt(allocBase)}) é dividida igualmente entre os {contributorsCount} clientes que geram receita agora · se um cliente sai ou entra, a margem de todos recalcula na hora. Recorrentes entram pelo valor do plano; avulsos pelo que foi recebido no mês corrente. Margem abaixo de 20% aparece em amarelo (piso do Plano Diretor).
-            </p>
-          </>
+
+                <ul className="divide-y divide-border lg:hidden">
+                  {marginRows.map((r) => (
+                    <li key={r.id} className="min-w-0 py-2.5">
+                      <div className="flex min-w-0 items-center">
+                        <span className="mr-2 min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{r.name}</span>
+                        <span className={juntar("shrink-0 text-[13px] font-medium tabular-nums", tomDaMargem(r))}>
+                          {fmt(r.margin)} ({Math.round(r.marginPct * 100)}%)
+                        </span>
+                      </div>
+                      <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                        {r.type === "recorrente" ? r.plan : "Avulso"} · {fmt(r.revenue)} − trib. {fmt(r.taxReserve)} − direto {fmt(r.directCost)} − rateio {fmt(r.rateio)}
+                      </p>
+                    </li>
+                  ))}
+                  <li className="flex min-w-0 items-center py-2.5">
+                    <span className="mr-2 min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">Total ({marginRows.length} clientes)</span>
+                    <span className={juntar("shrink-0 text-[13px] font-semibold tabular-nums", totalMargem >= 0 ? corDoTom.sucesso : corDoTom.perigo)}>{fmt(totalMargem)}</span>
+                  </li>
+                </ul>
+              </RegiaoRolavel>
+            )}
+          </div>
         )}
-      </div>
+      </Secao>
 
-      {/* Ações */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-sm text-muted-foreground">Planos recorrentes · preço-base antes do gross-up tributário</span>
-        <div className="flex gap-2">
-          {missingSeeds.length > 0 && (
+      {/* Planos recorrentes */}
+      <Secao
+        divisoria
+        titulo="Planos recorrentes"
+        descricao={`${activePlans.length} ${activePlans.length === 1 ? "ativo" : "ativos"}`}
+        ajuda="Preço-base antes do gross-up tributário. Um preço novo vira uma versão nova: mensalidades já pagas e competências passadas não mudam."
+        acao={
+          <>
+            {missingSeeds.length > 0 && (
+              <button type="button" onClick={() => setSeedModal(true)} className={botao.secundario} aria-label={`Importar Plano Diretor (${missingSeeds.length})`}>
+                <BookOpen className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Importar Plano Diretor ({missingSeeds.length})</span>
+              </button>
+            )}
             <button
-              onClick={() => setSeedModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors cursor-pointer border-none"
+              type="button"
+              onClick={() => { setPlanForm({ name: "", description: "" }); setPlanModal({ plan: null }); }}
+              className={botao.primario}
+              aria-label="Novo plano"
             >
-              <BookOpen className="w-3 h-3" /> Importar Plano Diretor ({missingSeeds.length})
+              <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Novo plano</span>
             </button>
-          )}
-          <button
-            onClick={() => { setPlanForm({ name: "", description: "" }); setPlanModal({ plan: null }); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
-          >
-            <Plus className="w-3 h-3" /> Novo plano
-          </button>
-        </div>
-      </div>
-
-      {isLoading && <p className="text-sm text-muted-foreground text-center py-6">Carregando catálogo…</p>}
-      {!isLoading && activePlans.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-6">
-          Nenhum plano no catálogo ainda. Importe a tabela do Plano Diretor ou crie o primeiro plano.
-        </p>
-      )}
-
-      {/* Grid de planos */}
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {activePlans.map((plan) => {
-          const v = plan.currentVersion || plan.versions[0] || null;
-          const linked = clientsByPlanName.get(normName(plan.name)) || { count: 0, mrr: 0 };
-          const bd = v ? breakdown(v.amount, v.taxRate, v.directCost) : null;
-          const needsReview = v?.amountKind === "needs_review" || v?.taxRate === null;
-          return (
-            <div key={plan.id} className="bg-card border border-border rounded-xl p-4 space-y-3 flex flex-col">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{plan.name}</p>
-                  {plan.description && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{plan.description}</p>}
-                </div>
-                {needsReview && (
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-warning/15 text-warning whitespace-nowrap flex items-center gap-1">
-                    <AlertTriangle className="w-2.5 h-2.5" /> Revisar alíquota
-                  </span>
-                )}
-              </div>
-
-              {v ? (
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-mono font-semibold text-foreground">{fmt(v.amount)}</span>
-                    <span className="text-[10px] text-muted-foreground">base/mês</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                    <span className="text-muted-foreground">Alíquota</span>
-                    <span className="font-mono text-right text-foreground">{pctLabel(v.taxRate)}</span>
-                    <span className="text-muted-foreground">Cobrança final</span>
-                    <span className="font-mono text-right text-info">{fmt(bd!.final)}</span>
-                    <span className="text-muted-foreground">Reserva tributária</span>
-                    <span className="font-mono text-right text-muted-foreground">{fmt(bd!.reserve)}</span>
-                    <span className="text-muted-foreground">Custo direto{v.directCostEstimated ? " (estimado)" : ""}</span>
-                    <span className="font-mono text-right text-warning">{fmt(v.directCost)}</span>
-                    <span className="text-muted-foreground">Rateio fixo/cliente</span>
-                    <span className="font-mono text-right text-warning">{fmt(fixedPerClient)}</span>
-                    <span className="text-muted-foreground">Margem estimada</span>
-                    <span className={`font-mono text-right ${bd!.margin >= 0 ? "text-success" : "text-destructive"}`}>
-                      {fmt(bd!.margin)} ({Math.round(bd!.marginPct * 100)}%)
-                    </span>
-                    {v.setupFee > 0 && (
-                      <>
-                        <span className="text-muted-foreground">Setup</span>
-                        <span className="font-mono text-right text-foreground">{fmt(v.setupFee)}</span>
-                      </>
+          </>
+        }
+      >
+        {isLoading && !plans ? (
+          <Carregando forma="lista" linhas={3} rotulo="Carregando catálogo" />
+        ) : activePlans.length === 0 ? (
+          <EstadoVazio compacto titulo="Nenhum plano no catálogo." descricao="Importe a tabela do Plano Diretor ou crie o primeiro plano." />
+        ) : (
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {activePlans.map((plan) => {
+              const v = plan.currentVersion || plan.versions[0] || null;
+              const linked = clientsByPlanName.get(normName(plan.name)) || { count: 0, mrr: 0 };
+              const bd = v ? breakdown(v.amount, v.taxRate, v.directCost) : null;
+              const needsReview = v?.amountKind === "needs_review" || v?.taxRate === null;
+              return (
+                <article key={plan.id} className={juntar(superficie.painel, "flex min-w-0 flex-col")}>
+                  <div className="flex min-w-0 items-start px-4 pt-4">
+                    <div className="mr-2 min-w-0 flex-1">
+                      <h3 className="truncate text-[14px] font-semibold text-foreground">{plan.name}</h3>
+                      {plan.description && <p className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2 leading-4")}>{plan.description}</p>}
+                    </div>
+                    {needsReview && (
+                      <Etiqueta tom="aviso">
+                        <AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" /> Revisar alíquota
+                      </Etiqueta>
                     )}
                   </div>
-                  {plan.upcomingVersion && (
-                    <p className="text-[10px] text-info">
-                      Programado: {fmt(plan.upcomingVersion.amount)} a partir de {new Date(`${plan.upcomingVersion.effectiveFrom}T12:00:00`).toLocaleDateString("pt-BR")}
+
+                  <div className="flex-1 px-4 pb-3 pt-3">
+                    {v ? (
+                      <>
+                        <p className="flex items-baseline">
+                          <span className="mr-2 text-[20px] font-semibold tabular-nums text-foreground">{fmt(v.amount)}</span>
+                          <span className={texto.auxiliar}>base/mês</span>
+                        </p>
+                        <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-[12px]">
+                          <dt className="text-muted-foreground">Alíquota</dt>
+                          <dd className="text-right tabular-nums text-foreground">{pctLabel(v.taxRate)}</dd>
+                          <dt className="text-muted-foreground">Cobrança final</dt>
+                          <dd className="text-right tabular-nums text-info">{fmt(bd!.final)}</dd>
+                          <dt className="text-muted-foreground">Reserva tributária</dt>
+                          <dd className="text-right tabular-nums text-muted-foreground">{fmt(bd!.reserve)}</dd>
+                          <dt className="truncate text-muted-foreground">Custo direto{v.directCostEstimated ? " (estimado)" : ""}</dt>
+                          <dd className="text-right tabular-nums text-warning">{fmt(v.directCost)}</dd>
+                          <dt className="text-muted-foreground">Rateio fixo/cliente</dt>
+                          <dd className="text-right tabular-nums text-warning">{fmt(fixedPerClient)}</dd>
+                          <dt className="text-muted-foreground">Margem estimada</dt>
+                          <dd className={juntar("text-right tabular-nums", bd!.margin >= 0 ? "text-success" : "text-destructive")}>
+                            {fmt(bd!.margin)} ({Math.round(bd!.marginPct * 100)}%)
+                          </dd>
+                          {v.setupFee > 0 && (
+                            <>
+                              <dt className="text-muted-foreground">Setup</dt>
+                              <dd className="text-right tabular-nums text-foreground">{fmt(v.setupFee)}</dd>
+                            </>
+                          )}
+                        </dl>
+                        {plan.upcomingVersion && (
+                          <p className="mt-2 truncate text-[12px] text-info">
+                            Programado: {fmt(plan.upcomingVersion.amount)} a partir de {new Date(`${plan.upcomingVersion.effectiveFrom}T12:00:00`).toLocaleDateString("pt-BR")}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className={texto.auxiliar}>Sem preço definido. Crie a primeira versão.</p>
+                    )}
+                    <p className={juntar(texto.auxiliar, "mt-3 flex items-center")}>
+                      <Users className="mr-1.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{linked.count > 0 ? `${linked.count} cliente(s) · ${fmt(linked.mrr)}/mês` : "Nenhum cliente vinculado"}</span>
                     </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-[11px] text-muted-foreground flex-1">Sem preço definido. Crie a primeira versão.</p>
-              )}
+                  </div>
 
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <Users className="w-3 h-3" />
-                {linked.count > 0 ? `${linked.count} cliente(s) · ${fmt(linked.mrr)}/mês` : "Nenhum cliente vinculado"}
-              </div>
-
-              <div className="flex gap-1.5 pt-1 border-t border-border">
-                <button
-                  onClick={() => openVersionModal(plan)}
-                  className="flex-1 text-[11px] px-2 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
-                >
-                  Novo preço
-                </button>
-                <button
-                  onClick={() => { setPlanForm({ name: plan.name, description: plan.description || "" }); setPlanModal({ plan }); }}
-                  className="text-[11px] px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => toggleArchive(plan)}
-                  title="Arquivar plano"
-                  className="text-[11px] px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors cursor-pointer border-none"
-                >
-                  <Archive className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {archivedPlans.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Arquivados ({archivedPlans.length})</p>
-          <div className="flex flex-wrap gap-2">
-            {archivedPlans.map((plan) => (
-              <button
-                key={plan.id}
-                onClick={() => toggleArchive(plan)}
-                className="text-[11px] px-3 py-1.5 rounded-full bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5"
-              >
-                <RotateCcw className="w-3 h-3" /> {plan.name}
-              </button>
-            ))}
+                  <div className="flex min-w-0 items-center border-t border-border px-3 py-2">
+                    <button type="button" onClick={() => openVersionModal(plan)} className={juntar(botaoDeLinha, "mr-auto")}>
+                      Novo preço
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPlanForm({ name: plan.name, description: plan.description || "" }); setPlanModal({ plan }); }}
+                      className={botao.icone}
+                      aria-label={`Editar ${plan.name}`}
+                      title="Editar plano"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleArchive(plan)}
+                      title="Arquivar plano"
+                      aria-label={`Arquivar ${plan.name}`}
+                      className={juntar(botao.icone, "hover:text-destructive")}
+                    >
+                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-        </div>
-      )}
+        )}
+
+        {archivedPlans.length > 0 && (
+          <div className="mt-4 min-w-0">
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Arquivados ({archivedPlans.length})</p>
+            <div className="-m-1 flex min-w-0 flex-wrap">
+              {archivedPlans.map((plan) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => toggleArchive(plan)}
+                  title="Reativar plano"
+                  className={juntar(botaoDeLinha, "m-1 max-w-full text-muted-foreground hover:text-foreground")}
+                >
+                  <RotateCcw className="mr-1.5 h-3 w-3 shrink-0" aria-hidden="true" /> <span className="truncate">{plan.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </Secao>
 
       {/* Avulsos · tabela oficial do Plano Diretor */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <button
-          onClick={() => setOneOffOpen((v) => !v)}
-          className="w-full px-5 py-3 flex items-center justify-between flex-wrap gap-2 bg-transparent border-none cursor-pointer text-left"
-        >
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Avulsos · tabela do Plano Diretor
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            Não entram no MRR · mudança de escopo vira nova etapa e novo preço <span className="ml-1">{oneOffOpen ? "▾" : "▸"}</span>
-          </span>
-        </button>
-        {oneOffOpen && (<>
-        <div className="overflow-x-auto max-h-[420px] overflow-y-auto border-t border-border">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
-                <th className="text-left px-4 sm:px-5 py-2 font-medium">Entrega</th>
-                <th className="text-right px-3 py-2 font-medium">Lançamento</th>
-                <th className="text-right px-3 py-2 font-medium">Padrão</th>
-                <th className="text-right px-3 py-2 font-medium hidden sm:table-cell">Cobrança final*</th>
-                <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Limite</th>
-                <th className="text-right px-4 sm:px-5 py-2 font-medium">Pagamento</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {ONE_OFF_CATALOG.map((o) => (
-                <tr key={o.name}>
-                  <td className="px-4 sm:px-5 py-2 text-foreground">{o.name}</td>
-                  <td className="px-3 py-2 text-right font-mono text-foreground whitespace-nowrap">
-                    {o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
-                    {o.fromPrice ? "a partir de " : ""}{fmt(o.standardPrice)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-info whitespace-nowrap hidden sm:table-cell">
-                    {fmt(calculateGrossedUpAmount(o.launchPrice, DEFAULT_TAX_RATE))}
-                  </td>
-                  <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap hidden md:table-cell">{o.limit}</td>
-                  <td className="px-4 sm:px-5 py-2 text-right text-muted-foreground whitespace-nowrap">{o.payment}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
-          *Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no cadastro do cliente · o valor entra no fluxo de caixa normalmente.
-        </p>
-        </>)}
-      </div>
+      <Secao
+        divisoria
+        titulo={
+          <TituloRecolhivel aberto={oneOffOpen} onAlternar={() => setOneOffOpen((v) => !v)} controla="financeiro-avulsos">
+            Avulsos do Plano Diretor
+          </TituloRecolhivel>
+        }
+        descricao="Não entram no MRR"
+        ajuda={
+          <>
+            Mudança de escopo vira nova etapa e novo preço. Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa
+            de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no
+            cadastro do cliente: o valor entra no fluxo de caixa normalmente.
+          </>
+        }
+      >
+        {oneOffOpen && (
+          <div id="financeiro-avulsos">
+            <RegiaoRolavel memoria="financeiro:planos:avulsos" rotulo="Avulsos do Plano Diretor" className="lg:max-h-[420px]">
+              <table className="hidden w-full text-[13px] lg:table">
+                <thead className="bg-background lg:sticky lg:top-0 lg:z-10">
+                  <tr className="border-b border-border">
+                    <th className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Entrega</th>
+                    <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Lançamento</th>
+                    <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Padrão</th>
+                    <th className={juntar(texto.rotulo, "px-3 py-2 text-right")}>Cobrança final</th>
+                    <th className={juntar(texto.rotulo, "hidden px-3 py-2 text-right xl:table-cell")}>Limite</th>
+                    <th className={juntar(texto.rotulo, "py-2 pl-3 text-right")}>Pagamento</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {ONE_OFF_CATALOG.map((o) => (
+                    <tr key={o.name}>
+                      <td className="py-2 pr-3 text-foreground">{o.name}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-foreground">
+                        {o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">
+                        {o.fromPrice ? "a partir de " : ""}{fmt(o.standardPrice)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-info">
+                        {fmt(calculateGrossedUpAmount(o.launchPrice, DEFAULT_TAX_RATE))}
+                      </td>
+                      <td className="hidden whitespace-nowrap px-3 py-2 text-right text-muted-foreground xl:table-cell">{o.limit}</td>
+                      <td className="whitespace-nowrap py-2 pl-3 text-right text-muted-foreground">{o.payment}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <ul className="divide-y divide-border lg:hidden">
+                {ONE_OFF_CATALOG.map((o) => (
+                  <li key={o.name} className="min-w-0 py-2.5">
+                    <div className="flex min-w-0 items-center">
+                      <span className="mr-2 min-w-0 flex-1 text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{o.name}</span>
+                      <span className="shrink-0 text-[13px] tabular-nums text-foreground">{o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}</span>
+                    </div>
+                    <p className={juntar(texto.auxiliar, "mt-0.5 tabular-nums [overflow-wrap:anywhere]")}>
+                      Padrão {fmt(o.standardPrice)} · final {fmt(calculateGrossedUpAmount(o.launchPrice, DEFAULT_TAX_RATE))} · {o.limit} · {o.payment}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </RegiaoRolavel>
+          </div>
+        )}
+      </Secao>
 
       {/* Precificador */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <button
-          onClick={() => setPricerOpen((v) => !v)}
-          className="w-full flex items-center gap-2 bg-transparent border-none cursor-pointer text-left p-0"
-        >
-          <Calculator className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
-            Precificador · componha um valor antes de fechar
-          </span>
-          <span className="text-[10px] text-muted-foreground">{pricerOpen ? "▾" : "▸"}</span>
-        </button>
-        {pricerOpen && (<>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor operacional</label>
-            <Input type="number" step="0.01" value={simulator.amount} onChange={(e) => setSimulator((f) => ({ ...f, amount: e.target.value }))} className="mt-1" />
+      <Secao
+        divisoria
+        titulo={
+          <TituloRecolhivel aberto={pricerOpen} onAlternar={() => setPricerOpen((v) => !v)} controla="financeiro-precificador">
+            Precificador
+          </TituloRecolhivel>
+        }
+        ajuda={
+          <>
+            Componha um valor antes de fechar. Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial:
+            {" "}{fmt(allocBase)} de estrutura ÷ {contributorsCount} cliente(s) com receita. O rateio é análise: no resultado global o custo
+            fixo é descontado uma única vez.
+          </>
+        }
+      >
+        {pricerOpen && (
+          <div id="financeiro-precificador" className="min-w-0 space-y-4">
+            <GrupoDeCampos colunas={3}>
+              <CampoDeFormulario rotulo="Valor operacional (R$)">
+                <input type="number" step="0.01" inputMode="decimal" value={simulator.amount} onChange={(e) => setSimulator((f) => ({ ...f, amount: e.target.value }))} className={campo} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Alíquota (%)">
+                <input type="number" step="0.01" inputMode="decimal" value={simulator.taxPct} onChange={(e) => setSimulator((f) => ({ ...f, taxPct: e.target.value }))} className={campo} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Custo direto (R$)">
+                <input type="number" step="0.01" inputMode="decimal" value={simulator.directCost} onChange={(e) => setSimulator((f) => ({ ...f, directCost: e.target.value }))} className={campo} />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <GradeDeKpis>
+              <Kpi rotulo="Cobrança final" valor={fmt(sim.final)} tom="info" />
+              <Kpi rotulo="Reserva tributária" valor={fmt(sim.reserve)} tom="apagado" />
+              <Kpi rotulo="Rateio fixo/cliente" valor={fmt(fixedPerClient)} tom="aviso" />
+              <Kpi
+                rotulo="Margem estimada"
+                valor={`${fmt(sim.margin)} (${simAmount > 0 ? Math.round(sim.marginPct * 100) : 0}%)`}
+                tom={sim.margin >= 0 ? "sucesso" : "perigo"}
+              />
+            </GradeDeKpis>
           </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Alíquota (%)</label>
-            <Input type="number" step="0.01" value={simulator.taxPct} onChange={(e) => setSimulator((f) => ({ ...f, taxPct: e.target.value }))} className="mt-1" />
-          </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Custo direto</label>
-            <Input type="number" step="0.01" value={simulator.directCost} onChange={(e) => setSimulator((f) => ({ ...f, directCost: e.target.value }))} className="mt-1" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Cobrança final", value: fmt(sim.final), color: "text-info" },
-            { label: "Reserva tributária", value: fmt(sim.reserve), color: "text-muted-foreground" },
-            { label: "Rateio fixo/cliente", value: fmt(fixedPerClient), color: "text-warning" },
-            { label: "Margem estimada", value: `${fmt(sim.margin)} (${simAmount > 0 ? Math.round(sim.marginPct * 100) : 0}%)`, color: sim.margin >= 0 ? "text-success" : "text-destructive" },
-          ].map((s) => (
-            <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-              <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial: {fmt(allocBase)} de estrutura ÷ {contributorsCount} cliente(s) com receita. O rateio é análise · no resultado global o custo fixo é descontado uma única vez.
-        </p>
-        </>)}
-      </div>
+        )}
+      </Secao>
 
       {/* Modal nova versão de preço */}
       <Dialog open={!!versionModal} onOpenChange={() => setVersionModal(null)}>
-        <DialogContent className="bg-card border-border max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-border bg-card">
           <DialogHeader><DialogTitle className="text-foreground">Novo preço · {versionModal?.plan.name}</DialogTitle></DialogHeader>
           {versionModal && (() => {
             const amount = parseFloat(versionForm.amount) || 0;
@@ -655,55 +704,46 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
             const linked = clientsByPlanName.get(normName(versionModal.plan.name)) || { count: 0, mrr: 0 };
             const effective = minEffectiveFor(versionModal.plan);
             return (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Valor operacional (R$)</label>
-                    <Input type="number" step="0.01" value={versionForm.amount} onChange={(e) => setVersionForm((f) => ({ ...f, amount: e.target.value }))} className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Alíquota (%)</label>
-                    <Input type="number" step="0.01" value={versionForm.taxPct} onChange={(e) => setVersionForm((f) => ({ ...f, taxPct: e.target.value }))} className="mt-1" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Custo direto (R$)</label>
-                    <Input type="number" step="0.01" value={versionForm.directCost} onChange={(e) => setVersionForm((f) => ({ ...f, directCost: e.target.value }))} className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Taxa de setup (R$)</label>
-                    <Input type="number" step="0.01" value={versionForm.setupFee} onChange={(e) => setVersionForm((f) => ({ ...f, setupFee: e.target.value }))} className="mt-1" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Observação (opcional)</label>
-                  <Input value={versionForm.description} onChange={(e) => setVersionForm((f) => ({ ...f, description: e.target.value }))} className="mt-1" placeholder="Ex: reajuste do degrau 60-90 dias" />
-                </div>
+              <div className="space-y-4">
+                <GrupoDeCampos>
+                  <CampoDeFormulario rotulo="Valor operacional (R$)">
+                    <input type="number" step="0.01" inputMode="decimal" value={versionForm.amount} onChange={(e) => setVersionForm((f) => ({ ...f, amount: e.target.value }))} className={campo} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Alíquota (%)">
+                    <input type="number" step="0.01" inputMode="decimal" value={versionForm.taxPct} onChange={(e) => setVersionForm((f) => ({ ...f, taxPct: e.target.value }))} className={campo} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Custo direto (R$)">
+                    <input type="number" step="0.01" inputMode="decimal" value={versionForm.directCost} onChange={(e) => setVersionForm((f) => ({ ...f, directCost: e.target.value }))} className={campo} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Taxa de setup (R$)">
+                    <input type="number" step="0.01" inputMode="decimal" value={versionForm.setupFee} onChange={(e) => setVersionForm((f) => ({ ...f, setupFee: e.target.value }))} className={campo} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Observação (opcional)" largo>
+                    <input value={versionForm.description} onChange={(e) => setVersionForm((f) => ({ ...f, description: e.target.value }))} className={campo} placeholder="Ex.: reajuste do degrau 60-90 dias" />
+                  </CampoDeFormulario>
+                </GrupoDeCampos>
 
-                <div className="bg-secondary/50 rounded-lg p-3 space-y-1">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Prévia da precificação</p>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px]">
-                    <span className="text-muted-foreground">Cobrança final</span>
-                    <span className="font-mono text-right text-info">{fmt(bd.final)}</span>
-                    <span className="text-muted-foreground">Reserva tributária</span>
-                    <span className="font-mono text-right text-muted-foreground">{fmt(bd.reserve)}</span>
-                    <span className="text-muted-foreground">Margem estimada</span>
-                    <span className={`font-mono text-right ${bd.margin >= 0 ? "text-success" : "text-destructive"}`}>{fmt(bd.margin)}</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground pt-1">
-                    Vigência: {new Date(`${effective}T12:00:00`).toLocaleDateString("pt-BR")} em diante · {linked.count} cliente(s) hoje neste plano.
-                    Mensalidades já pagas e competências passadas não mudam.
+                <div className={juntar(superficie.poco, "px-3 py-2.5")}>
+                  <p className={juntar(texto.rotulo, "mb-1")}>Prévia</p>
+                  <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 text-[13px]">
+                    <dt className="text-muted-foreground">Cobrança final</dt>
+                    <dd className="text-right tabular-nums text-info">{fmt(bd.final)}</dd>
+                    <dt className="text-muted-foreground">Reserva tributária</dt>
+                    <dd className="text-right tabular-nums text-muted-foreground">{fmt(bd.reserve)}</dd>
+                    <dt className="text-muted-foreground">Margem estimada</dt>
+                    <dd className={juntar("text-right tabular-nums", bd.margin >= 0 ? "text-success" : "text-destructive")}>{fmt(bd.margin)}</dd>
+                  </dl>
+                  <p className={juntar(texto.auxiliar, "mt-1.5 leading-4")}>
+                    Vale de {new Date(`${effective}T12:00:00`).toLocaleDateString("pt-BR")} em diante · {linked.count} cliente(s) hoje neste plano. O que já foi pago não muda.
                   </p>
                 </div>
 
-                <button
-                  onClick={saveVersion}
-                  disabled={createPlanVersion.isPending}
-                  className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-                >
-                  Criar nova versão de preço
-                </button>
+                <AcoesDoDialogo>
+                  <button type="button" onClick={() => setVersionModal(null)} className={botao.discreto}>Cancelar</button>
+                  <button type="button" onClick={saveVersion} disabled={createPlanVersion.isPending} className={botao.primario}>
+                    Criar nova versão de preço
+                  </button>
+                </AcoesDoDialogo>
               </div>
             );
           })()}
@@ -712,57 +752,57 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
 
       {/* Modal criar/editar plano */}
       <Dialog open={!!planModal} onOpenChange={() => setPlanModal(null)}>
-        <DialogContent className="bg-card border-border max-w-md">
+        <DialogContent className="max-w-md border-border bg-card">
           <DialogHeader><DialogTitle className="text-foreground">{planModal?.plan ? "Editar plano" : "Novo plano"}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Nome</label>
-              <Input value={planForm.name} onChange={(e) => setPlanForm((f) => ({ ...f, name: e.target.value }))} className="mt-1" placeholder="Ex: Essencial" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Descrição curta</label>
-              <textarea
-                value={planForm.description}
-                onChange={(e) => setPlanForm((f) => ({ ...f, description: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none"
-                rows={2}
-              />
-            </div>
-            <button
-              onClick={savePlan}
-              disabled={upsertPlan.isPending}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-            >
-              {planModal?.plan ? "Salvar" : "Criar plano"}
-            </button>
+          <div className="space-y-4">
+            <GrupoDeCampos colunas={1}>
+              <CampoDeFormulario rotulo="Nome" obrigatorio>
+                <input value={planForm.name} onChange={(e) => setPlanForm((f) => ({ ...f, name: e.target.value }))} className={campo} placeholder="Ex.: Essencial" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Descrição curta">
+                <textarea
+                  value={planForm.description}
+                  onChange={(e) => setPlanForm((f) => ({ ...f, description: e.target.value }))}
+                  className={juntar(campoTexto, "resize-none")}
+                  rows={2}
+                />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <AcoesDoDialogo>
+              <button type="button" onClick={() => setPlanModal(null)} className={botao.discreto}>Cancelar</button>
+              <button type="button" onClick={savePlan} disabled={upsertPlan.isPending} className={botao.primario}>
+                {planModal?.plan ? "Salvar" : "Criar plano"}
+              </button>
+            </AcoesDoDialogo>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Modal seed Plano Diretor */}
       <Dialog open={seedModal} onOpenChange={setSeedModal}>
-        <DialogContent className="bg-card border-border max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-border bg-card">
           <DialogHeader><DialogTitle className="text-foreground">Importar planos do Plano Diretor</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <p className="text-[12px] text-muted-foreground">
-              Serão criados os planos abaixo com o preço de lançamento, alíquota ilustrativa de 6% e custo direto estimado de {fmt(defaultDirectCost)}. Planos já existentes não são duplicados nem alterados.
+          <div className="space-y-4">
+            <p className="text-[13px] leading-5 text-muted-foreground">
+              Entram com o preço de lançamento, alíquota ilustrativa de 6% e custo direto estimado de {fmt(defaultDirectCost)}. Planos que já existem não mudam.
             </p>
-            <div className="space-y-1 max-h-52 overflow-y-auto">
-              {missingSeeds.map((s) => (
-                <div key={s.code} className="flex items-center gap-3 text-[12px] px-3 py-2 rounded-lg bg-secondary/30">
-                  <span className="flex-1 text-foreground">{s.name}</span>
-                  <span className="font-mono text-muted-foreground">{fmt(s.launchPrice)}/mês</span>
-                  <span className="font-mono text-[10px] text-muted-foreground">setup {fmt(s.setupFee)}</span>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={runSeed}
-              disabled={seeding}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-info text-white hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-            >
-              {seeding ? "Importando…" : `Importar ${missingSeeds.length} plano(s)`}
-            </button>
+            <RegiaoRolavel modo="sempre" sobre="cartao" className="max-h-52">
+              <ul className="divide-y divide-border">
+                {missingSeeds.map((s) => (
+                  <li key={s.code} className="flex min-w-0 items-center py-2 text-[13px]">
+                    <span className="mr-3 min-w-0 flex-1 truncate text-foreground">{s.name}</span>
+                    <span className="mr-3 shrink-0 tabular-nums text-muted-foreground">{fmt(s.launchPrice)}/mês</span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">setup {fmt(s.setupFee)}</span>
+                  </li>
+                ))}
+              </ul>
+            </RegiaoRolavel>
+            <AcoesDoDialogo>
+              <button type="button" onClick={() => setSeedModal(false)} className={botao.discreto}>Cancelar</button>
+              <button type="button" onClick={runSeed} disabled={seeding} className={botao.primario}>
+                {seeding ? "Importando..." : `Importar ${missingSeeds.length} plano(s)`}
+              </button>
+            </AcoesDoDialogo>
           </div>
         </DialogContent>
       </Dialog>

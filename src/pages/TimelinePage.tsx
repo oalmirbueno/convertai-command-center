@@ -6,7 +6,7 @@ import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useCelular } from "@/hooks/useCelular";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -14,9 +14,20 @@ import {
   Calendar, Flag, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pencil, RefreshCw,
   GripVertical, AlertCircle, ListTodo, Save, Trash2, User,
 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  Carregando,
+  EstadoVazio,
+  SeletorCompacto,
+  botao,
+  etiqueta,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 
 
@@ -99,7 +110,7 @@ export default function TimelinePage() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
+  const isMobile = useCelular();
   const isAdmin = profile?.role === "admin";
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: clients } = useClients();
@@ -120,10 +131,15 @@ export default function TimelinePage() {
     enabled: !!user,
   });
 
-  const [filterProject, setFilterProject] = useState("all");
-  const [expanded, setExpanded] = useState<string[]>([]);
-  const [expandedMilestones, setExpandedMilestones] = useState<string[]>([]);
-  const [milestonePageIndex, setMilestonePageIndex] = useState<Record<string, number>>({});
+  // Filtro, projetos abertos, marcos abertos e página de cada linha do tempo:
+  // lembrados ao sair e voltar (docs/design/SISTEMA.md, "Estado que não se perde").
+  const listaDeTexto = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+  const [filterProject, setFilterProject] = useEstadoDaTela("filtro:projeto", "all", { validar: (v) => typeof v === "string" });
+  const [expanded, setExpanded] = useEstadoDaTela<string[]>("abertos", [], { validar: listaDeTexto });
+  const [expandedMilestones, setExpandedMilestones] = useEstadoDaTela<string[]>("marcos-abertos", [], { validar: listaDeTexto });
+  const [milestonePageIndex, setMilestonePageIndex] = useEstadoDaTela<Record<string, number>>("paginas", {}, {
+    validar: (v) => !!v && typeof v === "object" && !Array.isArray(v),
+  });
   const [selectedMilestone, setSelectedMilestone] = useState<any>(null);
 
   // Add milestone state
@@ -434,40 +450,37 @@ export default function TimelinePage() {
 
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
-  if (loadingProjects || loadingMilestones) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}
-      </div>
-    );
-  }
+  const carregando = loadingProjects || loadingMilestones;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="heading-page">Timeline dos Projetos</h1>
-        <Select value={filterProject} onValueChange={setFilterProject}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="Todos os projetos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os projetos</SelectItem>
-            {(projects || []).map((p: any) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="min-w-0">
+      <CabecalhoDePagina
+        titulo="Timeline"
+        ajuda="Os marcos de cada projeto em ordem, com as tarefas de cada marco. Abra um projeto para ver detalhes, reordenar marcos (arrastando) e criar tarefas."
+        descricao={carregando ? undefined : `${filteredProjects.length} ${filteredProjects.length === 1 ? "projeto" : "projetos"}`}
+        acoes={
+          <SeletorCompacto
+            rotulo="Projeto"
+            modo="lista"
+            icone={<GitBranch className="h-3.5 w-3.5" />}
+            opcoes={[
+              { valor: "all", rotulo: "Todos os projetos" },
+              ...(projects || []).map((p: any) => ({ valor: p.id, rotulo: p.name })),
+            ]}
+            valor={filterProject}
+            onEscolher={setFilterProject}
+            className="max-w-[240px]"
+          />
+        }
+      />
 
-      {filteredProjects.length === 0 && (
-        <div className="text-center py-16">
-          <GitBranch className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Nenhum projeto encontrado</p>
-        </div>
-      )}
-
+      <AreaDeTrabalho className="mt-4" rotuloDoPrincipal="Projetos na linha do tempo" memoriaDaRolagem="timeline:lista">
+      {carregando ? (
+        <Carregando rotulo="Carregando a linha do tempo" linhas={4} />
+      ) : filteredProjects.length === 0 ? (
+        <EstadoVazio icone={<GitBranch className="h-5 w-5" />} titulo="Nenhum projeto encontrado" />
+      ) : (
+      <div className="space-y-3">
       {/* Project cards */}
       {filteredProjects.map((project: any) => {
         const milestones = (allMilestones || []).filter((m: any) => m.project_id === project.id);
@@ -482,38 +495,80 @@ export default function TimelinePage() {
         const canGoNext = pageIdx + INITIAL_MILESTONES < milestones.length;
 
         return (
-          <div key={project.id} className="bg-card border border-border rounded-xl p-6 space-y-5">
-            {/* Project header */}
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-base font-semibold text-foreground">{project.name}</p>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+          <div key={project.id} className={juntar(superficie.painel, "space-y-4 p-4 sm:p-5")}>
+            {/* Project header: ações na linha do título */}
+            <div className="flex min-w-0 items-start justify-between">
+              <div className="mr-3 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(project.id)}
+                  aria-expanded={isExpanded}
+                  className={juntar(texto.tituloSecao, "min-w-0 max-w-full truncate rounded text-left hover:text-primary")}
+                >
+                  {project.name}
+                </button>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center">
+                  <span className={juntar(etiqueta, "mb-1 mr-1.5 bg-primary/10 text-primary")}>
                     {typeLabels[project.project_type] || project.project_type}
                   </span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusBadge[project.status] || "bg-muted text-muted-foreground"}`}>
+                  <span className={juntar(etiqueta, "mb-1 mr-1.5", statusBadge[project.status] || "bg-muted text-muted-foreground")}>
                     {statusProjectLabel[project.status] || project.status}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">{project.progress}% concluído</span>
-                  {isAdmin && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                      {milestones.length} milestones
-                    </span>
-                  )}
+                  <span className={juntar(texto.auxiliar, "mb-1 mr-1.5 whitespace-nowrap tabular-nums")}>
+                    {project.progress}% concluído{isAdmin ? ` · ${milestones.length} marcos` : ""}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0 mt-2">
+              <div className="flex shrink-0 items-center [&>*+*]:ml-1">
+                <div className="mr-1 hidden h-1.5 w-20 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${project.progress}%` }} />
+                </div>
+                {milestones.length > INITIAL_MILESTONES && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!canGoPrev}
+                      onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: Math.max(0, pageIdx - INITIAL_MILESTONES) }))}
+                      className={juntar(botao.icone, "disabled:opacity-30")}
+                      aria-label="Marcos anteriores"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
+                      {pageIdx + 1}–{Math.min(pageIdx + INITIAL_MILESTONES, milestones.length)} de {milestones.length}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!canGoNext}
+                      onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: pageIdx + INITIAL_MILESTONES }))}
+                      className={juntar(botao.icone, "disabled:opacity-30")}
+                      aria-label="Próximos marcos"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
                 {isAdmin && (
                   <button
+                    type="button"
                     onClick={() => handleOpenAddMilestone(project.id)}
-                    className="text-[11px] text-primary hover:text-primary/80 cursor-pointer bg-transparent border border-primary/30 rounded-lg px-2.5 py-1 flex items-center gap-1 hover:bg-primary/5 transition-colors"
+                    className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
+                    aria-label="Novo marco"
                   >
-                    <Plus className="w-3 h-3" /> Milestone
+                    <Plus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                    <span className="hidden sm:inline">Marco</span>
                   </button>
                 )}
-                <div className="w-24 h-2 rounded-full bg-secondary overflow-hidden">
-                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${project.progress}%` }} />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(project.id)}
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? "Recolher detalhes" : "Abrir detalhes"}
+                  title={isExpanded ? "Recolher" : "Detalhes"}
+                  className={botao.icone}
+                >
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
@@ -543,7 +598,7 @@ export default function TimelinePage() {
                     >
                       <div className={`absolute -left-[9px] top-0.5 w-4 h-4 rounded-full flex items-center justify-center ${
                         m.status === "completed" ? "bg-primary" :
-                        m.status === "in_progress" ? "border-[2.5px] border-primary bg-card milestone-pulse" : "bg-secondary"
+                        m.status === "in_progress" ? "border-[2.5px] border-primary bg-card" : "bg-secondary"
                       }`}>
                         {m.status === "completed" && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                       </div>
@@ -595,7 +650,7 @@ export default function TimelinePage() {
                             m.status === "completed"
                               ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
                               : m.status === "in_progress"
-                                ? "border-[3px] border-primary bg-transparent milestone-pulse"
+                                ? "border-[3px] border-primary bg-transparent"
                                 : "bg-secondary"
                           }`}>
                             {m.status === "completed" && <Check className="w-4 h-4" />}
@@ -625,38 +680,6 @@ export default function TimelinePage() {
                 </div>
               </div>
             )}
-
-            {/* Carousel navigation arrows */}
-            {milestones.length > INITIAL_MILESTONES && (
-              <div className="flex items-center justify-center gap-3 pt-1">
-                <button
-                  disabled={!canGoPrev}
-                  onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: Math.max(0, pageIdx - INITIAL_MILESTONES) }))}
-                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-[11px] text-muted-foreground">
-                  {pageIdx + 1}–{Math.min(pageIdx + INITIAL_MILESTONES, milestones.length)} de {milestones.length}
-                </span>
-                <button
-                  disabled={!canGoNext}
-                  onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: pageIdx + INITIAL_MILESTONES }))}
-                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {/* Expand toggle */}
-            <button
-              onClick={() => toggleExpand(project.id)}
-              className="text-[12px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
-            >
-              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              {isExpanded ? "Recolher" : "Expandir Detalhes"}
-            </button>
 
             {/* Expanded details */}
             {isExpanded && (
@@ -706,7 +729,7 @@ export default function TimelinePage() {
                             className={`flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all ${
                               isAdmin ? "cursor-grab active:cursor-grabbing" : ""
                             } ${isDragOver ? "ring-2 ring-primary/50 bg-primary/5" : ""} ${dragId === m.id ? "opacity-50" : ""}
-                            ${isMilestoneExpanded ? "rounded-b-none" : ""}`}
+                            `}
                           >
                             {isAdmin && (
                               <div className="shrink-0 mt-1 text-muted-foreground/50">
@@ -780,9 +803,9 @@ export default function TimelinePage() {
 
                           {/* Expanded tasks for this milestone */}
                           {isMilestoneExpanded && (
-                            <div className="border border-t-0 border-border rounded-b-xl bg-card p-3 space-y-2 animate-in slide-in-from-top-1 duration-150">
+                            <div className="space-y-1 pb-2 pl-3 pr-1 pt-1 sm:pl-12">
                               {mTasks.map((t: any) => (
-                                <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
+                                <div key={t.id} className="group flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-muted/60">
                                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${taskStatusDot[t.status] || "bg-muted-foreground"}`} />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-[12px] text-foreground truncate">{t.title}</p>
@@ -815,14 +838,14 @@ export default function TimelinePage() {
                                     <>
                                       <button
                                         onClick={() => openEditTask(t)}
-                                        className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
+                                        className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                         title="Editar"
                                       >
                                         <Pencil className="w-3 h-3" />
                                       </button>
                                       <button
                                         onClick={() => setDeleteTask(t)}
-                                        className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
+                                        className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                                         title="Excluir tarefa"
                                       >
                                         <Trash2 className="w-3 h-3" />
@@ -834,7 +857,7 @@ export default function TimelinePage() {
 
                               {/* Add task inline */}
                               {isAdmin && addTaskMilestone === m.id ? (
-                                <div className="space-y-2 px-3 py-3 rounded-lg bg-primary/5 border border-primary/20">
+                                <div className="space-y-2 rounded-md border border-primary/25 px-3 py-3">
                                   <div className="flex items-center gap-2">
                                     <input
                                       autoFocus
@@ -928,6 +951,10 @@ export default function TimelinePage() {
           </div>
         );
       })}
+
+      </div>
+      )}
+      </AreaDeTrabalho>
 
       {/* ========== MILESTONE DETAIL MODAL ========== */}
       {selectedMilestone && (() => {

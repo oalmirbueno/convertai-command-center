@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, modelosAtivos, nomeDoModelo, type ModeloIa, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
 
@@ -275,6 +275,25 @@ export function problemasDaPersona(r: RascunhoDaPersona): string[] {
 // ------------------------------------------------------------------ normalizadores
 
 const texto = (v: unknown): string => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
+
+/**
+ * URL assinada estável (dono, 26/09: "imagem que some e volta"). A função
+ * assina de novo a cada leitura (o token da URL muda) e o <img> recarregava a
+ * mesma foto a cada releitura da lista: a miniatura sumia e voltava com a tela
+ * parada. Aqui a primeira URL de cada arquivo vale por 40 minutos (a
+ * assinatura vale 1 hora); URL sem assinatura passa como veio.
+ */
+const URLS_ESTAVEIS: Record<string, { url: string; em: number }> = {};
+const VALIDADE_DA_URL_ESTAVEL_MS = 40 * 60_000;
+export function urlEstavel(url: string): string {
+  if (!url || url.indexOf("?") < 0) return url;
+  const arquivo = url.split("?")[0];
+  const agora = Date.now();
+  const guardada = URLS_ESTAVEIS[arquivo];
+  if (guardada && agora - guardada.em < VALIDADE_DA_URL_ESTAVEL_MS) return guardada.url;
+  URLS_ESTAVEIS[arquivo] = { url, em: agora };
+  return url;
+}
 const textoOuNulo = (v: unknown): string | null => {
   const t = texto(v).trim();
   return t ? t : null;
@@ -449,7 +468,7 @@ export function normalizarImagemDaPersona(v: any, modeloId = ""): ImagemDaPerson
     uso_da_referencia: USOS_VALIDOS.indexOf(uso) >= 0 ? uso : null,
     storage_bucket: texto(v.storage_bucket) || "mesa",
     storage_path: texto(v.storage_path),
-    url: texto(v.url || v.signed_url),
+    url: urlEstavel(texto(v.url || v.signed_url)),
     largura: numeroOuNulo(v.largura),
     altura: numeroOuNulo(v.altura),
     motor_id: textoOuNulo(v.motor_id || v.modelo_imagem_id),
@@ -846,6 +865,8 @@ export function useAncoras(ids: string[]) {
     queryKey: ["mesa-foto", "persona-ancoras", lista.join(",")],
     enabled: lista.length > 0,
     staleTime: 60_000,
+    // Persona nova (ou âncora nova) muda a chave: as miniaturas que já estavam ficam na tela enquanto relê.
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: 1,
     queryFn: async (): Promise<ImagemDaPersona[]> => {

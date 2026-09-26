@@ -3,14 +3,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import {
-  FileText, BarChart3, TrendingUp, Calendar, ArrowRight,
+  FileText, BarChart3, TrendingUp, Calendar,
   Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
-  Folder, ChevronRight,
+  ChevronRight, ChevronDown,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
 import {
   AreaChart, Area, ResponsiveContainer,
@@ -29,7 +28,10 @@ const metricConfig: Record<string, { label: string; format: (v: number) => strin
 
 function formatDateShort(d: string) {
   if (!d) return "";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  // "2026-08-01" é data sem hora: lida como UTC, voltava um dia no Brasil.
+  const soData = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  const data = soData ? new Date(Number(soData[1]), Number(soData[2]) - 1, Number(soData[3])) : new Date(d);
+  return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export default function ClientReports() {
@@ -37,7 +39,7 @@ export default function ClientReports() {
   const { clientId } = useClientIdentity();
   const navigate = useNavigate();
 
-  const { data: reports, isLoading } = useQuery({
+  const { data: reports, isLoading, isError, refetch } = useQuery({
     queryKey: ["reports-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -54,26 +56,13 @@ export default function ClientReports() {
     enabled: !!user,
   });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-56 w-full rounded-xl" />)}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-bold text-foreground flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4 text-primary" />
-          </div>
-          Relatórios
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1.5">Acompanhe os resultados dos seus projetos com dados detalhados.</p>
-      </div>
+    <div className="min-w-0 space-y-6">
+      <CabecalhoDePagina
+        titulo="Relatórios"
+        descricao={reports && reports.length ? `${reports.length} ${reports.length === 1 ? "publicado" : "publicados"}` : undefined}
+        ajuda="Os resultados dos seus projetos, fechados pela equipe a cada período. Toque num relatório para ver os números e a leitura completa. Você recebe um aviso quando sai um novo."
+      />
 
       {/* As campanhas ao vivo entram ANTES dos relatórios publicados, e não no
           lugar deles: o relatório fecha o período com a leitura da equipe, e
@@ -81,14 +70,19 @@ export default function ClientReports() {
           sozinho quando não há campanha rodando. */}
       <ClientLiveCampaigns clientId={clientId || undefined} />
 
-      {(!reports || reports.length === 0) ? (
-        <div className="text-center py-20 bg-card border border-border rounded-xl">
-          <div className="w-16 h-16 rounded-2xl bg-secondary mx-auto mb-4 flex items-center justify-center">
-            <FileText className="w-7 h-7 text-muted-foreground/30" />
-          </div>
-          <p className="text-sm text-muted-foreground">Seus relatórios aparecerão aqui quando publicados.</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Você será notificado assim que um novo relatório estiver disponível.</p>
-        </div>
+      {isLoading ? (
+        <Carregando linhas={3} rotulo="Carregando relatórios" />
+      ) : isError && !reports ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar os relatórios."
+          acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+        />
+      ) : (!reports || reports.length === 0) ? (
+        <EstadoVazio
+          icone={<FileText className="h-5 w-5" />}
+          titulo="Nenhum relatório ainda"
+          descricao="Seus relatórios aparecem aqui quando a equipe publicar. Você recebe um aviso."
+        />
       ) : (
         <ClientReportsGrouped reports={reports} navigate={navigate} />
       )}
@@ -115,163 +109,114 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
     (groups[m] ||= []).push(r);
   }
   const modelKeys = PERIOD_ORDER.filter(p => groups[p]);
-  const [open, setOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(modelKeys.map(k => [k, true]))
-  );
-  const toggle = (k: string) => setOpen(s => ({ ...s, [k]: !s[k] }));
+  // Grupos fechados ficam lembrados ao sair e voltar (os demais abrem).
+  const [fechados, setFechados] = useEstadoDaTela<string[]>("relatorios:grupos-fechados", [], { validar: (v) => Array.isArray(v) });
+  const open: Record<string, boolean> = {};
+  modelKeys.forEach((k) => { open[k] = fechados.indexOf(k) < 0; });
+  const toggle = (k: string) => setFechados(s => (s.indexOf(k) >= 0 ? s.filter((x) => x !== k) : s.concat(k)));
 
   return (
-    <div className="space-y-4">
-      {modelKeys.map((model) => (
-        <div key={model} className="space-y-3">
-          <button
-            onClick={() => toggle(model)}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <Folder className="w-4 h-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">{model}</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{groups[model].length}</span>
-            </div>
-            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${open[model] ? "rotate-90" : ""}`} />
-          </button>
+    <div className="space-y-6">
+      {modelKeys.map((model, gi) => (
+        <Secao
+          key={model}
+          divisoria={gi > 0}
+          titulo={model}
+          descricao={`${groups[model].length} ${groups[model].length === 1 ? "relatório" : "relatórios"}`}
+          acao={
+            <button
+              type="button"
+              onClick={() => toggle(model)}
+              className={botao.icone}
+              aria-expanded={!!open[model]}
+              aria-label={open[model] ? `Recolher ${model}` : `Mostrar ${model}`}
+            >
+              <ChevronDown className={juntar("h-4 w-4 transition-transform", !open[model] && "-rotate-90")} />
+            </button>
+          }
+        >
           {open[model] && (
-            <div className="space-y-5 pl-2">
+            <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
               {groups[model].map((r: any) => {
-            const m = (r.metrics || {}) as Record<string, any>;
-            const visibleMetrics = Object.entries(m)
-              .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== 0)
-              .map(([k, v]) => ({ key: k, value: v as number, ...metricConfig[k] }));
+                const m = (r.metrics || {}) as Record<string, any>;
+                const visibleMetrics = Object.entries(m)
+                  .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== 0)
+                  .map(([k, v]) => ({ key: k, value: v as number, ...metricConfig[k] }));
 
-            const chartData = ((r.chart_data || []) as Array<Record<string, any>>);
-            const chartColumns = chartData.length > 0
-              ? Object.keys(chartData[0]).filter(k => k !== "label")
-              : [];
+                const chartData = ((r.chart_data || []) as Array<Record<string, any>>);
+                const chartColumns = chartData.length > 0
+                  ? Object.keys(chartData[0]).filter(k => k !== "label")
+                  : [];
 
-            // Mini sparkline data
-            const sparklineData = chartData.length > 0 && chartColumns.length > 0
-              ? chartData.map(row => ({ v: Number(row[chartColumns[0]]) || 0 }))
-              : null;
+                // Mini sparkline data
+                const sparklineData = chartData.length > 0 && chartColumns.length > 0
+                  ? chartData.map(row => ({ v: Number(row[chartColumns[0]]) || 0 }))
+                  : null;
+                const kind = reportKind(r);
 
-            return (
-              <div
-                key={r.id}
-                className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-all group cursor-pointer"
-                onClick={() => navigate(`/relatorios/${r.id}`)}
-              >
-                {/* Header */}
-                <div className="px-6 py-5 flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2.5 mb-1.5">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                        <TrendingUp className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
-                          {(() => { const kind = reportKind(r); return (
-                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${kind.cls}`}>
-                              {kind.label}
-                            </span>
-                          ); })()}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                          {(r as any).project?.name}
+                return (
+                  <li key={r.id} className="min-w-0">
+                    <button
+                      type="button"
+                      className={juntar("group flex w-full min-w-0 items-start px-4 py-3.5 text-left transition-colors hover:bg-muted/40 sm:px-5", foco)}
+                      onClick={() => navigate(`/relatorios/${r.id}`)}
+                      aria-label={`Abrir o relatório ${r.title}`}
+                    >
+                      <TrendingUp className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="block min-w-0 flex-1">
+                        <span className="flex min-w-0 items-center">
+                          <span className="mr-2 min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{r.title}</span>
+                          <span className={juntar(etiqueta, "border", kind.cls)}>{kind.label}</span>
+                        </span>
+                        <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
+                          <span className="truncate">{(r as any).project?.name}</span>
                           {r.period_start && r.period_end && (
                             <>
-                              <span className="w-1 h-1 rounded-full bg-muted-foreground/40 inline-block" />
-                              <Calendar className="w-3 h-3" />
-                              {formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}
+                              <span className="mx-1.5 shrink-0" aria-hidden="true">·</span>
+                              <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                              <span className="shrink-0">{formatDateShort(r.period_start)} a {formatDateShort(r.period_end)}</span>
                             </>
                           )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
-                      Publicado
-                    </span>
-                    {sparklineData && (
-                      <div className="w-20 h-8 hidden sm:block">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={sparklineData}>
-                            <defs>
-                              <linearGradient id={`spark-${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <Area type="monotone" dataKey="v" stroke="hsl(145, 100%, 50%)" fill={`url(#spark-${r.id})`} strokeWidth={1.5} dot={false} />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Metrics */}
-                {visibleMetrics.length > 0 && (
-                  <div className="px-6 pb-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      {visibleMetrics.slice(0, 4).map(metric => {
-                        const Icon = metric.icon;
-                        return (
-                          <div key={metric.key} className="bg-secondary/40 rounded-xl p-3 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${metric.color}12` }}>
-                              <Icon className="w-3.5 h-3.5" style={{ color: metric.color }} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-base font-mono font-bold text-foreground leading-none">{metric.format(metric.value)}</p>
-                              <p className="text-[9px] uppercase text-muted-foreground mt-0.5 tracking-wider">{metric.label}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {visibleMetrics.length > 4 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2.5">
-                        {visibleMetrics.slice(4, 8).map(metric => {
-                          const Icon = metric.icon;
-                          return (
-                            <div key={metric.key} className="bg-secondary/40 rounded-xl p-3 flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${metric.color}12` }}>
-                                <Icon className="w-3.5 h-3.5" style={{ color: metric.color }} />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-base font-mono font-bold text-foreground leading-none">{metric.format(metric.value)}</p>
-                                <p className="text-[9px] uppercase text-muted-foreground mt-0.5 tracking-wider">{metric.label}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Summary preview */}
-                {r.summary && (
-                  <div className="px-6 pb-4">
-                    <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed">{r.summary}</p>
-                  </div>
-                )}
-
-                {/* Footer CTA */}
-                <div className="px-6 py-3 border-t border-border/50 bg-secondary/20 flex items-center justify-between">
-                  <span className="text-[12px] text-muted-foreground">
-                    {visibleMetrics.length} métricas disponíveis
-                  </span>
-                  <span className="text-[12px] text-primary font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
-                    Ver Relatório Completo <ArrowRight className="w-3.5 h-3.5" />
-                  </span>
-                </div>
-              </div>
-              );
-            })}
-            </div>
+                        </span>
+                        {visibleMetrics.length > 0 && (
+                          <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+                            {visibleMetrics.slice(0, 8).map(metric => {
+                              const Icon = metric.icon;
+                              return (
+                                <span key={metric.key} className="flex min-w-0 items-center">
+                                  <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" style={{ color: metric.color }} aria-hidden="true" />
+                                  <span className="mr-1 text-[13px] font-semibold tabular-nums text-foreground">{metric.format(metric.value)}</span>
+                                  <span className="truncate text-[12px] text-muted-foreground">{metric.label}</span>
+                                </span>
+                              );
+                            })}
+                          </span>
+                        )}
+                        {r.summary && <span className={juntar(texto.auxiliar, "mt-2 line-clamp-2 block leading-5")}>{r.summary}</span>}
+                      </span>
+                      {sparklineData && (
+                        <span className="ml-3 hidden h-8 w-20 shrink-0 sm:block" aria-hidden="true">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={sparklineData}>
+                              <defs>
+                                <linearGradient id={`spark-${r.id}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.3} />
+                                  <stop offset="95%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area type="monotone" dataKey="v" stroke="hsl(145, 100%, 50%)" fill={`url(#spark-${r.id})`} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </span>
+                      )}
+                      <ChevronRight className="ml-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </div>
+        </Secao>
       ))}
     </div>
   );

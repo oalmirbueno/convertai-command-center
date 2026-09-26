@@ -58,7 +58,7 @@ export function NumerosQueEleViu({ n, carregando = false }: { n: NumerosVistos; 
     <section className="min-w-0" aria-label="O que o agente viu">
       <button type="button" className="flex w-full min-w-0 items-start text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
         <span className="min-w-0 flex-1">
-          <span className="block text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">O que ele viu{carregando ? " (lendo a conta...)" : ""}</span>
+          <span className="block text-[12px] font-semibold text-muted-foreground">O que ele viu{carregando ? " (lendo a conta...)" : ""}</span>
           <span className="block text-[12.5px] font-medium tabular-nums [overflow-wrap:anywhere]">{resumo}</span>
           <span className="block text-[10.5px] text-muted-foreground">
             Fonte: {n.fonte}
@@ -70,7 +70,7 @@ export function NumerosQueEleViu({ n, carregando = false }: { n: NumerosVistos; 
       </button>
       {aberto && (
         <div className="mt-2 min-w-0 space-y-1.5">
-          <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2">
             <Numero rotulo="Investido" valor={brl(n.gasto)} sub={cmp && cmp.gasto_pct !== null ? `${variacao(cmp.gasto_pct)} vs. antes` : undefined} />
             <Numero rotulo={n.resultado_rotulo ? `Resultados (${n.resultado_rotulo})` : "Resultados"} valor={inteiro(n.resultados)} sub={cmp && cmp.resultados_pct !== null ? `${variacao(cmp.resultados_pct)} vs. antes` : undefined} />
             <Numero rotulo="Custo por resultado" valor={brl(n.custo_por_resultado)} sub={cmp && cmp.custo_por_resultado_pct !== null ? `${variacao(cmp.custo_por_resultado_pct)} vs. antes` : undefined} />
@@ -184,7 +184,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const alternar = (id: string) => setMarcados((m) => (m.indexOf(id) >= 0 ? m.filter((x) => x !== id) : m.concat([id])));
 
   return (
-    <section className="min-w-0 rounded-xl border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+    <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[12.5px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Ações propostas · {atual.itens.length}

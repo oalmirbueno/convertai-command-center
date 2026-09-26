@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { guardarFotosParaUsar } from "@/components/mesa-foto/UsoDaFoto";
 import { invalidarFotos } from "@/components/mesa-foto/fotoApi";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { AvisoDoRascunho, CabecalhoDaEtapa, MolduraDaFoto, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { DESTINOS, encaminhar, enderecoDoDestino, FUNCOES_DAS_TOMADAS, paraEncaminhar, type DestinoDoAtivo } from "./publicidadeApi";
 
@@ -58,16 +59,23 @@ export default function EtapaEnvio() {
   };
 
   return (
-    <div className="space-y-4" data-etapa-publicidade="envio">
-      <CabecalhoDaEtapa titulo="Envio" descricao="Leve as fotos aprovadas para a Mesa e para a Mesa Ads. Aprovar a foto não aprova anúncio nem verba." />
+    <div className="min-w-0 space-y-5" data-etapa-publicidade="envio">
+      <CabecalhoDaEtapa
+        titulo="Envio"
+        ajuda="Leve as fotos aprovadas para a Mesa e para a Mesa Ads, com a linhagem registrada: campanha, versão do briefing, território, tomada, versão da foto e fontes do produto."
+        estado="Aprovar a foto não aprova anúncio nem verba."
+      />
       {!banco && <AvisoDoRascunho />}
       {!aprovadas.length ? (
-        <div className="rounded-xl border border-dashed border-border p-6 text-center">
-          <p className="text-[13.5px] font-medium">Nenhuma foto aprovada ainda.</p>
-          <button type="button" className="mt-2 text-[12.5px] font-medium text-primary hover:underline" onClick={() => irPara("revisao")}>
-            Ir para a revisão
-          </button>
-        </div>
+        <EstadoVazio
+          icone={<Send className="h-5 w-5" />}
+          titulo="Nenhuma foto aprovada ainda."
+          acao={
+            <button type="button" className={botao.secundario} onClick={() => irPara("revisao")}>
+              Ir para a revisão
+            </button>
+          }
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-aprovadas="">
@@ -77,37 +85,46 @@ export default function EtapaEnvio() {
               return (
                 <div key={`${r.foto_tomada_id}:${r.versao}`} className="min-w-0">
                   <MolduraDaFoto caminho={r.storage_path} alt={`Aprovada v${r.versao}`} rotulo="Gerada" />
-                  <p className="mt-1 truncate text-[11.5px] font-medium">
+                  <p className="mt-1 truncate text-[12px] font-medium">
                     {rotuloDaFuncao(tomada ? tomada.funcao : null)} v{r.versao}
                   </p>
-                  <p className="truncate text-[10.5px] text-muted-foreground">{destinos.length ? `Em ${destinos.join(" e ")}` : "Ainda em nenhuma mesa"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{destinos.length ? `Em ${destinos.join(" e ")}` : "Ainda em nenhuma mesa"}</p>
                 </div>
               );
             })}
           </div>
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
             {DESTINOS.map((d) => {
               const faltam = paraEncaminhar(campanha.revisoes, d.id, campanha.encaminhamentos).vao.length;
               return (
-                <section key={d.id} className="rounded-xl border border-border bg-card p-3.5" data-destino={d.id}>
-                  <p className="text-[13px] font-semibold">{d.rotulo}</p>
-                  <p className="mt-0.5 text-[12px] text-muted-foreground">{d.dica}</p>
-                  <Button type="button" size="sm" className="mt-2 h-9" disabled={!!enviando} onClick={() => void enviar(d.id)}>
-                    {enviando === d.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : faltam ? <Send className="mr-1.5 h-3.5 w-3.5" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
-                    {faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"}` : "Abrir com as fotos já enviadas"}
-                  </Button>
-                </section>
+                <li key={d.id} className="flex min-w-0 items-center px-4 py-3" data-destino={d.id}>
+                  <div className="mr-3 min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold">{d.rotulo}</p>
+                    <p className={juntar(texto.auxiliar, "truncate")} title={d.dica}>
+                      {d.dica}
+                    </p>
+                  </div>
+                  <button type="button" className={juntar(faltam ? botao.primario : botao.secundario, "max-w-[55%]")} disabled={!!enviando} onClick={() => void enviar(d.id)}>
+                    {enviando === d.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin" /> : faltam ? <Send className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
+                    <span className="min-w-0 truncate">{faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"}` : "Abrir com as fotos enviadas"}</span>
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </>
       )}
       {campanha.encaminhamentos.length > 0 && (
-        <section className="rounded-xl border border-border bg-card p-3.5" data-linhagem="">
-          <p className="text-[13px] font-semibold">Linhagem</p>
-          <ul className="mt-1.5 divide-y divide-border text-[11.5px]">
+        <section className="min-w-0 space-y-2" data-linhagem="">
+          <CabecalhoDaEtapa
+            nivel={3}
+            titulo="Linhagem"
+            ajuda="Cada foto enviada guarda de onde veio. Anúncio e verba seguem sem aprovação até a Mesa Ads aprovar."
+            estado={!campanha.persistida ? "Rascunho: vale só nesta aba até o banco ser publicado." : `${campanha.encaminhamentos.length} ${campanha.encaminhamentos.length === 1 ? "envio" : "envios"}`}
+          />
+          <ul className="divide-y divide-border border-t border-border text-[12px]">
             {campanha.encaminhamentos.map((e) => (
-              <li key={`${e.destino}:${e.imagem_id}`} className="py-1 leading-snug [overflow-wrap:anywhere]">
+              <li key={`${e.destino}:${e.imagem_id}`} className="py-1.5 leading-snug [overflow-wrap:anywhere]">
                 <span className="font-medium">{e.destino === "ads" ? "Mesa Ads" : "Mesa"}</span>
                 <span className="text-muted-foreground">
                   {" "}
@@ -117,7 +134,6 @@ export default function EtapaEnvio() {
               </li>
             ))}
           </ul>
-          {!campanha.persistida && <p className="mt-1 text-[11px] text-muted-foreground">Rascunho: a linhagem vale só nesta aba até o banco ser publicado.</p>}
         </section>
       )}
     </div>

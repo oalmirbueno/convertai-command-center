@@ -38,6 +38,7 @@ import { NOMES_DAS_FERRAMENTAS } from "./ferramentas-do-cliente.ts";
 import { conhecimentoEdicao } from "./conhecimento-edicao.ts";
 import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
 import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
+import { conhecimentoEstilo } from "./conhecimento-estilo.ts";
 
 export const VERSAO_DOS_MOTORES = `2026-09-25.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS})`;
 
@@ -277,6 +278,16 @@ export const FONTES: Record<string, Fonte> = {
     estado: "integrado",
     nota: "Mesa Roteiros. Antes estava escrito e sem motor.",
   },
+  // Frente S2 (26/09): agente de estilo do cliente.
+  pesquisa_estilo: {
+    id: "pesquisa_estilo",
+    tipo: "base_da_casa",
+    nome: "Pesquisa de guia de estilo para social e de como a IA de imagem segue um estilo (frente S2)",
+    licenca: "texto próprio com fontes públicas citadas",
+    uso: "conhecimento-estilo.ts (sistema visual, capa e miolo, estilo que a IA segue, aprender com o cliente, tendência do nicho)",
+    estado: "integrado",
+    nota: "docs/estudio/ESTILO-DO-CLIENTE.md. Agente de estilo (agente-estilo).",
+  },
 };
 
 // ------------------------------------------------------------------ origem de cada bloco
@@ -357,6 +368,12 @@ export const ORIGEM_DOS_BLOCOS: Record<string, { modulo: string; fontes: string[
   tecnicas_editoriais: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
   direcao_de_gravacao: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
   roteiro_de_video: { modulo: "conhecimento-marketing.ts", fontes: ["skills_de_video"], skills: ["hyperframes-creative"] },
+  // conhecimento-estilo.ts (frente S2, 26/09)
+  sistema_visual_de_social: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
+  capa_e_miolo: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
+  estilo_que_a_ia_segue: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
+  aprender_com_o_cliente: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
+  tendencia_do_nicho: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
 };
 
 /** O checklist de criativo do objetivo entra com id checklist_<objetivo> e vem dos especialistas. */
@@ -460,6 +477,8 @@ const CONTEXTO = "supabase/functions/agente-contexto/index.ts";
 const VIDEOS = "supabase/functions/mesa-videos/index.ts";
 const PUBLICIDADE = "supabase/functions/mesa-publicidade/index.ts";
 const ROTEIROS = "supabase/functions/mesa-roteiros/index.ts";
+const ESTILO = "supabase/functions/agente-estilo/index.ts";
+const PERFIS = "supabase/functions/perfis-instagram/index.ts";
 
 const BASE_ADS = ["conhecimento-ads.ts: CONHECIMENTO_ESTRATEGISTA_ADS (inteira, antes)", "mesa-ads: REGRAS_DA_EXECUCAO (depois)"];
 
@@ -662,6 +681,29 @@ export const MOTORES: readonly Motor[] = [
     montar: (objetivo) => conhecimentoRoteiros(objetivo),
     promete: ["papeis_do_roteiro", "modos_do_roteiro", "inteligencia_editorial", "roteiro_de_video"],
   },
+  // Frente S2 (26/09): agente de estilo do cliente (botão Estilo no Estúdio e no Estúdio Ads).
+  {
+    id: "estilo.agente",
+    nome: "Estilo do cliente: diretor de estilo (conversa, proposta do guia, leitura das referências)",
+    funcao: "agente-estilo",
+    ligacao: { arquivo: ESTILO, trechos: ["const CONHECIMENTO_DO_ESTILO = conhecimentoEstilo().texto;", "sistema: `${SISTEMA_DO_ESTILO}\\n\\n${CONHECIMENTO_DO_ESTILO}"] },
+    bases: ["agente-estilo: SISTEMA_DO_ESTILO e o contrato comum das ações (acoes-do-agente.ts)", "estilo-do-cliente.ts: o guia guardado, versões e aprendizados"],
+    montar: () => conhecimentoEstilo(),
+    promete: ["sistema_visual_de_social", "capa_e_miolo", "estilo_que_a_ia_segue", "aprender_com_o_cliente", "tendencia_do_nicho", "identidade_de_marca", "anti_generico"],
+  },
+  // Frente P (26/09): Perfis do Instagram. Plano "igual a esse perfil" e ideias de resposta a concorrente.
+  {
+    id: "perfis.plano",
+    nome: "Perfis do Instagram: plano igual ao perfil e ideias de resposta",
+    funcao: "perfis-instagram",
+    ligacao: {
+      arquivo: PERFIS,
+      trechos: ['const CONHECIMENTO_DO_PLANO_IGUAL = conhecimentoCalendarioPara("temas").texto;', "sistema: `${pedido.sistema}\\n\\n${CONHECIMENTO_DO_PLANO_IGUAL}`"],
+    },
+    bases: ["perfis-instagram: SISTEMA_DO_PLANO_IGUAL e SISTEMA_DAS_IDEIAS (regras da saída e anti-cópia)", "perfis-instagram.ts: números em código e a conferência de cópia do Jev"],
+    montar: () => conhecimentoCalendarioPara("temas"),
+    promete: ["calendario_editorial", "mistura_do_mes", "datas_e_oportunidades", "ganchos_por_tipo", "alcance_e_conversao", "estrategia_de_conteudo", "formulas_de_titulo", "cta_principios", "voz_de_marca", "anti_generico"],
+  },
 ];
 
 /**
@@ -672,6 +714,7 @@ export const SEM_BASE_DE_PROPOSITO: Record<string, string> = {
   "estudio.gerador": "promptDaLamina e promptDoReplicar (texto ao gerador de imagem): o gerador entende posição, escala e cor, não método de marketing. Aprovado pelo dono em 25/09.",
   "mesa_foto.leitor_kits_conferencia": "Descrever, agrupar e conferir foto: conhecimento de marketing só atrapalha.",
   "contexto.leitura_acervo": "Leitura de material e acervo: só extração.",
+  "perfis.leitura": "Leitura dos posts dos perfis do Instagram (visão) e o resumo do perfil: só descrição e números, sem método de marketing.",
   "central.rituais": "Esteira, coach e rituais (dossiê) são das frentes R e S; conhecimentoMarketingPara(\"dossie\") existe mas não está ligado.",
   mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte (mcp-mesas-ponte.ts) e chamam as funções acima, que já montam o conhecimento.",
 };
@@ -731,6 +774,33 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
       trechos: ["await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina)", "prancha: pranchaDaReferencia,", "serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia })"],
     },
     intocado: "Referência simples (sem leitura de prancha, ou lida como arte única) segue igual; a geração nunca dispara a leitura da prancha.",
+  },
+  {
+    id: "estilo_do_cliente",
+    em: "2026-09-26",
+    pedido: "Dono: \"quando ativo, a geração parte desse estilo como ponto de partida para não ficar genérica, e as referências da lâmina continuam complementando\".",
+    o_que: "Com direcao.usar_estilo_do_cliente ligado e o estilo do cliente ativo, entram as referências do estilo (até 2) DEPOIS das da lâmina e o bloco curto ESTILO DO CLIENTE no fim do texto, antes das regras de render. Vale para post e criativo de anúncio (o Estúdio Ads gera pelo mesmo gerarCard). A versão guarda estilo_do_cliente.",
+    modulo: "_shared/estilo-do-cliente.ts (blocoDoEstiloParaOGerador) e estudio-arte/estilo-na-geracao.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const estiloDoCliente = await estiloNaGeracao(t, {", "    blocoDoEstilo,\n    blocoDoTemplate,\n  ].filter(Boolean).join"] },
+    intocado: "Desligado (o padrão): estiloNaGeracao devolve null sem ler o banco e o prompt é byte a byte o de hoje (fixture replicar-identica-hoje.json e o do modo normal).",
+  },
+  {
+    id: "referencia_adapta_copy",
+    em: "2026-09-26",
+    pedido: "Dono: \"copiar o estilo, a estratégia, o layout e a estética da referência, mas montar a imagem com base no contexto da copy e do roteiro; muitas vezes o assunto da referência não tem nada a ver\".",
+    o_que: "No modo replicar, com o interruptor direcao.adaptar_conteudo_a_copy ligado (padrão): leitura por visão da referência (estética separada do conteúdo, guardada em conteudo-<ref>.json), Noul e Choice do Jev (serve a partir de 0,75) e, quando o assunto não serve, uma cena do diretor de arte num bloco ADAPTAR O CONTEÚDO À MENSAGEM logo depois do promptDoReplicar. A cena passa pela trava da marca. A versão guarda adaptacao_da_copy.",
+    modulo: "estudio-arte/referencia-adapta-copy.ts e _shared/trava-da-marca.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const querAdaptar = tentaAdaptar({", "      replica.prompt,\n      adaptacao ? adaptacao.bloco : \"\","] },
+    intocado: "Conteúdo que serve, sem copy, com foto do cliente, interruptor desligado ou qualquer falha da leitura, do Jev ou do diretor: bloco vazio e o prompt é byte a byte o de hoje (fixture replicar-identica-hoje.json).",
+  },
+  {
+    id: "rosto_na_referencia",
+    em: "2026-09-26",
+    pedido: "Dono: \"a equipe escolhe o rosto de quem vai aparecer, o dono ou o cliente, muito fiel, mas pose, ângulo, expressão e enquadramento podem variar para combinar com a arte\".",
+    o_que: "Com direcao.rosto (cliente, equipe ou fotos na hora), até 2 fotos de identidade entram depois dos anexos da lâmina (antes das do estilo), no limite de imagens do modelo, e o bloco ROSTO ESCOLHIDO entra depois do bloco da copy. Opção destacar põe o rosto em evidência. A versão guarda rosto.",
+    modulo: "estudio-arte/rosto-na-geracao.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "      blocoDoRostoAqui,"] },
+    intocado: "Sem rosto escolhido (o padrão): nada é lido, nenhuma imagem entra e o prompt é byte a byte o de hoje.",
   },
 ];
 

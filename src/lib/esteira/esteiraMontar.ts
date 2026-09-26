@@ -313,7 +313,8 @@ export function itensDeAnuncios(f: FatosDoCliente, hoje: Date, onboardingComplet
   const antes7 = somaJanela(f, hoje, 14, 7);
 
   for (const c of ativas) {
-    const ultimoDia = c.diario.map((d) => d.day).sort().at(-1) ?? null;
+    const dias = c.diario.map((d) => d.day).sort();
+    const ultimoDia = dias.length ? dias[dias.length - 1] : null;
     const parado = diasDesde(ultimoDia, hoje);
     if (parado === null || parado >= 3) {
       itens.push({ ...base, key: `camp:${c.id}:parado`, titulo: c.nome, passo: "Dados parados, conferir a campanha", gravidade: "atencao", fatos: [parado === null ? "Sem dado nenhum" : `Último dado há ${parado} dias`], plataforma: c.plataforma });

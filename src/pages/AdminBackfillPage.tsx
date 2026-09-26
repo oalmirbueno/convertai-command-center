@@ -1,12 +1,21 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, Send, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Loader2, Send, CheckCircle2, XCircle } from "lucide-react";
+import {
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  EstadoDeErro,
+  GrupoDeCampos,
+  Painel,
+  RegiaoRolavel,
+  Secao,
+  botao,
+  campo,
+  juntar,
+  superficie,
+  texto,
+} from "@/components/sistema";
 
 const PORTAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 if (!PORTAL_SUPABASE_URL) {
@@ -60,122 +69,109 @@ export default function AdminBackfillPage() {
     }
   };
 
+  const numeros = result
+    ? [
+        { rotulo: "Total", valor: result.total ?? 0, cor: "text-foreground", icone: null },
+        { rotulo: "Sucesso", valor: result.success ?? 0, cor: "text-primary", icone: <CheckCircle2 className="mr-1 h-3 w-3 text-primary" aria-hidden="true" /> },
+        { rotulo: "Falhas", valor: result.failed ?? 0, cor: "text-destructive", icone: <XCircle className="mr-1 h-3 w-3 text-destructive" aria-hidden="true" /> },
+      ]
+    : [];
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="heading-page">Backfill de Leads pro Ops</h1>
-        <p className="text-muted-foreground mt-2">
-          Envia todos os quiz submissions antigos pro Aceleriq Ops.
-        </p>
-      </div>
+    <div className="min-w-0 space-y-6">
+      <CabecalhoDePagina
+        titulo="Backfill de leads para o Ops"
+        ajuda={
+          <>
+            Envia os diagnósticos antigos do quiz para o Aceleriq Ops. Só vão as submissões com status <code>submitted</code>. Duplicatas são tratadas no destino.
+          </>
+        }
+      />
 
       <div className="max-w-3xl space-y-6">
-      <Card className="border-primary/20">
-        <CardHeader>
-          <CardTitle>Executar sincronização</CardTitle>
-          <CardDescription>
-            Apenas submissions com status <code className="text-primary">submitted</code> serão empurradas. Duplicatas são tratadas no destino.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="secret">Secret</Label>
-            <Input
-              id="secret"
-              type="password"
-              placeholder="x-webhook-secret"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              autoComplete="off"
-              disabled={running}
-              className="font-mono"
-            />
-          </div>
+        <Painel
+          titulo="Executar sincronização"
+          rodape={
+            <button type="button" className={botao.primario} onClick={runBackfill} disabled={running || !secret.trim()}>
+              {running ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Executando backfill...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Executar backfill
+                </>
+              )}
+            </button>
+          }
+        >
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Secret" apoio="Cabeçalho x-webhook-secret do Ops.">
+              <input
+                id="secret"
+                type="password"
+                placeholder="x-webhook-secret"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !running && secret.trim()) runBackfill();
+                }}
+                autoComplete="off"
+                disabled={running}
+                className={juntar(campo, "font-mono")}
+              />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+        </Painel>
 
-          <Button
-            size="lg"
-            className="w-full h-14 text-base font-semibold"
-            onClick={runBackfill}
-            disabled={running || !secret.trim()}
-          >
-            {running ? (
-              <>
-                <Loader2 className="animate-spin" /> Executando backfill...
-              </>
-            ) : (
-              <>
-                <Send /> Executar Backfill
-              </>
+        {errorMsg && (
+          <EstadoDeErro
+            titulo="O backfill não foi concluído."
+            descricao={errorMsg}
+            acao={
+              secret.trim() ? (
+                <button type="button" className={botao.secundario} onClick={runBackfill} disabled={running}>
+                  Tentar de novo
+                </button>
+              ) : undefined
+            }
+          />
+        )}
+
+        {result && !errorMsg && (
+          <>
+            <div className="grid grid-cols-3 gap-3">
+              {numeros.map((n) => (
+                <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 px-3 py-3 sm:px-4")}>
+                  <p className={juntar(texto.rotulo, "flex items-center truncate")}>
+                    {n.icone}
+                    {n.rotulo}
+                  </p>
+                  <p className={juntar("mt-1 text-[22px] font-semibold leading-7 tabular-nums", n.cor)}>{n.valor}</p>
+                </div>
+              ))}
+            </div>
+
+            {result.errors && result.errors.length > 0 && (
+              <Secao titulo="Erros" descricao={`${result.errors.length} ${result.errors.length === 1 ? "registro" : "registros"}`} divisoria>
+                <RegiaoRolavel rotulo="Erros do backfill" memoria="backfill:erros" className="lg:max-h-[50vh]">
+                  <ul className="divide-y divide-border">
+                    {result.errors.map((e, i) => (
+                      <li key={i} className="min-w-0 py-2.5">
+                        <p className={juntar(texto.auxiliar, "truncate font-mono")}>{e.token}</p>
+                        <p className="mt-0.5 font-mono text-[12.5px] leading-5 text-destructive [overflow-wrap:anywhere]">{e.error}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </RegiaoRolavel>
+              </Secao>
             )}
-          </Button>
-        </CardContent>
-      </Card>
 
-      {errorMsg && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{errorMsg}</AlertDescription>
-        </Alert>
-      )}
-
-      {result && !errorMsg && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Total</p>
-                <p className="text-3xl font-mono font-bold mt-1">{result.total ?? 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-primary/40">
-              <CardContent className="pt-6">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3 text-primary" /> Sucesso
-                </p>
-                <p className="text-3xl font-mono font-bold mt-1 text-primary">{result.success ?? 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-destructive/40">
-              <CardContent className="pt-6">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <XCircle className="h-3 w-3 text-destructive" /> Falhas
-                </p>
-                <p className="text-3xl font-mono font-bold mt-1 text-destructive">{result.failed ?? 0}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {result.errors && result.errors.length > 0 && (
-            <Card className="border-destructive/30">
-              <CardHeader>
-                <CardTitle className="text-base">Erros ({result.errors.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm font-mono">
-                  {result.errors.map((e, i) => (
-                    <li key={i} className="border-l-2 border-destructive pl-3">
-                      <div className="text-muted-foreground text-xs">{e.token}</div>
-                      <div className="text-destructive">{e.error}</div>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Resposta (JSON)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="bg-muted/50 rounded-md p-4 text-xs overflow-x-auto font-mono">
-                {JSON.stringify(result, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            <Secao titulo="Resposta" descricao="JSON devolvido pela função" divisoria>
+              <pre className={juntar(superficie.poco, "overflow-x-auto p-3 font-mono text-[12px] leading-5")}>{JSON.stringify(result, null, 2)}</pre>
+            </Secao>
+          </>
+        )}
       </div>
     </div>
   );

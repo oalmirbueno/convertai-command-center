@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase, Zap, Info, ArrowRight } from "lucide-react";
+import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight } from "lucide-react";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -181,7 +182,7 @@ export default function ClientFinanceiro() {
       "/financeiro"
     );
     queryClient.invalidateQueries({ queryKey: ["recharge-requests-client"] });
-    toast.success("Recarga confirmada! Aguarde a atualização do saldo.");
+    toast.success("Recarga confirmada. O saldo atualiza em seguida.");
   };
 
   const handleRejectRecharge = async (requestId: string) => {
@@ -199,7 +200,7 @@ export default function ClientFinanceiro() {
       "/financeiro"
     );
     queryClient.invalidateQueries({ queryKey: ["recharge-requests-client"] });
-    toast.success("Recarga recusada.");
+    toast.success("Recarga recusada");
   };
 
   const openWhatsApp = (message: string) => {
@@ -209,104 +210,81 @@ export default function ClientFinanceiro() {
     );
   };
 
-  // ===== LOADING =====
-  if (loadingBilling) {
-    return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">
-          Carregando dados financeiros...
-        </span>
-      </div>
-    );
-  }
+  const statusDoPagamento = (status: string, dueDate: string) => {
+    const isOverdue = status === "pending" && new Date(dueDate) < today;
+    return {
+      label: status === "paid" ? "Pago" : status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente",
+      dot: status === "paid" ? "bg-success" : status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning",
+      badge: status === "paid" ? "bg-success/10 text-success" : status === "partial" ? "bg-info/10 text-info" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning",
+    };
+  };
+  const falarSobreRenovacao = () => openWhatsApp("Olá! Gostaria de falar sobre a renovação do meu plano.");
 
   // ===== RENDER =====
   return (
-    <div className="space-y-6 animate-fade-in w-full">
-      <h1 className="heading-page">Financeiro</h1>
+    <div className="w-full min-w-0 space-y-6">
+      <CabecalhoDePagina
+        titulo="Financeiro"
+        descricao={pendingRecharges.length ? `${pendingRecharges.length} ${pendingRecharges.length === 1 ? "recarga esperando você" : "recargas esperando você"}` : undefined}
+        ajuda="Seu plano, o saldo dos anúncios, as recargas que a equipe pediu e o histórico de pagamentos. Recarga só acontece depois que você confirma."
+        acoes={
+          latestPlan && (
+            <button type="button" onClick={falarSobreRenovacao} className={botao.secundario} aria-label="Falar sobre renovação">
+              <MessageCircle className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Falar sobre renovação</span>
+            </button>
+          )
+        }
+      />
 
+      {/* ===== LOADING ===== */}
+      {loadingBilling ? (
+        <Carregando forma="aba" rotulo="Carregando dados financeiros" />
+      ) : (
+      <>
       {/* ========== SEÇÃO 1: MEU PLANO ========== */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <CreditCard className="w-4 h-4 text-muted-foreground" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Meu Plano
-          </span>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl p-6">
+      <Secao titulo="Plano">
+        <Painel>
           {latestPlan ? (
             <>
-              <div className="flex items-start justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-lg font-semibold text-foreground">
-                    {latestPlan.description || "Plano Mensal"}
-                  </p>
-                  <p className="text-2xl font-mono font-light text-foreground mt-1">
+              <div className="flex min-w-0 flex-wrap items-end justify-between">
+                <div className="mr-4 min-w-0">
+                  <p className={juntar(texto.tituloSecao, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
+                  <p className="mt-1 text-2xl font-light tabular-nums text-foreground">
                     {formatCurrency(Number(latestPlan.amount))}
-                    <span className="text-sm text-muted-foreground ml-1">/mês</span>
+                    <span className="ml-1 text-sm text-muted-foreground">/mês</span>
                   </p>
                 </div>
-              </div>
-
-              <div className="mt-4 flex items-center gap-3 flex-wrap">
-                <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${planStatusColor}`}
-                >
-                  {planStatusLabel}
-                </span>
-                {renewalDate && (
-                  <span className="text-sm text-muted-foreground">
-                    Renovação: {formatDate(renewalDateStr!)}
-                  </span>
-                )}
+                <div className="mt-2 flex items-center">
+                  <span className={juntar(etiqueta, planStatusColor)}>{planStatusLabel}</span>
+                  {renewalDate && <span className={juntar(texto.auxiliar, "ml-2")}>Renova em {formatDate(renewalDateStr!)}</span>}
+                </div>
               </div>
 
               {renewalDate && (
                 <div className="mt-4">
-                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${barColor} transition-all duration-500`}
-                      style={{ width: `${timePercent}%` }}
-                    />
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${timePercent}%` }} />
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1.5">
-                    {daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}
-                  </p>
+                  <p className={juntar(texto.auxiliar, "mt-1.5")}>{daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}</p>
                 </div>
               )}
-
-              <button
-                onClick={() =>
-                  openWhatsApp(
-                    "Olá! Gostaria de falar sobre a renovação do meu plano."
-                  )
-                }
-                className="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-xl text-[13px] bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
-              >
-                <MessageCircle className="w-3.5 h-3.5" /> Falar sobre renovação
-              </button>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground py-2">
-              Nenhum plano encontrado
-            </p>
+            <p className={texto.auxiliar}>Nenhum plano encontrado</p>
           )}
-        </div>
-      </section>
+        </Painel>
+      </Secao>
 
       {/* ========== SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ========== */}
       {showTraffic && (wallets || []).length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Wallet className="w-4 h-4 text-muted-foreground" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Investimento em Anúncios
-            </span>
-          </div>
-
-          <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-4">
+        <Secao
+          divisoria
+          titulo="Saldo de anúncios"
+          descricao={pendingRecharges.length === 0 ? "Nenhuma recarga pendente" : undefined}
+          ajuda="Quanto ainda tem de saldo em cada plataforma. A barra enche até R$ 2.000; abaixo de R$ 500 a equipe já avisa que vai precisar de recarga."
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {(wallets || []).map((w: any) => {
               const balance = Number(w.balance);
               const gaugePercent = Math.min((balance / 2000) * 100, 100);
@@ -332,98 +310,62 @@ export default function ClientFinanceiro() {
                     : "text-destructive";
 
               return (
-                <div
-                  key={w.id}
-                  className="h-full flex flex-col bg-card border border-border rounded-xl p-5"
-                >
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    {platformLabels[w.platform] || w.platform}
-                  </p>
-                  <p className="text-xl font-mono font-light text-foreground mt-2">
-                    {formatCurrency(balance)}
-                  </p>
-                  <div className="h-1.5 rounded-full bg-secondary overflow-hidden mt-3">
-                    <div
-                      className={`h-full rounded-full ${gaugeColor} transition-all duration-500`}
-                      style={{ width: `${gaugePercent}%` }}
-                    />
+                <Painel key={w.id}>
+                  <p className={texto.rotulo}>{platformLabels[w.platform] || w.platform}</p>
+                  <p className="mt-1.5 text-xl font-light tabular-nums text-foreground">{formatCurrency(balance)}</p>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div className={`h-full rounded-full ${gaugeColor}`} style={{ width: `${gaugePercent}%` }} />
                   </div>
-                  <p className={`text-[11px] mt-1.5 ${statusTextColor}`}>
-                    {statusText}
+                  <p className="mt-1.5 truncate text-[12px] leading-4">
+                    <span className={statusTextColor}>{statusText}</span>
+                    {w.last_recharge_date && <span className="text-muted-foreground"> · última recarga {formatDate(w.last_recharge_date)}</span>}
                   </p>
-                  {w.last_recharge_date && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Última recarga: {formatDate(w.last_recharge_date)}
-                    </p>
-                  )}
-                </div>
+                </Painel>
               );
             })}
           </div>
-        </section>
+        </Secao>
       )}
 
       {/* ========== SEÇÃO 3: RECARGAS PENDENTES ========== */}
       {pendingRecharges.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-4 h-4 text-warning" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Recargas Pendentes ({pendingRecharges.length})
+        <Secao
+          divisoria
+          titulo={
+            <span className="inline-flex items-center">
+              <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" /> Recargas para confirmar
             </span>
-          </div>
-
-          <div className="space-y-3">
+          }
+          descricao={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
+        >
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden border-warning/30")}>
             {pendingRecharges.map((r: any) => (
-              <div
-                key={r.id}
-                onClick={() => setRechargePopup(r)}
-                className="bg-card border border-warning/30 rounded-xl p-5 cursor-pointer hover:border-warning/60 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
-                    <Zap className="w-5 h-5 text-warning" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      Recarga {platformLabels[r.platform] || r.platform}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Solicitado em {formatDate(r.created_at)}
-                    </p>
-                  </div>
-                  <p className="text-lg font-mono font-semibold text-foreground">
-                    {formatCurrency(Number(r.amount))}
-                  </p>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                </div>
-                {r.reason && (
-                  <p className="text-xs text-muted-foreground mt-2 ml-[52px] italic">
-                    "{r.reason}"
-                  </p>
-                )}
-              </div>
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => setRechargePopup(r)}
+                  className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                >
+                  <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-foreground">Recarga {platformLabels[r.platform] || r.platform}</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>
+                      Pedido em {formatDate(r.created_at)}
+                      {r.reason ? ` · ${r.reason}` : ""}
+                    </span>
+                  </span>
+                  <span className="ml-3 text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</span>
+                  <ArrowRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              </li>
             ))}
-          </div>
-        </section>
-      )}
-
-      {pendingRecharges.length === 0 && showTraffic && (
-        <p className="text-xs text-muted-foreground/60 text-center py-2">
-          Nenhuma recarga pendente no momento ✓
-        </p>
+          </ul>
+        </Secao>
       )}
 
       {/* ========== SEÇÃO: PROJETOS INDIVIDUAIS ========== */}
       {(myProjectPayments || []).length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Briefcase className="w-4 h-4 text-muted-foreground" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Projetos Individuais
-            </span>
-          </div>
-
+        <Secao divisoria titulo="Projetos avulsos">
           <div className="space-y-3">
             {(myProjectPayments || []).map((pp: any) => {
               const installments = pp.installments || [];
@@ -433,147 +375,90 @@ export default function ClientFinanceiro() {
               const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
 
               return (
-                <div key={pp.id} className="bg-card border border-border rounded-xl p-5 space-y-4">
-                  <div className="flex items-start justify-between flex-wrap gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
+                <Painel key={pp.id}>
+                  <div className="flex min-w-0 flex-wrap items-start justify-between">
+                    <div className="mr-4 min-w-0">
+                      <div className="flex min-w-0 items-center">
+                        <p className="mr-2 truncate text-[14px] font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
+                        <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")}>{getProjectBrand(pp.project?.project_type)}</span>
                       </div>
-                      <p className="text-xl font-mono font-light text-foreground mt-1">{formatCurrency(Number(pp.total_value))}</p>
+                      <p className="mt-1 text-xl font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-success font-mono">{formatCurrency(paid)} pago</p>
-                      {remaining > 0 && <p className="text-xs text-warning font-mono">{formatCurrency(remaining)} restante</p>}
+                    <div className="text-right tabular-nums">
+                      <p className="text-xs text-success">{formatCurrency(paid)} pago</p>
+                      {remaining > 0 && <p className="text-xs text-warning">{formatCurrency(remaining)} restante</p>}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="mt-3">
                     <Progress value={pct} className="h-1.5" />
-                    <p className="text-[11px] text-muted-foreground mt-1">{pct}% concluído</p>
+                    <p className={juntar(texto.auxiliar, "mt-1")}>{pct}% concluído</p>
                   </div>
 
-                  <div className="divide-y divide-border">
+                  <ul className="mt-2 divide-y divide-border">
                     {sortedInstallments.map((inst: any) => {
-                      const isOverdue = inst.status === "pending" && new Date(inst.due_date) < today;
-                      const statusLabel = inst.status === "paid" ? "Pago" : inst.status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente";
-                      const dotColor = inst.status === "paid" ? "bg-success" : inst.status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning";
-                      const badgeColor = inst.status === "paid" ? "bg-success/10 text-success" : inst.status === "partial" ? "bg-info/10 text-info" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
-
+                      const st = statusDoPagamento(inst.status, inst.due_date);
                       return (
-                        <div key={inst.id} className="flex items-center gap-3 py-2.5">
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
-                          <div className="flex-1 min-w-0">
+                        <li key={inst.id} className="flex min-w-0 items-center py-2.5">
+                          <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
                             <p className="text-[13px] text-foreground">
                               {inst.installment_number === 0 ? "Entrada" : `Parcela ${inst.installment_number}`}
                             </p>
-                            <p className="text-[11px] text-muted-foreground">{formatDate(inst.due_date)}</p>
+                            <p className={texto.auxiliar}>{formatDate(inst.due_date)}</p>
                           </div>
-                          <div className="text-right whitespace-nowrap">
-                            <p className={`text-sm font-mono ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
+                          <div className="ml-2 whitespace-nowrap text-right tabular-nums">
+                            <p className={`text-sm ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
                               {formatCurrency(inst.status === "pending" ? Number(inst.amount) : receivedOf(inst))}
                             </p>
-                            {inst.status === "partial" && (
-                              <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>
-                            )}
+                            {inst.status === "partial" && <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
                           </div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}>
-                            {statusLabel}
-                          </span>
-                        </div>
+                          <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
+                        </li>
                       );
                     })}
-                  </div>
-                </div>
+                  </ul>
+                </Painel>
               );
             })}
           </div>
-        </section>
+        </Secao>
       )}
 
       {/* ========== SEÇÃO 4: HISTÓRICO ========== */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <Clock className="w-4 h-4 text-muted-foreground" />
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Histórico de Pagamentos
-          </span>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
-          {(!billing || billing.length === 0) ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              Nenhum pagamento registrado
-            </p>
-          ) : (
-            billing.map((b: any) => {
-              const isOverdue =
-                b.status === "pending" && new Date(b.due_date) < today;
-              const statusLabel =
-                b.status === "paid"
-                  ? "Pago"
-                  : b.status === "partial"
-                    ? "Parcial"
-                    : isOverdue
-                      ? "Atrasado"
-                      : "Pendente";
-              const dotColor =
-                b.status === "paid"
-                  ? "bg-success"
-                  : b.status === "partial"
-                    ? "bg-info"
-                    : isOverdue
-                      ? "bg-destructive"
-                      : "bg-warning";
-              const badgeColor =
-                b.status === "paid"
-                  ? "bg-success/10 text-success"
-                  : b.status === "partial"
-                    ? "bg-info/10 text-info"
-                    : isOverdue
-                      ? "bg-destructive/10 text-destructive"
-                      : "bg-warning/10 text-warning";
-
+      <Secao divisoria titulo="Pagamentos" descricao={billing && billing.length ? `${billing.length} ${billing.length === 1 ? "registro" : "registros"}` : undefined}>
+        {(!billing || billing.length === 0) ? (
+          <EstadoVazio compacto titulo="Nenhum pagamento registrado." />
+        ) : (
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+            {billing.map((b: any) => {
+              const st = statusDoPagamento(b.status, b.due_date);
               return (
-                <div
-                  key={b.id}
-                  className="flex items-center gap-4 px-5 py-3.5"
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-foreground truncate">
-                      {b.description || typeLabels[b.type] || b.type}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {formatDate(b.due_date)}
-                    </p>
+                <li key={b.id} className="flex min-w-0 items-center px-4 py-3 sm:px-5">
+                  <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] text-foreground">{b.description || typeLabels[b.type] || b.type}</p>
+                    <p className={texto.auxiliar}>{formatDate(b.due_date)}</p>
                   </div>
-                  <div className="text-right whitespace-nowrap">
-                    <p className={`text-sm font-mono ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
+                  <div className="ml-2 whitespace-nowrap text-right tabular-nums">
+                    <p className={`text-sm ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
                       {formatCurrency(b.status === "pending" ? Number(b.amount) : receivedOf(b))}
                     </p>
-                    {b.status === "partial" && (
-                      <p className="text-[10px] text-muted-foreground">
-                        de {formatCurrency(Number(b.amount))}
-                      </p>
-                    )}
+                    {b.status === "partial" && <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
                   </div>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}
-                  >
-                    {statusLabel}
-                  </span>
-                </div>
+                  <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
+                </li>
               );
-            })
-          )}
-        </div>
-      </section>
+            })}
+          </ul>
+        )}
+      </Secao>
+      </>
+      )}
+
       {/* ========== POPUP: DETALHES DA RECARGA ========== */}
       <Dialog open={!!rechargePopup} onOpenChange={(open) => { if (!open) setRechargePopup(null); }}>
-        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+        <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
           {rechargePopup && (() => {
             const r = rechargePopup;
             const platform = platformLabels[r.platform] || r.platform;
@@ -583,98 +468,76 @@ export default function ClientFinanceiro() {
 
             return (
               <>
-                {/* Header visual */}
-                <div className="bg-gradient-to-br from-warning/20 to-warning/5 px-6 pt-8 pb-6 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-warning/20 flex items-center justify-center mx-auto mb-4">
-                    <Zap className="w-8 h-8 text-warning" />
+                <div className="border-b border-border px-5 py-4">
+                  <div className="flex items-center">
+                    <Zap className="mr-2 h-4 w-4 text-warning" aria-hidden="true" />
+                    <DialogTitle className={texto.tituloSecao}>Recarga de anúncios</DialogTitle>
+                    <AjudaRecolhida className="ml-1.5" titulo="Como funciona">
+                      <ol className="list-inside list-decimal space-y-1">
+                        <li>A equipe viu que {platform} precisa de investimento.</li>
+                        <li>Depois que você confirma, a recarga é feita na plataforma.</li>
+                        <li>O saldo atualiza sozinho no seu painel.</li>
+                        <li>Você acompanha os resultados nos relatórios.</li>
+                      </ol>
+                    </AjudaRecolhida>
                   </div>
-                  <DialogTitle className="text-lg font-semibold text-foreground">
-                    Solicitação de Recarga
-                  </DialogTitle>
-                  <p className="text-sm text-muted-foreground mt-1">{platform}</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5")}>{platform} · pedido em {formatDate(r.created_at)}</p>
                 </div>
 
-                {/* Content */}
-                <div className="px-6 py-5 space-y-5">
-                  {/* Amount */}
+                <div className="space-y-4 px-5 py-5">
                   <div className="text-center">
-                    <p className="text-3xl font-mono font-bold text-foreground">
-                      {formatCurrency(Number(r.amount))}
-                    </p>
-                    {isPeriodic && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Investimento {period} em anúncios
-                      </p>
-                    )}
+                    <p className="text-3xl font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</p>
+                    {isPeriodic && <p className={juntar(texto.auxiliar, "mt-1")}>Investimento {period} em anúncios</p>}
                   </div>
 
-                  {/* Explanation */}
-                  <div className="bg-secondary/50 border border-border rounded-xl p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Info className="w-4 h-4 text-info shrink-0 mt-0.5" />
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-foreground">Como funciona?</p>
-                        <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                          <li>Sua equipe identificou a necessidade de investimento em <span className="text-foreground font-medium">{platform}</span></li>
-                          <li>Após sua confirmação, realizamos a recarga na plataforma de anúncios</li>
-                          <li>O saldo será atualizado automaticamente no seu painel</li>
-                          <li>Você acompanha os resultados nos relatórios periódicos</li>
-                        </ol>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Reason */}
                   {r.reason && (
-                    <div className="bg-card border border-border rounded-xl p-3">
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Observação da equipe</p>
-                      <p className="text-sm text-foreground italic">"{r.reason}"</p>
+                    <div className={juntar(superficie.poco, "px-3 py-2.5")}>
+                      <p className={juntar(texto.rotulo, "mb-0.5")}>Observação da equipe</p>
+                      <p className="text-sm text-foreground">{r.reason}</p>
                     </div>
                   )}
 
-                  {/* Date */}
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    Solicitado em {formatDate(r.created_at)}
-                  </p>
-
                   {/* Actions */}
                   {isImpersonating ? (
-                    <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-center text-xs text-sky-500">
+                    <p className="text-center text-xs text-sky-500" role="note">
                       Somente leitura: nenhuma decisão pode ser registrada neste modo.
-                    </div>
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       <button
+                        type="button"
                         onClick={() => {
                           handleConfirmRecharge(r.id, Number(r.amount), r.platform);
                           setRechargePopup(null);
                         }}
-                        className="w-full py-3 rounded-xl text-[14px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none flex items-center justify-center gap-2"
+                        className={juntar(botao.primario, "h-11 w-full")}
                       >
-                        <Check className="w-4 h-4" />
-                        Confirmar Pagamento
+                        <Check className="mr-1.5 h-4 w-4" />
+                        Confirmar pagamento
                       </button>
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
+                          type="button"
                           onClick={() => {
                             openWhatsApp(
                               `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platform}, gostaria de conversar antes de confirmar.`
                             );
                           }}
-                          className="py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border flex items-center justify-center gap-2"
+                          className={botao.secundario}
                         >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          Discutir
+                          <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+                          Conversar
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
                             handleRejectRecharge(r.id);
                             setRechargePopup(null);
                           }}
-                          className="py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30 flex items-center justify-center gap-2"
+                          className={botao.perigo}
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="mr-1.5 h-3.5 w-3.5" />
                           Recusar
                         </button>
                       </div>

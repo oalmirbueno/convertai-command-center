@@ -27,7 +27,6 @@ import {
   CheckCheck,
   ChevronRight,
   Clapperboard,
-  ClipboardList,
   Copy,
   Download,
   Eye,
@@ -53,10 +52,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { ErroDaMesa, padraoPara, textoDoErro } from "@/lib/mesa/api";
 import { useModoFoco } from "@/lib/modoFoco";
+import { AjudaRecolhida, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
 import { useBiblioteca, useFotos, useKits } from "./fotoApi";
 import { lerPedidoAoCanvas, motoresDaRodada, rotuloDoMotor, useAncoras, useAndamentos, usePersonas } from "./modelosApi";
 import {
@@ -997,6 +997,79 @@ function margensDoQuadro(folgaDireita: number) {
 
 type EstadoDoSalvar = { estado: "salvo" | "salvando" | "pendente" | "erro" | "conflito"; erro: string };
 
+/**
+ * Altura do quadro para caber na região da área de trabalho (de 1024 px para
+ * cima a região principal rola por dentro): da posição do quadro até o pé da
+ * região, sem cortar. Sem região que rola (celular e tablet, a página rola
+ * normal) ou sem medida (teste), vale a altura de antes (janela menos 150 px).
+ * Só muda quando a medida muda de verdade (tela parada, nada se mexe).
+ */
+function useAlturaDoQuadro(ativo: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [altura, setAltura] = useState<number | null>(null);
+  useEffect(() => {
+    if (!ativo) return;
+    const medir = () => {
+      const el = ref.current;
+      if (!el || typeof window === "undefined" || (window.innerWidth || 0) < 1024) {
+        setAltura(null);
+        return;
+      }
+      let rolador: HTMLElement | null = el.parentElement;
+      while (rolador) {
+        let oy = "";
+        try {
+          oy = window.getComputedStyle(rolador).overflowY;
+        } catch {
+          oy = "";
+        }
+        if ((oy === "auto" || oy === "scroll") && rolador.clientHeight > 0) break;
+        rolador = rolador.parentElement;
+      }
+      if (!rolador) {
+        setAltura(null);
+        return;
+      }
+      const topo = el.getBoundingClientRect().top - rolador.getBoundingClientRect().top + rolador.scrollTop;
+      const nova = Math.max(480, Math.round(rolador.clientHeight - topo - 12));
+      if (!isFinite(nova)) return;
+      setAltura((a) => (a !== null && Math.abs(a - nova) < 2 ? a : nova));
+    };
+    medir();
+    const t1 = window.setTimeout(medir, 250);
+    const t2 = window.setTimeout(medir, 900);
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+    };
+  }, [ativo]);
+  return { ref, altura };
+}
+
+/** Botão da barra do Canvas: secundário (um primário por área), ícone só no celular. Ligado = fundo marcado. */
+function BotaoDaBarra({ ligado, rotulo, icone, onClick, title, dados }: { ligado?: boolean; rotulo: string; icone: ReactNode; onClick: () => void; title?: string; dados?: Record<`data-${string}`, string> }) {
+  return (
+    <button
+      type="button"
+      className={juntar(botao.secundario, "mb-1.5 mr-1 h-8 px-2 text-[12px] sm:px-2.5", ligado && "border-primary/50 bg-muted text-foreground")}
+      aria-pressed={ligado === undefined ? undefined : ligado}
+      aria-label={rotulo}
+      title={title || rotulo}
+      onClick={onClick}
+      {...(dados || {})}
+    >
+      <span className="inline-flex shrink-0 sm:mr-1.5" aria-hidden="true">
+        {icone}
+      </span>
+      <span className="hidden sm:inline">{rotulo}</span>
+    </button>
+  );
+}
+
 function lerMarca(chave: string): boolean {
   try {
     return window.localStorage.getItem(chave) === "1";
@@ -1037,6 +1110,9 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
   // Modo foco: sem a barra de cima e sem os botões flutuantes do painel enquanto o Canvas está aberto (e sempre em tela cheia).
   useModoFoco("canvas", foco || cheia);
+  // O quadro cabe na região da área de trabalho (sem a altura feita à mão que dependia da página).
+  const medida = useAlturaDoQuadro(!lista && !cheia);
+
 
   const kits = useKits(clientId);
   const fotos = useFotos(clientId);
@@ -1503,8 +1579,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const barra = (
     <div className="flex min-w-0 flex-wrap items-center" data-barra-do-canvas="">
       {seletor}
-      <Input value={canvas.nome} onChange={(e) => mudar((c) => ({ ...c, nome: e.target.value }))} aria-label="Nome do canvas" className="mb-1.5 mr-2 h-8 w-full min-w-0 text-[12.5px] font-semibold sm:w-52" />
-      <span className={`mb-1.5 mr-2 inline-flex items-center text-[11px] ${salvar.estado === "erro" || salvar.estado === "conflito" ? "text-warning" : "text-muted-foreground"}`} role="status" data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
+      <Input value={canvas.nome} onChange={(e) => mudar((c) => ({ ...c, nome: e.target.value }))} aria-label="Nome do canvas" className="mb-1.5 mr-2 h-8 w-full min-w-0 text-[13px] font-semibold sm:w-52" />
+      <span className={`mb-1.5 mr-2 inline-flex items-center text-[12px] ${salvar.estado === "erro" || salvar.estado === "conflito" ? "text-warning" : "text-muted-foreground"}`} role="status" data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
         {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" /> : null}
         {rotuloDoSalvar}
       </span>
@@ -1512,7 +1588,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         type="button"
         size="sm"
         variant="ghost"
-        className="mb-1.5 mr-1 h-8 text-[12px]"
+        className="mb-1.5 mr-1 h-8 px-2 text-[12px]"
         disabled={salvar.estado === "salvando"}
         onClick={() =>
           salvarAgora()
@@ -1540,24 +1616,21 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           Recarregar
         </Button>
       )}
+      <AjudaRecolhida className="mb-1.5 mr-2">
+        Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique. Rolar move o quadro; Ctrl (ou Cmd) + rolar, ou pinça, dá zoom.
+      </AjudaRecolhida>
       <span className="hidden flex-1 sm:block" />
-      <Button type="button" size="sm" variant={historiaAberta ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={historiaAberta} onClick={alternarHistoria} data-botao-historia="">
-        <Clapperboard className="mr-1.5 h-3.5 w-3.5" /> História{totalDeCenas ? ` (${totalDeCenas})` : ""}
-      </Button>
-      <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={alternarProntos}>
-        <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Modelos prontos
-      </Button>
-      <Button type="button" size="sm" variant={comoFunciona ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={comoFunciona} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))}>
-        <HelpCircle className="mr-1.5 h-3.5 w-3.5" /> Como funciona
-      </Button>
-      <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={!foco} onClick={alternarFoco} title={foco ? "Mostrar a barra do painel e os botões flutuantes" : "Esconder a barra do painel e os botões flutuantes"}>
-        {foco ? <Eye className="mr-1.5 h-3.5 w-3.5" /> : <EyeOff className="mr-1.5 h-3.5 w-3.5" />}
-        {foco ? "Mostrar menu" : "Só o canvas"}
-      </Button>
-      <Button type="button" size="sm" variant={lista ? "default" : "outline"} className="mb-1.5 h-8 text-[12px]" aria-pressed={lista} onClick={() => setLista(!lista)}>
-        {lista ? <Workflow className="mr-1.5 h-3.5 w-3.5" /> : <LayoutList className="mr-1.5 h-3.5 w-3.5" />}
-        {lista ? "Ver o quadro" : "Modo lista"}
-      </Button>
+      <BotaoDaBarra ligado={historiaAberta} rotulo={`História${totalDeCenas ? ` (${totalDeCenas})` : ""}`} icone={<Clapperboard className="h-3.5 w-3.5" />} onClick={alternarHistoria} dados={{ "data-botao-historia": "" }} />
+      <BotaoDaBarra ligado={prontosAbertos} rotulo="Modelos prontos" icone={<Wand2 className="h-3.5 w-3.5" />} onClick={alternarProntos} />
+      <BotaoDaBarra ligado={comoFunciona} rotulo="Como funciona" icone={<HelpCircle className="h-3.5 w-3.5" />} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))} />
+      <BotaoDaBarra
+        ligado={!foco}
+        rotulo={foco ? "Mostrar menu" : "Só o canvas"}
+        icone={foco ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        onClick={alternarFoco}
+        title={foco ? "Mostrar a barra do painel e os botões flutuantes" : "Esconder a barra do painel e os botões flutuantes"}
+      />
+      <BotaoDaBarra ligado={lista} rotulo={lista ? "Ver o quadro" : "Modo lista"} icone={lista ? <Workflow className="h-3.5 w-3.5" /> : <LayoutList className="h-3.5 w-3.5" />} onClick={() => setLista(!lista)} />
     </div>
   );
 
@@ -1568,8 +1641,9 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
   const quadro = (
     <div
-      className={`flex min-w-0 flex-col overflow-hidden ${cheia ? "dark fixed inset-0 z-[120] bg-zinc-950 p-2 text-foreground" : "relative w-full rounded-2xl border border-border"}`}
-      style={cheia ? undefined : { height: "calc(100vh - 150px)", minHeight: 560 }}
+      ref={medida.ref}
+      className={`flex min-w-0 flex-col overflow-hidden ${cheia ? "dark fixed inset-0 z-[120] bg-zinc-950 p-2 text-foreground" : "relative w-full rounded-lg border border-border"}`}
+      style={cheia ? undefined : medida.altura ? { height: medida.altura } : { height: "calc(100vh - 150px)", minHeight: 560 }}
       data-quadro=""
       data-tela-cheia={cheia ? "sim" : "nao"}
     >
@@ -1630,7 +1704,17 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   return (
     <div className="min-w-0 space-y-2" data-canvas-aberto={canvas.id || "novo"}>
       {!cheia && barra}
-      {salvar.estado === "erro" && <AvisoDeErro erro={new Error(`O canvas não foi salvo: ${salvar.erro}`)} />}
+      {salvar.estado === "erro" && (
+        <EstadoDeErro
+          titulo="O canvas não foi salvo."
+          descricao={salvar.erro}
+          acao={
+            <button type="button" className={botao.secundario} onClick={() => salvarAgora().catch((e) => avisarErro(e, "Canvas não salvo"))}>
+              Tentar de novo
+            </button>
+          }
+        />
+      )}
 
       {lista ? (
         <div className="min-w-0 space-y-3">
@@ -1658,9 +1742,6 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       ) : (
         quadro
       )}
-      <p className="flex items-start text-[11px] leading-snug text-muted-foreground">
-        <ClipboardList className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique.
-      </p>
       {lista && <EscolherCartao lugar="pagina" pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />}
     </div>
   );
@@ -1678,6 +1759,8 @@ export default function EtapaCanvas() {
   const lista = canvases.data || [];
   const [aberto, setAberto] = useState<Canvas | null>(null);
   const [chave, setChave] = useState(0);
+  // O canvas aberto fica lembrado por cliente: sair e voltar abre o mesmo (sem ele, o mais recente).
+  const [idLembrado, lembrarId] = useEstadoDaTela<string | null>(`mesa-foto:canvas:aberto:${clientId}`, null, { validar: (v) => v === null || typeof v === "string" });
   const { opcoes } = useMemo(() => motoresDaRodada(catalogo), [catalogo]);
   const padrao = (opcoes.find((o) => o.padrao) || opcoes[0] || { id: "" }).id || null;
 
@@ -1690,7 +1773,10 @@ export default function EtapaCanvas() {
   // Abre o mais recente (ou um novo) quando a lista chega.
   useEffect(() => {
     if (aberto) return;
-    if (canvases.isSuccess) setAberto(lista.length ? comResultado(abrirComRascunho(clientId, lista[0]), padrao) : novo());
+    if (canvases.isSuccess) {
+      const lembrado = idLembrado ? lista.find((c) => c.id === idLembrado) || null : null;
+      setAberto(lista.length ? comResultado(abrirComRascunho(clientId, lembrado || lista[0]), padrao) : novo());
+    }
     else if (canvases.isError) setAberto(novo());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvases.isSuccess, canvases.isError]);
@@ -1698,6 +1784,7 @@ export default function EtapaCanvas() {
   const trocar = (c: Canvas) => {
     setAberto(comResultado(c, padrao));
     setChave((k) => k + 1);
+    lembrarId(c.id || null);
   };
 
   const seletor = (
@@ -1720,20 +1807,33 @@ export default function EtapaCanvas() {
           ))}
         </SelectContent>
       </Select>
-      <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-2 h-8 text-[12px]" onClick={() => trocar(canvasVazio(clientId))}>
-        <Plus className="mr-1 h-3.5 w-3.5" /> Novo canvas
-      </Button>
+      <button type="button" className={juntar(botao.secundario, "mb-1.5 mr-2 h-8 px-2 text-[12px] sm:px-2.5")} onClick={() => trocar(canvasVazio(clientId))} aria-label="Novo canvas">
+        <Plus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" /> <span className="hidden sm:inline">Novo canvas</span>
+      </button>
+
     </>
   );
 
   return (
     <ReactFlowProvider>
-      <div className="dark min-w-0 rounded-2xl border border-border bg-background p-2 pb-10 text-foreground sm:p-3 sm:pb-10" data-canvas-escuro="">
-        {canvases.isError && <AvisoDeErro erro={canvases.error} className="mb-2" />}
+      {/* Sem caixa em volta (a etapa já está na área de trabalho): o quadro é a única superfície. */}
+      <div className="dark min-w-0 bg-background pb-2 text-foreground" data-canvas-escuro="">
+        {canvases.isError && (
+          <EstadoDeErro
+            className="mb-2"
+            titulo="Não foi possível ler os canvas salvos."
+            descricao={textoDoErro(canvases.error)}
+            acao={
+              <button type="button" className={botao.secundario} onClick={() => void canvases.refetch()}>
+                Tentar de novo
+              </button>
+            }
+          />
+        )}
         {aberto ? (
           <CanvasAberto key={`${aberto.id || "novo"}-${chave}`} inicial={aberto} onTrocar={trocar} seletor={seletor} />
         ) : (
-          <div className="h-[60vh] animate-pulse rounded-2xl bg-muted/60" aria-busy="true" aria-label="Abrindo o canvas" />
+          <div className="h-[60vh] animate-pulse rounded-lg bg-muted/60" aria-busy="true" aria-label="Abrindo o canvas" />
         )}
       </div>
     </ReactFlowProvider>

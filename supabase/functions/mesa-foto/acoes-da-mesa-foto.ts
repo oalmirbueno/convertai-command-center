@@ -19,9 +19,12 @@ export const ESQUEMA_DAS_ACOES_DA_MESA_FOTO = esquemaDasAcoes(OPERACOES_DA_MESA_
 
 export type CampanhaDaMesaFoto = { id: string; nome: string; status?: string | null };
 
-/** Campanhas com apelido c1..cN (as encerradas ficam de fora: foto nova não entra nelas). */
-export function campanhasComApelido(campanhas: CampanhaDaMesaFoto[]): CampanhaParaFotos[] {
-  return campanhas.filter((c) => c.status !== "encerrada").slice(0, 20).map((c, i) => ({ id: c.id, nome: c.nome, ref: `c${i + 1}` }));
+/**
+ * Campanhas com apelido c1..cN (as encerradas ficam de fora: foto nova não entra nelas).
+ * O diretor agêntico (diretor-agentico.ts) usa cp1..cpN: lá c1..cN são os clones.
+ */
+export function campanhasComApelido(campanhas: CampanhaDaMesaFoto[], prefixo = "c"): CampanhaParaFotos[] {
+  return campanhas.filter((c) => c.status !== "encerrada").slice(0, 20).map((c, i) => ({ id: c.id, nome: c.nome, ref: `${prefixo}${i + 1}` }));
 }
 
 /** O pedido fala em aprovar, arquivar, organizar ou mandar fotos? Só então as listas entram no prompt. */

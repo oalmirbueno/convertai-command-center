@@ -322,11 +322,14 @@ describe("topo compacto da Mesa", () => {
 
   it("o nav continua sendo o que o Estúdio e o Contexto medem", () => {
     const pagina = ler("src/pages/MesaDoCliente.tsx");
-    expect(pagina).toContain('aria-label="Etapas da Mesa"');
+    expect(pagina).toContain('rotulo="Etapas da Mesa"');
+    expect(ler("src/components/sistema/Etapas.tsx")).toContain("<nav aria-label={rotulo}");
     expect(pagina).not.toContain('className="heading-page"');
     expect(pagina).not.toContain("<BarraDeCusto");
     expect(ler("src/components/mesa/EstudioAltura.ts")).toContain(`document.querySelector('nav[aria-label="Etapas da Mesa"]')`);
-    expect(ler("src/components/mesa/AbaContexto.tsx")).toContain("fimDoCabecalhoFixo()");
+    // O Contexto usa a área de trabalho do sistema: ela mede onde começa e ocupa a altura da janela.
+    expect(ler("src/components/mesa/AbaContexto.tsx")).toContain("<AreaDeTrabalho");
+    expect(ler("src/components/sistema/AreaDeTrabalho.tsx")).toContain("getBoundingClientRect().top + rolado");
   });
 });
 

@@ -1,11 +1,14 @@
-import { useMemo, useState } from "react";
-import { Archive, CalendarDays, FileText, Loader2, Plus, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { CalendarDays, FileText, Plus, Sparkles } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, textoDoErro } from "@/lib/mesa/api";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ROTULO_DO_FORMATO, ROTULO_DO_STATUS, modoDoTipo, type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { roteiroDaPeca, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 1: a agenda. Lista as peças de vídeo da agenda do cliente (Reels,
@@ -26,7 +29,9 @@ export default function EtapaAgenda({
   const { clientId } = useMesa();
   const pecasQ = usePecasDeVideo(clientId);
   const roteirosQ = useRoteiros(clientId);
-  const [comArquivados, setComArquivados] = useState(false);
+  // Filtro dos avulsos guardado por cliente (sair e voltar mantém).
+  const [filtro, setFiltro] = useEstadoDaTela<"ativos" | "todos">(`mesa-roteiros:agenda:filtro:${clientId}`, "ativos", { validar: (v) => v === "ativos" || v === "todos" });
+  const comArquivados = filtro === "todos";
   const lista = roteirosQ.data ? roteirosQ.data.lista : [];
   const pecas = pecasQ.data || [];
   const idsDasPecas = useMemo(() => {
@@ -36,53 +41,64 @@ export default function EtapaAgenda({
   }, [pecas]);
   const outros = lista.filter((r) => (!r.task_id || !idsDasPecas[r.task_id]) && (comArquivados || !r.arquivado_em));
   const arquivados = lista.filter((r) => !!r.arquivado_em).length;
+  const estados = Object.keys(ROTULO_DO_STATUS)
+    .map((k) => ROTULO_DO_STATUS[k as keyof typeof ROTULO_DO_STATUS])
+    .join(", ");
 
   return (
-    <div className="space-y-5" data-etapa-agenda="">
+    <div className="min-w-0 space-y-6" data-etapa-agenda="">
       {roteirosQ.data && roteirosQ.data.indisponivel && <AvisoDoBanco />}
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="mb-3 flex min-w-0 flex-wrap items-center">
-          <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          <h2 className="mr-auto min-w-0 truncate text-[14px] font-semibold">Peças de vídeo da agenda</h2>
-          <Button type="button" size="sm" variant="outline" onClick={onAvulso} className="mt-1 h-8 text-[12px] sm:mt-0">
-            <Plus className="mr-1 h-3.5 w-3.5" /> Roteiro avulso
-          </Button>
-        </div>
-        {pecasQ.isLoading && (
-          <p className="flex items-center text-[12.5px] text-muted-foreground">
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo a agenda...
-          </p>
+      <section className="min-w-0 space-y-3">
+        <Cabecalho
+          icone={<CalendarDays className="h-4 w-4" />}
+          titulo="Peças de vídeo da agenda"
+          ajuda={`Reels, vídeo, short e story da agenda, da semana passada até seis semanas à frente. O roteiro gravado no calendário, o contexto, o cérebro e a campanha entram como base. Estados: ${estados}. Aprovado fica ligado à peça da agenda.`}
+          estado={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
+          acoes={
+            <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
+              <Plus className="h-3.5 w-3.5" />
+              <RotuloLargo>Roteiro avulso</RotuloLargo>
+            </button>
+          }
+        />
+        {pecasQ.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo a agenda" />}
+        {pecasQ.isError && (
+          <EstadoDeErro
+            titulo={textoDoErro(pecasQ.error, "Não foi possível ler a agenda.")}
+            acao={
+              <button type="button" className={botao.secundario} onClick={() => void pecasQ.refetch()}>
+                Tentar de novo
+              </button>
+            }
+          />
         )}
-        {pecasQ.isError && <p className="text-[12.5px] text-destructive">{textoDoErro(pecasQ.error, "Não foi possível ler a agenda.")}</p>}
-        {pecasQ.isSuccess && !pecas.length && (
-          <p className="text-[12.5px] text-muted-foreground">Nenhuma peça de vídeo na agenda entre a semana passada e as próximas seis semanas. Use o roteiro avulso.</p>
-        )}
+        {pecasQ.isSuccess && !pecas.length && <EstadoVazio compacto titulo="Nenhuma peça de vídeo na agenda." descricao="Use o roteiro avulso." />}
         {pecas.length > 0 && (
-          <ul className="divide-y divide-border" data-pecas-de-video="">
+          <ul className={juntar(superficie.painel, "divide-y divide-border")} data-pecas-de-video="">
             {pecas.map((p) => {
               const r = roteiroDaPeca(lista, p.id);
               return (
-                <li key={p.id} className="flex min-w-0 flex-wrap items-center py-2.5" data-peca={p.id}>
-                  <div className="mr-3 w-[74px] shrink-0 text-[12px] text-muted-foreground">{p.data ? dataCurta(p.data) : "sem data"}</div>
+                <li key={p.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5" data-peca={p.id}>
+                  <div className="mr-3 w-[64px] shrink-0 text-[12px] tabular-nums text-muted-foreground">{p.data ? dataCurta(p.data) : "sem data"}</div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">{p.titulo}</p>
-                    <p className="truncate text-[11.5px] text-muted-foreground">
+                    <p className="truncate text-[12px] text-muted-foreground">
                       {ROTULO_DO_FORMATO[p.formato] || p.formato}
                       {p.temRoteiroDaAgenda ? " · roteiro do calendário entra como base" : ""}
                       {r ? ` · ${modoDoTipo(r.tipo).rotulo} · versão ${r.versao_atual}` : ""}
                     </p>
                   </div>
-                  <div className="mt-1 flex w-full items-center justify-end sm:mt-0 sm:w-auto">
-                    {r ? <SeloDoStatus status={r.status} /> : <span className="mr-2 text-[11px] text-muted-foreground">Sem roteiro</span>}
+                  <div className="mt-1.5 flex w-full items-center justify-end sm:ml-2 sm:mt-0 sm:w-auto">
+                    {r ? <SeloDoStatus status={r.status} /> : <span className="text-[11.5px] text-muted-foreground">Sem roteiro</span>}
                     {r ? (
-                      <Button type="button" size="sm" variant="outline" className="ml-2 h-8 text-[12px]" onClick={() => onAbrirRoteiro(r.id)}>
+                      <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id)}>
                         <FileText className="mr-1 h-3.5 w-3.5" /> Abrir
-                      </Button>
+                      </button>
                     ) : (
-                      <Button type="button" size="sm" className="ml-2 h-8 text-[12px]" onClick={() => onNovoDaPeca(p.id)}>
+                      <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px] text-primary")} onClick={() => onNovoDaPeca(p.id)}>
                         <Sparkles className="mr-1 h-3.5 w-3.5" /> Escrever roteiro
-                      </Button>
+                      </button>
                     )}
                   </div>
                 </li>
@@ -92,42 +108,58 @@ export default function EtapaAgenda({
         )}
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="mb-3 flex min-w-0 flex-wrap items-center">
-          <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          <h2 className="mr-auto min-w-0 truncate text-[14px] font-semibold">Roteiros avulsos e de outras datas</h2>
-          {arquivados > 0 && (
-            <button type="button" onClick={() => setComArquivados((v) => !v)} className="text-[11.5px] text-muted-foreground hover:text-foreground">
-              <Archive className="mr-1 inline h-3.5 w-3.5" />
-              {comArquivados ? "Esconder arquivados" : `Mostrar arquivados (${arquivados})`}
-            </button>
-          )}
-        </div>
-        {roteirosQ.isLoading && <p className="text-[12.5px] text-muted-foreground">Carregando roteiros...</p>}
-        {roteirosQ.isError && <p className="text-[12.5px] text-destructive">{textoDoErro(roteirosQ.error, "Não foi possível ler os roteiros.")}</p>}
-        {roteirosQ.isSuccess && !outros.length && <p className="text-[12.5px] text-muted-foreground">Nenhum roteiro avulso ainda.</p>}
+      <section className="min-w-0 space-y-3 border-t border-border pt-5">
+        <Cabecalho
+          icone={<FileText className="h-4 w-4" />}
+          titulo="Roteiros avulsos e de outras datas"
+          estado={roteirosQ.isSuccess ? `${outros.length} ${outros.length === 1 ? "roteiro" : "roteiros"}` : undefined}
+          acoes={
+            arquivados > 0 ? (
+              <SeletorCompacto
+                rotulo="Mostrar roteiros"
+                opcoes={[
+                  { valor: "ativos", rotulo: "Ativos" },
+                  { valor: "todos", rotulo: "Com arquivados", contador: arquivados },
+                ]}
+                valor={filtro}
+                onEscolher={(v) => setFiltro(v === "todos" ? "todos" : "ativos")}
+              />
+            ) : null
+          }
+        />
+        {roteirosQ.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os roteiros" />}
+        {roteirosQ.isError && (
+          <EstadoDeErro
+            titulo={textoDoErro(roteirosQ.error, "Não foi possível ler os roteiros.")}
+            acao={
+              <button type="button" className={botao.secundario} onClick={() => void roteirosQ.refetch()}>
+                Tentar de novo
+              </button>
+            }
+          />
+        )}
+        {roteirosQ.isSuccess && !outros.length && <EstadoVazio compacto titulo="Nenhum roteiro avulso ainda." />}
         {outros.length > 0 && (
-          <ul className="divide-y divide-border">
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
             {outros.map((r: LinhaDoRoteiro) => (
-              <li key={r.id} className="flex min-w-0 items-center py-2.5" data-roteiro={r.id}>
-                <div className="min-w-0 flex-1">
+              <li key={r.id} className="flex min-w-0 items-center px-4 py-2.5" data-roteiro={r.id}>
+                <div className="mr-2 min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{r.titulo}</p>
-                  <p className="truncate text-[11.5px] text-muted-foreground">
+                  <p className="truncate text-[12px] text-muted-foreground">
                     {modoDoTipo(r.tipo).rotulo} · versão {r.versao_atual}
                     {r.arquivado_em ? " · arquivado" : ""}
                     {r.task_id ? " · peça fora do período" : " · avulso"}
                   </p>
                 </div>
                 <SeloDoStatus status={r.status} />
-                <Button type="button" size="sm" variant="outline" className="ml-2 h-8 text-[12px]" onClick={() => onAbrirRoteiro(r.id)}>
+                <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id)}>
                   Abrir
-                </Button>
+                </button>
               </li>
             ))}
           </ul>
         )}
       </section>
-      <p className="text-[11.5px] text-muted-foreground">Estados: {Object.keys(ROTULO_DO_STATUS).map((k) => ROTULO_DO_STATUS[k as keyof typeof ROTULO_DO_STATUS]).join(", ")}. Aprovado fica ligado à peça da agenda.</p>
     </div>
   );
 }

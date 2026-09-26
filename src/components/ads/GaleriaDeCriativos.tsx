@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, ImageOff, Video, TrendingUp, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { X, ImageOff, Video, Megaphone } from "lucide-react";
+import { CampoDeBusca } from "@/components/sistema";
+import { EstadoVazio, Secao, SeletorCompacto, botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 
 /**
  * Os criativos de um cliente, com a peça à vista e o número ao lado.
@@ -8,12 +9,17 @@ import { cn } from "@/lib/utils";
  * A pergunta que esta tela responde, e que a de campanhas não responde:
  * campanha diz quanto se gastou; criativo diz QUAL arte fez o trabalho. É
  * a diferença entre "a campanha rendeu" e "este vídeo rendeu, aquela arte
- * não" — e só a segunda dá o que fazer na semana seguinte.
+ * não", e só a segunda dá o que fazer na semana seguinte.
  *
  * SOBRE A MINIATURA: o endereço vem da Meta e EXPIRA. Imagem que não
  * carrega aqui é normal, não é defeito, e por isso o lugar dela nunca fica
  * vazio: aparece o nome da peça sobre um fundo sólido. Um buraco branco na
  * grade faria qualquer pessoa achar que o painel quebrou.
+ *
+ * Sistema de design (26/09): seção sem caixa, filtros numa fileira, a
+ * imagem manda no cartão (sem moldura), proporção por padding-bottom (o
+ * Safari 11 não tem a propriedade de proporção) e a grade mostra um lote com "Ver mais" em vez de
+ * uma caixa com rolagem própria (no celular ela prenderia o dedo).
  */
 
 export interface CriativoDeAnuncio {
@@ -41,6 +47,9 @@ const dinheiro = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const inteiro = (v: number) => v.toLocaleString("pt-BR");
 
+/** Quantas peças por lote na grade (3 linhas de 4 no computador). */
+const LOTE = 12;
+
 function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
   const [falhou, setFalhou] = useState(false);
   /*
@@ -48,8 +57,8 @@ function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
    *
    * `thumbnail_url` da Meta traz `p64x64` na própria URL: são 64 pixels.
    * Esticada num cartão de 230px vira um borrão, e foi isso que apareceu
-   * na primeira versão. A `image_url` é a peça em tamanho real — conferi
-   * uma delas: 697 por 697, servida pelo fbcdn sem bloqueio de origem.
+   * na primeira versão. A `image_url` é a peça em tamanho real (conferi
+   * uma delas: 697 por 697, servida pelo fbcdn sem bloqueio de origem).
    * A miniatura fica como reserva, para quando a arte não vier.
    */
   const src = c.image_url || c.thumbnail_url;
@@ -57,16 +66,16 @@ function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
   if (!src || falhou) {
     return (
       <div
-        className={cn(
-          "flex flex-col items-center justify-center gap-1.5 bg-secondary p-3 text-center",
-          grande ? "h-[60vh] w-full" : "aspect-square w-full",
+        className={juntar(
+          "flex flex-col items-center justify-center bg-muted p-3 text-center",
+          grande ? "h-[60vh] w-full" : "absolute inset-0",
         )}
       >
-        <ImageOff className="h-5 w-5 text-muted-foreground" />
-        <p className="line-clamp-3 text-[10.5px] leading-tight text-muted-foreground">
+        <ImageOff className="mb-1.5 h-5 w-5 text-muted-foreground" aria-hidden="true" />
+        <p className="line-clamp-3 text-[11px] leading-tight text-muted-foreground">
           {c.ad_name || "Peça sem nome"}
         </p>
-        <p className="text-[9.5px] text-muted-foreground/70">
+        <p className="mt-1 text-[10.5px] text-muted-foreground/70">
           a imagem expirou na Meta
         </p>
       </div>
@@ -82,46 +91,57 @@ function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
       /* O fbcdn devolve a imagem sem exigir origem, e mandar a nossa não
          acrescenta nada além de vazar de onde o painel está sendo aberto. */
       referrerPolicy="no-referrer"
-      className={cn(
-        "bg-secondary object-cover",
-        grande ? "max-h-[60vh] w-auto object-contain" : "aspect-square w-full",
+      className={juntar(
+        "bg-muted",
+        grande ? "max-h-[60vh] w-auto object-contain" : "absolute inset-0 h-full w-full object-cover",
       )}
     />
   );
 }
 
-function Numero({ rotulo, valor, tom }: { rotulo: string; valor: string; tom?: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-2.5 py-1.5">
-      <p className={cn("text-[13px] font-bold tabular-nums leading-none", tom ?? "text-foreground")}>
-        {valor}
-      </p>
-      <p className="mt-1 text-[9.5px] leading-tight text-muted-foreground">{rotulo}</p>
-    </div>
-  );
-}
+const ORDENS = [
+  { id: "gasto", rotulo: "Maior gasto" },
+  { id: "custo", rotulo: "Menor custo" },
+  { id: "ctr", rotulo: "Maior CTR" },
+] as const;
+
+const RECORTES = [
+  { id: "rodaram", rotulo: "Rodaram" },
+  { id: "paradas", rotulo: "Paradas" },
+  { id: "todas", rotulo: "Todas" },
+] as const;
+
+type Ordem = (typeof ORDENS)[number]["id"];
 
 export default function GaleriaDeCriativos({
   criativos,
   periodoDias,
+  chave = "geral",
 }: {
   criativos: CriativoDeAnuncio[];
   periodoDias: number;
+  /** Onde guardar filtros e ordem (o cliente): sair e voltar mantém o recorte. */
+  chave?: string;
 }) {
   const [aberto, setAberto] = useState<CriativoDeAnuncio | null>(null);
-  const [ordem, setOrdem] = useState<"gasto" | "custo" | "ctr">("gasto");
-  const [busca, setBusca] = useState("");
-  const [campanhaFiltro, setCampanhaFiltro] = useState("");
+  const [ordem, setOrdem] = useEstadoDaTela<Ordem>(`criativos:${chave}:ordem`, "gasto", {
+    validar: (v) => v === "gasto" || v === "custo" || v === "ctr",
+  });
+  const [busca, setBusca] = useEstadoDaTela(`criativos:${chave}:busca`, "", { validar: (v) => typeof v === "string" });
+  const [campanhaFiltro, setCampanhaFiltro] = useEstadoDaTela(`criativos:${chave}:campanha`, "", { validar: (v) => typeof v === "string" });
+  const [visiveis, setVisiveis] = useState(LOTE);
   /**
    * O filtro que resolve o problema real desta carteira.
    *
    * Metade das peças nunca rodou: na Verzelo, dezenove das trinta e
    * quatro. Elas PRECISAM aparecer em algum lugar, porque arte parada é
-   * trabalho que não virou resultado — mas quem abriu a tela para decidir
+   * trabalho que não virou resultado, mas quem abriu a tela para decidir
    * verba está olhando as que rodaram. Por isso o padrão é "as que
    * rodaram", com o resto a um clique.
    */
-  const [recorte, setRecorte] = useState<"rodaram" | "paradas" | "todas">("rodaram");
+  const [recorte, setRecorte] = useEstadoDaTela<"rodaram" | "paradas" | "todas">(`criativos:${chave}:recorte`, "rodaram", {
+    validar: (v) => v === "rodaram" || v === "paradas" || v === "todas",
+  });
 
   // Escape fecha. Quem abre uma imagem em tela cheia espera isso, e sem
   // ele a única saída é caçar o X com o mouse.
@@ -133,6 +153,11 @@ export default function GaleriaDeCriativos({
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [aberto]);
+
+  // Filtro novo começa do primeiro lote.
+  useEffect(() => {
+    setVisiveis(LOTE);
+  }, [busca, campanhaFiltro, recorte, ordem, chave]);
 
   /* O total do período, para a grade ter um teto de leitura. Sem isto,
      quem abre a tela vê vinte cartões e não sabe se aquilo é muito ou
@@ -189,199 +214,152 @@ export default function GaleriaDeCriativos({
     });
   }, [filtrados, ordem]);
 
+  const ajuda =
+    "Qual arte fez o trabalho: gasto, cliques no link e custo de cada peça. O padrão mostra as que rodaram; as paradas ficam a um clique. Imagem que a Meta expirou aparece com o nome da peça. Toque numa peça para ver grande.";
+
   if (criativos.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card p-4 text-center">
-        <p className="text-[12px] text-foreground">Nenhum criativo lido ainda.</p>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          A leitura das peças acontece junto com a das campanhas, de dez em dez
-          minutos. Clique em "Atualizar agora" para apressar a primeira.
-        </p>
-      </div>
+      <Secao divisoria titulo="Criativos" descricao={`Últimos ${periodoDias} dias`} ajuda={ajuda}>
+        <EstadoVazio
+          compacto
+          titulo="Nenhum criativo lido ainda."
+          descricao='A leitura das peças vem junto com a das campanhas; "Atualizar agora" apressa a primeira.'
+        />
+      </Secao>
     );
   }
 
-  return (
-    <div className="rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-secondary px-3.5 py-2.5">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5 text-primary" />
-          <p className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
-            Criativos · últimos {periodoDias} dias
-          </p>
-          <span className="text-[10.5px] tabular-nums text-muted-foreground">
-            {criativos.length}
-          </span>
-        </div>
-        <div className="flex gap-1">
-          {([
-            { id: "gasto", rotulo: "Maior gasto" },
-            { id: "custo", rotulo: "Menor custo" },
-            { id: "ctr", rotulo: "Maior CTR" },
-          ] as const).map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => setOrdem(o.id)}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition-colors",
-                ordem === o.id
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {o.rotulo}
-            </button>
-          ))}
-        </div>
-      </header>
+  const mostrados = ordenados.slice(0, visiveis);
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border px-3.5 py-2.5 text-[11px]">
-        <span className="text-muted-foreground">
-          investido nas peças{" "}
-          <strong className="tabular-nums text-foreground">{dinheiro(resumo.gasto)}</strong>
+  return (
+    <Secao
+      divisoria
+      titulo="Criativos"
+      descricao={
+        <span className="block truncate tabular-nums">
+          {ordenados.length} de {criativos.length} · últimos {periodoDias} dias
         </span>
-        <span className="text-muted-foreground">
+      }
+      ajuda={ajuda}
+      acao={
+        <SeletorCompacto
+          rotulo="Ordenar criativos"
+          opcoes={ORDENS.map((o) => ({ valor: o.id, rotulo: o.rotulo }))}
+          valor={ordem}
+          onEscolher={(v) => setOrdem(v as Ordem)}
+        />
+      }
+    >
+      <p className={juntar(texto.auxiliar, "mb-3 flex min-w-0 flex-wrap [&>*]:mr-4")}>
+        <span>
+          investido nas peças{" "}
+          <strong className="font-semibold tabular-nums text-foreground">{dinheiro(resumo.gasto)}</strong>
+        </span>
+        <span>
           cliques no link{" "}
-          <strong className="tabular-nums text-info">{inteiro(resumo.cliques_no_link)}</strong>
+          <strong className="font-semibold tabular-nums text-foreground">{inteiro(resumo.cliques_no_link)}</strong>
         </span>
         {resumo.custo_medio !== null && (
-          <span className="text-muted-foreground">
+          <span>
             custo médio{" "}
-            <strong className="tabular-nums text-success">{dinheiro(resumo.custo_medio)}</strong>
+            <strong className="font-semibold tabular-nums text-foreground">{dinheiro(resumo.custo_medio)}</strong>
           </span>
         )}
         {resumo.maior && (
-          <span className="min-w-0 truncate text-muted-foreground">
+          <span className="min-w-0 max-w-full truncate">
             maior gasto:{" "}
-            <strong className="text-foreground">{resumo.maior.ad_name || "peça sem nome"}</strong>
+            <strong className="font-semibold text-foreground">{resumo.maior.ad_name || "peça sem nome"}</strong>
           </span>
         )}
-        {resumo.pecas_sem_numero > 0 && (
-          <span className="text-muted-foreground">
-            {resumo.pecas_sem_numero} sem número no período
-          </span>
-        )}
-      </div>
+        {resumo.pecas_sem_numero > 0 && <span>{resumo.pecas_sem_numero} sem número no período</span>}
+      </p>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5">
-        <div className="relative min-w-[190px] flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, campanha ou texto da peça"
-            className="h-8 w-full rounded-lg border border-border bg-secondary pl-8 pr-2 text-[11.5px] text-foreground placeholder:text-muted-foreground"
-          />
-        </div>
-
+      <div className="-m-1 mb-3 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar por nome, campanha ou texto da peça"
+          rotulo="Buscar criativo"
+          className="min-w-0 flex-1 basis-full sm:basis-[240px]"
+        />
         {campanhas.length > 1 && (
-          <select
-            value={campanhaFiltro}
-            onChange={(e) => setCampanhaFiltro(e.target.value)}
-            className="h-8 max-w-[220px] rounded-lg border border-border bg-secondary px-2 text-[11.5px] text-foreground"
-          >
-            <option value="">Todas as campanhas</option>
-            {campanhas.map((nome) => (
-              <option key={nome} value={nome}>{nome}</option>
-            ))}
-          </select>
+          <SeletorCompacto
+            rotulo="Campanha"
+            modo="lista"
+            icone={<Megaphone className="h-3.5 w-3.5" />}
+            opcoes={[{ valor: "", rotulo: "Todas as campanhas" }, ...campanhas.map((nome) => ({ valor: nome, rotulo: nome }))]}
+            valor={campanhaFiltro}
+            onEscolher={setCampanhaFiltro}
+            className="max-w-[220px]"
+          />
         )}
-
-        <div className="flex gap-1">
-          {([
-            { id: "rodaram", rotulo: "Rodaram" },
-            { id: "paradas", rotulo: "Paradas" },
-            { id: "todas", rotulo: "Todas" },
-          ] as const).map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => setRecorte(r.id)}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition-colors",
-                recorte === r.id
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {r.rotulo}
-            </button>
-          ))}
-        </div>
-
-        <span className="text-[10.5px] tabular-nums text-muted-foreground">
-          {ordenados.length} de {criativos.length}
-        </span>
+        <SeletorCompacto
+          rotulo="Recorte dos criativos"
+          opcoes={RECORTES.map((r) => ({ valor: r.id, rotulo: r.rotulo }))}
+          valor={recorte}
+          onEscolher={(v) => setRecorte(v as "rodaram" | "paradas" | "todas")}
+        />
       </div>
 
       {ordenados.length === 0 ? (
-        <div className="p-6 text-center">
-          <p className="text-[12px] text-foreground">Nada com esse recorte.</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {recorte === "rodaram" && resumo.pecas_sem_numero > 0
+        <EstadoVazio
+          compacto
+          titulo="Nada com esse recorte."
+          descricao={
+            recorte === "rodaram" && resumo.pecas_sem_numero > 0
               ? `Nenhuma peça com gasto aqui. Há ${resumo.pecas_sem_numero} parada(s) em "Paradas".`
-              : "Tente outro termo, ou volte para \"Todas\"."}
-          </p>
-        </div>
+              : "Tente outro termo, ou volte para \"Todas\"."
+          }
+        />
       ) : (
-      /* Rolagem própria: cinquenta e oito peças empurrariam as campanhas
-         para fora da tela, e é lá embaixo que está o resto da leitura. */
-      <div className="max-h-[38rem] overflow-y-auto">
-      <div className="grid gap-2.5 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {ordenados.map((c) => (
-          <button
-            key={c.ad_id}
-            type="button"
-            onClick={() => setAberto(c)}
-            className="group overflow-hidden rounded-lg border border-border bg-card text-left transition-all hover:-translate-y-px hover:border-primary/60 hover:shadow-lg hover:shadow-black/20"
-          >
-            <div className="relative overflow-hidden">
-              <Miniatura c={c} />
-              {c.video_id && (
-                <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                  <Video className="h-2.5 w-2.5" /> vídeo
-                </span>
-              )}
-              {c.effective_status && c.effective_status !== "ACTIVE" && (
-                <span className="absolute right-1.5 top-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                  {c.effective_status.toLowerCase()}
-                </span>
-              )}
-            </div>
-            <div className="p-2">
-              <p className="truncate text-[11.5px] font-semibold text-foreground">
-                {c.ad_name || "Peça sem nome"}
-              </p>
-              {c.campanha && (
-                <p className="truncate text-[9.5px] text-muted-foreground">{c.campanha}</p>
-              )}
-              {c.dias_com_dado === 0 ? (
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  sem número no período
-                </p>
-              ) : (
-                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]">
-                  <span className="font-semibold tabular-nums text-foreground">
-                    {dinheiro(c.gasto)}
-                  </span>
-                  {c.ctr !== null && (
-                    <span className="tabular-nums text-muted-foreground">
-                      CTR {c.ctr.toFixed(2)}%
+        <>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+            {mostrados.map((c) => (
+              <button
+                key={c.ad_id}
+                type="button"
+                onClick={() => setAberto(c)}
+                className={juntar("group min-w-0 rounded-md text-left", foco)}
+              >
+                <div className="relative overflow-hidden rounded-md bg-muted" style={{ paddingBottom: "100%" }}>
+                  <Miniatura c={c} />
+                  {c.video_id && (
+                    <span className="absolute left-1.5 top-1.5 flex items-center rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      <Video className="mr-1 h-3 w-3" aria-hidden="true" /> vídeo
                     </span>
                   )}
-                  {c.custo_no_link !== null && (
-                    <span className="tabular-nums text-info">
-                      {dinheiro(c.custo_no_link)}/clique
+                  {c.effective_status && c.effective_status !== "ACTIVE" && (
+                    <span className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {c.effective_status.toLowerCase()}
                     </span>
                   )}
                 </div>
-              )}
+                <p className="mt-1.5 truncate text-[12.5px] font-medium text-foreground group-hover:text-primary">
+                  {c.ad_name || "Peça sem nome"}
+                </p>
+                {c.campanha && (
+                  <p className={juntar(texto.auxiliar, "truncate")}>{c.campanha}</p>
+                )}
+                {c.dias_com_dado === 0 ? (
+                  <p className={juntar(texto.auxiliar, "mt-0.5")}>sem número no período</p>
+                ) : (
+                  <p className="mt-0.5 flex flex-wrap text-[11.5px] leading-4 tabular-nums [&>*]:mr-2">
+                    <span className="font-semibold text-foreground">{dinheiro(c.gasto)}</span>
+                    {c.ctr !== null && <span className="text-muted-foreground">CTR {c.ctr.toFixed(2)}%</span>}
+                    {c.custo_no_link !== null && <span className="text-info">{dinheiro(c.custo_no_link)}/clique</span>}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+          {ordenados.length > mostrados.length && (
+            <div className="mt-4 flex justify-center">
+              <button type="button" onClick={() => setVisiveis((v) => v + LOTE)} className={botao.secundario}>
+                Ver mais ({ordenados.length - mostrados.length})
+              </button>
             </div>
-          </button>
-        ))}
-      </div>
-      </div>
+          )}
+        </>
       )}
 
       {aberto && (
@@ -391,68 +369,63 @@ export default function GaleriaDeCriativos({
           role="presentation"
         >
           <div
-            className="max-h-full w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={aberto.ad_name || "Peça sem nome"}
+            className="max-h-full w-full max-w-3xl overflow-y-auto overscroll-contain rounded-lg border border-border bg-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {aberto.ad_name || "Peça sem nome"}
-                </p>
-                <p className="truncate text-[10.5px] text-muted-foreground">
+            <div className="flex items-start justify-between border-b border-border px-4 py-3">
+              <div className="mr-3 min-w-0">
+                <p className={juntar(texto.tituloSecao, "truncate")}>{aberto.ad_name || "Peça sem nome"}</p>
+                <p className={juntar(texto.auxiliar, "truncate")}>
                   {aberto.campanha ? `${aberto.campanha} · ` : ""}
                   {aberto.effective_status?.toLowerCase() || "situação desconhecida"}
                   {aberto.dias_com_dado > 0 && ` · ${aberto.dias_com_dado} dias com número`}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setAberto(null)}
-                className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground"
-                aria-label="Fechar"
-              >
-                <X className="h-4 w-4" />
+              <button type="button" onClick={() => setAberto(null)} className={botao.icone} aria-label="Fechar">
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
-            <div className="flex justify-center bg-secondary">
+            <div className="flex justify-center bg-muted">
               <Miniatura c={aberto} grande />
             </div>
 
-            <div className="space-y-3 p-4">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                <Numero rotulo="gasto" valor={dinheiro(aberto.gasto)} />
-                <Numero rotulo="impressões" valor={inteiro(aberto.impressoes)} />
-                <Numero
-                  rotulo="maior alcance num dia"
-                  valor={inteiro(aberto.maior_alcance)}
-                />
-                <Numero rotulo="cliques" valor={inteiro(aberto.cliques)} />
-                <Numero rotulo="cliques no link" valor={inteiro(aberto.cliques_no_link)} tom="text-info" />
-                <Numero
-                  rotulo="custo por clique no link"
-                  valor={aberto.custo_no_link !== null ? dinheiro(aberto.custo_no_link) : "-"}
-                  tom="text-success"
-                />
-              </div>
+            <div className="p-4">
+              <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
+                {[
+                  { rotulo: "Gasto", valor: dinheiro(aberto.gasto), tom: "" },
+                  { rotulo: "Impressões", valor: inteiro(aberto.impressoes), tom: "" },
+                  { rotulo: "Maior alcance num dia", valor: inteiro(aberto.maior_alcance), tom: "" },
+                  { rotulo: "Cliques", valor: inteiro(aberto.cliques), tom: "" },
+                  { rotulo: "Cliques no link", valor: inteiro(aberto.cliques_no_link), tom: "text-info" },
+                  {
+                    rotulo: "Custo por clique no link",
+                    valor: aberto.custo_no_link !== null ? dinheiro(aberto.custo_no_link) : "-",
+                    tom: "text-success",
+                  },
+                ].map((n) => (
+                  <div key={n.rotulo} className="min-w-0 bg-card px-3 py-2">
+                    <dt className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</dt>
+                    <dd className={juntar("mt-0.5 truncate text-[15px] font-semibold tabular-nums", n.tom || "text-foreground")}>{n.valor}</dd>
+                  </div>
+                ))}
+              </dl>
 
               {/* Alcance não soma, e dizer isso na tela evita que alguém
                   monte um relatório somando os dias e apresente um número
                   que nunca existiu. */}
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
-                O alcance mostrado é o maior dia do período, não a soma: a mesma
-                pessoa alcançada em dois dias não são duas pessoas.
+              <p className={juntar(texto.auxiliar, "mt-2")}>
+                O alcance mostrado é o maior dia do período, não a soma: a mesma pessoa em dois dias não são duas pessoas.
               </p>
 
               {(aberto.titulo || aberto.corpo) && (
-                <div className="rounded-lg border border-border bg-secondary p-3">
-                  {aberto.titulo && (
-                    <p className="text-[12px] font-semibold text-foreground">{aberto.titulo}</p>
-                  )}
+                <div className="mt-3 rounded-md bg-muted/50 p-3">
+                  {aberto.titulo && <p className="text-[13px] font-semibold text-foreground">{aberto.titulo}</p>}
                   {aberto.corpo && (
-                    <p className="mt-1 whitespace-pre-line text-[11.5px] leading-relaxed text-muted-foreground">
-                      {aberto.corpo}
-                    </p>
+                    <p className="mt-1 whitespace-pre-line text-[12.5px] leading-5 text-muted-foreground">{aberto.corpo}</p>
                   )}
                 </div>
               )}
@@ -460,6 +433,6 @@ export default function GaleriaDeCriativos({
           </div>
         </div>
       )}
-    </div>
+    </Secao>
   );
 }

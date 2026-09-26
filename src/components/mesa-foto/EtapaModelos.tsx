@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, precoDoModelo, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { useCampanhaEscolhida } from "./CampanhaDaMesa";
-import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
+import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
+import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
@@ -94,27 +95,13 @@ import {
 const MAX_REFERENCIAS = 4;
 const FILTROS = [
   { valor: "todas" as const, rotulo: "Todas" },
-  { valor: "cliente" as const, rotulo: "Do cliente" },
-  { valor: "agencia" as const, rotulo: "Da agência" },
+  { valor: "cliente" as const, rotulo: "Cliente" },
+  { valor: "agencia" as const, rotulo: "Agência" },
 ];
 type Filtro = (typeof FILTROS)[number]["valor"];
 
-const chaveDaEscolhida = (clientId: string) => `mesa-foto:persona:${clientId}`;
-function lerEscolhida(clientId: string): string | null {
-  try {
-    return window.sessionStorage.getItem(chaveDaEscolhida(clientId));
-  } catch {
-    return null;
-  }
-}
-function gravarEscolhida(clientId: string, id: string | null) {
-  try {
-    if (id) window.sessionStorage.setItem(chaveDaEscolhida(clientId), id);
-    else window.sessionStorage.removeItem(chaveDaEscolhida(clientId));
-  } catch {
-    /* sem armazenamento: abre a primeira */
-  }
-}
+const ehTextoOuNulo = (v: unknown) => v === null || typeof v === "string";
+const ehFiltro = (v: unknown) => FILTROS.some((f) => f.valor === v);
 
 // ------------------------------------------------------------------ peças
 
@@ -277,7 +264,8 @@ const PONTO_DO_STATUS: Record<string, string> = {
  * cima e, no computador, a lista curta com a âncora em miniatura.
  */
 function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { personas: Persona[]; escolhida: string | null; onEscolher: (id: string) => void; onNova: () => void; novaAberta: boolean }) {
-  const [filtro, setFiltro] = useState<Filtro>("todas");
+  const { clientId } = useMesa();
+  const [filtro, setFiltro] = useEstadoDaTela<Filtro>(`mesa-foto:modelos:filtro:${clientId}`, "todas", { validar: ehFiltro });
   const lista = personas.filter((p) => (filtro === "todas" ? p.status !== "arquivada" : filtro === "cliente" ? !!p.client_id : !p.client_id));
   const ancoras = useAncoras(personas.map((p) => p.ancora_imagem_id || ""));
   const itens: ItemDoSeletor[] = lista.map((p) => {
@@ -309,22 +297,15 @@ function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { pers
       onNovo={onNova}
       novoRotulo="Nova persona"
       novoAberto={novaAberta}
-      vazio={personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda. Crie a primeira."}
-      filtro={<Pilulas rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={setFiltro} />}
+      vazio={personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda."}
+      ajuda="Pessoas sintéticas do cliente e da agência. Abra uma para gerar candidatas, escolher a âncora, montar a folha e detalhar em 4K."
+      filtro={<SeletorCompacto rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={(v) => setFiltro(v as Filtro)} larguraTotal />}
     />
   );
 }
 
 // ------------------------------------------------------------------ nova persona
 
-function Campo({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
-  return (
-    <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1 block text-[11.5px] text-muted-foreground">{rotulo}</span>
-      {children}
-    </label>
-  );
-}
 
 function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["referencias"]; onMudar: (r: RascunhoDaPersona["referencias"]) => void }) {
   const { clientId } = useMesa();
@@ -358,7 +339,13 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
   };
   return (
     <div className="min-w-0" data-referencias-de-estilo="">
-      <p className="mb-1 text-[11.5px] text-muted-foreground">Referências (opcional): só estilo, pose, luz ou roupa. Nunca o rosto de alguém.</p>
+      <div className="mb-1.5 flex min-w-0 items-center">
+        <span className={texto.rotulo}>Referências (opcional)</span>
+        <AjudaRecolhida className="ml-1">Só estilo, pose, luz ou roupa. Nunca o rosto de alguém. Até {MAX_REFERENCIAS}.</AjudaRecolhida>
+        <button type="button" className={juntar(botao.discreto, "ml-auto h-7 px-2 text-[12px]")} disabled={cheio} onClick={() => setDoAcervo(true)}>
+          <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Do acervo
+        </button>
+      </div>
       {refs.length > 0 && (
         <ul className="mb-2 min-w-0 space-y-1.5">
           {refs.map((r) => {
@@ -373,7 +360,7 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
                   valor={r.uso}
                   onEscolher={(uso: UsoDaReferencia) => onMudar(refs.map((x) => (x.imagem_id === r.imagem_id ? { ...x, uso } : x)))}
                 />
-                <button type="button" aria-label="Tirar a referência" onClick={() => onMudar(refs.filter((x) => x.imagem_id !== r.imagem_id))} className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                <button type="button" aria-label="Tirar a referência" onClick={() => onMudar(refs.filter((x) => x.imagem_id !== r.imagem_id))} className={juntar(botao.icone, "ml-1 h-7 w-7")}>
                   <X className="h-3.5 w-3.5" />
                 </button>
               </li>
@@ -382,9 +369,6 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
         </ul>
       )}
       {!cheio && <ZonaDeEnvio compacta onArquivos={(a) => void subir(a)} andamento={andamento} />}
-      <Button type="button" size="sm" variant="outline" className="mt-2 h-8 text-[12px]" disabled={cheio} onClick={() => setDoAcervo(true)}>
-        <Images className="mr-1.5 h-3.5 w-3.5" /> Do acervo
-      </Button>
       {doAcervo && (
         <div className="mt-2">
           <SeletorDeFotos
@@ -403,20 +387,28 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
   );
 }
 
+const ehRascunhoDaPersona = (v: unknown) => !!v && typeof v === "object" && typeof (v as RascunhoDaPersona).nome === "string" && !!(v as RascunhoDaPersona).ficha && Array.isArray((v as RascunhoDaPersona).referencias);
+
 function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void; onCancelar: () => void }) {
   const { clientId, isAdmin, catalogo } = useMesa();
   const avisarErro = useAvisarErro();
   const campanha = useCampanhaEscolhida();
-  const [r, setR] = useState<RascunhoDaPersona>(rascunhoVazio);
+  // Rascunho que não se perde ao sair e voltar. A declaração ética volta desmarcada: é da equipe, na hora de criar.
+  const [r, setR, esquecerRascunho] = useEstadoDaTela<RascunhoDaPersona>(`mesa-foto:modelos:rascunho:${clientId}`, rascunhoVazio(), { validar: ehRascunhoDaPersona, esperaMs: 300 });
+  useEffect(() => {
+    setR((x) => (x.etica ? { ...x, etica: false } : x));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [criando, setCriando] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [avancado, setAvancado] = useState(false);
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:modelos:pedido-da-sugestao:${clientId}`, "");
   const [porque, setPorque] = useState("");
   const [avisos, setAvisos] = useState<string[]>([]);
   const problemas = problemasDaPersona(r);
   const ficha = (campo: keyof RascunhoDaPersona["ficha"], valor: string | number | null) => setR({ ...r, ficha: { ...r.ficha, [campo]: valor } });
   const resumo = [r.ficha.tom_de_pele, r.ficha.cabelo, r.ficha.rosto, r.ficha.olhos, r.ficha.corpo].filter((x) => x && x.trim()).join(" · ");
+  const altura = "h-9 text-[13px]";
 
   const criar = async () => {
     setTentou(true);
@@ -426,6 +418,8 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
       const p = await criarPersona(clientId, r);
       if (!p) throw new Error("A função não devolveu a persona criada.");
       toast.success(`Persona ${p.nome} criada`, { description: "Agora a rodada: gere candidatas em vários motores e escolha a mais real." });
+      esquecerRascunho();
+      setPedido("");
       onCriada(p);
     } catch (e) {
       avisarErro(e, "Persona não criada");
@@ -435,15 +429,19 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
   };
 
   return (
-    <Cartao titulo="Nova persona" dica="Uma pessoa que não existe. Comece pelo brief: a ficha sai pronta do contexto do cliente (público, marca, campanha da Mesa) e você só ajusta.">
-      <div className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-2.5" data-sugerir-pelo-brief="">
+    <Secao
+      titulo="Nova persona"
+      ajuda="Uma pessoa que não existe. Comece pelo brief: a ficha sai pronta do contexto do cliente (público, marca, campanha da Mesa) e você só ajusta. Criar não gasta; o custo aparece antes de cada geração."
+      data-nova-persona=""
+    >
+      <div className={juntar(superficie.poco, "min-w-0 p-3")} data-sugerir-pelo-brief="">
         <div className="flex min-w-0 flex-wrap items-center">
           <Input
             value={pedido}
             onChange={(e) => setPedido(e.target.value)}
             placeholder="Pedido (opcional). Ex.: mulher de uns 30 anos, estilo urbano"
             aria-label="Pedido para a sugestão"
-            className="mb-1.5 mr-2 h-9 min-w-0 flex-1 text-[12.5px]"
+            className="mb-1.5 mr-2 h-9 min-w-0 flex-1 text-[13px]"
           />
           <BotaoComCusto
             rotulo={
@@ -453,7 +451,7 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
             }
             titulo="Ficha sugerida"
             descricao="O diretor lê o contexto do cliente que a Mesa usa (brief, público, marca e campanha) e preenche a ficha. Não cria nada: você confere e cria."
-            className="mb-1.5 h-9 text-[12.5px]"
+            className="mb-1.5 h-9 text-[13px]"
             partes={() => partesDaSugestaoDePersona(padraoPara(catalogo, "diretor_arte"))}
             executar={() => sugerirPersona(clientId, pedido, campanha.campanhaId)}
             aoConcluir={(s: SugestaoDePersona) => {
@@ -464,22 +462,24 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
             }}
           />
         </div>
-        <p className="text-[11px] leading-snug text-muted-foreground">
-          Usa o brief do cliente{campanha.campanha ? ` e a campanha ${campanha.campanha.nome}` : ""}. A pessoa é sintética, adulta e sem semelhança com ninguém real.
-        </p>
-        {porque && <p className="mt-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]" data-porque="">{porque}</p>}
+        <p className={juntar(texto.auxiliar, "truncate")}>Usa o brief do cliente{campanha.campanha ? ` e a campanha ${campanha.campanha.nome}` : ""}.</p>
+        {porque && (
+          <p className="mt-1.5 text-[13px] leading-5 [overflow-wrap:anywhere]" data-porque="">
+            {porque}
+          </p>
+        )}
         {avisos.map((a) => (
-          <p key={a} className="mt-1 flex items-start text-[11.5px] leading-snug text-warning">
+          <p key={a} className="mt-1 flex items-start text-[12px] leading-snug text-warning">
             <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{a}</span>
           </p>
         ))}
       </div>
 
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-        <Campo rotulo="Nome fictício">
-          <Input value={r.nome} onChange={(e) => setR({ ...r, nome: e.target.value })} placeholder="Ex.: Marina" aria-label="Nome da persona" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo={`Idade aparente (mínimo ${IDADE_MINIMA})`}>
+      <GrupoDeCampos className="mt-4">
+        <CampoDeFormulario rotulo="Nome fictício">
+          <Input value={r.nome} onChange={(e) => setR({ ...r, nome: e.target.value })} placeholder="Ex.: Marina" aria-label="Nome da persona" className={altura} />
+        </CampoDeFormulario>
+        <CampoDeFormulario rotulo={`Idade aparente (mínimo ${IDADE_MINIMA})`}>
           <Input
             type="number"
             inputMode="numeric"
@@ -488,54 +488,52 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
             value={r.ficha.idade_aparente === null ? "" : String(r.ficha.idade_aparente)}
             onChange={(e) => ficha("idade_aparente", e.target.value === "" ? null : Number(e.target.value))}
             aria-label="Idade aparente"
-            className="h-9 text-[12.5px]"
+            className={altura}
           />
-        </Campo>
-        <div className="min-w-0">
-          <p className="mb-1 text-[11.5px] text-muted-foreground">Apresentação</p>
+        </CampoDeFormulario>
+        <CampoDeEscolha rotulo="Apresentação">
           <Pilulas rotulo="Apresentação da persona" opcoes={GENEROS} valor={r.ficha.genero_apresentado || null} onEscolher={(v) => ficha("genero_apresentado", v)} />
-        </div>
-        <Campo rotulo="Estilo">
-          <Input value={r.ficha.estilo} onChange={(e) => ficha("estilo", e.target.value)} placeholder="Ex.: urbano minimalista, roupa neutra" aria-label="Estilo" className="h-9 text-[12.5px]" />
-        </Campo>
-      </div>
+        </CampoDeEscolha>
+        <CampoDeFormulario rotulo="Estilo">
+          <Input value={r.ficha.estilo} onChange={(e) => ficha("estilo", e.target.value)} placeholder="Ex.: urbano minimalista, roupa neutra" aria-label="Estilo" className={altura} />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
 
       {resumo && !avancado && (
-        <p className="mt-2 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-resumo-da-ficha="">
+        <p className={juntar(texto.auxiliar, "mt-3 truncate")} title={resumo} data-resumo-da-ficha="">
           Traços: {resumo}
         </p>
       )}
-      <button type="button" className="mt-2 text-[12px] font-medium text-primary hover:underline" onClick={() => setAvancado(!avancado)} aria-expanded={avancado} data-campos-avancados="">
+      <button type="button" className={juntar(botao.discreto, "mt-2 h-8 px-0 text-primary hover:bg-transparent hover:text-primary")} onClick={() => setAvancado(!avancado)} aria-expanded={avancado} data-campos-avancados="">
         {avancado ? "Esconder os detalhes" : "Mais detalhes: pele, cabelo, rosto, marcas, corpo, referências"}
       </button>
       {avancado && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-          <Campo rotulo="Tom de pele">
-            <Input value={r.ficha.tom_de_pele} onChange={(e) => ficha("tom_de_pele", e.target.value)} placeholder="Ex.: pele morena clara, subtom quente" aria-label="Tom de pele" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Cabelo">
-            <Input value={r.ficha.cabelo} onChange={(e) => ficha("cabelo", e.target.value)} placeholder="Ex.: castanho escuro, ondulado, na altura do ombro" aria-label="Cabelo" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Rosto">
-            <Input value={r.ficha.rosto} onChange={(e) => ficha("rosto", e.target.value)} placeholder="Ex.: rosto oval, maçãs altas" aria-label="Rosto e olhos" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Olhos (opcional)">
-            <Input value={r.ficha.olhos} onChange={(e) => ficha("olhos", e.target.value)} placeholder="Ex.: castanhos amendoados" aria-label="Olhos" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Marcas (opcional)">
-            <Input value={r.ficha.marcas} onChange={(e) => ficha("marcas", e.target.value)} placeholder="Ex.: sardas leves, pinta no queixo" aria-label="Marcas" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="Corpo (opcional)">
-            <Input value={r.ficha.corpo} onChange={(e) => ficha("corpo", e.target.value)} placeholder="Ex.: altura média, porte atlético" aria-label="Corpo" className="h-9 text-[12.5px]" />
-          </Campo>
-          <Campo rotulo="O que nunca muda (um por linha, opcional)" className="md:col-span-2">
-            <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta no queixo\ncabelo sempre solto"} aria-label="Invariantes" className="text-[12.5px]" />
-          </Campo>
-          <div className="min-w-0 md:col-span-2">
+        <GrupoDeCampos className="mt-2">
+          <CampoDeFormulario rotulo="Tom de pele">
+            <Input value={r.ficha.tom_de_pele} onChange={(e) => ficha("tom_de_pele", e.target.value)} placeholder="Ex.: pele morena clara, subtom quente" aria-label="Tom de pele" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Cabelo">
+            <Input value={r.ficha.cabelo} onChange={(e) => ficha("cabelo", e.target.value)} placeholder="Ex.: castanho escuro, ondulado, na altura do ombro" aria-label="Cabelo" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Rosto">
+            <Input value={r.ficha.rosto} onChange={(e) => ficha("rosto", e.target.value)} placeholder="Ex.: rosto oval, maçãs altas" aria-label="Rosto e olhos" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Olhos (opcional)">
+            <Input value={r.ficha.olhos} onChange={(e) => ficha("olhos", e.target.value)} placeholder="Ex.: castanhos amendoados" aria-label="Olhos" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Marcas (opcional)">
+            <Input value={r.ficha.marcas} onChange={(e) => ficha("marcas", e.target.value)} placeholder="Ex.: sardas leves, pinta no queixo" aria-label="Marcas" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Corpo (opcional)">
+            <Input value={r.ficha.corpo} onChange={(e) => ficha("corpo", e.target.value)} placeholder="Ex.: altura média, porte atlético" aria-label="Corpo" className={altura} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="O que nunca muda (um por linha, opcional)" largo>
+            <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta no queixo\ncabelo sempre solto"} aria-label="Invariantes" className="text-[13px]" />
+          </CampoDeFormulario>
+          <div className="min-w-0 sm:col-span-full">
             <ReferenciasDeEstilo refs={r.referencias} onMudar={(referencias) => setR({ ...r, referencias })} />
           </div>
-          <div className="min-w-0 md:col-span-2">
-            <p className="mb-1 text-[11.5px] text-muted-foreground">De quem é</p>
+          <CampoDeEscolha rotulo="De quem é" className="sm:col-span-full">
             <Pilulas
               rotulo="De quem é a persona"
               opcoes={[
@@ -545,10 +543,10 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
               valor={r.daAgencia ? "agencia" : "cliente"}
               onEscolher={(v) => setR({ ...r, daAgencia: v === "agencia" && isAdmin })}
             />
-          </div>
-        </div>
+          </CampoDeEscolha>
+        </GrupoDeCampos>
       )}
-      <label className="mt-3 flex min-w-0 items-start rounded-lg border border-border bg-background p-2.5 text-[12px] leading-snug" data-etica="">
+      <label className={juntar(superficie.poco, "mt-4 flex min-w-0 items-start p-3 text-[13px] leading-5")} data-etica="">
         <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={r.etica} onChange={(e) => setR({ ...r, etica: e.target.checked })} aria-label="Declaração ética" />
         <span className="min-w-0">
           <ShieldCheck className="mr-1 inline h-3.5 w-3.5 text-primary" />
@@ -558,22 +556,28 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
       {tentou && problemas.length > 0 && (
         <ul className="mt-2 space-y-0.5" role="alert">
           {problemas.map((p) => (
-            <li key={p} className="text-[11.5px] text-warning">
+            <li key={p} className="text-[12px] text-warning">
               {p}
             </li>
           ))}
         </ul>
       )}
-      <div className="mt-3 flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" className="mb-1 mr-1.5 h-9 text-[12.5px]" onClick={() => void criar()} disabled={criando}>
-          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar persona
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="mb-1 h-9 text-[12.5px]" onClick={onCancelar}>
+      <BarraDeAcoes className="mt-4 border-t border-border pt-3" inicio="Criar não gasta.">
+        <button
+          type="button"
+          className={botao.discreto}
+          onClick={() => {
+            esquecerRascunho();
+            onCancelar();
+          }}
+        >
           Cancelar
-        </Button>
-        <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Criar não gasta. O custo aparece antes de cada geração.</span>
-      </div>
-    </Cartao>
+        </button>
+        <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando}>
+          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar persona
+        </button>
+      </BarraDeAcoes>
+    </Secao>
   );
 }
 
@@ -635,7 +639,7 @@ function SeletorDeMotores({
         <button
           type="button"
           aria-label={`Motores da rodada: ${ligados.length} ${ligados.length === 1 ? "ligado" : "ligados"}`}
-          className="flex h-9 w-full min-w-0 items-center rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-background px-2.5 text-left text-[13px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-seletor-de-motores=""
         >
           <span className="mr-2 shrink-0 rounded bg-primary/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-primary">{ligados.length}</span>
@@ -645,7 +649,7 @@ function SeletorDeMotores({
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[380px] p-1">
         <p className="px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">Ligue os motores da rodada. Preço estimado por imagem.</p>
-        <ul className="max-h-[50vh] min-w-0 overflow-y-auto overscroll-contain" aria-label="Motores da rodada">
+        <ul className="min-w-0 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain" aria-label="Motores da rodada">
           {visiveis.map((o) => (
             <LinhaDoMotor key={o.id} motor={o} ligado={escolhidos.indexOf(o.id) >= 0} qualidade={qualidade} onAlternar={() => onAlternar(o.id)} />
           ))}
@@ -708,7 +712,7 @@ function ColunaDoMotor({
   };
 
   return (
-    <li className="min-w-0 rounded-xl border border-border bg-card p-2" data-coluna-do-motor={motorId}>
+    <li className={juntar(superficie.painel, "min-w-0 p-2")} data-coluna-do-motor={motorId}>
       <div className="mb-1.5 flex min-w-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[12px] font-semibold">{titulo}</p>
         {andamento && andamento.estado === "gerando" && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-label="Gerando" />}
@@ -806,7 +810,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
   const [ligados, setLigados] = useState<string[] | null>(null);
   const escolhidos = ligados || opcoes.filter((o) => o.padrao).map((o) => o.id);
   const [qualidade, setQualidade] = useState<Qualidade>("alta");
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:modelos:pedido-da-rodada:${persona.id}`, "");
   const [cega, setCega] = useState(false);
   const [lupa, setLupa] = useState<{ x: number; y: number } | null>(null);
   const [ampliada, setAmpliada] = useState<number | null>(null);
@@ -831,23 +835,10 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
   const alternar = (id: string) => setLigados(escolhidos.indexOf(id) >= 0 ? escolhidos.filter((x) => x !== id) : escolhidos.concat([id]));
 
   return (
-    <Cartao
+    <Secao
       titulo="1. Rodada lado a lado"
-      dica="Cada motor gera uma candidata com a mesma ficha. Compare pele, olhos, mãos e cabelo e escolha a mais real como âncora."
-    >
-      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
-        <div className="min-w-0 md:col-span-2">
-          <span className="mb-1 block text-[11.5px] text-muted-foreground">Motores</span>
-          <SeletorDeMotores opcoes={opcoes} visiveis={visiveis} escolhidos={escolhidos} qualidade={qualidade} onAlternar={alternar} onVerTodos={() => setMostrarTodos(true)} />
-        </div>
-        <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
-        <label className="block min-w-0 md:col-span-3">
-          <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido extra (opcional)</span>
-          <Input value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Ex.: meio corpo, luz de janela, camiseta branca" aria-label="Pedido extra da rodada" className="h-9 text-[12.5px]" />
-        </label>
-      </div>
-      {faltando.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Ainda não ativos no catálogo: {faltando.join(", ")}.</p>}
-      <div className="mt-3 flex min-w-0 flex-wrap items-center">
+      ajuda="Cada motor gera uma candidata com a mesma ficha. Compare pele, olhos, mãos e cabelo e escolha a mais real como âncora. O que sair fica salvo mesmo se você sair da aba."
+      acao={
         <BotaoComCusto
           rotulo={
             <>
@@ -856,7 +847,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
           }
           titulo="Rodada"
           descricao="Uma imagem por motor ligado, todas juntas. O que sair fica salvo mesmo se você sair da aba."
-          className="mb-1.5 mr-2 h-9 text-[12.5px]"
+          className="h-9 text-[13px]"
           disabled={!escolhidos.length || gerando}
           fecharAoConfirmar
           partes={() => partesDaRodada(escolhidos, qualidade, 0)}
@@ -865,46 +856,61 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
             return Promise.resolve({});
           }}
         />
-        <label className="mb-1.5 mr-3 inline-flex items-center text-[12px]">
-          <input type="checkbox" className="mr-1.5 h-3.5 w-3.5" checked={cega} onChange={(e) => setCega(e.target.checked)} aria-label="Comparação às cegas" /> Às cegas
-        </label>
-        <Button
-          type="button"
-          size="sm"
-          variant={lupa ? "default" : "outline"}
-          className="mb-1.5 h-8 text-[12px]"
-          aria-pressed={!!lupa}
-          onClick={() => setLupa(lupa ? null : { x: 50, y: 35 })}
-          title="Toque num ponto do rosto: o mesmo recorte aparece ampliado em todas as candidatas"
-        >
-          <ZoomIn className="mr-1.5 h-3.5 w-3.5" /> Lupa
-        </Button>
-      </div>
+      }
+      data-rodada=""
+    >
+      <GrupoDeCampos colunas={3}>
+        <CampoDeEscolha rotulo="Motores">
+          <SeletorDeMotores opcoes={opcoes} visiveis={visiveis} escolhidos={escolhidos} qualidade={qualidade} onAlternar={alternar} onVerTodos={() => setMostrarTodos(true)} />
+        </CampoDeEscolha>
+        <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
+        <CampoDeFormulario rotulo="Pedido extra (opcional)">
+          <Input value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Ex.: meio corpo, luz de janela, camiseta branca" aria-label="Pedido extra da rodada" className="h-9 text-[13px]" />
+        </CampoDeFormulario>
+      </GrupoDeCampos>
+      {faltando.length > 0 && <p className={juntar(texto.auxiliar, "mt-1.5 truncate")}>Ainda não ativos no catálogo: {faltando.join(", ")}.</p>}
       {grupos.length > 0 ? (
-        <ul className="mt-3 grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Candidatas por motor">
-          {grupos.map((g, i) => (
-            <ColunaDoMotor
-              key={g.motor_id}
-              persona={persona}
-              motorId={g.motor_id}
-              opcao={opcoes.find((o) => o.id === g.motor_id) || null}
-              titulo={escondeNome ? `Motor ${letraDoMotor(i)}` : rotuloDoMotor(catalogo, g.motor_id)}
-              imagens={g.imagens}
-              qualidade={qualidade}
-              lupa={lupa}
-              onLupa={setLupa}
-              onAmpliar={(id) => {
-                const idx = todasAsCandidatas.findIndex((x) => x.id === id);
-                setAmpliada(idx >= 0 ? idx : null);
-              }}
-            />
-          ))}
-        </ul>
+        <>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center">
+            <p className={juntar(texto.auxiliar, "mb-1.5 mr-auto")}>{grupos.length} {grupos.length === 1 ? "motor" : "motores"}</p>
+            <label className="mb-1.5 mr-3 inline-flex items-center text-[12px]">
+              <input type="checkbox" className="mr-1.5 h-3.5 w-3.5" checked={cega} onChange={(e) => setCega(e.target.checked)} aria-label="Comparação às cegas" /> Às cegas
+            </label>
+            <button
+              type="button"
+              className={juntar(lupa ? botao.primario : botao.secundario, "mb-1.5 h-8 px-2.5 text-[12px]")}
+              aria-pressed={!!lupa}
+              onClick={() => setLupa(lupa ? null : { x: 50, y: 35 })}
+              title="Toque num ponto do rosto: o mesmo recorte aparece ampliado em todas as candidatas"
+            >
+              <ZoomIn className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Lupa
+            </button>
+          </div>
+          <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Candidatas por motor">
+            {grupos.map((g, i) => (
+              <ColunaDoMotor
+                key={g.motor_id}
+                persona={persona}
+                motorId={g.motor_id}
+                opcao={opcoes.find((o) => o.id === g.motor_id) || null}
+                titulo={escondeNome ? `Motor ${letraDoMotor(i)}` : rotuloDoMotor(catalogo, g.motor_id)}
+                imagens={g.imagens}
+                qualidade={qualidade}
+                lupa={lupa}
+                onLupa={setLupa}
+                onAmpliar={(id) => {
+                  const idx = todasAsCandidatas.findIndex((x) => x.id === id);
+                  setAmpliada(idx >= 0 ? idx : null);
+                }}
+              />
+            ))}
+          </ul>
+        </>
       ) : (
-        <p className="mt-3 text-[12px] text-muted-foreground">Nenhuma candidata ainda. Ligue os motores e gere a rodada.</p>
+        <EstadoVazio compacto className="mt-3" titulo="Nenhuma candidata ainda." descricao="Ligue os motores e gere a rodada." />
       )}
       <Ampliar imagens={todasAsCandidatas.map((c) => ampliavel(c, `${persona.nome}, candidata`))} indice={ampliada} onFechar={() => setAmpliada(null)} />
-    </Cartao>
+    </Secao>
   );
 }
 
@@ -968,10 +974,11 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
   };
 
   return (
-    <Cartao
-      className="h-full"
-      titulo={`2. Folha de 6 vistas · ${resumo.vistasProntas} de 6`}
-      dica={semAncora ? "Escolha a âncora na rodada primeiro: a folha parte dela." : `A mesma pessoa em 6 vistas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Trocar de motor aumenta a deriva do rosto.`}
+    <Secao
+      divisoria
+      titulo="2. Folha de 6 vistas"
+      descricao={semAncora ? "Escolha a âncora na rodada primeiro." : `${resumo.vistasProntas} de 6 prontas`}
+      ajuda={semAncora ? "A folha parte da âncora escolhida na rodada." : `A mesma pessoa em 6 vistas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Trocar de motor aumenta a deriva do rosto.`}
       acao={
         !semAncora && faltam.length > 0 ? (
           <BotaoComCusto
@@ -981,7 +988,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
               </>
             }
             titulo="Folha"
-            className="h-8 text-[12px]"
+            className="h-9 text-[13px]"
             disabled={gerandoAlguma}
             fecharAoConfirmar
             partes={() => partesDaVista(motorId, qualidade, 1 + resumo.vistasProntas, faltam.length)}
@@ -1033,7 +1040,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
         })}
       </ul>
       <Ampliar imagens={prontas.map((i) => ampliavel(i, `${persona.nome}, ${rotuloDaVista(i.vista)}`))} indice={ampliada !== null && ampliada >= 0 ? ampliada : null} onFechar={() => setAmpliada(null)} />
-    </Cartao>
+    </Secao>
   );
 }
 
@@ -1074,13 +1081,17 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
   const servidor = usePrecoNoServidor(clientId, "modelo_detalhar", extrasDaEstimativaDoDetalhe(motorId), !!fonte);
 
   return (
-    <Cartao className="h-full" titulo="3. Detalhar em 4K" dica="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino.">
+    <Secao
+      divisoria
+      titulo="3. Detalhar em 4K"
+      ajuda="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino. Ampliar fiel precisa da conta fal.ai."
+    >
       {!fonte ? (
-        <p className="text-[12px] text-muted-foreground">Escolha a âncora primeiro.</p>
+        <EstadoVazio compacto titulo="Escolha a âncora primeiro." />
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] text-muted-foreground">Imagem para detalhar</p>
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Imagem para detalhar</p>
             <ul className="flex min-w-0 flex-wrap" aria-label="Imagem para detalhar">
               {fontes.map((f) => (
                 <li key={f.id} className="mb-1.5 mr-1.5 w-12">
@@ -1113,9 +1124,7 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
                 Ampliar fiel
               </Button>
             </div>
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              {typeof servidor.data === "number" ? `Preço do 4K pela função: ~${usd(servidor.data)}. ` : ""}Ampliar fiel precisa da conta fal.ai.
-            </p>
+            {typeof servidor.data === "number" && <p className={juntar(texto.auxiliar, "truncate")}>Preço do 4K pela função: ~{usd(servidor.data)}.</p>}
           </div>
           <div className="min-w-0">
             {detalhe ? (
@@ -1129,7 +1138,7 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
           </div>
         </div>
       )}
-    </Cartao>
+    </Secao>
   );
 }
 
@@ -1151,7 +1160,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
   const tracos = [f.tom_de_pele, f.cabelo, f.rosto, f.olhos, f.estilo].filter(Boolean);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-2.5" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
+    <section className="min-w-0 border-t border-border pt-4" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
       {/* 25/09 (dono: "a imagem ficou espremida; em cima a imagem, embaixo o texto"): âncora inteira em cima, ficha embaixo. */}
       <div className="min-w-0" data-persona-lateral-empilhada="">
         <div className="mx-auto w-full max-w-[260px]">
@@ -1170,13 +1179,13 @@ function PersonaLateral({ persona }: { persona: Persona }) {
         </div>
         <div className="mt-2.5 min-w-0">
           <div className="flex min-w-0 flex-wrap items-center">
-            <p className="mr-2 truncate text-[14px] font-semibold">{persona.nome}</p>
+            <p className={juntar(texto.tituloSecao, "mr-2 min-w-0 truncate")}>{persona.nome}</p>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>
           </div>
           <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary" data-selo="gerada">
             <Sparkles className="mr-0.5 h-2.5 w-2.5" /> pessoa sintética
           </span>
-          <dl className="mt-2 space-y-0.5 text-[11.5px] leading-snug">
+          <dl className="mt-2 space-y-0.5 text-[12px] leading-snug">
             {f.idade_aparente ? (
               <div className="flex min-w-0">
                 <dt className="mr-1 text-muted-foreground">Idade:</dt>
@@ -1199,22 +1208,20 @@ function PersonaLateral({ persona }: { persona: Persona }) {
             </div>
           </dl>
           {resumo.ancora && (
-            <Button
+            <button
               type="button"
-              size="sm"
-              variant="outline"
-              className="mt-1.5 h-7 px-2 text-[11.5px]"
+              className={juntar(botao.secundario, "mt-2 h-8 px-2.5 text-[12px]")}
               onClick={() => {
                 pedirAoCanvas(clientId, persona.id);
                 irPara("canvas");
               }}
             >
-              <Workflow className="mr-1.5 h-3.5 w-3.5" /> Usar no Canvas
-            </Button>
+              <Workflow className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Usar no Canvas
+            </button>
           )}
         </div>
       </div>
-      <p className="mt-1.5 text-[10.5px] leading-snug text-muted-foreground">{resumo.ancora ? "Pessoa sintética. Ao publicar, ligue o rótulo de IA do Instagram." : "Sem âncora: gere a rodada e escolha a mais real."}</p>
+      <p className={juntar(texto.auxiliar, "mt-2")}>{resumo.ancora ? "Ao publicar, ligue o rótulo de IA." : "Sem âncora: gere a rodada."}</p>
       {resumo.ancora && (
         <Ampliar imagens={[ampliavel(resumo.ancora, `${persona.nome}, âncora`)]} indice={ampliada} onFechar={() => setAmpliada(null)} />
       )}
@@ -1226,8 +1233,18 @@ function PersonaAberta({ persona }: { persona: Persona }) {
   const imagensQ = useImagensDaPersona(persona.id);
   const imagens = imagensQ.data || [];
   return (
-    <div className="min-w-0 space-y-4" data-persona-aberta={persona.id}>
-      {imagensQ.isError && <AvisoDeErro erro={imagensQ.error} />}
+    <div className="min-w-0 space-y-6" data-persona-aberta={persona.id}>
+      {imagensQ.isError && (
+        <EstadoDeErro
+          titulo="Não foi possível ler as imagens da persona."
+          descricao={textoDoErro(imagensQ.error)}
+          acao={
+            <button type="button" className={botao.secundario} onClick={() => void imagensQ.refetch()}>
+              Tentar de novo
+            </button>
+          }
+        />
+      )}
       <Rodada persona={persona} imagens={imagens} />
       <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe="">
         <Folha persona={persona} imagens={imagens} />
@@ -1244,13 +1261,10 @@ export default function EtapaModelos() {
   const queryClient = useQueryClient();
   const personasQ = usePersonas(clientId);
   const personas = useMemo(() => personasQ.data || [], [personasQ.data]);
-  const [escolhida, setEscolhida] = useState<string | null>(() => lerEscolhida(clientId));
-  const [nova, setNova] = useState(false);
+  // A persona aberta e a ficha nova aberta ficam lembradas por cliente (sair e voltar não perde).
+  const [escolhida, setEscolhida] = useEstadoDaTela<string | null>(`mesa-foto:modelos:aberta:${clientId}`, null, { validar: ehTextoOuNulo });
+  const [nova, setNova] = useEstadoDaTela<boolean>(`mesa-foto:modelos:nova:${clientId}`, false, { validar: (v) => typeof v === "boolean" });
   const aberta = personas.find((p) => p.id === escolhida) || (nova ? null : personas.find((p) => p.status !== "arquivada") || null);
-
-  useEffect(() => {
-    gravarEscolhida(clientId, aberta ? aberta.id : null);
-  }, [clientId, aberta]);
 
   const escolher = (id: string) => {
     setNova(false);
@@ -1258,12 +1272,27 @@ export default function EtapaModelos() {
   };
 
   return (
-    <div className="min-w-0 pb-24">
-      {personasQ.isError && <AvisoDeErro erro={personasQ.error} className="mb-3" />}
+    <div className="min-w-0 pb-6">
+      {personasQ.isError && (
+        <EstadoDeErro
+          className="mb-4"
+          titulo="Não foi possível ler as personas."
+          descricao={textoDoErro(personasQ.error)}
+          acao={
+            <button type="button" className={botao.secundario} onClick={() => void personasQ.refetch()}>
+              Tentar de novo
+            </button>
+          }
+        />
+      )}
       {/* Coluna da esquerda estreita (26/09): seletor compacto e a persona em resumo; o trabalho fica à direita. */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]" data-modelos-layout="">
-        <div className="min-w-0 space-y-3">
-          <Galeria personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} novaAberta={nova} />
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]" data-modelos-layout="">
+        <div className="min-w-0 space-y-4">
+          {personasQ.isLoading ? (
+            <Carregando forma="lista" linhas={4} rotulo="Lendo as personas" />
+          ) : (
+            <Galeria personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} novaAberta={nova} />
+          )}
           {!nova && aberta && <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />}
         </div>
         <div className="min-w-0">
@@ -1279,17 +1308,19 @@ export default function EtapaModelos() {
             />
           ) : aberta ? (
             <PersonaAberta key={aberta.id} persona={aberta} />
+          ) : personasQ.isLoading ? (
+            <Carregando forma="aba" rotulo="Lendo as personas" />
           ) : (
-            <Vazio
+            <EstadoVazio
+              icone={<UserRound className="h-5 w-5" />}
               titulo="Crie a primeira persona"
+              descricao="Candidatas em vários motores, a âncora, a folha e o 4K."
               acao={
-                <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => setNova(true)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Nova persona
-                </Button>
+                <button type="button" className={botao.primario} onClick={() => setNova(true)}>
+                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
+                </button>
               }
-            >
-              Descreva a pessoa, gere candidatas em vários motores lado a lado e escolha a mais real. Depois a folha de 6 vistas e o detalhe em 4K. Tudo marcado como gerado.
-            </Vazio>
+            />
           )}
         </div>
       </div>

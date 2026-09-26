@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2, Layers, Loader2, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modoDoTipo, type EstruturaDoModelo } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useModelos, useRoteiros, type ModeloDeRoteiro } from "./roteirosApi";
-import { AvisoDoBanco } from "./Comuns";
+import { AvisoDoBanco, Cabecalho } from "./Comuns";
 
 /**
  * Etapa 5: memória (MEMORIA-E-TEMPLATES.md, de forma simples). Todo roteiro
@@ -25,7 +28,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
   const roteirosQ = useRoteiros(clientId);
   const modelos = modelosQ.data ? modelosQ.data.lista : [];
   const aprovados = (roteirosQ.data ? roteirosQ.data.lista : []).filter((r) => !!r.versao_aprovada && !r.arquivado_em);
-  const [origem, setOrigem] = useState("");
+  const [origem, setOrigem] = useEstadoDaTela<string>(`mesa-roteiros:modelos:origem:${clientId}`, "", { validar: (v) => typeof v === "string" });
   const [previa, setPrevia] = useState<{ estrutura: EstruturaDoModelo; removidos: string[] } | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
@@ -74,74 +77,97 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
 
   const doCliente = modelos.filter((m) => m.escopo === "cliente");
   const daAgencia = modelos.filter((m) => m.escopo === "agencia");
-  const cartao = (m: ModeloDeRoteiro) => (
-    <li key={m.id} className="flex min-w-0 flex-wrap items-center rounded-xl border border-border p-3" data-modelo={m.id}>
-      <div className="min-w-0 flex-1">
+  const linha = (m: ModeloDeRoteiro) => (
+    <li key={m.id} className="flex min-w-0 items-center px-4 py-2.5" data-modelo={m.id}>
+      <div className="mr-2 min-w-0 flex-1">
         <p className="truncate text-[13px] font-medium">{m.nome}</p>
-        <p className="truncate text-[11.5px] text-muted-foreground">
+        <p className="truncate text-[12px] text-muted-foreground">
           {modoDoTipo(m.tipo).rotulo} · {m.estrutura.blocos.length} blocos · {m.estrutura.duracao_alvo_s}s · {m.estrutura.blocos.map((b) => b.funcao).join(", ")}
         </p>
       </div>
-      <div className="mt-1 flex items-center sm:mt-0">
-        <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => onUsarModelo(m.id)}>Usar num roteiro novo</Button>
-        <button type="button" className="ml-1 p-2 text-muted-foreground hover:text-destructive disabled:opacity-50" disabled={ocupado === m.id} onClick={() => void revogar(m)} aria-label={`Retirar o modelo ${m.nome}`}>
-          {ocupado === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-        </button>
-      </div>
+      <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => onUsarModelo(m.id)} aria-label={`Usar ${m.nome} num roteiro novo`}>
+        Usar
+        <span className="ml-1 hidden sm:inline">num roteiro novo</span>
+      </button>
+      <button type="button" className={juntar(botao.icone, "ml-1 hover:text-destructive")} disabled={ocupado === m.id} onClick={() => void revogar(m)} aria-label={`Retirar o modelo ${m.nome}`}>
+        {ocupado === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+      </button>
     </li>
   );
 
   return (
-    <div className="space-y-4" data-etapa-modelos="">
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="flex items-center text-[14px] font-semibold"><UserRound className="mr-1.5 h-4 w-4 text-primary" />Modelos deste cliente</h2>
-        <p className="text-[11.5px] text-muted-foreground">Todo roteiro aprovado vira modelo daqui. Fica só com este cliente.</p>
-        {modelosQ.isLoading && <p className="mt-2 text-[12px] text-muted-foreground">Carregando...</p>}
-        {!modelosQ.isLoading && !doCliente.length && <p className="mt-2 text-[12.5px] text-muted-foreground">Nenhum ainda. Aprove um roteiro na Revisão.</p>}
-        <ul className="mt-2 space-y-2">{doCliente.map(cartao)}</ul>
+    <div className="min-w-0 space-y-6" data-etapa-modelos="">
+      <section className="min-w-0 space-y-3">
+        <Cabecalho
+          icone={<UserRound className="h-4 w-4" />}
+          titulo="Modelos deste cliente"
+          ajuda="Todo roteiro aprovado vira modelo daqui, com estrutura, ritmo, direção e as falas como exemplo. Fica só com este cliente."
+          estado={modelosQ.isSuccess ? `${doCliente.length} ${doCliente.length === 1 ? "modelo" : "modelos"}` : undefined}
+        />
+        {modelosQ.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os modelos" />}
+        {!modelosQ.isLoading && !doCliente.length && <EstadoVazio compacto titulo="Nenhum ainda." descricao="Aprove um roteiro na Revisão." />}
+        {doCliente.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{doCliente.map(linha)}</ul>}
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="flex items-center text-[14px] font-semibold"><Building2 className="mr-1.5 h-4 w-4 text-primary" />Modelos da agência</h2>
-        <p className="text-[11.5px] text-muted-foreground">Estrutura e ritmo que servem a qualquer cliente, sem dado privado.</p>
-        {!daAgencia.length && <p className="mt-2 text-[12.5px] text-muted-foreground">Nenhum ainda.</p>}
-        <ul className="mt-2 space-y-2">{daAgencia.map(cartao)}</ul>
+      <section className="min-w-0 space-y-3 border-t border-border pt-5">
+        <Cabecalho
+          icone={<Building2 className="h-4 w-4" />}
+          titulo="Modelos da agência"
+          ajuda="Estrutura e ritmo que servem a qualquer cliente, sem dado privado. Sai do modelo: fala, legenda, CTA, nome, contato, número e oferta do cliente de origem."
+          estado={modelosQ.isSuccess ? `${daAgencia.length} ${daAgencia.length === 1 ? "modelo" : "modelos"}` : undefined}
+        />
+        {!modelosQ.isLoading && !daAgencia.length && <EstadoVazio compacto titulo="Nenhum ainda." />}
+        {daAgencia.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{daAgencia.map(linha)}</ul>}
 
-        <div className="mt-4 rounded-xl bg-muted/50 p-3">
-          <p className="flex items-center text-[12.5px] font-medium"><Layers className="mr-1.5 h-4 w-4" />Levar um roteiro aprovado para a agência</p>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <select
-              value={origem}
-              onChange={(e) => {
-                setOrigem(e.target.value);
-                setPrevia(null);
-              }}
-              className="mb-1 mr-2 min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-[12.5px]"
-              aria-label="Roteiro aprovado de origem"
-            >
-              <option value="">{aprovados.length ? "Escolha o roteiro aprovado" : "Nenhum roteiro aprovado ainda"}</option>
-              {aprovados.map((r) => (
-                <option key={r.id} value={r.id}>{r.titulo}</option>
-              ))}
-            </select>
-            <Button type="button" size="sm" variant="outline" className="mb-1 h-8 text-[12px]" disabled={!origem || !!ocupado} onClick={() => void verPrevia()}>
+        <div className="min-w-0 space-y-3 pt-2">
+          <Cabecalho nivel={3} icone={<Layers className="h-4 w-4" />} titulo="Levar um roteiro aprovado para a agência" />
+          <div className="flex min-w-0 items-end">
+            <CampoDeFormulario rotulo="Roteiro aprovado de origem" className="mr-2 min-w-0 flex-1 sm:max-w-md">
+              <select
+                value={origem}
+                onChange={(e) => {
+                  setOrigem(e.target.value);
+                  setPrevia(null);
+                }}
+                className={campo}
+                aria-label="Roteiro aprovado de origem"
+              >
+                <option value="">{aprovados.length ? "Escolha o roteiro aprovado" : "Nenhum roteiro aprovado ainda"}</option>
+                {aprovados.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.titulo}
+                  </option>
+                ))}
+              </select>
+            </CampoDeFormulario>
+            <button type="button" className={botao.secundario} disabled={!origem || !!ocupado} onClick={() => void verPrevia()}>
               {ocupado === "previa" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Ver prévia
-            </Button>
+            </button>
           </div>
           {previa && (
-            <div className="mt-3 rounded-lg border border-border bg-background p-3" data-previa-do-modelo="">
-              <p className="flex items-center text-[12px] font-medium"><ShieldCheck className="mr-1.5 h-4 w-4 text-primary" />Sai do modelo: {previa.removidos.join(", ")}.</p>
-              <ol className="mt-2 space-y-1 text-[12px]">
+            <div className={juntar(superficie.poco, "min-w-0 space-y-2 px-3 py-3")} data-previa-do-modelo="">
+              <div className="flex min-w-0 flex-wrap items-center justify-between">
+                <p className="mb-1 mr-2 flex min-w-0 items-center text-[12.5px] font-medium">
+                  <ShieldCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0 [overflow-wrap:anywhere]">Sai do modelo: {previa.removidos.join(", ")}.</span>
+                </p>
+                <button type="button" className={juntar(botao.primario, "mb-1")} disabled={!!ocupado} onClick={() => void salvarDaAgencia()}>
+                  {ocupado === "salvar" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Salvar como modelo da agência
+                </button>
+              </div>
+              <ol className="space-y-1 text-[12.5px]">
                 {previa.estrutura.blocos.map((b, i) => (
-                  <li key={i}>
-                    <span className="font-medium">{i + 1}. {b.funcao}</span> ({b.segundos}s){b.orientacao ? `: ${b.orientacao}` : ""}
+                  <li key={i} className="[overflow-wrap:anywhere]">
+                    <span className="font-medium">
+                      {i + 1}. {b.funcao}
+                    </span>{" "}
+                    ({b.segundos}s){b.orientacao ? `: ${b.orientacao}` : ""}
                   </li>
                 ))}
               </ol>
-              {previa.estrutura.mecanismos_de_gancho.length > 0 && <p className="mt-1 text-[11.5px] text-muted-foreground">Mecanismos de gancho: {previa.estrutura.mecanismos_de_gancho.join(", ")}</p>}
-              <Button type="button" size="sm" className="mt-3 h-8 text-[12px]" disabled={!!ocupado} onClick={() => void salvarDaAgencia()}>
-                {ocupado === "salvar" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Salvar como modelo da agência
-              </Button>
+              {previa.estrutura.mecanismos_de_gancho.length > 0 && (
+                <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Mecanismos de gancho: {previa.estrutura.mecanismos_de_gancho.join(", ")}</p>
+              )}
             </div>
           )}
         </div>

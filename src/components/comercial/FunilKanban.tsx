@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -13,22 +14,23 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, GripVertical, Plus, Search, ThumbsDown, Trophy, X } from "lucide-react";
+import { Download, GripVertical, KanbanSquare, ListFilter, Plus, ThumbsDown, Trophy } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AreaDeTrabalho,
+  CampoDeFormulario,
+  Carregando,
+  EstadoVazio,
+  Etapas,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  foco,
+  juntar,
+  texto,
+} from "@/components/sistema";
 import {
   ESTAGIOS,
   ESTAGIOS_ABERTOS,
@@ -45,22 +47,29 @@ import {
   rotuloDaAtividade,
   rotuloDoEstagio,
 } from "@/lib/comercial";
+import { CampoDeBusca } from "@/components/sistema";
+import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 
 /**
  * O funil, arrastável de ponta a ponta.
  *
  * Antes o estágio só mudava abrindo o lead e escolhendo o destino numa lista
- * — três toques para dizer "avançou". Num funil, mover é o gesto principal:
+ * (três toques para dizer "avançou"). Num funil, mover é o gesto principal:
  * é o que se faz dez vezes por dia e o que dá a leitura do quadro.
  *
  * O arrasto usa mouse e toque como SENSORES SEPARADOS, igual à agenda: com o
  * cartão inteiro arrastável, um sensor de ponteiro único captura o toque e
  * mata a rolagem no celular. Mouse dispara com 3px; no dedo, é preciso
- * segurar 150ms — e até lá a lista rola normalmente.
+ * segurar 150ms, e até lá a lista rola normalmente.
  *
  * Ganho e Perdido não são colunas: viram uma faixa que só aparece durante o
  * arrasto. Coluna de fechado incha para sempre e empurra o trabalho de hoje
  * para fora da tela; a faixa aparece na hora exata em que ela é útil.
+ *
+ * Rolagem (sistema de design): de 1024 px para cima o quadro ocupa a altura
+ * da janela e cada coluna rola sozinha, lembrando onde estava; se as colunas
+ * não cabem, o quadro rola para o lado por dentro. No tablet as colunas ficam
+ * lado a lado e a página rola normal; no celular, uma etapa por vez.
  */
 
 interface Props {
@@ -73,6 +82,13 @@ interface Props {
   onImportar: () => void;
   importando: boolean;
   onMovido: () => Promise<unknown>;
+  /** Controles da página na mesma fileira dos filtros (ex.: Negócios | Empresas). */
+  filtrosAntes?: ReactNode;
+  /**
+   * Lugar da página para os filtros (a linha das Etapas, de 1280 px para
+   * cima): a fileira sobe para a linha das áreas e o quadro ganha altura.
+   */
+  destinoDosFiltros?: HTMLElement | null;
 }
 
 /**
@@ -84,6 +100,8 @@ interface Props {
  */
 const estaAtrasado = (agenda: AgendaDoLead) => agenda.atrasadas > 0;
 
+const CLASSES_DO_FILTRO = ["todas", ...CLASSES_DO_LEAD.map((c) => c.id as string), "sem"];
+
 export default function FunilKanban({
   leads,
   atividades,
@@ -94,16 +112,21 @@ export default function FunilKanban({
   onImportar,
   importando,
   onMovido,
+  filtrosAntes,
+  destinoDosFiltros = null,
 }: Props) {
   const queryClient = useQueryClient();
   const [arrastando, setArrastando] = useState<Lead | null>(null);
-  const [busca, setBusca] = useState("");
+  // Busca, classe e etapa do celular ficam guardadas: sair e voltar mantém.
+  const [busca, setBusca] = useEstadoDoComercial("funil:busca", "", { validar: ehTexto });
   // A visão separada por classe: cliente atual, upsell e novo prospect não
   // podem se misturar na leitura, mesmo dividindo os mesmos estágios.
-  const [classe, setClasse] = useState<string>("todas");
-  // No celular o quadro mostra UMA etapa por vez, escolhida por chip: seis
+  const [classe, setClasse] = useEstadoDoComercial<string>("funil:classe", "todas", { validar: umaDe(CLASSES_DO_FILTRO) });
+  // No celular o quadro mostra UMA etapa por vez, escolhida nas Etapas: seis
   // colunas estreitas rolando de lado nao se leem em 380px de tela.
-  const [etapaNoCelular, setEtapaNoCelular] = useState<EstagioId>(ESTAGIOS_ABERTOS[0]);
+  const [etapaNoCelular, setEtapaNoCelular] = useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0], {
+    validar: umaDe(ESTAGIOS_ABERTOS),
+  });
   const [fechamento, setFechamento] = useState<{
     lead: Lead;
     destino: "ganho" | "perdido";
@@ -160,7 +183,7 @@ export default function FunilKanban({
    * Move na tela primeiro, grava depois.
    *
    * Esperar a ida ao banco para o cartão sair do lugar faz o arrasto parecer
-   * quebrado — e quem arrasta tenta de novo, criando duas gravações. Se o
+   * quebrado, e quem arrasta tenta de novo, criando duas gravações. Se o
    * banco recusar, a lista é recarregada e o cartão volta sozinho.
    */
   const moverNaTela = (leadId: string, destino: EstagioId) => {
@@ -213,163 +236,141 @@ export default function FunilKanban({
     await aplicarMovimento(lead, destino as EstagioId);
   };
 
+  // A régua da visão: cada opção separa uma classe, e "sem classe" empurra
+  // para a mão o que ainda não foi confirmado: não confirmado é estado
+  // visível, não um buraco.
+  const opcoesDeClasse = [
+    { valor: "todas", rotulo: "Todas", descricao: "Todas as classes", contador: leads.length },
+    ...CLASSES_DO_LEAD.map((c) => ({
+      valor: c.id as string,
+      rotulo: c.label,
+      contador: leads.filter((lead) => lead.classe === c.id).length,
+    })),
+    { valor: "sem", rotulo: "Sem classe", contador: leads.filter((lead) => !lead.classe).length },
+  ];
+
+  const emLinha = Boolean(destinoDosFiltros);
+  const filtros = (
+    <div
+      className={emLinha ? "flex min-w-0 items-center [&>*+*]:ml-2" : "-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1"}
+      role="group"
+      aria-label="Filtros do funil"
+    >
+        {filtrosAntes}
+        <SeletorCompacto
+          rotulo="Classe"
+          icone={<ListFilter className="h-3.5 w-3.5" />}
+          opcoes={opcoesDeClasse}
+          valor={classe}
+          onEscolher={setClasse}
+        />
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar por nome ou empresa"
+          rotulo="Buscar no funil"
+          className={emLinha ? "w-[240px] desk:w-[300px]" : "min-w-[180px] flex-1 sm:max-w-[320px]"}
+        />
+    </div>
+  );
+
   return (
     <>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onNovo}
-          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground"
-        >
-          <Plus className="h-4 w-4" />
-          Novo lead
-        </button>
-        <button
-          type="button"
-          onClick={onImportar}
-          disabled={importando}
-          className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Trazer do diagnóstico
-        </button>
-        <div className="relative min-w-[160px] flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou empresa"
-            className="h-10 pl-9"
-            aria-label="Buscar no funil"
-          />
-        </div>
-      </div>
+      {destinoDosFiltros ? createPortal(filtros, destinoDosFiltros) : filtros}
 
-      {/* A régua da visão: cada chip separa uma classe, e "sem classe" empurra
-          para a mão o que ainda não foi confirmado: não confirmado é estado
-          visível, não um buraco. */}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {[
-          { id: "todas", label: "Todas", total: leads.length },
-          ...CLASSES_DO_LEAD.map((c) => ({
-            id: c.id as string,
-            label: c.label,
-            total: leads.filter((lead) => lead.classe === c.id).length,
-          })),
-          {
-            id: "sem",
-            label: "Sem classe",
-            total: leads.filter((lead) => !lead.classe).length,
-          },
-        ].map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            onClick={() => setClasse(chip.id)}
-            className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
-              classe === chip.id
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {chip.label}
-            <span className="tabular-nums opacity-70">{chip.total}</span>
-          </button>
-        ))}
-      </div>
-
-      {carregando ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Carregando o funil…
-        </p>
-      ) : leads.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-          <p className="text-sm font-medium text-foreground">O funil está vazio</p>
-          <p className="mx-auto mt-1 max-w-md text-[11.5px] leading-relaxed text-muted-foreground">
-            Cadastre quem já está em conversa, ou traga de uma vez quem preencheu o
-            diagnóstico. Cada lead guarda o valor proposto separado em mensalidade e
-            entrada, que é o que faz a meta de mensalidade nova bater no fim do mês.
-          </p>
-        </div>
-      ) : (
-        <DndContext sensors={sensors} onDragStart={aoIniciar} onDragEnd={aoTerminar}>
-          {/* A faixa de fechar só existe enquanto há cartão na mão. */}
-          {arrastando && (
-            <div className="sticky top-2 z-20 mb-2 grid grid-cols-2 gap-2">
-              <AlvoDeFechamento
-                id="ganho"
-                rotulo="Soltar para GANHAR"
-                icone={<Trophy className="h-4 w-4" />}
-                tom="success"
-              />
-              <AlvoDeFechamento
-                id="perdido"
-                rotulo="Soltar para PERDER"
-                icone={<ThumbsDown className="h-4 w-4" />}
-                tom="destructive"
-              />
-            </div>
-          )}
-
-          {/* Celular: chips com a contagem de cada etapa. */}
-          <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:hidden [scrollbar-width:none]" role="tablist" aria-label="Etapas do funil">
-            {ESTAGIOS_ABERTOS.map((estagio) => {
-              const total = (porEstagio.get(estagio) || []).length;
-              const ativa = etapaNoCelular === estagio;
-              return (
-                <button
-                  key={estagio}
-                  type="button"
-                  role="tab"
-                  aria-selected={ativa}
-                  onClick={() => setEtapaNoCelular(estagio)}
-                  className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-semibold transition-colors ${
-                    ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"
-                  }`}
-                >
-                  {rotuloDoEstagio(estagio)}
-                  <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${ativa ? "bg-primary-foreground/20" : "bg-secondary"}`}>{total}</span>
+      <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Funil" className={emLinha ? "" : "mt-3"}>
+        {carregando ? (
+          <Carregando rotulo="Carregando o funil" linhas={4} />
+        ) : leads.length === 0 ? (
+          <EstadoVazio
+            icone={<KanbanSquare className="h-5 w-5" />}
+            titulo="O funil está vazio"
+            descricao="Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."
+            acao={
+              <div className="flex flex-wrap items-center justify-center [&>*]:m-1">
+                <button type="button" onClick={onImportar} disabled={importando} className={botao.secundario}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Trazer do diagnóstico
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="-mx-1 flex snap-x gap-2.5 px-1 pb-3 sm:overflow-x-auto [scrollbar-width:thin]">
-            {ESTAGIOS_ABERTOS.map((estagio) => (
-              <Coluna
-                key={estagio}
-                visivelNoCelular={etapaNoCelular === estagio}
-                estagio={estagio}
-                leads={porEstagio.get(estagio) || []}
-                agendaDe={agendaDe}
-                arrastandoAlgo={Boolean(arrastando)}
-                onAbrir={(lead) => {
-                  if (acabouDeArrastar.current) return;
-                  onAbrir(lead);
-                }}
-              />
-            ))}
-          </div>
-
-          <DragOverlay dropAnimation={null}>
-            {arrastando && (
-              <div className="w-[230px] rotate-2 rounded-xl border border-primary bg-card p-2.5 shadow-lg">
-                <p className="truncate text-[12.5px] font-semibold text-foreground">
-                  {arrastando.name}
-                </p>
-                {arrastando.company && (
-                  <p className="truncate text-[10.5px] text-muted-foreground">
-                    {arrastando.company}
-                  </p>
-                )}
+                <button type="button" onClick={onNovo} className={botao.primario}>
+                  <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Novo lead
+                </button>
               </div>
-            )}
-          </DragOverlay>
-        </DndContext>
-      )}
+            }
+          />
+        ) : (
+          <DndContext sensors={sensors} onDragStart={aoIniciar} onDragEnd={aoTerminar}>
+            {/* lg:pb-12: o botão flutuante do painel (canto de baixo) não cobre o alvo de soltar da última coluna. */}
+            <div className="relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1 lg:pb-12">
+              {/* A faixa de fechar só existe enquanto há cartão na mão. No
+                  computador ela cobre o topo das colunas (nada se mexe de
+                  lugar durante o arrasto); no celular gruda no topo da tela. */}
+              {arrastando && (
+                <div className="sticky top-2 z-20 mb-2 grid grid-cols-2 gap-2 lg:absolute lg:inset-x-0 lg:top-0 lg:mb-0">
+                  <AlvoDeFechamento
+                    id="ganho"
+                    rotulo="Soltar para ganhar"
+                    icone={<Trophy className="mr-2 h-4 w-4" aria-hidden="true" />}
+                    tom="success"
+                  />
+                  <AlvoDeFechamento
+                    id="perdido"
+                    rotulo="Soltar para perder"
+                    icone={<ThumbsDown className="mr-2 h-4 w-4" aria-hidden="true" />}
+                    tom="destructive"
+                  />
+                </div>
+              )}
+
+              {/* Celular: uma etapa por vez, com a contagem de cada uma. */}
+              <Etapas
+                className="mb-2 border-b border-border sm:hidden"
+                rotulo="Etapas do funil"
+                itens={ESTAGIOS_ABERTOS.map((estagio) => ({
+                  valor: estagio,
+                  rotulo: rotuloDoEstagio(estagio),
+                  contador: (porEstagio.get(estagio) || []).length,
+                }))}
+                valor={etapaNoCelular}
+                onEscolher={(v) => setEtapaNoCelular(v as EstagioId)}
+              />
+
+              <div className="min-w-0 sm:-mx-1 sm:flex sm:overflow-x-auto sm:px-1 sm:pb-2 lg:min-h-0 lg:flex-1 sm:[&>*+*]:ml-3 [scrollbar-width:thin]">
+                {ESTAGIOS_ABERTOS.map((estagio) => (
+                  <Coluna
+                    key={estagio}
+                    visivelNoCelular={etapaNoCelular === estagio}
+                    estagio={estagio}
+                    leads={porEstagio.get(estagio) || []}
+                    agendaDe={agendaDe}
+                    arrastandoAlgo={Boolean(arrastando)}
+                    onAbrir={(lead) => {
+                      if (acabouDeArrastar.current) return;
+                      onAbrir(lead);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <DragOverlay dropAnimation={null}>
+              {arrastando && (
+                <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-2.5 shadow-lg">
+                  <p className="truncate text-[13px] font-medium text-foreground">
+                    {arrastando.name}
+                  </p>
+                  {arrastando.company && (
+                    <p className={juntar(texto.auxiliar, "truncate")}>
+                      {arrastando.company}
+                    </p>
+                  )}
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        )}
+      </AreaDeTrabalho>
 
       {fechamento && (
         <DialogoDeFechamento
@@ -422,37 +423,38 @@ function Coluna({
     leadQualificado(lead, Boolean(agendaDe(lead).proxima)),
   ).length;
   const ajuda = ESTAGIOS.find((e) => e.id === estagio)?.ajuda;
+  const rotulo = rotuloDoEstagio(estagio);
 
   return (
-    <div
+    <section
       ref={setNodeRef}
-      // A coluna tem altura maxima e a lista rola por dentro: com dez leads em
-      // "Novo" a coluna empurrava a pagina inteira e as outras sumiam da tela.
-      className={`${visivelNoCelular ? "flex" : "hidden"} max-h-[calc(100dvh-17rem)] min-h-[12rem] w-full shrink-0 flex-col rounded-2xl border p-2.5 transition-colors sm:flex sm:max-h-[calc(100dvh-15rem)] sm:w-[270px] ${
-        isOver
-          ? "border-primary bg-primary/[0.07]"
-          : arrastandoAlgo
-            ? "border-dashed border-border bg-card/40"
-            : "border-border bg-card/60"
-      }`}
+      aria-label={rotulo}
+      // A lista de cartões rola por dentro da coluna (de 1024 px para cima):
+      // com dez leads em "Novo" a coluna empurrava a pagina inteira e as
+      // outras sumiam da tela.
+      className={juntar(
+        visivelNoCelular ? "flex" : "hidden",
+        "min-h-[12rem] w-full min-w-0 flex-col rounded-lg border p-1.5 transition-colors sm:flex sm:w-[260px] sm:shrink-0 lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1",
+        isOver ? "border-primary bg-primary/[0.06]" : arrastandoAlgo ? "border-dashed border-border" : "border-transparent",
+      )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <p
-          title={ajuda}
-          className="truncate text-[11px] font-bold uppercase tracking-wide text-foreground"
-        >
-          {rotuloDoEstagio(estagio)}
-        </p>
-        <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
-          {leads.length}
-        </span>
+      {/* No celular o nome e a contagem já estão nas Etapas logo acima. */}
+      <div className="hidden h-7 shrink-0 items-center px-1 sm:flex">
+        <h3 title={ajuda} className={juntar(texto.rotulo, "min-w-0 truncate text-foreground")}>
+          {rotulo}
+        </h3>
+        <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{leads.length}</span>
       </div>
-      <p className="mt-0.5 shrink-0 text-[10px] tabular-nums text-muted-foreground">
+      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1 tabular-nums")}>
         {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
         {leads.length > 0 && ` · ${qualificadas}/${leads.length} qualificadas`}
       </p>
 
-      <div className="-mr-1.5 mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-1.5 [scrollbar-width:thin]">
+      <RegiaoRolavel
+        rotulo={`Leads em ${rotulo}`}
+        memoria={`comercial:funil:${estagio}`}
+        className="mt-2 space-y-1.5 lg:pr-1"
+      >
         {leads.map((lead) => (
           <Cartao
             key={lead.id}
@@ -461,20 +463,19 @@ function Coluna({
             onAbrir={onAbrir}
           />
         ))}
-      </div>
+      </RegiaoRolavel>
       {/* O alvo de soltar fica fora da rolagem: sempre visivel no pe da coluna. */}
       <div className="mt-1.5 shrink-0">
         <div
-          className={`rounded-xl border border-dashed px-2 py-3 text-center text-[10px] transition-colors ${
-            isOver
-              ? "border-primary text-primary"
-              : "border-border text-muted-foreground"
-          }`}
+          className={juntar(
+            "rounded-md border border-dashed px-2 py-2 text-center text-[11px] transition-colors",
+            isOver ? "border-primary text-primary" : "border-border text-muted-foreground",
+          )}
         >
           {isOver ? "soltar aqui" : leads.length === 0 ? "vazio" : "arraste para cá"}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -503,34 +504,30 @@ function Cartao({
       onClick={() => onAbrir(lead)}
       role="button"
       tabIndex={0}
+      aria-label={`Abrir lead ${lead.name}`}
       onKeyDown={(evento) => {
         if (evento.key === "Enter") onAbrir(lead);
       }}
-      className={`w-full cursor-grab rounded-xl border p-2.5 text-left transition-colors active:cursor-grabbing ${
-        isDragging ? "opacity-40" : ""
-      } ${
-        atrasado
-          ? "border-warning/40 bg-warning/[0.05]"
-          : "border-border bg-background hover:border-primary/40"
-      }`}
+      className={juntar(
+        "w-full cursor-grab rounded-md border bg-card p-2.5 text-left transition-colors active:cursor-grabbing",
+        foco,
+        isDragging && "opacity-40",
+        atrasado ? "border-warning/50" : "border-border hover:border-muted-foreground/30",
+      )}
     >
-      <div className="flex items-start gap-1.5">
-        <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+      <div className="flex items-start">
+        <GripVertical className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-semibold text-foreground">
+          <p className="truncate text-[13px] font-medium leading-5 text-foreground">
             {lead.name}
           </p>
           {lead.company && (
-            <p className="truncate text-[10.5px] text-muted-foreground">{lead.company}</p>
+            <p className={juntar(texto.auxiliar, "truncate")}>{lead.company}</p>
           )}
-          <p
-            className={`mt-0.5 text-[9.5px] uppercase tracking-wide ${
-              lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/60"
-            }`}
-          >
+          <p className={juntar("mt-0.5 truncate text-[11px] leading-4", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
             {rotuloDaClasse(lead.classe)}
           </p>
-          <p className="mt-1 text-[10.5px] font-semibold tabular-nums text-primary">
+          <p className="mt-1 truncate text-[12px] font-medium tabular-nums text-primary">
             {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
             {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}
             {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
@@ -540,15 +537,16 @@ function Cartao({
               lead tem alguém cuidando dele. */}
           {agenda.proxima ? (
             <p
-              className={`mt-1 truncate text-[10px] ${
-                atrasado ? "font-semibold text-warning" : "text-muted-foreground"
-              }`}
+              className={juntar(
+                "mt-1 truncate text-[11px] leading-4",
+                atrasado ? "font-medium text-warning" : "text-muted-foreground",
+              )}
             >
               {atrasado ? "Atrasado: " : `${rotuloDaAtividade(agenda.proxima.kind)}: `}
               {agenda.proxima.title}
             </p>
           ) : (
-            <p className="mt-1 text-[10px] italic text-muted-foreground/70">
+            <p className="mt-1 text-[11px] italic leading-4 text-muted-foreground/70">
               sem próximo passo
             </p>
           )}
@@ -576,14 +574,14 @@ function AlvoDeFechamento({
     tom === "success"
       ? isOver
         ? "border-success bg-success text-white"
-        : "border-success/40 bg-success/10 text-success"
+        : "border-success/50 bg-card text-success"
       : isOver
         ? "border-destructive bg-destructive text-white"
-        : "border-destructive/40 bg-destructive/10 text-destructive";
+        : "border-destructive/50 bg-card text-destructive";
   return (
     <div
       ref={setNodeRef}
-      className={`flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed text-[11.5px] font-bold uppercase tracking-wide transition-colors ${cor}`}
+      className={juntar("flex h-12 items-center justify-center rounded-md border-2 border-dashed text-[13px] font-semibold transition-colors", cor)}
     >
       {icone}
       {rotulo}
@@ -609,75 +607,58 @@ function DialogoDeFechamento({
   const [motivo, setMotivo] = useState("");
   const [cliente, setCliente] = useState("nenhum");
   const ganhou = destino === "ganho";
+  const valor =
+    lead.monthly_value === 0 && lead.one_off_value === 0
+      ? "Sem valor definido: a meta de mensalidade nova não conta nada por ele."
+      : [
+          lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês` : "",
+          lead.one_off_value > 0 ? `${dinheiro(lead.one_off_value)} de entrada` : "",
+        ]
+          .filter(Boolean)
+          .join(" + ");
 
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onCancelar()}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center text-[15px]">
             {ganhou ? (
-              <Trophy className="h-4 w-4 text-success" />
+              <Trophy className="mr-2 h-4 w-4 text-success" aria-hidden="true" />
             ) : (
-              <ThumbsDown className="h-4 w-4 text-destructive" />
+              <ThumbsDown className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />
             )}
             {ganhou ? "Fechou com" : "Perdeu"} {lead.name}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {ganhou ? (
-            <>
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
-                {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}
-                {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} de entrada`}
-                {lead.monthly_value === 0 &&
-                  lead.one_off_value === 0 &&
-                  "Este lead está sem valor definido. A meta de mensalidade nova não vai contar nada por ele."}
-              </p>
-              <div className="space-y-1.5">
-                <p className="text-[11px] text-muted-foreground">
-                  Cliente no painel (opcional)
-                </p>
-                {/* O elo com o cadastro é o que deixa o financeiro responder
-                    depois quanto aquele lead virou de verdade. */}
-                <Select value={cliente} onValueChange={setCliente}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Ligar a um cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhum">Ainda não cadastrei</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+            // O elo com o cadastro é o que deixa o financeiro responder
+            // depois quanto aquele lead virou de verdade.
+            <CampoDeFormulario rotulo="Cliente no painel" apoio={valor}>
+              <select value={cliente} onChange={(e) => setCliente(e.target.value)} className={campo}>
+                <option value="nenhum">Ainda não cadastrei</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </CampoDeFormulario>
           ) : (
-            <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground">
-                Por que não seguiu? É a única linha que ensina o próximo lead.
-              </p>
-              <Input
+            <CampoDeFormulario rotulo="Por que não seguiu?" obrigatorio ajuda="É a única linha que ensina o próximo lead.">
+              <input
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Preço, prazo, escolheu outro, sumiu…"
-                className="h-10"
+                placeholder="Preço, prazo, escolheu outro, sumiu"
+                className={campo}
                 autoFocus
               />
-            </div>
+            </CampoDeFormulario>
           )}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancelar}
-              className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-[12px] font-semibold text-muted-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
+          <div className="flex items-center justify-end [&>*+*]:ml-2">
+            <button type="button" onClick={onCancelar} className={botao.secundario}>
               Cancelar
             </button>
             <button
@@ -689,9 +670,7 @@ function DialogoDeFechamento({
                 }
                 onConfirmar(motivo, cliente === "nenhum" ? null : cliente);
               }}
-              className={`h-11 flex-1 rounded-xl text-[12px] font-semibold text-white ${
-                ganhou ? "bg-success" : "bg-destructive"
-              }`}
+              className={ganhou ? juntar(botao.primario, "bg-success hover:bg-success/90") : juntar(botao.primario, "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
             >
               {ganhou ? "Confirmar ganho" : "Confirmar perda"}
             </button>

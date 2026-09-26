@@ -224,7 +224,10 @@ describe("editorial design task workspace contract", () => {
     expect(page).toContain(
       "As publicações continuam visíveis, mas as tarefas do Kanban não puderam ser atualizadas.",
     );
-    expect(page).toContain("<main className=\"min-w-0\">");
+    // E4 (26/09): o calendário é uma região própria (rola sozinho e lembra a
+    // posição), separada dos avisos de tarefa; sem <main> dentro do <main> da casca.
+    expect(page).toContain('rotuloDoPrincipal="Calendário editorial"');
+    expect(page).not.toContain("<main");
   });
 
   it("keeps a task link mandatory when creation starts from the Kanban", () => {

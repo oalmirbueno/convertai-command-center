@@ -7,7 +7,7 @@ import {
   Ban, Bot, CheckCircle2, Clock, ExternalLink, FileText, Loader2,
   PauseCircle, ShieldAlert, UserPlus, XCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Carregando, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * Quem está trabalhando nesta tarefa, por quê, e o que já entregou.
@@ -168,7 +168,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[11.5px] text-destructive">
+      <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-[12px] leading-5 text-destructive">
         Não consegui ler o trabalho dos agentes nesta tarefa:{" "}
         {error instanceof Error ? error.message : String(error)}.
         Isso <strong>não</strong> quer dizer que nenhum agente trabalhou nela.
@@ -176,7 +176,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
     );
   }
   if (isLoading) {
-    return <p className="py-3 text-center text-[11px] text-muted-foreground">carregando o contexto…</p>;
+    return <Carregando linhas={2} rotulo="Carregando o contexto do agente" />;
   }
   // A proposta pode existir SEM vínculo: o agente pode sugerir um dono
   // para uma tarefa que ele nem pegou. Sumir com ela aqui esconderia
@@ -184,202 +184,212 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
   if ((!data || !temTrabalho) && propostas.length === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-4">
       {/* A sugestão do agente, respondível em um clique. */}
       {propostas.map((p: any) => (
-        <div key={p.id} className="rounded-xl border border-info/40 bg-info/[0.06] p-3">
-          <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-info">
-            <UserPlus className="h-3 w-3" /> O agente sugere um responsável
+        <div key={p.id} className="rounded-md bg-info/10 px-3 py-3">
+          <p className="inline-flex items-center text-[12px] font-medium text-info">
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> O agente sugere um responsável
           </p>
-          <p className="mt-1.5 text-[12.5px] text-foreground">
+          <p className="mt-1.5 text-[13px] text-foreground">
             <strong>{p.nome_sugerido}</strong> deveria responder por esta tarefa
             {typeof p.confianca === "number" && (
               <span className="text-muted-foreground"> · confiança {(p.confianca * 100).toFixed(0)}%</span>
             )}
           </p>
-          <p className="mt-1 whitespace-pre-wrap text-[11.5px] leading-relaxed text-foreground/85">
+          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-foreground/85">
             {p.justificativa}
           </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              disabled={decidir.isPending}
-              onClick={() => decidir.mutate({ id: p.id, decisao: "aprovada" })}
-              className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-success px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
-            >
-              {decidir.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-              Aprovar e designar
-            </button>
-            <button
-              type="button"
-              disabled={decidir.isPending}
-              onClick={() => decidir.mutate({ id: p.id, decisao: "rejeitada" })}
-              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-destructive/50 px-2.5 text-[11px] font-semibold text-destructive disabled:opacity-50"
-            >
-              <Ban className="h-3 w-3" /> Recusar
-            </button>
+          <div className="mt-2.5">
+            <div className="-m-1 flex flex-wrap [&>*]:m-1">
+              <button
+                type="button"
+                disabled={decidir.isPending}
+                onClick={() => decidir.mutate({ id: p.id, decisao: "aprovada" })}
+                className={juntar(botao.primario, "h-8 px-3 text-[12px]")}
+              >
+                {decidir.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" aria-hidden="true" />}
+                Aprovar e designar
+              </button>
+              <button
+                type="button"
+                disabled={decidir.isPending}
+                onClick={() => decidir.mutate({ id: p.id, decisao: "rejeitada" })}
+                className={juntar(botao.perigo, "h-8 px-3 text-[12px]")}
+              >
+                <Ban className="mr-1.5 h-3 w-3" aria-hidden="true" /> Recusar
+              </button>
+            </div>
           </div>
         </div>
       ))}
 
-      {(data?.links ?? []).map((l: any) => {
-        const op = data?.operadores?.get(l.operator_id);
-        const Icone = ICONE_ESTADO[l.status] || Bot;
-        return (
-          <div key={l.id} className="rounded-xl border border-border bg-card p-3.5">
-            {/* Quem, de qual área, e em que pé está. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <Bot className="h-4 w-4 text-primary" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-foreground">
-                  {op?.display_name || "operador"}
-                </p>
-                <p className="text-[10.5px] text-muted-foreground">
-                  {[op?.role, op?.area].filter(Boolean).join(" · ") || "agente do Hermes"}
-                </p>
-              </div>
-              <span className={cn(
-                "ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-semibold",
-                TOM_ESTADO[l.status] || "bg-secondary text-muted-foreground",
-              )}>
-                <Icone className={cn("h-3 w-3", l.status === "in_progress" && "animate-spin")} />
-                {ROTULO_ESTADO[l.status] || l.status}
-              </span>
-            </div>
+      {(data?.links?.length ?? 0) > 0 && (
+        <ul className="divide-y divide-border">
+          {(data?.links ?? []).map((l: any) => {
+            const op = data?.operadores?.get(l.operator_id);
+            const Icone = ICONE_ESTADO[l.status] || Bot;
+            return (
+              <li key={l.id} className="min-w-0 py-3 first:pt-0 last:pb-0">
+                {/* Quem, de qual área, e em que pé está. */}
+                <div className="flex min-w-0 items-center">
+                  <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
+                  </span>
+                  <div className="mr-2 min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-foreground">
+                      {op?.display_name || "operador"}
+                    </p>
+                    <p className="truncate text-[12px] text-muted-foreground">
+                      {[op?.role, op?.area].filter(Boolean).join(" · ") || "agente do Hermes"}
+                    </p>
+                  </div>
+                  <span className={juntar(
+                    etiqueta,
+                    "h-6 px-2",
+                    TOM_ESTADO[l.status] || "bg-secondary text-muted-foreground",
+                  )}>
+                    <Icone className={juntar("mr-1 h-3 w-3", l.status === "in_progress" && "animate-spin")} aria-hidden="true" />
+                    {ROTULO_ESTADO[l.status] || l.status}
+                  </span>
+                </div>
 
-            {/* O PORQUÊ e o que vem depois: sem isso o card diz que algo
-                aconteceu, mas não o que fazer com isso. */}
-            <div className="mt-2.5 space-y-1.5">
-              {l.last_action && (
-                <p className="text-[12px] leading-relaxed text-foreground/90">{l.last_action}</p>
-              )}
-              {l.next_step && (
-                <p className="text-[11px] text-muted-foreground">
-                  <span className="font-semibold uppercase tracking-wide">próximo passo: </span>
-                  {l.next_step}
-                </p>
-              )}
-              {l.block_reason && (
-                <p className="rounded-lg border border-destructive/25 bg-secondary px-2.5 py-1.5 text-[11px] text-destructive">
-                  <span className="font-semibold">travado: </span>{l.block_reason}
-                </p>
-              )}
-              {precisaDecisao(l) && (
-                <p className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning">
-                  <ShieldAlert className="h-3 w-3" /> precisa da sua aprovação
-                </p>
-              )}
-            </div>
+                {/* O PORQUÊ e o que vem depois: sem isso o card diz que algo
+                    aconteceu, mas não o que fazer com isso. */}
+                <div className="mt-2 space-y-1.5">
+                  {l.last_action && (
+                    <p className="text-[12.5px] leading-relaxed text-foreground/90">{l.last_action}</p>
+                  )}
+                  {l.next_step && (
+                    <p className="text-[12px] text-muted-foreground">
+                      <span className="font-medium">próximo passo: </span>
+                      {l.next_step}
+                    </p>
+                  )}
+                  {l.block_reason && (
+                    <p className="text-[12px] text-destructive">
+                      <span className="font-medium">travado: </span>{l.block_reason}
+                    </p>
+                  )}
+                  {precisaDecisao(l) && (
+                    <p className={juntar(etiqueta, "bg-warning/15 text-warning")}>
+                      <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> precisa da sua aprovação
+                    </p>
+                  )}
+                </div>
 
-            {/* A ENTREGA: link clicável e, se for imagem, a prova visível.
-                Uma URL em texto obriga a copiar e colar para conferir. */}
-            {l.last_evidence && (
-              <div className="mt-2.5 rounded-lg border border-success/25 bg-success/[0.06] p-2.5">
-                <p className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-success">
-                  <FileText className="h-3 w-3" /> Entrega
-                </p>
-                {ehLink(l.last_evidence) ? (
-                  <>
-                    <a
-                      href={String(l.last_evidence).trim()}
-                      target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 break-all text-[11.5px] text-primary underline"
-                    >
-                      {String(l.last_evidence).trim()}
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                    </a>
-                    {ehImagem(String(l.last_evidence)) && (
-                      <img
-                        src={String(l.last_evidence).trim()}
-                        alt="Comprovação da entrega"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="mt-2 max-h-56 w-auto rounded-lg border border-border"
-                      />
+                {/* A ENTREGA: link clicável e, se for imagem, a prova visível.
+                    Uma URL em texto obriga a copiar e colar para conferir. */}
+                {l.last_evidence && (
+                  <div className={juntar(superficie.poco, "mt-2.5 p-2.5")}>
+                    <p className="mb-1 inline-flex items-center text-[12px] font-medium text-success">
+                      <FileText className="mr-1 h-3 w-3" aria-hidden="true" /> Entrega
+                    </p>
+                    {ehLink(l.last_evidence) ? (
+                      <>
+                        <a
+                          href={String(l.last_evidence).trim()}
+                          target="_blank" rel="noopener noreferrer"
+                          className="block break-all text-[12px] text-primary underline"
+                        >
+                          {String(l.last_evidence).trim()}
+                          <ExternalLink className="ml-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
+                        </a>
+                        {ehImagem(String(l.last_evidence)) && (
+                          <img
+                            src={String(l.last_evidence).trim()}
+                            alt="Comprovação da entrega"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            className="mt-2 max-h-56 w-auto rounded-md border border-border"
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <p className="break-words text-[12px] text-foreground/90">{l.last_evidence}</p>
                     )}
-                  </>
-                ) : (
-                  <p className="break-words text-[11.5px] text-foreground/90">{l.last_evidence}</p>
+                  </div>
                 )}
-              </div>
-            )}
 
-            <p className="mt-2 text-[10px] text-muted-foreground">
-              começou {quando(l.created_at)} · última atualização {quando(l.updated_at)}
-            </p>
-          </div>
-        );
-      })}
+                <p className={juntar(texto.auxiliar, "mt-2")}>
+                  começou {quando(l.created_at)} · última atualização {quando(l.updated_at)}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* O QUE FOI PARA O HISTÓRICO DO CLIENTE.
           A entrega já era gravada aqui, e ninguém via: registro invisível
           é indistinguível de registro inexistente. */}
       {(data?.memoria?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-info/30 bg-info/[0.05] p-3">
-          <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-info">
-            <FileText className="h-3 w-3" /> Registrado no histórico do cliente ({data?.memoria?.length ?? 0})
-          </p>
-          <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+        <section className="border-t border-border pt-3">
+          <h4 className="mb-1.5 inline-flex items-center text-[13px] font-semibold text-foreground">
+            <FileText className="mr-1.5 h-3.5 w-3.5 text-info" aria-hidden="true" /> Registrado no histórico do cliente
+            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">{data?.memoria?.length ?? 0}</span>
+          </h4>
+          <ul className="divide-y divide-border">
             {(data?.memoria ?? []).map((m: any) => (
-              <div key={m.id} className="rounded-lg bg-background/60 px-2.5 py-1.5">
-                <p className="text-[10px] text-muted-foreground">
+              <li key={m.id} className="min-w-0 py-2">
+                <p className={texto.auxiliar}>
                   {m.kind} · {quando(m.created_at)}
                 </p>
-                <p className="text-[11.5px] font-semibold text-foreground">{m.title}</p>
-                <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-foreground/85">
+                <p className="text-[12.5px] font-semibold text-foreground">{m.title}</p>
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-[12px] text-foreground/85">
                   {m.content}
                 </p>
-              </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
       {/* O que você escreveu, junto do que o agente respondeu. */}
       {(data?.diario?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-border bg-card p-3">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Conversa desta tarefa ({data?.diario?.length ?? 0})
-          </p>
-          <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+        <section className="border-t border-border pt-3">
+          <h4 className="mb-1.5 text-[13px] font-semibold text-foreground">
+            Conversa desta tarefa
+            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">{data?.diario?.length ?? 0}</span>
+          </h4>
+          <div className="space-y-1.5">
             {(data?.diario ?? []).map((d: any) => (
-              <div key={d.id} className={cn(
-                "rounded-lg px-2.5 py-1.5",
-                d.author_kind === "humano" ? "bg-primary/[0.07]" : "bg-secondary/50",
+              <div key={d.id} className={juntar(
+                "rounded-md px-2.5 py-1.5",
+                d.author_kind === "humano" ? "bg-primary/10" : "bg-muted/50",
               )}>
-                <p className="text-[10px] text-muted-foreground">
+                <p className={texto.auxiliar}>
                   {d.author_kind === "humano" ? "você" : "o agente"} ·{" "}
                   {String(d.entry_type).replace(/_/g, " ")} · {quando(d.created_at)}
                 </p>
-                {d.title && <p className="text-[11.5px] font-semibold text-foreground">{d.title}</p>}
-                <p className="whitespace-pre-wrap break-words text-[11.5px] text-foreground/90">{d.body}</p>
+                {d.title && <p className="text-[12.5px] font-semibold text-foreground">{d.title}</p>}
+                <p className="whitespace-pre-wrap break-words text-[12.5px] text-foreground/90">{d.body}</p>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* O histórico completo, recolhido: quem quer auditar abre. */}
       {(data?.trilha?.length ?? 0) > 0 && (
-        <details className="rounded-xl border border-border bg-card p-3">
-          <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Histórico completo ({data?.trilha?.length ?? 0})
+        <details className="border-t border-border pt-3">
+          <summary className="cursor-pointer text-[13px] font-semibold text-foreground">
+            Histórico completo
+            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">{data?.trilha?.length ?? 0}</span>
           </summary>
-          <div className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
+          <ul className="mt-2 divide-y divide-border">
             {(data?.trilha ?? []).map((e: any) => (
-              <div key={e.id} className="flex flex-wrap items-baseline gap-x-2 border-b border-border/50 pb-1 last:border-0">
-                <span className="text-[10px] tabular-nums text-muted-foreground">{quando(e.occurred_at)}</span>
-                <span className="text-[11px] text-foreground/90">{e.action}</span>
+              <li key={e.id} className="-mx-1 flex flex-wrap items-baseline py-1.5 [&>*]:mx-1">
+                <span className="text-[11.5px] tabular-nums text-muted-foreground">{quando(e.occurred_at)}</span>
+                <span className="text-[12px] text-foreground/90">{e.action}</span>
                 {e.old_status && e.new_status && (
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-[11.5px] text-muted-foreground">
                     {e.old_status} → {e.new_status}
                   </span>
                 )}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </details>
       )}
     </div>

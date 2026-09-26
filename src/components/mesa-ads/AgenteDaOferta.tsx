@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageSquarePlus, Sparkles, X } from "lucide-react";
+import { MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "@/components/mesa/AnexosDoPedido";
 import { Ditado } from "@/components/mesa/Ditado";
 import { Cronometro } from "@/components/mesa/Cronometro";
+import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { botao, foco as focoVisivel, juntar } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { abrirLateralDaArea } from "@/components/mesa-foto/lateralDaArea";
 import { chamarAds, chavesAds, lerConversa, normalizarRespostaDaOferta, partesDaOferta, type RespostaDaOferta } from "./adsApi";
 
 /**
@@ -15,6 +20,10 @@ import { chamarAds, chavesAds, lerConversa, normalizarRespostaDaOferta, partesDa
  * específicas (gravadas em ads_ofertas e conferidas pelo Jev), ideias de
  * criativo e, quando fizer sentido, uma sugestão de briefing. A conversa
  * fica no banco; o id da conversa em andamento fica no navegador.
+ *
+ * 26/09 (sistema de design): é a lateral fixa da etapa Oferta
+ * (AreaDeTrabalho + PainelDoAgente). O rascunho do campo fica lembrado por
+ * cliente; "Lapidar com o agente" põe o pedido no campo e abre a lateral.
  */
 
 const ATALHOS = [
@@ -89,7 +98,8 @@ export default function AgenteDaOferta({
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const anexos = useAnexos(clientId);
-  const [texto, setTexto] = useState("");
+  // Rascunho do campo lembrado por cliente (sair e voltar não perde o que foi escrito).
+  const [texto, setTexto] = useEstadoDaTela(`mesa-ads:oferta:agente:rascunho:${clientId}`, "");
   const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
   const [conversaId, setConversaId] = useState<string | null>(() => lerConversaGuardada(clientId));
   const [recomecou, setRecomecou] = useState(false);
@@ -100,11 +110,13 @@ export default function AgenteDaOferta({
     if (!pedido) return;
     setTexto(pedido.texto);
     setFoco(pedido.ofertaId ? { id: pedido.ofertaId, nome: pedido.nome } : null);
-    const el = entradaRef.current;
-    if (el) {
-      if (typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      el.focus();
-    }
+    // O agente é a lateral fixa: no celular abre a gaveta; no computador reabre se estava recolhido.
+    abrirLateralDaArea();
+    const t = window.setTimeout(() => {
+      const el = entradaRef.current;
+      if (el) el.focus();
+    }, 60);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido ? pedido.chave : 0]);
   const enviados = useRef<string[]>([]);
@@ -165,133 +177,137 @@ export default function AgenteDaOferta({
   const podeEnviar = !!texto.trim() && !anexos.subindo && !envio;
   const vazia = !atual || (conversa.data && mensagens.length === 0);
 
+  // Casca fixa de agente (src/components/sistema/PainelDoAgente.tsx): cabeçalho e
+  // campo sempre à vista; só a conversa rola, por dentro.
   return (
-    <div className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card ${className}`} aria-label="Agente de oferta">
-      <div className="flex shrink-0 items-center border-b border-border px-4 py-3">
-        <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold">Agente de oferta</span>
-          <span className="block truncate text-[11.5px] text-muted-foreground">Ofertas específicas, conferidas pelo Jev</span>
-        </span>
-        {atual && (
-          <button type="button" onClick={novaConversa} disabled={!!envio} className="ml-2 inline-flex h-8 shrink-0 items-center rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50" title="Começar uma conversa nova">
-            <MessageSquarePlus className="mr-1 h-3.5 w-3.5" /> Nova
-          </button>
-        )}
-      </div>
-
-      <div ref={listaRef} className="min-h-[220px] flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Conversa com o agente de oferta">
-        {conversa.isLoading && (
-          <p className="text-[12px] text-muted-foreground">
-            <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" /> Lendo a conversa…
-          </p>
-        )}
-        {conversa.isError && <AvisoDeErro erro={conversa.error} />}
-        {vazia && !envio && !conversa.isLoading && (
-          <div className="px-1 py-6 text-center">
-            <p className="text-[12.5px] font-medium">Conte o que o cliente vende</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              Produto, preço confirmado, para quem, o que já funcionou e o que trava a venda. O agente monta ofertas com promessa, mecanismo, bônus, garantia e CTA, sem inventar prova nem urgência.
-            </p>
+    <PainelDoAgente
+      className={className}
+      titulo="Agente de oferta"
+      descricao="Ofertas conferidas pelo Jev"
+      icone={<Sparkles className="h-4 w-4" />}
+      acoes={
+        <>
+          {atual && (
+            <button type="button" onClick={novaConversa} disabled={!!envio} className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Começar uma conversa nova" title="Começar uma conversa nova">
+              <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+          <AjudaRecolhida rotulo="Como o agente de oferta funciona">
+            Conte o que o cliente vende, fale pelo microfone ou anexe prints. O agente devolve ofertas específicas (promessa, mecanismo, bônus, garantia e CTA), conferidas pelo Jev, sem inventar prova nem urgência.
+          </AjudaRecolhida>
+        </>
+      }
+      refDasMensagens={listaRef}
+      rotuloDasMensagens="Conversa com o agente de oferta"
+      compositor={
+        <>
+          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente de oferta">
+            {ATALHOS.map((a) => (
+              <button
+                key={a.rotulo}
+                type="button"
+                onClick={() => setTexto(a.texto)}
+                className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", focoVisivel)}
+              >
+                {a.rotulo}
+              </button>
+            ))}
           </div>
-        )}
-        {mensagens.map((m) => {
-          if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
-          const imagens = m.anexos.map((a: any) => (a && a.caminho ? String(a.caminho) : typeof a === "string" ? a : "")).filter(Boolean);
-          return (
-            <div key={m.id} className="min-w-0 space-y-1.5">
-              {m.conteudo && (
-                <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
-                  <p className="whitespace-pre-wrap">{m.conteudo}</p>
-                </Bolha>
-              )}
-              {imagens.length > 0 && (
-                <div className="ml-8 flex flex-wrap justify-end">
-                  {imagens.map((c: string) => (
-                    <ImagemDaMesa key={c} caminho={c} alt="Imagem anexada" className="mb-1 ml-1 h-12 w-12 rounded-md border border-border" />
-                  ))}
-                </div>
-              )}
+          {foco && (
+            <div className="flex min-w-0 items-center rounded-md bg-primary/10 px-2.5 py-1.5 text-[11.5px]" role="note">
+              <span className="min-w-0 flex-1 truncate">
+                Lapidando: <span className="font-medium">{foco.nome}</span>
+              </span>
+              <button type="button" onClick={() => setFoco(null)} className={juntar("ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted", focoVisivel)} aria-label="Tirar a oferta em foco">
+                <X className="h-3 w-3" />
+              </button>
             </div>
-          );
-        })}
-        {envio && (
-          <div className="min-w-0 space-y-2">
-            {envio.mensagem && (
-              <Bolha papel="usuario">
-                <p className="whitespace-pre-wrap">{envio.mensagem}</p>
+          )}
+          <ZonaDeAnexos anexos={anexos}>
+            <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
+              <MiniaturasDosAnexos anexos={anexos} />
+              <Textarea
+                ref={entradaRef}
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && podeEnviar) {
+                    e.preventDefault();
+                    const b = botaoRef.current ? botaoRef.current.querySelector("button") : null;
+                    if (b) b.click();
+                  }
+                }}
+                rows={3}
+                aria-label="Mensagem ao agente de oferta"
+                placeholder="Fale ou escreva. Arraste ou cole prints do cardápio, da tabela de preços, de um anúncio."
+                className="max-h-40 min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+              <div className="mt-1 flex min-w-0 items-center">
+                <BotaoDeAnexar anexos={anexos} className="mr-1.5" />
+                <Ditado valor={texto} onChange={setTexto} disabled={!!envio} className="mr-1.5 min-w-0" />
+                <span ref={botaoRef} className="ml-auto shrink-0">
+                  <BotaoComCusto
+                    rotulo="Enviar"
+                    titulo="Mensagem ao agente de oferta"
+                    descricao="Uma chamada do estrategista com o briefing, o contexto do cliente e os aprendizados; as ofertas voltam conferidas pelo Jev."
+                    partes={() => partesDaOferta(catalogo, anexos.caminhos.length)}
+                    executar={enviar}
+                    aoConcluir={() => anexos.tirarEnviados(enviados.current)}
+                    disabled={!podeEnviar}
+                    className="h-8"
+                  />
+                </span>
+              </div>
+            </div>
+          </ZonaDeAnexos>
+        </>
+      }
+    >
+      {conversa.isLoading && (
+        <div className="space-y-2" aria-label="Lendo a conversa">
+          <div className="mr-6 h-10 animate-pulse rounded-lg bg-muted" />
+          <div className="ml-8 h-8 animate-pulse rounded-lg bg-muted" />
+        </div>
+      )}
+      {conversa.isError && <AvisoDeErro erro={conversa.error} />}
+      {vazia && !envio && !conversa.isLoading && (
+        <div className="px-1 py-6 text-center">
+          <p className="text-[12.5px] font-medium">Conte o que o cliente vende</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Produto, preço confirmado, para quem e o que trava a venda.</p>
+        </div>
+      )}
+      {mensagens.map((m) => {
+        if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
+        const imagens = m.anexos.map((a: any) => (a && a.caminho ? String(a.caminho) : typeof a === "string" ? a : "")).filter(Boolean);
+        return (
+          <div key={m.id} className="min-w-0 space-y-1.5">
+            {m.conteudo && (
+              <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
+                <p className="whitespace-pre-wrap">{m.conteudo}</p>
               </Bolha>
             )}
-            <div className="mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
-              <Cronometro desde={envio.desde} rotulo="Montando e conferindo as ofertas" />
-            </div>
+            {imagens.length > 0 && (
+              <div className="ml-8 flex flex-wrap justify-end">
+                {imagens.map((c: string) => (
+                  <ImagemDaMesa key={c} caminho={c} alt="Imagem anexada" className="mb-1 ml-1 h-12 w-12 rounded-md border border-border" />
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
-        <div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente de oferta">
-          {ATALHOS.map((a) => (
-            <button
-              key={a.rotulo}
-              type="button"
-              onClick={() => setTexto(a.texto)}
-              className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-            >
-              {a.rotulo}
-            </button>
-          ))}
+        );
+      })}
+      {envio && (
+        <div className="min-w-0 space-y-2">
+          {envio.mensagem && (
+            <Bolha papel="usuario">
+              <p className="whitespace-pre-wrap">{envio.mensagem}</p>
+            </Bolha>
+          )}
+          <div className="mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
+            <Cronometro desde={envio.desde} rotulo="Montando e conferindo as ofertas" />
+          </div>
         </div>
-        {foco && (
-          <div className="flex min-w-0 items-center rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[11.5px]" role="note">
-            <span className="min-w-0 flex-1 truncate">
-              Lapidando: <span className="font-medium">{foco.nome}</span>
-            </span>
-            <button type="button" onClick={() => setFoco(null)} className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary" aria-label="Tirar a oferta em foco">
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-        <ZonaDeAnexos anexos={anexos}>
-          <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
-            <MiniaturasDosAnexos anexos={anexos} />
-            <Textarea
-              ref={entradaRef}
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && podeEnviar) {
-                  e.preventDefault();
-                  const b = botaoRef.current ? botaoRef.current.querySelector("button") : null;
-                  if (b) b.click();
-                }
-              }}
-              rows={3}
-              aria-label="Mensagem ao agente de oferta"
-              placeholder="Fale ou escreva. Arraste ou cole prints do cardápio, da tabela de preços, de um anúncio."
-              className="max-h-40 min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            <div className="mt-1 flex min-w-0 items-center">
-              <BotaoDeAnexar anexos={anexos} className="mr-1.5" />
-              <Ditado valor={texto} onChange={setTexto} disabled={!!envio} className="mr-1.5 min-w-0" />
-              <span ref={botaoRef} className="ml-auto shrink-0">
-                <BotaoComCusto
-                  rotulo="Enviar"
-                  titulo="Mensagem ao agente de oferta"
-                  descricao="Uma chamada do estrategista com o briefing, o contexto do cliente e os aprendizados; as ofertas voltam conferidas pelo Jev."
-                  partes={() => partesDaOferta(catalogo, anexos.caminhos.length)}
-                  executar={enviar}
-                  aoConcluir={() => anexos.tirarEnviados(enviados.current)}
-                  disabled={!podeEnviar}
-                  className="h-8"
-                />
-              </span>
-            </div>
-          </div>
-        </ZonaDeAnexos>
-      </div>
-    </div>
+      )}
+    </PainelDoAgente>
   );
 }

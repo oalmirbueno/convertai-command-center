@@ -1,12 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Wallet, PiggyBank, Target, Scale, TrendingUp, Landmark, Pencil } from "lucide-react";
+import { Wallet, PiggyBank, Target, Scale, TrendingUp, Landmark, Pencil, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier } from "@/lib/directorPlan";
+import {
+  AjudaRecolhida, CampoDeFormulario, GrupoDeCampos, Painel, Secao, useEstadoDaTela, botao, etiqueta, juntar, texto,
+} from "@/components/sistema";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pct = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
@@ -37,7 +40,8 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
   const { updateSettings } = useFinanceMutations();
   const [goalModal, setGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState("");
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Aberto/recolhido fica guardado ao sair e voltar.
+  const [panelOpen, setPanelOpen] = useEstadoDaTela("financeiro:divisao-aberta", true, { validar: (v) => typeof v === "boolean" });
 
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -138,233 +142,251 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
     }
   };
 
+  const reservaCompleta = clientReserve >= clientReserveTarget - 0.005 && clientReserveTarget > 0;
+  const estadoDaReserva = reservaCompleta
+    ? `Completa · alvo ${fmt(clientReserveTarget)}`
+    : clientReserve > 0
+      ? `Parcial · faltam ${fmt(clientReserveTarget - clientReserve)} do alvo ${fmt(clientReserveTarget)}`
+      : `Sem sobra ainda · alvo ${fmt(clientReserveTarget)}`;
+
+  // Barra única: como o dinheiro que entrou se divide (alocação em ordem de prioridade)
+  let restante = Math.max(operationalReceived, 0);
+  const alocar = (target: number) => {
+    const v = Math.min(restante, Math.max(target, 0));
+    restante -= v;
+    return v;
+  };
+  const fixosAlloc = alocar(fixedCostsValue);
+  const plAlloc = alocar(proLaboreProp);
+  const reservaAlloc = alocar(clientReserveTarget);
+  const lucroAlloc = restante;
+  const uncovered = fixedCostsValue + proLaboreProp - (fixosAlloc + plAlloc);
+  const segs = [
+    { label: "Reserva tributária", value: taxReserve, cls: "bg-info" },
+    { label: "Custos fixos", value: fixosAlloc, cls: "bg-warning" },
+    { label: "Pró-labore", value: plAlloc, cls: "bg-primary" },
+    { label: "Reserva clientes/invest.", value: reservaAlloc, cls: "bg-info/60" },
+    { label: "Lucro", value: lucroAlloc, cls: "bg-success" },
+  ].filter((s) => s.value > 0.005);
+  const totalDaBarra = grossReceived > 0 ? grossReceived : 1;
+
   return (
-    <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-      <button
-        onClick={() => setPanelOpen((v) => !v)}
-        className="w-full flex items-center justify-between flex-wrap gap-2 bg-transparent border-none cursor-pointer text-left p-0"
-      >
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
-          <Landmark className="w-3.5 h-3.5 text-primary" />
-          Gestão Financeira · Divisão automática de {monthLabel}
-        </p>
-        <span className="text-[10px] text-muted-foreground">
-          Alíquota do plano de cada cliente; sem plano, {pct(DEFAULT_TAX_RATE)} ilustrativa <span className="ml-1">{panelOpen ? "▾" : "▸"}</span>
-        </span>
-      </button>
-
+    <Secao
+      titulo="Divisão do mês"
+      descricao={monthLabel}
+      ajuda={
+        <>
+          Divide o que entrou no mês. A reserva tributária usa a alíquota do plano de cada cliente; sem plano, {pct(DEFAULT_TAX_RATE)} ilustrativa.
+          {" "}Pró-labore proporcional: abaixo de R$ 10 mil acompanha o que entra (R$ 5 mil vira R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (R$ 12,5 mil vira R$ 3.500).
+          {" "}Retirada oficial: {fmt(proLabore)}, ajuste em Custos fixos. A reserva de clientes ({activeClientsCount} × {fmt(defaultDirectCost)}) sai só do que sobra, então estimativa não gera negativo.
+        </>
+      }
+      acao={
+        <button
+          type="button"
+          onClick={() => setPanelOpen((v) => !v)}
+          aria-expanded={panelOpen}
+          aria-label={`${panelOpen ? "Recolher" : "Mostrar"} divisão do mês`}
+          className={botao.discreto}
+        >
+          <span className="hidden sm:inline">{panelOpen ? "Recolher" : "Mostrar"}</span>
+          <ChevronDown className={juntar("h-4 w-4 transition-transform sm:ml-1", panelOpen && "rotate-180")} aria-hidden="true" />
+        </button>
+      }
+    >
       {panelOpen && (
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* Coluna 1: divisão do que entrou */}
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 py-1">
-            <Wallet className="w-3.5 h-3.5 shrink-0 text-foreground" />
-            <span className="text-[12px] flex-1 text-foreground font-medium">Recebido no mês (bruto)</span>
-            <span className="text-[13px] font-mono text-foreground">{fmt(grossReceived)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1">
-            <Landmark className="w-3.5 h-3.5 shrink-0 text-info" />
-            <span className="text-[12px] flex-1 text-muted-foreground">Reserva tributária (separa na hora)</span>
-            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(taxReserve)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1 pb-2 border-b border-border">
-            <TrendingUp className="w-3.5 h-3.5 shrink-0 text-success" />
-            <span className="text-[12px] flex-1 text-foreground font-medium">Receita operacional</span>
-            <span className="text-[13px] font-mono text-success">{fmt(operationalReceived)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1">
-            <Scale className="w-3.5 h-3.5 shrink-0 text-warning" />
-            <span className="text-[12px] flex-1 text-muted-foreground">
-              {fixedCostsSource === "real" ? "Custos fixos do mês" : "Custos fixos (referência: ferramentas)"}
-            </span>
-            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(fixedCostsValue)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1">
-            <PiggyBank className="w-3.5 h-3.5 shrink-0 text-primary" />
-            <span className="text-[12px] flex-1 text-muted-foreground">
-              Pró-labore proporcional ao que entrou
-              <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary align-middle">escada</span>
-            </span>
-            <span className="text-[13px] font-mono text-primary">− {fmt(proLaboreProp)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1">
-            <Scale className="w-3.5 h-3.5 shrink-0 text-info" />
-            <span className="text-[12px] flex-1 text-muted-foreground">
-              Reserva p/ custos de clientes e investimento
-              {clientReserve >= clientReserveTarget - 0.005 && clientReserveTarget > 0 ? (
-                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success align-middle">completa · {fmt(clientReserveTarget)}</span>
-              ) : clientReserve > 0 ? (
-                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/10 text-warning align-middle">parcial · faltam {fmt(clientReserveTarget - clientReserve)} do alvo {fmt(clientReserveTarget)}</span>
-              ) : (
-                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground align-middle">sem sobra ainda · alvo {fmt(clientReserveTarget)}</span>
-              )}
-            </span>
-            <span className="text-[13px] font-mono text-info">
-              {clientReserve > 0 ? `− ${fmt(clientReserve)}` : fmt(0)}
-            </span>
-          </div>
-          <p className="text-[10px] text-muted-foreground pl-5 -mt-0.5">
-            Essa linha é o que <span className="text-info">sobrou e foi guardado</span> (desconta antes do lucro) · não é falta. Se não sobrar nada, fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar.
-          </p>
-          <div className="flex items-center gap-2 pt-2 border-t border-border">
-            <span className="text-[12px] font-medium text-foreground flex-1">Lucro do mês</span>
-            <span className={`text-base font-mono font-semibold ${result >= 0 ? "text-success" : "text-destructive"}`}>{fmt(result)}</span>
-          </div>
+        <Painel semEspaco>
+          <div className="grid min-w-0 grid-cols-1 md:grid-cols-2">
+            {/* Coluna 1: divisão do que entrou */}
+            <div className="min-w-0 p-4 sm:p-5">
+              <ul className="min-w-0">
+                <Linha icone={<Wallet className="h-3.5 w-3.5 text-foreground" />} rotulo="Recebido no mês (bruto)" forte valor={fmt(grossReceived)} />
+                <Linha icone={<Landmark className="h-3.5 w-3.5 text-info" />} rotulo="Reserva tributária" valor={`− ${fmt(taxReserve)}`} />
+                <Linha icone={<TrendingUp className="h-3.5 w-3.5 text-success" />} rotulo="Receita operacional" forte valor={fmt(operationalReceived)} corDoValor="text-success" separada />
+                <Linha
+                  icone={<Scale className="h-3.5 w-3.5 text-warning" />}
+                  rotulo={fixedCostsSource === "real" ? "Custos fixos do mês" : "Custos fixos (referência: ferramentas)"}
+                  valor={`− ${fmt(fixedCostsValue)}`}
+                />
+                <Linha
+                  icone={<PiggyBank className="h-3.5 w-3.5 text-primary" />}
+                  rotulo={<>Pró-labore proporcional <span className={juntar(etiqueta, "ml-1 bg-primary/10 text-primary")}>escada</span></>}
+                  valor={`− ${fmt(proLaboreProp)}`}
+                  corDoValor="text-primary"
+                />
+                <Linha
+                  icone={<Scale className="h-3.5 w-3.5 text-info" />}
+                  rotulo="Reserva de clientes e investimento"
+                  apoio={<span className={reservaCompleta ? "text-success" : clientReserve > 0 ? "text-warning" : undefined}>{estadoDaReserva}</span>}
+                  ajuda="É o que sobrou e foi guardado antes do lucro. Não é falta: sem sobra fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar."
+                  valor={clientReserve > 0 ? `− ${fmt(clientReserve)}` : fmt(0)}
+                  corDoValor="text-info"
+                />
+              </ul>
+              <div className="mt-2 flex min-w-0 items-center border-t border-border pt-2.5">
+                <span className={juntar(texto.corpo, "min-w-0 flex-1 font-medium")}>Lucro do mês</span>
+                <span className={juntar("shrink-0 text-[16px] font-semibold tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
+              </div>
 
-          {/* Barra única: como o dinheiro que entrou se divide (alocação em ordem de prioridade) */}
-          {(() => {
-            let rest = Math.max(operationalReceived, 0);
-            const alloc = (target: number) => {
-              const v = Math.min(rest, Math.max(target, 0));
-              rest -= v;
-              return v;
-            };
-            const fixosAlloc = alloc(fixedCostsValue);
-            const plAlloc = alloc(proLaboreProp);
-            const reservaAlloc = alloc(clientReserveTarget);
-            const lucroAlloc = rest;
-            const uncovered = fixedCostsValue + proLaboreProp - (fixosAlloc + plAlloc);
-            const segs = [
-              { label: "Reserva tributária", value: taxReserve, cls: "bg-info" },
-              { label: "Custos fixos", value: fixosAlloc, cls: "bg-warning" },
-              { label: "Pró-labore", value: plAlloc, cls: "bg-primary" },
-              { label: "Reserva clientes/invest.", value: reservaAlloc, cls: "bg-info/60" },
-              { label: "Lucro", value: lucroAlloc, cls: "bg-success" },
-            ].filter((s) => s.value > 0.005);
-            const total = grossReceived > 0 ? grossReceived : 1;
-            return grossReceived > 0 ? (
-              <div className="pt-3 space-y-2">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Como o dinheiro que entrou se divide
-                </p>
-                <div className="h-3 rounded-full overflow-hidden flex bg-secondary">
-                  {segs.map((s) => (
-                    <div key={s.label} className={s.cls} style={{ width: `${(s.value / total) * 100}%` }} title={`${s.label}: ${fmt(s.value)}`} />
-                  ))}
+              {grossReceived > 0 ? (
+                <div className="mt-4 min-w-0">
+                  <p className={juntar(texto.rotulo, "mb-1.5")}>Como o dinheiro que entrou se divide</p>
+                  <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
+                    {segs.map((s) => (
+                      <div key={s.label} className={s.cls} style={{ width: `${(s.value / totalDaBarra) * 100}%` }} title={`${s.label}: ${fmt(s.value)}`} />
+                    ))}
+                  </div>
+                  <div className="-mx-1.5 mt-1.5 flex min-w-0 flex-wrap">
+                    {segs.map((s) => (
+                      <span key={s.label} className="mx-1.5 my-0.5 inline-flex items-center text-[11px] tabular-nums text-muted-foreground">
+                        <span className={juntar("mr-1 h-2 w-2 shrink-0 rounded-full", s.cls)} aria-hidden="true" />
+                        {s.label} {fmt(s.value)} ({Math.round((s.value / totalDaBarra) * 100)}%)
+                      </span>
+                    ))}
+                  </div>
+                  {uncovered > 0.005 && (
+                    <p className="mt-1.5 text-[12px] leading-4 text-destructive">
+                      Faltam {fmt(uncovered)} para cobrir custos fixos e pró-labore do mês.
+                    </p>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {segs.map((s) => (
-                    <span key={s.label} className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${s.cls}`} /> {s.label} {fmt(s.value)} ({Math.round((s.value / total) * 100)}%)
-                    </span>
-                  ))}
-                </div>
-                {uncovered > 0.005 && (
-                  <p className="text-[10px] text-destructive">
-                    Faltam {fmt(uncovered)} entrando para cobrir custos fixos + pró-labore proporcional do mês.
+              ) : (
+                <p className={juntar(texto.auxiliar, "mt-3")}>Nada recebido neste mês ainda.</p>
+              )}
+
+              {isCurrentMonth && projectedOperational !== null && grossReceived > 0 && (
+                <div className="mt-2 flex min-w-0 items-center">
+                  <p className={juntar(texto.auxiliar, "min-w-0 truncate")}>
+                    Ritmo: fecha em ~<span className="tabular-nums">{fmt(projectedOperational)}</span> operacionais
                   </p>
+                  <AjudaRecolhida className="ml-1" rotulo="Como o ritmo é calculado">
+                    Entrou {fmt(operationalReceived)} operacionais até o dia {dayOfMonth}. Se a média diária continuar, o mês fecha em ~{fmt(projectedOperational)}, com pró-labore proporcional projetado de {fmt(projectedProLabore || 0)}. É estimativa: o que vale é o recebido.
+                  </AjudaRecolhida>
+                </div>
+              )}
+            </div>
+
+            {/* Coluna 2: meta, ponto de equilíbrio e pró-labore pela escada */}
+            <div className="min-w-0 divide-y divide-border border-t border-border md:border-l md:border-t-0">
+              <div className="min-w-0 p-4 sm:p-5">
+                <div className="flex min-w-0 items-center">
+                  <Target className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  <span className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>Meta mensal (receita operacional)</span>
+                  <button
+                    type="button"
+                    onClick={() => { setGoalInput(monthlyGoal ? String(monthlyGoal) : "10000"); setGoalModal(true); }}
+                    className={juntar(botao.discreto, "h-7 px-2 text-primary")}
+                  >
+                    <Pencil className="mr-1 h-3 w-3" aria-hidden="true" /> {monthlyGoal ? "Editar" : "Definir"}
+                  </button>
+                </div>
+                {monthlyGoal && monthlyGoal > 0 ? (
+                  <>
+                    <div className="mt-1 flex min-w-0 items-baseline">
+                      <span className="text-[17px] font-semibold tabular-nums text-foreground">{fmt(operationalReceived)}</span>
+                      <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>de {fmt(monthlyGoal)}</span>
+                      <span className={juntar("ml-auto shrink-0 pl-2 text-[12px] tabular-nums", goalProgress! >= 1 ? "text-success" : "text-muted-foreground")}>
+                        {Math.round(goalProgress! * 100)}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={juntar("h-full rounded-full", goalProgress! >= 1 ? "bg-success" : "bg-primary")}
+                        style={{ width: `${Math.round(goalProgress! * 100)}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className={juntar(texto.auxiliar, "mt-1.5 truncate")}>Sem meta. O Plano Diretor sugere R$ 10.000 operacionais.</p>
                 )}
               </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground pt-2">
-                Nenhum valor recebido neste mês ainda · a divisão aparece automaticamente conforme o dinheiro entra.
-              </p>
-            );
-          })()}
 
-          {isCurrentMonth && projectedOperational !== null && grossReceived > 0 && (
-            <p className="text-[10px] text-muted-foreground pt-1">
-              Entrou {fmt(operationalReceived)} operacionais até o dia {dayOfMonth}. Se a média diária continuar, o mês fecha em ~{fmt(projectedOperational)} (estimativa · o que vale é o recebido), com pró-labore proporcional projetado de {fmt(projectedProLabore || 0)}.
-            </p>
-          )}
-
-          <p className="text-[10px] text-muted-foreground pt-1">
-            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} · ajuste na aba Custos Fixos. A reserva de clientes ({activeClientsCount} × {fmt(defaultDirectCost)}) é separada só do que sobra, como colchão para custos e investimento · estimativa não gera negativo.
-          </p>
-        </div>
-
-        {/* Coluna 2: meta, ponto de equilíbrio e pró-labore sugerido */}
-        <div className="space-y-3">
-          <div className="bg-secondary/30 border border-border rounded-xl p-3.5">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Target className="w-3 h-3 text-primary" /> Meta mensal (receita operacional)
-              </p>
-              <button
-                onClick={() => { setGoalInput(monthlyGoal ? String(monthlyGoal) : "10000"); setGoalModal(true); }}
-                className="text-[10px] text-primary flex items-center gap-1 bg-transparent border-none cursor-pointer hover:opacity-80"
-              >
-                <Pencil className="w-3 h-3" /> {monthlyGoal ? "Editar" : "Definir"}
-              </button>
-            </div>
-            {monthlyGoal && monthlyGoal > 0 ? (
-              <>
-                <div className="flex items-baseline gap-2 mt-1.5">
-                  <span className="text-lg font-mono font-semibold text-foreground">{fmt(operationalReceived)}</span>
-                  <span className="text-[11px] text-muted-foreground">de {fmt(monthlyGoal)}</span>
-                  <span className={`text-[11px] font-mono ml-auto ${goalProgress! >= 1 ? "text-success" : "text-muted-foreground"}`}>
-                    {Math.round(goalProgress! * 100)}%
-                  </span>
+              <div className="min-w-0 p-4 sm:p-5">
+                <div className="flex min-w-0 items-center">
+                  <Scale className="mr-1.5 h-3.5 w-3.5 shrink-0 text-info" aria-hidden="true" />
+                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Ponto de equilíbrio</span>
                 </div>
-                <div className="h-1.5 bg-secondary rounded-full mt-2 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${goalProgress! >= 1 ? "bg-success" : "bg-primary"}`}
-                    style={{ width: `${Math.round(goalProgress! * 100)}%` }}
-                  />
+                <div className="mt-1 flex min-w-0 items-baseline">
+                  <span className="shrink-0 text-[17px] font-semibold tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
+                  <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>por mês · {fmt(breakEvenGross)} brutos</span>
                 </div>
-              </>
-            ) : (
-              <p className="text-[11px] text-muted-foreground mt-1.5">Sem meta definida. O Plano Diretor sugere R$ 10.000 operacionais na fase atual.</p>
-            )}
-          </div>
+                <p className={juntar("mt-1 text-[12px] leading-4", operationalReceived >= breakEvenOperational ? "text-success" : "text-warning")}>
+                  {operationalReceived >= breakEvenOperational
+                    ? "Estrutura do mês coberta pelo que já entrou."
+                    : `Faltam ${fmt(breakEvenOperational - operationalReceived)} operacionais para cobrir a estrutura.`}
+                </p>
+              </div>
 
-          <div className="bg-secondary/30 border border-border rounded-xl p-3.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Scale className="w-3 h-3 text-info" /> Ponto de equilíbrio
-            </p>
-            <div className="flex items-baseline gap-2 mt-1.5">
-              <span className="text-lg font-mono font-semibold text-foreground">{fmt(breakEvenOperational)}</span>
-              <span className="text-[11px] text-muted-foreground">operacionais/mês · {fmt(breakEvenGross)} brutos</span>
+              <div className="min-w-0 p-4 sm:p-5">
+                <div className="flex min-w-0 items-center">
+                  <PiggyBank className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Pró-labore pela escada</span>
+                  <AjudaRecolhida className="ml-1" rotulo="Sobre o pró-labore">
+                    Proporcional ao que entrou no mês, pela escada do Plano Diretor. Nada muda sozinho: a retirada oficial você confirma em Custos fixos.
+                  </AjudaRecolhida>
+                </div>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center">
+                  <span className="mr-2 text-[17px] font-semibold tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
+                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Oficial {fmt(proLabore)}</span>
+                </div>
+                <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
+                  {nextTier
+                    ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)}.`
+                    : "Topo da escada atingido."}
+                </p>
+              </div>
             </div>
-            <p className={`text-[11px] mt-1 ${operationalReceived >= breakEvenOperational ? "text-success" : "text-warning"}`}>
-              {operationalReceived >= breakEvenOperational
-                ? "Estrutura do mês coberta pelo que já entrou."
-                : `Faltam ${fmt(breakEvenOperational - operationalReceived)} operacionais para cobrir a estrutura.`}
-            </p>
           </div>
-
-          <div className="bg-secondary/30 border border-border rounded-xl p-3.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <PiggyBank className="w-3 h-3 text-success" /> Pró-labore pela escada do Plano Diretor
-            </p>
-            <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
-              <span className="text-lg font-mono font-semibold text-foreground">{fmt(proLaboreProp)}</span>
-              <span className="text-[11px] text-muted-foreground">proporcional ao mês</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                Oficial: {fmt(proLabore)}
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {nextTier
-                ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)} operacionais.`
-                : "Topo da escada atingido."}
-              {" "}Nada muda sozinho · a retirada oficial você confirma na aba Custos Fixos.
-            </p>
-          </div>
-        </div>
-      </div>
+        </Painel>
       )}
 
-      {/* Modal meta mensal */}
+      {/* Meta mensal */}
       <Dialog open={goalModal} onOpenChange={setGoalModal}>
-        <DialogContent className="bg-card border-border max-w-sm">
-          <DialogHeader><DialogTitle className="text-foreground">Meta mensal de receita operacional</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Meta (R$)</label>
-              <Input type="number" step="0.01" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="mt-1" placeholder="10000" />
+        <DialogContent className="border-border bg-card sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Meta mensal</DialogTitle>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <GrupoDeCampos colunas={1}>
+              <CampoDeFormulario rotulo="Meta (R$)" apoio="Receita operacional: recebido menos a reserva tributária.">
+                <Input type="number" inputMode="decimal" step="0.01" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="h-9" placeholder="10000" />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <div className="flex min-w-0 items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+              <button type="button" onClick={() => setGoalModal(false)} className={botao.secundario}>Cancelar</button>
+              <button type="button" onClick={saveGoal} disabled={updateSettings.isPending} className={botao.primario}>
+                Salvar meta
+              </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">Receita operacional = valor recebido após separar a reserva tributária.</p>
-            <button
-              onClick={saveGoal}
-              disabled={updateSettings.isPending}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-            >
-              Salvar meta
-            </button>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Secao>
+  );
+}
+
+/** Uma linha da divisão: ícone, rótulo (com apoio opcional) e valor à direita. */
+function Linha({ icone, rotulo, apoio, ajuda, valor, corDoValor = "text-muted-foreground", forte = false, separada = false }: {
+  icone: ReactNode;
+  rotulo: ReactNode;
+  apoio?: ReactNode;
+  ajuda?: ReactNode;
+  valor: ReactNode;
+  corDoValor?: string;
+  forte?: boolean;
+  separada?: boolean;
+}) {
+  return (
+    <li className={juntar("flex min-w-0 items-start py-1.5", separada && "mb-1 border-b border-border pb-2.5")}>
+      <span className="mr-2 mt-0.5 inline-flex shrink-0" aria-hidden="true">{icone}</span>
+      <div className="mr-3 min-w-0 flex-1">
+        <div className="flex min-w-0 items-center">
+          <span className={juntar("min-w-0 text-[13px] leading-5", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
+          {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
+        </div>
+        {apoio && <p className="truncate text-[11.5px] leading-4 text-muted-foreground">{apoio}</p>}
+      </div>
+      <span className={juntar("shrink-0 text-[13px] leading-5 tabular-nums", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
+    </li>
   );
 }

@@ -136,6 +136,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Período, objetivo e lista ficam lembrados no navegador (useEstadoDaTela): cada teste começa limpo.
+  window.localStorage.clear();
   mock.tabelas = {};
   mock.escritas = [];
   mock.rpc.mockResolvedValue({ data: { saldo_usd: 10 }, error: null });
@@ -143,7 +145,8 @@ beforeEach(() => {
 });
 
 describe("conta de anúncios v4", () => {
-  it("resumo com comparação, saldo da conta, tendência, tabela de campanhas e anúncios em páginas de 12", async () => {
+  // Tela grande (a conta inteira com o agente ao lado): as buscas por papel no jsdom passam de 5 s com a máquina ocupada.
+  it("resumo com comparação, saldo da conta, tendência, tabela de campanhas e anúncios em páginas de 12", { timeout: 20000 }, async () => {
     responder({ conta_ao_vivo: CONTA_V4, evolucao: EVOLUCAO });
     montar(h(AbaConta, {}));
     const resumo = await screen.findByRole("region", { name: "Resumo do período" });
@@ -167,12 +170,15 @@ describe("conta de anúncios v4", () => {
     expect(chamadasDe("desempenho_cliente")).toHaveLength(0);
   });
 
-  it("período de 7 a 90 dias", async () => {
+  // Tela grande (a conta inteira com o agente ao lado): as buscas por papel no jsdom passam de 5 s com a máquina ocupada.
+  it("período de 7 a 90 dias", { timeout: 20000 }, async () => {
     responder({ conta_ao_vivo: CONTA_V4 });
     expect(PERIODOS_DA_CONTA).toEqual([7, 14, 30, 60, 90]);
     montar(h(AbaConta, {}));
     await screen.findByRole("region", { name: "Resumo do período" });
-    fireEvent.click(screen.getByRole("radio", { name: "90 dias" }));
+    // Período num seletor compacto (sistema de design: mais de 4 opções vira lista).
+    fireEvent.click(screen.getByRole("button", { name: "Período: 14 dias" }));
+    fireEvent.click(await screen.findByRole("option", { name: "90 dias" }));
     await waitFor(() => expect(chamadasDe("conta_ao_vivo").some((c) => c.dias === 90)).toBe(true));
   });
 
@@ -188,7 +194,7 @@ describe("conta de anúncios v4", () => {
     expect(within(ev).getByText(/Pouca curtida e muito comentário/)).toBeTruthy();
     expect(within(ev).getByText("Variar o vencedor \"Peça 1\"")).toBeTruthy();
     expect(within(ev).getByText(/Gravados na memória dos agentes: 1 novo/)).toBeTruthy();
-  });
+  }, 20000);
 
   it("normalizadores tolerantes: resposta velha vira vazio, nunca erro", () => {
     const x = extrasDaConta({ totais: {}, anuncios: [{ nome: "sem id" }] });

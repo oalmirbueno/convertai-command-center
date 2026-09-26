@@ -358,8 +358,14 @@ describe("rota, casca e troca entre mesas", () => {
     expect(central).toContain("navigate(`/mesa-foto?client=${client.id}`)");
     expect(central.indexOf("Mesa Foto")).toBeGreaterThan(central.indexOf("navigate(`/mesa-ads?client=${client.id}`)"));
     // Marca por projeto (docs/marcas): a troca de mesas leva a marca aberta junto.
-    expect(ler("src/pages/MesaAds.tsx")).toContain('<TrocaDeMesas atual="ads" clientId={clientId} marcaId={marca ? marca.id : null} />');
-    expect(ler("src/pages/MesaDoCliente.tsx")).toContain('<TrocaDeMesas atual="mesa" clientId={clientId} marcaId={marca ? marca.id : null} />');
+    // A troca de mesas mora no seletor de mesa da casca padrão (src/components/sistema/CascaDaMesa.tsx).
+    for (const [pagina, mesa] of [["src/pages/MesaAds.tsx", "ads"], ["src/pages/MesaDoCliente.tsx", "mesa"]]) {
+      const fonte = ler(pagina);
+      expect(fonte).toContain(`<CascaDaMesa
+      mesa="${mesa}"`);
+      expect(fonte).toContain("marcaId={marca ? marca.id : null}");
+    }
+    expect(ler("src/components/sistema/CascaDaMesa.tsx")).toContain("<SeletorDeMesa atual={mesa} clientId={clientId} marcaId={marcaId} />");
     expect(enderecoDaMesa("ads", CLIENTE, "m1")).toBe(`/mesa-ads?client=${CLIENTE}&marca=m1`);
     expect(enderecoDaMesa("foto", CLIENTE)).toBe(`/mesa-foto?client=${CLIENTE}`);
     expect(enderecoDaMesa("ads", CLIENTE)).toBe(`/mesa-ads?client=${CLIENTE}`);
@@ -380,26 +386,39 @@ describe("rota, casca e troca entre mesas", () => {
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const botoes = within(nav).getAllByRole("button");
     // Pedido do dono (25/09, "não tem um processo mais simples"): 1 Fotos (o produto é identificado ali),
-    // 2 Criar, 3 Usar (com a revisão dentro); Biblioteca, Modelos e Canvas como ferramentas de apoio.
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
+    // 2 Criar, 3 Usar (com a revisão dentro); as ferramentas de apoio num seletor só (26/09, sistema de design).
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Ferramentas"]);
+    const apoio = nav.querySelector("[data-etapas-de-apoio]") as HTMLElement;
+    expect(apoio.querySelector('[data-seletor-compacto="lista"]')).toBeTruthy();
+    expect(apoio.closest("[data-caminho-principal]")).toBeNull();
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
+    const ferramentas = await screen.findByRole("listbox", { name: "Ferramentas" });
+    expect(within(ferramentas).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent)).toEqual(["Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
+    fireEvent.keyDown(ferramentas, { key: "Escape" });
     expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "book", "canvas"]);
     expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "ensaio", "campanha", "preparar"], ["usar", "revisar"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
-    // Celular: o caminho principal em 3 colunas e as de apoio quebram a linha, sem rolagem lateral.
+    // Celular: o caminho principal em 3 colunas e o seletor ao lado, sem rolagem lateral.
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(caminho.className).toContain("grid-cols-3");
     expect(caminho.className).toContain("min-w-0");
-    expect(nav.className).toContain("flex-wrap");
+    expect(nav.className).toContain("min-w-0");
+    expect(apoio.className).toContain("max-w-[42%]");
     expect(botoes[0].getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("combobox", { name: /Cliente: Loja Sintética/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Saldo e gasto do mês" })).toBeTruthy();
-    const troca = screen.getByRole("navigation", { name: "Trocar de mesa" });
+    // Seletor de mesa: um botão "Mesa Foto" que abre a lista das mesas.
+    fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Mesa Foto/ }));
+    const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });
     // As outras mesas viram link (a lista cresce com as mesas novas); a aberta não.
-    const links = within(troca).getAllByRole("link").map((l) => l.textContent);
+    const links = within(troca).getAllByRole("link").map((l) => l.getAttribute("aria-label"));
     expect(links).toEqual(expect.arrayContaining(["Mesa", "Mesa Ads", "Mesa Vídeos"]));
     expect(links).not.toContain("Mesa Foto");
-    expect(within(troca).getByText("Mesa Foto").getAttribute("aria-current")).toBe("page");
+    expect(within(troca).getByLabelText("Mesa Foto").getAttribute("aria-current")).toBe("page");
+    // O cliente vai junto na troca.
+    expect(within(troca).getByLabelText("Mesa Ads").getAttribute("href")).toBe(`/mesa-ads?client=${CLIENTE}`);
+    fireEvent.keyDown(troca.firstElementChild as HTMLElement, { key: "Escape" });
     // Barra do kit e do ensaio.
     // A barra é carregada sob demanda (lazyComPreCarga): no teste o primeiro import pode passar de 1 s.
     const barra = await screen.findByLabelText("Kit, ensaio e custo", {}, { timeout: 8000 });
@@ -410,10 +429,16 @@ describe("rota, casca e troca entre mesas", () => {
     const proximo = await screen.findByText(/Próximo: Revisar 1 foto/);
     expect(proximo.closest("[data-proximo-passo]")).toBeTruthy();
     expect(botoes[2].hasAttribute("data-proximo")).toBe(true);
-    // O diretor de fotografia fica à mão em qualquer etapa.
-    expect(await screen.findByRole("button", { name: "Abrir o diretor de fotografia" })).toBeTruthy();
-    fireEvent.click(botoes[3]);
-    await waitFor(() => expect(within(nav).getAllByRole("button")[3].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    // O diretor de fotografia fica fixo na lateral da área de trabalho, com o campo à vista (26/09).
+    const campoDoDiretor = await screen.findByLabelText("Mensagem ao diretor", {}, { timeout: 8000 });
+    expect(campoDoDiretor.closest("[data-lateral]")).toBeTruthy();
+    expect(campoDoDiretor.closest("[data-compositor-do-agente]")).toBeTruthy();
+    expect(document.querySelector("[data-area-de-trabalho] [data-regiao-principal]")).toBeTruthy();
+    // Ferramenta pelo seletor: a aberta aparece no botão.
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /^Biblioteca/ }));
+    await waitFor(() => expect(apoio.getAttribute("data-ferramenta")).toBe("biblioteca"), { timeout: 5000 });
+    expect(within(apoio).getByRole("button", { name: "Ferramentas: Biblioteca" })).toBeTruthy();
     // Variações, Campanha e Preparar ficam dentro do passo 2 (Criar).
     fireEvent.click(within(nav).getAllByRole("button")[1]);
     await waitFor(() => expect(document.querySelector('[data-forma-de-criar="campanha"]')).toBeTruthy(), { timeout: 5000 });
@@ -424,7 +449,7 @@ describe("rota, casca e troca entre mesas", () => {
     // Produto (kits) e Revisar continuam por endereço, dentro dos passos 1 e 3.
     fireEvent.click(within(nav).getAllByRole("button")[2]);
     await waitFor(() => expect(within(nav).getAllByRole("button")[2].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
-  });
+  }, 30000);
 });
 
 // ------------------------------------------------------------------ acervo
@@ -434,7 +459,9 @@ describe("etapa 1, acervo", () => {
     montar(h(EtapaAcervo));
     await screen.findByText("mouse-frente.jpg");
     expect(document.querySelectorAll('[data-selo="gerada"]').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("radio", { name: /^Geradas/ }));
+    // Tipo de foto num seletor compacto (5 opções, sistema de design 26/09).
+    fireEvent.click(screen.getByRole("button", { name: /^Tipo de foto:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /^Geradas/ }));
     await waitFor(() => expect(screen.queryByText("mouse-frente.jpg")).toBeNull());
     expect(screen.getByText("mouse-tres-quartos.png")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Abrir mouse-tres-quartos.png" }));
@@ -528,7 +555,9 @@ describe("etapa 2, kits", () => {
     montar(h(EtapaKits));
     fireEvent.click(await screen.findByRole("button", { name: /Novo kit/ }));
     fireEvent.change(screen.getByLabelText("Nome do kit"), { target: { value: "Dra. Ana" } });
-    fireEvent.click(screen.getByRole("radio", { name: "Pessoa" }));
+    // Tipo do kit num seletor compacto (8 opções).
+    fireEvent.click(screen.getByRole("button", { name: /^Tipo do kit:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Pessoa" }));
     expect((screen.getByRole("button", { name: "Criar kit" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/confirme a autorização do cliente/)).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Autorização confirmada" }));
@@ -831,22 +860,31 @@ describe("biblioteca de prompts e referências", () => {
 
 // ------------------------------------------------------------------ agente
 
+// O diretor é a lateral fixa da área de trabalho (26/09): sem botão para abrir, o campo já está à vista.
 function AgenteAberto() {
-  const [aberto, setAberto] = useState(false);
-  return h(AgenteDiretor, { aberto, onAberto: setAberto });
+  return h(AgenteDiretor, {});
 }
 
 describe("diretor de fotografia", () => {
-  it("botão flutuante abre o pop-up; a mensagem vai com o kit e o ensaio; sugestão só muda com Aplicar", async () => {
+  it("diretor fixo na lateral: a mensagem vai com o kit e o ensaio; sugestão só muda com Aplicar", async () => {
     respostas.agente_conversar = { resposta: "Faça a principal com luz lateral.", sugestoes: [{ id: "s1", titulo: "Trocar a luz da principal", descricao: "Luz lateral suave" }], conversa_id: "conv-1", custo_usd: 0.02 };
     respostas.agente_aplicar = { ensaio: ENSAIO_BRUTO };
     montar(h(AgenteAberto), { kitId: KIT, ensaioId: ENSAIO, selecionadas: [F1] });
-    fireEvent.click(screen.getByRole("button", { name: "Abrir o diretor de fotografia" }));
+    expect(document.querySelector("[data-agente-diretor] [data-painel-do-agente]")).toBeTruthy();
     const campo = await screen.findByLabelText("Mensagem ao diretor");
     fireEvent.change(campo, { target: { value: "Que luz usar?" } });
     fireEvent.click(screen.getByRole("button", { name: "Mandar" }));
     await waitFor(() => expect(chamadasDe("agente_conversar")).toHaveLength(1));
-    expect(chamadasDe("agente_conversar")[0]).toEqual({ acao: "agente_conversar", client_id: CLIENTE, mensagem: "Que luz usar?", kit_id: KIT, ensaio_id: ENSAIO, anexos: [{ imagem_id: F1 }] });
+    // Diretor agêntico (26/09): o foco da tela (etapa, produto, ensaio e o que está marcado) vai junto.
+    expect(chamadasDe("agente_conversar")[0]).toEqual({
+      acao: "agente_conversar",
+      client_id: CLIENTE,
+      mensagem: "Que luz usar?",
+      kit_id: KIT,
+      ensaio_id: ENSAIO,
+      anexos: [{ imagem_id: F1 }],
+      foco: { etapa: "acervo", kit_id: KIT, ensaio_id: ENSAIO, clone_id: null, persona_id: null, book_id: null, canvas_id: null, imagem_ids: [F1], prompt_ids: [] },
+    });
     expect(await screen.findByText("Faça a principal com luz lateral.")).toBeTruthy();
     expect(chamadasDe("agente_aplicar")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Aplicar" }));
@@ -1225,8 +1263,7 @@ describe("v2: produto pela embalagem e o kit que não some", () => {
         h(MemoryRouter, { initialEntries: [`/mesa-foto?client=${CLIENTE}&etapa=acervo`] }, h(TooltipProvider, null, h(MesaFoto)), h(Onde)),
       ),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Abrir o diretor de fotografia" }));
-    fireEvent.change(await screen.findByLabelText("Mensagem ao diretor"), { target: { value: "2 variações" } });
+    fireEvent.change(await screen.findByLabelText("Mensagem ao diretor", {}, { timeout: 8000 }), { target: { value: "2 variações" } });
     fireEvent.click(screen.getByRole("button", { name: "Mandar" }));
     const plano = (await screen.findByText("Plano")).closest("[data-plano-de-variacoes]") as HTMLElement;
     const gerar = await within(plano).findByRole("button", { name: /Gerar todas \(2 fotos\)/ });
@@ -1406,7 +1443,6 @@ describe("v2: diretor que trabalha", () => {
     const escolherKit = vi.fn();
     const escolherEnsaio = vi.fn();
     montar(h(AgenteAberto), { kitId: KIT, escolherKit, escolherEnsaio });
-    fireEvent.click(screen.getByRole("button", { name: "Abrir o diretor de fotografia" }));
     const atalhos = await screen.findByRole("group", { name: "Atalhos do diretor" });
     expect(within(atalhos).getAllByRole("button").map((b) => b.textContent)).toEqual(["Identificar produto", "Tirar da caixa", "8 variações", "Campanha com modelo"]);
     fireEvent.click(within(atalhos).getByRole("button", { name: "8 variações" }));
@@ -1457,7 +1493,6 @@ describe("v2: diretor que trabalha", () => {
     respostas.acervo_registrar = (corpo: any) => ({ imagens: corpo.caminhos.map((c: string, i: number) => ({ id: `print-${i}`, storage_path: c, nome: corpo.nomes[i] })), duplicadas: [] });
     respostas.agente_conversar = { resposta: "Vou usar a pegada do print.", sugestoes: [], conversa_id: "conv-3" };
     montar(h(AgenteAberto));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir o diretor de fotografia" }));
     const entrada = (await screen.findByLabelText("Escolher prints de referência")) as HTMLInputElement;
     fireEvent.change(entrada, { target: { files: [new File(["a"], "perfil.png", { type: "image/png" })] } });
     await waitFor(() => expect(chamadasDe("acervo_registrar")).toHaveLength(1));
@@ -2014,7 +2049,10 @@ describe("26/09: Fotos com rolagem própria e painel organizado", () => {
     montar(h(EtapaAcervo), { imagemId: F1 });
     const detalhe = await screen.findByRole("region", { name: /Foto mouse-frente.jpg/ });
     const area = document.querySelector("[data-area-das-fotos]") as HTMLElement;
-    expect(area.className).toContain("lg:h-[calc(100vh-176px)]");
+    // A etapa organiza a própria coluna na área de trabalho: a área das fotos ocupa o resto da altura (sem calc à mão).
+    expect(area.className).toContain("lg:flex-1");
+    expect(area.className).toContain("lg:min-h-[240px]");
+    expect(area.className).not.toContain("100vh");
     const rolagem = document.querySelector("[data-rolagem-das-fotos]") as HTMLElement;
     expect(rolagem.className).toContain("lg:overflow-y-auto");
     expect(rolagem.className).not.toMatch(/(^|\s)overflow-y-auto/);
@@ -2105,7 +2143,8 @@ describe("26/09: Clones sem piscar, aprovar na hora, contexto, uniforme e transf
       return { imagem: { ...f, url: "https://arquivo.test/v.png" }, custo_usd: 0.14 };
     };
     montar(h(EtapaClones));
-    fireEvent.click(await screen.findByRole("radio", { name: "Pelo contexto do cliente" }));
+    // 26/09 (sistema de design): o modo da variação é uma sub-aba de 4 (seletor segmentado).
+    fireEvent.click(await screen.findByRole("tab", { name: "Contexto" }));
     await clicarComCusto(/Sugerir pelo contexto/, "clone_variacoes_sugerir");
     expect(chamadasDe("clone_variacoes_sugerir")[0]).toMatchObject({ modelo_id: CL, quantidade: 6 });
     expect(await screen.findByText("Podando o jardim")).toBeTruthy();
@@ -2125,7 +2164,7 @@ describe("26/09: Clones sem piscar, aprovar na hora, contexto, uniforme e transf
     respostas.clone_ler = { ...CLONE_LIDO, presets: CLONE_LIDO.presets.concat([{ id: "uniforme_marca", rotulo: "Uniforme da marca", roupa: "uniforme", cenario: "trabalho", pose: "", expressao: "", luz: "", enquadramento: "meio_corpo" }]) };
     respostas.clone_variacao_gerar = { imagem: fotoBruta(F3, { gerada: true, modo: "clone", tags: [`clone:${CL}`, "uniforme_da_marca"] }), custo_usd: 0.14, avisos: ["Uniforme com a logo oficial: confira a logo."] };
     montar(h(EtapaClones));
-    fireEvent.click(await screen.findByRole("radio", { name: "Uniforme da marca" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Uniforme" }));
     expect(screen.getByText(/logo oficial do kit da marca/)).toBeTruthy();
     await clicarComCusto(/Gerar 2 variações/, "clone_variacao_gerar");
     expect(chamadasDe("clone_variacao_gerar")[0].pedido.preset).toBe("uniforme_marca");

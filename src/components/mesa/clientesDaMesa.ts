@@ -5,7 +5,7 @@
  * Padrão, na mesma régua do Ciclo (useEsteira + AdminEsteira): só entra
  * cliente com plano ativo (plan_status "active"), que não é avulso
  * (client_type "one_off") e não foi apagado.
- * - Mesa (orgânica), Mesa Foto e Mesa Vídeos: todo cliente do plano mensal recorrente.
+ * - Mesa (orgânica), Mesa Foto, Mesa Vídeos e Mesa Edição: todo cliente do plano mensal recorrente.
  * - Mesa Ads: além disso, o Ads marcado (services_config.trafego, o mesmo
  *   serviço que põe o cliente na frente Tráfego do Ciclo).
  *
@@ -18,7 +18,7 @@
  * confunde quem abre a mesa todo dia.
  */
 
-export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros";
+export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao";
 export type ModoDaEscolha = "incluir" | "retirar";
 
 export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
@@ -28,6 +28,7 @@ export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
   videos: "Mesa Vídeos",
   publicidade: "Mesa Publicidade",
   roteiros: "Mesa Roteiros",
+  edicao: "Mesa Edição",
 };
 
 export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
@@ -37,6 +38,7 @@ export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
   videos: "Padrão: clientes com plano mensal ativo.",
   publicidade: "Padrão: clientes com plano mensal ativo.",
   roteiros: "Padrão: clientes com plano mensal ativo.",
+  edicao: "Padrão: clientes com plano mensal ativo.",
 };
 
 export interface ClienteBruto {

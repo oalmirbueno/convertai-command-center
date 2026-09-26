@@ -10,10 +10,17 @@ import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { CustoCompacto } from "@/components/mesa/CustoCompacto";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
-import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
-import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import Etapas from "@/components/sistema/Etapas";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { abrirLateralDaArea } from "@/components/mesa-foto/lateralDaArea";
+import { Megaphone } from "lucide-react";
 import { ehEtapa, ETAPAS_DA_PUBLICIDADE, MesaPublicidadeProvider, type EtapaDaPublicidade, type MesaPublicidadeValor } from "@/components/mesa-publicidade/Comuns";
 import { chaveDaCampanha, guardarCampanha, lerRascunho, useCampanha, useCampanhas, type CampanhaDePublicidade } from "@/components/mesa-publicidade/publicidadeApi";
 
@@ -28,8 +35,9 @@ import { chaveDaCampanha, guardarCampanha, lerRascunho, useCampanha, useCampanha
  * Cinco passos: 1. Campanha (produto do kit da Mesa Foto e briefing
  * versionado), 2. Direção (três territórios; a equipe aprova um), 3. Tomadas
  * (seis, pedidas à Mesa Foto), 4. Revisão (produto antes da estética) e
- * 5. Envio (Mesa e Mesa Ads, com linhagem). O agente da campanha fica à mão
- * em todas, no botão do centro da base.
+ * 5. Envio (Mesa e Mesa Ads, com linhagem). O agente da campanha fica fixo
+ * ao lado das etapas (lateral da AreaDeTrabalho; no celular, a gaveta do
+ * botão de baixo). "Pedir ao agente" põe o pedido no campo dele e o mostra.
  *
  * A Publicidade dirige; a Mesa Foto produz; a Mesa Ads testa. Nada de motor,
  * acervo ou carteira paralelos. Regra da fotografia: nunca escurecer a foto.
@@ -81,13 +89,27 @@ function gravarOnde(clientId: string, onde: OndeParou) {
 }
 
 function EsqueletoDaEtapa() {
-  return (
-    <div aria-busy="true" aria-label="Abrindo a etapa" className="space-y-3">
-      <div className="h-9 w-2/3 animate-pulse rounded-lg bg-muted sm:w-1/3" />
-      <div className="h-28 animate-pulse rounded-xl bg-muted/80" />
-      <div className="h-[40vh] animate-pulse rounded-xl bg-muted/60" />
-    </div>
-  );
+  return <Carregando forma="aba" rotulo="Abrindo a etapa" />;
+}
+
+/** Enquanto o agente baixa (primeira abertura): a casca dele, sem texto. */
+function EsqueletoDoAgente() {
+  return <div aria-busy="true" aria-label="Abrindo o agente" className="h-full min-h-[320px] animate-pulse rounded-lg border border-border bg-card" />;
+}
+
+/** Leva o foco para o campo do agente (depois que a lateral ou a gaveta aparece). */
+function focarNoAgente() {
+  window.setTimeout(() => {
+    try {
+      const campo = document.querySelector("[data-agente-publicidade] textarea") as HTMLTextAreaElement | null;
+      if (campo && campo.offsetParent !== null) {
+        campo.focus();
+        campo.setSelectionRange(campo.value.length, campo.value.length);
+      }
+    } catch {
+      /* sem documento */
+    }
+  }, 150);
 }
 
 export default function MesaPublicidade() {
@@ -111,8 +133,6 @@ export default function MesaPublicidade() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
-  const [agenteAberto, setAgenteAberto] = useState(false);
-  const [pedidoAoAgente, setPedidoAoAgente] = useState<{ mensagem: string; em: number } | null>(null);
   const [rascunho, setRascunho] = useState<CampanhaDePublicidade | null>(null);
 
   const role = profile?.role || "";
@@ -129,6 +149,8 @@ export default function MesaPublicidade() {
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
+  // Rascunho do campo do agente, guardado por cliente (sair e voltar mantém; "pedir ao agente" cai nele).
+  const [rascunhoDoAgente, setRascunhoDoAgente] = useEstadoDaTela<string>(`mesa-publicidade:agente:rascunho:${clientId || "sem-cliente"}`, "");
 
   const pendente = useRef<{ base: URLSearchParams; atual: URLSearchParams } | null>(null);
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
@@ -245,102 +267,104 @@ export default function MesaPublicidade() {
     },
     irPara: (e) => mudar({ etapa: e }),
     pedirAoAgente: (mensagem) => {
-      setPedidoAoAgente({ mensagem, em: Date.now() });
-      setAgenteAberto(true);
+      setRascunhoDoAgente(mensagem);
+      abrirLateralDaArea();
+      focarNoAgente();
     },
   };
 
   return (
-    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa Publicidade</h1>
-        <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
-          <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
-            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Publicidade</span>
-            <SeletorDeClientesDaMesa mesa="publicidade" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
-          </div>
-          {clientId && marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} className="mr-2" />}
-          {clientId && (
-            <nav aria-label="Etapas da Mesa Publicidade" className="order-last mt-2 w-full min-w-0 lg:order-none lg:mx-3 lg:mt-0 lg:w-auto lg:flex-1">
-              <div className="grid w-full min-w-0 grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5" data-caminho-principal="">
-                {ETAPAS_DA_PUBLICIDADE.map((p) => {
-                  const ativo = etapa === p.valor;
-                  return (
-                    <button
-                      key={p.valor}
-                      type="button"
-                      onClick={() => mudar({ etapa: p.valor })}
-                      aria-current={ativo ? "page" : undefined}
-                      title={p.dica}
-                      className={`inline-flex min-w-0 items-center justify-center rounded-md px-1 py-1.5 text-[12.5px] font-medium transition-colors ${
-                        ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <span className={`mr-1.5 hidden h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:inline-flex ${ativo ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
-                        {p.passo}
-                      </span>
-                      <span className="truncate">{p.rotulo}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </nav>
-          )}
-          {clientId && <TrocaDeMesas atual="publicidade" clientId={clientId} marcaId={marca ? marca.id : null} />}
-          {clientId && (
-            <CustoCompacto
-              saldoUsd={saldoUsd}
-              consumo={consumo.data || null}
-              previsao={previsao.data || null}
-              carregando={consumo.isLoading}
-              podeRecarregar={podeRecarregar}
-              isAdmin={isAdmin}
-              onRecarregar={() => setRecargaAberta(true)}
-              onChaves={abrirChaves}
-              onModelos={abrirModelos}
-            />
-          )}
-          <BotaoDeTelaCheia tela={telaCheia} />
-        </div>
-        {clientId && campanha && (
-          <p className="mt-1.5 truncate text-[11.5px] text-muted-foreground" data-campanha-aberta="">
+    // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx).
+    <CascaDaMesa
+      mesa="publicidade"
+      titulo="Mesa Publicidade"
+      clientId={clientId}
+      marcaId={marca ? marca.id : null}
+      telaCheia={telaCheia}
+      cliente={<SeletorDeClientesDaMesa mesa="publicidade" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
+      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} /> : null}
+      etapas={
+        clientId ? (
+          <Etapas
+            rotulo="Etapas da Mesa Publicidade"
+            numerar
+            itens={ETAPAS_DA_PUBLICIDADE.map((p) => ({ valor: p.valor, rotulo: p.rotulo, dica: p.dica }))}
+            valor={etapa}
+            onEscolher={(v) => mudar({ etapa: v })}
+          />
+        ) : null
+      }
+      acoes={
+        clientId ? (
+          <CustoCompacto
+            saldoUsd={saldoUsd}
+            consumo={consumo.data || null}
+            previsao={previsao.data || null}
+            carregando={consumo.isLoading}
+            podeRecarregar={podeRecarregar}
+            isAdmin={isAdmin}
+            onRecarregar={() => setRecargaAberta(true)}
+            onChaves={abrirChaves}
+            onModelos={abrirModelos}
+          />
+        ) : null
+      }
+      abaixo={
+        clientId && campanha ? (
+          <p className="truncate text-[12px] text-muted-foreground" data-campanha-aberta="">
             Campanha: <span className="font-medium text-foreground">{campanha.nome || campanha.kit_nome || "sem nome"}</span>
             {campanha.kit_nome ? ` · produto ${campanha.kit_nome}` : ""}
             {!campanha.persistida ? " · rascunho" : ""}
           </p>
-        )}
-      </header>
+        ) : null
+      }
+    >
 
       {!clientId && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Publicidade dele.</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Cinco passos: produto e briefing, três territórios criativos, seis tomadas pedidas à Mesa Foto, revisão do produto antes da estética e envio para a Mesa e a Mesa Ads. Custo sempre à vista antes de gastar.
-          </p>
-        </div>
+        <EstadoVazio
+          icone={<Megaphone className="h-5 w-5" />}
+          titulo="Escolha um cliente para abrir a Mesa Publicidade dele."
+          descricao="Produto, direção, tomadas, revisão e envio, com o custo à vista antes de gastar."
+        />
       )}
 
       {valor && (
         <MesaProvider valor={valor}>
           <MesaPublicidadeProvider valor={valorDaPublicidade}>
-            <div key={valor.clientId} className="min-w-0">
-              <Suspense fallback={<EsqueletoDaEtapa />}>
-                {valorDaPublicidade.carregando ? (
-                  <EsqueletoDaEtapa />
-                ) : (
-                  <>
-                    {etapa === "campanha" && <EtapaCampanha />}
-                    {etapa === "direcao" && <EtapaDirecao />}
-                    {etapa === "tomadas" && <EtapaTomadas />}
-                    {etapa === "revisao" && <EtapaRevisao />}
-                    {etapa === "envio" && <EtapaEnvio />}
-                  </>
-                )}
-              </Suspense>
-            </div>
-            <Suspense fallback={null}>
-              <AgenteDaPublicidade key={`agente-${valor.clientId}`} aberto={agenteAberto} onAberto={setAgenteAberto} pedido={pedidoAoAgente} />
-            </Suspense>
+            {/* Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no
+                computador a etapa rola por dentro e o agente fica parado ao lado,
+                com o campo sempre à vista; no celular a página rola normal e o
+                agente abre em tela cheia pelo botão de baixo. */}
+            <AreaDeTrabalho
+              key={valor.clientId}
+              memoria="mesa-publicidade"
+              rotuloDaLateral="Agente da campanha"
+              iconeDaLateral={<Megaphone className="h-4 w-4" />}
+              rotuloDoPrincipal="Etapa da Mesa Publicidade"
+              principalRolavel={false}
+              lateral={
+                <Suspense fallback={<EsqueletoDoAgente />}>
+                  <AgenteDaPublicidade rascunho={rascunhoDoAgente} onRascunho={setRascunhoDoAgente} />
+                </Suspense>
+              }
+            >
+              {/* Uma região por etapa e cliente: trocar de etapa e voltar devolve a rolagem. */}
+              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-publicidade:${valor.clientId}:${etapa}`} className="pb-24 lg:pr-1" data-regiao-da-etapa={etapa}>
+                <Suspense fallback={<EsqueletoDaEtapa />}>
+                  {valorDaPublicidade.carregando ? (
+                    <EsqueletoDaEtapa />
+                  ) : (
+                    <>
+                      {etapa === "campanha" && <EtapaCampanha />}
+                      {etapa === "direcao" && <EtapaDirecao />}
+                      {etapa === "tomadas" && <EtapaTomadas />}
+                      {etapa === "revisao" && <EtapaRevisao />}
+                      {etapa === "envio" && <EtapaEnvio />}
+                    </>
+                  )}
+                </Suspense>
+              </RegiaoRolavel>
+            </AreaDeTrabalho>
           </MesaPublicidadeProvider>
 
           {podeRecarregar && (
@@ -368,6 +392,6 @@ export default function MesaPublicidade() {
           )}
         </MesaProvider>
       )}
-    </div>
+    </CascaDaMesa>
   );
 }

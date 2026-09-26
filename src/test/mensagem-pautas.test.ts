@@ -110,7 +110,9 @@ describe("a Central ganhou o botão de atualizar", () => {
   });
 
   it("o botão fica junto do seletor de momento, onde a dúvida aparece", () => {
-    expect(central).toMatch(/Mensagem do grupo · escolha o momento[\s\S]{0,600}atualizarMensagens/);
+    // 26/09 (C2): a instrução "escolha o momento" foi para o "?" ao lado do título.
+    // E3 (26/09): virou Secao com ajuda ("?") e o botão na ação do título.
+    expect(central).toMatch(/titulo="Mensagem do grupo"\s*ajuda=[\s\S]{0,900}acao=\{[\s\S]{0,200}atualizarMensagens/);
   });
 });
 

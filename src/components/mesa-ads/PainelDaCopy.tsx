@@ -155,7 +155,7 @@ export default function PainelDaCopy({
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4" aria-label="Copy do anúncio">
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4" aria-label="Copy do anúncio">
         <div className="flex items-center">
           <h3 className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Copy do anúncio</h3>
           {salvando ? (

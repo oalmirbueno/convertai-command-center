@@ -6,6 +6,7 @@ import { useResolvedFileUrl } from "@/lib/fileUrls";
 import { explicacaoDoMovimento, iconeDoMovimento, lerMovimentos, type Movimento } from "@/lib/movimentos";
 import { kindLabel, resolveKind } from "@/lib/fileTaxonomy";
 import { toast } from "sonner";
+import { Carregando, EstadoVazio, Secao, botao, campoTexto, juntar, texto } from "@/components/sistema";
 import {
   BookOpen, CheckCircle2, FileCheck2, Megaphone, PenLine, Send, Loader2,
 } from "lucide-react";
@@ -360,29 +361,44 @@ export default function ProjectJournal({
     queryClient.invalidateQueries({ queryKey: ["project-journal", clientId] });
   };
 
+  // Sem caixa com rolagem própria: o diário mora dentro de páginas e regiões
+  // que já rolam (Central, Onde estamos, painel do cliente). O tamanho fica
+  // controlado pelos 12 mais recentes e "Ver tudo" na linha do título.
   return (
-    <section className="space-y-3">
-      <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        <BookOpen className="h-3.5 w-3.5" /> Diário do trabalho
-      </p>
-
+    <Secao
+      titulo={
+        <span className="inline-flex items-center">
+          <BookOpen className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Diário do trabalho
+        </span>
+      }
+      descricao={entries.length ? `${entries.length} ${entries.length === 1 ? "registro" : "registros"}` : undefined}
+      ajuda="Cada avanço do trabalho aparece aqui sozinho: materiais, aprovações, publicações e as atualizações escritas pela equipe."
+      acao={
+        entries.length > 12 && (
+          <button type="button" onClick={() => setShowAll((value) => !value)} className={botao.discreto}>
+            {showAll ? "Mostrar menos" : `Ver tudo (${entries.length})`}
+          </button>
+        )
+      }
+    >
       {canWrite && (
-        <div className="rounded-xl border border-border bg-card p-3.5">
+        <div className="mb-4">
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             rows={3}
+            aria-label="Nova atualização no diário"
             placeholder="O que foi feito, por que foi feito e qual o próximo passo. O cliente vê na hora."
-            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none"
+            className={juntar(campoTexto, "resize-none")}
           />
           <div className="mt-2 flex justify-end">
             <button
               type="button"
               disabled={saving || !draft.trim()}
               onClick={() => void registerNote()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity disabled:opacity-50"
+              className={botao.primario}
             >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
               Registrar atualização
             </button>
           </div>
@@ -390,15 +406,11 @@ export default function ProjectJournal({
       )}
 
       {isLoading ? (
-        <div className="h-24 animate-pulse rounded-xl bg-secondary/40" />
+        <Carregando linhas={3} rotulo="Carregando o diário" />
       ) : entries.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">
-          Cada avanço do trabalho aparece aqui automaticamente: materiais, aprovações, publicações e as
-          atualizações escritas pelo time.
-        </div>
+        <EstadoVazio compacto titulo="Nada registrado ainda." descricao="Os avanços aparecem aqui assim que acontecem." />
       ) : (
-        <>
-        <div className="relative space-y-0 rounded-xl border border-border/60 bg-secondary/[0.15] p-3 pr-2 sm:max-h-[380px] sm:overflow-y-auto">
+        <div className="relative min-w-0" data-diario-lista="">
           {(() => {
             // Agrupado por dia: a linha do tempo vira leitura, não lista solta.
             const visible = showAll ? entries : entries.slice(0, 12);
@@ -421,16 +433,16 @@ export default function ProjectJournal({
               return (
                 <div key={`${entry.at}-${index}`}>
                   {showDayHeader && (
-                    <p className="pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                    <p className={juntar(texto.rotulo, "pb-2 pt-1")}>
                       {day}
                     </p>
                   )}
-                  <div className="relative flex gap-3 pb-4">
+                  <div className="relative flex pb-4">
                 {index < visible.length - 1 && (
                   <span className="absolute left-[13px] top-7 h-full w-px bg-border" aria-hidden="true" />
                 )}
                 <span
-                  className={`relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
+                  className={`relative z-10 mr-3 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
                     isNote
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-border bg-secondary/50 text-muted-foreground"
@@ -439,7 +451,7 @@ export default function ProjectJournal({
                   <EntryIcon className="h-3.5 w-3.5" />
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <div className="flex flex-wrap items-baseline [&>*+*]:ml-2">
                     <p className={isNote ? "text-[13px] font-medium leading-snug text-foreground" : "text-[12px] leading-snug text-foreground/80"}>
                       {entry.file ? (
                         <JournalFileTitle file={entry.file} title={entry.title} />
@@ -447,7 +459,7 @@ export default function ProjectJournal({
                         entry.title
                       )}
                     </p>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[11px] tabular-nums text-muted-foreground">
                       {new Date(entry.at).toLocaleTimeString("pt-BR", {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -467,17 +479,7 @@ export default function ProjectJournal({
             });
           })()}
         </div>
-        {entries.length > 12 && (
-          <button
-            type="button"
-            onClick={() => setShowAll((value) => !value)}
-            className="w-full rounded-lg border border-border bg-transparent py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {showAll ? "Mostrar menos" : `Ver histórico completo (${entries.length})`}
-          </button>
-        )}
-        </>
       )}
-    </section>
+    </Secao>
   );
 }

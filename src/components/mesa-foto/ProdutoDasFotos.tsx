@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import {
@@ -60,7 +61,7 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher }: { kit: KitDeFoto; capa:
     }
   };
   return (
-    <li className={`flex min-w-0 items-center rounded-xl border bg-card p-1.5 ${ativo ? "border-primary" : "border-border"}`} data-produto={kit.id}>
+    <li className={`flex min-w-0 items-center rounded-lg border p-1.5 ${ativo ? "border-primary" : "border-border"}`} data-produto={kit.id}>
       <button type="button" onClick={onEscolher} className="flex min-w-0 flex-1 items-center text-left" aria-pressed={ativo} aria-label={`Escolher o produto ${kit.nome}`}>
         <span className="mr-2 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
         <span className="min-w-0">
@@ -109,15 +110,16 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
   };
 
   return (
-    <section className={`min-w-0 rounded-xl border bg-card p-4 ${!kits.length ? "border-primary/50" : "border-border"}`} aria-label="O produto" data-produto-das-fotos="">
-      <div className="mb-2 flex min-w-0 flex-wrap items-start">
-        <div className="mr-2 min-w-0 flex-1">
-          <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">O produto</h3>
-          <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+    <section className="min-w-0 border-t border-border pt-4" aria-label="O produto" data-produto-das-fotos="">
+      <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between">
+        <div className="mr-2 flex min-w-0 flex-1 items-center">
+          <h3 className="text-[13px] font-semibold leading-5">O produto</h3>
+          <AjudaRecolhida className="ml-1.5" rotulo="Como o produto é identificado">
             {kits.length
               ? "Escolha o produto das fotos e confirme. A identificação já montou tudo: fotos, referências e o que não pode mudar."
               : "Toque em Identificar: a leitura acha marca, modelo e variante pela embalagem ou pela foto, busca as fotos oficiais e monta o produto sozinha."}
-          </p>
+          </AjudaRecolhida>
+          {kits.length > 0 && <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">{kits.length}</span>}
         </div>
         <BotaoComCusto
           rotulo={
@@ -140,11 +142,11 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
         />
       </div>
       {!selecionadas.length && paraLer.length > 0 && !kits.length && (
-        <p className="mb-2 text-[11px] text-muted-foreground">Sem foto marcada, lê as {paraLer.length} originais mais recentes. Marque as da embalagem para escolher.</p>
+        <p className="mb-2 truncate text-[12px] text-muted-foreground" title="Marque as fotos da embalagem para escolher quais ler.">Sem foto marcada, lê as {paraLer.length} originais mais recentes.</p>
       )}
 
       {kits.length > 0 && (
-        <div className="max-h-56 min-w-0 overflow-y-auto" data-rolagem-propria="">
+        <div className="min-w-0 lg:max-h-40 lg:overflow-y-auto lg:overscroll-contain" data-rolagem-propria="">
           <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {kits.map((k) => (
               <ChipDoProduto key={String(k.id)} kit={k} capa={capaDe(k)} ativo={k.id === kitId} onEscolher={() => escolherKit(k.id)} />

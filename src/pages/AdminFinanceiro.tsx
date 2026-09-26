@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -9,12 +9,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  DollarSign, TrendingUp, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase,
+  AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight, ChevronDown, LayoutList, LayoutDashboard,
+  Sparkles, ArrowLeftRight, Repeat, Receipt, Tag, Landmark, Wallet, Inbox,
+} from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  AjudaRecolhida, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel,
+  RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela, botao, campo, campoTexto, etiqueta, foco, juntar, superficie, texto,
+  type OpcaoCompacta,
+} from "@/components/sistema";
 import CashFlow from "@/components/finance/CashFlow";
 import InvestorCapital from "@/components/finance/InvestorCapital";
 import FixedCosts from "@/components/finance/FixedCosts";
@@ -68,15 +77,140 @@ const statusBadge = (status: string, dueDate?: string) => {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const due = parseAppDate(dueDate);
   const isOverdue = due && due < todayStart && status === "pending";
-  if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Pago</span>;
-  if (status === "partial") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">◐ Parcial</span>;
-  if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
-  if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
-  if (isOverdue) return <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Atrasado</span>;
-  if (status === "pending") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Pendente</span>;
-  if (status === "rejected") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Recusada</span>;
-  return <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{status}</span>;
+  if (status === "paid") return <span className={juntar(etiqueta, "bg-success/15 text-success")}>Pago</span>;
+  if (status === "partial") return <span className={juntar(etiqueta, "bg-info/15 text-info")}>Parcial</span>;
+  if (status === "completed") return <span className={juntar(etiqueta, "bg-success/15 text-success")}>Concluída</span>;
+  if (status === "approved") return <span className={juntar(etiqueta, "bg-info/15 text-info")}>Aprovada pelo cliente</span>;
+  if (isOverdue) return <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Atrasado</span>;
+  if (status === "pending") return <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>Pendente</span>;
+  if (status === "rejected") return <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Recusada</span>;
+  return <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{status}</span>;
 };
+
+/* ------------------------------------------------------------------ */
+/* Peças locais da tela (sistema de design, docs/design/SISTEMA.md).   */
+/* ------------------------------------------------------------------ */
+
+type PapelDaAba = "admin" | "gestao" | "todos";
+
+/** Abas do Financeiro v1 e quem vê cada uma (as mesmas condições do TabsList antigo). */
+const ABAS_DO_FINANCEIRO: { valor: string; rotulo: string; papeis: PapelDaAba; icone: ReactNode }[] = [
+  { valor: "overview", rotulo: "Visão geral", papeis: "admin", icone: <LayoutDashboard className="h-3.5 w-3.5" /> },
+  { valor: "assistant", rotulo: "Assistente", papeis: "admin", icone: <Sparkles className="h-3.5 w-3.5" /> },
+  { valor: "cashflow", rotulo: "Fluxo de caixa", papeis: "gestao", icone: <ArrowLeftRight className="h-3.5 w-3.5" /> },
+  { valor: "renewals", rotulo: "Mensalidades", papeis: "admin", icone: <Repeat className="h-3.5 w-3.5" /> },
+  { valor: "fixedcosts", rotulo: "Custos fixos", papeis: "admin", icone: <Receipt className="h-3.5 w-3.5" /> },
+  { valor: "plans", rotulo: "Planos e preços", papeis: "admin", icone: <Tag className="h-3.5 w-3.5" /> },
+  { valor: "capital", rotulo: "Capital", papeis: "gestao", icone: <Landmark className="h-3.5 w-3.5" /> },
+  { valor: "ads", rotulo: "Ads Wallet", papeis: "todos", icone: <Wallet className="h-3.5 w-3.5" /> },
+  { valor: "audit", rotulo: "Histórico", papeis: "admin", icone: <History className="h-3.5 w-3.5" /> },
+];
+
+const ehBooleano = (v: unknown) => typeof v === "boolean";
+
+/** Mês guardado válido: não pode passar do mês corrente (a seta de avançar para nele). */
+const mesValido = (v: unknown) => {
+  if (!v || typeof v !== "object") return false;
+  const { m, y } = v as { m?: unknown; y?: unknown };
+  if (typeof m !== "number" || typeof y !== "number" || m < 0 || m > 11 || y < 2000 || y > 2100) return false;
+  const hoje = new Date();
+  return y * 12 + m <= hoje.getFullYear() * 12 + hoje.getMonth();
+};
+
+const rascunhoDeCobrancaValido = (v: unknown) =>
+  !!v && typeof v === "object" && ["client_id", "type", "amount", "due_date", "description"].every((k) => typeof (v as Record<string, unknown>)[k] === "string");
+
+/** Ação discreta de uma linha de lista (32 px). */
+const acaoDaLinha = `inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 ${foco}`;
+
+/** Rodapé de diálogo: ações à direita, o primário por último. */
+const rodapeDoDialogo = "flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2";
+
+/** Cartão de número (KPI): grade simples de um nível, sem nada dentro. */
+function Numero({ rotulo, valor, sub, icone, cor = "text-muted-foreground", ajuda, carregando = false, className = "" }: {
+  rotulo: ReactNode;
+  valor: ReactNode;
+  sub?: ReactNode;
+  icone?: ReactNode;
+  cor?: string;
+  ajuda?: ReactNode;
+  carregando?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4", className)}>
+      <div className="flex min-w-0 items-center">
+        {icone && <span className={juntar("mr-1.5 inline-flex shrink-0", cor)} aria-hidden="true">{icone}</span>}
+        <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{rotulo}</span>
+        {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
+      </div>
+      {carregando ? (
+        <div className="mt-2 h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${typeof rotulo === "string" ? rotulo : "valor"}`} />
+      ) : (
+        <p className="mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums text-foreground sm:text-[18px]">{valor}</p>
+      )}
+      {sub && !carregando && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={typeof sub === "string" ? sub : undefined}>{sub}</p>}
+    </div>
+  );
+}
+
+/** Número sem caixa (resumo de uma seção). */
+function Resumo({ itens }: { itens: { rotulo: string; valor: string; cor?: string }[] }) {
+  return (
+    <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
+      {itens.map((s) => (
+        <div key={s.rotulo} className="min-w-0">
+          <dt className={juntar(texto.rotulo, "truncate")}>{s.rotulo}</dt>
+          <dd className={juntar("mt-0.5 truncate text-[15px] font-semibold tabular-nums", s.cor || "text-foreground")}>{s.valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Recolher/mostrar uma seção (o estado fica guardado pela tela). */
+function BotaoRecolher({ aberto, onAlternar, rotulo }: { aberto: boolean; onAlternar: () => void; rotulo: string }) {
+  return (
+    <button type="button" onClick={onAlternar} aria-expanded={aberto} aria-label={`${aberto ? "Recolher" : "Mostrar"} ${rotulo}`} className={botao.discreto}>
+      <span className="hidden sm:inline">{aberto ? "Recolher" : "Mostrar"}</span>
+      <ChevronDown className={juntar("h-4 w-4 transition-transform sm:ml-1", aberto && "rotate-180")} aria-hidden="true" />
+    </button>
+  );
+}
+
+/** Lista longa: um painel só, linhas com divisória, rolagem própria no computador (com memória). */
+function ListaDoFinanceiro({ memoria, rotulo, alta = false, children }: { memoria: string; rotulo: string; alta?: boolean; children: ReactNode }) {
+  return (
+    <div className={juntar(superficie.painel, "overflow-hidden")}>
+      <RegiaoRolavel memoria={memoria} rotulo={rotulo} sobre="cartao" className={alta ? "lg:max-h-[70vh]" : "lg:max-h-[56vh]"}>
+        <ul className="divide-y divide-border">{children}</ul>
+      </RegiaoRolavel>
+    </div>
+  );
+}
+
+/** Mês/ano com setas (o próximo mês para no mês corrente, como antes). */
+function SeletorDeMes({ mes, ano, noMesAtual, onMudar, onHoje }: { mes: number; ano: number; noMesAtual: boolean; onMudar: (passo: number) => void; onHoje: () => void }) {
+  return (
+    <div className="flex min-w-0 items-center" role="group" aria-label="Mês do financeiro">
+      <button type="button" onClick={() => onMudar(-1)} className={botao.icone} aria-label="Mês anterior">
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <span className="mx-0.5 min-w-[72px] text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[118px]" aria-live="polite">
+        <span className="sm:hidden">{MONTHS_SHORT[mes]} {ano}</span>
+        <span className="hidden sm:inline">{MONTHS_FULL[mes]} {ano}</span>
+      </span>
+      <button type="button" onClick={() => onMudar(1)} disabled={noMesAtual} className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-30")} aria-label="Próximo mês">
+        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {!noMesAtual && (
+        <button type="button" onClick={onHoje} className={juntar(botao.discreto, "h-8 px-2 text-primary")}>
+          Hoje
+        </button>
+      )}
+    </div>
+  );
+}
 
 const typeIcon = (type: string) => {
   if (type === "renewal") return "REC";
@@ -85,15 +219,18 @@ const typeIcon = (type: string) => {
 };
 
 function LegacyFinanceiro() {
-  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
+  const isManager = profile?.role === "manager";
   const queryClient = useQueryClient();
-  const { data: billing, isLoading: billingLoading } = useBilling();
-  const { data: wallets } = useAdsWallet();
-  const { data: recharges } = useRechargeRequests();
+  const billingQuery = useBilling();
+  const { data: billing, isLoading: billingLoading } = billingQuery;
+  const walletsQuery = useAdsWallet();
+  const { data: wallets } = walletsQuery;
+  const rechargesQuery = useRechargeRequests();
+  const { data: recharges } = rechargesQuery;
   const { data: clients } = useClients();
-  const { data: projectPayments } = useQuery({
+  const paymentsQuery = useQuery({
     queryKey: ["all-project-payments-finance"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -104,6 +241,7 @@ function LegacyFinanceiro() {
     },
     enabled: isAdmin,
   });
+  const { data: projectPayments } = paymentsQuery;
   const { data: financeSettings } = useFinanceSettings();
   const { data: allExpensesCash } = useQuery({
     queryKey: ["expenses"],
@@ -114,7 +252,7 @@ function LegacyFinanceiro() {
     },
     enabled: isAdmin,
   });
-  const { data: auditLogs } = useQuery({
+  const auditQuery = useQuery({
     queryKey: ["payment-audit-log"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -134,6 +272,17 @@ function LegacyFinanceiro() {
     },
     enabled: isAdmin,
   });
+  const { data: auditLogs } = auditQuery;
+
+  // Abas: as mesmas condições de papel do seletor antigo. Manager não tem Visão geral.
+  const abasPermitidas = ABAS_DO_FINANCEIRO.filter((a) =>
+    a.papeis === "todos" || (a.papeis === "admin" ? isAdmin : isAdmin || isManager),
+  );
+  const abaPadrao = isAdmin ? "overview" : "ads";
+  const [abaGuardada, setAba] = useEstadoDaTela<string>("financeiro:aba", abaPadrao, {
+    validar: (v) => typeof v === "string" && abasPermitidas.some((a) => a.valor === v),
+  });
+  const aba = abasPermitidas.some((a) => a.valor === abaGuardada) ? abaGuardada : abaPadrao;
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [creatingBilling, setCreatingBilling] = useState(false);
@@ -141,20 +290,37 @@ function LegacyFinanceiro() {
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [addWalletModal, setAddWalletModal] = useState(false);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
-  const [receivedFilter, setReceivedFilter] = useState<string>("month");
-  const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
-  const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
+  const [receivedFilter, setReceivedFilter] = useEstadoDaTela<string>("financeiro:recebidos-filtro", "month", {
+    validar: (v) => v === "all" || v === "month" || v === "last3" || v === "year",
+  });
+  const [brandFilter, setBrandFilter] = useEstadoDaTela<BrandFilter>("financeiro:marca", "all", {
+    validar: (v) => BRAND_FILTERS.some((f) => f.value === v),
+  });
+  const [periodFilter, setPeriodFilter] = useEstadoDaTela<"month" | "all">("financeiro:periodo", "month", {
+    validar: (v) => v === "month" || v === "all",
+  });
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string; paidSoFar?: number; totalAmount?: number } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
-  const [receivedCollapsed, setReceivedCollapsed] = useState(false);
-  const [indivCollapsed, setIndivCollapsed] = useState(true);
-  const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
-  const [walletsOpen, setWalletsOpen] = useState(false);
-  const [selMonth, setSelMonth] = useState<number>(new Date().getMonth());
-  const [selYear, setSelYear] = useState<number>(new Date().getFullYear());
+  const [receivedCollapsed, setReceivedCollapsed] = useEstadoDaTela("financeiro:recebidos-recolhido", false, { validar: ehBooleano });
+  const [indivCollapsed, setIndivCollapsed] = useEstadoDaTela("financeiro:projetos-recolhido", true, { validar: ehBooleano });
+  const [renewalsView, setRenewalsView] = useEstadoDaTela<"mensalistas" | "avulsos">("financeiro:mensalidades-visao", "mensalistas", {
+    validar: (v) => v === "mensalistas" || v === "avulsos",
+  });
+  const [walletsOpen, setWalletsOpen] = useEstadoDaTela("financeiro:wallets-aberto", false, { validar: ehBooleano });
+  const [mesEscolhido, setMesEscolhido] = useEstadoDaTela<{ m: number; y: number }>(
+    "financeiro:mes",
+    { m: new Date().getMonth(), y: new Date().getFullYear() },
+    { validar: mesValido },
+  );
+  const selMonth = mesEscolhido.m;
+  const selYear = mesEscolhido.y;
 
-  const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
+  // Rascunho da nova cobrança: fica guardado ao sair e voltar; limpa só depois de criar.
+  const [billForm, setBillForm] = useEstadoDaTela("financeiro:rascunho-cobranca", { client_id: "", type: "renewal", amount: "", due_date: "", description: "" }, {
+    validar: rascunhoDeCobrancaValido,
+    esperaMs: 300,
+  });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
   const [addWalletForm, setAddWalletForm] = useState({ client_id: "", platform: "meta", balance: "0" });
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
@@ -691,442 +857,297 @@ function LegacyFinanceiro() {
     walletsByClient[w.client_id].push(w);
   });
 
-  return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto">
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:mb-6 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="heading-page">Financeiro</p>
-        {isAdmin && (
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
-            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-              {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => setPeriodFilter(f.value)}
-                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                    periodFilter === f.value
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground bg-transparent"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            {periodFilter === "month" && (
-              <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-                <button
-                  onClick={() => {
-                    const d = new Date(selYear, selMonth - 1, 1);
-                    setSelMonth(d.getMonth());
-                    setSelYear(d.getFullYear());
-                  }}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
-                  aria-label="Mês anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-[12px] font-medium text-foreground min-w-[110px] text-center tabular-nums">
-                  {MONTHS_FULL[selMonth]} {selYear}
-                </span>
-                <button
-                  disabled={isCurrentMonthSelected}
-                  onClick={() => {
-                    const d = new Date(selYear, selMonth + 1, 1);
-                    setSelMonth(d.getMonth());
-                    setSelYear(d.getFullYear());
-                  }}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Próximo mês"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                {!isCurrentMonthSelected && (
-                  <button
-                    onClick={() => { setSelMonth(thisMonth); setSelYear(thisYear); }}
-                    className="text-[10px] px-2 py-1 rounded-md text-primary hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
-                  >
-                    Hoje
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-              {BRAND_FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => setBrandFilter(f.value)}
-                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                    brandFilter === f.value
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground bg-transparent"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-      </div>
+  /* ---------------- Visão geral: números, listas e gráficos ---------------- */
+  const showMonthly = brandFilter === "all" || brandFilter === "aceleriq";
+  const showIndiv = brandFilter === "all" || brandFilter === "sitebolt";
+  const primeiraCarga = billingLoading && !billing;
+  const erroAoLer = (billingQuery.isError && !billing) || (paymentsQuery.isError && !projectPayments);
+  const tentarDeNovo = () => {
+    void billingQuery.refetch?.();
+    void paymentsQuery.refetch?.();
+  };
 
-      <div className="flex-1 min-h-0 space-y-5 overflow-y-auto px-4 pt-3 pb-4 md:block md:space-y-6 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
+  const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
+  const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
+  const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
+  const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
+  const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
+  const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
+  const noPeriodo = periodFilter === "month" ? "no mês" : "no geral";
+  const nextMonthFull = MONTHS_FULL[nextMonth];
+  const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
+  const receivedBreakdown = brandFilter === "all"
+    ? `Planos ${fmt(showMonthly ? receivedTotal : 0)} · Projetos ${fmt(showIndiv ? indivPaid : 0)}`
+    : recSub;
+  const numeros: { rotulo: string; valor: string; sub?: string; icone: ReactNode; cor: string; ajuda?: string }[] = [
+    {
+      rotulo: "Saldo em caixa",
+      valor: fmt(cashBalance),
+      sub: reservedInBoxes > 0 ? `Caixinhas ${fmt(reservedInBoxes)} · livre ${fmt(cashBalance - reservedInBoxes)}` : undefined,
+      icone: <DollarSign className="h-3.5 w-3.5" />,
+      cor: "text-primary",
+      ajuda: "Base de meses anteriores + tudo que entrou − tudo que saiu. Concilie no Fluxo de caixa.",
+    },
+    { rotulo: `Recebido ${noPeriodo}`, valor: fmt(receivedVal), sub: receivedBreakdown, icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-success" },
+    { rotulo: `A receber ${noPeriodo}`, valor: fmt(pendingVal), sub: subLabel, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-warning" },
+    { rotulo: "Atrasado", valor: fmt(overdueVal), sub: ovSub, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-destructive" },
+    ...(periodFilter === "month" ? [{
+      rotulo: "Receita esperada",
+      valor: fmt((showMonthly ? expectedMonthlyRevenue : 0) + (showIndiv ? indivPendingMonth : 0)),
+      sub: brandFilter === "all"
+        ? `Planos ${fmt(expectedMonthlyRevenue)} · Parcelas ${fmt(indivPendingMonth)}`
+        : (brandFilter === "aceleriq" ? "Planos ativos AcelerIQ" : "Parcelas avulsas do mês"),
+      icone: <CheckCircle2 className="h-3.5 w-3.5" />,
+      cor: "text-info",
+    }] : []),
+  ];
+  const totalDeNumeros = numeros.length + 1; // + projeção
 
-      {/* Stats - only admin sees revenue/pending/overdue */}
-      {isAdmin && (() => {
-        const showMonthly = brandFilter === "all" || brandFilter === "aceleriq";
-        const showIndiv = brandFilter === "all" || brandFilter === "sitebolt";
-        const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
-        const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
-        const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
-        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
-        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
-        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
-        const periodLabel = periodFilter === "month" ? `· ${MONTHS_FULL[selMonth]} ${selYear}` : "Geral";
+  // A receber: cobranças pendentes, parcelas abertas e planos ativos ainda sem cobrança.
+  const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
+    const client = (clients || []).find((c: any) => c.id === b.client_id);
+    const due = parseAppDate(b.due_date);
+    return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+  }) : [];
+  const indivPendingItems = showIndiv ? filteredPayments.flatMap((pp: any) =>
+    (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
+      id: i.id, label: `${pp.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
+      client: pp.client?.company_name || pp.client?.full_name || "-", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
+      brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
+    }))
+  ) : [];
+  const extraItems = showMonthly ? clientsWithPlanNotInBilling.map((c: any) => ({
+    id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
+    client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
+    brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
+  })) : [];
+  const allPending: any[] = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
+    .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
+  const allPendingTotal = allPending.reduce((s: number, it: any) => s + Number(it.amount || 0), 0);
 
-        const nextMonthFull = MONTHS_FULL[nextMonth];
-        const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
+  const abrirPagamento = async (item: any) => {
+    let realId = item.id;
+    // For "extra" items (plan_value but no billing row), create the billing first
+    if (item.itemType === "extra" && item.clientId) {
+      const { data: newBill, error } = await supabase.from("billing").insert({
+        client_id: item.clientId,
+        type: "renewal",
+        amount: item.amount,
+        due_date: item.due || toLocalDateKey(),
+        description: item.label,
+      }).select().single();
+      if (error || !newBill) { toast.error("Erro ao gerar cobrança"); return; }
+      realId = newBill.id;
+      await queryClient.invalidateQueries({ queryKey: ["billing"] });
+    }
+    setPayModal({
+      id: realId,
+      type: item.itemType === "installment" ? "installment" : "billing",
+      label: item.label,
+      amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
+      clientId: item.clientId,
+      billingType: item.billingType || "renewal",
+      paidSoFar: item.paidSoFar || 0,
+      totalAmount: item.totalAmount || item.amount,
+    });
+    setPayType("full");
+    setPayPartialAmount("");
+  };
 
-        const receivedBreakdown = brandFilter === "all"
-          ? `Planos ${fmt(showMonthly ? receivedTotal : 0)} · Projetos ${fmt(showIndiv ? indivPaid : 0)}`
-          : recSub;
-
-        const cards = [
-          {
-            label: "Saldo em Caixa",
-            value: fmt(cashBalance),
-            sub: reservedInBoxes > 0
-              ? `Caixinhas guardam ${fmt(reservedInBoxes)} · livre ${fmt(cashBalance - reservedInBoxes)}`
-              : "Base anterior + entradas − saídas · concilie no Fluxo de Caixa",
-            icon: DollarSign,
-            color: "text-primary",
-          },
-          ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" }] : [
-            { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" },
-          ]),
-
-          ...(!showMonthly ? [] : []),
-          { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
-          { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
-          ...(periodFilter === "month" ? [{
-            label: "Receita Esperada",
-            value: fmt((showMonthly ? expectedMonthlyRevenue : 0) + (showIndiv ? indivPendingMonth : 0)),
-            sub: brandFilter === "all"
-              ? `Planos ${fmt(expectedMonthlyRevenue)} · Parcelas ${fmt(indivPendingMonth)}`
-              : (brandFilter === "aceleriq" ? "Planos ativos AcelerIQ" : "Parcelas avulsas do mês"),
-            icon: CheckCircle2,
-            color: "text-info",
-          }] : []),
-        ];
-        return (
-        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 overflow-x-auto snap-x snap-mandatory md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-2 scrollbar-hidden">
-          {cards.map((s: any, i: number) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-4 shrink-0 w-[80%] snap-center md:w-auto md:shrink">
-              <div className="flex items-center gap-2 mb-2">
-                <s.icon className={`w-4 h-4 ${s.color}`} />
-                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
-              </div>
-              {billingLoading ? (
-                <div className="h-7 w-28 animate-pulse rounded bg-secondary" aria-label={`Carregando ${s.label}`} />
-              ) : (
-                <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
-              )}
-              {s.sub && !billingLoading && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
-            </div>
-          ))}
-          {/* Projeção card · clickable */}
-          <div
-            onClick={() => navigate("/financeiro/projecao")}
-            className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-info/40 transition-colors group relative"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Briefcase className="w-4 h-4 text-info" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção: Próximo Mês</span>
-            </div>
-            <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear}: {nextMonthSub}</p>
-            <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
-              Ver projeção
-            </span>
-          </div>
-        </div>
-        );
-      })()}
-
-      {/* Detalhamento A Receber */}
-      {isAdmin && (() => {
-        const showMonthly2 = brandFilter === "all" || brandFilter === "aceleriq";
-        const showIndiv2 = brandFilter === "all" || brandFilter === "sitebolt";
-
-        const monthlyPendingItems = showMonthly2 ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
-          const client = (clients || []).find((c: any) => c.id === b.client_id);
-          const due = parseAppDate(b.due_date);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
-        }) : [];
-
-        const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
-          (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
-            id: i.id, label: `${pp.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-            client: pp.client?.company_name || pp.client?.full_name || "-", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
-            brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
+  // Já recebido: histórico unificado (planos + projetos)
+  const billingItems = showMonthly
+    ? paidBills
+        .filter((b: any) => b.type !== "ads_recharge")
+        .map((b: any) => ({
+          id: `bill-${b.id}`,
+          label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
+          client: b.client?.company_name || b.client?.full_name || "-",
+          brand: "AcelerIQ",
+          amount: receivedOf(b),
+          totalAmount: Number(b.amount) || 0,
+          isPartial: b.status === "partial" || (Number(b.paid_amount) > 0 && Number(b.paid_amount) < Number(b.amount)),
+          date: b.paid_date || b.due_date,
+          icon: typeIcon(b.type),
+        }))
+    : [];
+  const installmentItems = showIndiv
+    ? filteredPayments.flatMap((pp: any) =>
+        (pp.installments || [])
+          .filter((i: any) => i.status === "paid" || i.status === "partial")
+          .map((i: any) => ({
+            id: `inst-${i.id}`,
+            label: `${pp.project?.name || "Projeto"} · Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
+            client: pp.client?.company_name || pp.client?.full_name || "-",
+            brand: getProjectBrand(pp.project?.project_type),
+            amount: receivedOf(i),
+            totalAmount: Number(i.amount) || 0,
+            isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
+            date: i.paid_date || i.due_date,
+            icon: "PRJ",
           }))
-        ) : [];
+      )
+    : [];
+  const allReceived = [...billingItems, ...installmentItems].sort(
+    (a, b) => (parseAppDate(b.date)?.getTime() || 0) - (parseAppDate(a.date)?.getTime() || 0)
+  );
+  const receivedFiltered = allReceived.filter((it) => {
+    const d = parseAppDate(it.date);
+    if (!d) return false;
+    if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
+    if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
+    if (receivedFilter === "year") return d.getFullYear() === selYear;
+    return true;
+  });
+  const receivedFilteredTotal = receivedFiltered.reduce((s, it) => s + it.amount, 0);
+  const receivedGrandTotal = allReceived.reduce((s, it) => s + it.amount, 0);
 
-        const extraItems = showMonthly2 ? clientsWithPlanNotInBilling.map((c: any) => ({
-          id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
-          client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
-          brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
-        })) : [];
+  // Projetos individuais (SiteBolt / avulsos)
+  const enrichedProjects = filteredPayments.map((pp: any) => {
+    const paid = (pp.installments || [])
+      .filter((i: any) => i.status === "paid" || i.status === "partial")
+      .reduce((s: number, i: any) => s + receivedOf(i), 0);
+    const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+    const hasOverdue = (pp.installments || []).some((i: any) => {
+      const due = parseAppDate(i.due_date);
+      return i.status === "pending" && !!due && due < todayStart;
+    });
+    const remaining = Number(pp.total_value) - paid;
+    const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
+    return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
+  });
+  const quitados = enrichedProjects.filter((p: any) => p._group === "quitado");
+  const andamento = enrichedProjects.filter((p: any) => p._group === "andamento");
+  const atrasados = enrichedProjects.filter((p: any) => p._group === "atrasado");
 
-        const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
-          .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
+  // Receita mês a mês (ano corrente)
+  const chartData: { name: string; recebido: number; pendente: number }[] = [];
+  const currentYear = now.getFullYear();
+  for (let m = 0; m < 12; m++) {
+    let received = 0;
+    let pending = 0;
+    if (showMonthly) {
+      received += (billing || [])
+        .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
+        .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
+        .reduce((s: number, b: any) => s + receivedOf(b), 0);
+      pending += (billing || [])
+        .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge" && !isPausedRenewal(b))
+        .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
+        .reduce((s: number, b: any) => s + Number(b.amount), 0);
+    }
+    if (showIndiv) {
+      filteredPayments.forEach((pp: any) => {
+        (pp.installments || []).forEach((inst: any) => {
+          const d = parseAppDate(inst.paid_date || inst.due_date);
+          if (d && d.getMonth() === m && d.getFullYear() === currentYear) {
+            if (inst.status === "paid") received += Number(inst.amount);
+            else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
+            else if (inst.status === "pending") pending += Number(inst.amount);
+          }
+        });
+      });
+    }
+    if (received > 0 || pending > 0 || m <= now.getMonth()) {
+      chartData.push({ name: MONTHS_SHORT[m], recebido: received, pendente: pending });
+    }
+  }
 
-        if (allPending.length === 0) return null;
-        return (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-              <CreditCard className="w-3.5 h-3.5 text-warning" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento · A Receber ({allPending.length})</span>
-            </div>
-            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-              {allPending.map((item: any) => (
-                <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-5">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
-                  <div className="flex-1 min-w-0 w-full">
-                    <p className="text-[13px] text-foreground truncate">{item.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{item.client}
-                      {item.paidSoFar > 0 && <span className="ml-1 text-success">(já pago: {fmt(item.paidSoFar)})</span>}
-                    </p>
-                  </div>
-                  <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <span className="hidden text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap sm:inline-flex">{item.brand}</span>
-                    <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
-                      {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      let realId = item.id;
-                      // For "extra" items (plan_value but no billing row), create the billing first
-                      if (item.itemType === "extra" && item.clientId) {
-                        const { data: newBill, error } = await supabase.from("billing").insert({
-                          client_id: item.clientId,
-                          type: "renewal",
-                          amount: item.amount,
-                          due_date: item.due || toLocalDateKey(),
-                          description: item.label,
-                        }).select().single();
-                        if (error || !newBill) { toast.error("Erro ao gerar cobrança"); return; }
-                        realId = newBill.id;
-                        await queryClient.invalidateQueries({ queryKey: ["billing"] });
-                      }
-                      setPayModal({
-                        id: realId,
-                        type: item.itemType === "installment" ? "installment" : "billing",
-                        label: item.label,
-                        amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
-                        clientId: item.clientId,
-                        billingType: item.billingType || "renewal",
-                        paidSoFar: item.paidSoFar || 0,
-                        totalAmount: item.totalAmount || item.amount,
-                      });
-                      setPayType("full");
-                      setPayPartialAmount("");
-                    }}
-                    className="w-full text-[10px] px-2.5 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium sm:w-auto sm:py-1"
-                  >
-                    Pagar
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+  // Proporção da receita: AcelerIQ x SiteBolt (tudo que já entrou)
+  const allPaymentsForPie = projectPayments || [];
+  const aceleriqReceived = paidBills
+    .filter((b: any) => b.type !== "ads_recharge")
+    .reduce((s: number, b: any) => s + receivedOf(b), 0);
+  const siteboltReceived = allPaymentsForPie
+    .filter((pp: any) => ["site", "landing_page", "event", "other"].includes(pp.project?.project_type))
+    .reduce((sum: number, pp: any) =>
+      sum + (pp.installments || [])
+        .filter((i: any) => i.status === "paid" || i.status === "partial")
+        .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
+  const jointReceived = allPaymentsForPie
+    .filter((pp: any) => pp.project?.project_type === "automation")
+    .reduce((sum: number, pp: any) =>
+      sum + (pp.installments || [])
+        .filter((i: any) => i.status === "paid" || i.status === "partial")
+        .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
+  const pieData = [
+    { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
+    { name: "SiteBolt", value: siteboltReceived, color: "hsl(var(--primary))" },
+    ...(jointReceived > 0 ? [{ name: "AcelerIQ + SiteBolt", value: jointReceived, color: "hsl(var(--info))" }] : []),
+  ].filter(d => d.value > 0);
+  const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
 
+  const semNadaNoFinanceiro = (!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0;
 
+  /* ---------------- Topo ---------------- */
+  const mostrarMes = isAdmin && ((aba === "overview" && periodFilter === "month") || aba === "fixedcosts");
+  const mudarMes = (passo: number) => {
+    const d = new Date(selYear, selMonth + passo, 1);
+    setMesEscolhido({ m: d.getMonth(), y: d.getFullYear() });
+  };
+  const opcoesDasAbas: OpcaoCompacta[] = abasPermitidas.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: a.icone }));
+  const abrirNovaCobranca = () => setNewBillingOpen(true);
 
-      {!isAdmin && (
-        <div className="grid grid-cols-1 gap-3">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-info" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Investimento Ads Total</span>
-            </div>
-            <p className="text-lg font-semibold font-mono text-foreground">{fmt(totalAds)}</p>
-          </div>
+  return (
+    <div className="min-w-0 space-y-5 pb-4">
+      <CabecalhoDePagina
+        titulo="Financeiro"
+        ajuda="Cobranças, recebimentos, mensalidades, wallets de anúncios e histórico de pagamentos. A visão geral segue o mês e a marca escolhidos."
+        acoes={
+          (mostrarMes || isAdmin) ? (
+            <>
+              {mostrarMes && (
+                <SeletorDeMes
+                  mes={selMonth}
+                  ano={selYear}
+                  noMesAtual={isCurrentMonthSelected}
+                  onMudar={mudarMes}
+                  onHoje={() => setMesEscolhido({ m: thisMonth, y: thisYear })}
+                />
+              )}
+              {isAdmin && (
+                <button type="button" onClick={abrirNovaCobranca} className={botao.primario} aria-label="Nova cobrança">
+                  <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Nova cobrança</span>
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
+
+      {(opcoesDasAbas.length > 1 || (isAdmin && aba === "overview")) && (
+        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+          {opcoesDasAbas.length > 1 && (
+            <SeletorCompacto
+              opcoes={opcoesDasAbas}
+              valor={aba}
+              onEscolher={setAba}
+              rotulo="Área do financeiro"
+              icone={<LayoutList className="h-3.5 w-3.5" />}
+            />
+          )}
+          {isAdmin && aba === "overview" && (
+            <>
+              <SeletorCompacto
+                opcoes={[{ valor: "month", rotulo: "Mês" }, { valor: "all", rotulo: "Geral" }]}
+                valor={periodFilter}
+                onEscolher={(v) => setPeriodFilter(v === "all" ? "all" : "month")}
+                rotulo="Período"
+              />
+              <SeletorCompacto
+                opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
+                valor={brandFilter}
+                onEscolher={(v) => setBrandFilter(v as BrandFilter)}
+                rotulo="Marca"
+              />
+            </>
+          )}
         </div>
       )}
 
-      {/* Revenue Chart - monthly comparison */}
-      {isAdmin && (() => {
-        const showMonthlyChart = brandFilter === "all" || brandFilter === "aceleriq";
-        const showIndivChart = brandFilter === "all" || brandFilter === "sitebolt";
-        const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-        const chartData: { name: string; recebido: number; pendente: number }[] = [];
-        const currentYear = now.getFullYear();
-        for (let m = 0; m < 12; m++) {
-          let received = 0;
-          let pending = 0;
-
-          if (showMonthlyChart) {
-            received += (billing || [])
-              .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
-              .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
-              .reduce((s: number, b: any) => s + receivedOf(b), 0);
-            pending += (billing || [])
-              .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge" && !isPausedRenewal(b))
-              .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
-              .reduce((s: number, b: any) => s + Number(b.amount), 0);
-          }
-
-          if (showIndivChart) {
-            filteredPayments.forEach((pp: any) => {
-              (pp.installments || []).forEach((inst: any) => {
-                const d = parseAppDate(inst.paid_date || inst.due_date);
-                if (d && d.getMonth() === m && d.getFullYear() === currentYear) {
-                  if (inst.status === "paid") received += Number(inst.amount);
-                  else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
-                  else if (inst.status === "pending") pending += Number(inst.amount);
-                }
-              });
-            });
-          }
-
-          if (received > 0 || pending > 0 || m <= now.getMonth()) {
-            chartData.push({ name: MONTHS[m], recebido: received, pendente: pending });
-          }
-        }
-        return chartData.length > 0 ? (
-          <div className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5 text-success" />
-                Receita {currentYear} {brandFilter !== "all" ? `- ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""} · Mês a Mês
-              </p>
-            </div>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}${v >= 1000 ? 'k' : ''}`} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                    formatter={(value: number, name: string) => [fmt(value), name === "recebido" ? "Recebido" : "Pendente"]}
-                  />
-                  <Legend formatter={(value) => value === "recebido" ? "Recebido" : "Pendente"} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="recebido" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pendente" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        ) : null;
-      })()}
-
-      {/* Pie Chart: AcelerIQ vs SiteBolt */}
-      {isAdmin && (() => {
-        const allPayments = projectPayments || [];
-        // AcelerIQ received = billing paid (non-ads)
-        const aceleriqReceived = paidBills
-          .filter((b: any) => b.type !== "ads_recharge")
-          .reduce((s: number, b: any) => s + receivedOf(b), 0);
-        // SiteBolt received = individual project installments paid
-        const siteboltReceived = allPayments
-          .filter((pp: any) => ["site", "landing_page", "event", "other"].includes(pp.project?.project_type))
-          .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || [])
-              .filter((i: any) => i.status === "paid" || i.status === "partial")
-              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
-        // Joint (automation) received
-        const jointReceived = allPayments
-          .filter((pp: any) => pp.project?.project_type === "automation")
-          .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || [])
-              .filter((i: any) => i.status === "paid" || i.status === "partial")
-              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
-
-        const pieData = [
-          { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
-          { name: "SiteBolt", value: siteboltReceived, color: "hsl(var(--primary))" },
-          ...(jointReceived > 0 ? [{ name: "AcelerIQ + SiteBolt", value: jointReceived, color: "hsl(var(--info))" }] : []),
-        ].filter(d => d.value > 0);
-
-        const total = pieData.reduce((s, d) => s + d.value, 0);
-        if (total === 0) return null;
-
-        return (
-          <div className="bg-card border border-border rounded-xl p-5">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2 mb-4">
-              <TrendingUp className="w-3.5 h-3.5 text-primary" />
-              Proporção da Receita · AcelerIQ vs SiteBolt
-            </p>
-            <div className="flex flex-col sm:flex-row items-center gap-6">
-              <div className="h-[200px] w-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                      formatter={(value: number) => [fmt(value), ""]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 space-y-3">
-                {pieData.map((d) => (
-                  <div key={d.name} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                    <div className="flex-1">
-                      <p className="text-[13px] text-foreground font-medium">{d.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{Math.round((d.value / total) * 100)}% da receita</p>
-                    </div>
-                    <p className="text-sm font-mono text-foreground">{fmt(d.value)}</p>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-muted-foreground">Total</p>
-                    <p className="text-sm font-mono font-semibold text-foreground">{fmt(total)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
-        <TabsList className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
-          {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="assistant" className="text-[13px] rounded-md shrink-0">Assistente</TabsTrigger>}
-          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md shrink-0">Mensalidades</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="fixedcosts" className="text-[13px] rounded-md shrink-0">Custos Fixos</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="plans" className="text-[13px] rounded-md shrink-0">Planos & Preços</TabsTrigger>}
-          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md shrink-0">Capital</TabsTrigger>}
-          <TabsTrigger value="ads" className="text-[13px] rounded-md shrink-0">Ads Wallet</TabsTrigger>
-          {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md shrink-0">Histórico</TabsTrigger>}
-        </TabsList>
-
-        {(isAdmin || profile?.role === "manager") && (
-          <TabsContent value="cashflow" className="space-y-6">
+      <Tabs value={aba} onValueChange={setAba} className="min-w-0">
+        {(isAdmin || isManager) && (
+          <TabsContent value="cashflow" className="mt-0 space-y-6">
             <CashFlow
               billing={billing || []}
               projectPayments={projectPayments || []}
@@ -1135,33 +1156,60 @@ function LegacyFinanceiro() {
           </TabsContent>
         )}
 
-        {(isAdmin || profile?.role === "manager") && (
-          <TabsContent value="capital" className="space-y-6">
+        {(isAdmin || isManager) && (
+          <TabsContent value="capital" className="mt-0 space-y-6">
             <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
         {isAdmin && (
-          <TabsContent value="assistant" className="space-y-6">
+          <TabsContent value="assistant" className="mt-0 space-y-6">
             <CFOAssistant billing={billing || []} projectPayments={projectPayments || []} clients={clients || []} />
           </TabsContent>
         )}
 
         {isAdmin && (
-          <TabsContent value="fixedcosts" className="space-y-6">
+          <TabsContent value="fixedcosts" className="mt-0 space-y-6">
             <FixedCosts monthlyOperationalRevenue={ladderRevenue} grossReceivedThisMonth={monthGrossReceived} />
           </TabsContent>
         )}
 
         {isAdmin && (
-          <TabsContent value="plans" className="space-y-6">
+          <TabsContent value="plans" className="mt-0 space-y-6">
             <PlansPricing billing={billing || []} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
-        {/* Tab: Overview */}
-        <TabsContent value="overview" className="space-y-6">
-          {isAdmin && (
+        {/* Visão geral (só admin, como antes) */}
+        {isAdmin && (
+          <TabsContent value="overview" className="mt-0 space-y-8">
+            {erroAoLer && (
+              <EstadoDeErro
+                titulo="Não foi possível carregar o financeiro."
+                descricao="Os números abaixo podem estar incompletos."
+                acao={<button type="button" onClick={tentarDeNovo} className={botao.secundario}>Tentar de novo</button>}
+              />
+            )}
+
+            <div className={juntar("grid min-w-0 grid-cols-2 gap-3", totalDeNumeros === 6 ? "lg:grid-cols-3 desk:grid-cols-6" : "lg:grid-cols-5")}>
+              {numeros.map((n) => (
+                <Numero key={n.rotulo} rotulo={n.rotulo} valor={n.valor} sub={n.sub} icone={n.icone} cor={n.cor} ajuda={n.ajuda} carregando={billingLoading} />
+              ))}
+              <Link
+                to="/financeiro/projecao"
+                className={juntar(superficie.painel, "group min-w-0 p-3 transition-colors hover:border-info/50 sm:p-4", totalDeNumeros % 2 === 1 && "col-span-2 lg:col-span-1", foco)}
+                aria-label={`Projeção de ${nextMonthFull}: ${fmt(nextMonthTotal)}. Ver projeção`}
+              >
+                <span className="flex min-w-0 items-center">
+                  <Briefcase className="mr-1.5 h-3.5 w-3.5 shrink-0 text-info" aria-hidden="true" />
+                  <span className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>Próximo mês</span>
+                  <ChevronRight className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden="true" />
+                </span>
+                <span className="mt-1.5 block truncate text-[17px] font-semibold leading-6 tabular-nums text-foreground sm:text-[18px]">{fmt(nextMonthTotal)}</span>
+                <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")} title={`${nextMonthFull} ${nextYear}: ${nextMonthSub}`}>{nextMonthFull} {nextYear}: {nextMonthSub}</span>
+              </Link>
+            </div>
+
             <ManagementSummary
               monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}
               receivedItems={monthReceivedItems}
@@ -1170,964 +1218,941 @@ function LegacyFinanceiro() {
               clients={clients || []}
               isCurrentMonth={isCurrentMonthSelected}
             />
-          )}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className="text-sm text-muted-foreground">Controle Financeiro</span>
-            <div className="flex gap-2">
-              <button onClick={() => setNewBillingOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-                <Plus className="w-3 h-3" /> Nova Cobrança
-              </button>
-            </div>
-          </div>
 
-          {/* Pendentes a Receber */}
-          {pendingBillsInActivePeriod.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-warning" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Pendentes a Receber ({pendingBillsInActivePeriod.length})
-                </span>
-                <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingBillsInActivePeriod.reduce((s: number, b: any) => s + Number(b.amount || 0), 0))}</span>
-              </div>
-              {pendingBillsInActivePeriod.map((b: any) => {
-                const due = parseAppDate(b.due_date);
-                const isOverdue = due ? due < todayStart : false;
-                return (
-                  <div key={b.id} className={`bg-card border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap ${isOverdue ? "border-destructive/30" : "border-border"}`}>
-                    <span className="text-lg">{typeIcon(b.type)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {formatAppDate(b.due_date)}</p>
-                    </div>
-                    <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
-                    {statusBadge(b.status, b.due_date)}
-                    <div className="flex gap-1.5">
-                      <button onClick={() => handleMarkPaid(b.id)}
-                        className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none">
-                        Marcar como Pago
-                      </button>
-                      <button onClick={() => openWhatsAppReminder(b.client, b)}
-                        className="text-[11px] px-2 py-1 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none">
-                        <MessageCircle className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Já Recebido · histórico unificado (planos + projetos) */}
-          {(() => {
-            const showMonthlyR = brandFilter === "all" || brandFilter === "aceleriq";
-            const showIndivR = brandFilter === "all" || brandFilter === "sitebolt";
-
-            // 1) Recebimentos de planos/serviços (billing)
-            const billingItems = showMonthlyR
-              ? paidBills
-                  .filter((b: any) => b.type !== "ads_recharge")
-                  .map((b: any) => ({
-                    id: `bill-${b.id}`,
-                    label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
-                    client: b.client?.company_name || b.client?.full_name || "-",
-                    brand: "AcelerIQ",
-                    amount: receivedOf(b),
-                    totalAmount: Number(b.amount) || 0,
-                    isPartial: b.status === "partial" || (Number(b.paid_amount) > 0 && Number(b.paid_amount) < Number(b.amount)),
-                    date: b.paid_date || b.due_date,
-                    icon: typeIcon(b.type),
-                  }))
-              : [];
-
-            // 2) Recebimentos de projetos individuais (parcelas pagas)
-            const installmentItems = showIndivR
-              ? filteredPayments.flatMap((pp: any) =>
-                  (pp.installments || [])
-                    .filter((i: any) => i.status === "paid" || i.status === "partial")
-                    .map((i: any) => ({
-                      id: `inst-${i.id}`,
-                      label: `${pp.project?.name || "Projeto"} · Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
-                      client: pp.client?.company_name || pp.client?.full_name || "-",
-                      brand: getProjectBrand(pp.project?.project_type),
-                      amount: receivedOf(i),
-                      totalAmount: Number(i.amount) || 0,
-                      isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
-                      date: i.paid_date || i.due_date,
-                      icon: "PRJ",
-                    }))
-                )
-              : [];
-
-            const allReceived = [...billingItems, ...installmentItems].sort(
-              (a, b) => (parseAppDate(b.date)?.getTime() || 0) - (parseAppDate(a.date)?.getTime() || 0)
-            );
-
-            const filtered = allReceived.filter((it) => {
-              const d = parseAppDate(it.date);
-              if (!d) return false;
-              if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
-              if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
-              if (receivedFilter === "year") return d.getFullYear() === selYear;
-              return true;
-            });
-            const filteredTotal = filtered.reduce((s, it) => s + it.amount, 0);
-            const grandTotal = allReceived.reduce((s, it) => s + it.amount, 0);
-
-            return (
-              <div className="space-y-2">
-                <button
-                  onClick={() => setReceivedCollapsed(v => !v)}
-                  className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
-                >
-                  <div className="w-2 h-2 rounded-full bg-success" />
-                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    Histórico · Já Recebido ({allReceived.length})
-                  </span>
-                  <span className="text-xs font-mono text-success ml-auto">{fmt(grandTotal)}</span>
-                  <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
-                </button>
-                {!receivedCollapsed && (
-                  <>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[
-                        { value: "all", label: "Todos" },
-                        { value: "month", label: `${MONTHS_SHORT[selMonth]}/${selYear}` },
-                        { value: "last3", label: "Últimos 3 meses" },
-                        { value: "year", label: `Ano ${selYear}` },
-                      ].map((f) => (
-                        <button key={f.value} onClick={() => setReceivedFilter(f.value)}
-                          className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      {receivedFilter === "all" ? "Total recebido" : "Filtrado"}: <span className="font-mono text-success">{fmt(filteredTotal)}</span> ({filtered.length} {filtered.length === 1 ? "pagamento" : "pagamentos"})
-                    </p>
-                    {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento neste período.</p>}
-                    {filtered.map((it) => (
-                      <div key={it.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                        <span className="text-lg">{it.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{it.label}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {it.client}
-                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
-                            {" • "}Pago em {formatAppDate(it.date)}
-                            {it.isPartial && <> • recebido {fmt(it.amount)} de {fmt(it.totalAmount)}</>}
-                          </p>
-                        </div>
-                        <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            );
-          })()}
-
-
-          {/* Projetos Individuais (SiteBolt / Avulsos) */}
-          {filteredPayments.length > 0 && (() => {
-            const enriched = filteredPayments.map((pp: any) => {
-              const paid = (pp.installments || [])
-                .filter((i: any) => i.status === "paid" || i.status === "partial")
-                .reduce((s: number, i: any) => s + receivedOf(i), 0);
-              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-              const hasOverdue = (pp.installments || []).some((i: any) => {
-                const due = parseAppDate(i.due_date);
-                return i.status === "pending" && !!due && due < todayStart;
-              });
-              const remaining = Number(pp.total_value) - paid;
-              const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
-              return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
-            });
-            const quitados = enriched.filter((p: any) => p._group === "quitado");
-            const andamento = enriched.filter((p: any) => p._group === "andamento");
-            const atrasados = enriched.filter((p: any) => p._group === "atrasado");
-
-            const renderItem = (pp: any) => (
-              <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{pp.project?.name || "Projeto"}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {pp.client?.company_name || pp.client?.full_name}
-                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
-                  </p>
-                </div>
-                <div className="w-20 hidden sm:block">
-                  <Progress value={pp._pct} className="h-1.5" />
-                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pp._pct}%</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-mono text-success">{fmt(pp._paid)}</p>
-                  <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
-                </div>
-                {pp._remaining > 0.01 && (
-                  <div className="text-right hidden md:block">
-                    <p className="text-xs font-mono text-warning">{fmt(pp._remaining)}</p>
-                    <p className="text-[10px] text-muted-foreground">falta</p>
-                  </div>
-                )}
-                {pp._hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
-              </div>
-            );
-
-            return (
-              <div className="space-y-3">
-                <button
-                  onClick={() => setIndivCollapsed(v => !v)}
-                  className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
-                >
-                  <Briefcase className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    Projetos Individuais ({enriched.length})
-                  </span>
-                  <span className="text-[10px] text-muted-foreground ml-auto flex items-center gap-2">
-                    <span className="text-success">●{quitados.length} quitados</span>
-                    {andamento.length > 0 && <span className="text-warning">●{andamento.length} em andamento</span>}
-                    {atrasados.length > 0 && <span className="text-destructive">●{atrasados.length} atrasados</span>}
-                    <span className="text-muted-foreground">{indivCollapsed ? "▸" : "▾"}</span>
-                  </span>
-                </button>
-
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {[
-                    { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
-                    { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
-                    { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
-                    { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                      <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {!indivCollapsed && (
-                  <div className="space-y-4">
-                    {atrasados.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-wider text-destructive font-medium">Atrasados ({atrasados.length})</p>
-                        {atrasados.map(renderItem)}
-                      </div>
-                    )}
-                    {andamento.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-wider text-warning font-medium">Em andamento ({andamento.length})</p>
-                        {andamento.map(renderItem)}
-                      </div>
-                    )}
-                    {quitados.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-wider text-success font-medium">Quitados ({quitados.length})</p>
-                        {quitados.map(renderItem)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-
-          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
-          )}
-        </TabsContent>
-
-        {/* Tab: Ads · Investimento da Aceleriq */}
-        <TabsContent value="ads" className="space-y-4">
-          {isAdmin && <AdsInvestment billing={billing || []} projectPayments={projectPayments || []} />}
-
-          {isAdmin && (
-            <button
-              onClick={() => setWalletsOpen((v) => !v)}
-              className="w-full flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 text-left"
-            >
-              <DollarSign className="w-3.5 h-3.5 text-info" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Wallets de clientes ({Object.entries(walletsByClient).length})
-              </span>
-              <span className="text-[10px] text-muted-foreground ml-auto">{walletsOpen ? "▾ recolher" : "▸ expandir"}</span>
-            </button>
-          )}
-
-          {(!isAdmin || walletsOpen) && (<>
-          {/* Total Geral Ads */}
-          {isAdmin && Object.entries(walletsByClient).length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-4 h-4 text-info" />
-                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total Geral Ads Wallet</span>
-              </div>
-              <p className="text-2xl font-mono font-light text-foreground">{fmt(totalAds)}</p>
-              <p className="text-[11px] text-muted-foreground mt-1">{Object.entries(walletsByClient).length} clientes • {(wallets || []).length} carteiras</p>
-            </div>
-          )}
-
-          {/* Add wallet button */}
-          <div className="flex justify-end">
-            <button onClick={() => setAddWalletModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer border-none">
-              <Plus className="w-4 h-4" /> Adicionar Wallet
-            </button>
-          </div>
-
-          {Object.entries(walletsByClient).length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Nenhum wallet de anúncios cadastrado. Clique em "Adicionar Wallet" para começar.</p>}
-          {Object.entries(walletsByClient).map(([clientId, clientWallets]) => {
-            const clientTotal = clientWallets.reduce((s: number, w: any) => s + Number(w.balance), 0);
-            const clientRecharges = (recharges || []).filter((r: any) => r.client_id === clientId && r.status === "completed");
-            const totalInvested = clientRecharges.reduce((s: number, r: any) => s + Number(r.amount), 0);
-            return (
-            <div key={clientId} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-foreground">{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
-                <span className="text-xs font-mono text-info">{fmt(clientTotal)}</span>
-              </div>
-              <div className="space-y-2">
-                {clientWallets.map((w: any) => (
-                  <div key={w.id} className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xs text-muted-foreground w-24 capitalize">{w.platform} Ads</span>
-                    <p className={`text-sm font-mono font-medium flex-1 ${Number(w.balance) < 100 ? "text-warning" : "text-foreground"}`}>{fmt(Number(w.balance))}</p>
-                    <button onClick={() => setRechargeModal({ clientId, platform: w.platform })}
-                      className="text-[11px] px-3 py-1 rounded-full bg-info/10 text-info hover:bg-info/20 transition-colors cursor-pointer border-none flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3" /> Solicitar Recarga
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {totalInvested > 0 && (
-                <p className="text-[11px] text-muted-foreground">Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
-              )}
-              {clientWallets[0]?.last_recharge_date && (
-                <p className="text-[11px] text-muted-foreground">Última recarga: {new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}</p>
-              )}
-            </div>
-            );
-          })}
-
-          {/* Recharge requests */}
-          {(recharges || []).length > 0 && (
-            <div className="space-y-2 mt-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Solicitações de Recarga</p>
-              {(recharges || []).map((r: any) => (
-                <div key={r.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
-                  <Zap className="w-4 h-4 text-warning" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground">{fmt(Number(r.amount))} · {r.platform}</p>
-                    {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
-                    <p className="text-[11px] text-muted-foreground">Por {r.requester?.full_name} • {new Date(r.created_at).toLocaleDateString("pt-BR")}</p>
-                  </div>
-                  {statusBadge(r.status)}
-                  {r.status === "approved" && (
-                    <button onClick={() => handleCompleteRecharge(r)}
-                      className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Concluir Recarga
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          </>)}
-        </TabsContent>
-
-        {/* Tab: Renewals & Avulsos */}
-        <TabsContent value="renewals" className="space-y-4">
-          {/* Sub-toggle */}
-          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5 w-fit">
-            {[
-              { value: "mensalistas" as const, label: "Mensalistas" },
-              { value: "avulsos" as const, label: "Avulsos / Histórico" },
-            ].map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setRenewalsView(f.value)}
-                className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                  renewalsView === f.value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground bg-transparent"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {renewalsView === "mensalistas" && (() => {
-            const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0 && !isInternalClient(c));
-            if (mensalistas.length === 0) {
-              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente mensalista. Edite um cliente e adicione o valor do plano para marcá-lo como mensalista.</p>;
-            }
-            // Group by plan_name
-            const groups: Record<string, any[]> = {};
-            mensalistas.forEach((c: any) => {
-              const key = c.plan_name || "Sem plano definido";
-              if (!groups[key]) groups[key] = [];
-              groups[key].push(c);
-            });
-            const planNames = Object.keys(groups).sort();
-
-            return (
-              <div className="space-y-5">
-                {/* Summary */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {[
-                    { label: "Mensalistas", value: String(mensalistas.length), color: "text-foreground" },
-                    { label: "Planos distintos", value: String(planNames.length), color: "text-primary" },
-                    { label: "MRR Esperado", value: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), color: "text-success" },
-                    { label: "Renovações ≤15 dias", value: String(mensalistas.filter((c: any) => {
-                      const renewal = parseAppDate(c.plan_renewal_date);
-                      if (!renewal) return false;
-                      const d = Math.ceil((renewal.getTime() - todayStart.getTime()) / 86400000);
-                      return d >= 0 && d <= 15;
-                    }).length), color: "text-warning" },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                      <p className={`text-base font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {planNames.map((planName) => {
-                  const planClients = groups[planName];
-                  const planMRR = planClients.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0);
-                  return (
-                    <div key={planName} className="space-y-2">
-                      <div className="flex items-center gap-2 px-1">
-                        <span className="text-[11px] uppercase tracking-wider text-primary font-medium">{planName}</span>
-                        <span className="text-[10px] text-muted-foreground">({planClients.length} {planClients.length === 1 ? "cliente" : "clientes"})</span>
-                        <span className="text-[10px] font-mono text-success ml-auto">{fmt(planMRR)}/mês</span>
-                      </div>
-                      {planClients.map((c: any) => {
-                        const renewalDate = parseAppDate(c.plan_renewal_date);
-                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
-                        const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
-                        const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
-                        const reminderCount = clientBilling?.reminder_count || 0;
-                        return (
-                          <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
-                            <div className="flex items-center justify-between flex-wrap gap-2">
-                              <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Ativo</span>}
-                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Renovação em breve</span>}
-                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Pendente</span>}
-                              {planStatus === "unknown" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Sem data</span>}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {fmt(Number(c.plan_value))}/mês
-                              {renewalDate && <> • Renova {formatAppDate(c.plan_renewal_date)}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
+            {primeiraCarga ? (
+              <Carregando forma="lista" linhas={5} rotulo="Carregando cobranças" />
+            ) : semNadaNoFinanceiro ? (
+              <EstadoVazio
+                icone={<Inbox className="h-5 w-5" />}
+                titulo="Nenhuma transação ainda"
+                descricao="Use Nova cobrança para lançar a primeira."
+              />
+            ) : (
+              <>
+                {/* A receber: tudo que está em aberto (cobranças, parcelas e planos sem cobrança) */}
+                {allPending.length > 0 && (
+                  <Secao
+                    titulo="A receber"
+                    descricao={`${allPending.length} ${allPending.length === 1 ? "item" : "itens"} · ${fmt(allPendingTotal)}`}
+                    ajuda="Cobranças pendentes, parcelas de projetos em aberto e planos ativos que ainda não têm cobrança. Pagar registra o pagamento total ou parcial."
+                    divisoria
+                  >
+                    <ListaDoFinanceiro memoria="financeiro:a-receber" rotulo="A receber">
+                      {allPending.map((item: any) => (
+                        <li key={item.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                          <span className={juntar("mr-3 h-2 w-2 shrink-0 rounded-full", item.isOverdue ? "bg-destructive" : "bg-warning")} aria-hidden="true" />
+                          <div className="mr-3 min-w-0 flex-1">
+                            <p className={juntar(texto.corpo, "truncate")}>{item.label}</p>
+                            <p className={juntar(texto.auxiliar, "truncate")}>
+                              {item.client}
+                              <span className="hidden sm:inline"> · {item.brand}</span>
+                              {item.paidSoFar > 0 && <span className="text-success"> · já pago {fmt(item.paidSoFar)}</span>}
                             </p>
-                            <div className="flex gap-2 pt-1 flex-wrap">
-                              <button onClick={() => handleSendReminder(c, "notification")}
-                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                                <Bell className="w-3 h-3" /> {reminderCount > 0 ? `Lembrete (${reminderCount}x)` : "Notificar"}
-                              </button>
-                              <button onClick={() => handleSendReminder(c, "whatsapp")}
-                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                                <MessageCircle className="w-3 h-3" /> WhatsApp
-                              </button>
-                              <button onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : String(c.plan_value || ""), renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || c.plan_name || "" }); }}
-                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                                <Edit3 className="w-3 h-3" /> Editar Plano
-                              </button>
-                            </div>
                           </div>
+                          <div className="mr-3 flex shrink-0 flex-col items-end">
+                            <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(item.amount)}</span>
+                            <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
+                              {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
+                            </span>
+                          </div>
+                          <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
+                            Pagar
+                          </button>
+                        </li>
+                      ))}
+                    </ListaDoFinanceiro>
+                  </Secao>
+                )}
+
+                {/* Pendentes a receber: marcar como pago direto ou lembrar pelo WhatsApp */}
+                {pendingBillsInActivePeriod.length > 0 && (
+                  <Secao
+                    titulo="Cobranças pendentes"
+                    descricao={`${pendingBillsInActivePeriod.length} ${pendingBillsInActivePeriod.length === 1 ? "cobrança" : "cobranças"} · ${fmt(pendingBillsInActivePeriod.reduce((s: number, b: any) => s + Number(b.amount || 0), 0))}`}
+                    ajuda="Marcar como pago registra o valor total, avança a renovação do plano e gera a cobrança do mês seguinte."
+                    divisoria
+                  >
+                    <ListaDoFinanceiro memoria="financeiro:pendentes" rotulo="Cobranças pendentes">
+                      {pendingBillsInActivePeriod.map((b: any) => {
+                        const due = parseAppDate(b.due_date);
+                        const isOverdue = due ? due < todayStart : false;
+                        return (
+                          <li key={b.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                            <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{typeIcon(b.type)}</span>
+                            <div className="mr-3 min-w-0 flex-1">
+                              <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
+                              <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name} · vence {formatAppDate(b.due_date)}</p>
+                            </div>
+                            <div className="mr-2 flex shrink-0 flex-col items-end">
+                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(Number(b.amount))}</span>
+                              <span className="mt-0.5">{statusBadge(b.status, b.due_date)}</span>
+                            </div>
+                            <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
+                              <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                              <span className="hidden sm:inline">Marcar como pago</span>
+                            </button>
+                            <button type="button" onClick={() => openWhatsAppReminder(b.client, b)} className={juntar(botao.icone, "ml-1")} aria-label="Lembrar pelo WhatsApp">
+                              <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </li>
                         );
                       })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                    </ListaDoFinanceiro>
+                  </Secao>
+                )}
 
-          {renewalsView === "avulsos" && (() => {
-            // Avulsos = clientes one_off OU sem plan_value que tenham QUALQUER lançamento
-            // (project_payments ou billing avulso). Antes só considerávamos project_payments,
-            // o que escondia recebimentos como o de Itamar (lançado via billing).
-            const isAvulsoClient = (c: any) =>
-              !!c && !isInternalClient(c) && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
-
-            const billingByClient = new Map<string, any[]>();
-            (billing || []).forEach((b: any) => {
-              if (!b.client_id) return;
-              const c = (clients || []).find((cl: any) => cl.id === b.client_id);
-              if (!isAvulsoClient(c)) return;
-              const arr = billingByClient.get(b.client_id) || [];
-              arr.push(b);
-              billingByClient.set(b.client_id, arr);
-            });
-            const paymentsByClient = new Map<string, any[]>();
-            (projectPayments || []).forEach((pp: any) => {
-              if (!pp.client_id) return;
-              const c = (clients || []).find((cl: any) => cl.id === pp.client_id);
-              if (!isAvulsoClient(c)) return;
-              const arr = paymentsByClient.get(pp.client_id) || [];
-              arr.push(pp);
-              paymentsByClient.set(pp.client_id, arr);
-            });
-
-            const avulsoClientIds = new Set<string>([
-              ...billingByClient.keys(),
-              ...paymentsByClient.keys(),
-            ]);
-            const avulsoClients = (clients || []).filter((c: any) => avulsoClientIds.has(c.id));
-
-            if (avulsoClients.length === 0) {
-              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente avulso com histórico.</p>;
-            }
-
-            const sumBillingPaid = (rows: any[]) =>
-              (rows || []).filter((b: any) => b.status === "paid" || b.status === "partial")
-                .reduce((s: number, b: any) => s + receivedOf(b), 0);
-            const sumBillingOpen = (rows: any[]) =>
-              (rows || []).filter((b: any) => b.status === "pending" || b.status === "partial")
-                .reduce((s: number, b: any) => s + Math.max(Number(b.amount) - Number(b.paid_amount || 0), 0), 0);
-            const sumInstallmentsPaid = (pps: any[]) =>
-              (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
-                .filter((i: any) => i.status === "paid" || i.status === "partial")
-                .reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
-            const sumInstallmentsOpen = (pps: any[]) =>
-              (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
-                .filter((i: any) => i.status === "pending" || i.status === "partial")
-                .reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0);
-
-            const totalRecebido = avulsoClients.reduce((s, c) =>
-              s + sumBillingPaid(billingByClient.get(c.id) || []) + sumInstallmentsPaid(paymentsByClient.get(c.id) || []), 0);
-            const totalAberto = avulsoClients.reduce((s, c) =>
-              s + sumBillingOpen(billingByClient.get(c.id) || []) + sumInstallmentsOpen(paymentsByClient.get(c.id) || []), 0);
-
-            return (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[
-                    { label: "Clientes Avulsos", value: String(avulsoClients.length), color: "text-foreground" },
-                    { label: "Total Recebido", value: fmt(totalRecebido), color: "text-success" },
-                    { label: "Em aberto", value: fmt(totalAberto), color: "text-warning" },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                      <p className={`text-base font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {avulsoClients.map((c: any) => {
-                  const clientProjects = paymentsByClient.get(c.id) || [];
-                  const clientBills = billingByClient.get(c.id) || [];
-                  const totalFaturado =
-                    clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0) +
-                    clientBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
-                  const totalPago = sumInstallmentsPaid(clientProjects) + sumBillingPaid(clientBills);
-                  const aberto = Math.max(totalFaturado - totalPago, 0);
-                  const lineCount = clientProjects.length + clientBills.length;
-                  return (
-                    <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                          {lineCount} {lineCount === 1 ? "lançamento" : "lançamentos"}
+                {/* Já recebido */}
+                <Secao
+                  titulo="Já recebido"
+                  descricao={`${allReceived.length} ${allReceived.length === 1 ? "pagamento" : "pagamentos"} · ${fmt(receivedGrandTotal)}`}
+                  acao={<BotaoRecolher aberto={!receivedCollapsed} onAlternar={() => setReceivedCollapsed((v) => !v)} rotulo="já recebido" />}
+                  divisoria
+                >
+                  {!receivedCollapsed && (
+                    <div className="space-y-3">
+                      <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+                        <SeletorCompacto
+                          opcoes={[
+                            { valor: "all", rotulo: "Todos" },
+                            { valor: "month", rotulo: `${MONTHS_SHORT[selMonth]}/${selYear}` },
+                            { valor: "last3", rotulo: "3 meses" },
+                            { valor: "year", rotulo: `${selYear}` },
+                          ]}
+                          valor={receivedFilter}
+                          onEscolher={setReceivedFilter}
+                          rotulo="Período do recebido"
+                        />
+                        <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>
+                          {receivedFilter === "all" ? "Total" : "Filtrado"}: <span className="tabular-nums text-success">{fmt(receivedFilteredTotal)}</span> ({receivedFiltered.length} {receivedFiltered.length === 1 ? "pagamento" : "pagamentos"})
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs flex-wrap">
-                        <span className="text-muted-foreground">Faturado: <span className="font-mono text-foreground">{fmt(totalFaturado)}</span></span>
-                        <span className="text-muted-foreground">Pago: <span className="font-mono text-success">{fmt(totalPago)}</span></span>
-                        {aberto > 0.01 && <span className="text-muted-foreground">Aberto: <span className="font-mono text-warning">{fmt(aberto)}</span></span>}
-                      </div>
-                      <div className="space-y-1 pt-1">
-                        {clientProjects.map((pp: any) => {
-                          const paid = sumInstallmentsPaid([pp]);
-                          const total = Number(pp.total_value) || 0;
-                          const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
-                          const isPartial = paid > 0 && paid < total;
-                          const isFull = paid >= total && total > 0;
-                          return (
-                            <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">{pp.project?.name || "Projeto"}</span>
-                              <span className={`text-[10px] font-mono ${isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
-                              <span className="font-mono">
-                                <span className={isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
-                                {!isFull && <span className="text-muted-foreground"> / {fmt(total)}</span>}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        {clientBills.map((b: any) => {
-                          const paid = sumBillingPaid([b]);
-                          const total = Number(b.amount) || 0;
-                          const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
-                          const isPartial = b.status === "partial";
-                          const isPaid = b.status === "paid" && paid >= total;
-                          return (
-                            <div key={b.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">{b.description || "Cobrança avulsa"}</span>
-                              <span className={`text-[10px] font-mono ${isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
-                              <span className="font-mono">
-                                <span className={isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
-                                {!isPaid && <span className="text-muted-foreground"> / {fmt(total)}</span>}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {receivedFiltered.length === 0 ? (
+                        <EstadoVazio compacto titulo="Nenhum pagamento neste período." />
+                      ) : (
+                        <ListaDoFinanceiro memoria="financeiro:recebidos" rotulo="Já recebido">
+                          {receivedFiltered.map((it) => (
+                            <li key={it.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                              <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{it.icon}</span>
+                              <div className="mr-3 min-w-0 flex-1">
+                                <p className={juntar(texto.corpo, "truncate font-medium")}>{it.label}</p>
+                                <p className={juntar(texto.auxiliar, "truncate")}>
+                                  {it.client} · {it.brand} · pago em {formatAppDate(it.date)}
+                                  {it.isPartial && <> · recebido {fmt(it.amount)} de {fmt(it.totalAmount)}</>}
+                                </p>
+                              </div>
+                              <span className="shrink-0 text-[13px] font-medium tabular-nums text-success">{fmt(it.amount)}</span>
+                            </li>
+                          ))}
+                        </ListaDoFinanceiro>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </TabsContent>
+                  )}
+                </Secao>
 
+                {/* Projetos individuais (SiteBolt / avulsos) */}
+                {filteredPayments.length > 0 && (
+                  <Secao
+                    titulo="Projetos individuais"
+                    descricao={[
+                      `${quitados.length} ${quitados.length === 1 ? "quitado" : "quitados"}`,
+                      andamento.length > 0 ? `${andamento.length} em andamento` : "",
+                      atrasados.length > 0 ? `${atrasados.length} ${atrasados.length === 1 ? "atrasado" : "atrasados"}` : "",
+                    ].filter(Boolean).join(" · ")}
+                    acao={<BotaoRecolher aberto={!indivCollapsed} onAlternar={() => setIndivCollapsed((v) => !v)} rotulo="projetos individuais" />}
+                    divisoria
+                  >
+                    <div className="space-y-4">
+                      <Resumo
+                        itens={[
+                          { rotulo: "Total contratado", valor: fmt(indivTotal), cor: "text-primary" },
+                          { rotulo: "Recebido", valor: fmt(indivPaid), cor: "text-success" },
+                          { rotulo: "Pendente", valor: fmt(indivPending), cor: "text-warning" },
+                          { rotulo: "Atrasado", valor: fmt(indivOverdue), cor: "text-destructive" },
+                        ]}
+                      />
+                      {!indivCollapsed && (
+                        <ListaDoFinanceiro memoria="financeiro:projetos" rotulo="Projetos individuais">
+                          {([
+                            { chave: "atrasado", rotulo: "Atrasados", cor: "text-destructive", itens: atrasados },
+                            { chave: "andamento", rotulo: "Em andamento", cor: "text-warning", itens: andamento },
+                            { chave: "quitado", rotulo: "Quitados", cor: "text-success", itens: quitados },
+                          ] as const).filter((g) => g.itens.length > 0).map((g) => (
+                            <li key={g.chave} className="min-w-0">
+                              <p className={juntar("bg-muted/40 px-3 py-1.5 text-[12px] font-medium sm:px-4", g.cor)}>{g.rotulo} ({g.itens.length})</p>
+                              <ul className="divide-y divide-border border-t border-border">
+                                {g.itens.map((pp: any) => (
+                                  <li key={pp.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                                    <div className="mr-3 min-w-0 flex-1">
+                                      <p className={juntar(texto.corpo, "truncate font-medium")}>{pp.project?.name || "Projeto"}</p>
+                                      <p className={juntar(texto.auxiliar, "truncate")}>{pp.client?.company_name || pp.client?.full_name} · {getProjectBrand(pp.project?.project_type)}</p>
+                                    </div>
+                                    <div className="mr-3 hidden w-20 shrink-0 sm:block">
+                                      <Progress value={pp._pct} className="h-1.5" />
+                                      <p className="mt-0.5 text-right text-[11px] tabular-nums text-muted-foreground">{pp._pct}%</p>
+                                    </div>
+                                    <div className="flex shrink-0 flex-col items-end">
+                                      <span className="text-[13px] tabular-nums text-success">{fmt(pp._paid)}</span>
+                                      <span className="text-[11px] tabular-nums text-muted-foreground">de {fmt(Number(pp.total_value))}</span>
+                                    </div>
+                                    {pp._remaining > 0.01 && (
+                                      <div className="ml-3 hidden shrink-0 flex-col items-end md:flex">
+                                        <span className="text-[13px] tabular-nums text-warning">{fmt(pp._remaining)}</span>
+                                        <span className="text-[11px] text-muted-foreground">falta</span>
+                                      </div>
+                                    )}
+                                    {pp._hasOverdue && <AlertTriangleIcon className="ml-2 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Parcela atrasada" />}
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          ))}
+                        </ListaDoFinanceiro>
+                      )}
+                    </div>
+                  </Secao>
+                )}
+              </>
+            )}
 
-
-        {/* Audit Log Tab */}
-        {isAdmin && (
-          <TabsContent value="audit" className="space-y-4">
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-                <History className="w-3.5 h-3.5 text-info" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Histórico de Alterações · Últimos 50 registros</span>
-              </div>
-              {(auditLogs || []).length === 0 ? (
-                <div className="px-5 py-8 text-center text-muted-foreground text-sm">
-                  Nenhuma alteração registrada ainda.
-                </div>
-              ) : (
-                <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
-                  {(auditLogs || []).map((log: any) => {
-                    const actionLabels: Record<string, { label: string; color: string }> = {
-                      paid_full: { label: "Pago Total", color: "text-success bg-success/10" },
-                      paid_partial: { label: "Pago Parcial", color: "text-warning bg-warning/10" },
-                      status_change: { label: "Status Alterado", color: "text-info bg-info/10" },
-                      amount_change: { label: "Valor Alterado", color: "text-primary bg-primary/10" },
-                    };
-                    const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-secondary" };
-                    const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
-
-                    return (
-                      <div key={log.id} className="flex items-center gap-3 px-5 py-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${actionInfo.color}`}>
-                              {actionInfo.label}
-                            </span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{typeLabel}</span>
-                          </div>
-                          {log.notes && <p className="text-[12px] text-foreground mt-1 truncate">{log.notes}</p>}
-                          <div className="flex items-center gap-3 mt-1">
-                            {log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount && (
-                              <span className="text-[11px] text-muted-foreground">
-                                {fmt(log.old_amount)} para {fmt(log.new_amount)}
-                              </span>
-                            )}
-                            {log.new_amount != null && log.old_amount === log.new_amount && (
-                              <span className="text-[11px] text-muted-foreground font-mono">{fmt(log.new_amount)}</span>
-                            )}
-                            {log.old_status && log.new_status && log.old_status !== log.new_status && (
-                              <span className="text-[11px] text-muted-foreground">{log.old_status} para {log.new_status}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-[11px] text-muted-foreground">
-                            {new Date(log.created_at).toLocaleDateString("pt-BR")}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground/60">
-                            {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                          {log.performerName && (
-                            <p className="text-[10px] text-primary mt-0.5">{log.performerName}</p>
-                          )}
-                        </div>
+            {/* Receita: mês a mês e proporção por marca */}
+            {(chartData.length > 0 || pieTotal > 0) && (
+              <Secao titulo="Receita" descricao={`${currentYear}${brandFilter !== "all" ? ` · ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""}`} divisoria>
+                <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+                  {chartData.length > 0 && (
+                    <Painel titulo="Mês a mês" descricao="Recebido e pendente">
+                      <div className="h-[220px] min-w-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} barGap={2}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}${v >= 1000 ? 'k' : ''}`} />
+                            <Tooltip
+                              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                              formatter={(value: number, name: string) => [fmt(value), name === "recebido" ? "Recebido" : "Pendente"]}
+                            />
+                            <Legend formatter={(value) => value === "recebido" ? "Recebido" : "Pendente"} wrapperStyle={{ fontSize: 11 }} />
+                            <Bar dataKey="recebido" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                            <Bar dataKey="pendente" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
+                    </Painel>
+                  )}
+                  {pieTotal > 0 && (
+                    <Painel titulo="Proporção por marca" descricao={`Tudo que já entrou · ${fmt(pieTotal)}`}>
+                      <div className="flex min-w-0 flex-col items-center sm:flex-row">
+                        <div className="h-[180px] w-[180px] shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={78} paddingAngle={3} dataKey="value" strokeWidth={0} isAnimationActive={false}>
+                                {pieData.map((entry, index) => (
+                                  <Cell key={index} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                                formatter={(value: number) => [fmt(value), ""]}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <ul className="mt-3 w-full min-w-0 flex-1 divide-y divide-border sm:ml-5 sm:mt-0">
+                          {pieData.map((d) => (
+                            <li key={d.name} className="flex min-w-0 items-center py-2">
+                              <span className="mr-2.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: d.color }} aria-hidden="true" />
+                              <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{d.name}</span>
+                              <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{Math.round((d.value / pieTotal) * 100)}%</span>
+                              <span className="ml-3 shrink-0 text-[13px] tabular-nums text-foreground">{fmt(d.value)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </Painel>
+                  )}
+                </div>
+              </Secao>
+            )}
+          </TabsContent>
+        )}
+
+        {/* Ads Wallet: investimento da Aceleriq, wallets dos clientes e recargas */}
+        <TabsContent value="ads" className="mt-0 space-y-8">
+          {!isAdmin && (
+            <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
+              <Numero rotulo="Investimento Ads total" valor={fmt(totalAds)} icone={<DollarSign className="h-3.5 w-3.5" />} cor="text-info" />
+            </div>
+          )}
+
+          {isAdmin && <AdsInvestment billing={billing || []} projectPayments={projectPayments || []} />}
+
+          <Secao
+            titulo="Wallets de clientes"
+            descricao={`${Object.entries(walletsByClient).length} ${Object.entries(walletsByClient).length === 1 ? "cliente" : "clientes"} · ${(wallets || []).length} ${(wallets || []).length === 1 ? "carteira" : "carteiras"} · ${fmt(totalAds)}`}
+            acao={
+              <>
+                {(!isAdmin || walletsOpen) && (
+                  <button type="button" onClick={() => setAddWalletModal(true)} className={botao.secundario} aria-label="Adicionar wallet">
+                    <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">Adicionar wallet</span>
+                  </button>
+                )}
+                {isAdmin && <BotaoRecolher aberto={walletsOpen} onAlternar={() => setWalletsOpen((v) => !v)} rotulo="wallets de clientes" />}
+              </>
+            }
+            divisoria={isAdmin}
+          >
+            {(!isAdmin || walletsOpen) && (
+              walletsQuery.isError && !wallets ? (
+                <EstadoDeErro
+                  titulo="Não foi possível carregar as wallets."
+                  acao={<button type="button" onClick={() => { void walletsQuery.refetch?.(); }} className={botao.secundario}>Tentar de novo</button>}
+                />
+              ) : walletsQuery.isLoading && !wallets ? (
+                <Carregando forma="lista" linhas={3} rotulo="Carregando wallets" />
+              ) : Object.entries(walletsByClient).length === 0 ? (
+                <EstadoVazio
+                  compacto
+                  titulo="Nenhuma wallet de anúncios."
+                  descricao="Adicione a primeira para acompanhar saldo e recargas."
+                  acao={<button type="button" onClick={() => setAddWalletModal(true)} className={acaoDaLinha}>Adicionar wallet</button>}
+                />
+              ) : (
+                <ListaDoFinanceiro memoria="financeiro:wallets" rotulo="Wallets de clientes" alta>
+                  {Object.entries(walletsByClient).map(([clientId, clientWallets]) => {
+                    const clientTotal = clientWallets.reduce((s: number, w: any) => s + Number(w.balance), 0);
+                    const clientRecharges = (recharges || []).filter((r: any) => r.client_id === clientId && r.status === "completed");
+                    const totalInvested = clientRecharges.reduce((s: number, r: any) => s + Number(r.amount), 0);
+                    const detalhes = [
+                      totalInvested > 0 ? `Já investido ${fmt(totalInvested)} (${clientRecharges.length} ${clientRecharges.length === 1 ? "recarga" : "recargas"})` : "",
+                      clientWallets[0]?.last_recharge_date ? `Última recarga ${new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}` : "",
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <li key={clientId} className="min-w-0 px-3 py-3 sm:px-4">
+                        <div className="flex min-w-0 items-center">
+                          <p className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
+                          <span className="ml-3 shrink-0 text-[13px] font-medium tabular-nums text-info">{fmt(clientTotal)}</span>
+                        </div>
+                        {detalhes && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{detalhes}</p>}
+                        <ul className={juntar(superficie.poco, "mt-2 divide-y divide-border/60")}>
+                          {clientWallets.map((w: any) => (
+                            <li key={w.id} className="flex min-w-0 items-center px-2.5 py-1.5">
+                              <span className={juntar(texto.auxiliar, "w-24 shrink-0 truncate capitalize")}>{w.platform} Ads</span>
+                              <span className={juntar("min-w-0 flex-1 truncate text-[13px] font-medium tabular-nums", Number(w.balance) < 100 ? "text-warning" : "text-foreground")}>{fmt(Number(w.balance))}</span>
+                              <button type="button" onClick={() => setRechargeModal({ clientId, platform: w.platform })} className={juntar(acaoDaLinha, "ml-2 text-info")} aria-label={`Solicitar recarga ${w.platform}`}>
+                                <RefreshCw className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                <span className="hidden sm:inline">Solicitar recarga</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
                     );
                   })}
+                </ListaDoFinanceiro>
+              )
+            )}
+          </Secao>
+
+          {(!isAdmin || walletsOpen) && (recharges || []).length > 0 && (
+            <Secao titulo="Solicitações de recarga" descricao={`${(recharges || []).length} ${(recharges || []).length === 1 ? "solicitação" : "solicitações"}`} divisoria>
+              <ListaDoFinanceiro memoria="financeiro:recargas" rotulo="Solicitações de recarga">
+                {(recharges || []).map((r: any) => (
+                  <li key={r.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                    <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                    <div className="mr-3 min-w-0 flex-1">
+                      <p className={juntar(texto.corpo, "truncate")}><span className="tabular-nums">{fmt(Number(r.amount))}</span> · {r.platform}</p>
+                      <p className={juntar(texto.auxiliar, "truncate")}>
+                        {r.reason ? `${r.reason} · ` : ""}por {r.requester?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <span className="mr-2 shrink-0">{statusBadge(r.status)}</span>
+                    {r.status === "approved" && (
+                      <button type="button" onClick={() => handleCompleteRecharge(r)} className={juntar(acaoDaLinha, "text-success")} aria-label="Concluir recarga">
+                        <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                        <span className="hidden sm:inline">Concluir recarga</span>
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ListaDoFinanceiro>
+            </Secao>
+          )}
+        </TabsContent>
+
+        {/* Mensalidades: mensalistas e avulsos (só admin, como antes) */}
+        {isAdmin && (
+          <TabsContent value="renewals" className="mt-0 space-y-6">
+            <SeletorCompacto
+              opcoes={[
+                { valor: "mensalistas", rotulo: "Mensalistas" },
+                { valor: "avulsos", rotulo: "Avulsos e histórico" },
+              ]}
+              valor={renewalsView}
+              onEscolher={(v) => setRenewalsView(v === "avulsos" ? "avulsos" : "mensalistas")}
+              rotulo="Tipo de cliente"
+            />
+
+            {renewalsView === "mensalistas" && (() => {
+              const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0 && !isInternalClient(c));
+              if (mensalistas.length === 0) {
+                return (
+                  <EstadoVazio
+                    icone={<Repeat className="h-5 w-5" />}
+                    titulo="Nenhum cliente mensalista"
+                    descricao="Edite um cliente e adicione o valor do plano para marcá-lo como mensalista."
+                  />
+                );
+              }
+              // Group by plan_name
+              const groups: Record<string, any[]> = {};
+              mensalistas.forEach((c: any) => {
+                const key = c.plan_name || "Sem plano definido";
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(c);
+              });
+              const planNames = Object.keys(groups).sort();
+
+              return (
+                <div className="space-y-5">
+                  <Resumo
+                    itens={[
+                      { rotulo: "Mensalistas", valor: String(mensalistas.length) },
+                      { rotulo: "Planos distintos", valor: String(planNames.length), cor: "text-primary" },
+                      { rotulo: "MRR esperado", valor: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), cor: "text-success" },
+                      { rotulo: "Renovam em até 15 dias", valor: String(mensalistas.filter((c: any) => {
+                        const renewal = parseAppDate(c.plan_renewal_date);
+                        if (!renewal) return false;
+                        const d = Math.ceil((renewal.getTime() - todayStart.getTime()) / 86400000);
+                        return d >= 0 && d <= 15;
+                      }).length), cor: "text-warning" },
+                    ]}
+                  />
+
+                  <ListaDoFinanceiro memoria="financeiro:mensalistas" rotulo="Mensalistas" alta>
+                    {planNames.map((planName) => {
+                      const planClients = groups[planName];
+                      const planMRR = planClients.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0);
+                      return (
+                        <li key={planName} className="min-w-0">
+                          <div className="flex min-w-0 items-center bg-muted/40 px-3 py-1.5 sm:px-4">
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-primary">
+                              {planName} <span className="font-normal text-muted-foreground">({planClients.length} {planClients.length === 1 ? "cliente" : "clientes"})</span>
+                            </span>
+                            <span className="ml-3 shrink-0 text-[12px] tabular-nums text-success">{fmt(planMRR)}/mês</span>
+                          </div>
+                          <ul className="divide-y divide-border border-t border-border">
+                            {planClients.map((c: any) => {
+                              const renewalDate = parseAppDate(c.plan_renewal_date);
+                              const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
+                              const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
+                              const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
+                              const reminderCount = clientBilling?.reminder_count || 0;
+                              const nome = c.company_name || c.full_name;
+                              return (
+                                <li key={c.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
+                                  <div className="mr-3 min-w-0 flex-1">
+                                    <div className="flex min-w-0 items-center">
+                                      <p className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-medium")}>{nome}</p>
+                                      {planStatus === "active" && <span className={juntar(etiqueta, "bg-success/15 text-success")}>Ativo</span>}
+                                      {planStatus === "soon" && <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>Renova em breve</span>}
+                                      {planStatus === "overdue" && <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Pendente</span>}
+                                      {planStatus === "unknown" && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Sem data</span>}
+                                    </div>
+                                    <p className={juntar(texto.auxiliar, "truncate")}>
+                                      <span className="tabular-nums">{fmt(Number(c.plan_value))}</span>/mês
+                                      {renewalDate && <> · renova {formatAppDate(c.plan_renewal_date)}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center [&>*+*]:ml-1">
+                                    <button type="button" onClick={() => handleSendReminder(c, "notification")} className={botao.barra} aria-label={reminderCount > 0 ? `Lembrete para ${nome} (${reminderCount}x)` : `Notificar ${nome}`}>
+                                      <Bell className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                      <span className="hidden sm:inline">{reminderCount > 0 ? `Lembrete (${reminderCount}x)` : "Notificar"}</span>
+                                      {reminderCount > 0 && <span className="ml-0.5 text-[11px] tabular-nums sm:hidden">{reminderCount}</span>}
+                                    </button>
+                                    <button type="button" onClick={() => handleSendReminder(c, "whatsapp")} className={botao.barra} aria-label={`WhatsApp para ${nome}`}>
+                                      <MessageCircle className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                      <span className="hidden sm:inline">WhatsApp</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : String(c.plan_value || ""), renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || c.plan_name || "" }); }}
+                                      className={botao.barra}
+                                      aria-label={`Editar plano de ${nome}`}
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                      <span className="hidden sm:inline">Editar plano</span>
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </li>
+                      );
+                    })}
+                  </ListaDoFinanceiro>
                 </div>
+              );
+            })()}
+
+            {renewalsView === "avulsos" && (() => {
+              // Avulsos = clientes one_off OU sem plan_value que tenham QUALQUER lançamento
+              // (project_payments ou billing avulso). Antes só considerávamos project_payments,
+              // o que escondia recebimentos como o de Itamar (lançado via billing).
+              const isAvulsoClient = (c: any) =>
+                !!c && !isInternalClient(c) && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
+
+              const billingByClient = new Map<string, any[]>();
+              (billing || []).forEach((b: any) => {
+                if (!b.client_id) return;
+                const c = (clients || []).find((cl: any) => cl.id === b.client_id);
+                if (!isAvulsoClient(c)) return;
+                const arr = billingByClient.get(b.client_id) || [];
+                arr.push(b);
+                billingByClient.set(b.client_id, arr);
+              });
+              const paymentsByClient = new Map<string, any[]>();
+              (projectPayments || []).forEach((pp: any) => {
+                if (!pp.client_id) return;
+                const c = (clients || []).find((cl: any) => cl.id === pp.client_id);
+                if (!isAvulsoClient(c)) return;
+                const arr = paymentsByClient.get(pp.client_id) || [];
+                arr.push(pp);
+                paymentsByClient.set(pp.client_id, arr);
+              });
+
+              const avulsoClientIds = new Set<string>([
+                ...billingByClient.keys(),
+                ...paymentsByClient.keys(),
+              ]);
+              const avulsoClients = (clients || []).filter((c: any) => avulsoClientIds.has(c.id));
+
+              if (avulsoClients.length === 0) {
+                return <EstadoVazio icone={<Receipt className="h-5 w-5" />} titulo="Nenhum cliente avulso com histórico" />;
+              }
+
+              const sumBillingPaid = (rows: any[]) =>
+                (rows || []).filter((b: any) => b.status === "paid" || b.status === "partial")
+                  .reduce((s: number, b: any) => s + receivedOf(b), 0);
+              const sumBillingOpen = (rows: any[]) =>
+                (rows || []).filter((b: any) => b.status === "pending" || b.status === "partial")
+                  .reduce((s: number, b: any) => s + Math.max(Number(b.amount) - Number(b.paid_amount || 0), 0), 0);
+              const sumInstallmentsPaid = (pps: any[]) =>
+                (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
+                  .filter((i: any) => i.status === "paid" || i.status === "partial")
+                  .reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
+              const sumInstallmentsOpen = (pps: any[]) =>
+                (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
+                  .filter((i: any) => i.status === "pending" || i.status === "partial")
+                  .reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0);
+
+              const totalRecebido = avulsoClients.reduce((s, c) =>
+                s + sumBillingPaid(billingByClient.get(c.id) || []) + sumInstallmentsPaid(paymentsByClient.get(c.id) || []), 0);
+              const totalAberto = avulsoClients.reduce((s, c) =>
+                s + sumBillingOpen(billingByClient.get(c.id) || []) + sumInstallmentsOpen(paymentsByClient.get(c.id) || []), 0);
+
+              return (
+                <div className="space-y-5">
+                  <Resumo
+                    itens={[
+                      { rotulo: "Clientes avulsos", valor: String(avulsoClients.length) },
+                      { rotulo: "Total recebido", valor: fmt(totalRecebido), cor: "text-success" },
+                      { rotulo: "Em aberto", valor: fmt(totalAberto), cor: "text-warning" },
+                    ]}
+                  />
+
+                  <ListaDoFinanceiro memoria="financeiro:avulsos" rotulo="Clientes avulsos" alta>
+                    {avulsoClients.map((c: any) => {
+                      const clientProjects = paymentsByClient.get(c.id) || [];
+                      const clientBills = billingByClient.get(c.id) || [];
+                      const totalFaturado =
+                        clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0) +
+                        clientBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
+                      const totalPago = sumInstallmentsPaid(clientProjects) + sumBillingPaid(clientBills);
+                      const aberto = Math.max(totalFaturado - totalPago, 0);
+                      const lineCount = clientProjects.length + clientBills.length;
+                      return (
+                        <li key={c.id} className="min-w-0 px-3 py-3 sm:px-4">
+                          <div className="flex min-w-0 items-center">
+                            <p className={juntar(texto.corpo, "mr-2 min-w-0 flex-1 truncate font-medium")}>{c.company_name || c.full_name}</p>
+                            <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
+                              {lineCount} {lineCount === 1 ? "lançamento" : "lançamentos"}
+                            </span>
+                          </div>
+                          <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                            Faturado <span className="tabular-nums text-foreground">{fmt(totalFaturado)}</span>
+                            {" · "}Pago <span className="tabular-nums text-success">{fmt(totalPago)}</span>
+                            {aberto > 0.01 && <>{" · "}Aberto <span className="tabular-nums text-warning">{fmt(aberto)}</span></>}
+                          </p>
+                          <ul className={juntar(superficie.poco, "mt-2 divide-y divide-border/60")}>
+                            {clientProjects.map((pp: any) => {
+                              const paid = sumInstallmentsPaid([pp]);
+                              const total = Number(pp.total_value) || 0;
+                              const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                              const isPartial = paid > 0 && paid < total;
+                              const isFull = paid >= total && total > 0;
+                              const cor = isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground";
+                              return (
+                                <li key={pp.id} className="flex min-w-0 items-center px-2.5 py-1.5 text-[12px] text-muted-foreground">
+                                  <span className="min-w-0 flex-1 truncate">{pp.project?.name || "Projeto"}</span>
+                                  <span className={juntar("ml-3 shrink-0 text-[11px] tabular-nums", cor)}>{pct}%</span>
+                                  <span className="ml-3 shrink-0 tabular-nums">
+                                    <span className={cor}>{fmt(paid)}</span>
+                                    {!isFull && <span> / {fmt(total)}</span>}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                            {clientBills.map((b: any) => {
+                              const paid = sumBillingPaid([b]);
+                              const total = Number(b.amount) || 0;
+                              const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                              const isPartial = b.status === "partial";
+                              const isPaid = b.status === "paid" && paid >= total;
+                              const cor = isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground";
+                              return (
+                                <li key={b.id} className="flex min-w-0 items-center px-2.5 py-1.5 text-[12px] text-muted-foreground">
+                                  <span className="min-w-0 flex-1 truncate">{b.description || "Cobrança avulsa"}</span>
+                                  <span className={juntar("ml-3 shrink-0 text-[11px] tabular-nums", cor)}>{pct}%</span>
+                                  <span className="ml-3 shrink-0 tabular-nums">
+                                    <span className={cor}>{fmt(paid)}</span>
+                                    {!isPaid && <span> / {fmt(total)}</span>}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </li>
+                      );
+                    })}
+                  </ListaDoFinanceiro>
+                </div>
+              );
+            })()}
+          </TabsContent>
+        )}
+
+        {/* Histórico de alterações de pagamento */}
+        {isAdmin && (
+          <TabsContent value="audit" className="mt-0 space-y-6">
+            <Secao titulo="Histórico de alterações" descricao="Últimos 50 registros">
+              {auditQuery.isError && !auditLogs ? (
+                <EstadoDeErro
+                  titulo="Não foi possível carregar o histórico."
+                  acao={<button type="button" onClick={() => { void auditQuery.refetch?.(); }} className={botao.secundario}>Tentar de novo</button>}
+                />
+              ) : auditQuery.isLoading && !auditLogs ? (
+                <Carregando forma="lista" linhas={5} rotulo="Carregando histórico" />
+              ) : (auditLogs || []).length === 0 ? (
+                <EstadoVazio icone={<History className="h-5 w-5" />} titulo="Nenhuma alteração registrada ainda" />
+              ) : (
+                <ListaDoFinanceiro memoria="financeiro:historico" rotulo="Histórico de alterações" alta>
+                  {(auditLogs || []).map((log: any) => {
+                    const actionLabels: Record<string, { label: string; color: string }> = {
+                      paid_full: { label: "Pago total", color: "text-success bg-success/10" },
+                      paid_partial: { label: "Pago parcial", color: "text-warning bg-warning/10" },
+                      status_change: { label: "Status alterado", color: "text-info bg-info/10" },
+                      amount_change: { label: "Valor alterado", color: "text-primary bg-primary/10" },
+                    };
+                    const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-muted" };
+                    const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
+                    const mudancas = [
+                      log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount ? `${fmt(log.old_amount)} para ${fmt(log.new_amount)}` : "",
+                      log.new_amount != null && log.old_amount === log.new_amount ? fmt(log.new_amount) : "",
+                      log.old_status && log.new_status && log.old_status !== log.new_status ? `${log.old_status} para ${log.new_status}` : "",
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <li key={log.id} className="flex min-w-0 items-start px-3 py-2.5 sm:px-4">
+                        <div className="mr-3 min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center [&>*+*]:ml-1.5">
+                            <span className={juntar(etiqueta, actionInfo.color)}>{actionInfo.label}</span>
+                            <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{typeLabel}</span>
+                          </div>
+                          {log.notes && <p className={juntar(texto.corpo, "mt-1 truncate")}>{log.notes}</p>}
+                          {mudancas && <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>{mudancas}</p>}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-[12px] tabular-nums text-muted-foreground">{new Date(log.created_at).toLocaleDateString("pt-BR")}</p>
+                          <p className="text-[11px] tabular-nums text-muted-foreground/70">
+                            {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          {log.performerName && <p className="mt-0.5 max-w-[120px] truncate text-[11px] text-primary">{log.performerName}</p>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ListaDoFinanceiro>
               )}
-            </div>
+            </Secao>
           </TabsContent>
         )}
       </Tabs>
-      </div>
 
-      {/* New Billing Modal */}
+      {/* Nova cobrança */}
       <Dialog open={newBillingOpen} onOpenChange={(open) => { if (!creatingBilling) setNewBillingOpen(open); }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">Nova Cobrança</DialogTitle>
+            <DialogTitle className="text-foreground">Nova cobrança</DialogTitle>
             <DialogDescription>Confira os dados. O cliente será avisado depois que a cobrança for criada.</DialogDescription>
           </DialogHeader>
-          <fieldset disabled={creatingBilling} className="space-y-3">
-            <div>
-              <label htmlFor="billing-client" className="text-xs text-muted-foreground">Cliente</label>
-              <select id="billing-client" value={billForm.client_id} onChange={e => setBillForm(f => ({ ...f, client_id: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-                <option value="">Selecionar...</option>
-                {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
-              </select>
+          <fieldset disabled={creatingBilling} className="min-w-0 space-y-4 border-0 p-0">
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Cliente">
+                <select id="billing-client" value={billForm.client_id} onChange={e => setBillForm(f => ({ ...f, client_id: e.target.value }))} className={campo}>
+                  <option value="">Selecionar...</option>
+                  {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Tipo">
+                <select id="billing-type" value={billForm.type} onChange={e => setBillForm(f => ({ ...f, type: e.target.value }))} className={campo}>
+                  <option value="renewal">Renovação</option>
+                  <option value="ads_recharge">Recarga Ads</option>
+                  <option value="extra_service">Serviço Extra</option>
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Valor (R$)">
+                <Input id="billing-amount" type="number" inputMode="decimal" value={billForm.amount} onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="h-9" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Vencimento">
+                <Input id="billing-due-date" type="date" value={billForm.due_date} onChange={e => setBillForm(f => ({ ...f, due_date: e.target.value }))} className="h-9" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Descrição" largo>
+                <textarea id="billing-description" value={billForm.description} onChange={e => setBillForm(f => ({ ...f, description: e.target.value }))} className={juntar(campoTexto, "min-h-[64px] resize-none")} rows={2} />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <div className={rodapeDoDialogo}>
+              <button type="button" onClick={() => setNewBillingOpen(false)} className={botao.secundario}>Cancelar</button>
+              <button type="button" onClick={handleCreateBilling} disabled={creatingBilling} className={botao.primario}>
+                {creatingBilling ? "Criando cobrança…" : "Criar cobrança"}
+              </button>
             </div>
-            <div>
-              <label htmlFor="billing-type" className="text-xs text-muted-foreground">Tipo</label>
-              <select id="billing-type" value={billForm.type} onChange={e => setBillForm(f => ({ ...f, type: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-                <option value="renewal">Renovação</option>
-                <option value="ads_recharge">Recarga Ads</option>
-                <option value="extra_service">Serviço Extra</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="billing-amount" className="text-xs text-muted-foreground">Valor (R$)</label>
-              <Input id="billing-amount" type="number" value={billForm.amount} onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
-            </div>
-            <div>
-              <label htmlFor="billing-due-date" className="text-xs text-muted-foreground">Vencimento</label>
-              <Input id="billing-due-date" type="date" value={billForm.due_date} onChange={e => setBillForm(f => ({ ...f, due_date: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <label htmlFor="billing-description" className="text-xs text-muted-foreground">Descrição</label>
-              <textarea id="billing-description" value={billForm.description} onChange={e => setBillForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={2} />
-            </div>
-            <button onClick={handleCreateBilling} disabled={creatingBilling}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
-              {creatingBilling ? "Criando cobrança…" : "Criar Cobrança"}
-            </button>
           </fieldset>
         </DialogContent>
       </Dialog>
 
-      {/* Recharge Modal · Preset Values */}
+      {/* Solicitar recarga: valores prontos ou personalizado */}
       <Dialog open={!!rechargeModal} onOpenChange={() => setRechargeModal(null)}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Solicitar Recarga · {rechargeModal?.platform}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-xs text-muted-foreground">Escolha o valor semanal de investimento para o cliente:</p>
-            
-            {/* Preset amount buttons */}
-            <div className="grid grid-cols-3 gap-2">
-              {[250, 500, 1000].map((val) => (
-                <button
-                  key={val}
-                  onClick={() => setRechargeForm(f => ({ ...f, amount: String(val) }))}
-                  className={`flex flex-col items-center gap-1 py-4 px-3 rounded-xl border-2 transition-all cursor-pointer ${
-                    rechargeForm.amount === String(val)
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-secondary/30 text-foreground hover:border-muted-foreground"
-                  }`}
-                >
-                  <span className="text-lg font-mono font-semibold">{fmt(val)}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">/semana</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Custom amount option */}
-            <div className="relative">
-              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Ou valor personalizado</label>
-              <Input
-                type="number"
-                value={![250, 500, 1000].includes(Number(rechargeForm.amount)) ? rechargeForm.amount : ""}
-                onChange={e => setRechargeForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="Outro valor..."
-                className="mt-1"
-                onFocus={() => {
-                  if ([250, 500, 1000].includes(Number(rechargeForm.amount))) {
-                    setRechargeForm(f => ({ ...f, amount: "" }));
-                  }
-                }}
-              />
-            </div>
-
-            {/* Period selector */}
-            <div>
-              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Período</label>
-              <div className="flex gap-2 mt-1">
-                {["semanal", "mensal"].map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setRechargeForm(f => ({ ...f, period: p }))}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
-                      rechargeForm.period === p
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {p === "semanal" ? "Semanal" : "Mensal"}
-                  </button>
-                ))}
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Solicitar recarga · <span className="capitalize">{rechargeModal?.platform}</span></DialogTitle>
+            <DialogDescription>O cliente recebe o pedido e confirma a recarga.</DialogDescription>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <div className="min-w-0">
+              <p className={juntar(texto.rotulo, "mb-1.5")}>Valor</p>
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Valor da recarga">
+                {[250, 500, 1000].map((val) => {
+                  const ativo = rechargeForm.amount === String(val);
+                  return (
+                    <button
+                      key={val}
+                      type="button"
+                      aria-pressed={ativo}
+                      onClick={() => setRechargeForm(f => ({ ...f, amount: String(val) }))}
+                      className={juntar(
+                        "flex min-w-0 flex-col items-center rounded-md border px-2 py-2.5 transition-colors",
+                        ativo ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-muted",
+                        foco,
+                      )}
+                    >
+                      <span className="text-[14px] font-semibold tabular-nums">{fmt(val)}</span>
+                      <span className="text-[11px] text-muted-foreground">por semana</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div>
-              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Observação (opcional)</label>
-              <textarea value={rechargeForm.reason} onChange={e => setRechargeForm(f => ({ ...f, reason: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={2} placeholder="Ex: Manter campanha X ativa..." />
-            </div>
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Outro valor (R$)">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={![250, 500, 1000].includes(Number(rechargeForm.amount)) ? rechargeForm.amount : ""}
+                  onChange={e => setRechargeForm(f => ({ ...f, amount: e.target.value }))}
+                  placeholder="Outro valor..."
+                  className="h-9"
+                  onFocus={() => {
+                    if ([250, 500, 1000].includes(Number(rechargeForm.amount))) {
+                      setRechargeForm(f => ({ ...f, amount: "" }));
+                    }
+                  }}
+                />
+              </CampoDeFormulario>
+              <div className="min-w-0">
+                <p className={juntar(texto.rotulo, "mb-1.5")}>Período</p>
+                <SeletorCompacto
+                  opcoes={[{ valor: "semanal", rotulo: "Semanal" }, { valor: "mensal", rotulo: "Mensal" }]}
+                  valor={rechargeForm.period}
+                  onEscolher={(p) => setRechargeForm(f => ({ ...f, period: p }))}
+                  rotulo="Período da recarga"
+                  larguraTotal
+                />
+              </div>
+              <CampoDeFormulario rotulo="Observação (opcional)" largo>
+                <textarea value={rechargeForm.reason} onChange={e => setRechargeForm(f => ({ ...f, reason: e.target.value }))} className={juntar(campoTexto, "min-h-[64px] resize-none")} rows={2} placeholder="Ex.: manter a campanha X ativa" />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
 
-            {/* Summary */}
             {rechargeForm.amount && (
-              <div className="bg-secondary/50 border border-border rounded-xl p-3">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Resumo da solicitação</p>
-                <p className="text-sm text-foreground">
-                  <span className="font-mono font-semibold text-primary">{fmt(Number(rechargeForm.amount))}</span>
-                  <span className="text-muted-foreground"> / {rechargeForm.period}</span>
-                  <span className="text-muted-foreground"> · {rechargeModal?.platform} Ads</span>
+              <div className={juntar(superficie.poco, "px-3 py-2.5")}>
+                <p className={texto.corpo}>
+                  <span className="font-semibold tabular-nums text-primary">{fmt(Number(rechargeForm.amount))}</span>
+                  <span className="text-muted-foreground"> / {rechargeForm.period} · <span className="capitalize">{rechargeModal?.platform}</span> Ads</span>
                 </p>
                 {rechargeForm.period === "mensal" && (
-                  <p className="text-[11px] text-muted-foreground mt-1">≈ {fmt(Number(rechargeForm.amount) / 4)}/semana</p>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 tabular-nums")}>≈ {fmt(Number(rechargeForm.amount) / 4)}/semana</p>
                 )}
               </div>
             )}
 
-            <button
-              onClick={handleRequestRecharge}
-              disabled={!rechargeForm.amount || Number(rechargeForm.amount) <= 0}
-              className="w-full py-3 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              <Bell className="w-4 h-4" /> Enviar Solicitação ao Cliente
-            </button>
+            <div className={rodapeDoDialogo}>
+              <button type="button" onClick={() => setRechargeModal(null)} className={botao.secundario}>Cancelar</button>
+              <button
+                type="button"
+                onClick={handleRequestRecharge}
+                disabled={!rechargeForm.amount || Number(rechargeForm.amount) <= 0}
+                className={botao.primario}
+              >
+                <Bell className="mr-1.5 h-4 w-4" aria-hidden="true" /> Enviar ao cliente
+              </button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Add Wallet Modal */}
+      {/* Adicionar wallet */}
       <Dialog open={addWalletModal} onOpenChange={setAddWalletModal}>
-        <DialogContent className="bg-card border-border max-w-sm">
-          <DialogHeader><DialogTitle className="text-foreground">Adicionar Wallet de Anúncios</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Cliente</label>
-              <select value={addWalletForm.client_id} onChange={e => setAddWalletForm(f => ({ ...f, client_id: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-                <option value="">Selecionar...</option>
-                {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
-              </select>
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Adicionar wallet de anúncios</DialogTitle>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Cliente" largo>
+                <select value={addWalletForm.client_id} onChange={e => setAddWalletForm(f => ({ ...f, client_id: e.target.value }))} className={campo}>
+                  <option value="">Selecionar...</option>
+                  {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Plataforma">
+                <select value={addWalletForm.platform} onChange={e => setAddWalletForm(f => ({ ...f, platform: e.target.value }))} className={campo}>
+                  <option value="meta">Meta Ads</option>
+                  <option value="google">Google Ads</option>
+                  <option value="tiktok">TikTok Ads</option>
+                  <option value="linkedin">LinkedIn Ads</option>
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Saldo inicial (R$)">
+                <Input type="number" inputMode="decimal" value={addWalletForm.balance} onChange={e => setAddWalletForm(f => ({ ...f, balance: e.target.value }))} className="h-9" placeholder="0" />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <div className={rodapeDoDialogo}>
+              <button type="button" onClick={() => setAddWalletModal(false)} className={botao.secundario}>Cancelar</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!addWalletForm.client_id) { toast.error("Selecione um cliente"); return; }
+                  const existing = (wallets || []).find((w: any) => w.client_id === addWalletForm.client_id && w.platform === addWalletForm.platform);
+                  if (existing) { toast.error("Este cliente já possui wallet para esta plataforma"); return; }
+                  await supabase.from("ads_wallet").insert({
+                    client_id: addWalletForm.client_id,
+                    platform: addWalletForm.platform,
+                    balance: Number(addWalletForm.balance) || 0,
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+                  toast.success("Wallet criado com sucesso!");
+                  setAddWalletModal(false);
+                  setAddWalletForm({ client_id: "", platform: "meta", balance: "0" });
+                }}
+                className={botao.primario}
+              >
+                Criar wallet
+              </button>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Plataforma</label>
-              <select value={addWalletForm.platform} onChange={e => setAddWalletForm(f => ({ ...f, platform: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-                <option value="meta">Meta Ads</option>
-                <option value="google">Google Ads</option>
-                <option value="tiktok">TikTok Ads</option>
-                <option value="linkedin">LinkedIn Ads</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Saldo Inicial (R$)</label>
-              <Input type="number" value={addWalletForm.balance} onChange={e => setAddWalletForm(f => ({ ...f, balance: e.target.value }))} className="mt-1" placeholder="0" />
-            </div>
-            <button
-              onClick={async () => {
-                if (!addWalletForm.client_id) { toast.error("Selecione um cliente"); return; }
-                const existing = (wallets || []).find((w: any) => w.client_id === addWalletForm.client_id && w.platform === addWalletForm.platform);
-                if (existing) { toast.error("Este cliente já possui wallet para esta plataforma"); return; }
-                await supabase.from("ads_wallet").insert({
-                  client_id: addWalletForm.client_id,
-                  platform: addWalletForm.platform,
-                  balance: Number(addWalletForm.balance) || 0,
-                });
-                queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
-                toast.success("Wallet criado com sucesso!");
-                setAddWalletModal(false);
-                setAddWalletForm({ client_id: "", platform: "meta", balance: "0" });
-              }}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
-            >
-              Criar Wallet
-            </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Plan Modal */}
+      {/* Editar plano */}
       <Dialog open={!!editPlanModal} onOpenChange={() => setEditPlanModal(null)}>
-        <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="text-foreground">Editar Plano · {editPlanModal?.company_name || editPlanModal?.full_name}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Valor Mensal (R$)</label>
-              <Input type="number" value={planForm.amount} onChange={e => setPlanForm(f => ({ ...f, amount: e.target.value }))} className="mt-1" />
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6 text-foreground">Editar plano · {editPlanModal?.company_name || editPlanModal?.full_name}</DialogTitle>
+          </DialogHeader>
+          <div className="min-w-0 space-y-4">
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Valor mensal (R$)">
+                <Input type="number" inputMode="decimal" value={planForm.amount} onChange={e => setPlanForm(f => ({ ...f, amount: e.target.value }))} className="h-9" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Data de renovação">
+                <Input type="date" value={planForm.renewal_date} onChange={e => setPlanForm(f => ({ ...f, renewal_date: e.target.value }))} className="h-9" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Descrição do plano" largo>
+                <textarea value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))} className={juntar(campoTexto, "min-h-[64px] resize-none")} rows={2} />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <div className={rodapeDoDialogo}>
+              <button type="button" onClick={() => setEditPlanModal(null)} className={botao.secundario}>Cancelar</button>
+              <button type="button" onClick={handleEditPlan} className={botao.primario}>Salvar</button>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Data de Renovação</label>
-              <Input type="date" value={planForm.renewal_date} onChange={e => setPlanForm(f => ({ ...f, renewal_date: e.target.value }))} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Descrição do Plano</label>
-              <textarea value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={2} />
-            </div>
-            <button onClick={handleEditPlan}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none">
-              Salvar
-            </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Pay Modal */}
+      {/* Registrar pagamento (total ou parcial) */}
       <Dialog open={!!payModal} onOpenChange={() => setPayModal(null)}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Registrar Pagamento</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Registrar pagamento</DialogTitle>
+          </DialogHeader>
           {payModal && (
-            <div className="space-y-4">
-              <div className="bg-secondary/50 rounded-lg p-3">
-                <p className="text-[13px] text-foreground font-medium">{payModal.label}</p>
-                <p className="text-sm font-mono text-foreground mt-1">Valor: {fmt(payModal.amount)}</p>
+            <div className="min-w-0 space-y-4">
+              <div className={juntar(superficie.poco, "px-3 py-2.5")}>
+                <p className={juntar(texto.corpo, "font-medium [overflow-wrap:anywhere]")}>{payModal.label}</p>
+                <p className={juntar(texto.auxiliar, "mt-0.5 tabular-nums")}>Valor {fmt(payModal.amount)}</p>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPayType("full")}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
-                    payType === "full" ? "bg-success/15 border-success/30 text-success" : "bg-secondary border-border text-muted-foreground"
-                  }`}
-                >
-                  Pago total
-                </button>
-                <button
-                  onClick={() => setPayType("partial")}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
-                    payType === "partial" ? "bg-warning/15 border-warning/30 text-warning" : "bg-secondary border-border text-muted-foreground"
-                  }`}
-                >
-                  Pagou parte
-                </button>
-              </div>
+              <SeletorCompacto
+                opcoes={[{ valor: "full", rotulo: "Pago total" }, { valor: "partial", rotulo: "Pagou parte" }]}
+                valor={payType}
+                onEscolher={(v) => setPayType(v === "partial" ? "partial" : "full")}
+                rotulo="Tipo de pagamento"
+                larguraTotal
+              />
 
               {payType === "partial" && (
-                <div>
-                  <label className="text-xs text-muted-foreground">Valor pago (R$)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={payPartialAmount}
-                    onChange={e => setPayPartialAmount(e.target.value)}
-                    className="mt-1"
-                    placeholder={`Máx: ${payModal.amount.toFixed(2)}`}
-                  />
-                  {payPartialAmount && parseFloat(payPartialAmount) > 0 && parseFloat(payPartialAmount) < payModal.amount && (
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Restante: {fmt(payModal.amount - parseFloat(payPartialAmount))}
-                    </p>
-                  )}
-                </div>
+                <GrupoDeCampos colunas={1}>
+                  <CampoDeFormulario
+                    rotulo="Valor pago (R$)"
+                    apoio={payPartialAmount && parseFloat(payPartialAmount) > 0 && parseFloat(payPartialAmount) < payModal.amount
+                      ? `Restante: ${fmt(payModal.amount - parseFloat(payPartialAmount))}`
+                      : undefined}
+                  >
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      value={payPartialAmount}
+                      onChange={e => setPayPartialAmount(e.target.value)}
+                      className="h-9"
+                      placeholder={`Máx: ${payModal.amount.toFixed(2)}`}
+                    />
+                  </CampoDeFormulario>
+                </GrupoDeCampos>
               )}
 
-              <button
-                onClick={handlePayFromPanel}
-                disabled={payType === "partial" && (!payPartialAmount || parseFloat(payPartialAmount) <= 0)}
-                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-success text-success-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {payType === "full" ? `Confirmar · ${fmt(payModal.amount)}` : `Confirmar · ${fmt(parseFloat(payPartialAmount) || 0)}`}
-              </button>
+              <div className={rodapeDoDialogo}>
+                <button type="button" onClick={() => setPayModal(null)} className={botao.secundario}>Cancelar</button>
+                <button
+                  type="button"
+                  onClick={handlePayFromPanel}
+                  disabled={payType === "partial" && (!payPartialAmount || parseFloat(payPartialAmount) <= 0)}
+                  className={botao.primario}
+                >
+                  {payType === "full" ? `Confirmar · ${fmt(payModal.amount)}` : `Confirmar · ${fmt(parseFloat(payPartialAmount) || 0)}`}
+                </button>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -2140,7 +2165,7 @@ export default function AdminFinanceiro() {
   const { profile, loading } = useAuth();
 
   if (loading || !profile) {
-    return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" role="status">Carregando financeiro…</div>;
+    return <Carregando forma="aba" rotulo="Carregando financeiro" />;
   }
 
   return <LegacyFinanceiro />;

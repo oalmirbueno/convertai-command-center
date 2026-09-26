@@ -1,7 +1,27 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Pause, Play } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, Pause, Play } from "lucide-react";
+import {
+  AjudaRecolhida,
+  CampoDeFormulario,
+  EstadoVazio,
+  Etapas,
+  GrupoDeCampos,
+  RegiaoRolavel,
+  Secao,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+  type ItemDeEtapa,
+} from "@/components/sistema";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
 import CobrancasDoCliente from "@/components/admin/CobrancasDoCliente";
@@ -41,6 +61,19 @@ const SERVICES = [
 
 const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "other"];
 const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
+
+/** Partes da ficha (abas). A aberta fica lembrada ao sair e voltar. */
+type AbaDaFicha = "resumo" | "cadastro" | "plano" | "acesso" | "contas" | "onboarding";
+const ABAS_DA_FICHA: AbaDaFicha[] = ["resumo", "cadastro", "plano", "acesso", "contas", "onboarding"];
+
+const STATUS_DO_PROJETO: Record<string, string> = {
+  todo: "A fazer",
+  in_progress: "Em andamento",
+  review: "Em revisão",
+  paused: "Pausado",
+  done: "Concluído",
+  cancelled: "Cancelado",
+};
 
 const CLIENT_STATUS_OPTIONS = [
   { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
@@ -105,6 +138,35 @@ export default function EditClientDrawer({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const accountsSectionRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const [aba, setAba] = useEstadoDaTela<AbaDaFicha>("ficha:aba", "resumo", {
+    validar: (v) => typeof v === "string" && (ABAS_DA_FICHA as string[]).indexOf(v) >= 0,
+  });
+  // Link com ?section=accounts abre direto na parte de contas.
+  useEffect(() => {
+    if (open && initialSection === "accounts") setAba("contas");
+  }, [client?.id, initialSection, open, setAba]);
+
+  // Celular: a ficha ocupa a tela toda por cima da barra do topo e da de baixo
+  // (mesmo combinado da gaveta do agente em src/index.css), e o painel por baixo não rola.
+  useEffect(() => {
+    if (!open) return;
+    let celular = false;
+    try {
+      celular = window.innerWidth < 640;
+      if (celular) document.body.setAttribute("data-gaveta-aberta", "");
+    } catch {
+      /* sem documento */
+    }
+    return () => {
+      if (!celular) return;
+      try {
+        document.body.removeAttribute("data-gaveta-aberta");
+      } catch {
+        /* sem documento */
+      }
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || initialSection !== "accounts") return;
@@ -520,521 +582,642 @@ export default function EditClientDrawer({
     setPaySubmitting(false);
   };
 
-  return (
+  // Travar (Standby) e Retornar: mesmas regras de antes, só saíram do meio do JSX.
+  const retornarCliente = async () => {
+    setSaving(true);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const nextDate = new Date();
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      const nextStr = nextDate.toISOString().slice(0, 10);
+      const planValNum = Number(client.plan_value) || 0;
+
+      const { error } = await supabase.from("profiles").update({
+        plan_status: "active",
+        plan_renewal_date: planValNum > 0 ? nextStr : (client.plan_renewal_date || null),
+      }).eq("id", client.id);
+      if (error) throw error;
+
+      // Retomada = ciclo atual JÁ pago + próxima renovação pendente
+      if (planValNum > 0) {
+        await supabase.from("billing").insert([
+          {
+            client_id: client.id,
+            type: "renewal",
+            amount: planValNum,
+            due_date: todayStr,
+            paid_date: todayStr,
+            paid_amount: planValNum,
+            description: "Mensalidade · Retomada de Standby (pago)",
+            status: "paid",
+          },
+          {
+            client_id: client.id,
+            type: "renewal",
+            amount: planValNum,
+            due_date: nextStr,
+            description: "Mensalidade",
+            status: "pending",
+          },
+        ] as any);
+      }
+
+      setPlanStatus("active");
+      await notifyUser(client.id, "Seu plano foi reativado. Bem-vindo de volta!", "project", "/dashboard");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      toast.success(planValNum > 0 ? "Cliente reativado. Pagamento do ciclo registrado e próxima renovação agendada." : "Cliente reativado.");
+    } catch (e: any) { toast.error(e.message || "Erro ao reativar"); }
+    setSaving(false);
+  };
+
+  const travarCliente = async () => {
+    const proceed = await confirmDialog({
+      title: "Colocar em Standby?",
+      description: "A cobrança recorrente fica pausada até você reativar o cliente.",
+      confirmLabel: "Colocar em Standby",
+    });
+    if (!proceed) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("profiles").update({ plan_status: "standby" }).eq("id", client.id);
+      if (error) throw error;
+      setPlanStatus("standby");
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      toast.success("Cliente em Standby. Cobrança recorrente pausada.");
+    } catch (e: any) { toast.error(e.message || "Erro ao travar"); }
+    setSaving(false);
+  };
+
+  const reenviarConvite = async () => {
+    if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
+    setResendingInvite(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+        body: {
+          profile_id: client.id,
+          new_email: String(client.email).trim().toLowerCase(),
+          new_full_name: (fullName || client.full_name || "").trim(),
+        },
+      });
+      const result = (Array.isArray(data) ? data[0] : data) as any;
+      if (error || result?.error) throw new Error(result?.error || error?.message);
+      const delivery = result?.delivery;
+      if (delivery?.status === "sent") {
+        toast.success(`E-mail ENTREGUE ao provedor com sucesso para ${client.email}. Peça para conferir a caixa de entrada e o spam.`);
+      } else if (["failed", "dlq", "bounced", "suppressed"].includes(delivery?.status)) {
+        toast.error(`O envio FALHOU no provedor: ${delivery?.error || delivery.status}. Verifique a chave do Resend e o domínio de envio.`);
+      } else {
+        toast.info(`Convite enfileirado para ${client.email}. A entrega será confirmada pelo despachante em instantes.`);
+      }
+    } catch (err: any) {
+      toast.error("Não foi possível reenviar agora. Tente novamente em instantes.");
+    } finally {
+      setResendingInvite(false);
+    }
+  };
+
+  const gerarLinkDeAcesso = async () => {
+    if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
+    setGeneratingLink(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+        body: {
+          profile_id: client.id,
+          new_email: String(client.email).trim().toLowerCase(),
+          new_full_name: (fullName || client.full_name || "").trim(),
+          send_email: false,
+        },
+      });
+      const result = (Array.isArray(data) ? data[0] : data) as any;
+      if (error || result?.error || !result?.firstAccessUrl) throw new Error(result?.error || error?.message);
+      setFirstAccessLink(String(result.firstAccessUrl));
+      try {
+        await navigator.clipboard.writeText(String(result.firstAccessUrl));
+        toast.success("Link gerado e copiado. Cole no WhatsApp do cliente.");
+      } catch {
+        toast.success("Link gerado. Copie no campo abaixo.");
+      }
+    } catch {
+      toast.error("Não foi possível gerar o link agora. Tente novamente em instantes.");
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const nomeDoCliente = client.company_name || client.full_name;
+  const abas: ItemDeEtapa[] = [
+    { valor: "resumo", rotulo: "Resumo", contador: execPendingFiles || null },
+    { valor: "cadastro", rotulo: "Cadastro" },
+    ...(isAdmin ? [{ valor: "plano", rotulo: "Plano e cobrança", contador: execOverdueBills || null }] : []),
+    ...(isAdmin ? [{ valor: "acesso", rotulo: "Acesso" }] : []),
+    { valor: "contas", rotulo: "Contas e cofre" },
+    { valor: "onboarding", rotulo: "Onboarding" },
+  ];
+  const abaAberta: AbaDaFicha = abas.some((a) => a.valor === aba) ? aba : "resumo";
+  const painelDaAba = (valor: AbaDaFicha) => juntar("space-y-6", abaAberta !== valor && "hidden");
+  const statusAtual = CLIENT_STATUS_OPTIONS.find((s) => s.value === planStatus);
+
+  // Portal no body: dentro do conteúdo do painel (camada fixa própria no celular) a ficha ficava por baixo das barras.
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6">
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:p-6">
+        <div className="absolute inset-0 bg-black/60" onClick={onClose} />
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="client-drawer-title"
-          className="relative bg-card border border-border w-full max-w-3xl h-full sm:h-auto sm:max-h-[92vh] sm:rounded-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-200 flex flex-col overflow-hidden"
+          className="relative flex h-full w-full max-w-4xl flex-col overflow-hidden border-border bg-card sm:h-[88vh] sm:max-h-[900px] sm:rounded-lg sm:border"
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div className="min-w-0">
-              <h2 id="client-drawer-title" className="truncate text-sm font-semibold text-foreground">
-                Cliente: {client.company_name || client.full_name}
-              </h2>
-              <p className="text-[11px] text-muted-foreground">Cadastro, contas e canais</p>
+          {/* Cabeçalho da ficha: logo (troca ao tocar), nome, estado e fechar */}
+          <div className="flex min-w-0 items-center border-b border-border px-4 pb-2 pt-3 sm:px-5">
+            <div className="group relative shrink-0">
+              {avatarUrl ? (
+                <div className="h-11 w-11 overflow-hidden rounded-full bg-muted ring-1 ring-border">
+                  <img src={avatarUrl} alt={client.full_name} className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <FotoDoCliente nome={nomeDoCliente || ""} foto={fotoFallback} tamanho="md" />
+              )}
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                aria-label={avatarUrl ? "Trocar a logo do cliente" : "Subir a logo do cliente"}
+                title={avatarUrl ? "Trocar a logo" : fotoFallback?.tipo === "instagram" ? "Foto do Instagram. Toque para subir a logo." : "Subir a logo"}
+                className={juntar(
+                  "absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground",
+                  foco,
+                )}
+              >
+                {uploadingAvatar ? <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden="true" /> : <Camera className="h-2.5 w-2.5" aria-hidden="true" />}
+              </button>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
             </div>
-            <button ref={closeButtonRef} aria-label="Fechar dados do cliente" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
-              <X className="w-4 h-4" />
+            <div className="ml-3 min-w-0 flex-1">
+              <h2 id="client-drawer-title" className={juntar(texto.tituloSecao, "truncate")}>
+                {nomeDoCliente}
+              </h2>
+              <p className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center truncate")}>
+                {statusAtual && <span className={`mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusAtual.color}`} aria-hidden="true" />}
+                <span className="truncate">
+                  {statusAtual?.label || "Sem status"}
+                  {client.full_name && client.company_name ? ` · ${client.full_name}` : ""}
+                </span>
+              </p>
+            </div>
+            <button ref={closeButtonRef} type="button" aria-label="Fechar dados do cliente" onClick={onClose} className={juntar(botao.icone, "ml-2")}>
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
+          <div className="border-b border-border px-2 sm:px-3">
+            <Etapas itens={abas} valor={abaAberta} onEscolher={(v) => setAba(v as AbaDaFicha)} rotulo="Partes da ficha do cliente" />
+          </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-            {/* Avatar upload */}
-            <div className="flex items-center gap-4 pb-2">
-              <div className="relative group">
-                {avatarUrl ? (
-                  <div className="w-16 h-16 rounded-full overflow-hidden bg-secondary border border-border flex items-center justify-center">
-                    <img src={avatarUrl} alt={client.full_name} className="w-full h-full object-cover" />
-                  </div>
-                ) : (
-                  <FotoDoCliente nome={client.company_name || client.full_name || ""} foto={fotoFallback} tamanho="xl" />
-                )}
-                <button
-                  onClick={() => avatarInputRef.current?.click()}
-                  disabled={uploadingAvatar}
-                  className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer border-none"
-                >
-                  {uploadingAvatar ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
-                </button>
-                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">{client.company_name || client.full_name}</p>
-                <p className="text-[11px] text-muted-foreground">{avatarUrl ? "Clique na foto para alterar a logo" : fotoFallback?.tipo === "instagram" ? "Foto do Instagram. Clique para subir a logo." : fotoFallback?.tipo === "logo" ? "Logo dos arquivos. Clique para trocar." : "Clique para subir a logo"}</p>
-              </div>
-            </div>
-            {/* Executive Summary */}
-            {isAdmin && (
-              <div className="bg-secondary/50 border border-border rounded-xl p-3.5 space-y-2">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
-                  <Activity className="w-3 h-3" /> Resumo Executivo
-                </p>
-                <div className="grid grid-cols-3 gap-2">
+          <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ficha:${client.id}:${abaAberta}`} className="px-4 py-5 sm:px-5">
+            {/* ── Resumo: números, operação, projetos e briefing ── */}
+            <div className={painelDaAba("resumo")}>
+              {isAdmin && (
+                <dl className={juntar(superficie.poco, "grid grid-cols-3 gap-y-3 px-2 py-3 sm:grid-cols-6")} aria-label="Resumo executivo">
                   {[
-                    { label: "Projetos", value: execActiveProjects, icon: Briefcase, color: "text-primary" },
-                    { label: "Tarefas", value: execOpenTasks, icon: ListChecks, color: "text-sky-400", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
-                    { label: "Aprovações", value: execPendingFiles, icon: PackageCheck, color: execPendingFiles > 0 ? "text-amber-400" : "text-muted-foreground" },
-                    { label: "Relatórios", value: execPublishedReports, icon: BarChart3, color: "text-primary" },
-                    { label: "Pendências", value: execPendingBills, icon: DollarSign, color: execPendingBills > 0 ? "text-warning" : "text-muted-foreground" },
-                    { label: "Atrasados", value: execOverdueBills, icon: AlertCircle, color: execOverdueBills > 0 ? "text-destructive" : "text-muted-foreground" },
+                    { label: "Projetos", value: execActiveProjects, color: "text-foreground" },
+                    { label: "Tarefas", value: execOpenTasks, color: "text-foreground", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
+                    { label: "Aprovações", value: execPendingFiles, color: execPendingFiles > 0 ? "text-warning" : "text-foreground" },
+                    { label: "Relatórios", value: execPublishedReports, color: "text-foreground" },
+                    { label: "Pendências", value: execPendingBills, color: execPendingBills > 0 ? "text-warning" : "text-foreground" },
+                    { label: "Atrasados", value: execOverdueBills, color: execOverdueBills > 0 ? "text-destructive" : "text-foreground" },
                   ].map((m) => (
-                    <div key={m.label} className="text-center py-1.5">
-                      <m.icon className={`w-3.5 h-3.5 mx-auto mb-0.5 ${m.color}`} />
-                      <p className="text-sm font-mono font-medium text-foreground">{m.value}</p>
-                      <p className="text-[9px] text-muted-foreground">{m.label}</p>
-                      {"alert" in m && m.alert && <p className="text-[8px] text-destructive">{m.alert}</p>}
+                    <div key={m.label} className="min-w-0 px-2 text-center">
+                      <dd className={juntar("text-[17px] font-semibold leading-6 tabular-nums", m.color)}>{m.value}</dd>
+                      <dt className={juntar(texto.auxiliar, "truncate")}>{m.label}</dt>
+                      {"alert" in m && m.alert && <p className="truncate text-[11px] text-destructive">{m.alert}</p>}
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
+                </dl>
+              )}
 
-            <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3.5">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Operação do cliente
-                  </p>
-                  <p className="mt-1 text-[12px] text-muted-foreground">
-                    Crie uma entrega ou acompanhe o que já foi enviado.
-                  </p>
+              <Secao
+                titulo="Operação"
+                descricao={execPendingFiles > 0 ? `${execPendingFiles} aguardando cliente` : undefined}
+                ajuda="Crie uma entrega ou acompanhe o que já foi enviado para este cliente."
+              >
+                <div className="-m-1 flex flex-wrap [&>*]:m-1">
+                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`)} className={botao.primario}>
+                    <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    Novo conteúdo
+                  </button>
+                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`)} className={botao.secundario}>
+                    <FolderOpen className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
+                    Ver entregas
+                  </button>
+                  <button type="button" onClick={() => openClientOperation(`/aprovacoes?client=${encodeURIComponent(client.id)}`)} className={botao.secundario}>
+                    <PackageCheck className="mr-1.5 h-4 w-4 text-warning" aria-hidden="true" />
+                    Aprovações
+                  </button>
                 </div>
-                {execPendingFiles > 0 && (
-                  <span className="shrink-0 rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">
-                    {execPendingFiles} aguardando cliente
-                  </span>
+              </Secao>
+
+              {/* Projetos do cliente: criar aqui ou puxar um que ficou solto */}
+              <Secao
+                titulo="Projetos"
+                divisoria
+                descricao={(clientProjects || []).length === 0 ? "Nenhum projeto ainda" : `${(clientProjects || []).length} neste cadastro`}
+                acao={
+                  <>
+                    <button type="button" onClick={() => setVincularAberto((v) => !v)} aria-expanded={vincularAberto} className={botao.secundario} aria-label="Vincular projeto existente">
+                      <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />
+                      <span className="ml-1.5 hidden sm:inline">Vincular existente</span>
+                    </button>
+                    <button type="button" onClick={() => setNovoProjetoAberto(true)} className={botao.secundario} aria-label="Novo projeto">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                      <span className="ml-1.5 hidden sm:inline">Novo projeto</span>
+                    </button>
+                  </>
+                }
+              >
+                {vincularAberto && (
+                  <div className={juntar(superficie.poco, "mb-3 p-3")}>
+                    <CampoDeFormulario
+                      rotulo="Projeto que vem para este cliente"
+                      ajuda="O projeto sai do cadastro atual e passa para cá com tarefas, marcos e arquivos. Fica registrado no diário dos dois."
+                    >
+                      <select value={projetoParaVincular} onChange={(e) => setProjetoParaVincular(e.target.value)} className={campo}>
+                        <option value="">Escolha o projeto</option>
+                        {projetosDeOutros.map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} · hoje em {p.client?.company_name || p.client?.full_name || "sem cliente"} ({p.status})
+                          </option>
+                        ))}
+                      </select>
+                    </CampoDeFormulario>
+                    <div className="mt-3 flex justify-end [&>*+*]:ml-2">
+                      <button type="button" onClick={() => setVincularAberto(false)} className={botao.discreto}>
+                        Cancelar
+                      </button>
+                      <button type="button" disabled={!projetoParaVincular || vinculando} onClick={() => void vincularProjeto()} className={botao.primario}>
+                        {vinculando ? "Vinculando…" : "Vincular a este cliente"}
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </div>
+                {(clientProjects || []).length > 0 ? (
+                  <ul className="divide-y divide-border">
+                    {(clientProjects || []).map((p: any) => (
+                      <li key={p.id} className="flex min-w-0 items-center justify-between py-2">
+                        <span className={juntar(texto.corpo, "min-w-0 truncate")}>{p.name}</span>
+                        <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
+                          {STATUS_DO_PROJETO[p.status] || p.status} · {p.progress ?? 0}%
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EstadoVazio compacto titulo="Sem projeto." descricao="Crie um ou vincule um que já existe." />
+                )}
+              </Secao>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`);
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-primary bg-primary px-3 py-2.5 text-left text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                >
-                  <Plus className="h-4 w-4 shrink-0" />
-                  Novo conteúdo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`);
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-[12px] font-medium text-foreground transition-colors hover:border-primary/40"
-                >
-                  <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
-                  Ver entregas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    openClientOperation(`/aprovacoes?client=${encodeURIComponent(client.id)}`);
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-[12px] font-medium text-foreground transition-colors hover:border-primary/40"
-                >
-                  <PackageCheck className="h-4 w-4 shrink-0 text-warning" />
-                  Aprovações
-                </button>
-              </div>
+              {clientBriefing && (
+                <Secao titulo="Briefing" divisoria>
+                  <button
+                    type="button"
+                    onClick={() => setBriefingOpen(true)}
+                    className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-1.5 text-left hover:bg-muted/50", foco)}
+                  >
+                    <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>Ver diagnóstico estratégico</span>
+                    <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{new Date(clientBriefing.created_at).toLocaleDateString("pt-BR")}</span>
+                  </button>
+                </Secao>
+              )}
+
             </div>
 
-            {/* Projetos do cliente: criar aqui ou puxar um que ficou solto */}
-            <div className="rounded-xl border border-border bg-secondary/20 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Projetos</p>
-                  <p className="mt-1 text-[12px] text-muted-foreground">
-                    {(clientProjects || []).length === 0
-                      ? "Este cliente ainda não tem projeto. Crie um ou vincule um que já existe."
-                      : `${(clientProjects || []).length} projeto(s) neste cadastro.`}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNovoProjetoAberto(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Novo projeto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVincularAberto((v) => !v)}
-                    className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[12px] font-medium text-foreground hover:border-primary/40"
-                  >
-                    <Briefcase className="h-3.5 w-3.5 text-primary" /> Vincular projeto existente
-                  </button>
-                </div>
-              </div>
-              {(clientProjects || []).length > 0 && (
-                <ul className="mt-3 space-y-1">
-                  {(clientProjects || []).map((p: any) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2 text-[12px]">
-                      <span className="truncate text-foreground">{p.name}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">{p.status} · {p.progress ?? 0}%</span>
+            {/* ── Cadastro: dados, status, tipo, marca e serviços ── */}
+            <div className={painelDaAba("cadastro")}>
+              <GrupoDeCampos titulo="Dados">
+                <CampoDeFormulario rotulo="Nome completo" obrigatorio>
+                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Empresa" obrigatorio>
+                  <input value={company} onChange={(e) => setCompany(e.target.value)} className={campo} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="E-mail" apoio="É o login do cliente.">
+                  <input value={email} disabled className={juntar(campo, "text-muted-foreground")} />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Telefone">
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className={campo} inputMode="tel" />
+                </CampoDeFormulario>
+              </GrupoDeCampos>
+
+              <GrupoDeCampos titulo="Situação" colunas={1}>
+                <CampoDeFormulario rotulo="Status do cliente">
+                  <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
+                    <SeletorCompacto
+                      rotulo="Status do cliente"
+                      modo="segmentado"
+                      opcoes={CLIENT_STATUS_OPTIONS.map((s) => ({ valor: s.value, rotulo: s.label }))}
+                      valor={planStatus}
+                      onEscolher={setPlanStatus}
+                    />
+                    {/* Ação rápida: Travar / Retornar (recorrentes e híbridos) */}
+                    {isAdmin && (clientType === "recurring" || clientType === "hybrid") && (
+                      planStatus === "standby" ? (
+                        <button type="button" onClick={retornarCliente} disabled={saving} className={juntar(botao.secundario, "text-success")}>
+                          <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                          Retornar cliente
+                        </button>
+                      ) : (
+                        <button type="button" onClick={travarCliente} disabled={saving} className={botao.secundario}>
+                          <Pause className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                          Travar (Standby)
+                        </button>
+                      )
+                    )}
+                  </div>
+                </CampoDeFormulario>
+              </GrupoDeCampos>
+
+              <GrupoDeCampos>
+                <CampoDeFormulario rotulo="Tipo de cliente">
+                  <SeletorCompacto
+                    rotulo="Tipo de cliente"
+                    larguraTotal
+                    opcoes={[
+                      { valor: "recurring", rotulo: "Recorrente" },
+                      { valor: "one_off", rotulo: "Avulso" },
+                      { valor: "hybrid", rotulo: "Híbrido" },
+                    ]}
+                    valor={clientType}
+                    onEscolher={(v) => setClientType(v as any)}
+                  />
+                </CampoDeFormulario>
+                <CampoDeFormulario rotulo="Marca">
+                  <SeletorCompacto
+                    rotulo="Marca"
+                    larguraTotal
+                    opcoes={[
+                      { valor: "", rotulo: "Nenhuma" },
+                      { valor: "aceleriq", rotulo: "AcelerIQ" },
+                      { valor: "sitebolt", rotulo: "SiteBolt" },
+                    ]}
+                    valor={brand}
+                    onEscolher={(v) => setBrand(v as any)}
+                  />
+                </CampoDeFormulario>
+              </GrupoDeCampos>
+
+              <Secao titulo="Serviços ativos" divisoria descricao={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length}`}>
+                <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+                  {SERVICES.map((s) => (
+                    <li key={s.key} className="flex min-w-0 items-center justify-between border-b border-border py-2">
+                      <span className={juntar(texto.corpo, "min-w-0 truncate")} id={`servico-${s.key}`}>
+                        {s.label}
+                      </span>
+                      <Switch aria-labelledby={`servico-${s.key}`} checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
                     </li>
                   ))}
                 </ul>
-              )}
-              {vincularAberto && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-3">
-                  <select
-                    value={projetoParaVincular}
-                    onChange={(e) => setProjetoParaVincular(e.target.value)}
-                    className="min-w-0 flex-1 rounded-md border border-border bg-secondary px-2 py-2 text-[12px] text-foreground"
-                  >
-                    <option value="">Escolha o projeto que vai para este cliente…</option>
-                    {projetosDeOutros.map((p: any) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} · hoje em {p.client?.company_name || p.client?.full_name || "sem cliente"} ({p.status})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={!projetoParaVincular || vinculando}
-                    onClick={() => void vincularProjeto()}
-                    className="rounded-md bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
-                  >
-                    {vinculando ? "Vinculando…" : "Vincular a este cliente"}
-                  </button>
-                  <p className="basis-full text-[10.5px] text-muted-foreground">
-                    O projeto sai do cadastro atual e passa para cá com tarefas, marcos e arquivos. Fica registrado no diário dos dois.
-                  </p>
-                </div>
-              )}
+              </Secao>
             </div>
 
-            {/* Contas e canais cadastrados manualmente, sem credenciais */}
-            <div ref={accountsSectionRef} className="scroll-mt-4">
-              <ClientConnectionsPanel
-                key={client.id}
-                clientId={client.id}
-                clientName={
-                  client.company_name || client.full_name || "Cliente"
-                }
-                initialProjectId={initialProjectId}
-              />
-            </div>
-
-            {/* Status do Cliente */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status do Cliente</label>
-              <div className="flex gap-1.5 flex-wrap">
-                {CLIENT_STATUS_OPTIONS.map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => setPlanStatus(s.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
-                      planStatus === s.value
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full ${s.color}`} />
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Quick action: Travar / Retornar (recorrentes e híbridos) */}
-              {isAdmin && (clientType === "recurring" || clientType === "hybrid") && (
-                planStatus === "standby" ? (
-                  <button
-                    onClick={async () => {
-                      setSaving(true);
-                      try {
-                        const todayStr = new Date().toISOString().slice(0, 10);
-                        const nextDate = new Date();
-                        nextDate.setMonth(nextDate.getMonth() + 1);
-                        const nextStr = nextDate.toISOString().slice(0, 10);
-                        const planValNum = Number(client.plan_value) || 0;
-
-                        const { error } = await supabase.from("profiles").update({
-                          plan_status: "active",
-                          plan_renewal_date: planValNum > 0 ? nextStr : (client.plan_renewal_date || null),
-                        }).eq("id", client.id);
-                        if (error) throw error;
-
-                        // Retomada = ciclo atual JÁ pago + próxima renovação pendente
-                        if (planValNum > 0) {
-                          await supabase.from("billing").insert([
-                            {
-                              client_id: client.id,
-                              type: "renewal",
-                              amount: planValNum,
-                              due_date: todayStr,
-                              paid_date: todayStr,
-                              paid_amount: planValNum,
-                              description: "Mensalidade · Retomada de Standby (pago)",
-                              status: "paid",
-                            },
-                            {
-                              client_id: client.id,
-                              type: "renewal",
-                              amount: planValNum,
-                              due_date: nextStr,
-                              description: "Mensalidade",
-                              status: "pending",
-                            },
-                          ] as any);
-                        }
-
-                        setPlanStatus("active");
-                        await notifyUser(client.id, "Seu plano foi reativado. Bem-vindo de volta!", "project", "/dashboard");
-                        queryClient.invalidateQueries({ queryKey: ["clients"] });
-                        queryClient.invalidateQueries({ queryKey: ["billing"] });
-                        toast.success(planValNum > 0 ? "Cliente reativado. Pagamento do ciclo registrado e próxima renovação agendada." : "Cliente reativado.");
-                      } catch (e: any) { toast.error(e.message || "Erro ao reativar"); }
-                      setSaving(false);
-                    }}
-                    disabled={saving}
-                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-4 h-4" />
-                    Retornar cliente
-                  </button>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      const proceed = await confirmDialog({
-                        title: "Colocar em Standby?",
-                        description: "A cobrança recorrente fica pausada até você reativar o cliente.",
-                        confirmLabel: "Colocar em Standby",
-                      });
-                      if (!proceed) return;
-                      setSaving(true);
-                      try {
-                        const { error } = await supabase.from("profiles").update({ plan_status: "standby" }).eq("id", client.id);
-                        if (error) throw error;
-                        setPlanStatus("standby");
-                        queryClient.invalidateQueries({ queryKey: ["clients"] });
-                        queryClient.invalidateQueries({ queryKey: ["billing"] });
-                        toast.success("Cliente em Standby. Cobrança recorrente pausada.");
-                      } catch (e: any) { toast.error(e.message || "Erro ao travar"); }
-                      setSaving(false);
-                    }}
-                    disabled={saving}
-                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-medium bg-transparent text-foreground border border-border hover:border-muted-foreground/50 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Pause className="w-4 h-4" />
-                    Travar (Standby)
-                  </button>
-                )
-              )}
-            </div>
-
-            {/* Cobranças editáveis: valor, vencimento e pago/pendente. É o
-                caminho de corrigir o financeiro sem caçar linha no banco. */}
-            {client?.id && <CobrancasDoCliente clientId={client.id} />}
-
-            {/* Tipo de Cliente + Brand */}
-            <div className="space-y-3 p-3 rounded-[10px] border border-border bg-secondary/30">
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Tipo de Cliente</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: "recurring", label: "Recorrente" },
-                    { v: "one_off", label: "Avulso" },
-                    { v: "hybrid", label: "Híbrido" },
-                  ].map((opt) => (
-                    <button key={opt.v} type="button" onClick={() => setClientType(opt.v as any)}
-                      className={`px-2 py-1.5 rounded-md text-[11px] border transition-all cursor-pointer ${
-                        clientType === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
-                      }`}>{opt.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: "", label: "-" },
-                    { v: "aceleriq", label: "AcelerIQ" },
-                    { v: "sitebolt", label: "SiteBolt" },
-                  ].map((opt) => (
-                    <button key={opt.v} type="button" onClick={() => setBrand(opt.v as any)}
-                      className={`px-2 py-1.5 rounded-md text-[11px] border transition-all cursor-pointer ${
-                        brand === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
-                      }`}>{opt.label}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo</label>
-              <input value={fullName} onChange={(e) => setFullName(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Empresa</label>
-              <input value={company} onChange={(e) => setCompany(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Email</label>
-              <input value={email} disabled
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-muted-foreground cursor-not-allowed" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Telefone</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-            </div>
-
-            {/* Admin-only fields */}
+            {/* ── Plano e cobrança (admin) ── */}
             {isAdmin && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Plano do Catálogo</label>
-                  <select
-                    value={matchedCatalogPlan?.id || ""}
-                    onChange={(e) => {
-                      const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
-                      if (!plan) return;
-                      const version = plan.currentVersion || plan.versions[0] || null;
-                      setPlanName(plan.name);
-                      if (version) setPlanValue(String(version.finalAmount || version.amount));
-                    }}
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
-                  >
-                    <option value="">Manual / fora do catálogo</option>
-                    {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
-                      const v = p.currentVersion || p.versions[0] || null;
-                      return (
-                        <option key={p.id} value={p.id}>
-                          {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche nome e valor. O valor continua editável sem sair do plano.</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Plano</label>
-                  <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex: Básico, Pro, Premium"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Valor do Plano (R$)</label>
-                  <input type="number" step="0.01" value={planValue} onChange={(e) => setPlanValue(e.target.value)} placeholder="Ex: 1500.00"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                  {matchedCatalogPlan && catalogPlanValue !== null && planValue && Math.abs(parseFloat(planValue) - catalogPlanValue) > 0.009 && (
-                    <p className="text-[10px] text-info">
-                      Valor de tabela do plano: R$ {catalogPlanValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · este cliente usa um valor ajustado dentro do plano.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Data de Vencimento</label>
-                  <input type="date" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)}
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-                <div className="flex items-center justify-between gap-3 bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
-                    <p className="text-[10px] text-muted-foreground">Cadastro só para organização · fica fora de cobranças, alertas de atraso, "sem plano" e MRR.</p>
-                  </div>
-                  <Switch
-                    checked={Boolean(services.internal_company)}
-                    onCheckedChange={(v) => setServices((prev) => ({ ...prev, internal_company: v }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</label>
-                  <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
-                    Cliente não recebeu o e-mail para criar a senha? Reenvie o convite aqui: um novo link seguro é gerado e enviado direto para o e-mail cadastrado.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={resendingInvite}
-                    onClick={async () => {
-                      if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
-                      setResendingInvite(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
-                          body: {
-                            profile_id: client.id,
-                            new_email: String(client.email).trim().toLowerCase(),
-                            new_full_name: (fullName || client.full_name || "").trim(),
-                          },
-                        });
-                        const result = (Array.isArray(data) ? data[0] : data) as any;
-                        if (error || result?.error) throw new Error(result?.error || error?.message);
-                        const delivery = result?.delivery;
-                        if (delivery?.status === "sent") {
-                          toast.success(`E-mail ENTREGUE ao provedor com sucesso para ${client.email}. Peça para conferir a caixa de entrada e o spam.`);
-                        } else if (["failed", "dlq", "bounced", "suppressed"].includes(delivery?.status)) {
-                          toast.error(`O envio FALHOU no provedor: ${delivery?.error || delivery.status}. Verifique a chave do Resend e o domínio de envio.`);
-                        } else {
-                          toast.info(`Convite enfileirado para ${client.email}. A entrega será confirmada pelo despachante em instantes.`);
-                        }
-                      } catch (err: any) {
-                        toast.error("Não foi possível reenviar agora. Tente novamente em instantes.");
-                      } finally {
-                        setResendingInvite(false);
-                      }
-                    }}
-                    className="w-full py-2.5 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    {resendingInvite ? "Reenviando convite…" : "Reenviar convite de primeiro acesso"}
-                  </button>
-                </div>
-                {!client?.first_access_used_at && (
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Link de Primeiro Acesso</label>
-                    <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
-                      Gera o link para você enviar na mão (WhatsApp) sem disparar e-mail. Cada novo link invalida o anterior, então envie sempre o último gerado.
-                    </p>
-                    <button
-                      type="button"
-                      disabled={generatingLink}
-                      onClick={async () => {
-                        if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
-                        setGeneratingLink(true);
-                        try {
-                          const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
-                            body: {
-                              profile_id: client.id,
-                              new_email: String(client.email).trim().toLowerCase(),
-                              new_full_name: (fullName || client.full_name || "").trim(),
-                              send_email: false,
-                            },
-                          });
-                          const result = (Array.isArray(data) ? data[0] : data) as any;
-                          if (error || result?.error || !result?.firstAccessUrl) throw new Error(result?.error || error?.message);
-                          setFirstAccessLink(String(result.firstAccessUrl));
-                          try {
-                            await navigator.clipboard.writeText(String(result.firstAccessUrl));
-                            toast.success("Link gerado e copiado. Cole no WhatsApp do cliente.");
-                          } catch {
-                            toast.success("Link gerado. Copie no campo abaixo.");
-                          }
-                        } catch {
-                          toast.error("Não foi possível gerar o link agora. Tente novamente em instantes.");
-                        } finally {
-                          setGeneratingLink(false);
-                        }
+              <div className={painelDaAba("plano")}>
+                <GrupoDeCampos titulo="Plano">
+                  <CampoDeFormulario rotulo="Plano do catálogo" apoio="Preenche nome e valor. O valor segue editável.">
+                    <select
+                      value={matchedCatalogPlan?.id || ""}
+                      onChange={(e) => {
+                        const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
+                        if (!plan) return;
+                        const version = plan.currentVersion || plan.versions[0] || null;
+                        setPlanName(plan.name);
+                        if (version) setPlanValue(String(version.finalAmount || version.amount));
                       }}
-                      className="w-full py-2.5 rounded-[10px] text-[13px] font-medium bg-secondary text-foreground border border-border hover:border-primary/50 transition-colors cursor-pointer disabled:opacity-50"
+                      className={campo}
                     >
-                      {generatingLink ? "Gerando link…" : firstAccessLink ? "Gerar novo link" : "Gerar link de primeiro acesso"}
+                      <option value="">Manual / fora do catálogo</option>
+                      {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
+                        const v = p.currentVersion || p.versions[0] || null;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Nome do plano">
+                    <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex.: Básico, Pro, Premium" className={campo} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario
+                    rotulo="Valor do plano (R$)"
+                    apoio={
+                      matchedCatalogPlan && catalogPlanValue !== null && planValue && Math.abs(parseFloat(planValue) - catalogPlanValue) > 0.009
+                        ? `Tabela: R$ ${catalogPlanValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. Valor ajustado para este cliente.`
+                        : undefined
+                    }
+                  >
+                    <input type="number" step="0.01" value={planValue} onChange={(e) => setPlanValue(e.target.value)} placeholder="Ex.: 1500.00" className={juntar(campo, "tabular-nums")} />
+                  </CampoDeFormulario>
+                  <CampoDeFormulario rotulo="Data de vencimento">
+                    <input type="date" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)} className={campo} />
+                  </CampoDeFormulario>
+                  <div className={juntar(superficie.poco, "flex min-w-0 items-center justify-between px-3 py-2.5 sm:col-span-full")}>
+                    <div className="mr-3 flex min-w-0 items-center">
+                      <span className={juntar(texto.corpo, "font-medium")} id="empresa-do-grupo">
+                        Empresa do grupo (interna)
+                      </span>
+                      <AjudaRecolhida className="ml-1.5">Cadastro só para organização. Fica fora de cobranças, alertas de atraso, "sem plano" e MRR.</AjudaRecolhida>
+                    </div>
+                    <Switch
+                      aria-labelledby="empresa-do-grupo"
+                      checked={Boolean(services.internal_company)}
+                      onCheckedChange={(v) => setServices((prev) => ({ ...prev, internal_company: v }))}
+                    />
+                  </div>
+                </GrupoDeCampos>
+
+                {/* Cobranças editáveis: valor, vencimento e pago/pendente. É o
+                    caminho de corrigir o financeiro sem caçar linha no banco. */}
+                {client?.id && <CobrancasDoCliente clientId={client.id} />}
+
+                {/* Pagamentos de projetos não recorrentes */}
+                {nonRecurringProjects && nonRecurringProjects.length > 0 && (
+                  <Secao titulo="Pagamentos de projetos" divisoria descricao={`${nonRecurringProjects.length} projeto(s) avulso(s)`}>
+                    <ul className="divide-y divide-border">
+                      {nonRecurringProjects.map((proj: any) => {
+                        const pay = proj.payment;
+                        const isExpanded = expandedProject === proj.id;
+
+                        if (!pay) {
+                          return (
+                            <li key={proj.id} className="py-3">
+                              <div className="flex min-w-0 items-center justify-between">
+                                <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{proj.name}</p>
+                                {payCreateForProject !== proj.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                    className={juntar(botao.discreto, "ml-3 h-8 text-primary")}
+                                  >
+                                    <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Criar plano de pagamento
+                                  </button>
+                                )}
+                              </div>
+                              {payCreateForProject === proj.id && (
+                                <div className={juntar(superficie.poco, "mt-3 p-3")}>
+                                  <GrupoDeCampos colunas={3}>
+                                    <CampoDeFormulario rotulo="Valor total (R$)" obrigatorio>
+                                      <input type="number" placeholder="5000" value={payTotal} onChange={(e) => setPayTotal(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                    </CampoDeFormulario>
+                                    <CampoDeFormulario rotulo="Entrada (%)">
+                                      <input type="number" min="0" max="100" value={payEntryPct} onChange={(e) => setPayEntryPct(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                    </CampoDeFormulario>
+                                    <CampoDeFormulario rotulo="Parcelas">
+                                      <input type="number" min="1" max="24" value={payInstCount} onChange={(e) => setPayInstCount(e.target.value)} className={juntar(campo, "tabular-nums")} />
+                                    </CampoDeFormulario>
+                                    <CampoDeFormulario rotulo="Observações" largo>
+                                      <input placeholder="Opcional" value={payNotes} onChange={(e) => setPayNotes(e.target.value)} className={campo} />
+                                    </CampoDeFormulario>
+                                  </GrupoDeCampos>
+                                  <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between">
+                                    <p className={juntar(texto.auxiliar, "mr-3 min-w-0 tabular-nums")}>
+                                      {parseFloat(payTotal) > 0
+                                        ? `Entrada R$ ${((parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${payEntryPct}%) · ${payInstCount}x de R$ ${(((parseFloat(payTotal) - (parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100) / (parseInt(payInstCount) || 1))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                                        : ""}
+                                    </p>
+                                    <div className="flex [&>*+*]:ml-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                        className={botao.discreto}
+                                      >
+                                        Cancelar
+                                      </button>
+                                      <button type="button" onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !parseFloat(payTotal)} className={botao.primario}>
+                                        {paySubmitting ? "Criando..." : "Criar plano"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        }
+
+                        const installments = pay.installments || [];
+                        const paidTotal = installments.filter((i: any) => i.status === "paid").reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+                        const remaining = pay.total_value - paidTotal;
+                        const paidCount = installments.filter((i: any) => i.status === "paid").length;
+                        const totalCount = installments.length;
+                        const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
+
+                        return (
+                          <li key={proj.id} className="py-1">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedProject(isExpanded ? null : proj.id)}
+                              aria-expanded={isExpanded}
+                              className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-2 text-left hover:bg-muted/40", foco)}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-center">
+                                  <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{proj.name}</p>
+                                  {hasOverdue && <span className={juntar(etiqueta, "ml-2 bg-destructive/10 text-destructive")}>Atrasado</span>}
+                                </div>
+                                <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                                  <span className="text-success">R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                  {" de "}R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  <span className="text-warning"> · falta R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                </p>
+                                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                                  <div className="h-full rounded-full bg-success" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
+                                </div>
+                              </div>
+                              {isExpanded ? <ChevronUp className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="pb-2 pl-1">
+                                <p className={juntar(texto.auxiliar, "mb-1 tabular-nums")}>{paidCount}/{totalCount} parcelas · entrada {pay.entry_percentage}%</p>
+                                <ul className="divide-y divide-border">
+                                  {installments
+                                    .sort((a: any, b: any) => a.installment_number - b.installment_number)
+                                    .map((inst: any) => {
+                                      const isPaid = inst.status === "paid";
+                                      const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
+                                      return (
+                                        <li key={inst.id} className="flex min-w-0 items-center py-2">
+                                          <span className={`mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${isPaid ? "bg-success/10 text-success" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`} aria-hidden="true">
+                                            {isPaid ? <CheckCircle2 className="h-3 w-3" /> : isOverdue ? <AlertCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                                          </span>
+                                          <div className="min-w-0 flex-1">
+                                            <p className={juntar(texto.corpo, "truncate")}>{inst.description}</p>
+                                            <p className={juntar(texto.auxiliar, "tabular-nums")}>
+                                              {new Date(inst.due_date).toLocaleDateString("pt-BR")}
+                                              {inst.paid_date && ` · pago ${new Date(inst.paid_date).toLocaleDateString("pt-BR")}`}
+                                            </p>
+                                          </div>
+                                          <span className="ml-3 whitespace-nowrap text-[13px] font-medium tabular-nums text-foreground">R$ {Number(inst.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                          {!isPaid && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(inst.id); }}
+                                              disabled={paySubmitting}
+                                              className={juntar(botao.discreto, "ml-2 h-8 text-success")}
+                                            >
+                                              Pago
+                                            </button>
+                                          )}
+                                        </li>
+                                      );
+                                    })}
+                                </ul>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </Secao>
+                )}
+              </div>
+            )}
+
+            {/* ── Acesso ao portal (admin) ── */}
+            {isAdmin && (
+              <div className={painelDaAba("acesso")}>
+                <Secao
+                  titulo="Convite de primeiro acesso"
+                  ajuda="Cliente não recebeu o e-mail para criar a senha? Reenvie o convite: um novo link seguro é gerado e enviado para o e-mail cadastrado."
+                  descricao={client.email || "Sem e-mail cadastrado"}
+                  acao={
+                    <button type="button" disabled={resendingInvite} onClick={reenviarConvite} className={botao.secundario}>
+                      {resendingInvite ? "Reenviando…" : "Reenviar convite"}
                     </button>
+                  }
+                />
+                {!client?.first_access_used_at && (
+                  <Secao
+                    titulo="Link de primeiro acesso"
+                    divisoria
+                    ajuda="Gera o link para você enviar na mão (WhatsApp) sem disparar e-mail. Cada novo link invalida o anterior, então envie sempre o último gerado."
+                    acao={
+                      <button type="button" disabled={generatingLink} onClick={gerarLinkDeAcesso} className={botao.secundario}>
+                        {generatingLink ? "Gerando link…" : firstAccessLink ? "Gerar novo link" : "Gerar link"}
+                      </button>
+                    }
+                  >
                     {firstAccessLink && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 items-center">
                         <input
                           readOnly
+                          aria-label="Link de primeiro acesso"
                           value={firstAccessLink}
                           onFocus={(e) => e.currentTarget.select()}
-                          className="flex-1 min-w-0 bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-[12px] font-mono text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+                          className={juntar(campo, "flex-1 font-mono text-[12px]")}
                         />
                         <button
                           type="button"
@@ -1046,231 +1229,66 @@ export default function EditClientDrawer({
                               toast.error("Copie manualmente selecionando o texto.");
                             }
                           }}
-                          className="shrink-0 py-2.5 px-3.5 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+                          className={juntar(botao.primario, "ml-2")}
                         >
                           Copiar
                         </button>
                       </div>
                     )}
-                  </div>
+                  </Secao>
                 )}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Segurança do Acesso</label>
-                  <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
-                    A senha fica protegida pelo sistema de autenticação e não pode ser visualizada. Para trocar, defina uma nova abaixo.
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Definir / Alterar Senha</label>
-                  <input value={clientPassword} onChange={(e) => setClientPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres; deixe vazio para manter"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 placeholder:font-sans focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-
-              </>
+                <GrupoDeCampos titulo="Senha" className="border-t border-border pt-5">
+                  <CampoDeFormulario
+                    rotulo="Definir ou alterar senha"
+                    apoio="Deixe vazio para manter a atual."
+                    ajuda="A senha fica protegida pelo sistema de autenticação e não pode ser visualizada. Para trocar, defina uma nova aqui (mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo)."
+                  >
+                    <input
+                      value={clientPassword}
+                      onChange={(e) => setClientPassword(e.target.value)}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Nova senha"
+                      className={juntar(campo, "font-mono placeholder:font-sans")}
+                    />
+                  </CampoDeFormulario>
+                </GrupoDeCampos>
+              </div>
             )}
 
-            <div className="pt-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 block">Serviços Ativos</label>
-              <div className="space-y-3">
-                {SERVICES.map((s) => (
-                  <div key={s.key} className="flex items-center justify-between">
-                    <span className="text-sm text-foreground">{s.label}</span>
-                    <Switch checked={!!services[s.key]} onCheckedChange={() => toggleService(s.key)} />
-                  </div>
-                ))}
+            {/* ── Contas e canais (sem credenciais) + cofre de acessos ── */}
+            <div className={painelDaAba("contas")}>
+              <div ref={accountsSectionRef} className="scroll-mt-4">
+                <ClientConnectionsPanel key={client.id} clientId={client.id} clientName={client.company_name || client.full_name || "Cliente"} initialProjectId={initialProjectId} />
               </div>
+              <Secao titulo="Cofre de acessos" divisoria>
+                <ClientVault clientId={client.id} canManage={isAdmin || ["design", "traffic", "manager"].includes(profile?.role || "")} />
+              </Secao>
             </div>
 
-            {/* Briefing */}
-            {clientBriefing && (
-              <div className="pt-2">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Briefing</label>
-                <button
-                  onClick={() => setBriefingOpen(true)}
-                  className="inline-flex items-center gap-2 w-full px-4 py-3 rounded-xl text-[13px] text-foreground bg-secondary/70 border border-border hover:border-primary/30 hover:bg-secondary transition-colors cursor-pointer"
-                >
-                  <FileText className="w-4 h-4 text-primary" />
-                  <span className="flex-1 text-left">Ver Diagnóstico Estratégico</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(clientBriefing.created_at).toLocaleDateString("pt-BR")}
-                  </span>
-                </button>
-              </div>
-            )}
-
-            {/* Esteira de Onboarding */}
-            <div className="pt-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                <ListChecks className="w-3 h-3" /> Esteira de Onboarding
-              </label>
-              <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+            {/* ── Esteira de onboarding ── */}
+            <div className={painelDaAba("onboarding")}>
+              <Secao titulo="Esteira de onboarding">
+                <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+              </Secao>
             </div>
+          </RegiaoRolavel>
 
-            {/* Cofre de Acessos */}
-            <div className="pt-2">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                <KeyRound className="w-3 h-3" /> Cofre de Acessos
-              </label>
-              <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
-            </div>
-
-            {/* Pagamentos de projetos não recorrentes */}
-            {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
-              <div className="pt-2">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">
-                  <DollarSign className="w-3 h-3 inline mr-1" />Pagamentos de Projetos
-                </label>
-                <div className="space-y-2">
-                  {nonRecurringProjects.map((proj: any) => {
-                    const pay = proj.payment;
-                    const isExpanded = expandedProject === proj.id;
-
-                    if (!pay) {
-                      return (
-                        <div key={proj.id} className="rounded-xl bg-secondary/50 border border-border">
-                          <div className="px-4 py-3 text-[13px]">
-                            <p className="font-medium text-foreground">{proj.name}</p>
-                            {payCreateForProject === proj.id ? (
-                              <div className="mt-3 space-y-3">
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Valor Total (R$)</label>
-                                  <input type="number" placeholder="5000" value={payTotal} onChange={e => setPayTotal(e.target.value)}
-                                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
-                                </div>
-                                <div className="flex gap-2">
-                                  <div className="flex-1">
-                                    <label className="text-[10px] text-muted-foreground">Entrada (%)</label>
-                                    <input type="number" min="0" max="100" value={payEntryPct} onChange={e => setPayEntryPct(e.target.value)}
-                                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <label className="text-[10px] text-muted-foreground">Parcelas</label>
-                                    <input type="number" min="1" max="24" value={payInstCount} onChange={e => setPayInstCount(e.target.value)}
-                                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Observações</label>
-                                  <input placeholder="Opcional" value={payNotes} onChange={e => setPayNotes(e.target.value)}
-                                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
-                                </div>
-                                {parseFloat(payTotal) > 0 && (
-                                  <div className="bg-background rounded-lg p-2 text-[11px] text-muted-foreground space-y-0.5">
-                                    <p>Entrada: <strong>R$ {((parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> ({payEntryPct}%)</p>
-                                    <p>Restante: <strong>{payInstCount}x de R$ {(((parseFloat(payTotal) - (parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100) / (parseInt(payInstCount) || 1))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></p>
-                                  </div>
-                                )}
-                                <div className="flex gap-2">
-                                  <button onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
-                                    className="flex-1 px-3 py-1.5 rounded-lg text-[12px] border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent">Cancelar</button>
-                                  <button onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !parseFloat(payTotal)}
-                                    className="flex-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 border-none">
-                                    {paySubmitting ? "Criando..." : "Criar Plano"}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <button onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
-                                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] text-primary border border-primary/30 hover:bg-primary/5 transition-colors cursor-pointer bg-transparent">
-                                <Plus className="w-3 h-3" /> Criar Plano de Pagamento
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const installments = pay.installments || [];
-                    const paidTotal = installments.filter((i: any) => i.status === "paid").reduce((sum: number, i: any) => sum + Number(i.amount), 0);
-                    const remaining = pay.total_value - paidTotal;
-                    const paidCount = installments.filter((i: any) => i.status === "paid").length;
-                    const totalCount = installments.length;
-                    const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
-
-                    return (
-                      <div key={proj.id} className="rounded-xl bg-secondary/50 border border-border">
-                        <button onClick={() => setExpandedProject(isExpanded ? null : proj.id)}
-                          className="w-full px-4 py-3 flex items-center justify-between cursor-pointer bg-transparent border-none text-left">
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
-                              {hasOverdue && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Atrasado</span>}
-                            </div>
-                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                              <span className="text-success">R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                              <span>/</span>
-                              <span>R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                              <span className="text-warning">• Falta R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
-                            </div>
-                          </div>
-                          {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 ml-2" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 ml-2" />}
-                        </button>
-
-                        {isExpanded && (
-                          <div className="px-4 pb-3 space-y-1.5 border-t border-border pt-2">
-                            <p className="text-[10px] text-muted-foreground">{paidCount}/{totalCount} parcelas • Entrada: {pay.entry_percentage}%</p>
-                            {installments
-                              .sort((a: any, b: any) => a.installment_number - b.installment_number)
-                              .map((inst: any) => {
-                                const isPaid = inst.status === "paid";
-                                const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
-                                return (
-                                  <div key={inst.id} className="flex items-center gap-2 py-1.5">
-                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${isPaid ? "text-success bg-success/10" : isOverdue ? "text-destructive bg-destructive/10" : "text-warning bg-warning/10"}`}>
-                                      {isPaid ? <CheckCircle2 className="w-3 h-3" /> : isOverdue ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[12px] text-foreground">{inst.description}</p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        {new Date(inst.due_date).toLocaleDateString("pt-BR")}
-                                        {inst.paid_date && ` • Pago ${new Date(inst.paid_date).toLocaleDateString("pt-BR")}`}
-                                      </p>
-                                    </div>
-                                    <span className="text-[12px] font-medium text-foreground whitespace-nowrap">R$ {Number(inst.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                                    {!isPaid && (
-                                      <button onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(inst.id); }}
-                                        disabled={paySubmitting}
-                                        className="text-[10px] px-2 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none whitespace-nowrap">
-                                        Pago ✓
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {client.projectCount !== undefined && (
-              <div className="pt-2">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Projetos</label>
-                <p className="text-sm text-muted-foreground">{client.projectCount} projeto(s) vinculados</p>
-              </div>
-            )}
-          </div>
-
-          <div className="px-5 py-4 border-t border-border flex items-center justify-between">
+          <div className="flex min-w-0 items-center justify-between border-t border-border px-4 py-3 sm:px-5">
             {isAdmin ? (
-              <button onClick={() => setConfirmDelete(true)} disabled={saving}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
-                <Trash2 className="w-3.5 h-3.5" />
-                Excluir
+              <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving} className={juntar(botao.discreto, "text-destructive hover:text-destructive")}>
+                <Trash2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Excluir</span>
+                <span className="sr-only sm:hidden">Excluir cliente</span>
               </button>
             ) : <div />}
-            <div className="flex gap-3">
-              <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border">
+            <div className="flex items-center [&>*+*]:ml-2">
+              {hasUnsavedChanges && <span className={juntar(texto.auxiliar, "hidden sm:inline")}>Alterações não salvas</span>}
+              <button type="button" onClick={onClose} disabled={saving} className={botao.secundario}>
                 Cancelar
               </button>
-              <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-2">
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
+                {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
                 {saving ? "Salvando..." : "Salvar"}
               </button>
             </div>
@@ -1304,6 +1322,7 @@ export default function EditClientDrawer({
           queryClient.invalidateQueries({ queryKey: ["projects"] });
         }}
       />
-    </>
+    </>,
+    document.body,
   );
 }

@@ -56,7 +56,7 @@ export default function SeletorDeFotos({
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
-        <div className="grid max-h-[50vh] min-w-0 grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-4 md:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain">
           {lista.map((f) => {
             const ja = jaEscolhidas.indexOf(f.id) >= 0;
             const marcada = marcadas.indexOf(f.id) >= 0;

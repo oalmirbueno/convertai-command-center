@@ -1,20 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, AlertTriangle, CheckCircle2, Clock, Copy, Cpu, Eye, EyeOff,
-  ExternalLink, FileJson, Key, Loader2, Lock, Network, Plus, RefreshCw,
+  Activity, AlertTriangle, CheckCircle2, Copy, Cpu, Eye, EyeOff,
+  ExternalLink, FileJson, Key, Loader2, Network, Plus, RefreshCw,
   RotateCw, Server, ShieldCheck, Trash2, XCircle, Zap
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  AjudaRecolhida,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  GrupoDeCampos,
+  RegiaoRolavel,
+  Secao,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { MCP_OAUTH_METADATA_URL, MCP_SERVER_URL } from "@/lib/mcp/endpoints";
@@ -204,17 +217,29 @@ function keyStatus(k: ApiKey): { label: string; tone: "green" | "amber" | "red" 
 }
 
 /* ─── Component ───────────────────────────────────────────── */
+const ABAS_DO_MCP = ["connect", "credentials", "tools", "audit"] as const;
+type AbaDoMcp = (typeof ABAS_DO_MCP)[number];
+
 export default function MCPManager() {
+  // Aba interna e filtro lembram ao sair e voltar (docs/design/SISTEMA.md, seção 12).
+  const celular = useIsMobile();
+  const [aba, setAba] = useEstadoDaTela<AbaDoMcp>("api-docs:mcp:aba", "connect", {
+    validar: (v) => typeof v === "string" && (ABAS_DO_MCP as readonly string[]).indexOf(v) >= 0,
+  });
+
   const [discovery, setDiscovery] = useState<McpDiscovery | null>(null);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [loadingDiscovery, setLoadingDiscovery] = useState(true);
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
-  const [showOnlyMcp, setShowOnlyMcp] = useState(true);
+  const [keysError, setKeysError] = useState<string | null>(null);
+  const [showOnlyMcp, setShowOnlyMcp] = useEstadoDaTela<boolean>("api-docs:mcp:so-mcp", true, { validar: (v) => typeof v === "boolean" });
 
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditoriaLida, setAuditoriaLida] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [agentPreset, setAgentPreset] = useState<(typeof AGENTS)[number] | null>(null);
@@ -253,6 +278,7 @@ export default function MCPManager() {
       .select("id, name, key_preview, scopes, origin, audience, is_active, created_at, last_used_at, expires_at, revoked_at")
       .order("created_at", { ascending: false });
     if (error) toast.error("Erro ao carregar credenciais: " + error.message);
+    setKeysError(error ? error.message : null);
     setKeys((data as ApiKey[]) ?? []);
     setLoadingKeys(false);
   }, []);
@@ -266,8 +292,10 @@ export default function MCPManager() {
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) toast.error("Erro na auditoria: " + error.message);
+    setAuditError(error ? error.message : null);
     setAudit((data as AuditRow[]) ?? []);
     setLoadingAudit(false);
+    setAuditoriaLida(true);
   }, []);
 
   useEffect(() => { loadDiscovery(); loadKeys(); loadAudit(); }, [loadDiscovery, loadKeys, loadAudit]);
@@ -322,308 +350,328 @@ export default function MCPManager() {
     await loadKeys();
   };
 
+  const tones: Record<string, string> = {
+    green: "bg-primary/15 text-primary",
+    amber: "bg-warning/15 text-warning",
+    red: "bg-destructive/15 text-destructive",
+    muted: "bg-muted text-muted-foreground",
+  };
+
+  const novaConexao = () => { setAgentPreset(null); setShowCreate(true); };
+
   return (
-    <div className="space-y-4">
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Network className="w-4 h-4 text-primary" /> MCP · Model Context Protocol
-          </h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">
-            Painel administrativo do servidor MCP do Aceleriq OS. Gere credenciais escopadas para ChatGPT, Claude, Codex, Hermes, OpenClaw e outros agentes autorizados.
-            Os tokens são exibidos <span className="font-semibold text-foreground">uma única vez</span> · nunca são armazenados em texto claro.
-          </p>
+    <div className="min-w-0 space-y-6">
+      {/* ── Cabeçalho da área ─────────────────────────────── */}
+      <Secao
+        titulo="MCP"
+        descricao={discovery ? `${discovery.name}@${discovery.version} · ${discovery.toolCount ?? 0} tools` : undefined}
+        ajuda="Servidor MCP do Aceleriq OS. Gere credenciais escopadas para ChatGPT, Claude, Codex, Hermes, OpenClaw e outros agentes autorizados. O token aparece uma única vez e nunca é guardado em texto claro."
+        acao={
+          <>
+            <button type="button" className={botao.icone} onClick={() => { loadDiscovery(); loadKeys(); loadAudit(); }} aria-label="Atualizar MCP" title="Atualizar">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" className={juntar(botao.primario, "px-2.5 sm:px-3.5")} onClick={novaConexao} aria-label="Nova conexão">
+              <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Nova conexão</span>
+            </button>
+          </>
+        }
+      >
+        {/* ── Estado dos serviços (uma grade de um nível) ─── */}
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
+          <StatusCard
+            icon={<Server className="h-3.5 w-3.5" />}
+            title="Servidor MCP"
+            loading={loadingDiscovery && !discovery}
+            ok={!!discovery && !discoveryError}
+            error={discoveryError}
+            onRetry={loadDiscovery}
+          >
+            {discovery && (
+              <dl className="divide-y divide-border">
+                <Row label="Servidor" value={<code className="text-foreground">{discovery.name}@{discovery.version}</code>} />
+                <Row label="Protocolo" value={<code>{discovery.protocolVersion}</code>} />
+                <Row label="Tools expostos" value={<span className="tabular-nums">{discovery.toolCount ?? 0}</span>} />
+                <Row label="Endpoint" value={<code className="font-mono">{MCP_URL}</code>} />
+                <Row label="Hora do servidor" value={<span className="tabular-nums">{fmtDate(discovery.serverTime ?? null)}</span>} />
+              </dl>
+            )}
+          </StatusCard>
+
+          <StatusCard
+            icon={<Cpu className="h-3.5 w-3.5" />}
+            title="Segundo Cérebro"
+            loading={loadingDiscovery && !discovery}
+            ok={!!discovery?.secondBrain?.configured}
+            error={discovery?.secondBrain && !discovery.secondBrain.configured ? "Bridge não configurada" : null}
+          >
+            {discovery?.secondBrain && (
+              <dl className="divide-y divide-border">
+                <Row label="Status" value={
+                  discovery.secondBrain.configured
+                    ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Configurado</span>
+                    : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>Não configurado</span>
+                } />
+                <Row label="Escrita permitida" value={<code>memory/inbox/chatgpt/</code>} />
+                <Row label="Detalhes" value={<span className="text-muted-foreground">via <code>aceleriq_capabilities</code></span>} />
+              </dl>
+            )}
+          </StatusCard>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => { loadDiscovery(); loadKeys(); loadAudit(); }}>
-            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Atualizar
-          </Button>
-          <Button size="sm" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
-          </Button>
+      </Secao>
+
+      {/* ── Abas internas (4: segmentado, lembra ao voltar) ─ */}
+      <Tabs value={aba} onValueChange={(v) => setAba(v as AbaDoMcp)} className="w-full min-w-0">
+        <div className="min-w-0 overflow-x-auto">
+          <SeletorCompacto
+            rotulo="Área do MCP"
+            valor={aba}
+            onEscolher={(v) => setAba(v as AbaDoMcp)}
+            larguraTotal={celular}
+            // Celular: sem ícones, sem contador e nome curto, para as 4 opções caberem sem corte.
+            opcoes={[
+              { valor: "connect", rotulo: "Conectar", icone: celular ? undefined : <Network className="h-3.5 w-3.5" /> },
+              { valor: "credentials", rotulo: celular ? "Chaves" : "Credenciais", icone: celular ? undefined : <Key className="h-3.5 w-3.5" />, contador: celular || loadingKeys ? null : mcpKeys.length },
+              { valor: "tools", rotulo: "Tools", icone: celular ? undefined : <Zap className="h-3.5 w-3.5" /> },
+              { valor: "audit", rotulo: "Auditoria", icone: celular ? undefined : <Activity className="h-3.5 w-3.5" /> },
+            ]}
+          />
         </div>
-      </div>
 
-      {/* ── Status cards ───────────────────────────────────── */}
-      <div className="grid md:grid-cols-2 gap-3">
-        <StatusCard
-          icon={<Server className="w-4 h-4" />}
-          title="Servidor MCP"
-          loading={loadingDiscovery}
-          ok={!!discovery && !discoveryError}
-          error={discoveryError}
-        >
-          {discovery && (
-            <div className="space-y-1.5 text-[11px]">
-              <Row label="Servidor" value={<code className="text-foreground">{discovery.name}@{discovery.version}</code>} />
-              <Row label="Protocolo" value={<code>{discovery.protocolVersion}</code>} />
-              <Row label="Tools expostos" value={<Badge variant="secondary" className="text-[10px]">{discovery.toolCount ?? 0}</Badge>} />
-              <Row label="Endpoint" value={<code className="text-[10px] break-all">{MCP_URL}</code>} />
-              <Row label="Hora do servidor" value={fmtDate(discovery.serverTime ?? null)} />
-            </div>
-          )}
-        </StatusCard>
+        {/* ── Conectar ── */}
+        <TabsContent value="connect" className="mt-5 space-y-6">
+          <Secao
+            titulo="Endereços"
+            ajuda="ChatGPT Work usa OAuth: cadastre a URL MCP, escolha OAuth e aguarde a tela de login do Aceleriq. Não cole token manual no ChatGPT Work."
+            acao={
+              <a href="/conectar-mcp" target="_blank" rel="noreferrer" className={botao.secundario}>
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Guia público
+              </a>
+            }
+          >
+            <ul className="divide-y divide-border border-y border-border">
+              <li className="flex min-w-0 items-center py-2.5">
+                <Network className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <span className={juntar(texto.rotulo, "mr-3 w-24 shrink-0")}>URL MCP</span>
+                <code className="mr-2 min-w-0 flex-1 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{MCP_URL}</code>
+                <button type="button" className={botao.icone} onClick={() => copyText(MCP_URL)} aria-label="Copiar URL MCP" title="Copiar URL MCP">
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </li>
+              <li className="flex min-w-0 items-center py-2.5">
+                <FileJson className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <span className={juntar(texto.rotulo, "mr-3 w-24 shrink-0")}>OAuth PRM</span>
+                <code className="mr-2 min-w-0 flex-1 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{PRM_URL}</code>
+                <button type="button" className={botao.icone} onClick={() => copyText(PRM_URL)} aria-label="Copiar OAuth PRM" title="Copiar OAuth PRM">
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </li>
+            </ul>
+          </Secao>
 
-        <StatusCard
-          icon={<Cpu className="w-4 h-4" />}
-          title="Segundo Cérebro (GitHub bridge)"
-          loading={loadingDiscovery}
-          ok={!!discovery?.secondBrain?.configured}
-          error={discovery?.secondBrain && !discovery.secondBrain.configured ? "Bridge não configurada" : null}
-        >
-          {discovery?.secondBrain && (
-            <div className="space-y-1.5 text-[11px]">
-              <Row label="Status" value={
-                discovery.secondBrain.configured
-                  ? <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-0">Configurado</Badge>
-                  : <Badge variant="destructive" className="text-[10px]">Não configurado</Badge>
-              } />
-              <Row label="Escrita permitida" value={<code className="text-[10px]">memory/inbox/chatgpt/</code>} />
-              <Row label="Detalhes" value={<span className="text-muted-foreground">via <code>aceleriq_capabilities</code></span>} />
-            </div>
-          )}
-        </StatusCard>
-      </div>
+          <Secao
+            titulo="Diagnóstico OAuth externo"
+            ajuda="O endpoint segue o formato esperado por clientes externos que partem da URL MCP e fazem o discovery OAuth sozinhos."
+            divisoria
+          >
+            <dl className="divide-y divide-border sm:max-w-xl">
+              <Row label="401 sem autenticação" value={<span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Obrigatório</span>} />
+              <Row label="WWW-Authenticate" value={<code>Bearer resource_metadata</code>} />
+              <Row label="Expose headers" value={<code>WWW-Authenticate</code>} />
+              <Row label="PRM público" value={<span className={juntar(etiqueta, "bg-primary/15 text-primary")}>JSON 200</span>} />
+            </dl>
+          </Secao>
 
-      {/* ── Main tabs ──────────────────────────────────────── */}
-      <Tabs defaultValue="connect" className="w-full">
-        <TabsList className="grid grid-cols-4 w-full max-w-2xl h-9">
-          <TabsTrigger value="connect" className="text-xs gap-1.5"><Network className="w-3.5 h-3.5" /> Conectar</TabsTrigger>
-          <TabsTrigger value="credentials" className="text-xs gap-1.5"><Key className="w-3.5 h-3.5" /> Credenciais</TabsTrigger>
-          <TabsTrigger value="tools" className="text-xs gap-1.5"><Zap className="w-3.5 h-3.5" /> Tools</TabsTrigger>
-          <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Auditoria</TabsTrigger>
-        </TabsList>
-
-        {/* ── Universal connection center ── */}
-        <TabsContent value="connect" className="mt-3 space-y-3">
-          <div className="grid lg:grid-cols-[1.1fr_.9fr] gap-3">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-xs flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Central Universal de Conexão MCP
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-3">
-                <div className="grid sm:grid-cols-2 gap-2 text-[11px]">
-                  <div className="rounded border bg-secondary/30 p-2.5">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="font-semibold flex items-center gap-1.5"><Network className="w-3 h-3 text-primary" /> URL MCP</span>
-                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(MCP_URL)}><Copy className="w-3 h-3" /></Button>
+          <Secao titulo="Agentes" descricao={`${AGENTS.length} modelos de conexão`} divisoria>
+            <ul className="divide-y divide-border border-y border-border">
+              {AGENTS.map(agent => (
+                <li key={agent.id} className="flex min-w-0 items-start py-3">
+                  <div className="mr-3 min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center">
+                      <h4 className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-semibold")}>{agent.name}</h4>
+                      <span className={juntar(etiqueta, "uppercase", agent.auth === "oauth" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>{agent.auth}</span>
                     </div>
-                    <code className="break-all text-[10px]">{MCP_URL}</code>
-                  </div>
-                  <div className="rounded border bg-secondary/30 p-2.5">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="font-semibold flex items-center gap-1.5"><FileJson className="w-3 h-3 text-primary" /> OAuth PRM</span>
-                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(PRM_URL)}><Copy className="w-3 h-3" /></Button>
+                    <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">{agent.title}. {agent.description}</p>
+                    <div className="-m-0.5 mt-1.5 flex flex-wrap">
+                      {agent.defaultScopes.map(scope => <span key={scope} className={juntar(etiqueta, "m-0.5 border border-border font-mono text-muted-foreground")}>{scope}</span>)}
                     </div>
-                    <code className="break-all text-[10px]">{PRM_URL}</code>
-                  </div>
-                </div>
-                <div className="rounded border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                  <p className="font-semibold text-foreground mb-1">ChatGPT Work deve usar OAuth.</p>
-                  <p>Cadastre a URL MCP, selecione OAuth e aguarde a tela de login/autorização do Aceleriq. Não cole token manual no ChatGPT Work.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => copyText(MCP_URL)}><Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL MCP</Button>
-                  <Button size="sm" variant="outline" asChild>
-                    <a href="/conectar-mcp" target="_blank" rel="noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" /> Guia público</a>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-xs flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Diagnóstico OAuth externo</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-2 text-[11px]">
-                <Row label="401 sem autenticação" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">Obrigatório</Badge>} />
-                <Row label="WWW-Authenticate" value={<code className="text-[10px]">Bearer resource_metadata</code>} />
-                <Row label="Expose headers" value={<code className="text-[10px]">WWW-Authenticate</code>} />
-                <Row label="PRM público" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">JSON 200</Badge>} />
-                <Separator />
-                <p className="text-muted-foreground leading-relaxed">O endpoint foi ajustado para o formato esperado por clientes externos que partem da URL MCP e fazem discovery OAuth automaticamente.</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {AGENTS.map(agent => (
-              <Card key={agent.id} className="bg-card">
-                <CardContent className="p-3.5 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="text-sm font-semibold">{agent.name}</h4>
-                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{agent.description}</p>
-                    </div>
-                    <Badge variant={agent.auth === "oauth" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.auth}</Badge>
-                  </div>
-                  <p className="text-[11px] font-medium">{agent.title}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {agent.defaultScopes.map(scope => <Badge key={scope} variant="outline" className="text-[9px] font-mono">{scope}</Badge>)}
                   </div>
                   {agent.auth === "oauth" ? (
-                    <Button size="sm" className="w-full" onClick={() => copyText(MCP_URL, "URL do ChatGPT copiada")}>
-                      <Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL OAuth
-                    </Button>
+                    <button type="button" className={juntar(botao.secundario, "px-2.5 sm:px-3.5")} onClick={() => copyText(MCP_URL, "URL do ChatGPT copiada")} aria-label={`Copiar URL OAuth para ${agent.name}`}>
+                      <Copy className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Copiar URL OAuth</span>
+                    </button>
                   ) : (
-                    <Button size="sm" className="w-full" onClick={() => { setAgentPreset(agent); setShowCreate(true); }}>
-                      <Plus className="w-3.5 h-3.5 mr-1" /> Gerar conexão
-                    </Button>
+                    <button type="button" className={juntar(botao.secundario, "px-2.5 sm:px-3.5")} onClick={() => { setAgentPreset(agent); setShowCreate(true); }} aria-label={`Gerar conexão para ${agent.name}`}>
+                      <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /> <span className="hidden sm:inline">Gerar conexão</span>
+                    </button>
                   )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </li>
+              ))}
+            </ul>
+          </Secao>
         </TabsContent>
 
-        {/* ── Credentials ── */}
-        <TabsContent value="credentials" className="mt-3 space-y-2">
-          <div className="flex items-center gap-2 text-[11px]">
-            <Checkbox id="only-mcp" checked={showOnlyMcp} onCheckedChange={v => setShowOnlyMcp(v === true)} />
-            <label htmlFor="only-mcp" className="text-muted-foreground cursor-pointer select-none">
-              Mostrar apenas credenciais MCP (origem = <code>mcp</code> ou escopos MCP)
-            </label>
-          </div>
-
-          {loadingKeys ? (
-            <div className="py-8 text-center text-xs text-muted-foreground"><Loader2 className="w-4 h-4 mx-auto animate-spin mb-1" /> Carregando…</div>
-          ) : mcpKeys.length === 0 ? (
-            <Card className="bg-secondary/30 border-dashed">
-              <CardContent className="py-8 text-center">
-                <Key className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm">Nenhuma credencial MCP</p>
-                <p className="text-xs text-muted-foreground mt-1">Crie uma credencial para conectar agentes externos.</p>
-                <Button size="sm" className="mt-3" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {mcpKeys.map(k => {
-                const st = keyStatus(k);
-                const tones: Record<string, string> = {
-                  green: "bg-emerald-500/15 text-emerald-500 border-emerald-500/20",
-                  amber: "bg-amber-500/15 text-amber-500 border-amber-500/20",
-                  red: "bg-red-500/15 text-red-500 border-red-500/20",
-                  muted: "bg-muted text-muted-foreground border-border",
-                };
-                return (
-                  <Card key={k.id} className="bg-card">
-                    <CardContent className="p-3 sm:p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold truncate">{k.name}</span>
-                            <Badge className={`text-[10px] border ${tones[st.tone]}`} variant="outline">{st.label}</Badge>
-                            {k.origin && <Badge variant="outline" className="text-[10px]">origin: {k.origin}</Badge>}
+        {/* ── Credenciais ── */}
+        <TabsContent value="credentials" className="mt-5">
+          <Secao
+            titulo="Credenciais"
+            descricao={loadingKeys && keys.length === 0 ? undefined : `${mcpKeys.length} ${mcpKeys.length === 1 ? "credencial" : "credenciais"}`}
+            acao={
+              <label htmlFor="only-mcp" className="flex cursor-pointer select-none items-center text-[12px] text-muted-foreground">
+                <Checkbox id="only-mcp" checked={showOnlyMcp} onCheckedChange={v => setShowOnlyMcp(v === true)} className="mr-2" />
+                Só MCP
+                <AjudaRecolhida className="ml-1">Mostra apenas credenciais MCP (audience ou origem = mcp).</AjudaRecolhida>
+              </label>
+            }
+          >
+            {loadingKeys && keys.length === 0 ? (
+              <Carregando linhas={3} rotulo="Carregando credenciais" />
+            ) : keysError && keys.length === 0 ? (
+              <EstadoDeErro
+                titulo="Não foi possível carregar as credenciais."
+                descricao={keysError}
+                acao={<button type="button" className={botao.secundario} onClick={loadKeys}>Tentar de novo</button>}
+              />
+            ) : mcpKeys.length === 0 ? (
+              <EstadoVazio
+                compacto
+                titulo="Nenhuma credencial MCP."
+                descricao="Crie uma para conectar agentes externos."
+                acao={<button type="button" className={botao.discreto} onClick={novaConexao}>Nova conexão</button>}
+              />
+            ) : (
+              <RegiaoRolavel rotulo="Credenciais MCP" memoria="api-docs:mcp:credenciais" className="lg:max-h-[70vh]">
+                <ul className="divide-y divide-border border-y border-border">
+                  {mcpKeys.map(k => {
+                    const st = keyStatus(k);
+                    return (
+                      <li key={k.id} className="flex min-w-0 items-start py-3">
+                        <div className="mr-3 min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center">
+                            <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-semibold")}>{k.name}</span>
+                            <span className={juntar(etiqueta, "mr-1.5", tones[st.tone])}>{st.label}</span>
+                            {k.origin && <span className={juntar(etiqueta, "border border-border text-muted-foreground")}>origin: {k.origin}</span>}
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <Key className="w-3 h-3 text-muted-foreground" />
-                            <code className="bg-secondary px-1.5 py-0.5 rounded font-mono">{k.key_preview}</code>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
+                          <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                            <code className="font-mono text-foreground">{k.key_preview}</code>
+                            {" · "}Criada {fmtDate(k.created_at)} · Uso {fmtDate(k.last_used_at)} · Expira {fmtDate(k.expires_at)}
+                          </p>
+                          <div className="-m-0.5 mt-1.5 flex flex-wrap">
                             {(k.scopes ?? []).map(s => (
-                              <Badge key={s} variant="secondary" className="text-[10px] font-mono">{s}</Badge>
+                              <span key={s} className={juntar(etiqueta, "m-0.5 bg-muted font-mono text-muted-foreground")}>{s}</span>
                             ))}
                           </div>
-                          <div className="grid sm:grid-cols-3 gap-x-6 gap-y-1 text-[10.5px] text-muted-foreground">
-                            <span><Clock className="w-3 h-3 inline mr-1" />Criada {fmtDate(k.created_at)}</span>
-                            <span><Activity className="w-3 h-3 inline mr-1" />Uso {fmtDate(k.last_used_at)}</span>
-                            <span><ShieldCheck className="w-3 h-3 inline mr-1" />Expira {fmtDate(k.expires_at)}</span>
-                          </div>
                         </div>
-                        <div className="flex sm:flex-col gap-1 sm:items-end">
-                          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => setTestFor(k)}>
-                            <Zap className="w-3.5 h-3.5" /> Testar
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => setRotateFor(k)} disabled={!!k.revoked_at}>
-                            <RotateCw className="w-3.5 h-3.5" /> Rotacionar
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive" onClick={() => setRevokeFor(k)} disabled={!!k.revoked_at}>
-                            <Trash2 className="w-3.5 h-3.5" /> Revogar
-                          </Button>
+                        <div className="flex shrink-0 items-center [&>*+*]:ml-1">
+                          <button type="button" className={botao.icone} onClick={() => setTestFor(k)} aria-label={`Testar ${k.name}`} title="Testar">
+                            <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button type="button" className={botao.icone} onClick={() => setRotateFor(k)} disabled={!!k.revoked_at} aria-label={`Rotacionar ${k.name}`} title="Rotacionar">
+                            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button type="button" className={juntar(botao.icone, "hover:text-destructive disabled:opacity-40")} onClick={() => setRevokeFor(k)} disabled={!!k.revoked_at} aria-label={`Revogar ${k.name}`} title="Revogar">
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </RegiaoRolavel>
+            )}
+          </Secao>
         </TabsContent>
 
         {/* ── Tools ── */}
-        <TabsContent value="tools" className="mt-3">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-xs flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-primary" />
-                Tools registrados no servidor MCP
-                <Badge variant="secondary" className="text-[10px]">{discovery?.toolCount ?? 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                O total exposto acima vem do discovery público do servidor (<code>{discovery?.name}@{discovery?.version}</code>).
-                O catálogo detalhado (nomes, descrições e escopos por tool, bem como as tools visíveis para cada credencial)
-                exige Bearer válido e é retornado pela tool <code>aceleriq_capabilities</code>. Use o botão
-                <span className="mx-1 inline-flex items-center gap-1"><Zap className="w-3 h-3" /> Testar</span>
-                em uma credencial para ver o total visível para aquela chave.
+        <TabsContent value="tools" className="mt-5">
+          <Secao
+            titulo="Tools registrados"
+            descricao={discovery ? `${discovery.name}@${discovery.version}` : undefined}
+            ajuda={
+              <>
+                O total vem do discovery público do servidor. O catálogo detalhado (nomes, descrições, escopos e o que cada credencial vê) exige Bearer válido e sai da tool <code>aceleriq_capabilities</code>. Use "Testar" numa credencial para ver o total visível para ela.
+              </>
+            }
+          >
+            {loadingDiscovery && !discovery ? (
+              <Carregando linhas={1} rotulo="Lendo o servidor" />
+            ) : (
+              <p className="flex items-baseline">
+                <span className="mr-2 text-[28px] font-semibold leading-8 tabular-nums text-primary">{discovery?.toolCount ?? 0}</span>
+                <span className={texto.auxiliar}>tools expostos pelo servidor</span>
               </p>
-            </CardContent>
-          </Card>
+            )}
+          </Secao>
         </TabsContent>
 
-        {/* ── Audit ── */}
-        <TabsContent value="audit" className="mt-3">
-          <Card>
-            <CardHeader className="py-3 flex-row items-center justify-between">
-              <CardTitle className="text-xs flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-primary" /> Auditoria MCP · últimas 200 chamadas
-              </CardTitle>
-              <Button size="sm" variant="ghost" onClick={loadAudit} disabled={loadingAudit}>
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingAudit ? "animate-spin" : ""}`} />
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {audit.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground py-6 text-center">Nenhuma chamada registrada.</p>
-              ) : (
-                <div className="overflow-x-auto -mx-3 sm:mx-0">
-                  <table className="w-full text-[10.5px] min-w-[640px]">
-                    <thead>
-                      <tr className="text-left text-muted-foreground border-b border-border">
-                        <th className="py-1.5 px-2 font-medium">Quando</th>
-                        <th className="py-1.5 px-2 font-medium">Tool</th>
-                        <th className="py-1.5 px-2 font-medium">Chave</th>
-                        <th className="py-1.5 px-2 font-medium">Status</th>
-                        <th className="py-1.5 px-2 font-medium text-right">ms</th>
+        {/* ── Auditoria ── */}
+        <TabsContent value="audit" className="mt-5">
+          <Secao
+            titulo="Auditoria MCP"
+            descricao="Últimas 200 chamadas"
+            acao={
+              <button type="button" className={botao.icone} onClick={loadAudit} disabled={loadingAudit} aria-label="Atualizar auditoria MCP" title="Atualizar">
+                <RefreshCw className={juntar("h-4 w-4", loadingAudit && "animate-spin")} aria-hidden="true" />
+              </button>
+            }
+          >
+            {loadingAudit && audit.length === 0 && !auditoriaLida ? (
+              <Carregando linhas={6} rotulo="Carregando auditoria" />
+            ) : auditError && audit.length === 0 ? (
+              <EstadoDeErro
+                titulo="Não foi possível carregar a auditoria."
+                descricao={auditError}
+                acao={<button type="button" className={botao.secundario} onClick={loadAudit}>Tentar de novo</button>}
+              />
+            ) : audit.length === 0 ? (
+              <EstadoVazio compacto titulo="Nenhuma chamada registrada." />
+            ) : (
+              <RegiaoRolavel rotulo="Chamadas do MCP" memoria="api-docs:mcp:auditoria" className="lg:max-h-[70vh]">
+                <table className="hidden w-full min-w-0 md:table">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Quando</th>
+                      <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Tool</th>
+                      <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Chave</th>
+                      <th scope="col" className={juntar(texto.rotulo, "py-2 pr-3 text-left")}>Status</th>
+                      <th scope="col" className={juntar(texto.rotulo, "py-2 text-right")}>ms</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-[12px]">
+                    {audit.map(a => (
+                      <tr key={a.id} className="hover:bg-muted/40">
+                        <td className="whitespace-nowrap py-2 pr-3 tabular-nums text-muted-foreground">{fmtDate(a.created_at)}</td>
+                        <td className="py-2 pr-3 font-mono">{a.tool_name}</td>
+                        <td className="max-w-[180px] truncate py-2 pr-3 text-muted-foreground">{a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "-"}</td>
+                        <td className="py-2 pr-3">
+                          {a.success
+                            ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>{a.status_code ?? 200}</span>
+                            : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</span>}
+                        </td>
+                        <td className="py-2 text-right font-mono tabular-nums">{a.duration_ms ?? "-"}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {audit.map(a => (
-                        <tr key={a.id} className="border-b border-border/50 hover:bg-secondary/40">
-                          <td className="py-1.5 px-2 whitespace-nowrap">{fmtDate(a.created_at)}</td>
-                          <td className="py-1.5 px-2 font-mono">{a.tool_name}</td>
-                          <td className="py-1.5 px-2 truncate max-w-[160px]">{a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "-"}</td>
-                          <td className="py-1.5 px-2">
-                            {a.success
-                              ? <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-0">{a.status_code ?? 200}</Badge>
-                              : <Badge variant="destructive" className="text-[10px]" title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</Badge>}
-                          </td>
-                          <td className="py-1.5 px-2 text-right font-mono">{a.duration_ms ?? "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </tbody>
+                </table>
+                <ul className="divide-y divide-border md:hidden">
+                  {audit.map(a => (
+                    <li key={a.id} className="min-w-0 py-2.5">
+                      <div className="flex min-w-0 items-center">
+                        <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[12.5px]">{a.tool_name}</code>
+                        {a.success
+                          ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>{a.status_code ?? 200}</span>
+                          : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</span>}
+                      </div>
+                      <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                        {fmtDate(a.created_at)} · {a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "-"} · {a.duration_ms ?? "-"} ms
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </RegiaoRolavel>
+            )}
+          </Secao>
         </TabsContent>
       </Tabs>
 
@@ -652,45 +700,45 @@ export default function MCPManager() {
 
       {/* ── Issued token modal (shown only once) ──────────── */}
       <Dialog open={!!issuedToken} onOpenChange={o => { if (!o) { setIssuedToken(null); setTokenRevealed(false); } }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" /> Credencial criada
+            <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}>
+              <ShieldCheck className="mr-2 h-4 w-4 text-primary" aria-hidden="true" /> Credencial criada
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              <span className="font-semibold text-amber-500">Este token será mostrado apenas uma vez.</span> Copie e guarde em local seguro (gerenciador de senhas, cofre da equipe). Após fechar, não será possível recuperá-lo · apenas rotacionar ou revogar.
+            <DialogDescription className="text-[12.5px] leading-5">
+              <span className="font-medium text-warning">O token aparece só esta vez.</span> Guarde num local seguro (gerenciador de senhas, cofre da equipe). Depois de fechar, só dá para rotacionar ou revogar.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Nome</Label>
-              <p className="text-sm">{issuedName}</p>
+          <div className="min-w-0 space-y-4">
+            <div className="min-w-0">
+              <p className={juntar(texto.rotulo, "mb-1")}>Nome</p>
+              <p className={texto.corpo}>{issuedName}</p>
             </div>
-            <div>
-              <Label className="text-xs">Token completo</Label>
-              <div className="mt-1 p-2.5 bg-secondary rounded border border-border font-mono text-[11px] break-all">
+            <div className="min-w-0">
+              <div className="mb-1.5 flex min-w-0 items-center">
+                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>Token completo</p>
+                <button type="button" className={botao.discreto} onClick={() => setTokenRevealed(v => !v)}>
+                  {tokenRevealed ? <><EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ocultar</> : <><Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Revelar</>}
+                </button>
+              </div>
+              <div className={juntar(superficie.poco, "break-all px-3 py-2 font-mono text-[12px] leading-5")}>
                 {tokenRevealed ? issuedToken : "•".repeat(48)}
               </div>
-              <div className="flex gap-2 mt-2">
-                <Button size="sm" variant="outline" onClick={() => setTokenRevealed(v => !v)}>
-                  {tokenRevealed ? <><EyeOff className="w-3.5 h-3.5 mr-1" /> Ocultar</> : <><Eye className="w-3.5 h-3.5 mr-1" /> Revelar</>}
-                </Button>
-                <Button size="sm" onClick={async () => {
-                  if (!issuedToken) return;
-                  try { await navigator.clipboard.writeText(issuedToken); toast.success("Copiado"); } catch { toast.error("Não foi possível copiar"); }
-                }}>
-                  <Copy className="w-3.5 h-3.5 mr-1" /> Copiar token
-                </Button>
-              </div>
             </div>
-            <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/5 text-[11px] text-amber-500 flex gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-              <span>Apenas o hash SHA-256 e um preview (12 chars) foram gravados. O token nunca aparece em logs, auditoria ou banco de dados.</span>
-            </div>
+            <p className="flex items-start text-[12px] leading-5 text-muted-foreground">
+              <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <span>Só o hash SHA-256 e uma prévia de 12 caracteres foram gravados. O token nunca aparece em logs, auditoria ou banco.</span>
+            </p>
           </div>
-          <DialogFooter>
-            <Button onClick={() => { setIssuedToken(null); setTokenRevealed(false); }}>Concluí · guardei em local seguro</Button>
-          </DialogFooter>
+          <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+            <button type="button" className={botao.secundario} onClick={async () => {
+              if (!issuedToken) return;
+              try { await navigator.clipboard.writeText(issuedToken); toast.success("Copiado"); } catch { toast.error("Não foi possível copiar"); }
+            }}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar token
+            </button>
+            <button type="button" className={botao.primario} onClick={() => { setIssuedToken(null); setTokenRevealed(false); }}>Concluí, guardei</button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -710,37 +758,46 @@ export default function MCPManager() {
   );
 }
 
-/* ─── Status card ─────────────────────────────────────────── */
+/* ─── Status (um bloco de um nível, sem cartão dentro) ────── */
 function StatusCard({
-  icon, title, loading, ok, error, children,
+  icon, title, loading, ok, error, onRetry, children,
 }: {
-  icon: React.ReactNode; title: string; loading: boolean; ok: boolean; error: string | null; children?: React.ReactNode;
+  icon: React.ReactNode; title: string; loading: boolean; ok: boolean; error: string | null; onRetry?: () => void; children?: React.ReactNode;
 }) {
   return (
-    <Card className="bg-card">
-      <CardContent className="p-3.5">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            {icon} {title}
-          </div>
-          {loading
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-            : ok
-              ? <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Online</Badge>
-              : <Badge variant="destructive" className="text-[10px]"><XCircle className="w-3 h-3 mr-1" /> Offline</Badge>}
-        </div>
-        {error && <p className="text-[11px] text-red-500 mb-2">{error}</p>}
-        {children}
-      </CardContent>
-    </Card>
+    <div className={juntar(superficie.painel, "min-w-0 p-4")}>
+      <div className="mb-2 flex min-w-0 items-center">
+        <p className={juntar(texto.corpo, "mr-2 flex min-w-0 flex-1 items-center truncate font-semibold")}>
+          <span className="mr-1.5 shrink-0 text-muted-foreground" aria-hidden="true">{icon}</span> {title}
+        </p>
+        {loading
+          ? <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Verificando</span>
+          : ok
+            ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}><CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" /> Online</span>
+            : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}><XCircle className="mr-1 h-3 w-3" aria-hidden="true" /> Offline</span>}
+      </div>
+      {loading ? (
+        <Carregando linhas={3} rotulo={`Verificando ${title}`} />
+      ) : (
+        <>
+          {error && (
+            <div className="mb-2 flex min-w-0 items-center">
+              <p className="mr-2 min-w-0 flex-1 truncate text-[12px] text-destructive">{error}</p>
+              {onRetry && <button type="button" className={botao.discreto} onClick={onRetry}>Tentar de novo</button>}
+            </div>
+          )}
+          {children}
+        </>
+      )}
+    </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right min-w-0 truncate">{value}</span>
+    <div className="flex min-w-0 items-center justify-between py-1.5 text-[12px]">
+      <dt className="mr-3 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right">{value}</dd>
     </div>
   );
 }
@@ -786,61 +843,62 @@ function CreateCredentialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{rotate ? "Rotacionar credencial" : agent ? `Conectar ${agent.name}` : "Nova conexão MCP"}</DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogTitle className={texto.tituloSecao}>{rotate ? "Rotacionar credencial" : agent ? `Conectar ${agent.name}` : "Nova conexão MCP"}</DialogTitle>
+          <DialogDescription className="text-[12.5px] leading-5">
             {rotate
-              ? "Cria uma nova credencial com os mesmos escopos e revoga a anterior automaticamente."
+              ? "Cria uma credencial nova com os mesmos escopos e revoga a anterior."
               : agent
                 ? agent.description
-                : "Gere um token seguro para um agente externo. Somente o hash é gravado no banco."}
+                : "Gera um token seguro para um agente externo. Só o hash vai para o banco."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label className="text-xs">Nome descritivo *</Label>
-            <Input placeholder="Ex: ChatGPT Work · Almir" value={name} onChange={e => setName(e.target.value)} />
-            <p className="text-[10px] text-muted-foreground mt-1">Use um nome que identifique o agente e o operador.</p>
-          </div>
+        <div className="min-w-0 space-y-4">
+          <GrupoDeCampos>
+            <CampoDeFormulario rotulo="Nome descritivo" apoio="Agente e operador." obrigatorio>
+              <input className={campo} placeholder="Ex: ChatGPT Work · Almir" value={name} onChange={e => setName(e.target.value)} />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Expiração" apoio="Recomendado: 90 dias." obrigatorio>
+              <Select value={expiryPreset} onValueChange={setExpiryPreset}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EXPIRY_PRESETS.map(p => (
+                    <SelectItem key={String(p.days)} value={p.days === null ? "never" : String(p.days)}>{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CampoDeFormulario>
+          </GrupoDeCampos>
 
-          <div>
-            <Label className="text-xs mb-1.5 block">Escopos concedidos *</Label>
-            <div className="space-y-1.5">
+          <fieldset className="min-w-0 border-0 p-0">
+            <legend className={juntar(texto.rotulo, "mb-1.5 p-0")}>
+              Escopos concedidos<span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
+            </legend>
+            <ul className={juntar(superficie.poco, "divide-y divide-border")}>
               {SCOPES.map(s => (
-                <label key={s.id} className="flex items-start gap-2 p-2 rounded border border-border hover:bg-secondary/40 cursor-pointer">
-                  <Checkbox checked={scopes.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <code className="text-[11px] font-semibold">{s.label}</code>
-                      {s.danger && <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-500">sensível</Badge>}
-                    </div>
-                    <p className="text-[10.5px] text-muted-foreground">{s.hint}</p>
-                  </div>
-                </label>
+                <li key={s.id}>
+                  <label className="flex min-w-0 cursor-pointer items-start px-3 py-2 transition-colors hover:bg-muted">
+                    <Checkbox checked={scopes.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="mr-2.5 mt-0.5" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center">
+                        <code className="mr-1.5 font-mono text-[12px] font-semibold">{s.label}</code>
+                        {s.danger && <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>sensível</span>}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] leading-4 text-muted-foreground">{s.hint}</span>
+                    </span>
+                  </label>
+                </li>
               ))}
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-xs">Expiração *</Label>
-            <Select value={expiryPreset} onValueChange={setExpiryPreset}>
-              <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {EXPIRY_PRESETS.map(p => (
-                  <SelectItem key={String(p.days)} value={p.days === null ? "never" : String(p.days)}>{p.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground mt-1">Recomendado: 90 dias. Você pode rotacionar a qualquer momento.</p>
-          </div>
+            </ul>
+          </fieldset>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={submit} disabled={saving}>
-            {saving ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Gerando…</> : rotate ? "Rotacionar" : "Gerar token"}
-          </Button>
-        </DialogFooter>
+        <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+          <button type="button" className={botao.secundario} onClick={() => onOpenChange(false)}>Cancelar</button>
+          <button type="button" className={botao.primario} onClick={submit} disabled={saving}>
+            {saving ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Gerando...</> : rotate ? "Rotacionar" : "Gerar token"}
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -891,32 +949,36 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Zap className="w-4 h-4 text-primary" /> Testar conexão</DialogTitle>
-          <DialogDescription className="text-xs">
-            Credencial: <span className="font-semibold text-foreground">{keyName}</span>.
-            Cole o token completo (só você possui a cópia) para validar <code>initialize</code> + <code>tools/list</code>.
+          <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}><Zap className="mr-2 h-4 w-4 text-primary" aria-hidden="true" /> Testar conexão</DialogTitle>
+          <DialogDescription className="text-[12.5px] leading-5">
+            Credencial <span className="font-medium text-foreground">{keyName}</span>. Valida <code>initialize</code> e <code>tools/list</code>.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">Token</Label>
-            <Input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="mcp_live_…" className="font-mono text-xs" />
-            <p className="text-[10px] text-muted-foreground mt-1">O token não é gravado em nenhum lugar · usado apenas nesta chamada.</p>
-          </div>
+        <div className="min-w-0 space-y-3">
+          <GrupoDeCampos colunas={1}>
+            <CampoDeFormulario rotulo="Token" apoio="Não é gravado. Usado só nesta chamada.">
+              <input type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} placeholder="mcp_live_..." className={juntar(campo, "font-mono text-[12px]")} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
           {result && (
-            <div className={`p-2.5 rounded border text-[11px] ${result.ok ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-500" : "border-red-500/30 bg-red-500/5 text-red-500"}`}>
-              {result.ok
-                ? <div className="space-y-0.5"><div className="flex items-center gap-1.5 font-semibold"><CheckCircle2 className="w-3.5 h-3.5" /> Conexão OK</div><div>Servidor: <code>{result.server}</code></div><div>Tools visíveis: {result.toolCount}</div><div>Latência: {result.latencyMs} ms</div></div>
-                : <div className="flex items-start gap-1.5"><XCircle className="w-3.5 h-3.5 mt-0.5" /> <span>{result.error}</span></div>}
-            </div>
+            result.ok ? (
+              <div className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5")} role="status">
+                <p className="flex items-center font-medium text-primary"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Conexão OK</p>
+                <p className="text-muted-foreground">Servidor: <code className="text-foreground">{result.server}</code></p>
+                <p className="text-muted-foreground">Tools visíveis: <span className="tabular-nums text-foreground">{result.toolCount}</span></p>
+                <p className="text-muted-foreground">Latência: <span className="tabular-nums text-foreground">{result.latencyMs} ms</span></p>
+              </div>
+            ) : (
+              <EstadoDeErro titulo="A conexão falhou." descricao={result.error} />
+            )
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-          <Button onClick={run} disabled={running || !token.trim()}>
-            {running ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Testando…</> : "Testar"}
-          </Button>
-        </DialogFooter>
+        <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+          <button type="button" className={botao.secundario} onClick={() => onOpenChange(false)}>Fechar</button>
+          <button type="button" className={botao.primario} onClick={run} disabled={running || !token.trim()}>
+            {running ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Testando...</> : "Testar"}
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );

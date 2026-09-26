@@ -35,7 +35,7 @@ interface MesaDoPainel {
   semCliente?: Record<string, Carregar>;
 }
 
-export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-publicidade" | "/mesa-roteiros", MesaDoPainel> = {
+export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-edicao" | "/mesa-publicidade" | "/mesa-roteiros", MesaDoPainel> = {
   "/mesa": {
     prefixo: "mesa",
     pagina: () => import("@/pages/MesaDoCliente"),
@@ -97,20 +97,42 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       "agente-diretor": () => import("@/components/mesa-foto/AgenteDiretor"),
     },
   },
-  // Mesa Vídeos (frente V2, 25/09): acervo, história, roteiro e cenas, edição e versões.
+  // Mesa Vídeos (frente V2, 25/09; separada da Edição na frente E2, 26/09; diretor na V-A): base, kit, bíblia, roteiro, gerar e resultados.
   "/mesa-videos": {
     prefixo: "mesa-videos",
     pagina: () => import("@/pages/MesaVideos"),
     parametro: "etapa",
-    padrao: "acervo",
+    padrao: "base",
     onde: "mesa-videos:onde:",
     campoOnde: "etapa",
     etapas: {
-      acervo: () => import("@/components/mesa-videos/EtapaAcervo"),
-      historia: () => import("@/components/mesa-videos/EtapaHistoria"),
-      roteiros: () => import("@/components/mesa-videos/EtapaRoteiros"),
-      edicao: () => import("@/components/mesa-videos/EtapaEdicao"),
-      memoria: () => import("@/components/mesa-videos/EtapaMemoria"),
+      base: () => import("@/components/mesa-videos/EtapaBase"),
+      // Frente V-A (26/09): kit, bíblia e roteiro do diretor.
+      kit: () => import("@/components/mesa-videos/EtapaKit"),
+      biblia: () => import("@/components/mesa-videos/EtapaBiblia"),
+      roteiro: () => import("@/components/mesa-videos/EtapaRoteiro"),
+      gerar: () => import("@/components/mesa-videos/EtapaGerar"),
+      resultados: () => import("@/components/mesa-videos/EtapaResultados"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-videos/AgenteDaMesaDeVideo"),
+    },
+  },
+  // Mesa Edição (frente E2, 26/09): entrada, organizar e editar.
+  "/mesa-edicao": {
+    prefixo: "mesa-edicao",
+    pagina: () => import("@/pages/MesaEdicao"),
+    parametro: "etapa",
+    padrao: "entrada",
+    onde: "mesa-edicao:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      entrada: () => import("@/components/mesa-edicao/EtapaEntrada"),
+      organizar: () => import("@/components/mesa-edicao/EtapaOrganizar"),
+      editar: () => import("@/components/mesa-edicao/EtapaEditar"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-videos/AgenteDaMesaDeVideo"),
     },
   },
   // Mesa Publicidade (frente P, 26/09): campanha, direção, tomadas, revisão e envio.
@@ -160,7 +182,7 @@ export const chaveDaEtapa = (caminho: Caminho, etapa: string) => `${MESAS_DO_PAI
 
 function mesaDoCaminho(caminho: string): Caminho | null {
   const limpo = (caminho || "").replace(/\/+$/, "") || "/";
-  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" ? limpo : null;
+  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-edicao" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" ? limpo : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -242,6 +264,7 @@ export const PaginaMesaDoCliente = paginaDaMesa("/mesa");
 export const PaginaMesaAds = paginaDaMesa("/mesa-ads");
 export const PaginaMesaFoto = paginaDaMesa("/mesa-foto");
 export const PaginaMesaVideos = paginaDaMesa("/mesa-videos");
+export const PaginaMesaEdicao = paginaDaMesa("/mesa-edicao");
 export const PaginaMesaPublicidade = paginaDaMesa("/mesa-publicidade");
 export const PaginaMesaRoteiros = paginaDaMesa("/mesa-roteiros");
 

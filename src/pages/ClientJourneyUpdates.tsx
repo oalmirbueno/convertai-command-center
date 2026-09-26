@@ -1,19 +1,19 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Compass, FileCheck, CalendarDays, Inbox, ArrowUpRight,
-  CheckCircle2, Clock, Sparkles, ExternalLink, AlertCircle,
-  Instagram, TrendingDown, TrendingUp,
+  FileCheck, CalendarDays, Inbox, ArrowUpRight,
+  CheckCircle2, Clock, ExternalLink, ChevronDown,
+  TrendingDown, TrendingUp,
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
 import { readMemory } from "@/lib/clientMemory";
 import RitualEstruturado from "@/components/client/RitualEstruturado";
+import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { estruturaDoRitual } from "@/lib/ritualTexto";
 import {
   formatMetricNumber,
@@ -24,12 +24,26 @@ import {
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
 import { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
+import {
+  CabecalhoDePagina,
+  Carregando,
+  EstadoDeErro,
+  Painel,
+  Secao,
+  botao,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+  useEstadoDaTela,
+} from "@/components/sistema";
 
 /**
  * O narrador do mês: a IA escreve 3 a 5 frases contando o mês do cliente a
  * partir da linha do tempo real do painel. Cache local de 24 horas por
  * cliente e mês, para a página abrir na hora e a IA não rodar a cada visita.
- * Sem movimento no mês ou com o narrador indisponível, o card simplesmente
+ * Sem movimento no mês ou com o narrador indisponível, o bloco simplesmente
  * não aparece: nunca um erro na cara do cliente.
  */
 function MonthNarrative({ clientId }: { clientId: string }) {
@@ -67,14 +81,16 @@ function MonthNarrative({ clientId }: { clientId: string }) {
 
   if (!data?.narrative) return null;
   return (
-    <section className="rounded-xl border border-primary/25 bg-primary/[0.04] p-5 sm:p-6">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
-        O seu mês{data.month ? ` de ${data.month}` : ""}, contado pela Aceleriq
-      </p>
-      <p className="mt-2 text-[13.5px] leading-relaxed text-foreground/90">{data.narrative}</p>
-    </section>
+    <Secao
+      divisoria
+      titulo={`O seu mês${data.month ? ` de ${data.month}` : ""}`}
+      ajuda="Contado pela Aceleriq a partir do que aconteceu de verdade no seu painel neste mês."
+    >
+      <p className={juntar(texto.corpo, "max-w-3xl text-[14px] leading-6 text-foreground/90")}>{data.narrative}</p>
+    </Secao>
   );
 }
+
 /**
  * Bastidores da semana: o trabalho que acontece antes de qualquer post ir ao
  * ar. Vem do checklist que a equipe fecha toda semana, traduzido para a
@@ -101,43 +117,38 @@ function WeekBackstage({ clientId }: { clientId: string }) {
   if (!data?.fronts?.length) return null;
 
   return (
-    <section data-tour="cliente-bastidores" className="rounded-xl border border-border bg-card p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Bastidores desta semana
-        </p>
-        <span className="text-[10px] text-muted-foreground">
-          {data.total} {data.total === 1 ? "etapa concluída" : "etapas concluídas"}
-        </span>
-      </div>
-      <div className="mt-3 space-y-3">
+    <Secao
+      divisoria
+      data-tour="cliente-bastidores"
+      titulo="Bastidores da semana"
+      descricao={`${data.total} ${data.total === 1 ? "etapa concluída" : "etapas concluídas"}`}
+      ajuda="Este é o trabalho de bastidor da semana, atualizado conforme a equipe avança. O que chega até você, como conteúdo e publicações, nasce daqui."
+    >
+      <ul className={juntar(superficie.painel, "divide-y divide-border")}>
         {data.fronts.map((front) => (
-          <div key={front.area}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[12.5px] font-semibold text-foreground">{front.label}</p>
-              <p className="text-[11px] tabular-nums text-muted-foreground">
+          <li key={front.area} className="min-w-0 px-4 py-3">
+            <div className="flex min-w-0 items-center justify-between">
+              <p className="min-w-0 truncate text-[13px] font-medium text-foreground">{front.label}</p>
+              <p className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
                 {front.done} de {front.total}
               </p>
             </div>
-            <div className="mt-1.5 flex h-1.5 gap-[3px]">
+            {/* Segmentos com margem (sem gap em flex: Safari 11). */}
+            <div className="mt-1.5 flex h-1.5" aria-hidden="true">
               {Array.from({ length: front.total }, (_, index) => (
                 <span
                   key={index}
-                  className={`flex-1 rounded-full ${index < front.done ? "bg-primary" : "bg-secondary"}`}
+                  className={juntar("flex-1 rounded-full", index > 0 && "ml-[3px]", index < front.done ? "bg-primary" : "bg-muted")}
                 />
               ))}
             </div>
-            <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+            <p className={juntar(texto.auxiliar, "mt-1.5 leading-5")}>
               {front.highlights.join(", ")}.
             </p>
-          </div>
+          </li>
         ))}
-      </div>
-      <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
-        Este é o trabalho de bastidor da semana, atualizado conforme a equipe
-        avança. O que chega até você, como conteúdo e publicações, nasce daqui.
-      </p>
-    </section>
+      </ul>
+    </Secao>
   );
 }
 
@@ -160,21 +171,24 @@ function ClientHistory({ clientId }: { clientId: string }) {
   if (!entries?.length) return null;
 
   return (
-    <section data-tour="cliente-historia" className="rounded-xl border border-border bg-card p-5 sm:p-6">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        A nossa história até aqui
-      </p>
-      <div className="mt-4 space-y-4 border-l border-border pl-4">
+    <Secao
+      divisoria
+      data-tour="cliente-historia"
+      titulo="A nossa história até aqui"
+      descricao={`${entries.length} ${entries.length === 1 ? "capítulo" : "capítulos"}`}
+      ajuda="Cada capítulo fica guardado aqui: o que foi combinado, o que foi feito e o porquê. Assim nada se perde entre uma conversa e outra."
+    >
+      <ol className="ml-1 space-y-4 border-l border-border pl-4">
         {entries.map((entry) => (
-          <div key={entry.id} className="relative">
-            <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
-            <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+          <li key={entry.id} className="relative min-w-0">
+            <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" aria-hidden="true" />
+            <p className={texto.auxiliar}>
               {new Date(entry.created_at).toLocaleDateString("pt-BR", {
                 day: "2-digit", month: "long", year: "numeric",
               })}
             </p>
             {entry.title && (
-              <p className="mt-0.5 text-[13.5px] font-semibold leading-snug text-foreground">
+              <p className="mt-0.5 text-[14px] font-medium leading-5 text-foreground">
                 {entry.title}
               </p>
             )}
@@ -184,18 +198,14 @@ function ClientHistory({ clientId }: { clientId: string }) {
             {estruturaDoRitual(entry.content).blocos.length > 0 ? (
               <RitualEstruturado body={entry.content} compact className="mt-2" />
             ) : (
-              <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
+              <p className={juntar(texto.corpo, "mt-1 whitespace-pre-line text-muted-foreground")}>
                 {entry.content.length > 320 ? `${entry.content.slice(0, 320).replace(/\s+\S*$/, "")}…` : entry.content}
               </p>
             )}
-          </div>
+          </li>
         ))}
-      </div>
-      <p className="mt-4 text-[10.5px] leading-relaxed text-muted-foreground">
-        Cada capítulo fica guardado aqui: o que foi combinado, o que foi feito e
-        o porquê. Assim nada se perde entre uma conversa e outra.
-      </p>
-    </section>
+      </ol>
+    </Secao>
   );
 }
 
@@ -276,78 +286,75 @@ function InstagramContaBlock({
   if (cards.length === 0) return null;
   const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-5 py-4 sm:px-7">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary">
-          <Instagram className="h-3 w-3" /> Instagram em números reais
-        </span>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {username ? `@${username} · ` : ""}
+    <Secao
+      divisoria
+      titulo={username ? `Instagram @${username}` : "Instagram"}
+      descricao={
+        <span className="block truncate">
           Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)}
-          {semanaEmAndamento(latest) ? " (em andamento, números parciais)" : ""},
-          direto da sua conta. Atualiza sozinho toda semana.
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-4 sm:px-7">
-        {cards.map((card) => {
+          {semanaEmAndamento(latest) ? " (em andamento, números parciais)" : ""}
+        </span>
+      }
+      ajuda="Números reais, direto da sua conta. Atualiza sozinho toda semana; a variação compara com a semana anterior."
+    >
+      <FaixaDeNumeros
+        rotulo="Instagram em números reais"
+        itens={cards.map((card) => {
           const up = card.delta != null && card.delta >= 0;
-          return (
-            <div key={card.label} className="rounded-xl border border-border bg-secondary/25 p-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {card.label}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <p className="font-mono text-sm font-semibold text-foreground">
-                  {formatMetricNumber(card.value)}
-                </p>
-                {card.delta != null && (
-                  <span
-                    className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                      up ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
-                    }`}
-                  >
-                    {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    {`${up ? "+" : ""}${card.delta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
-                  </span>
-                )}
-              </div>
-            </div>
-          );
+          return {
+            rotulo: card.label,
+            valor: formatMetricNumber(card.value),
+            aoLado:
+              card.delta != null ? (
+                <span className={juntar(etiqueta, up ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
+                  {up ? <TrendingUp className="mr-0.5 h-3 w-3" aria-hidden="true" /> : <TrendingDown className="mr-0.5 h-3 w-3" aria-hidden="true" />}
+                  {`${up ? "+" : ""}${card.delta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                </span>
+              ) : undefined,
+          };
         })}
-      </div>
+      />
       {rows.length > 1 && (
-        <div className="border-t border-border px-5 py-4 sm:px-7">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Alcance semana a semana
-          </p>
-          <div className="mt-2 space-y-1.5">
+        <div className="mt-4">
+          <h3 className={texto.rotulo}>Alcance semana a semana</h3>
+          <ul className="mt-2 space-y-1.5">
             {rows.slice(0, 8).map((row) => (
-              <div key={row.id} className="flex items-center gap-2">
-                <span className="w-24 shrink-0 font-mono text-[10px] text-muted-foreground">
+              <li key={row.id} className="flex min-w-0 items-center">
+                <span className="mr-2 w-24 shrink-0 text-[11px] tabular-nums text-muted-foreground">
                   {weekLabel(row.week_start)} a {weekLabel(row.week_end)}
                 </span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary/70"
                     style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
                   />
                 </div>
-                <span className="w-16 shrink-0 text-right font-mono text-[10px] text-foreground">
+                <span className="ml-2 w-14 shrink-0 text-right text-[11px] tabular-nums text-foreground">
                   {formatMetricNumber(row.reach)}
                 </span>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
-    </section>
+    </Secao>
   );
 }
+
+/** Atalhos da página: na linha do título (ícone no celular). */
+const ATALHOS = [
+  { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
+  { label: "Calendário", icon: CalendarDays, to: "/calendario" },
+  { label: "Pedidos", icon: Inbox, to: "/pedidos" },
+];
 
 export default function ClientJourneyUpdates() {
   const navigate = useNavigate();
   const { clientId, isImpersonating } = useClientIdentity();
-  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
+  // Mês aberto na linha de evolução: lembrado por cliente ao sair e voltar.
+  const [expandedMonth, setExpandedMonth] = useEstadoDaTela<string | null>(`onde-estamos:mes-aberto:${clientId || ""}`, null, {
+    validar: (v) => v === null || (typeof v === "string" && /^\d{4}-\d{2}$/.test(v)),
+  });
   const { profile } = useAuth();
   // Staff sem "Ver como Cliente" nao tem jornada propria: sem esta trava, o
   // admin via os dados do proprio cadastro achando que eram de um cliente.
@@ -361,7 +368,7 @@ export default function ClientJourneyUpdates() {
   const deveRedirecionar = isStaff && !isImpersonating;
 
   // Um único retrato do momento, atualizado sozinho a cada 30 segundos.
-  const { data: snapshot, isLoading, isError } = useQuery({
+  const { data: snapshot, isLoading, isError, refetch } = useQuery({
     queryKey: ["client-journey-live", clientId],
     queryFn: async () => {
       const [projects, tasks, milestones, approvals, allFiles, publications, reports] =
@@ -465,207 +472,175 @@ export default function ClientJourneyUpdates() {
     return <Navigate to="/central" replace />;
   }
 
+  const cabecalho = (
+    <CabecalhoDePagina
+      titulo="Onde estamos"
+      descricao={narrative ? narrative.phase : undefined}
+      ajuda="O retrato do seu trabalho agora: o que já foi entregue, o que está em produção e qual é o próximo passo. Esta página se atualiza sozinha."
+      acoes={ATALHOS.map((atalho) => (
+        <button
+          key={atalho.to}
+          type="button"
+          onClick={() => navigate(atalho.to)}
+          className={juntar(botao.secundario, "px-2.5 sm:px-3.5")}
+          aria-label={atalho.label}
+          title={atalho.label}
+        >
+          <atalho.icon className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+          <span className="hidden sm:inline">{atalho.label}</span>
+        </button>
+      ))}
+    />
+  );
+
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-56 w-full rounded-xl" />
-        <Skeleton className="h-32 w-full rounded-xl" />
+      <div className="min-w-0 space-y-5">
+        {cabecalho}
+        <Carregando forma="aba" rotulo="Carregando o retrato do trabalho" />
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div>
-        <h1 className="heading-page flex items-center gap-2">
-          <Compass className="h-5 w-5 text-primary" /> Onde Estamos
-        </h1>
-        <p className="mt-1 text-xs text-muted-foreground">
-          O retrato do seu trabalho agora: o que já foi entregue, o que está em produção e qual é o próximo passo.
-          Esta página se atualiza sozinha.
-        </p>
-      </div>
+    <div className="min-w-0 space-y-6">
+      {cabecalho}
 
       {isError && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Não conseguimos carregar as informações agora. Tente atualizar a página em instantes.
-          </p>
-        </div>
+        <EstadoDeErro
+          titulo="Não conseguimos carregar as informações agora."
+          descricao={snapshot ? "Mostrando o último retrato carregado." : undefined}
+          acao={<button type="button" className={botao.secundario} onClick={() => refetch()}>Tentar de novo</button>}
+        />
+      )}
+
+      {/* ── Retrato automático do momento: o assunto da página ── */}
+      {narrative && (
+        <section aria-label="Retrato de agora" className="min-w-0 space-y-4">
+          <h2 className="max-w-3xl text-[17px] font-semibold leading-6 text-foreground">{narrative.headline}</h2>
+          <FaixaDeNumeros
+            rotulo="Sinais do momento"
+            itens={narrative.signals.map((signal) => {
+              const signalTarget: Record<string, string> = {
+                "Entregas concluídas no mês": "/documentos",
+                "Em produção agora": "/projetos",
+                "Publicações no ar": "/calendario",
+                "Esperando você": "/aprovacoes",
+              };
+              const target = signalTarget[signal.label];
+              return {
+                rotulo: signal.label,
+                valor: signal.value,
+                corDoValor: SIGNAL_TONE[signal.tone],
+                para: target || undefined,
+              };
+            })}
+          />
+          <div className="max-w-3xl space-y-2">
+            {narrative.paragraphs.map((paragraph) => (
+              <p key={paragraph} className={juntar(texto.corpo, "text-[13.5px] leading-6")}>
+                {paragraph}
+              </p>
+            ))}
+          </div>
+          <div className="max-w-3xl border-l-2 border-emerald-500/60 pl-3">
+            <p className={juntar(texto.rotulo, "flex items-center text-emerald-500")}>
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Próximo passo
+            </p>
+            <p className={juntar(texto.corpo, "mt-1 leading-6")}>{narrative.nextStep}</p>
+          </div>
+        </section>
       )}
 
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
       {clientId && <MonthNarrative clientId={clientId} />}
       {clientId && <WeekBackstage clientId={clientId} />}
-      {clientId && <ClientHistory clientId={clientId} />}
-
-      {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
-      {clientId && <InstagramRealBlock clientId={clientId} />}
-
-      {/* ── Retrato automático do momento ── */}
-      {narrative && (
-        <section className="overflow-hidden rounded-xl border border-primary/25 bg-card">
-          <div className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7 sm:py-5">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary">
-              <Sparkles className="h-3 w-3" /> {narrative.phase}
-            </span>
-            <h2 className="mt-2.5 text-base font-semibold leading-snug text-foreground sm:text-lg">
-              {narrative.headline}
-            </h2>
-          </div>
-
-          <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {narrative.signals.map((signal) => {
-                const signalTarget: Record<string, string> = {
-                  "Entregas concluídas no mês": "/documentos",
-                  "Em produção agora": "/projetos",
-                  "Publicações no ar": "/calendario",
-                  "Esperando você": "/aprovacoes",
-                };
-                const target = signalTarget[signal.label];
-                return (
-                  <button
-                    key={signal.label}
-                    type="button"
-                    onClick={() => target && navigate(target)}
-                    className="rounded-xl border border-border bg-secondary/25 p-3 text-left transition-colors hover:border-primary/40 hover:bg-secondary/40"
-                  >
-                    <p className={`text-xl font-bold tabular-nums ${SIGNAL_TONE[signal.tone]}`}>
-                      {signal.value}
-                    </p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{signal.label}</p>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="space-y-2">
-              {narrative.paragraphs.map((paragraph) => (
-                <p key={paragraph} className="text-[13px] leading-relaxed text-foreground">
-                  {paragraph}
-                </p>
-              ))}
-            </div>
-
-            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4">
-              <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Próximo passo
-              </p>
-              <p className="mt-2 text-[13px] leading-relaxed text-foreground">{narrative.nextStep}</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Atalhos ── */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
-          { label: "Calendário", icon: CalendarDays, to: "/calendario" },
-          { label: "Pedidos", icon: Inbox, to: "/pedidos" },
-        ].map((shortcut) => (
-          <button
-            key={shortcut.to}
-            type="button"
-            onClick={() => navigate(shortcut.to)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
-          >
-            <shortcut.icon className="h-4 w-4" /> {shortcut.label}
-          </button>
-        ))}
-      </div>
 
       {/* ── Frentes ativas ── */}
       {activeProjects.length > 0 && (
-        <section className="space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Suas frentes
-          </p>
-          {activeProjects.map((project: any) => {
-            const view = buildProgressView(project, (snapshot?.tasks || []) as any[]);
-            return (
-              <div key={project.id} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="flex min-w-0 items-baseline gap-2 truncate text-[13px] font-medium text-foreground">
-                    <span className="truncate">{project.name}</span>
-                    <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-                      {({ social_media: "Social", trafego: "Tráfego", site: "Site", automacao: "Automação", design: "Design", video: "Vídeo", seo: "SEO" } as Record<string, string>)[(project as any).project_type] || "Projeto"}
+        <Secao divisoria titulo="Suas frentes" descricao={`${activeProjects.length} ${activeProjects.length === 1 ? "ativa" : "ativas"}`}>
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+            {activeProjects.map((project: any) => {
+              const view = buildProgressView(project, (snapshot?.tasks || []) as any[]);
+              // Contexto real: o que esta em producao nesta frente agora
+              const doing = (snapshot?.tasks || [])
+                .filter((task: any) => task.project_id === project.id &&
+                  !["done", "completed", "concluido", "concluída"].includes((task.status || "").toLowerCase()))
+                .slice(0, 3);
+              return (
+                <li key={project.id} className="min-w-0 px-4 py-3">
+                  <div className="flex min-w-0 items-center justify-between">
+                    <p className="flex min-w-0 items-center text-[14px] font-medium text-foreground">
+                      <span className="mr-2 min-w-0 truncate">{project.name}</span>
+                      <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>
+                        {({ social_media: "Social", trafego: "Tráfego", site: "Site", automacao: "Automação", design: "Design", video: "Vídeo", seo: "SEO" } as Record<string, string>)[(project as any).project_type] || "Projeto"}
+                      </span>
+                    </p>
+                    <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
+                      {view.mode === "percent" ? (view.percent > 0 ? `${view.percent}%` : "Em andamento") : view.label}
                     </span>
-                  </p>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {view.mode === "percent" ? (view.percent > 0 ? `${view.percent}%` : "Em andamento") : view.label}
-                  </span>
-                </div>
-                <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${cycleFillPercent(view)}%` }}
-                  />
-                </div>
-                {view.mode === "cycle" && view.nextTitle && (
-                  <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Clock className="h-3 w-3" /> A seguir: {view.nextTitle}
-                  </p>
-                )}
-                {(() => {
-                  // Contexto real: o que esta em producao nesta frente agora
-                  const doing = (snapshot?.tasks || [])
-                    .filter((task: any) => task.project_id === project.id &&
-                      !["done", "completed", "concluido", "concluída"].includes((task.status || "").toLowerCase()))
-                    .slice(0, 3);
-                  if (doing.length === 0) return null;
-                  return (
+                  </div>
+                  <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${cycleFillPercent(view)}%` }}
+                    />
+                  </div>
+                  {view.mode === "cycle" && view.nextTitle && (
+                    <p className={juntar(texto.auxiliar, "mt-2 flex items-center")}>
+                      <Clock className="mr-1.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="truncate">A seguir: {view.nextTitle}</span>
+                    </p>
+                  )}
+                  {doing.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {doing.map((task: any, index: number) => (
-                        <li key={index} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                          <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-primary/60" />
+                        <li key={index} className={juntar(texto.auxiliar, "flex min-w-0 items-start")}>
+                          <span className="mr-1.5 mt-[6px] h-1 w-1 shrink-0 rounded-full bg-primary/60" aria-hidden="true" />
                           <span className="truncate">{task.title}</span>
                         </li>
                       ))}
                     </ul>
-                  );
-                })()}
-              </div>
-            );
-          })}
-        </section>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Secao>
       )}
 
       {/* ── O que já foi ao ar ── */}
       {published.length > 0 && (
-        <section className="space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Já publicado
-          </p>
-          {published.map((publication: any, index: number) => (
-            <div
-              key={`${publication.published_at}-${index}`}
-              className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5"
-            >
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              <p className="min-w-0 flex-1 truncate text-[12px] text-foreground">
-                Publicado em{" "}
-                {new Date(publication.published_at).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "long",
-                })}
-              </p>
-              {publication.permalink && (
-                <a
-                  href={publication.permalink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex shrink-0 items-center gap-1 text-[11px] text-primary hover:opacity-80"
-                >
-                  Ver <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-          ))}
-        </section>
+        <Secao divisoria titulo="Já publicado" descricao={`${published.length} mais recentes`}>
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+            {published.map((publication: any, index: number) => (
+              <li key={`${publication.published_at}-${index}`} className="flex min-w-0 items-center px-4 py-2.5">
+                <CheckCircle2 className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+                  Publicado em{" "}
+                  {new Date(publication.published_at).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "long",
+                  })}
+                </p>
+                {publication.permalink && (
+                  <a
+                    href={publication.permalink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={juntar(botao.discreto, "h-8 text-primary")}
+                  >
+                    Ver <ExternalLink className="ml-1 h-3 w-3" aria-hidden="true" />
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Secao>
       )}
+
+      {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
+      {clientId && <InstagramRealBlock clientId={clientId} />}
 
       {/* ── O case vivo: de onde saímos para onde chegamos ── */}
       {(() => {
@@ -694,48 +669,45 @@ export default function ClientJourneyUpdates() {
             : null;
         if (materials === 0 && postsLive === 0 && reportsCount === 0) return null;
         return (
-          <section className="overflow-hidden rounded-xl border border-primary/25 bg-card">
-            <div className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                A sua história com a Aceleriq
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                {monthsTogether === 1 ? "No primeiro mês" : `Em ${monthsTogether} meses`} de trabalho, isto foi construído:
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-0 sm:grid-cols-[1fr,auto,1fr]">
-              <div className="p-5 sm:p-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Quando começou · {started.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
-                </p>
-                <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                  <li>Nenhum material produzido por aqui</li>
-                  <li>Nenhuma publicação registrada</li>
-                  <li>Sem medição de resultados</li>
-                </ul>
+          <Secao
+            divisoria
+            titulo="A sua história com a Aceleriq"
+            descricao={`${monthsTogether === 1 ? "No primeiro mês" : `Em ${monthsTogether} meses`} de trabalho, isto foi construído`}
+          >
+            <Painel semEspaco>
+              <div className="grid grid-cols-1 sm:grid-cols-2">
+                <div className="min-w-0 px-4 py-4 sm:px-5">
+                  <p className={texto.rotulo}>
+                    Quando começou · {started.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                  </p>
+                  <ul className={juntar(texto.corpo, "mt-2 space-y-1 text-muted-foreground")}>
+                    <li>Nenhum material produzido por aqui</li>
+                    <li>Nenhuma publicação registrada</li>
+                    <li>Sem medição de resultados</li>
+                  </ul>
+                </div>
+                <div className="min-w-0 border-t border-border px-4 py-4 sm:border-l sm:border-t-0 sm:px-5">
+                  <p className={juntar(texto.rotulo, "flex items-center text-primary")}>
+                    Hoje <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                  </p>
+                  <ul className={juntar(texto.corpo, "mt-2 space-y-1")}>
+                    {materials > 0 && (
+                      <li><span className="font-semibold tabular-nums text-primary">{materials}</span> materia(is) produzidos e entregues</li>
+                    )}
+                    {postsLive > 0 && (
+                      <li><span className="font-semibold tabular-nums text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
+                    )}
+                    {reportsCount > 0 && (
+                      <li><span className="font-semibold tabular-nums text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
+                    )}
+                    {contactsGrowth !== null && contactsGrowth > 0 && (
+                      <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
+                    )}
+                  </ul>
+                </div>
               </div>
-              <div className="hidden items-center justify-center px-2 sm:flex" aria-hidden="true">
-                <ArrowUpRight className="h-6 w-6 text-primary" />
-              </div>
-              <div className="border-t border-border p-5 sm:border-l sm:border-t-0 sm:p-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Hoje</p>
-                <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-foreground">
-                  {materials > 0 && (
-                    <li><span className="font-semibold text-primary">{materials}</span> materia(is) produzidos e entregues</li>
-                  )}
-                  {postsLive > 0 && (
-                    <li><span className="font-semibold text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
-                  )}
-                  {reportsCount > 0 && (
-                    <li><span className="font-semibold text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
-                  )}
-                  {contactsGrowth !== null && contactsGrowth > 0 && (
-                    <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
-                  )}
-                </ul>
-              </div>
-            </div>
-          </section>
+            </Painel>
+          </Secao>
         );
       })()}
 
@@ -749,42 +721,44 @@ export default function ClientJourneyUpdates() {
         const money = (value: number) =>
           new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
         return (
-          <section className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="border-b border-border px-5 py-4 sm:px-7">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Crescimento do seu negócio
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
+          <Secao
+            divisoria
+            titulo="Crescimento do seu negócio"
+            descricao={
+              <span className="block truncate">
                 {totalContacts > 0
                   ? `${totalContacts.toLocaleString("pt-BR")} pessoa(s) chegaram até vocês nos períodos medidos`
                   : "A resposta do público ao longo do tempo"}
                 {totalSpend > 0 && ` · ${money(totalSpend)} investidos`}
                 {totalRevenue > 0 && ` · ${money(totalRevenue)} em retorno`}
-              </p>
-            </div>
-            <div className="px-2 py-4 sm:px-4">
-              <ResponsiveContainer width="100%" height={220}>
-                <ComposedChart data={series} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="contacts" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <YAxis yAxisId="reach" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))" }}
-                    itemStyle={{ color: "hsl(var(--foreground))" }}
-                    labelStyle={{ color: "hsl(var(--primary))", fontSize: 10 }}
-                    formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name === "contacts" ? "Contatos" : "Alcance"]}
-                  />
-                  <Bar yAxisId="contacts" dataKey="contacts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                  <Line yAxisId="reach" type="monotone" dataKey="reach" stroke="#0EA5E9" strokeWidth={2} dot={{ r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap gap-3 px-3 pt-1 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-primary" /> Pessoas que chamaram vocês</span>
-                <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 rounded bg-sky-500" /> Pessoas alcançadas</span>
+              </span>
+            }
+          >
+            <Painel semEspaco>
+              <div className="px-2 py-4 sm:px-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={series} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="contacts" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis yAxisId="reach" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))" }}
+                      itemStyle={{ color: "hsl(var(--foreground))" }}
+                      labelStyle={{ color: "hsl(var(--primary))", fontSize: 10 }}
+                      formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name === "contacts" ? "Contatos" : "Alcance"]}
+                    />
+                    <Bar yAxisId="contacts" dataKey="contacts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+                    <Line yAxisId="reach" type="monotone" dataKey="reach" stroke="#0EA5E9" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap px-3 pt-1 text-[11px] text-muted-foreground [&>*]:mr-4">
+                  <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-sm bg-primary" aria-hidden="true" /> Pessoas que chamaram vocês</span>
+                  <span className="flex items-center"><span className="mr-1.5 h-0.5 w-3 rounded bg-sky-500" aria-hidden="true" /> Pessoas alcançadas</span>
+                </div>
               </div>
-            </div>
-          </section>
+            </Painel>
+          </Secao>
         );
       })()}
 
@@ -817,29 +791,34 @@ export default function ClientJourneyUpdates() {
         });
         const peak = Math.max(...rows.map((row) => row.total), 1);
         return (
-          <section className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="border-b border-border px-5 py-4 sm:px-7">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Sua evolução desde o início
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                Do ponto de partida até hoje: {rows[rows.length - 1].running} movimento(s) de trabalho registrados.
-              </p>
-            </div>
-            <div className="space-y-2.5 px-5 py-5 sm:px-7">
+          <Secao
+            divisoria
+            titulo="Sua evolução desde o início"
+            descricao={`${rows[rows.length - 1].running} movimento(s) de trabalho registrados`}
+            ajuda="Do ponto de partida até hoje, mês a mês. Toque num mês para ver o que foi feito nele."
+            acao={
+              <div className="hidden text-[11px] text-muted-foreground sm:flex [&>*+*]:ml-3" aria-hidden="true">
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-primary" /> Entregas</span>
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-sky-500" /> Publicações</span>
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500" /> Relatórios</span>
+              </div>
+            }
+          >
+            <ul className={juntar(superficie.painel, "divide-y divide-border")}>
               {rows.map((row) => {
                 const isOpen = expandedMonth === row.key;
                 return (
-                <div key={row.key}>
+                <li key={row.key} className="min-w-0">
                   <button
                     type="button"
                     onClick={() => setExpandedMonth(isOpen ? null : row.key)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors ${isOpen ? "bg-secondary/40" : "hover:bg-secondary/25"}`}
+                    aria-expanded={isOpen}
+                    className={juntar("flex w-full min-w-0 items-center px-4 py-2.5 text-left transition-colors", isOpen ? "bg-muted/40" : "hover:bg-muted/30", foco)}
                   >
-                    <span className="w-14 shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                    <span className="mr-3 w-14 shrink-0 text-[12px] font-medium text-muted-foreground">
                       {monthLabel(row.key)}
                     </span>
-                    <div className="h-3 flex-1 overflow-hidden rounded-full bg-secondary/50">
+                    <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                       <div
                         className="flex h-full overflow-hidden rounded-full"
                         style={{ width: `${Math.max(6, (row.total / peak) * 100)}%` }}
@@ -849,43 +828,44 @@ export default function ClientJourneyUpdates() {
                         {row.relatorios > 0 && <span className="h-full bg-amber-500" style={{ flex: row.relatorios }} />}
                       </div>
                     </div>
-                    <span className="w-20 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                    <span className="ml-3 w-20 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
                       {row.total} · total {row.running}
                     </span>
+                    <ChevronDown className={juntar("ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")} aria-hidden="true" />
                   </button>
                   {isOpen && (
-                    <div className="ml-16 mt-1.5 space-y-1 border-l border-border pl-3 pb-1">
+                    <div className="mb-2 ml-[72px] mr-4 space-y-1 border-l border-border pb-1 pl-3">
                       {/* Entregas com nome: o mês deixa de ser só um número. */}
                       {(snapshot?.allFiles || [])
                         .filter((file: any) => file.created_at?.startsWith(row.key))
                         .slice(0, 5)
                         .map((file: any) => (
-                          <p key={file.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                          <p key={file.id} className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                             <span className="truncate">{file.file_name}</span>
                           </p>
                         ))}
                       {row.entregas > 5 && (
-                        <p className="text-[11px] text-muted-foreground/70">e mais {row.entregas - 5} material(is) neste mês</p>
+                        <p className={texto.auxiliar}>e mais {row.entregas - 5} material(is) neste mês</p>
                       )}
                       {/* Etapas do plano vencidas no mês. */}
                       {((snapshot?.milestones || []) as any[])
                         .filter((m: any) => m.status === "completed" && (m.updated_at || m.target_date || "").startsWith(row.key))
                         .slice(0, 4)
                         .map((m: any, index: number) => (
-                          <p key={`ms-${index}`} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                          <p key={`ms-${index}`} className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
                             <span className="truncate">Etapa concluída: {m.title}</span>
                           </p>
                         ))}
                       {(snapshot?.publications || [])
                         .filter((pub: any) => pub.status === "published" && pub.published_at && pub.published_at.startsWith(row.key))
                         .map((pub: any, index: number) => (
-                          <p key={index} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                          <p key={index} className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
                             Publicação no ar em {new Date(pub.published_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                             {pub.permalink && (
-                              <a href={pub.permalink} target="_blank" rel="noreferrer" className="text-primary hover:opacity-80">ver</a>
+                              <a href={pub.permalink} target="_blank" rel="noreferrer" className="ml-1.5 text-primary hover:opacity-80">ver</a>
                             )}
                           </p>
                         ))}
@@ -896,65 +876,62 @@ export default function ClientJourneyUpdates() {
                             key={report.id}
                             type="button"
                             onClick={() => navigate(`/relatorios/${report.id}`)}
-                            className="flex items-center gap-1.5 text-left text-[11px] text-muted-foreground hover:text-foreground"
+                            className={juntar(texto.auxiliar, "flex min-w-0 items-center rounded text-left hover:text-foreground", foco)}
                           >
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                            <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
                             <span className="truncate">{report.title}</span>
                           </button>
                         ))}
                     </div>
                   )}
-                </div>
+                </li>
                 );
               })}
-              <div className="flex flex-wrap gap-3 pt-2 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Entregas</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Publicações</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Relatórios</span>
-              </div>
+            </ul>
+            <div className="mt-2 flex flex-wrap text-[11px] text-muted-foreground sm:hidden [&>*]:mr-3">
+              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true" /> Entregas</span>
+              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-sky-500" aria-hidden="true" /> Publicações</span>
+              <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" /> Relatórios</span>
             </div>
-          </section>
+          </Secao>
         );
       })()}
 
+      {/* ── A história da parceria, capítulo a capítulo ── */}
+      {clientId && <ClientHistory clientId={clientId} />}
+
       {/* ── Diário do trabalho: cada movimento, na hora ── */}
-      {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
+      {clientId && (
+        <div className="border-t border-border pt-5">
+          <ProjectJournal clientId={clientId} canWrite={false} />
+        </div>
+      )}
 
       {/* ── Atualizações escritas pela Aceleriq ── */}
       {rituals.length > 0 && (
-        <section className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Atualizações da Aceleriq
-          </p>
+        <Secao divisoria titulo="Atualizações da Aceleriq" descricao={`${rituals.length} ${rituals.length === 1 ? "atualização" : "atualizações"}`}>
+          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
           {rituals.map((update: any, index: number) => {
             const ritualType = (update.metrics as any)?.ritual_type as string;
             const badge = RITUAL_LABELS[ritualType] || {
               label: "Atualização",
-              cls: "bg-secondary text-muted-foreground",
+              cls: "bg-muted text-muted-foreground",
             };
             const isLatest = index === 0;
             return (
-              <article
-                key={update.id}
-                className={`rounded-xl border bg-card p-5 sm:p-6 ${isLatest ? "border-primary/40 shadow-sm" : "border-border"}`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${badge.cls}`}>
-                    {badge.label}
-                  </span>
-                  {isLatest && (
-                    <span className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground">
-                      Mais recente
-                    </span>
-                  )}
-                  <span className="ml-auto text-[11px] text-muted-foreground">
+              <li key={update.id} className="min-w-0">
+              <article className={juntar("min-w-0 px-4 py-4 sm:px-5", isLatest && "border-l-2 border-primary")}>
+                <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
+                  <span className={juntar(etiqueta, badge.cls)}>{badge.label}</span>
+                  {isLatest && <span className={juntar(etiqueta, "bg-primary text-primary-foreground")}>Mais recente</span>}
+                  <span className={juntar(texto.auxiliar, "ml-auto")}>
                     {new Date(update.created_at).toLocaleDateString("pt-BR", {
                       day: "2-digit",
                       month: "long",
                     })}
                   </span>
                 </div>
-                <h3 className="mt-3 text-sm font-semibold text-foreground">{update.title}</h3>
+                <h3 className="mt-1 text-[14px] font-semibold leading-5 text-foreground">{update.title}</h3>
                 {/* A mesma mensagem do grupo, mas do jeito do painel: secoes
                     com titulo, listas de verdade, sem asteriscos; a mais
                     recente inteira, as antigas resumidas sem frase cortada. */}
@@ -963,14 +940,14 @@ export default function ClientJourneyUpdates() {
                 ) : (
                   <>
                     {update.summary && (
-                      <div className={`mt-3 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground ${isLatest ? "" : "line-clamp-6"}`}>
+                      <div className={juntar(texto.corpo, "mt-3 whitespace-pre-line text-muted-foreground", isLatest ? "" : "line-clamp-6")}>
                         {update.summary}
                       </div>
                     )}
                     {update.next_steps && (
-                      <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-3.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">Próximo passo</p>
-                        <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-foreground">{update.next_steps}</p>
+                      <div className="mt-3 border-l-2 border-primary/60 pl-3">
+                        <p className={juntar(texto.rotulo, "text-primary")}>Próximo passo</p>
+                        <p className={juntar(texto.corpo, "mt-1 whitespace-pre-line")}>{update.next_steps}</p>
                       </div>
                     )}
                   </>
@@ -979,15 +956,17 @@ export default function ClientJourneyUpdates() {
                   <button
                     type="button"
                     onClick={() => navigate(`/relatorios/${update.id}`)}
-                    className="mt-3 flex items-center gap-1 text-[11px] text-primary hover:opacity-80"
+                    className={juntar(botao.discreto, "-ml-2.5 mt-2 h-8 text-primary")}
                   >
-                    Ver completa <ArrowUpRight className="h-3 w-3" />
+                    Ver completa <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
                   </button>
                 )}
               </article>
+              </li>
             );
           })}
-        </section>
+          </ul>
+        </Secao>
       )}
     </div>
   );

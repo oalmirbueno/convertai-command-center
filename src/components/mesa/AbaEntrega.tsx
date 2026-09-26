@@ -26,6 +26,8 @@ import {
 } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, type Trabalho } from "./useItensDoMes";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 
 /**
  * Aba Entrega (SPEC seção 6). O caminho de cada arte até a Agenda:
@@ -224,13 +226,16 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center">
+    // Sistema de design (docs/design/SISTEMA.md): a barra do mês e o plano sem caixa;
+    // só a lista de artes é um painel. No computador a aba tem a altura da janela
+    // (AreaDeTrabalho) e só a lista rola, por dentro; no celular a página rola normal.
+    <AreaDeTrabalho principalRolavel={false}>
+      <div className="flex shrink-0 flex-col sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center">
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, -1))} aria-label="Mês anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <p className="mx-1 min-w-[120px] text-center text-[13.5px] font-medium capitalize">{rotuloDoMes(mes)}</p>
+          <p className="mx-1 min-w-[120px] text-center text-[15px] font-semibold capitalize">{rotuloDoMes(mes)}</p>
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -247,11 +252,13 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         </div>
       </div>
 
-      <AjustesDaEntrega podeEditar={podeRecarregar} />
+      <div className="mt-5 shrink-0">
+        <AjustesDaEntrega podeEditar={podeRecarregar} />
+      </div>
 
-      <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
-          <p className="text-[12.5px] font-medium">Artes do mês</p>
+      <section className="mt-5 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:min-h-[240px] lg:flex-1">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-3.5 py-2.5">
+          <h2 className="text-[14px] font-semibold">Artes do mês</h2>
           <span className="text-[11.5px] text-muted-foreground">{itens.length} {itens.length === 1 ? "item" : "itens"}</span>
         </div>
         {dados.isLoading && (
@@ -260,9 +267,12 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         {dados.isError && <p className="m-3 rounded-lg border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">{textoDoErro(dados.error)}</p>}
         {dados.data && itens.length === 0 && <p className="px-3.5 py-6 text-center text-[12.5px] text-muted-foreground">Nenhum item com arte na agenda deste mês.</p>}
 
-        {/* Rolagem própria: a lista longa não arrasta a página inteira. */}
+        {/* Rolagem própria só no computador (RegiaoRolavel): a lista longa não
+            arrasta a página e a posição volta ao trocar de aba. No celular a
+            lista faz parte da página, sem caixa com rolagem prendendo o dedo. */}
         {itens.length > 0 && (
-          <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto overscroll-contain">
+          <RegiaoRolavel modo="lg" rotulo="Artes do mês" sobre="cartao" memoria={`mesa:entrega:${clientId}:${mes}`}>
+          <ul className="divide-y divide-border">
             {itens.map((i) => {
               const t = trabalhoDe(i);
               const pub = publicacaoDe(t);
@@ -296,9 +306,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
               );
             })}
           </ul>
+          </RegiaoRolavel>
         )}
       </section>
-    </div>
+    </AreaDeTrabalho>
   );
 }
 
@@ -394,7 +405,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];
   tipos.sort((a, b) => ORDEM_DOS_TIPOS.indexOf(a) - ORDEM_DOS_TIPOS.indexOf(b));
   const blocoDeHorarios = (
-    <div className="min-w-0 space-y-2 rounded-lg border border-border bg-muted p-3">
+    <div className="min-w-0 space-y-2 rounded-md bg-muted/50 p-3">
       <div className="flex items-start">
         <Clock className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
@@ -413,7 +424,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       {tipos.length > 0 && (
         <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {tipos.map((t) => (
-            <li key={t} className="min-w-0 rounded-md border border-border bg-card px-2.5 py-1.5">
+            <li key={t} className="min-w-0 rounded-md bg-background/60 px-2.5 py-1.5">
               <p className="truncate text-[11px] text-muted-foreground">{ROTULO_DO_TIPO[t] || t}</p>
               <p className="text-[14px] font-semibold tabular-nums">{melhores.data!.por_tipo[t]}</p>
             </li>
@@ -433,12 +444,12 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   );
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-card p-3.5 text-[12.5px]">
+    <section className="space-y-3 border-y border-border py-4 text-[13px]">
       {!editando ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-1.5">
             <div className="flex items-start">
-              <p className="min-w-0 flex-1 text-[13px] font-medium">Publicação e plano</p>
+              <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-[22px]">Publicação e plano</h2>
               {podeEditar && (
                 <Button type="button" size="sm" variant="ghost" className="-mt-1 h-8 shrink-0 text-[12px]" onClick={() => setEditando(true)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar

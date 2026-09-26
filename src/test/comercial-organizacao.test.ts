@@ -30,11 +30,17 @@ describe("cada aba é uma área, com nome que diz o que é", () => {
     expect(pagina).toContain(': "visao";');
   });
 
-  it("a página não tem fileira de abas: o menu lateral é a única navegação", () => {
-    // Duas navegações para o mesmo lugar era o que fazia a tela parecer
-    // desorganizada. O cabeçalho guarda identidade; o conteúdo, a tela toda.
+  it("as áreas ficam nas Etapas do sistema e navegam pelo endereço", () => {
+    // Sistema de design (26/09): abas principais de uma página são Etapas.
+    // A escolha continua sendo a rota (a mesma do menu lateral): não existe
+    // um segundo estado de aba escondido na tela, nem fileira feita à mão.
+    expect(pagina).toContain("<Etapas");
+    expect(pagina).toContain('rotulo="Áreas do Comercial"');
+    expect(pagina).toContain("onEscolher={(v) => setAba(v as Aba)}");
     expect(pagina).not.toContain('{ id: "crm", label: "CRM"');
     expect(pagina).not.toContain("setAba(item.id)");
+    // A explicação da área vai no "?" do título, não num parágrafo fixo.
+    expect(pagina).toContain("ajuda={TITULO_DA_ABA[aba]}");
   });
 
   it("o menu leva à visão geral, ao CRM e à Agenda", () => {
@@ -92,8 +98,10 @@ describe("cada aba é uma área, com nome que diz o que é", () => {
       pagina.indexOf("</header>"),
     );
     expect(cabecalho).not.toContain("<Tile");
-    expect(pagina).toContain('titulo="Previsão do mês"');
-    expect(pagina).toContain('titulo="Receita do mês"');
+    expect(cabecalho).not.toContain("<FaixaDeNumeros");
+    // Os números agora são uma faixa só (FaixaDeNumeros), não um cartão por número.
+    expect(pagina).toContain('rotulo: "Previsão do mês"');
+    expect(pagina).toContain('rotulo: "Receita do mês"');
   });
 });
 
@@ -150,7 +158,7 @@ describe("compromisso próprio: reunião sua, sem lead", () => {
   });
 
   it("a tela oferece marcar sem lead", () => {
-    expect(agenda).toContain('<SelectItem value="proprio">Compromisso seu (sem lead)</SelectItem>');
+    expect(agenda).toContain('<option value="proprio">Compromisso seu (sem lead)</option>');
     expect(agenda).toContain('leadId: leadId === "proprio" ? null : leadId');
   });
 

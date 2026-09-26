@@ -32,6 +32,21 @@
  * - computador_pedir { client_id?, titulo, app, passos } -> { tarefa } (ou 409 desligado)
  * - computador_decidir { tarefa_id, estado: aprovada|cancelada } -> { tarefa }
  *
+ * Frente E2 (26/09): a mesma função atende a Mesa Vídeos (geração) e a Mesa
+ * Edição (/mesa-edicao: entrada, organizar e editar).
+ * - pedido_preparar aceita tipo gerar_cena { alvo: { roteiro_id, cena_ref } } e o
+ *   modelo de vídeo escolhido (parametros.modelo, catálogo em _shared/modelos-de-video.ts);
+ *   o modelo escolhido nunca é trocado por outro motor.
+ * - arquivo_editar aceita { na_edicao: true|false } (vídeo gerado aprovado entra na
+ *   Entrada da Edição; coluna video_arquivos.edicao_desde, SQL E2-01).
+ * - resultados_para_edicao_propor { client_id } -> { mensagem_id, acao | null }
+ *   (contrato comum; executar_acao_agente e desfazer_acao_agente executam as duas propostas).
+ * - agente_entender { client_id, mesa: videos|edicao, texto } -> { intencao, confianca, via }
+ *   (Jev Choice; sem o Jev, as palavras do pedido).
+ * - Projeto de edição (_shared/projeto-de-edicao.ts; coluna video_versoes.projeto, SQL E2-01):
+ *   versao_registrar aceita { projeto }; projeto_salvar { versao_id, projeto, revisao_lida } -> { versao }
+ *   (trava otimista pela revisão; versão aprovada não muda). É onde o editor completo grava.
+ *
  * Sem travessão.
  */
 
@@ -75,13 +90,59 @@ import { montarPacote, type TakeDoPacote } from "../_shared/pacote-de-edicao.ts"
 import { conhecimentoEdicao } from "../_shared/conhecimento-edicao.ts";
 import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "../_shared/roteiros-para-video.ts";
 import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, podeMudarEstado, type EstadoDaTarefa } from "../_shared/computador-do-agente.ts";
+import {
+  acaoDoEnvioParaEdicao,
+  AGENTE_DO_ENVIO,
+  AGENTES_DA_MESA_DE_VIDEO,
+  camposDoEnvio,
+  CONFIANCA_MINIMA,
+  intencaoPorPalavras,
+  intencaoValida,
+  type MesaDoAgente,
+  NENHUMA,
+  perguntaDaIntencao,
+  type ResultadoGerado,
+} from "../_shared/agente-de-video.ts";
+import { modelosDeVideo } from "../_shared/modelos-de-video.ts";
+import { jevPerguntar } from "../_shared/jev.ts";
+import { cobrarJev } from "../_shared/ia-motor.ts";
+import { MAX_BYTES_DO_PROJETO, normalizarProjeto, type ProjetoDeEdicao, proximaRevisao, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
+// Frente V-A (26/09): gerador (motores, ângulo, continuar, transição, antes e depois) e o diretor.
+import { AGENTE_DO_DIRETOR } from "../_shared/diretor-de-video.ts";
+import {
+  anguloGerar,
+  antesDepoisImagem,
+  type BaseDaFuncao,
+  continuarVideo,
+  custoEstimar,
+  gerarStatus,
+  gerarStatusCliente,
+  gerarVideo,
+  motoresEstado,
+  motoresSincronizar,
+  quadroRegistrar,
+  transicaoGerar,
+} from "./geracao.ts";
+import {
+  antesDepoisParaEditor,
+  diretorAvaliar,
+  diretorConversar,
+  diretorEditorDesfazer,
+  diretorParaEditor,
+  diretorProporGerar,
+  diretorSalvar,
+  executarItemDoDiretor,
+  templateArquivar,
+  templateSalvar,
+} from "./diretor.ts";
+import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 
 /** Direção de edição do pacote (motor mesa_videos.direcao_de_edicao em motores.ts). */
 const CONHECIMENTO_DA_EDICAO = conhecimentoEdicao("pacote").texto;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -164,6 +225,9 @@ const idOuNulo = (v: unknown): string | null => {
 /** Tabela que ainda não existe no banco (SQL V2-01 não aplicado). */
 function erroDeTabela(error: { message?: string; code?: string } | null, tabela: string): ErroHttp {
   const m = String((error && error.message) || "");
+  if (/edicao_desde|video_pedidos_tipo_check|column "projeto"|'projeto' column/i.test(m)) {
+    return new ErroHttp(503, "banco_sem_mesa_edicao", "A Mesa Edição ainda não foi ativada no banco. Aplique o SQL E2-01.");
+  }
   if (/does not exist|schema cache|42P01|PGRST205/i.test(m) || (error && error.code === "42P01")) {
     return new ErroHttp(503, "banco_sem_mesa_videos", `A Mesa Vídeos ainda não foi ativada no banco (tabela ${tabela}). Aplique o SQL V2-01.`);
   }
@@ -194,10 +258,11 @@ async function auditar(ch: Chamador, ferramenta: string, input: Record<string, u
 
 // ------------------------------------------------------------------ leituras
 
-const COLUNAS_DO_ARQUIVO =
-  "id, client_id, nome, nome_original, storage_bucket, storage_path, tipo, mime, bytes, duracao_s, largura, altura, sha256, gravado_em, roteiro_id, cena_ref, grupo, melhor, nota, estado, criado_por, criado_em, atualizado_em";
+// Todas as colunas: edicao_desde (SQL E2-01) entra quando existir, sem quebrar antes dele.
+const COLUNAS_DO_ARQUIVO = "*";
 
 type LinhaDoArquivo = TakeParaOrganizar & {
+  edicao_desde?: string | null;
   client_id: string;
   storage_bucket: string;
   storage_path: string;
@@ -345,9 +410,12 @@ async function arquivoRegistrar(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 /** Campos que a equipe pode mudar num arquivo (o original e o caminho nunca). */
-function camposPermitidos(bruto: unknown): CamposDoTake & { nota?: string | null; tipo?: string } {
+function camposPermitidos(bruto: unknown): CamposDoTake & { nota?: string | null; tipo?: string; edicao_desde?: string | null } {
   const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
-  const c: CamposDoTake & { nota?: string | null; tipo?: string } = {};
+  const c: CamposDoTake & { nota?: string | null; tipo?: string; edicao_desde?: string | null } = {};
+  // Vídeo gerado aprovado na Mesa Vídeos entra na Entrada da Edição (e o desfazer tira).
+  if ("na_edicao" in o) c.edicao_desde = o.na_edicao === true ? new Date().toISOString() : null;
+  if ("edicao_desde" in o) c.edicao_desde = o.edicao_desde && !isNaN(Date.parse(String(o.edicao_desde))) ? new Date(String(o.edicao_desde)).toISOString() : null;
   if ("nome" in o) {
     const n = limparNome(o.nome);
     if (!n) throw new ErroHttp(400, "nome_vazio", "Dê um nome ao take.");
@@ -408,11 +476,12 @@ async function takesOrganizarPropor(ch: Chamador, corpo: Record<string, unknown>
   const [arquivos, rot, aprovados] = await Promise.all([lerArquivosDoCliente(clientId), lerRoteiros(clientId), arquivosEmVersaoAprovada(clientId)]);
   const takes: TakeParaOrganizar[] = arquivos.map((a) => ({ ...a, em_versao_aprovada: aprovados.indexOf(a.id) >= 0 }));
   const roteiros = rot.roteiros.map(paraOrganizar);
-  const itens = proporOrganizacao(takes, roteiros);
+  const itens = proporOrganizacao(takes, roteiros, { melhores: true });
+  const melhores = itens.filter((i) => i.operacao === "marcar_melhor").length;
   const acao = acaoDaOrganizacao(takes, itens, roteiros, {
     id: `organizador-${Date.now().toString(36)}`,
     resumo: itens.length
-      ? `Organizar ${new Set(itens.map((i) => i.arquivo_id)).size} takes por roteiro e cena, com nomes no padrão roteiro_c01_t01. O arquivo original não muda.`
+      ? `Organizar ${new Set(itens.map((i) => i.arquivo_id)).size} takes por roteiro e cena, com nomes no padrão roteiro_c01_t01${melhores ? ` e ${melhores} ${melhores === 1 ? "melhor take sugerido" : "melhores takes sugeridos"} (o último de cada cena)` : ""}. O arquivo original não muda.`
       : "",
   });
   if (!acao) return json({ mensagem_id: null, acao: null, roteiros_disponiveis: rot.disponivel });
@@ -423,11 +492,12 @@ async function takesOrganizarPropor(ch: Chamador, corpo: Record<string, unknown>
 
 async function propostaGuardada(ch: Chamador, corpo: Record<string, unknown>) {
   try {
-    return await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), {
+    const g = await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), {
       tabela: TABELA_DAS_ACOES,
       acaoId: corpo.acao_id,
-      agente: "organizador_de_takes",
     });
+    if ((AGENTES_DA_MESA_DE_VIDEO as readonly string[]).indexOf(g.acao.agente) < 0) throw new ErroHttp(404, "acao_inexistente", "Esta mensagem não tem ação da Mesa Vídeos.");
+    return g;
   } catch (e) {
     if (e instanceof ErroDaAcao && e.codigo === "mensagem_indisponivel") throw new ErroHttp(503, "banco_sem_mesa_videos", "A Mesa Vídeos ainda não foi ativada no banco. Aplique o SQL V2-01.");
     throw e;
@@ -437,6 +507,12 @@ async function propostaGuardada(ch: Chamador, corpo: Record<string, unknown>) {
 async function executarNoTake(clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer: Record<string, unknown> }> {
   const atual = await lerArquivo(item.alvo_id);
   if (atual.client_id !== clientId) throw new Error("Arquivo de outro cliente.");
+  if (item.operacao === "enviar_para_edicao") {
+    if (atual.tipo !== "gerado") throw new Error("Só vídeo gerado vai por aqui.");
+    if (atual.edicao_desde) throw new Error("Já está na Edição.");
+    await gravarCampos(clientId, atual.id, camposDoEnvio(item.operacao, new Date().toISOString()));
+    return { desfazer: { campos: { edicao_desde: null } } };
+  }
   if (item.operacao === "arquivar") {
     const aprovados = await arquivosEmVersaoAprovada(clientId);
     if (aprovados.indexOf(atual.id) >= 0) throw new Error("Está numa versão aprovada: fica no acervo.");
@@ -449,7 +525,12 @@ async function executarNoTake(clientId: string, item: ItemDaAcaoDoAgente): Promi
 async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const guardada = await propostaGuardada(ch, corpo);
   const clientId = guardada.mensagem.client_id;
-  const r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] } = await confirmarAcaoGuardada(guardada, (item) => executarNoTake(clientId, item), {
+  // Diretor (frente V-A): cada item gera um plano (pago, sem desfazer), com a entrada mostrada na confirmação.
+  const doDiretor = guardada.acao.agente === AGENTE_DO_DIRETOR;
+  const executor = doDiretor
+    ? (item: ItemDaAcaoDoAgente, acao: AcaoDoAgente) => executarItemDoDiretor(baseDa(ch), clientId, item, acao, guardada.mensagem.id)
+    : (item: ItemDaAcaoDoAgente) => executarNoTake(clientId, item);
+  const r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] } = await confirmarAcaoGuardada(guardada, executor, {
     descartar: corpo.descartar === true,
     userId: ch.userId,
     lote: 3,
@@ -457,7 +538,7 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   if (corpo.descartar === true) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  await auditar(ch, "video_organizar_takes", { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) }, falhas === 0, guardada.mensagem.id);
+  await auditar(ch, doDiretor ? "video_diretor_gerar_planos" : guardada.acao.agente === AGENTE_DO_ENVIO ? "video_enviar_para_edicao" : "video_organizar_takes", { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) }, falhas === 0, guardada.mensagem.id);
   return json({ anexo: r.anexo, feitos, falhas });
 }
 
@@ -467,6 +548,11 @@ async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const r = await desfazerAcaoGuardada(
     guardada,
     async (x) => {
+      const bruto = x.desfazer && typeof x.desfazer === "object" ? ((x.desfazer as { campos?: Record<string, unknown> }).campos || {}) : {};
+      if ("edicao_desde" in bruto) {
+        await gravarCampos(clientId, x.alvo_id, { edicao_desde: null });
+        return;
+      }
       const campos = camposDoDesfazer(x.desfazer);
       if (!Object.keys(campos).length) return;
       await gravarCampos(clientId, x.alvo_id, campos as Record<string, unknown>);
@@ -503,6 +589,25 @@ async function pedidoPreparar(ch: Chamador, corpo: Record<string, unknown>) {
     if (!temFoto) throw new ErroHttp(409, "cena_sem_foto", "A cena ainda não tem foto: a foto da cena é o primeiro quadro do vídeo.");
     alvo.numero = c.numero;
     alvo.titulo = c.titulo || null;
+    // Cena da História ligada a uma cena de roteiro (Mesa Vídeos, Gerar): guarda a ligação.
+    if (alvoBruto.roteiro_id && UUID.test(String(alvoBruto.roteiro_id))) {
+      alvo.roteiro_id = String(alvoBruto.roteiro_id);
+      alvo.cena_ref = String(alvoBruto.cena_ref || "").slice(0, MAX_CENA_REF) || null;
+    }
+  } else if (tipo === "gerar_cena") {
+    // Cena de roteiro aprovado sem foto: o texto da cena é a base (texto para vídeo).
+    alvo.roteiro_id = idDe(alvoBruto.roteiro_id, "roteiro_id");
+    alvo.cena_ref = String(alvoBruto.cena_ref || "").trim().slice(0, MAX_CENA_REF);
+    if (!alvo.cena_ref) throw new ErroHttp(400, "cena_invalida", "Diga qual cena do roteiro gerar.");
+    const rot = await lerRoteiros(clientId);
+    const roteiro = rot.roteiros.find((r) => r.id === alvo.roteiro_id) || null;
+    const cena = roteiro ? roteiro.cenas.find((x) => x.ref === alvo.cena_ref) || null : null;
+    if (!roteiro || !cena) throw new ErroHttp(404, "cena_inexistente", "Cena não encontrada nos roteiros aprovados deste cliente.");
+    alvo.roteiro = roteiro.titulo;
+    alvo.numero = cena.ordem;
+    alvo.titulo = cena.titulo || null;
+    const p0 = (corpo.parametros && typeof corpo.parametros === "object" ? corpo.parametros : {}) as Record<string, unknown>;
+    if (!p0.descricao) corpo.parametros = { ...p0, descricao: [cena.visual, cena.fala].filter(Boolean).join(". ") || cena.titulo || null };
   } else {
     const arquivo = await lerArquivo(idDe(alvoBruto.arquivo_id, "arquivo_id"));
     if (arquivo.client_id !== clientId) throw new ErroHttp(404, "arquivo_inexistente", "Arquivo de vídeo não encontrado.");
@@ -512,11 +617,21 @@ async function pedidoPreparar(ch: Chamador, corpo: Record<string, unknown>) {
       corpo.parametros = { ...((corpo.parametros as object) || {}), duracao_s: arquivo.duracao_s };
     }
   }
-  const { data: catalogo } = await servico().from("ia_modelos").select("id, tipo, ativo, rotulo").eq("ativo", true).limit(500);
+  const { data: catalogo } = await servico().from("ia_modelos").select("id, tipo, ativo, rotulo, modelo_api").eq("ativo", true).limit(500);
+  const lista = (catalogo || []) as { id: string; tipo: string; ativo: boolean; rotulo: string | null; modelo_api?: string | null }[];
   const params = normalizarParametros(tipo, corpo.parametros);
-  const escolhido = tipo === "animar_cena" ? (params as { motor_video: string | null }).motor_video : null;
-  const executor = executorDoPedido(tipo, (catalogo || []) as { id: string; tipo: string; ativo: boolean; rotulo: string | null }[], escolhido);
-  if (tipo === "animar_cena") (params as { motor_video: string | null }).motor_video = executor.executor === "em_breve" ? null : executor.executor;
+  const deVideo = tipo === "animar_cena" || tipo === "gerar_cena";
+  const pv = params as { motor_video: string | null; modelo?: string | null };
+  let escolhido = deVideo ? pv.motor_video : null;
+  let executor = executorDoPedido(tipo, lista, escolhido);
+  if (deVideo && pv.modelo) {
+    // O modelo que a equipe escolheu manda: só executa o motor ligado dele; sem motor, fica "em breve".
+    const m = modelosDeVideo(lista).find((x) => x.id === pv.modelo) || null;
+    escolhido = m && m.ligado ? m.motor_id || null : null;
+    executor = escolhido ? executorDoPedido(tipo, lista, escolhido) : executorDoPedido(tipo, [], null);
+    if (escolhido && executor.executor !== escolhido) executor = executorDoPedido(tipo, [], null);
+  }
+  if (deVideo) pv.motor_video = executor.executor === "em_breve" ? null : executor.executor;
   const modeloTexto = PRECOS_REFERENCIA.modelos.some((m) => m.modelo === corpo.modelo_texto) ? String(corpo.modelo_texto) : MODELO_PADRAO_DO_TEXTO;
   const estimativa = estimarPedido(tipo, params, modeloTexto);
   const chave = chaveDoPedido(tipo, alvo, params);
@@ -689,9 +804,11 @@ async function versaoRegistrar(ch: Chamador, corpo: Record<string, unknown>) {
     if (a.client_id !== clientId) throw new ErroHttp(404, "arquivo_inexistente", "Arquivo de vídeo não encontrado.");
   }
   const custo = numero(corpo.custo_usd);
+  const projeto = corpo.projeto ? projetoValido(corpo.projeto, null, null) : null;
   const { data, error: e2 } = await servico()
     .from("video_versoes")
     .insert({
+      ...(projeto ? { projeto } : {}),
       client_id: clientId,
       video_id: videoId,
       titulo,
@@ -749,6 +866,39 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ versao: normalizarVersao(data) });
 }
 
+// ------------------------------------------------------------------ projeto de edição
+
+function projetoValido(bruto: unknown, atual: ProjetoDeEdicao | null, revisaoLida: number | null): ProjetoDeEdicao {
+  const p = normalizarProjeto(bruto);
+  if (!p) throw new ErroHttp(400, "projeto_invalido", "O projeto de edição veio em formato desconhecido.");
+  let novo: ProjetoDeEdicao;
+  try {
+    novo = proximaRevisao(atual, p, revisaoLida, new Date().toISOString());
+  } catch (e) {
+    throw new ErroHttp(409, "projeto_mudou", e instanceof Error ? e.message : "O projeto mudou. Abra de novo.");
+  }
+  if (tamanhoDoProjeto(novo) > MAX_BYTES_DO_PROJETO) throw new ErroHttp(413, "projeto_grande", "O projeto passou do tamanho que o banco guarda.");
+  return novo;
+}
+
+async function projetoSalvar(ch: Chamador, corpo: Record<string, unknown>) {
+  const id = idDe(corpo.versao_id, "versao_id");
+  const { data: linha, error } = await servico().from("video_versoes").select("*").eq("id", id).maybeSingle();
+  if (error) throw erroDeTabela(error, "video_versoes");
+  const v = normalizarVersao(linha);
+  if (!v) throw new ErroHttp(404, "versao_inexistente", "Versão não encontrada.");
+  await garantirAcesso(ch, v.client_id);
+  const trava = motivoParaNaoMudar(v, "decidir");
+  if (trava) throw new ErroHttp(409, "versao_travada", trava);
+  const atual = normalizarProjeto((linha as { projeto?: unknown }).projeto);
+  const lida = corpo.revisao_lida === null || corpo.revisao_lida === undefined ? null : Number(corpo.revisao_lida);
+  const projeto = projetoValido(corpo.projeto, atual, lida !== null && isFinite(lida) ? lida : null);
+  const { data, error: e2 } = await servico().from("video_versoes").update({ projeto }).eq("id", v.id).select("*").single();
+  if (e2) throw erroDeTabela(e2, "video_versoes");
+  await auditar(ch, "video_projeto_salvar", { client_id: v.client_id, versao_id: v.id, revisao: projeto.revisao }, true, v.id);
+  return json({ versao: normalizarVersao(data) });
+}
+
 // ------------------------------------------------------------------ computador do agente (desligado)
 
 async function computadorPedir(ch: Chamador, corpo: Record<string, unknown>) {
@@ -794,6 +944,69 @@ async function computadorDecidir(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ tarefa: data });
 }
 
+// ------------------------------------------------------------------ resultados para a Edição (contrato comum)
+
+async function resultadosParaEdicaoPropor(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const arquivos = await lerArquivosDoCliente(clientId);
+  const lista: ResultadoGerado[] = arquivos.map((a) => ({ id: a.id, nome: a.nome, tipo: String(a.tipo), estado: a.estado, edicao_desde: a.edicao_desde || null, grupo: a.grupo }));
+  const acao = acaoDoEnvioParaEdicao(lista, { id: `envio-${Date.now().toString(36)}` });
+  if (!acao) return json({ mensagem_id: null, acao: null });
+  const { data, error } = await servico().from(TABELA_DAS_ACOES).insert({ client_id: clientId, anexos: [acao], criado_por: ch.userId }).select("id").single();
+  if (error) throw erroDeTabela(error, TABELA_DAS_ACOES);
+  return json({ mensagem_id: (data as { id: string }).id, acao });
+}
+
+// ------------------------------------------------------------------ agente: entender o pedido
+
+async function agenteEntender(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
+  const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, 600);
+  if (!texto) throw new ErroHttp(400, "texto_vazio", "Escreva o que precisa.");
+  const reserva = intencaoPorPalavras(mesa, texto);
+  try {
+    const r = await jevPerguntar(perguntaDaIntencao(mesa, texto));
+    await cobrarJev(r, { clientId, tarefa: "conversa", criadoPor: ch.userId });
+    const resposta = r.answers.intencao || {};
+    const escolha = intencaoValida(mesa, resposta.choice);
+    const confianca = typeof resposta.confidence === "number" ? resposta.confidence : null;
+    // Pouca certeza do Jev: vale a palavra do pedido quando ela reconhece algo.
+    if (escolha === NENHUMA || (confianca !== null && confianca < CONFIANCA_MINIMA)) {
+      if (reserva !== NENHUMA) return json({ intencao: reserva, confianca, via: "palavras" });
+    }
+    return json({ intencao: escolha, confianca, via: "jev" });
+  } catch {
+    return json({ intencao: reserva, confianca: null, via: "palavras" });
+  }
+}
+
+// ------------------------------------------------------------------ gerador e diretor (frente V-A)
+
+function baseDa(ch: Chamador): BaseDaFuncao {
+  return {
+    servico,
+    garantirAcesso: (clientId: string) => garantirAcesso(ch, clientId),
+    erro: (status, codigo, mensagem, extra = {}) => new ErroHttp(status, codigo, mensagem, extra),
+    json,
+    auditar: (ferramenta, input, sucesso, ref) => auditar(ch, ferramenta, input, sucesso, ref),
+    userId: ch.userId,
+    admin: ch.admin,
+  };
+}
+
+/** Trabalho longo (diretor com raciocínio max, imagem, baixar vídeo): responde com fôlego. */
+const comFolego = (fn: (b: BaseDaFuncao, corpo: Record<string, unknown>) => Promise<Response>) => (ch: Chamador, corpo: Record<string, unknown>) =>
+  Promise.resolve(respostaComFolego(() => fn(baseDa(ch), corpo).catch((e) => respostaDeErro(e)), corsHeaders));
+const direto = (fn: (b: BaseDaFuncao, corpo: Record<string, unknown>) => Promise<Response>) => (ch: Chamador, corpo: Record<string, unknown>) => fn(baseDa(ch), corpo);
+
+async function motoresSincronizarDaEquipe(ch: Chamador) {
+  if (!ch.admin) throw new ErroHttp(403, "somente_admin", "Só o dono sincroniza o catálogo.");
+  return await motoresSincronizar(baseDa(ch));
+}
+
 // ------------------------------------------------------------------ roteador
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
@@ -812,12 +1025,49 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   versao_decidir: versaoDecidir,
   computador_pedir: computadorPedir,
   computador_decidir: computadorDecidir,
+  resultados_para_edicao_propor: resultadosParaEdicaoPropor,
+  agente_entender: agenteEntender,
+  projeto_salvar: projetoSalvar,
+  // Frente V-A: gerador (contrato em docs/video/CONTRATOS.md).
+  motores_estado: direto((b) => motoresEstado(b)),
+  custo_estimar: direto(custoEstimar),
+  gerar_video: direto(gerarVideo),
+  // Contrato com a V-B: clipe a partir de um quadro inicial (o mesmo núcleo do gerar_video).
+  cena_gerar: direto((b, c) => gerarVideo(b, { ...c, modo: c.modo || "primeiro_quadro", tipo: c.tipo || "gerar_livre" })),
+  angulo_gerar: direto(anguloGerar),
+  continuar_video: direto(continuarVideo),
+  transicao_gerar: direto(transicaoGerar),
+  antes_depois_imagem: comFolego(antesDepoisImagem),
+  gerar_status: comFolego(gerarStatus),
+  gerar_status_cliente: comFolego(gerarStatusCliente),
+  quadro_registrar: direto(quadroRegistrar),
+  motores_sincronizar: (ch) => motoresSincronizarDaEquipe(ch),
+  // Frente V-A: agente diretor, bíblia, roteiro e templates.
+  diretor_conversar: comFolego(diretorConversar),
+  diretor_salvar: direto(diretorSalvar),
+  diretor_propor_gerar: direto(diretorProporGerar),
+  diretor_avaliar: comFolego(diretorAvaliar),
+  diretor_para_editor: direto(diretorParaEditor),
+  diretor_editor_desfazer: direto(diretorEditorDesfazer),
+  antes_depois_para_editor: direto(antesDepoisParaEditor),
+  template_salvar: direto(templateSalvar),
+  template_arquivar: direto(templateArquivar),
 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
+    // Cron semanal (DESLIGADO no SQL V-01): só a sincronização do catálogo de motores.
+    const cronSecret = (Deno.env.get("CRON_SECRET") || "").trim();
+    if (cronSecret && (req.headers.get("x-cron-secret") || "").trim() === cronSecret) {
+      let c: Record<string, unknown> = {};
+      try {
+        c = await req.json();
+      } catch { /* corpo vazio */ }
+      if (String(c.acao ?? "") !== "motores_sincronizar") return json({ error: "nao_autorizado", mensagem: "O cron só sincroniza o catálogo." }, 403);
+      return await motoresSincronizar({ ...baseDa({ userId: "", token: "", doChamador: servico(), admin: true }), garantirAcesso: async () => {} });
+    }
     const chamador = await identificar(req);
     let corpo: Record<string, unknown> = {};
     try {

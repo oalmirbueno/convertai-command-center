@@ -1318,7 +1318,7 @@ function MonthView({
                         </PopoverTrigger>
                         <PopoverContent
                           align="start"
-                          className="max-h-[min(420px,70vh)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3"
+                          className="max-h-[70vh] w-[calc(100vw-2rem)] max-w-[22rem] overflow-y-auto overscroll-contain p-3"
                         >
                           <p className="mb-2 text-xs font-semibold text-foreground">
                             {format(day, "EEEE, dd 'de' MMMM", {
@@ -1573,10 +1573,14 @@ function BoardPostCard({
       <button
         type="button"
         onClick={onClick}
-        className="mb-3 block aspect-[16/9] w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        className="relative mb-3 block w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        style={{ paddingBottom: "56.25%" }}
         aria-label={`Ver conteúdo completo de ${post.post.title}`}
       >
-        <EditorialFileThumbnail post={post} className="h-full w-full" showArtBadge />
+        {/* 16:9 por padding (Safari 11 não tem aspect-ratio). */}
+        <span className="absolute inset-0 block">
+          <EditorialFileThumbnail post={post} className="h-full w-full" showArtBadge />
+        </span>
       </button>
       <div className="flex items-start gap-2.5">
         <button
@@ -1827,16 +1831,16 @@ function BoardColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex h-[min(68vh,720px)] min-h-[520px] min-w-0 flex-col rounded-2xl border border-border bg-card/65 p-3 transition-colors",
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg p-1.5 transition-colors lg:h-[540px] desk:h-[640px]",
         isOver &&
           acceptsActive &&
-          "border-primary/60 bg-primary/[0.06] ring-1 ring-primary/30",
+          "bg-primary/[0.06] ring-1 ring-primary/40",
       )}
     >
-      <header className="mb-3 px-1 pt-0.5">
+      <header className="mb-2 px-1 pt-0.5" title={column.description}>
         <div className="flex items-center gap-2">
           <span className={cn("h-2 w-2 rounded-full", column.dot)} />
-          <h2 className="text-xs font-semibold text-foreground">
+          <h2 className="text-[12px] font-semibold text-foreground">
             {column.label}
           </h2>
           <Badge
@@ -1846,11 +1850,8 @@ function BoardColumn({
             {posts.length + tasks.length}
           </Badge>
         </div>
-        <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">
-          {column.description}
-        </p>
       </header>
-      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
+      <div className="space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5 lg:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}

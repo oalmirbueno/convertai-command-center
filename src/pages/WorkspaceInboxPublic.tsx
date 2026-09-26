@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
 import { UploadCloud, Loader2, CheckCircle2, FileText, AlertCircle } from "lucide-react";
+import { CampoDeFormulario, Carregando, foco, juntar, texto } from "@/components/sistema";
+import CascaPublica, { campoPublico } from "@/components/publico/CascaPublica";
 
 
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/workspace-inbox`;
@@ -146,15 +147,13 @@ export default function WorkspaceInboxPublic() {
 
 
   if (error) return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="max-w-md text-center space-y-3">
-        <div className="text-4xl">🔒</div>
-        <h1 className="text-lg font-semibold">Link inválido ou expirado</h1>
-        <p className="text-sm text-muted-foreground">{error}</p>
-      </div>
-    </div>
+    <CascaPublica titulo="Link inválido ou expirado" descricao={error} />
   );
-  if (!info) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  if (!info) return (
+    <CascaPublica titulo="Enviar arquivos" descricao="Abrindo o link..." largura="media" centralizar={false}>
+      <Carregando linhas={3} rotulo="Abrindo o link" />
+    </CascaPublica>
+  );
 
   const remainingFiles = Math.max(0, info.limits.max_files_per_24h - info.usage.files_24h);
   const remainingBytes = Math.max(0, info.limits.max_bytes_per_24h - info.usage.bytes_24h);
@@ -163,94 +162,85 @@ export default function WorkspaceInboxPublic() {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(info.expires_at));
+  const blocked = isUploading || quotaBlocked;
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
-      <div className="max-w-2xl mx-auto space-y-5">
-        <header className="text-center space-y-2 pt-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-mono uppercase tracking-wider">
-            Inbox · Aceleriq
-          </div>
-          <h1 className="text-2xl font-bold">Envie arquivos para <span className="text-primary">{info.folder.name}</span></h1>
-          <p className="text-sm text-muted-foreground">Link sem cadastro, válido até {expiresLabel}.</p>
-        </header>
+    <CascaPublica
+      titulo={<>Enviar para <span className="text-primary">{info.folder.name}</span></>}
+      descricao={`Sem cadastro. Válido até ${expiresLabel}.`}
+      ajuda="Os arquivos aparecem no Workspace da equipe em quarentena até a verificação de segurança."
+      largura="media"
+      centralizar={false}
+    >
+      <CampoDeFormulario rotulo="Seu nome (opcional)">
+        <input value={sender} onChange={e => setSender(e.target.value)} placeholder="Ex.: João / Empresa X" autoComplete="name" className={campoPublico} />
+      </CampoDeFormulario>
 
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Seu nome (opcional)</label>
-          <Input value={sender} onChange={e => setSender(e.target.value)} placeholder="Ex.: João / Empresa X" className="h-10" />
-        </div>
-
-        <div
-          role="button"
-          tabIndex={isUploading || quotaBlocked ? -1 : 0}
-          onClick={() => { if (!isUploading && !quotaBlocked) inputRef.current?.click(); }}
-          onKeyDown={(event) => {
-            if ((event.key === "Enter" || event.key === " ") && !isUploading && !quotaBlocked) {
-              event.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-          onDragOver={(e) => { e.preventDefault(); if (!isUploading && !quotaBlocked) setDragActive(true); }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={(e) => { e.preventDefault(); setDragActive(false); void onFiles(e.dataTransfer.files); }}
-          aria-disabled={isUploading || quotaBlocked}
-          aria-label={`Selecionar arquivos, máximo de ${formatMb(info.limits.max_file_bytes)} por arquivo`}
-          className={`rounded-2xl border-2 border-dashed transition-colors p-10 text-center ${isUploading || quotaBlocked ? "cursor-not-allowed opacity-60 border-border bg-card" : "cursor-pointer"} ${isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 bg-card"}`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            hidden
-            disabled={isUploading || quotaBlocked}
-            onChange={(e) => { void onFiles(e.target.files); e.currentTarget.value = ""; }}
-          />
-          <UploadCloud className="w-10 h-10 mx-auto text-primary mb-3" />
-          <p className="text-sm font-medium">
-            {quotaBlocked ? "Cota das últimas 24 horas atingida" : isUploading ? "Enviando a fila atual" : isDragActive ? "Solte para enviar" : "Arraste arquivos ou clique aqui"}
-          </p>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            Até {formatMb(info.limits.max_file_bytes)} por arquivo e {MAX_BATCH_FILES} arquivos por lote
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="rounded-lg border border-border bg-card px-3 py-2">
-            <span className="text-muted-foreground">Disponíveis no período</span>
-            <div className="font-medium mt-0.5">{remainingFiles} arquivos</div>
-          </div>
-          <div className="rounded-lg border border-border bg-card px-3 py-2">
-            <span className="text-muted-foreground">Volume disponível</span>
-            <div className="font-medium mt-0.5">{formatMb(remainingBytes)}</div>
-          </div>
-        </div>
-
-
-        {!!rows.length && (
-          <div className="rounded-xl border border-border bg-card divide-y divide-border">
-            {rows.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
-                {r.status === "err"
-                  ? <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                  : <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <div className="truncate">{r.name}</div>
-                  {r.msg && <div className="text-[10px] text-destructive mt-0.5">{r.msg}</div>}
-                </div>
-                <span className="text-[11px] text-muted-foreground">{formatMb(r.size)}</span>
-                {r.status === "queued" && <span className="text-[11px] text-muted-foreground">na fila</span>}
-                {r.status === "up" && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-                {r.status === "done" && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                {r.status === "err" && <span className="text-[11px] text-destructive">não enviado</span>}
-              </div>
-            ))}
-          </div>
+      <div
+        role="button"
+        tabIndex={blocked ? -1 : 0}
+        onClick={() => { if (!blocked) inputRef.current?.click(); }}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !isUploading && !quotaBlocked) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => { e.preventDefault(); if (!blocked) setDragActive(true); }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(e) => { e.preventDefault(); setDragActive(false); void onFiles(e.dataTransfer.files); }}
+        aria-disabled={blocked}
+        aria-label={`Selecionar arquivos, máximo de ${formatMb(info.limits.max_file_bytes)} por arquivo`}
+        className={juntar(
+          "mt-5 flex min-w-0 flex-col items-center rounded-lg border-2 border-dashed px-4 py-10 text-center transition-colors",
+          foco,
+          blocked ? "cursor-not-allowed border-border opacity-60" : "cursor-pointer",
+          !blocked && (isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"),
         )}
-
-        <p className="text-center text-[10px] text-muted-foreground pt-4">
-          Os arquivos aparecem no Workspace da equipe em quarentena até a verificação de segurança.
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          hidden
+          disabled={blocked}
+          onChange={(e) => { void onFiles(e.target.files); e.currentTarget.value = ""; }}
+        />
+        <UploadCloud className="mb-3 h-8 w-8 text-primary" aria-hidden="true" />
+        <p className={juntar(texto.corpo, "font-medium")}>
+          {quotaBlocked ? "Cota das últimas 24 horas atingida" : isUploading ? "Enviando a fila atual" : isDragActive ? "Solte para enviar" : "Arraste arquivos ou clique aqui"}
+        </p>
+        <p className={juntar(texto.auxiliar, "mt-1")}>
+          Até {formatMb(info.limits.max_file_bytes)} por arquivo e {MAX_BATCH_FILES} por lote
         </p>
       </div>
-    </div>
+
+      <p className={juntar(texto.auxiliar, "mt-3 tabular-nums")}>
+        Restam {remainingFiles} arquivos e {formatMb(remainingBytes)} no período.
+      </p>
+
+      {!!rows.length && (
+        <ul className="mt-6 divide-y divide-border border-y border-border" aria-label="Arquivos enviados">
+          {rows.map((r) => (
+            <li key={r.id} className="flex min-w-0 items-center py-2.5">
+              {r.status === "err"
+                ? <AlertCircle className="mr-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                : <FileText className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+              <div className="mr-3 min-w-0 flex-1">
+                <p className={juntar(texto.corpo, "truncate")}>{r.name}</p>
+                {r.msg && <p className="mt-0.5 text-[12px] leading-4 text-destructive">{r.msg}</p>}
+              </div>
+              <span className={juntar(texto.auxiliar, "mr-3 shrink-0 tabular-nums")}>{formatMb(r.size)}</span>
+              <span className="flex w-[72px] shrink-0 justify-end">
+                {r.status === "queued" && <span className={texto.auxiliar}>na fila</span>}
+                {r.status === "up" && <Loader2 className="h-4 w-4 animate-spin text-primary" aria-label="Enviando" />}
+                {r.status === "done" && <CheckCircle2 className="h-4 w-4 text-success" aria-label="Enviado" />}
+                {r.status === "err" && <span className="text-[12px] leading-4 text-destructive">não enviado</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </CascaPublica>
   );
 }

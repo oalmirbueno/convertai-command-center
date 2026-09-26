@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Clock, ExternalLink, Zap } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Carregando, EstadoDeErro, Secao, botao, juntar, superficie, texto } from "@/components/sistema";
 
 /**
  * O que já foi AUTORIZADO e ainda espera o agente fazer.
@@ -30,7 +30,7 @@ export function diasParada(aprovadaEm?: string | null, agora = new Date()): numb
 }
 
 export default function OrdensAutorizadas() {
-  const { data, error, isLoading } = useQuery({
+  const { data, error, isLoading, refetch } = useQuery({
     queryKey: ["ordens-autorizadas"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -60,84 +60,80 @@ export default function OrdensAutorizadas() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[12px] text-destructive">
-        Não consegui ler as ordens: {error instanceof Error ? error.message : String(error)}.
-        Nada está sendo dado como cumprido nem como pendente — a leitura falhou.
-      </div>
+      <EstadoDeErro
+        titulo="Não consegui ler as ordens."
+        descricao={<>{error instanceof Error ? error.message : String(error)}. Nada está sendo dado como cumprido nem como pendente: a leitura falhou.</>}
+        acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void refetch()}>Tentar de novo</button>}
+      />
     );
   }
-  if (isLoading) return null;
+  if (isLoading) return <Carregando linhas={2} rotulo="Carregando as ordens" />;
 
   const pendentes = data?.pendentes ?? [];
   const cumpridas = data?.cumpridas ?? [];
   if (pendentes.length === 0 && cumpridas.length === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {pendentes.length > 0 && (
-        <div className="rounded-xl border border-info/40 bg-info/[0.05] p-3.5">
-          <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-info">
-            <Zap className="h-3.5 w-3.5" />
-            Autorizado · esperando o agente fazer
-            <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] normal-case">
-              {pendentes.length}
-            </span>
-          </p>
-          <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+        <Secao
+          nivel={3}
+          titulo={<span className="inline-flex items-center"><Zap className="mr-1.5 h-3.5 w-3.5 text-info" aria-hidden="true" />Autorizado · esperando o agente fazer</span>}
+          descricao={`${pendentes.length} ${pendentes.length === 1 ? "ordem" : "ordens"}`}
+          ajuda="Você liberou; o agente ainda não executou. Autorizar não é o mesmo que estar feito, e sem esta lista as duas coisas pareceriam iguais."
+        >
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
             {pendentes.map((o: any) => {
               const dias = diasParada(o.decided_at);
               return (
-                <div key={o.id} className="rounded-lg border border-border bg-card px-2.5 py-1.5">
-                  <p className="text-[12px] text-foreground">{o.o_que}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                <li key={o.id} className="min-w-0 px-4 py-2.5">
+                  <p className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{o.o_que}</p>
+                  <p className="-mx-1 mt-0.5 flex flex-wrap items-center text-[11.5px] text-muted-foreground [&>*]:mx-1">
                     <span className="font-medium text-foreground/80">{o.agente}</span>
                     <span>· {String(o.action_kind).replace(/_/g, " ")}</span>
                     {o.destino && <span>· para {o.destino}</span>}
-                    <span className={cn(
-                      "inline-flex items-center gap-1",
+                    <span className={juntar(
+                      "inline-flex items-center",
                       // Três dias parada é o ponto em que "vai sair" deixa de
                       // ser verdade sozinho e vira uma pergunta.
                       dias >= 3 && "font-semibold text-warning",
                     )}>
-                      <Clock className="h-2.5 w-2.5" />
+                      <Clock className="mr-1 h-2.5 w-2.5" aria-hidden="true" />
                       autorizado há {dias === 0 ? "menos de um dia" : `${dias} dia${dias > 1 ? "s" : ""}`}
                     </span>
                   </p>
-                </div>
+                </li>
               );
             })}
-          </div>
-          <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-            Você liberou; o agente ainda não executou. Autorizar não é o mesmo que
-            estar feito, e sem esta lista as duas coisas pareceriam iguais.
-          </p>
-        </div>
+          </ul>
+        </Secao>
       )}
 
       {cumpridas.length > 0 && (
-        <div className="rounded-xl border border-success/30 bg-success/[0.04] p-3.5">
-          <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-success">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Feito no mundo, com prova
-          </p>
-          <div className="space-y-1.5">
+        <Secao
+          nivel={3}
+          titulo={<span className="inline-flex items-center"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-success" aria-hidden="true" />Feito no mundo, com prova</span>}
+          descricao={`${cumpridas.length} ${cumpridas.length === 1 ? "ordem cumprida" : "ordens cumpridas"}`}
+        >
+          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
             {cumpridas.map((o: any) => (
-              <div key={o.id} className="rounded-lg border border-border bg-card px-2.5 py-1.5">
-                <p className="text-[12px] text-foreground">{o.o_que}</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <li key={o.id} className="min-w-0 px-4 py-2.5">
+                <p className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{o.o_que}</p>
+                <p className={juntar(texto.auxiliar, "mt-0.5")}>
                   {o.agente} · {quando(o.executed_at)}
                 </p>
                 {o.execution_evidence && (
                   /* A prova é o ponto: ação externa não pode ser afirmada sem
                      ela, porque ninguém consegue desfazer depois. */
-                  <p className="mt-0.5 break-all text-[10.5px]">
+                  <p className="mt-0.5 break-all text-[12px]">
                     {/^https?:\/\//i.test(o.execution_evidence) ? (
                       <a
                         href={o.execution_evidence}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary underline"
+                        className="inline-flex items-center text-primary underline"
                       >
-                        <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                        <ExternalLink className="mr-1 h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                         {o.execution_evidence}
                       </a>
                     ) : (
@@ -145,10 +141,10 @@ export default function OrdensAutorizadas() {
                     )}
                   </p>
                 )}
-              </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </Secao>
       )}
     </div>
   );

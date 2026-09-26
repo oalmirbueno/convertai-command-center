@@ -2,8 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plug, Plus, Power, PowerOff, Link2, Link2Off, Loader2, AlertTriangle, Pencil, Save, X } from "lucide-react";
+import { Plus, Power, PowerOff, Link2, Link2Off, Loader2, AlertTriangle, Pencil, Save, X } from "lucide-react";
 import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
+import {
+  AjudaRecolhida,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  GrupoDeCampos,
+  Secao,
+  botao,
+  campo,
+  etiqueta,
+  foco,
+  juntar,
+  superficie,
+  texto,
+} from "@/components/sistema";
 import type { EditorialAccountRow } from "@/hooks/useEditorialCalendar";
 import { EDITORIAL_PLATFORMS } from "@/lib/editorial";
 
@@ -415,23 +431,46 @@ export default function ClientConnectionsPanel({
     invalidate();
   };
 
+  const totalDeCanais = (accounts || []).length;
+  const canaisInativos = (accounts || []).filter((a) => a.status !== "active").length;
+  const estadoDosCanais = isLoading || accountsError
+    ? undefined
+    : totalDeCanais === 0
+      ? "Nenhum canal"
+      : `${totalDeCanais} ${totalDeCanais === 1 ? "canal" : "canais"}${canaisInativos ? ` · ${canaisInativos} ${canaisInativos === 1 ? "inativo" : "inativos"}` : ""}`;
+  const estadoDaPublicacao = projectsError
+    ? "Projetos indisponíveis"
+    : !projects
+      ? undefined
+      : projects.length === 0
+        ? "Nenhum projeto neste cliente"
+        : !publishingProject
+          ? "Escolha o projeto"
+          : publishingAccountsLoading || publishingAccountsError
+            ? publishingProject.name
+            : `${linkedPublishingAccounts.length} ${linkedPublishingAccounts.length === 1 ? "conta vinculada" : "contas vinculadas"}`;
+
   return (
-    <div className="pt-2">
-      <section className="mb-4 rounded-xl border border-primary/20 bg-primary/[0.03] p-3.5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-              Contas para publicação
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              A conta fica salva neste cliente e vinculada ao projeto escolhido.
-            </p>
+    <div className="min-w-0 space-y-6">
+      {/* Contas para publicação: o projeto escolhido fica na linha do título */}
+      {/* Mesmo cabeçalho da Secao, mas o seletor de projeto desce para uma
+          linha inteira no celular (na Secao a ação fica presa à largura dela). */}
+      <section className="min-w-0" aria-labelledby="contas-para-publicacao">
+        <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between">
+          <div className="mr-3 min-w-0 flex-1">
+            <div className="flex min-w-0 items-center">
+              <h2 id="contas-para-publicacao" className={juntar(texto.tituloSecao, "min-w-0 truncate")}>
+                Contas para publicação
+              </h2>
+              <AjudaRecolhida className="ml-1.5">
+                A conta fica salva neste cliente e vinculada ao projeto escolhido. É por ela que o painel publica o
+                material aprovado e agendado.
+              </AjudaRecolhida>
+            </div>
+            {estadoDaPublicacao && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{estadoDaPublicacao}</p>}
           </div>
-          <div className="min-w-0 sm:w-56">
-            <label
-              htmlFor="publishing-project"
-              className="text-[10px] text-muted-foreground"
-            >
+          <div className="mt-2 w-full min-w-0 sm:mt-0 sm:w-56">
+            <label htmlFor="publishing-project" className="sr-only">
               Projeto
             </label>
             <select
@@ -439,7 +478,7 @@ export default function ClientConnectionsPanel({
               value={publishingProjectId}
               onChange={(event) => setPublishingProjectId(event.target.value)}
               disabled={projectsError || !projects?.length}
-              className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground focus:border-primary/50 focus:outline-none"
+              className={campo}
             >
               <option value="">
                 {(projects || []).length === 0
@@ -454,357 +493,360 @@ export default function ClientConnectionsPanel({
             </select>
           </div>
         </div>
-
         {publishingProject && publishingAccountsLoading && (
-          <div className="mt-3 flex min-h-20 items-center justify-center rounded-xl border border-border bg-background/60">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          </div>
+          <Carregando linhas={2} rotulo="Carregando contas de publicação" />
         )}
         {publishingProject && publishingAccountsError && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            Não foi possível carregar as contas de publicação deste projeto.
-          </div>
+          <EstadoDeErro
+            titulo="Não foi possível carregar as contas de publicação deste projeto."
+            acao={
+              <button type="button" onClick={invalidate} className={juntar(botao.secundario, "h-8")}>
+                Tentar de novo
+              </button>
+            }
+          />
         )}
         {publishingProject &&
           !publishingAccountsLoading &&
           !publishingAccountsError && (
-          <div className="mt-3">
-            <EditorialAccountSetup
-              clientId={clientId}
-              clientName={clientName}
-              projectId={publishingProject.id}
-              projectName={publishingProject.name || "Projeto"}
-              linkedAccounts={linkedPublishingAccounts}
-              availableAccounts={availablePublishingAccounts}
-              canManage={canManage}
-              permissionUnavailable={permissionsError}
-              showManualOptions={false}
-              onAccountReady={() => undefined}
-            />
-          </div>
+          <EditorialAccountSetup
+            clientId={clientId}
+            clientName={clientName}
+            projectId={publishingProject.id}
+            projectName={publishingProject.name || "Projeto"}
+            linkedAccounts={linkedPublishingAccounts}
+            availableAccounts={availablePublishingAccounts}
+            canManage={canManage}
+            permissionUnavailable={permissionsError}
+            showManualOptions={false}
+            onAccountReady={() => undefined}
+            embutido
+          />
           )}
       </section>
 
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Plug className="w-3 h-3" /> Contas e Canais
-        </label>
-        {canManage && !creating && !editingId && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-primary border border-primary/30 hover:bg-primary/5 transition-colors bg-transparent"
-          >
-            <Plus className="w-3 h-3" /> Adicionar canal
-          </button>
-        )}
-      </div>
-      <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-        Confira aqui Instagram, site, WhatsApp e outros canais deste cliente. O cliente já está cadastrado, você só adiciona os canais que ele usa.
-      </p>
-
-      {permissionsError && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Não foi possível confirmar sua permissão. Os canais estão em modo de leitura.
-        </div>
-      )}
-
-      {accountsError && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Não foi possível carregar os canais deste cliente. Tente novamente em instantes.
-        </div>
-      )}
-
-      {(projectsError || linksError || officialConnectionsError) && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Os canais carregaram, mas alguns vínculos oficiais ou com projetos estão indisponíveis no momento.
-        </div>
-      )}
-
-      {canManage && !permissionsLoading && creating && (
-        <div className="rounded-xl bg-secondary/50 border border-border p-3 space-y-2 mb-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <label htmlFor="new-channel-platform" className="text-[10px] text-muted-foreground">Canal ou plataforma *</label>
-              <select
-                id="new-channel-platform"
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-              >
-                <option value="">Selecione uma plataforma</option>
-                {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="new-channel-name" className="text-[10px] text-muted-foreground">Nome para identificar *</label>
-              <input
-                id="new-channel-name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Ex.: Instagram oficial"
-                className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-              />
-            </div>
-            <div>
-              <label htmlFor="new-channel-address" className="text-[10px] text-muted-foreground">Usuário, link ou domínio</label>
-              <input
-                id="new-channel-address"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value)}
-                placeholder="Ex.: @cliente ou cliente.com.br"
-                className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-              />
-            </div>
-            <div>
-              <label htmlFor="new-channel-code" className="text-[10px] text-muted-foreground">Código da conta (opcional)</label>
-              <input
-                id="new-channel-code"
-                value={externalId}
-                onChange={(e) => setExternalId(e.target.value)}
-                placeholder="Pode deixar em branco"
-                className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-              />
-            </div>
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            Este campo serve só para organização. Não coloque senha, token ou chave de acesso.
-          </p>
-          <div className="flex gap-2">
+      {/* Canais do cliente: lista com divisória, ação da linha à direita */}
+      <Secao
+        titulo="Canais"
+        divisoria
+        descricao={estadoDosCanais}
+        ajuda="Instagram, site, WhatsApp e outros canais deste cliente. O cliente já está cadastrado: aqui você só adiciona os canais que ele usa. Não guarde senha, token ou chave de acesso aqui; isso vai no cofre."
+        acao={
+          canManage && !creating && !editingId ? (
             <button
-              onClick={resetForm}
-              className="flex-1 px-3 py-1.5 rounded-lg text-[12px] border border-border text-muted-foreground hover:text-foreground bg-transparent"
-            >Cancelar</button>
-            <button
-              onClick={handleCreate}
-              disabled={submitting || !platform || !displayName.trim()}
-              className="flex-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 border-none inline-flex items-center justify-center gap-1"
+              type="button"
+              onClick={() => setCreating(true)}
+              aria-label="Adicionar canal"
+              className={botao.secundario}
             >
-              {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
-              Salvar canal
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span className="ml-1.5 hidden sm:inline">Adicionar canal</span>
             </button>
+          ) : undefined
+        }
+      >
+        {(permissionsError || projectsError || linksError || officialConnectionsError) && (
+          <div className="mb-3 space-y-1">
+            {permissionsError && (
+              <p className="flex min-w-0 items-start text-[12px] leading-4 text-warning" role="status">
+                <AlertTriangle className="mr-1.5 mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Não foi possível confirmar sua permissão. Os canais estão em modo de leitura.
+              </p>
+            )}
+            {(projectsError || linksError || officialConnectionsError) && (
+              <p className="flex min-w-0 items-start text-[12px] leading-4 text-warning" role="status">
+                <AlertTriangle className="mr-1.5 mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Alguns vínculos oficiais ou com projetos estão indisponíveis agora.
+              </p>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {isLoading ? (
-        <div className="text-[12px] text-muted-foreground py-2">Carregando…</div>
-      ) : accountsError ? null : !accounts || accounts.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] text-muted-foreground">
-          Nenhum canal adicionado ainda. O cliente já está cadastrado, use “Adicionar canal” somente para incluir Instagram, site, WhatsApp ou outra conta dele.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {accounts.map((acc) => {
-            const accLinks = (links || []).filter((link) => link.external_account_id === acc.id);
-            const linkedProjectIds = new Set(accLinks.map((link) => link.project_id));
-            const availableProjects = (projects || []).filter((project) => !linkedProjectIds.has(project.id));
-            const isInactive = acc.status !== "active";
-            const isEditing = editingId === acc.id;
-            const isOfficial = officialAccountIds.has(acc.id);
-            return (
-              <div key={acc.id} className="rounded-xl border border-border bg-secondary/40">
-                {isEditing ? (
-                  <div className="p-3 space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <label htmlFor={`edit-channel-platform-${acc.id}`} className="text-[10px] text-muted-foreground">Canal ou plataforma *</label>
-                        <select
-                          id={`edit-channel-platform-${acc.id}`}
-                          value={editPlatform}
-                          onChange={(e) => setEditPlatform(e.target.value)}
-                          disabled={editingOfficial}
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
+        {canManage && !permissionsLoading && creating && (
+          <div className={juntar(superficie.poco, "mb-3 p-3 sm:p-4")}>
+            <GrupoDeCampos>
+              <CampoDeFormulario rotulo="Canal ou plataforma" obrigatorio>
+                <select
+                  id="new-channel-platform"
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                  className={campo}
+                >
+                  <option value="">Selecione uma plataforma</option>
+                  {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Nome para identificar" obrigatorio>
+                <input
+                  id="new-channel-name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Ex.: Instagram oficial"
+                  className={campo}
+                />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Usuário, link ou domínio">
+                <input
+                  id="new-channel-address"
+                  value={handle}
+                  onChange={(e) => setHandle(e.target.value)}
+                  placeholder="Ex.: @cliente ou cliente.com.br"
+                  className={campo}
+                />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Código da conta" apoio="Opcional. Nada de senha, token ou chave.">
+                <input
+                  id="new-channel-code"
+                  value={externalId}
+                  onChange={(e) => setExternalId(e.target.value)}
+                  placeholder="Pode deixar em branco"
+                  className={campo}
+                />
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <div className="mt-4 flex justify-end [&>*+*]:ml-2">
+              <button type="button" onClick={resetForm} className={botao.discreto}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={submitting || !platform || !displayName.trim()}
+                className={botao.primario}
+              >
+                {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
+                Salvar canal
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <Carregando linhas={2} rotulo="Carregando canais" />
+        ) : accountsError ? (
+          <EstadoDeErro
+            titulo="Não foi possível carregar os canais deste cliente."
+            acao={
+              <button type="button" onClick={invalidate} className={juntar(botao.secundario, "h-8")}>
+                Tentar de novo
+              </button>
+            }
+          />
+        ) : !accounts || accounts.length === 0 ? (
+          <EstadoVazio
+            compacto
+            titulo="Nenhum canal ainda."
+            descricao={canManage ? "Use Adicionar canal para incluir Instagram, site ou WhatsApp." : undefined}
+          />
+        ) : (
+          <ul className="divide-y divide-border border-y border-border">
+            {accounts.map((acc) => {
+              const accLinks = (links || []).filter((link) => link.external_account_id === acc.id);
+              const linkedProjectIds = new Set(accLinks.map((link) => link.project_id));
+              const availableProjects = (projects || []).filter((project) => !linkedProjectIds.has(project.id));
+              const isInactive = acc.status !== "active";
+              const isEditing = editingId === acc.id;
+              const isOfficial = officialAccountIds.has(acc.id);
+              const nomeDaPlataforma = PLATFORMS.find(p => p.value === acc.platform)?.label || acc.platform;
+              return (
+                <li key={acc.id} className="min-w-0 py-3">
+                  {isEditing ? (
+                    <div className={juntar(superficie.poco, "p-3 sm:p-4")}>
+                      <GrupoDeCampos>
+                        <CampoDeFormulario
+                          rotulo="Canal ou plataforma"
+                          obrigatorio
+                          apoio={editingOfficial ? "Conta oficial Meta: plataforma e ID são protegidos." : undefined}
+                          ajuda={editingOfficial ? "Para trocar a identidade, desconecte e autorize a conta correta." : undefined}
                         >
-                          <option value="">Selecione uma plataforma</option>
-                          {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor={`edit-channel-name-${acc.id}`} className="text-[10px] text-muted-foreground">Nome para identificar *</label>
-                        <input
-                          id={`edit-channel-name-${acc.id}`}
-                          value={editDisplayName}
-                          onChange={(e) => setEditDisplayName(e.target.value)}
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor={`edit-channel-address-${acc.id}`} className="text-[10px] text-muted-foreground">Usuário, link ou domínio</label>
-                        <input
-                          id={`edit-channel-address-${acc.id}`}
-                          value={editHandle}
-                          onChange={(e) => setEditHandle(e.target.value)}
-                          placeholder="Ex.: @cliente ou cliente.com.br"
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor={`edit-channel-code-${acc.id}`} className="text-[10px] text-muted-foreground">Código da conta (opcional)</label>
-                        <input
-                          id={`edit-channel-code-${acc.id}`}
-                          value={editExternalId}
-                          onChange={(e) => setEditExternalId(e.target.value)}
-                          readOnly={editingOfficial}
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50 read-only:cursor-not-allowed read-only:opacity-60"
-                        />
+                          <select
+                            id={`edit-channel-platform-${acc.id}`}
+                            value={editPlatform}
+                            onChange={(e) => setEditPlatform(e.target.value)}
+                            disabled={editingOfficial}
+                            className={campo}
+                          >
+                            <option value="">Selecione uma plataforma</option>
+                            {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                          </select>
+                        </CampoDeFormulario>
+                        <CampoDeFormulario rotulo="Nome para identificar" obrigatorio>
+                          <input
+                            id={`edit-channel-name-${acc.id}`}
+                            value={editDisplayName}
+                            onChange={(e) => setEditDisplayName(e.target.value)}
+                            className={campo}
+                          />
+                        </CampoDeFormulario>
+                        <CampoDeFormulario rotulo="Usuário, link ou domínio">
+                          <input
+                            id={`edit-channel-address-${acc.id}`}
+                            value={editHandle}
+                            onChange={(e) => setEditHandle(e.target.value)}
+                            placeholder="Ex.: @cliente ou cliente.com.br"
+                            className={campo}
+                          />
+                        </CampoDeFormulario>
+                        <CampoDeFormulario rotulo="Código da conta" apoio={editingOfficial ? undefined : "Opcional."}>
+                          <input
+                            id={`edit-channel-code-${acc.id}`}
+                            value={editExternalId}
+                            onChange={(e) => setEditExternalId(e.target.value)}
+                            readOnly={editingOfficial}
+                            className={juntar(campo, "read-only:cursor-not-allowed read-only:opacity-60")}
+                          />
+                        </CampoDeFormulario>
+                      </GrupoDeCampos>
+                      <div className="mt-4 flex justify-end [&>*+*]:ml-2">
+                        <button
+                          type="button"
+                          onClick={cancelEditing}
+                          disabled={editSubmitting}
+                          className={botao.discreto}
+                        >
+                          <X className="mr-1.5 h-4 w-4" aria-hidden="true" /> Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveEditing}
+                          disabled={editSubmitting || !editPlatform || !editDisplayName.trim()}
+                          className={botao.primario}
+                        >
+                          {editSubmitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+                          Salvar
+                        </button>
                       </div>
                     </div>
-                    {editingOfficial && (
-                      <p className="text-[10px] leading-relaxed text-muted-foreground">
-                        Conta oficial Meta: plataforma e ID são protegidos. Para trocar a identidade, desconecte e autorize a conta correta.
-                      </p>
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={cancelEditing}
-                        disabled={editSubmitting}
-                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[12px] border border-border text-muted-foreground hover:text-foreground bg-transparent disabled:opacity-50"
-                      >
-                        <X className="w-3 h-3" /> Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveEditing}
-                        disabled={editSubmitting || !editPlatform || !editDisplayName.trim()}
-                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 border-none"
-                      >
-                        {editSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                        Salvar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${isInactive ? "opacity-60" : ""}`}>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-medium text-foreground truncate">{acc.display_name}</p>
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground">
-                          {PLATFORMS.find(p => p.value === acc.platform)?.label || acc.platform}
-                        </span>
-                        {isInactive && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Inativa</span>
-                        )}
-                        {isOfficial && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                            Oficial Meta
-                          </span>
-                        )}
-                      </div>
-                      {(acc.handle || acc.external_id) && (
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {acc.handle && <span>{acc.handle}</span>}
-                          {acc.handle && acc.external_id && <span> · </span>}
-                          {acc.external_id && <span>ID {acc.external_id}</span>}
+                  ) : (
+                    <div className="flex min-w-0 items-start">
+                      <div className={juntar("min-w-0 flex-1", isInactive && "opacity-60")}>
+                        <div className="flex min-w-0 items-center">
+                          <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{acc.display_name}</p>
+                          {isOfficial && (
+                            <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>
+                              Oficial Meta
+                            </span>
+                          )}
+                          {isInactive && (
+                            <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>Inativa</span>
+                          )}
+                        </div>
+                        <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                          {nomeDaPlataforma}
+                          {acc.handle && <span> · {acc.handle}</span>}
+                          {acc.external_id && <span className="tabular-nums"> · ID {acc.external_id}</span>}
                         </p>
+                      </div>
+                      {canManage && !creating && !editingId && (
+                        <div className="-my-0.5 ml-3 flex shrink-0 items-center [&>*+*]:ml-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditing(acc)}
+                            title={
+                              officialConnectionsError
+                                ? "Não foi possível confirmar se a conta é oficial"
+                                : officialConnectionsLoading
+                                  ? "Confirmando o tipo da conta"
+                                  : "Editar conta"
+                            }
+                            aria-label="Editar canal"
+                            disabled={
+                              officialConnectionsLoading ||
+                              officialConnectionsError
+                            }
+                            className={juntar(botao.discreto, "h-8 px-2 disabled:cursor-not-allowed disabled:opacity-40")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span className="ml-1.5 hidden md:inline">Editar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleStatus(acc)}
+                            title={isInactive ? "Ativar" : "Inativar"}
+                            aria-label={isInactive ? "Ativar canal" : "Inativar canal"}
+                            className={juntar(botao.discreto, "h-8 px-2")}
+                          >
+                            {isInactive ? <Power className="h-3.5 w-3.5" aria-hidden="true" /> : <PowerOff className="h-3.5 w-3.5" aria-hidden="true" />}
+                            <span className="ml-1.5 hidden md:inline">{isInactive ? "Ativar" : "Inativar"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setLinkOpenFor(linkOpenFor === acc.id ? null : acc.id); setSelectedProjectId(""); }}
+                            title={
+                              projectsError || linksError
+                                ? "Vínculos indisponíveis no momento"
+                                : availableProjects.length > 0
+                                  ? "Vincular a projeto"
+                                  : "Todos os projetos já estão vinculados"
+                            }
+                            aria-label="Vincular canal a um projeto"
+                            aria-expanded={linkOpenFor === acc.id}
+                            disabled={projectsError || linksError || availableProjects.length === 0}
+                            className={juntar(botao.discreto, "h-8 px-2 disabled:cursor-not-allowed disabled:opacity-40")}
+                          >
+                            <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span className="ml-1.5 hidden md:inline">Projeto</span>
+                          </button>
+                        </div>
                       )}
                     </div>
-                    {canManage && !creating && !editingId && (
-                      <div className="flex shrink-0 flex-wrap items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => startEditing(acc)}
-                          title={
-                            officialConnectionsError
-                              ? "Não foi possível confirmar se a conta é oficial"
-                              : officialConnectionsLoading
-                                ? "Confirmando o tipo da conta"
-                                : "Editar conta"
-                          }
-                          aria-label="Editar canal"
-                          disabled={
-                            officialConnectionsLoading ||
-                            officialConnectionsError
-                          }
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <Pencil className="w-3.5 h-3.5" /> Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleStatus(acc)}
-                          title={isInactive ? "Ativar" : "Inativar"}
-                          aria-label={isInactive ? "Ativar canal" : "Inativar canal"}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
-                        >
-                          {isInactive ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
-                          {isInactive ? "Ativar" : "Inativar"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setLinkOpenFor(linkOpenFor === acc.id ? null : acc.id); setSelectedProjectId(""); }}
-                          title={
-                            projectsError || linksError
-                              ? "Vínculos indisponíveis no momento"
-                              : availableProjects.length > 0
-                                ? "Vincular a projeto"
-                                : "Todos os projetos já estão vinculados"
-                          }
-                          aria-label="Vincular canal a um projeto"
-                          disabled={projectsError || linksError || availableProjects.length === 0}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <Link2 className="w-3.5 h-3.5" /> Projeto
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
-                {canManage && !isEditing && !projectsError && !linksError && linkOpenFor === acc.id && availableProjects.length > 0 && (
-                  <div className="flex flex-col gap-2 px-3 pb-2 sm:flex-row">
-                    <select
-                      value={selectedProjectId}
-                      onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
-                    >
-                      <option value="">Selecione um projeto…</option>
-                      {availableProjects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!selectedProjectId}
-                      onClick={() => linkToProject(acc.id)}
-                      className="px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 border-none"
-                    >Vincular</button>
-                  </div>
-                )}
+                  {canManage && !isEditing && !projectsError && !linksError && linkOpenFor === acc.id && availableProjects.length > 0 && (
+                    <div className="mt-2 flex min-w-0 items-center">
+                      <select
+                        value={selectedProjectId}
+                        onChange={(e) => setSelectedProjectId(e.target.value)}
+                        aria-label="Projeto para vincular"
+                        className={juntar(campo, "flex-1")}
+                      >
+                        <option value="">Selecione um projeto…</option>
+                        {availableProjects.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!selectedProjectId}
+                        onClick={() => linkToProject(acc.id)}
+                        className={juntar(botao.primario, "ml-2")}
+                      >
+                        Vincular
+                      </button>
+                    </div>
+                  )}
 
-                {!projectsError && !linksError && accLinks.length > 0 && (
-                  <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                    {accLinks.map((l) => {
-                      const proj = (projects || []).find((p) => p.id === l.project_id);
-                      return (
-                        <span key={l.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-background border border-border text-[11px] text-foreground">
-                          {proj?.name || "Projeto"}
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => unlink(l.id)}
-                              title="Desvincular"
-                              aria-label={`Desvincular do projeto ${proj?.name || "selecionado"}`}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <Link2Off className="w-3 h-3" />
-                            </button>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  {!projectsError && !linksError && accLinks.length > 0 && (
+                    <div className="-m-0.5 mt-1.5 flex min-w-0 flex-wrap [&>*]:m-0.5">
+                      {accLinks.map((l) => {
+                        const proj = (projects || []).find((p) => p.id === l.project_id);
+                        return (
+                          <span key={l.id} className="inline-flex h-6 min-w-0 max-w-full items-center rounded bg-muted pl-2 pr-0.5 text-[12px] text-foreground">
+                            <span className="min-w-0 truncate">{proj?.name || "Projeto"}</span>
+                            {canManage ? (
+                              <button
+                                type="button"
+                                onClick={() => unlink(l.id)}
+                                title="Desvincular"
+                                aria-label={`Desvincular do projeto ${proj?.name || "selecionado"}`}
+                                className={juntar("ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-destructive", foco)}
+                              >
+                                <Link2Off className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            ) : (
+                              <span className="w-1.5" aria-hidden="true" />
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Secao>
     </div>
   );
 }

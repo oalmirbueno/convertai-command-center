@@ -76,6 +76,13 @@ interface EditorialAccountSetupProps {
   onAccountReady: (accountId: string) => void;
   showManualOptions?: boolean;
   compact?: boolean;
+  /**
+   * Dentro de uma seção que já tem título (aba Contas da ficha do cliente):
+   * sem a caixa tracejada em volta e sem repetir o título e a explicação; a
+   * lista de contas vira linhas com divisória. O resto (conexão Meta,
+   * alternativas, permissões) fica igual.
+   */
+  embutido?: boolean;
 }
 
 const MAX_VISIBLE_META_RESOURCES = 100;
@@ -142,6 +149,7 @@ export default function EditorialAccountSetup({
   onAccountReady,
   showManualOptions = true,
   compact = false,
+  embutido = false,
 }: EditorialAccountSetupProps) {
   const { createAndLinkAccount, linkAccount } = useEditorialAccountMutations(
     clientId,
@@ -548,8 +556,9 @@ export default function EditorialAccountSetup({
 
   return (
     <>
-      <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className={embutido ? "min-w-0" : "rounded-xl border border-dashed border-border bg-muted/20 p-4"} data-contas-embutidas={embutido ? "" : undefined}>
+        <div className={embutido ? "flex min-w-0 justify-end empty:hidden" : "flex flex-wrap items-start justify-between gap-3"}>
+          {!embutido && (
           <div>
             <p className="text-sm font-medium text-foreground">
               {compact
@@ -566,6 +575,7 @@ export default function EditorialAccountSetup({
                 : "Conecte a Meta oficialmente ou vincule uma conta já cadastrada neste cliente."}
             </p>
           </div>
+          )}
           {canManage && canShowAlternatives && linkedAccountCount > 0 && (
             <Button
               type="button"
@@ -590,7 +600,7 @@ export default function EditorialAccountSetup({
 
         {!canManage && (
           <div
-            className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-xs text-amber-700 dark:text-amber-300"
+            className="mt-3 flex items-start first:mt-0 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-xs text-amber-700 dark:text-amber-300"
             role="alert"
           >
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -603,11 +613,11 @@ export default function EditorialAccountSetup({
         )}
 
         {!compact && linkedAccounts.length > 0 && (
-          <div className="mt-4 space-y-2" aria-label="Contas vinculadas">
+          <div className={embutido ? "mt-2 divide-y divide-border border-y border-border first:mt-0" : "mt-4 space-y-2"} aria-label="Contas vinculadas">
             {linkedAccounts.map((account) => (
               <div
                 key={account.id}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/70 px-3 py-2"
+                className={embutido ? "flex flex-wrap items-center gap-2 py-2" : "flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/70 px-3 py-2"}
               >
                 <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                   {PLATFORM_LABELS[account.platform as EditorialPlatform] ||

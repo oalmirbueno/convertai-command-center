@@ -9,6 +9,7 @@ const app = read("src/App.tsx");
 const layout = read("src/components/AppLayout.tsx");
 const mobileNav = read("src/components/MobileBottomNav.tsx");
 const page = read("src/pages/EditorialCalendar.tsx");
+const lembrados = read("src/components/editorial/useParametrosLembrados.ts");
 const hook = read("src/hooks/useEditorialCalendar.ts");
 const editor = read("src/components/editorial/EditorialEditor.tsx");
 const views = read(
@@ -45,7 +46,11 @@ describe("editorial calendar integration contract", () => {
   });
 
   it("keeps filters and the selected content in shareable URL state", () => {
-    expect(page).toContain("useSearchParams");
+    // E4 (26/09): o estado segue no endereço, agora por um useSearchParams
+    // que também lembra visão e filtros ao sair e voltar pelo menu.
+    expect(page).toContain("useParametrosLembrados(");
+    expect(lembrados).toContain("useSearchParams()");
+    expect(lembrados).toContain("setUrl(params, { replace: true })");
     expect(page).toContain('searchParams.get("view")');
     expect(page).toContain('searchParams.get("date")');
     expect(page).toContain('searchParams.get("platform")');

@@ -17,6 +17,7 @@ import {
   resolveAiProviderChain,
   type AiProvider,
 } from "../_shared/ai-provider.ts";
+import { contextoParaAgente, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -97,6 +98,12 @@ Você é 100% autônomo DENTRO do escopo operacional: projetos, milestones, tare
   "clientSummary"?: string,
   "plan"?: { "milestones": [ { "title": string, "offsetDays": number, "tasks": [ { "title": string, "description"?: string, "priority": "high"|"medium"|"low", "role": "admin"|"design"|"traffic"|"manager" } ] } ] } | null }
 
+## Pré-contexto escolhido pela equipe
+- Pode vir um bloco "PRÉ-CONTEXTO" com o cliente e o serviço escolhidos no topo do agente, o dossiê resumido, a memória do cliente e os projetos e tarefas abertos.
+- O cliente do pré-contexto é o cliente do pedido, a não ser que o comando cite outro com clareza. Coloque o id dele primeiro em suggestedClientIds.
+- Se o serviço escolhido tiver tipo de projeto (ex.: Tráfego = "trafego"), use esse tipo quando o comando não disser outro.
+- Nunca repita o dossiê inteiro: use só o que ajuda a decidir.
+
 ## clientSummary — campo separado, voltado ao CLIENTE FINAL
 Gere SEMPRE que houver projeto/plan. Regras absolutas:
 - 3 a 5 frases em pt-BR, tom profissional, estratégico e premium.
@@ -126,7 +133,117 @@ interface RequestBody {
   fetchOnly?: boolean;
   // Quando true, edge não tenta recarregar contratos do sistema (UI já passou).
   skipSystemContractAutoLoad?: boolean;
+  // Pré-contexto escolhido no topo do agente (seletores Cliente e Serviço).
+  servico?: string | null;
+  tela?: string | null;
+  // "conversa": responde uma pergunta (resumo, próximos passos) em texto,
+  // sem intent e sem criar nada. Padrão: interpretar o comando.
+  modo?: "interpretar" | "conversa";
+  pergunta?: string | null;
 }
+
+// ─── Pré-contexto (cliente + serviço) ──────────────────────────────────
+// Os serviços que o agente aceita no pré-contexto: os de services_config
+// (SERVICE_LABELS em src/lib/cycleDefs.ts), mais "geral" e "contrato".
+// Financeiro fica fora: é jurisdição proibida do agente.
+const SERVICOS: Record<string, { rotulo: string; tipo?: string; areas: AreaDoCerebro[] }> = {
+  geral: { rotulo: "Geral", areas: ["geral"] },
+  social: { rotulo: "Social", tipo: "social_media", areas: ["calendario", "campanha", "copy", "arte"] },
+  trafego: { rotulo: "Tráfego", tipo: "trafego", areas: ["ads", "conta", "campanha"] },
+  design: { rotulo: "Design", areas: ["arte", "foto"] },
+  copywriting: { rotulo: "Copy", areas: ["copy"] },
+  edicao_video: { rotulo: "Edição de vídeo", tipo: "video", areas: ["arte", "campanha"] },
+  videos_ia: { rotulo: "Vídeo com IA", tipo: "video_ai", areas: ["arte", "campanha"] },
+  site: { rotulo: "Site", tipo: "site", areas: ["geral"] },
+  seo: { rotulo: "SEO", areas: ["geral"] },
+  automacao: { rotulo: "Automação", tipo: "automation", areas: ["geral"] },
+  email_marketing: { rotulo: "E-mail", areas: ["copy"] },
+  relatorios: { rotulo: "Relatórios", areas: ["ads", "conta"] },
+  contrato: { rotulo: "Contrato", areas: ["geral"] },
+};
+
+export function servicoValido(chave: unknown): string {
+  return typeof chave === "string" && Object.prototype.hasOwnProperty.call(SERVICOS, chave) ? chave : "geral";
+}
+
+type PreContexto = { texto: string; clienteNome: string | null; linhasLocais: string[] };
+
+// Lê o que o painel já sabe do cliente, com teto: nome, serviços
+// contratados, dossiê e memória (contextoParaAgente, a mesma leitura das
+// mesas), projetos e tarefas abertos. Cada parte falha sozinha.
+async function lerPreContexto(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string | null,
+  servico: string,
+  tela: string,
+): Promise<PreContexto> {
+  const s = SERVICOS[servico];
+  const partes: string[] = [];
+  const linhasLocais: string[] = [];
+  let clienteNome: string | null = null;
+  partes.push(`Serviço escolhido: ${s.rotulo}${s.tipo ? ` (tipo de projeto "${s.tipo}")` : ""}`);
+  if (tela) partes.push(`Tela aberta: ${tela.slice(0, 120)}`);
+  if (!clientId) {
+    return { texto: `\n\n## PRÉ-CONTEXTO\n${partes.join("\n")}\nCliente: nenhum escolhido.`, clienteNome, linhasLocais };
+  }
+  const [perfil, contexto, projetos] = await Promise.all([
+    Promise.resolve(
+      supabase.from("profiles").select("company_name, full_name, services_config, client_type").eq("id", clientId).maybeSingle(),
+    ).catch(() => ({ data: null })),
+    contextoParaAgente(supabase as never, clientId, s.areas[0], { areas: s.areas, limiteCerebro: 1200, limiteDossie: 2500 })
+      .catch(() => ({ texto: "" })),
+    Promise.resolve(
+      supabase.from("projects").select("id, name, status, progress, deadline, project_type")
+        .eq("client_id", clientId).is("deleted_at", null).not("status", "in", "(done,completed,cancelled)")
+        .order("created_at", { ascending: false }).limit(8),
+    ).catch(() => ({ data: [] })),
+  ]);
+  const p = (perfil as { data: Record<string, unknown> | null }).data;
+  if (p) {
+    clienteNome = String(p.company_name || p.full_name || "") || null;
+    const cfg = (p.services_config && typeof p.services_config === "object" ? p.services_config : {}) as Record<string, unknown>;
+    const contratados = Object.keys(SERVICOS).filter((k) => cfg[k] === true).map((k) => SERVICOS[k].rotulo);
+    partes.unshift(`Cliente: ${clienteNome || "sem nome"} (id ${clientId})${p.client_type ? ` · ${p.client_type}` : ""}`);
+    partes.push(`Serviços contratados: ${contratados.length ? contratados.join(", ") : "nenhum marcado no cadastro"}`);
+  } else {
+    partes.unshift(`Cliente: id ${clientId}`);
+  }
+  const listaProjetos = ((projetos as { data: Record<string, unknown>[] | null }).data || []);
+  if (listaProjetos.length) {
+    const linhas = listaProjetos.map((x) => `- ${x.name} · ${x.status} · ${x.progress ?? 0}%${x.deadline ? ` · prazo ${x.deadline}` : ""}`);
+    partes.push(`Projetos abertos:\n${linhas.join("\n")}`);
+    linhasLocais.push(...listaProjetos.map((x) => `${x.name}: ${x.status}, ${x.progress ?? 0}%`));
+    try {
+      const { data: tarefas } = await supabase.from("tasks").select("title, status, due_date")
+        .in("project_id", listaProjetos.map((x) => x.id as string)).neq("status", "done").is("deleted_at", null)
+        .order("due_date", { ascending: true, nullsFirst: false }).limit(12);
+      const t = (tarefas || []) as Record<string, unknown>[];
+      if (t.length) {
+        partes.push(`Tarefas abertas (as mais próximas):\n${t.map((x) => `- [${x.status}] ${x.title}${x.due_date ? ` · ${x.due_date}` : ""}`).join("\n")}`);
+        linhasLocais.push(...t.slice(0, 6).map((x) => `Tarefa aberta: ${x.title}${x.due_date ? ` (${x.due_date})` : ""}`));
+      }
+    } catch { /* sem tarefas no pré-contexto */ }
+  } else {
+    partes.push("Projetos abertos: nenhum.");
+  }
+  const ctx = String((contexto as { texto?: string }).texto || "").trim();
+  if (ctx) partes.push(ctx.slice(0, 4000));
+  return { texto: `\n\n## PRÉ-CONTEXTO\n${partes.join("\n")}`.slice(0, 7000), clienteNome, linhasLocais };
+}
+
+const PERGUNTAS_PRONTAS: Record<string, string> = {
+  resumo: "Faça um resumo do cliente para quem vai trabalhar nele hoje: quem é, o que contratou, em que pé está e o que está pendente. No máximo 6 frases.",
+  proximos_passos: "Quais são os próximos passos concretos para este cliente neste serviço? Em ordem, com base nas tarefas abertas, nos projetos e no dossiê. No máximo 5 passos curtos.",
+};
+
+const PROMPT_DA_CONVERSA = `Você é o Aceleriq, agente de operações da agência Aceleriq, conversando com a equipe.
+Responda à pergunta usando SÓ o PRÉ-CONTEXTO (cadastro, dossiê, memória do cliente, projetos e tarefas).
+Regras:
+- Português do Brasil, frases curtas e claras. Sem travessão. Sem markdown, sem asterisco.
+- Não invente dado. Se faltar informação, diga o que falta e onde a equipe encontra.
+- Financeiro, cobrança e cofre de senhas estão fora do seu alcance: se a pergunta for disso, diga que não acessa.
+- Devolva JSON puro: { "resposta": string, "passos"?: string[] } (passos só quando pedirem passos, até 5).`;
 
 // Extrai texto cru de PDF sem parser pesado: pega só strings ASCII dentro do
 // stream — suficiente pra contratos digitais (texto, não scan). Limita 18k chars.
@@ -408,6 +525,52 @@ Deno.serve(async (req) => {
       });
     }
 
+    const servico = servicoValido(body.servico);
+    const tela = typeof body.tela === "string" ? body.tela.slice(0, 120) : "";
+
+    // Modo conversa: responde em texto (resumo, próximos passos, pergunta
+    // livre) com o pré-contexto. Não devolve intent nem cria nada.
+    if (body.modo === "conversa") {
+      const chave = typeof body.pergunta === "string" ? body.pergunta : "";
+      const pergunta = (PERGUNTAS_PRONTAS[chave] || chave || body.text || "").slice(0, 1500).trim();
+      if (!pergunta) {
+        return new Response(JSON.stringify({ resposta: "Escreva a pergunta ou escolha um atalho.", passos: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const pre = await lerPreContexto(supabase, body.clientId || null, servico, tela);
+      const local = {
+        resposta: pre.linhasLocais.length
+          ? `A IA não respondeu agora. O que o painel mostra${pre.clienteNome ? ` de ${pre.clienteNome}` : ""}:`
+          : "A IA não respondeu agora e o painel não tem projetos abertos para este cliente.",
+        passos: pre.linhasLocais.slice(0, 8),
+        _degraded: true,
+      };
+      if (!providers.length) {
+        return new Response(JSON.stringify(local), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const pedidoDaConversa = `Pergunta da equipe:\n"""${pergunta}"""${pre.texto}\n\nRetorne APENAS o JSON.`;
+      const erros: string[] = [];
+      for (const provider of providers) {
+        const r = await callModel(provider, PROMPT_DA_CONVERSA, pedidoDaConversa);
+        if (!r.ok) { erros.push(`${provider.label}: ${r.status}`); continue; }
+        let j: any = null;
+        try { j = JSON.parse(r.content); } catch {
+          const m = r.content.match(/\{[\s\S]*\}/);
+          try { j = m ? JSON.parse(m[0]) : null; } catch { j = null; }
+        }
+        if (j && typeof j.resposta === "string" && j.resposta.trim()) {
+          const passos = Array.isArray(j.passos) ? j.passos.map((p: unknown) => String(p)).filter(Boolean).slice(0, 5) : [];
+          return new Response(JSON.stringify({ resposta: j.resposta.trim(), passos, _model: provider.model }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        erros.push(`${provider.label}: parse_failed`);
+      }
+      console.warn(`[assistente] conversa sem resposta: ${erros.join(" | ")}`);
+      return new Response(JSON.stringify({ ...local, _errors: erros }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (!body.text && incomingAttachments.length === 0 && !body.clientId) {
       return new Response(JSON.stringify({
         intent: { kind: "unknown", raw: "" },
@@ -449,9 +612,16 @@ Deno.serve(async (req) => {
       ? `\n\n## ${docBlocks.length} DOCUMENTO(S) DO CLIENTE — leia INTEIRO, extraia números, prazos e formatos com precisão cirúrgica:${docBlocks.join("")}`
       : "";
 
+    // Pré-contexto: cliente e serviço escolhidos no topo do agente, com o
+    // dossiê e a memória resumidos (sem despejar tudo).
+    const preContexto = body.clientId || body.servico || tela
+      ? (await lerPreContexto(supabase, body.clientId || null, servico, tela)).texto
+      : "";
+
     const userPrompt =
       `Comando do administrador:\n"""${body.text.slice(0, 4000)}"""\n\n` +
       `Clientes disponíveis (JSON):\n${JSON.stringify(clientsCondensed)}\n` +
+      preContexto +
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
 
@@ -508,6 +678,7 @@ Deno.serve(async (req) => {
     parsed._contractAutoLoaded = contractAutoLoaded;
     parsed._contractName = allDocs[0]?.fileName || null;
     parsed._documentsCount = allDocs.length;
+    parsed._servico = servico;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -5,6 +5,7 @@ import { TrendingUp, Megaphone, Wallet, Target } from "lucide-react";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
+import { Carregando, EstadoDeErro, Painel, Secao, botao, juntar, superficie, texto } from "@/components/sistema";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -37,7 +38,7 @@ interface Props {
 }
 
 export default function AdsInvestment({ billing, projectPayments }: Props) {
-  const { data: allExpenses = [] } = useQuery({
+  const { data: allExpenses = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
@@ -99,57 +100,61 @@ export default function AdsInvestment({ billing, projectPayments }: Props) {
   const roiMonth = curInvested > 0 ? curReceived / curInvested : null;
   const roiTotal = totalInvested > 0 ? totalReceived / totalInvested : null;
 
+  const numeros = [
+    { label: "Investido no mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", icon: Megaphone, color: "text-warning" },
+    { label: "Recebido no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", icon: TrendingUp, color: "text-success" },
+    { label: "Retorno no mês", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento no mês" : "Receita ÷ investimento", icon: Target, color: "text-info" },
+    { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre marketing ou tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, icon: Wallet, color: "text-foreground" },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Megaphone className="w-3.5 h-3.5 text-primary" />
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-          Investimento da Aceleriq em anúncios
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Investido este mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", icon: Megaphone, color: "text-warning" },
-          { label: "Receita recebida no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", icon: TrendingUp, color: "text-success" },
-          { label: "Retorno / real investido (mês)", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento registrado no mês" : "Receita do mês ÷ investimento do mês", icon: Target, color: "text-info" },
-          { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre despesas de marketing/tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, icon: Wallet, color: "text-foreground" },
-        ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
-            </div>
-            <p className={`text-lg font-mono font-semibold ${s.color}`}>{s.value}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</p>
+    <Secao
+      titulo="Investimento em anúncios"
+      descricao="Da própria Aceleriq"
+      ajuda={`Investimento = despesas nas categorias "Marketing & Ads próprios" e "Tráfego pago" (lançadas no Fluxo de caixa ou no Capital). O retorno compara com toda a receita recebida: é um termômetro de aquisição, não atribuição exata por campanha.`}
+    >
+      {isError && !allExpenses.length ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar as despesas."
+          acao={<button type="button" onClick={() => { void refetch(); }} className={botao.secundario}>Tentar de novo</button>}
+        />
+      ) : isLoading ? (
+        <Carregando forma="lista" linhas={3} rotulo="Carregando investimento em anúncios" />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
+            {numeros.map((s) => (
+              <div key={s.label} className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4")}>
+                <div className="flex min-w-0 items-center">
+                  <s.icon className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0", s.color)} aria-hidden="true" />
+                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{s.label}</span>
+                </div>
+                <p className={juntar("mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums sm:text-[18px]", s.color)}>{s.value}</p>
+                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={s.sub}>{s.sub}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3">
-          Investido vs receita · últimos 6 meses
-        </p>
-        <div className="h-[200px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                formatter={(v: number, name: string) => [fmt(Number(v)), name === "investido" ? "Investido em ads" : "Receita recebida"]}
-              />
-              <Bar dataKey="investido" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} name="investido" />
-              <Line type="monotone" dataKey="receita" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3 }} name="receita" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <Painel titulo="Investido e receita" descricao="Últimos 6 meses">
+            <div className="h-[200px] min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={series}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12 }}
+                    formatter={(v: number, name: string) => [fmt(Number(v)), name === "investido" ? "Investido em ads" : "Receita recebida"]}
+                  />
+                  <Bar dataKey="investido" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} name="investido" isAnimationActive={false} />
+                  <Line type="monotone" dataKey="receita" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 3 }} name="receita" isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Painel>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2">
-          Investimento = despesas nas categorias "Marketing & Ads próprios" e "Tráfego pago" (lançadas no Fluxo de Caixa ou no Capital). O retorno compara com toda a receita recebida · é um termômetro de aquisição, não atribuição exata por campanha.
-        </p>
-      </div>
-    </div>
+      )}
+    </Secao>
   );
 }

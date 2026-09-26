@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Carregando, EstadoDeErro, EstadoVazio, Secao, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
 
 /**
  * As cobranças do cliente, editáveis onde o dono já está.
@@ -37,7 +38,7 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
   const [edicao, setEdicao] = useState<Record<string, { amount: string; due: string }>>({});
 
   const chave = ["cobrancas-cliente", clientId];
-  const { data: linhas = [], isLoading } = useQuery({
+  const { data: linhas = [], isLoading, isError, refetch } = useQuery({
     queryKey: chave,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -98,134 +99,160 @@ export default function CobrancasDoCliente({ clientId }: { clientId: string }) {
     );
   };
 
-  if (isLoading || linhas.length === 0) return null;
+  const pendentes = linhas.filter((l) => l.status !== "paid").length;
+  const pagas = linhas.length - pendentes;
+  const estado =
+    linhas.length === 0
+      ? undefined
+      : [
+          pendentes ? `${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"}` : "",
+          pagas ? `${pagas} ${pagas === 1 ? "paga" : "pagas"}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   return (
-    <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-2">
-      <p className="text-[11px] font-semibold text-foreground/80">
-        Cobranças · valores e vencimentos editáveis
-      </p>
-      {linhas.map((linha) => {
-        const rascunho = edicao[linha.id];
-        const mudou =
-          rascunho &&
-          (parseFloat(rascunho.amount) !== linha.amount ||
-            (rascunho.due || linha.due_date) !== linha.due_date);
-        const paga = linha.status === "paid";
-        return (
-          <div
-            key={linha.id}
-            className="rounded-[10px] border border-border bg-background px-3 py-2"
-          >
-            <div className="flex items-center gap-2">
-              <p className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
-                {linha.description || (linha.type === "renewal" ? "Mensalidade" : "Cobrança")}
-              </p>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold ${
-                  paga ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                }`}
-              >
-                {paga ? `paga${linha.paid_date ? ` · ${linha.paid_date.slice(8, 10)}/${linha.paid_date.slice(5, 7)}` : ""}` : "pendente"}
-              </span>
-            </div>
-            <div className="mt-1.5 grid grid-cols-[1fr_1fr_auto] items-center gap-2">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={rascunho?.amount ?? String(linha.amount)}
-                onChange={(e) =>
-                  setEdicao((atual) => ({
-                    ...atual,
-                    [linha.id]: {
-                      amount: e.target.value,
-                      due: atual[linha.id]?.due ?? (linha.due_date || ""),
-                    },
-                  }))
-                }
-                className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[12px] text-foreground focus:border-primary/50 focus:outline-none"
-                aria-label="Valor da cobrança"
-              />
-              <input
-                type="date"
-                value={rascunho?.due ?? (linha.due_date || "")}
-                onChange={(e) =>
-                  setEdicao((atual) => ({
-                    ...atual,
-                    [linha.id]: {
-                      amount: atual[linha.id]?.amount ?? String(linha.amount),
-                      due: e.target.value,
-                    },
-                  }))
-                }
-                className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[12px] text-foreground focus:border-primary/50 focus:outline-none"
-                aria-label="Vencimento da cobrança"
-              />
-              <div className="flex items-center gap-1">
-                {mudou && (
-                  <button
-                    type="button"
-                    disabled={salvando === linha.id}
-                    onClick={() => salvarEdicao(linha)}
-                    title="Salvar valor e vencimento"
-                    className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50"
-                  >
-                    {salvando === linha.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Check className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                )}
-                {paga ? (
-                  <button
-                    type="button"
-                    disabled={salvando === linha.id}
-                    onClick={() =>
-                      void aplicar(
-                        linha,
-                        { status: "pending", paid_date: null, paid_amount: null },
-                        "Cobrança voltou a pendente.",
-                      )
-                    }
-                    title="Marcar como pendente (foi pago por engano)"
-                    className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground disabled:opacity-50"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={salvando === linha.id}
-                    onClick={() =>
-                      void aplicar(
-                        linha,
-                        {
-                          status: "paid",
-                          paid_date: new Date().toISOString().slice(0, 10),
-                          paid_amount: linha.amount,
+    <Secao
+      titulo="Cobranças"
+      divisoria
+      descricao={estado}
+      ajuda="Valor e vencimento se corrigem na própria linha. Recebi marca como paga hoje; a seta volta a cobrança para pendente se ela foi marcada por engano. Mostra as 10 mais recentes."
+    >
+      {isLoading ? (
+        <Carregando linhas={2} rotulo="Carregando cobranças" />
+      ) : isError ? (
+        <EstadoDeErro
+          titulo="Não foi possível carregar as cobranças."
+          acao={
+            <button type="button" onClick={() => void refetch()} className={juntar(botao.secundario, "h-8")}>
+              Tentar de novo
+            </button>
+          }
+        />
+      ) : linhas.length === 0 ? (
+        <EstadoVazio compacto titulo="Sem cobrança." descricao="Mensalidades e parcelas aparecem aqui." />
+      ) : (
+        <ul className="divide-y divide-border border-y border-border">
+          {linhas.map((linha) => {
+            const rascunho = edicao[linha.id];
+            const mudou =
+              rascunho &&
+              (parseFloat(rascunho.amount) !== linha.amount ||
+                (rascunho.due || linha.due_date) !== linha.due_date);
+            const paga = linha.status === "paid";
+            const ocupada = salvando === linha.id;
+            return (
+              // Celular: descrição e ação na mesma linha, campos embaixo.
+              // Computador: tudo numa linha, colunas alinhadas entre as linhas.
+              <li key={linha.id} className="flex min-w-0 flex-wrap items-center py-3 sm:flex-nowrap">
+                <div className="order-1 min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center">
+                    <p className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>
+                      {linha.description || (linha.type === "renewal" ? "Mensalidade" : "Cobrança")}
+                    </p>
+                    <span className={juntar(etiqueta, "ml-2", paga ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>
+                      {paga ? `Paga${linha.paid_date ? ` ${linha.paid_date.slice(8, 10)}/${linha.paid_date.slice(5, 7)}` : ""}` : "Pendente"}
+                    </span>
+                  </div>
+                  <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
+                    {dinheiro(linha.amount)}
+                    {paga && linha.paid_amount != null && linha.paid_amount !== linha.amount
+                      ? ` · recebido ${dinheiro(linha.paid_amount)}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="order-3 mt-2 grid w-full min-w-0 grid-cols-2 gap-2 sm:order-2 sm:ml-4 sm:mt-0 sm:w-[320px] sm:shrink-0">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={rascunho?.amount ?? String(linha.amount)}
+                    onChange={(e) =>
+                      setEdicao((atual) => ({
+                        ...atual,
+                        [linha.id]: {
+                          amount: e.target.value,
+                          due: atual[linha.id]?.due ?? (linha.due_date || ""),
                         },
-                        "Pagamento registrado.",
-                      )
+                      }))
                     }
-                    title="Marcar como paga hoje"
-                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-success/40 bg-success/10 px-2 text-[10.5px] font-semibold text-success hover:bg-success/20 disabled:opacity-50"
-                  >
-                    Recebi
-                  </button>
-                )}
-              </div>
-            </div>
-            <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
-              {dinheiro(linha.amount)}
-              {paga && linha.paid_amount != null && linha.paid_amount !== linha.amount
-                ? ` · recebido ${dinheiro(linha.paid_amount)}`
-                : ""}
-            </p>
-          </div>
-        );
-      })}
-    </div>
+                    className={juntar(campo, "tabular-nums")}
+                    aria-label="Valor da cobrança"
+                  />
+                  <input
+                    type="date"
+                    value={rascunho?.due ?? (linha.due_date || "")}
+                    onChange={(e) =>
+                      setEdicao((atual) => ({
+                        ...atual,
+                        [linha.id]: {
+                          amount: atual[linha.id]?.amount ?? String(linha.amount),
+                          due: e.target.value,
+                        },
+                      }))
+                    }
+                    className={juntar(campo, "tabular-nums")}
+                    aria-label="Vencimento da cobrança"
+                  />
+                </div>
+                <div className="order-2 ml-2 flex shrink-0 items-center justify-end sm:order-3 sm:w-[112px] [&>*+*]:ml-1">
+                    {mudou && (
+                      <button
+                        type="button"
+                        disabled={ocupada}
+                        onClick={() => salvarEdicao(linha)}
+                        title="Salvar valor e vencimento"
+                        aria-label="Salvar valor e vencimento"
+                        className={juntar(botao.icone, "text-primary hover:text-primary disabled:opacity-50")}
+                      >
+                        {ocupada ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                      </button>
+                    )}
+                    {paga ? (
+                      <button
+                        type="button"
+                        disabled={ocupada}
+                        onClick={() =>
+                          void aplicar(
+                            linha,
+                            { status: "pending", paid_date: null, paid_amount: null },
+                            "Cobrança voltou a pendente.",
+                          )
+                        }
+                        title="Marcar como pendente (foi pago por engano)"
+                        aria-label="Voltar para pendente"
+                        className={juntar(botao.icone, "disabled:opacity-50")}
+                      >
+                        <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={ocupada}
+                        onClick={() =>
+                          void aplicar(
+                            linha,
+                            {
+                              status: "paid",
+                              paid_date: new Date().toISOString().slice(0, 10),
+                              paid_amount: linha.amount,
+                            },
+                            "Pagamento registrado.",
+                          )
+                        }
+                        title="Marcar como paga hoje"
+                        className={juntar(botao.secundario, "h-8 px-2.5 text-success")}
+                      >
+                        Recebi
+                      </button>
+                    )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Secao>
   );
 }

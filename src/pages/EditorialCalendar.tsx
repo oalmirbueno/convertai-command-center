@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -14,19 +14,22 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
-  AlertCircle,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
   GripVertical,
-  LayoutTemplate,
   RefreshCw,
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AjudaRecolhida,
+  AreaDeTrabalho,
+  Carregando,
+  EstadoDeErro,
+  botao,
+  juntar,
+  texto,
+} from "@/components/sistema";
+import { useParametrosLembrados } from "@/components/editorial/useParametrosLembrados";
 import EditorialToolbar, {
   type EditorialView,
 } from "@/components/editorial/EditorialToolbar";
@@ -204,94 +207,56 @@ function periodTitle(dateKey: string, view: EditorialView) {
   }).format(date);
 }
 
-function CalendarMetrics({
-  posts,
-  taskCount,
-}: {
-  posts: EditorialPostBundle[];
-  taskCount?: number;
-}) {
+/** Visão e filtros que a Agenda lembra ao sair e voltar (a data não entra). */
+const CHAVES_LEMBRADAS = [
+  "view",
+  "q",
+  "client",
+  "project",
+  "format",
+  "platform",
+  "status",
+  "production",
+  "approval",
+  "responsible",
+] as const;
+
+/**
+ * Os números do recorte numa linha de estado (antes eram cinco caixas com
+ * ícone em cima do calendário).
+ */
+function resumoDoCalendario(
+  posts: EditorialPostBundle[],
+  taskCount?: number,
+) {
   const publications = posts.flatMap((post) =>
     post.publications.map(({ publication }) => publication),
   );
-  const metrics = [
-    ...(taskCount === undefined
-      ? []
-      : [
-          {
-            label: "Tarefas",
-            value: taskCount,
-            icon: LayoutTemplate,
-            className: "text-violet-500 bg-violet-500/10",
-          },
-        ]),
-    {
-      label: "Conteúdos",
-      value: posts.length,
-      icon: CalendarDays,
-      className: "text-sky-500 bg-sky-500/10",
-    },
-    {
-      label: "Agendados",
-      value: publications.filter(
-        (publication) => publication.status === "scheduled",
-      ).length,
-      icon: Clock3,
-      className: "text-sky-500 bg-sky-500/10",
-    },
-    {
-      label: "Publicados",
-      value: publications.filter(
-        (publication) => publication.status === "published",
-      ).length,
-      icon: CheckCircle2,
-      className: "text-success bg-success/10",
-    },
-    ...(taskCount === undefined
-      ? [
-          {
-            label: "Falhas",
-            value: publications.filter(
-              (publication) => publication.status === "failed",
-            ).length,
-            icon: AlertCircle,
-            className: "text-destructive bg-destructive/10",
-          },
-        ]
-      : []),
-  ];
-
-  return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-card/70 lg:grid-cols-4">
-      {metrics.map((metric) => (
-        <div
-          key={metric.label}
-          className="flex items-center gap-3 border-b border-r border-border px-4 py-3.5 last:border-r-0 lg:border-b-0"
-        >
-          <span
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${metric.className}`}
-          >
-            <metric.icon className="h-4 w-4" />
-          </span>
-          <div>
-            <p className="text-base font-semibold leading-none text-foreground">
-              {metric.value}
-            </p>
-            <p className="mt-1.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-              {metric.label}
-            </p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  const contar = (estado: string) =>
+    publications.filter((publication) => publication.status === estado).length;
+  const partes: string[] = [];
+  if (taskCount !== undefined) {
+    partes.push(`${taskCount} ${taskCount === 1 ? "tarefa" : "tarefas"}`);
+  }
+  partes.push(`${posts.length} ${posts.length === 1 ? "conteúdo" : "conteúdos"}`);
+  partes.push(`${contar("scheduled")} agendados`);
+  partes.push(`${contar("published")} publicados`);
+  const falhas = contar("failed");
+  if (taskCount === undefined && falhas > 0) {
+    partes.push(`${falhas} ${falhas === 1 ? "falha" : "falhas"}`);
+  }
+  return partes.join(" · ");
 }
 
 export default function EditorialCalendar() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const { isImpersonating, impersonatedId } = useImpersonation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  // Visão e filtros no endereço (link compartilhável) e lembrados ao voltar pelo menu.
+  const [searchParams, setSearchParams] = useParametrosLembrados(
+    "agenda:parametros",
+    CHAVES_LEMBRADAS,
+  );
   const queryClient = useQueryClient();
   const editorialRealtimeGateRef = useRef<EditorialRealtimeGate>({
     pendingCount: 0,
@@ -1633,115 +1598,48 @@ export default function EditorialCalendar() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDragSummary(null)}
     >
-      <div className="space-y-6">
-        <header className="relative overflow-hidden rounded-2xl border border-border bg-card/75 px-4 py-4 sm:px-5">
-          <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <LayoutTemplate className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
-                  {effectiveRole === "client"
-                    ? "Calendário de Conteúdo"
-                    : view === "board"
-                      ? "Conteúdos em produção"
-                      : "Agenda editorial"}
-                </p>
-                <h1 className="mt-0.5 text-xl font-semibold text-foreground">
-                  {effectiveRole === "client"
-                    ? "Seu conteúdo planejado, aprovado e publicado"
-                    : view === "board"
-                      ? "Criação e revisão em um fluxo organizado"
-                      : "Conteúdo no dia certo, na conta certa"}
-                </h1>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {effectiveRole === "client"
-                    ? "Acompanhe o que está aprovado, programado e no ar. Aprovações acontecem na área de Aprovações."
-                    : view === "board"
-                      ? "Prepare o conteúdo e leve até a aprovação"
-                      : "Veja prazos de produção e publicações agendadas sem misturar outras tarefas"}
-                </p>
-              </div>
-            </div>
-            <div className="flex max-w-xl items-start gap-2 rounded-xl border border-primary/15 bg-primary/[0.05] px-3.5 py-2.5 text-xs leading-5 text-muted-foreground">
-              <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p>
-                {view === "board"
-                  ? "Aqui ficam rascunho, produção e aprovação. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
-                  : "Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."}
-              </p>
-            </div>
-          </div>
-        </header>
-
-        {approvedReadyToSchedule.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-4 py-3">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
-              <Send className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">
-                {approvedReadyToSchedule.length === 1
-                  ? "1 conteúdo aprovado pelo cliente pronto para agendar"
-                  : `${approvedReadyToSchedule.length} conteúdos aprovados pelo cliente prontos para agendar`}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Mantém a data e o horário planejados; se o horário já passou, agenda para 1 hora a partir de agora.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void scheduleApprovedNow()}
-              disabled={batchScheduling}
-              className="inline-flex items-center gap-1.5 rounded-lg border-none bg-success px-4 py-2 text-[12px] font-medium text-success-foreground transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
-            >
-              {batchScheduling ? "Agendando…" : "Agendar aprovados"}
-            </button>
-          </div>
-        )}
-
-        {editorialOptionsError && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-              <p className="text-xs text-muted-foreground">
-                Não foi possível carregar todas as opções editoriais. A criação
-                fica bloqueada até recarregar.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void Promise.all([
-                  clientsQuery.refetch(),
-                  projectsQuery.refetch(),
-                  teamMembersQuery.refetch(),
-                  editorialScopeQuery.refetch(),
-                  tasksQuery.refetch(),
-                  linkedTaskIdsQuery.refetch(),
-                ]);
-              }}
-            >
-              <RefreshCw className="mr-1.5 h-4 w-4" />
-              Recarregar acesso
-            </Button>
-          </div>
-        )}
-
-        <CalendarMetrics
-          posts={filteredPosts}
-          taskCount={
-            canUseTeamData && view === "board"
-              ? tasksForCurrentView.length
-              : undefined
-          }
-        />
-
+      <div className="min-w-0">
         <EditorialToolbar
+          cabecalho={
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center">
+                <h1 className={juntar(texto.tituloPagina, "min-w-0 truncate")}>
+                  {effectiveRole === "client"
+                    ? "Calendário de conteúdo"
+                    : view === "board"
+                      ? "Conteúdos"
+                      : "Agenda editorial"}
+                </h1>
+                <AjudaRecolhida className="ml-2">
+                  {effectiveRole === "client"
+                    ? "Seu conteúdo planejado, aprovado e publicado. Aprovações acontecem na área de Aprovações."
+                    : view === "board"
+                      ? "Fluxo editorial completo: rascunho, produção e aprovação. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
+                      : "Conteúdo no dia certo, na conta certa. Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."}
+                </AjudaRecolhida>
+              </div>
+              <p className={juntar(texto.auxiliar, "mt-1 truncate")} aria-live="polite">
+                {resumoDoCalendario(
+                  filteredPosts,
+                  canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
+                )}
+                {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
+              </p>
+            </div>
+          }
+          inicioDaLinha={
+            canUseTeamData ? (
+              <div className="flex min-w-0 items-center">
+                <span className={juntar(texto.auxiliar, "mr-2 truncate")}>
+                  <span className="font-medium text-violet-500">{productionTasks.length}</span>{" "}
+                  {productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"}
+                </span>
+                <Link to={kanbanHref} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
+                  Abrir Kanban central
+                </Link>
+              </div>
+            ) : null
+          }
           title={pageTitle}
           view={view}
           search={search}
@@ -1803,66 +1701,63 @@ export default function EditorialCalendar() {
           }}
         />
 
-        {canUseTeamData && view === "board" && (
-          <section className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500">
-                <LayoutTemplate className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-foreground">
-                  Entregas editoriais do Kanban
-                </p>
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {productionTasks.length} visíveis com os filtros atuais
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-8 items-center rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 text-[10px] font-medium text-violet-500">
-                Fluxo editorial completo
-              </span>
-              <Button
-                asChild
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 text-[11px]"
-              >
-                <Link to={kanbanHref}>Abrir Kanban central</Link>
-              </Button>
-            </div>
-          </section>
+        {approvedReadyToSchedule.length > 0 && (
+          <div className="mb-2 flex min-w-0 items-center rounded-md border border-success/30 bg-success/5 px-3 py-2">
+            <Send className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+            <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate")}>
+              {approvedReadyToSchedule.length === 1
+                ? "1 conteúdo aprovado pelo cliente pronto para agendar"
+                : `${approvedReadyToSchedule.length} conteúdos aprovados pelo cliente prontos para agendar`}
+            </p>
+            <AjudaRecolhida className="mr-3">
+              Mantém a data e o horário planejados; se o horário já passou, agenda para 1 hora a partir de agora.
+            </AjudaRecolhida>
+            <button
+              type="button"
+              onClick={() => void scheduleApprovedNow()}
+              disabled={batchScheduling}
+              className={juntar(botao.primario, "ml-auto h-8 bg-success text-success-foreground hover:bg-success/90")}
+            >
+              {batchScheduling ? "Agendando…" : "Agendar aprovados"}
+            </button>
+          </div>
         )}
 
-        {canUseTeamData && (taskDataLoading || taskDataError) && (
-          <section
-            aria-live="polite"
-            className={cn(
-              "flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5",
-              taskDataError
-                ? "border-destructive/25 bg-destructive/5"
-                : "border-border bg-card/55",
-            )}
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              {taskDataError ? (
-                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
-              ) : (
-                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {taskDataError
-                  ? "As publicações continuam visíveis, mas as tarefas do Kanban não puderam ser atualizadas."
-                  : "Carregando as tarefas do Kanban sem interromper o calendário…"}
-              </p>
-            </div>
-            {taskDataError && (
-              <Button
+        {editorialOptionsError && (
+          <EstadoDeErro
+            className="mb-2"
+            titulo="Não foi possível carregar todas as opções editoriais."
+            descricao="A criação fica bloqueada até recarregar."
+            acao={
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-[11px]"
+                className={juntar(botao.secundario, "h-8")}
+                onClick={() => {
+                  void Promise.all([
+                    clientsQuery.refetch(),
+                    projectsQuery.refetch(),
+                    teamMembersQuery.refetch(),
+                    editorialScopeQuery.refetch(),
+                    tasksQuery.refetch(),
+                    linkedTaskIdsQuery.refetch(),
+                  ]);
+                }}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                Recarregar acesso
+              </button>
+            }
+          />
+        )}
+
+        {canUseTeamData && taskDataError && (
+          <EstadoDeErro
+            className="mb-2"
+            titulo="As publicações continuam visíveis, mas as tarefas do Kanban não puderam ser atualizadas."
+            acao={
+              <button
+                type="button"
+                className={juntar(botao.secundario, "h-8")}
                 onClick={() => {
                   void Promise.all([
                     tasksQuery.refetch(),
@@ -1870,40 +1765,50 @@ export default function EditorialCalendar() {
                   ]);
                 }}
               >
-                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 Tentar novamente
-              </Button>
-            )}
-          </section>
+              </button>
+            }
+          />
         )}
 
-        <main className="min-w-0">
+        {contentId && detailQuery.isError && !selectedPost && (
+          <EstadoDeErro
+            className="mb-2"
+            titulo="Não foi possível abrir os detalhes deste conteúdo."
+            acao={
+              <div className="flex items-center [&>*+*]:ml-1">
+                <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => detailQuery.refetch()}>
+                  Tentar novamente
+                </button>
+                <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => setParam("content", "")}>
+                  Fechar
+                </button>
+              </div>
+            }
+          />
+        )}
+
+        {/* O calendário rola por dentro de 1024 px para cima e lembra onde
+            estava em cada visão; no celular a página rola normal. */}
+        <AreaDeTrabalho
+          className="mt-1"
+          rotuloDoPrincipal="Calendário editorial"
+          memoriaDaRolagem={`agenda:${view}`}
+        >
           {calendarQuery.isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-12 w-full rounded-xl" />
-              <Skeleton className="h-[480px] w-full rounded-2xl" />
-            </div>
+            <Carregando rotulo="Carregando o calendário" forma="aba" />
           ) : calendarQuery.isError ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/5 p-6 text-center">
-              <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
-              <p className="text-sm font-medium text-foreground">
-                Não foi possível carregar o calendário
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Tente novamente. Se o problema continuar, avise a equipe
-                responsável pelo painel.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => calendarQuery.refetch()}
-              >
-                <RefreshCw className="mr-1.5 h-4 w-4" />
-                Recarregar
-              </Button>
-            </div>
+            <EstadoDeErro
+              titulo="Não foi possível carregar o calendário."
+              descricao="Tente novamente. Se continuar, avise quem cuida do painel."
+              acao={
+                <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => calendarQuery.refetch()}>
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Recarregar
+                </button>
+              }
+            />
           ) : (
             <EditorialCalendarViews
               view={view}
@@ -1929,42 +1834,13 @@ export default function EditorialCalendar() {
               onShowBacklog={() => setParam("view", "list")}
             />
           )}
-        </main>
+        </AreaDeTrabalho>
 
         <p className="sr-only" aria-live="polite">
           {pendingMoveKeys.size > 0
             ? `Salvando ${pendingMoveKeys.size} movimentação editorial`
             : "Movimentação editorial concluída"}
         </p>
-
-        {contentId && detailQuery.isError && !selectedPost && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-              <p className="text-xs text-muted-foreground">
-                Não foi possível abrir os detalhes deste conteúdo.
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => detailQuery.refetch()}
-              >
-                Tentar novamente
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setParam("content", "")}
-              >
-                Fechar
-              </Button>
-            </div>
-          </div>
-        )}
 
         <EditorialEditor
           open={editorOpen}

@@ -27,16 +27,24 @@ const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
 const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
 
 describe("o funil rola por dentro da coluna", () => {
-  it("a coluna tem altura máxima e a lista de cartões rola sozinha", () => {
-    expect(kanban).toContain("sm:max-h-[calc(100dvh-15rem)]");
-    expect(kanban).toContain("min-h-[12rem] w-full shrink-0 flex-col");
-    expect(kanban).toContain("min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain");
+  // Sistema de design (26/09): o quadro fica numa AreaDeTrabalho (altura da
+  // janela de 1024 px para cima) e cada coluna tem uma RegiaoRolavel com
+  // memória: a lista rola sozinha e a página não. No celular a página rola
+  // normal (sem caixa com rolagem própria prendendo o dedo).
+  it("a coluna tem altura da área e a lista de cartões rola sozinha", () => {
+    expect(kanban).toContain("<AreaDeTrabalho principalRolavel={false}");
+    expect(kanban).toContain("min-h-[12rem] w-full min-w-0 flex-col");
+    expect(kanban).toContain("lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1");
+    expect(kanban).toContain("memoria={`comercial:funil:${estagio}`}");
+    // Sem dvh sozinho (Safari 11 não tem).
+    expect(kanban).not.toContain("100dvh");
   });
 
   it("o alvo de soltar fica fora da rolagem, sempre visível", () => {
-    const lista = kanban.indexOf("overflow-y-auto overscroll-contain");
+    const lista = kanban.indexOf("<RegiaoRolavel");
     const alvo = kanban.indexOf('{isOver ? "soltar aqui"');
-    const fimDaLista = kanban.indexOf("</div>", kanban.indexOf("))}", lista));
+    const fimDaLista = kanban.indexOf("</RegiaoRolavel>", lista);
+    expect(lista).toBeGreaterThan(0);
     expect(alvo).toBeGreaterThan(fimDaLista);
   });
 });

@@ -233,7 +233,7 @@ export default function ApprovedMediaPicker({
               key={item}
               className="overflow-hidden rounded-xl border border-border"
             >
-              <div className="aspect-[4/3] animate-pulse bg-secondary" />
+              <div className="animate-pulse bg-secondary" style={{ paddingBottom: "75%" }} />
               <div className="space-y-2 p-3">
                 <div className="h-3 w-2/3 animate-pulse rounded bg-secondary" />
                 <div className="h-2.5 w-1/3 animate-pulse rounded bg-secondary" />
@@ -287,9 +287,13 @@ export default function ApprovedMediaPicker({
                   disabled={disabled}
                   aria-label={`Ver ${asset.root.file_name} completo`}
                   onClick={() => setPreviewAsset(asset)}
-                  className="relative block aspect-[4/3] w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="relative block w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ paddingBottom: "75%" }}
                 >
-                  <AssetPreview asset={asset} />
+                  {/* Proporção por padding (Safari 11 não tem aspect-ratio). */}
+                  <span className="absolute inset-0 block">
+                    <AssetPreview asset={asset} />
+                  </span>
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/65 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
                     <TypeIcon className="h-3 w-3" />
                     {contentTypeLabels[asset.contentType]}

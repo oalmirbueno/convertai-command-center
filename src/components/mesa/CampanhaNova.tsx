@@ -30,6 +30,7 @@ import {
 import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from "./campanhasApi";
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Nova campanha, numa coluna só e com o mínimo à vista: um campo grande
@@ -113,10 +114,12 @@ export default function CampanhaNova({
       <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6">
         <div className="flex min-w-0 items-start">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[16px] font-semibold">Nova campanha</h2>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              Descreva a campanha. O agente cria o tema, a identidade com o selo e os conteúdos do período.
-            </p>
+            <div className="flex min-w-0 items-center">
+              <h2 className="text-[16px] font-semibold">Nova campanha</h2>
+              <AjudaRecolhida className="ml-1.5" rotulo="O que o agente faz na campanha">
+                Descreva a campanha. O agente cria o tema, a identidade com o selo e os conteúdos do período.
+              </AjudaRecolhida>
+            </div>
           </div>
           {onCancelar && (
             // Criando: a chamada já foi paga e segue no servidor; cancelar aqui

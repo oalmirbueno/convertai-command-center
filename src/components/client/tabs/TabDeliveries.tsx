@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Carregando, EstadoVazio, Secao, botao, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -45,9 +45,9 @@ function SwipeableGallery({ previewIndex, setPreviewIndex, totalItems, children 
 }
 
 const approvalBadge: Record<string, { className: string; label: string }> = {
-  pending: { className: "bg-warning/10 text-warning", label: "\u23F3 Aguardando Aprova\u00E7\u00E3o" },
-  approved: { className: "bg-success/10 text-success", label: "\u2713 Aprovado" },
-  rejected: { className: "bg-destructive/10 text-destructive", label: "Ajuste Solicitado" },
+  pending: { className: "bg-warning/10 text-warning", label: "Aguardando aprova\u00E7\u00E3o" },
+  approved: { className: "bg-success/10 text-success", label: "Aprovado" },
+  rejected: { className: "bg-destructive/10 text-destructive", label: "Ajuste solicitado" },
   none: { className: "bg-muted text-muted-foreground", label: "Sem status" },
 };
 
@@ -167,7 +167,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
         expectedVersion: parentFile.version,
         decision: "approved",
       });
-      toast({ title: "Aprovado!", description: "A entrega foi aprovada com sucesso." });
+      toast({ title: "Aprovado", description: "A entrega foi aprovada com sucesso." });
     } catch (error: any) {
       toast({
         title: "Erro",
@@ -203,68 +203,81 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
     setPreviewGroup(null);
   };
 
-  if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}</div>;
+  if (isLoading) return <Carregando linhas={3} rotulo="Carregando entregas" />;
   if (!groups.length) return (
-    <div className="text-sm text-muted-foreground py-8 text-center flex flex-col items-center gap-2">
-      <File className="w-6 h-6 text-muted-foreground/50" />Nenhuma entrega pendente no momento
-      <Link to="/documentos" className="text-xs text-primary hover:underline">
-        Ver todos os seus documentos
-      </Link>
-    </div>
+    <EstadoVazio
+      icone={<File className="h-5 w-5" />}
+      titulo="Nenhuma entrega pendente no momento"
+      acao={<Link to="/documentos" className={botao.secundario}>Ver todos os seus documentos</Link>}
+    />
   );
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {/* Uma área só: aqui é o recorte do projeto; o acervo completo, com os
           filtros por pasta e tipo, vive em Documentos. */}
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">Entregas deste projeto</p>
-        <Link to="/documentos" className="text-[11px] text-primary hover:underline">
-          Ver tudo em Documentos
-        </Link>
-      </div>
-      {isReadOnly && (
-        <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
-          Modo somente leitura: decisões do cliente estão bloqueadas.
-        </div>
-      )}
+      <Secao
+        titulo="Entregas deste projeto"
+        descricao={`${groups.length} ${groups.length === 1 ? "entrega" : "entregas"}${isReadOnly ? " · somente leitura, decisões do cliente bloqueadas" : ""}`}
+        acao={
+          <Link to="/documentos" className={botao.discreto} aria-label="Ver tudo em Documentos">
+            <span className="hidden sm:inline">Ver tudo em Documentos</span>
+            <ChevronRight className="h-4 w-4 sm:ml-1" aria-hidden="true" />
+          </Link>
+        }
+      >
+      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
       {groups.map((group) => {
         const f = group.parent;
         const Icon = group.type === "carousel" ? Images : (fileIcons[f.file_type] || FileText);
         const badge = approvalBadge[f.approval_status] || approvalBadge.none;
         return (
-          <div key={f.id}
-            className="bg-card border border-border rounded-xl p-4 space-y-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
-            onClick={() => { setPreviewGroup(group); setPreviewIndex(0); }}>
-            <div className="flex items-start gap-3">
-              <Icon className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">{f.file_name}</p>
+          <li key={f.id} className="min-w-0">
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir ${f.file_name}`}
+              className={juntar("block min-w-0 cursor-pointer px-4 py-3 transition-colors hover:bg-muted/40", foco)}
+              onClick={() => { setPreviewGroup(group); setPreviewIndex(0); }}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPreviewGroup(group); setPreviewIndex(0); }
+              }}
+            >
+            <div className="flex min-w-0 items-start">
+              <Icon className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center">
+                  <p className="mr-2 min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{f.file_name}</p>
                   {group.type === "carousel" && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary font-medium">
+                    <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>
                       Carrossel · {group.children.length} itens
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">Enviado por {f.uploader?.full_name || "-"} • {formatDate(f.created_at)}</p>
+                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>Enviado por {f.uploader?.full_name || "-"} · {formatDate(f.created_at)}</p>
               </div>
+              <span className={juntar(etiqueta, "ml-3 mt-0.5", badge.className)}>{badge.label}</span>
             </div>
 
             {group.type === "carousel" && (
-              <CarouselThumbnails files={group.children} onOpen={(idx) => { setPreviewGroup(group); setPreviewIndex(idx); }} />
-            )}
-
-            <span className={`text-[11px] px-2 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span>
-            {f.approval_status === "rejected" && f.feedback && (
-              <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mt-2">
-                <p className="text-xs text-muted-foreground mb-1">Feedback enviado:</p>
-                <p className="text-xs text-foreground">{f.feedback}</p>
+              <div className="ml-7 mt-2">
+                <CarouselThumbnails files={group.children} onOpen={(idx) => { setPreviewGroup(group); setPreviewIndex(idx); }} />
               </div>
             )}
-          </div>
+
+            {f.approval_status === "rejected" && f.feedback && (
+              <div className={juntar(superficie.poco, "ml-7 mt-2 px-3 py-2")}>
+                <p className={texto.rotulo}>Feedback enviado</p>
+                <p className={juntar(texto.corpo, "mt-0.5 [overflow-wrap:anywhere]")}>{f.feedback}</p>
+              </div>
+            )}
+            </div>
+          </li>
         );
       })}
+      </ul>
+      </Secao>
 
       {/* Preview / Gallery Modal */}
       <Dialog open={!!previewGroup} onOpenChange={() => setPreviewGroup(null)}>
@@ -347,19 +360,19 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
               </p>
               {previewGroup?.parent.caption && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p>
+                  <p className={texto.rotulo}>Legenda</p>
                   <p className="text-sm text-foreground">{previewGroup.parent.caption}</p>
                 </div>
               )}
               {previewGroup?.parent.carousel_text && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p>
+                  <p className={texto.rotulo}>Texto do carrossel</p>
                   <p className="text-sm text-foreground whitespace-pre-wrap">{previewGroup.parent.carousel_text}</p>
                 </div>
               )}
               {previewGroup?.parent.description && (
                 <div className="space-y-0.5">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p>
+                  <p className={texto.rotulo}>Descrição</p>
                   <p className="text-sm text-foreground">{previewGroup.parent.description}</p>
                 </div>
               )}
@@ -406,12 +419,12 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
       {/* Feedback dialog */}
       <Dialog open={!!feedbackFileId} onOpenChange={() => setFeedbackFileId(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Solicitar Ajuste</DialogTitle></DialogHeader>
-          <Textarea placeholder="Descreva as mudanças necessárias... (mínimo 10 caracteres)" value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
+          <DialogHeader><DialogTitle>Solicitar ajuste</DialogTitle></DialogHeader>
+          <Textarea placeholder="Descreva as mudanças necessárias (mínimo 10 caracteres)" value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setFeedbackFileId(null)}>Cancelar</Button>
             <Button onClick={handleReject} disabled={submitting || isReadOnly || feedbackText.trim().length < 10}>
-              {submitting ? "Enviando..." : "Enviar Feedback"}
+              {submitting ? "Enviando..." : "Enviar feedback"}
             </Button>
           </DialogFooter>
         </DialogContent>

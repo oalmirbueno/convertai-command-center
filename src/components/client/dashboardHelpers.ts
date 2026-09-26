@@ -81,7 +81,7 @@ export function formatDateShort(d: string) {
 export function useClientDashboardData(clientId: string) {
   const { user } = useAuth();
 
-  const { data: projects, isLoading: loadingProjects } = useQuery({
+  const { data: projects, isLoading: loadingProjects, isError: errorProjects, refetch: refetchProjects } = useQuery({
     queryKey: ["client-projects", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("projects")
@@ -225,6 +225,9 @@ export function useClientDashboardData(clientId: string) {
 
   return {
     loadingProjects,
+    /** Falha na consulta de projetos (a base da tela): mostra "Tentar de novo". */
+    errorProjects: errorProjects && !projects,
+    refetchProjects,
     data: {
       projects: allProjects,
       activeProjects,

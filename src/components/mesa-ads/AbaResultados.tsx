@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Loader2, RefreshCw } from "lucide-react";
+import { BarChart3, BookmarkCheck, CalendarDays, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
+import { BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { dataCurta, padraoPara } from "@/lib/mesa/api";
+import { dataCurta, padraoPara, textoDoErro } from "@/lib/mesa/api";
+import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
+import { foco, juntar, superficie } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { chamarAds, chavesAds, lerAprendizados } from "./adsApi";
-import { Diagnostico } from "./Comuns";
+import { CabecalhoDaParte, Diagnostico } from "./Comuns";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
 import { CartaoCompacto, FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type AnuncioDoResultado, type GrupoDeObjetivo } from "./resultadosApi";
@@ -24,6 +29,10 @@ export { Diagnostico };
  * Mesa Ads no lugar da lista "anúncios sem vínculo". Números de
  * conta_ao_vivo (grátis, regra em código). Sem tabela larga: nada rola de
  * lado nem cria rolagem dupla na página.
+ *
+ * 26/09 (sistema de design): área de trabalho (no computador a etapa rola por
+ * dentro, com a posição lembrada), explicação no "?", período num seletor,
+ * período, objetivo e aba lembrados por cliente.
  */
 
 export const PERIODOS = PERIODOS_DA_CONTA_V4.map((d) => ({ dias: d, rotulo: `${d} dias` }));
@@ -39,8 +48,10 @@ export function periodoDosUltimos(dias: number, hoje = new Date()): { inicio: st
 export default function AbaResultados() {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [dias, setDias] = useState<PeriodoDaConta>(14);
-  const [grupo, setGrupo] = useState<GrupoDeObjetivo | "">("");
+  const [dias, setDias] = useEstadoDaTela<PeriodoDaConta>(`mesa-ads:resultados:dias:${clientId}`, 14, {
+    validar: (v) => typeof v === "number" && PERIODOS.some((p) => p.dias === v),
+  });
+  const [grupo, setGrupo] = useEstadoDaTela<GrupoDeObjetivo | "">(`mesa-ads:resultados:objetivo:${clientId}`, "", { validar: (v) => typeof v === "string", esperaMs: 0 });
   const [registrando, setRegistrando] = useState<string | null>(null);
   const [textoDoAprendizado, setTextoDoAprendizado] = useState("");
   const conta = useQuery({
@@ -71,7 +82,7 @@ export default function AbaResultados() {
           }
         />
         {aberto && criativoId && (
-          <div className="rounded-lg border border-border bg-muted/40 p-2.5">
+          <div className={juntar(superficie.poco, "p-2.5")}>
             {a.diagnostico && <div className="mb-2"><Diagnostico valor={a.diagnostico} /></div>}
             <div className="flex min-w-0 flex-wrap items-end">
               <Textarea
@@ -103,66 +114,71 @@ export default function AbaResultados() {
   };
 
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-3">
-        <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold">Resultados</h2>
-          <p className="text-[12px] text-muted-foreground">
-            De {dataCurta(periodo.inicio)} a {dataCurta(periodo.fim)}. O resultado de cada anúncio é o que o objetivo dele busca; o custo só se compara dentro do mesmo objetivo.
-          </p>
-        </div>
-        <div className="mb-1 mr-2 mt-1 flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Período">
-          {PERIODOS.map((p) => (
-            <button
-              key={p.dias}
-              type="button"
-              role="radio"
-              aria-checked={dias === p.dias}
-              onClick={() => setDias(p.dias)}
-              className={`h-7 rounded-md px-2.5 text-[12px] ${dias === p.dias ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
-            >
-              {p.rotulo}
-            </button>
-          ))}
-        </div>
-        <Button type="button" size="sm" variant="outline" className="mb-1 mt-1 h-9" disabled={conta.isFetching} onClick={() => void conta.refetch()} title="Relê as métricas (sem custo de IA)">
-          {conta.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-          Atualizar
-        </Button>
+    <AreaDeTrabalho rotuloDoPrincipal="Resultados" memoriaDaRolagem={`mesa-ads:resultados:${clientId}`}>
+      <div className="min-w-0 space-y-5 pb-6">
+        <CabecalhoDaParte
+          titulo="Resultados"
+          ajuda="O resultado de cada anúncio é o que o objetivo dele busca; o custo só se compara dentro do mesmo objetivo. Números da conta, calculados em código (grátis)."
+          descricao={`De ${dataCurta(periodo.inicio)} a ${dataCurta(periodo.fim)}`}
+          acoes={
+            <>
+              <SeletorCompacto
+                rotulo="Período"
+                icone={<CalendarDays className="h-3.5 w-3.5" />}
+                opcoes={PERIODOS.map((p) => ({ valor: String(p.dias), rotulo: p.rotulo }))}
+                valor={String(dias)}
+                onEscolher={(v) => setDias(Number(v) as PeriodoDaConta)}
+              />
+              <Button type="button" size="sm" variant="outline" className="h-9" disabled={conta.isFetching} onClick={() => void conta.refetch()} title="Relê as métricas (sem custo de IA)">
+                {conta.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+                Atualizar
+              </Button>
+            </>
+          }
+        />
+
+        {conta.isError && (
+          <EstadoDeErro
+            titulo="Os resultados não abriram."
+            descricao={textoDoErro(conta.error)}
+            acao={
+              <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => void conta.refetch()}>
+                Tentar de novo
+              </Button>
+            }
+          />
+        )}
+        {conta.isLoading && <Carregando forma="aba" rotulo="Lendo os resultados" />}
+
+        {dados && !dados.conta.conectada && (
+          <EstadoVazio icone={<BarChart3 className="h-5 w-5" />} titulo="A conta de anúncios deste cliente não está conectada" descricao="Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui." />
+        )}
+
+        {dados && dados.conta.conectada && (
+          <>
+            <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
+            <section className="min-w-0 border-t border-border pt-5" aria-label="Anúncios">
+              <CabecalhoDaParte titulo="Anúncios" nivel={3} acoes={<FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />} />
+              <PainelDeResultados dados={dados} grupo={grupo} renderAnuncio={cartao} memoria={`mesa-ads:resultados:aba:${clientId}`} />
+            </section>
+            <VinculoAutomatico />
+          </>
+        )}
+
+        {(aprendizados.data || []).length > 0 && (
+          <details className="min-w-0 border-t border-border pt-4" aria-label="Aprendizados registrados">
+            <summary className={juntar("cursor-pointer rounded text-[13px] font-medium text-foreground", foco)}>Aprendizados registrados ({(aprendizados.data || []).length})</summary>
+            <ul className="mt-2 divide-y divide-border">
+              {(aprendizados.data || []).map((a) => (
+                <li key={a.id} className="py-2">
+                  <p className="text-[11px] text-muted-foreground">{a.evidencia} · {dataCurta(a.criado_em)}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{a.texto}</p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </div>
-
-      {conta.isError && <AvisoDeErro erro={conta.error} />}
-      {conta.isLoading && <div className="h-40 animate-pulse rounded-xl bg-muted/70" />}
-
-      {dados && !dados.conta.conectada && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">A conta de anúncios deste cliente não está conectada</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">Conecte a conta da Meta no cadastro do cliente para ver os resultados aqui.</p>
-        </div>
-      )}
-
-      {dados && dados.conta.conectada && (
-        <>
-          <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
-          <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
-          <PainelDeResultados dados={dados} grupo={grupo} renderAnuncio={cartao} />
-          <VinculoAutomatico />
-        </>
-      )}
-
-      {(aprendizados.data || []).length > 0 && (
-        <details className="rounded-xl border border-border bg-card p-4" aria-label="Aprendizados registrados">
-          <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Aprendizados registrados ({(aprendizados.data || []).length})</summary>
-          <ul className="mt-2 space-y-2">
-            {(aprendizados.data || []).map((a) => (
-              <li key={a.id} className="rounded-lg border border-border px-3 py-2">
-                <p className="text-[11px] text-muted-foreground">{a.evidencia} · {dataCurta(a.criado_em)}</p>
-                <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{a.texto}</p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
+    </AreaDeTrabalho>
   );
 }
