@@ -1297,6 +1297,62 @@
       "remote_name": "miniaturas_leitura_das_copias",
       "remote_statements_sha256": "8b88567f04fc2cf9816b5c4f648534f6c6e2890ebaae41a8a8128dc9fb947aa6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050000",
+      "path": "supabase/migrations/20260926050000_fila_de_geracao.sql",
+      "local_sha256": "ff57a5f587d675c4089e1e9b720aa873ff9c002d61e137353e1f75621eb78cf6",
+      "remote_name": "fila_de_geracao",
+      "remote_statements_sha256": "a3da0218f6aa3c3214896e0a1478cf4b35898c5cbba3e1be3b76381b6c93e120",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050100",
+      "path": "supabase/migrations/20260926050100_estilo_do_cliente.sql",
+      "local_sha256": "736df2d62d8ca85411a9b43aa288b41fb552bceece8d59c7043acacbccbb3087",
+      "remote_name": "estilo_do_cliente",
+      "remote_statements_sha256": "190c68d728575795e48b5371feebbbd6c4cdfba6937f6ffb0e516c7ff507128b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050200",
+      "path": "supabase/migrations/20260926050200_mesa_edicao.sql",
+      "local_sha256": "cc3e9e4594df46322578a829b373cf04144f303739149b8b95874d179db2929c",
+      "remote_name": "mesa_edicao",
+      "remote_statements_sha256": "d15aa3b8bf27b67cbbf964bb9739cb902da5a7be61ece094c0c4c2f841412942",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050300",
+      "path": "supabase/migrations/20260926050300_motores_de_video.sql",
+      "local_sha256": "0170681d3b95c62c0939436d1ec28c842b7c603dc6dcef972f0b195cece9eed2",
+      "remote_name": "motores_de_video",
+      "remote_statements_sha256": "18c714cf01a5fe966f0221ac26f88250e55e399301d674c5d6595bdde844c759",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050400",
+      "path": "supabase/migrations/20260926050400_perfis_instagram.sql",
+      "local_sha256": "1b7962128243fb036865266f67676d2eac54992f0ac4a342d2082c50cbedfe85",
+      "remote_name": "perfis_instagram",
+      "remote_statements_sha256": "6013059138cd103e67f65dd470f709fbd98a9d8da44b46c4aeb6a988a424d13d",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050500",
+      "path": "supabase/migrations/20260926050500_templates_de_design.sql",
+      "local_sha256": "84ef0e6b47a969523afcae81bec1f56d75104589cba455b4b08d60e3e67d657f",
+      "remote_name": "templates_de_design",
+      "remote_statements_sha256": "1e851f45e5b525b2c89615861fb01508d4e9a96f342b39b6245a103dc2761f18",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926050600",
+      "path": "supabase/migrations/20260926050600_receitas_de_edicao.sql",
+      "local_sha256": "c3c36de5e9e601de15f99b42da07e28b2806748829b97453180d05baa6e47f03",
+      "remote_name": "receitas_de_edicao",
+      "remote_statements_sha256": "9b2f968fd1c375dbdec5a829350f51101ee124940fb6ebb4acae1b58d2b25ada",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
