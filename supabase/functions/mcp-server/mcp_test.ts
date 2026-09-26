@@ -206,6 +206,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_central_review_preparar',
     'aceleriq_cerebro_do_cliente',
     'aceleriq_cerebro_registrar',
+    'aceleriq_client_instruction',
     'aceleriq_complete_commercial_activity',
     'aceleriq_complete_task',
     'aceleriq_create_commercial_activity',

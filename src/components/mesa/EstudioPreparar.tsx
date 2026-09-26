@@ -15,7 +15,8 @@ import type { InfoDoRoteiro } from "./useItensDoMes";
  * que ser decidido já no começo"; "nem todos são sete cards").
  *
  * Modo: roteiro do estrategista (grátis, quando o item tem roteiro
- * detalhado) ou diretor de arte (com preço). Quantidade de lâminas
+ * detalhado; com um custo pequeno quando alguma lâmina passa do limite de
+ * texto e é enxuta antes, frente R3) ou diretor de arte (com preço). Quantidade de lâminas
  * (Automático ou 3 a 8), carrossel contínuo e um pedido livre para o
  * diretor. Post de uma lâmina só esconde quantidade e contínuo.
  */
@@ -92,6 +93,7 @@ export default function EstudioPreparar({
   roteiro,
   postUnico,
   partesDiretor,
+  partesEnxugar,
   onPreparar,
   onConcluido,
   aviso,
@@ -100,6 +102,8 @@ export default function EstudioPreparar({
   roteiro: InfoDoRoteiro | null;
   postUnico: boolean;
   partesDiretor: () => ParteDaEstimativa[];
+  /** Estimativa da chamada curta que enxuga as lâminas longas do roteiro (frente R3). */
+  partesEnxugar?: () => ParteDaEstimativa[];
   onPreparar: (escolhas: EscolhasDoPreparo) => Promise<any>;
   onConcluido: () => void;
   /** Linha de contexto acima das escolhas (ex.: refazendo uma arte que já está na Agenda). */
@@ -107,6 +111,9 @@ export default function EstudioPreparar({
 }) {
   const avisarErro = useAvisarErro();
   const temRoteiro = !!roteiro && roteiro.laminas > 0;
+  // Frente R3: lâminas do roteiro acima do limite de texto são enxutas na preparação (uma chamada curta).
+  const longas = temRoteiro && roteiro!.longas ? roteiro!.longas : 0;
+  const plural = longas === 1 ? "" : "s";
   const [modo, setModo] = useState<"roteiro" | "diretor">(temRoteiro ? "roteiro" : "diretor");
   const [laminas, setLaminas] = useState<number | null>(null);
   const [continuo, setContinuo] = useState<boolean>(!!(roteiro && roteiro.continuo));
@@ -145,7 +152,7 @@ export default function EstudioPreparar({
           ativa={modo === "roteiro"}
           onClick={() => temRoteiro && setModo("roteiro")}
           titulo="Roteiro do estrategista"
-          detalhe={temRoteiro ? `${roteiro!.laminas} lâmina${roteiro!.laminas === 1 ? "" : "s"} prontas no roteiro · grátis` : "Este item não tem roteiro detalhado"}
+          detalhe={temRoteiro ? `${roteiro!.laminas} lâmina${roteiro!.laminas === 1 ? "" : "s"} prontas no roteiro · ${longas ? `${longas} longa${plural}, enxuga com IA` : "grátis"}` : "Este item não tem roteiro detalhado"}
           icone={<Star className={`h-4 w-4 ${temRoteiro ? "fill-warning text-warning" : ""}`} />}
         />
         <Opcao
@@ -220,7 +227,18 @@ export default function EstudioPreparar({
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-primary" /> Preparando <span className="ml-1 tabular-nums"><Cronometro desde={desde} /></span>
           </span>
         )}
-        {modo === "roteiro" ? (
+        {modo === "roteiro" && longas > 0 && partesEnxugar ? (
+          <BotaoComCusto
+            rotulo={<><Sparkles className="mr-1 h-4 w-4" /> Montar do roteiro</>}
+            titulo="Montar a direção do roteiro"
+            descricao={`${longas} lâmina${plural} passa${longas === 1 ? "" : "m"} do limite de texto. Uma chamada curta enxuga antes de chegar ao Estúdio; a capa não muda. Nenhuma imagem é gerada ainda.`}
+            className="h-10"
+            disabled={desde !== null}
+            partes={partesEnxugar}
+            executar={preparar}
+            aoConcluir={() => onConcluido()}
+          />
+        ) : modo === "roteiro" ? (
           <Button type="button" className="h-10" onClick={() => void montarDoRoteiro()} disabled={desde !== null}>
             {desde !== null ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
             Montar do roteiro · grátis

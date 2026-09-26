@@ -219,8 +219,9 @@ describe("o cache da lista é JSON puro e acha a arte que já está na Agenda", 
     // Post revisado por outro mais novo não vale.
     expect(dados.artes["i-2"]).toMatchObject({ post_id: "p-2", legenda: "Legenda 2", capa: { bucket: "files", caminho: "c/f2.png" }, do_estudio: false });
     expect(dados.artes["i-4"].do_estudio).toBe(true);
-    expect(dados.roteiros["i-1"]).toEqual({ laminas: 3, continuo: true });
-    expect(dados.roteiros["i-9"]).toEqual({ laminas: 0, continuo: null });
+    // Frente R3: longas = lâminas do roteiro acima do limite de texto (os cards daqui não têm texto).
+    expect(dados.roteiros["i-1"]).toEqual({ laminas: 3, continuo: true, longas: 0 });
+    expect(dados.roteiros["i-9"]).toEqual({ laminas: 0, continuo: null, longas: 0 });
     expect(dados.publicacoes["p-4"].scheduled_at).toBe("2026-10-01T12:00:00Z");
 
     const mapas = paraMapas(dados);
@@ -319,6 +320,26 @@ describe("o preparo decide tudo antes da direção", () => {
     expect((screen.getByRole("switch", { name: "Carrossel contínuo" }) as HTMLElement).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: /Montar do roteiro/ }));
     await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "roteiro", laminas: null, continuo: true, pedido: "", formato: "feed_4x5" }));
+    expect(screen.getByText(/4 lâminas prontas no roteiro · grátis/)).toBeTruthy();
+  });
+
+  it("roteiro com lâmina longa (frente R3): diz quantas e mostra o preço da chamada curta que enxuga", async () => {
+    const onPreparar = vi.fn().mockResolvedValue({ custo_usd: 0.002, miolo_longo: [2, 3], miolo_enxuto: [2, 3] });
+    montar(
+      h(EstudioPreparar, {
+        roteiro: { laminas: 4, continuo: false, longas: 2 },
+        postUnico: false,
+        partesDiretor: () => [],
+        partesEnxugar: () => [{ modeloId: diretor.id, tipo: "texto", tokensEntrada: 3000, tokensSaida: 1500 }],
+        onPreparar,
+        onConcluido: vi.fn(),
+      }),
+    );
+    expect(screen.getByText(/4 lâminas prontas no roteiro · 2 longas, enxuga com IA/)).toBeTruthy();
+    expect(screen.queryByText(/Montar do roteiro · grátis/)).toBeNull();
+    expect(await screen.findByText(/~US\$/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Montar do roteiro/ }));
+    await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "roteiro", laminas: null, continuo: false, pedido: "", formato: "feed_4x5" }));
   });
 });
 

@@ -21,6 +21,8 @@ import { Carregando } from "@/components/sistema/Estados";
 
 // Frente P: Perfis do Instagram (referências e concorrentes). Carrega só ao abrir o grupo.
 const PerfisDoInstagram = lazy(() => import("@/components/perfis/PerfisDoInstagram"));
+// Área MCP (26/09): o que chegou pelo MCP e o que vale para o planejamento. Carrega só ao abrir o grupo.
+const ContextoMcp = lazy(() => import("./ContextoMcp"));
 
 /** O editor em detalhe começa recolhido; os atalhos "Editar" abrem na parte certa. */
 const DETALHES_DE_INICIO: Record<string, boolean> = {};
@@ -149,6 +151,17 @@ export default function AbaContexto() {
           >
             <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Carregando os perfis" />}>
               <PerfisDoInstagram />
+            </Suspense>
+          </Hub>
+          <Hub
+            id="ctx-mcp"
+            titulo="MCP"
+            resumo="O que chegou pelo MCP e o que vale para o planejamento"
+            aberto={hubs.aberto("ctx-mcp")}
+            onAlternar={() => hubs.alternar("ctx-mcp")}
+          >
+            <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Carregando o MCP" />}>
+              <ContextoMcp />
             </Suspense>
           </Hub>
           <div ref={detalhes} className="min-w-0 scroll-mt-4">

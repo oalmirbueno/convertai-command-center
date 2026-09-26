@@ -62,6 +62,11 @@
  * - reabrir { trabalho_id, motivo? } (25/09): trabalho entregue ou agendado
  *   volta para edição com as mesmas lâminas e versões; a entrega anterior vai
  *   para direcao.reaberturas e a próxima entrega sobe a rodada (arquivo novo).
+ * - rostos_fotos { trabalho_id, parte? } (26/09, frente R2): fotos para o rosto
+ *   (as escolhidas, as leituras "tem pessoa" e os clones com as fotos geradas),
+ *   sem custo. rostos_marcar { trabalho_id, itens }: leitura por visão barata
+ *   "tem pessoa", uma vez por foto, guardada. conferir_rosto { trabalho_id,
+ *   ordem, versao? }: só aviso, a pessoa da arte é a das fotos? (uma vez).
  *
  * Pedidos do dono de 25/09 (frente A): formato do post (direcao.formato: 4:5,
  * 3:4, 1:1 ou 9:16, pelo configurar ou pelo preparar), logo sem caixa, série guiada pela capa sem
@@ -257,14 +262,37 @@ import {
 } from "./referencia-adapta-copy.ts";
 import {
   autorizacaoDoCloneValida,
+  avisoDaConferencia,
   blocoDoRosto,
+  clonesNasTags,
+  cloneUsavel,
+  type ConferenciaDoRosto,
+  ehItemEscolhido,
   ehUuid,
+  ESQUEMA_CONFERENCIA_DO_ROSTO,
+  ESQUEMA_PESSOAS_NAS_FOTOS,
+  estadoDaPessoaNaLamina,
+  fotoDoAcervoLiberada,
+  laminaPedePessoa,
+  type LeituraDePessoa,
+  leiturasDePessoas,
+  lerItemEscolhido,
   lerRostoDoTrabalho,
   MAX_FOTOS_DO_ROSTO,
+  MAX_FOTOS_ESCOLHIDAS,
+  MAX_FOTOS_POR_LEITURA,
+  maxFotosDoRosto,
   normalizarRosto,
+  PERGUNTA_OUTRA_PESSOA,
+  PERGUNTA_PEDE_PESSOA,
+  referenciaCedeAoRosto,
   ROTULO_DA_FOTO_DO_ROSTO,
   type RostoEscolhido,
+  SISTEMA_CONFERENCIA_DO_ROSTO,
+  SISTEMA_PESSOAS_NAS_FOTOS,
   vagasDoRosto,
+  VERSAO_DA_LEITURA_DE_PESSOAS,
+  vistaDoCloneArquivada,
 } from "./rosto-na-geracao.ts";
 import {
   acabamentoDaLamina,
@@ -308,6 +336,9 @@ import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPubli
 import { ANTI_GENERICO, CTA_PRINCIPIOS, FORMULAS_DE_TITULO, REVISAO_DE_MARCA, VOZ_DE_MARCA } from "../_shared/conhecimento-marketing.ts";
 import { FRAMEWORKS, frameworkPorId } from "../_shared/conhecimento-conteudo.ts";
 import { ESQUEMA_REFINO, INSTRUCOES_REFINO, limparOpcoesDoRefino, OBJETIVOS_DO_REFINO, objetivosDoRefino } from "./refinar-texto.ts";
+// Frente R3 (26/09): jogada do texto, palavra decorativa, cor por papel e miolo enxuto e desenhado.
+import { blocoDoMioloDesenhado, enxugarMiolo, ESQUEMA_MIOLO_ENXUTO, passaDoLimite, termoDecorativoDaLamina, textoEsperadoNaConferencia } from "./composicao-dinamica.ts";
+import { blocosDeLeitura } from "../_shared/jogada-do-texto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1391,6 +1422,12 @@ async function rostosDosClientes(clientIds: string[]): Promise<{ id: string; nom
  * primeiro) ou fotos na hora na pasta do cliente. Nada achado: lista vazia.
  */
 async function fotosDoRostoEscolhido(t: Trabalho, rosto: RostoEscolhido): Promise<FotoDoRosto[]> {
+  // Frente R2: fotos de qualquer pasta ou de um clone, cada uma conferida agora (a que não vale fica de fora).
+  if (rosto.fonte === "escolhidas") {
+    const casa = casaUmaVez();
+    const locais = await Promise.all((rosto.itens ?? []).slice(0, MAX_FOTOS_ESCOLHIDAS).map((i) => localDoItemEscolhido(t, i, casa).catch(() => null)));
+    return locais.filter((l): l is FotoDoRosto => !!l).map((l, i) => ({ bucket: l.bucket, caminho: l.caminho, nome: `rosto-${i + 1}` }));
+  }
   if (rosto.fonte === "fotos") return (rosto.fotos ?? []).slice(0, MAX_FOTOS_DO_ROSTO).map((c, i) => ({ bucket: "mesa", caminho: c, nome: `rosto-${i + 1}` }));
   const donos = rosto.fonte === "cliente" ? [t.client_id] : await clientesDaCasa();
   if (!donos.length || !rosto.id) return [];
@@ -1435,6 +1472,360 @@ async function rostosDisponiveis(ch: Chamador, corpo: Record<string, unknown>) {
       }
     }));
   return json({ cliente: await comUrl(doCliente), equipe: await comUrl(daCasa), escolhido: lerRostoDoTrabalho(t.direcao, t.client_id), custo_usd: 0 });
+}
+
+// --------------------- rosto escolhido, frente R2 (pastas, clones gerados, pose, conferência)
+
+/** Os clientes da casa lidos uma vez só por chamada. */
+function casaUmaVez(): () => Promise<string[]> {
+  let p: Promise<string[]> | null = null;
+  return () => (p = p || clientesDaCasa().catch(() => [] as string[]));
+}
+
+type CloneDoRosto = {
+  id: string;
+  client_id: string;
+  nome: string;
+  origem: string;
+  status: string;
+  autorizacao: unknown;
+  identidade_real: { imagem_id: string; principal?: boolean }[] | null;
+};
+
+/**
+ * Clones ligados a uma foto do acervo (pela tag clone:<id> ou como foto de
+ * origem). Null quando não deu para conferir: a foto não entra.
+ */
+async function clonesLigadosAFoto(clientId: string, imagemId: string, dasTags: string[]): Promise<CloneDoRosto[] | null> {
+  const db = servico();
+  const campos = "id, client_id, nome, origem, status, autorizacao, identidade_real";
+  const [porTag, porOrigem] = await Promise.all([
+    dasTags.length ? db.from("foto_modelos").select(campos).in("id", dasTags) : Promise.resolve({ data: [] as unknown[], error: null }),
+    db.from("foto_modelos").select(campos).eq("client_id", clientId).eq("origem", "clone_de_foto_real").contains("identidade_real", JSON.stringify([{ imagem_id: imagemId }])),
+  ]);
+  if (porTag.error || porOrigem.error) return null;
+  const todos = [...((porTag.data as CloneDoRosto[] | null) ?? []), ...((porOrigem.data as CloneDoRosto[] | null) ?? [])];
+  return todos.filter((c, i) => todos.findIndex((x) => x.id === c.id) === i);
+}
+
+/**
+ * Onde está a foto de um item escolhido, conferida agora: do cliente (acervo,
+ * Workspace, Arquivos) ou de um clone do cliente ou da casa com autorização
+ * válida (foto de origem, variação gerada ou vista da folha). Null: fora.
+ */
+async function localDoItemEscolhido(t: Trabalho, item: string, casa: () => Promise<string[]>): Promise<FotoDoRosto | null> {
+  const x = lerItemEscolhido(item);
+  if (!x) return null;
+  const db = servico();
+  if (x.tipo === "acervo") {
+    const { data } = await db.from("cliente_imagens").select("id, storage_bucket, storage_path, nome, tags, ativa").eq("id", x.id).eq("client_id", t.client_id).maybeSingle();
+    const i = data as { id: string; storage_bucket: string; storage_path: string; nome: string; tags: string[] | null; ativa: boolean } | null;
+    if (!i || i.ativa === false || !i.storage_path) return null;
+    const ligados = await clonesLigadosAFoto(t.client_id, i.id, clonesNasTags(i.tags));
+    if (!ligados || !fotoDoAcervoLiberada(ligados)) return null;
+    return { bucket: i.storage_bucket || "mesa", caminho: i.storage_path, nome: texto(i.nome, 60) || "rosto" };
+  }
+  if (x.tipo === "workspace") {
+    const { data } = await db.from("workspace_nodes").select("id, name, kind, storage_path").eq("id", x.id).eq("client_id", t.client_id).maybeSingle();
+    const n = data as { name: string; kind: string; storage_path: string | null } | null;
+    return n && n.kind === "file" && n.storage_path ? { bucket: "workspace", caminho: n.storage_path, nome: texto(n.name, 60) || "rosto" } : null;
+  }
+  if (x.tipo === "arquivo") {
+    const { data } = await db.from("files").select("id, file_name, storage_bucket, storage_path, archived_at").eq("id", x.id).eq("client_id", t.client_id).maybeSingle();
+    const f = data as { file_name: string; storage_bucket: string | null; storage_path: string | null; archived_at: string | null } | null;
+    return f && !f.archived_at && f.storage_bucket && f.storage_path ? { bucket: f.storage_bucket, caminho: f.storage_path, nome: texto(f.file_name, 60) || "rosto" } : null;
+  }
+  // Clone: do cliente ou da casa, usável (não arquivado, autorização válida).
+  const donos = [t.client_id].concat(await casa());
+  const { data: cl } = await db.from("foto_modelos").select("id, client_id, nome, origem, status, autorizacao, identidade_real").eq("id", x.clone!).in("client_id", donos).maybeSingle();
+  const c = cl as CloneDoRosto | null;
+  if (!c || !cloneUsavel(c)) return null;
+  const daOrigem = (Array.isArray(c.identidade_real) ? c.identidade_real : []).some((r) => String(r.imagem_id).toLowerCase() === x.id);
+  const { data: img } = await db.from("cliente_imagens").select("id, storage_bucket, storage_path, tags, ativa").eq("id", x.id).eq("client_id", c.client_id).maybeSingle();
+  const a = img as { storage_bucket: string; storage_path: string; tags: string[] | null; ativa: boolean } | null;
+  if (a && a.storage_path && (daOrigem || (a.ativa !== false && clonesNasTags(a.tags).indexOf(c.id.toLowerCase()) >= 0))) {
+    return { bucket: a.storage_bucket || "mesa", caminho: a.storage_path, nome: texto(c.nome, 60) || "clone" };
+  }
+  const { data: v } = await db.from("foto_modelo_imagens").select("*").eq("id", x.id).eq("modelo_id", c.id).maybeSingle();
+  const vista = v as { storage_bucket: string; storage_path: string; arquivada_em?: string | null; avisos?: string[] | null } | null;
+  return vista && vista.storage_path && !vistaDoCloneArquivada(vista) ? { bucket: vista.storage_bucket || "mesa", caminho: vista.storage_path, nome: texto(c.nome, 60) || "clone" } : null;
+}
+
+/** URLs assinadas da miniatura própria (<caminho>.mini.jpg) ou do original, em lote por bucket; nunca a transformação do Storage. */
+async function urlsDasMiniaturas(lista: { bucket: string; caminho: string }[]): Promise<(string | null)[]> {
+  const saida: (string | null)[] = lista.map(() => null);
+  const porBucket = new Map<string, number[]>();
+  lista.forEach((l, i) => porBucket.set(l.bucket, (porBucket.get(l.bucket) ?? []).concat([i])));
+  for (const [bucket, indices] of porBucket) {
+    try {
+      const caminhos = indices.flatMap((i) => [`${lista[i].caminho}.mini.jpg`, lista[i].caminho]);
+      const { data } = await servico().storage.from(bucket).createSignedUrls(caminhos, 3600);
+      const linhas = (data ?? []) as { path: string | null; signedUrl?: string | null; error?: string | null }[];
+      const achar = (p: string) => linhas.find((x) => x.path === p && !!x.signedUrl && !x.error)?.signedUrl ?? null;
+      for (const i of indices) saida[i] = achar(`${lista[i].caminho}.mini.jpg`) || achar(lista[i].caminho);
+    } catch {
+      // Sem URL: a tela mostra o espaço vazio.
+    }
+  }
+  return saida;
+}
+
+const caminhoDasPessoas = (clientId: string) => `${pastaDasLeituras(clientId)}/pessoas.json`;
+
+/** Leituras "tem pessoa" já guardadas (por item escolhido: i:, w:, a:). */
+async function leiturasDePessoasGuardadas(clientId: string): Promise<Record<string, LeituraDePessoa>> {
+  const g = await leituraGuardada(caminhoDasPessoas(clientId));
+  const fotos = g && g.versao === VERSAO_DA_LEITURA_DE_PESSOAS && g.fotos && typeof g.fotos === "object" ? g.fotos as Record<string, LeituraDePessoa> : {};
+  const saida: Record<string, LeituraDePessoa> = {};
+  for (const [id, l] of Object.entries(fotos)) if (ehItemEscolhido(id) && l && typeof l === "object") saida[id] = { pessoa: l.pessoa === true, rosto: l.rosto === true, lido_em: l.lido_em };
+  return saida;
+}
+
+type FotoDeClone = { id: string; nome: string; papel: "origem" | "gerada" | "vista"; url: string | null };
+
+/** Clones usáveis do cliente e da casa, com as fotos de origem, as variações geradas e as vistas aprovadas da folha. */
+async function clonesParaORosto(t: Trabalho, casa: string[]) {
+  const db = servico();
+  const donos = [t.client_id].concat(casa.filter((id) => id !== t.client_id));
+  const { data } = await db.from("foto_modelos").select("id, client_id, nome, origem, status, autorizacao, identidade_real")
+    .in("client_id", donos).eq("origem", "clone_de_foto_real").neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(60);
+  const clones = ((data as CloneDoRosto[] | null) ?? []).filter((c) => cloneUsavel(c));
+  if (!clones.length) return [];
+  const origemIds = clones.flatMap((c) => (Array.isArray(c.identidade_real) ? c.identidade_real : []).map((r) => r.imagem_id)).filter(ehUuid);
+  const [origens, geradas, vistas] = await Promise.all([
+    origemIds.length
+      ? db.from("cliente_imagens").select("id, client_id, storage_bucket, storage_path, nome").in("id", origemIds).then((r) => (r.data as { id: string; client_id: string; storage_bucket: string; storage_path: string; nome: string }[] | null) ?? [], () => [])
+      : Promise.resolve([]),
+    db.from("cliente_imagens").select("id, client_id, storage_bucket, storage_path, nome, tags").in("client_id", donos).overlaps("tags", clones.map((c) => `clone:${c.id}`)).eq("ativa", true).order("criado_em", { ascending: false }).limit(300)
+      .then((r) => (r.data as { id: string; client_id: string; storage_bucket: string; storage_path: string; nome: string; tags: string[] | null }[] | null) ?? [], () => []),
+    db.from("foto_modelo_imagens").select("*").in("modelo_id", clones.map((c) => c.id)).eq("papel", "vista").eq("aprovada", true).limit(200)
+      .then((r) => (r.data as { id: string; modelo_id: string; storage_bucket: string; storage_path: string; vista: string | null; arquivada_em?: string | null; avisos?: string[] | null }[] | null) ?? [], () => []),
+  ]);
+  const montados = clones.map((c) => {
+    const fotos: { id: string; nome: string; papel: FotoDeClone["papel"]; bucket: string; caminho: string }[] = [];
+    for (const r of Array.isArray(c.identidade_real) ? c.identidade_real : []) {
+      const o = origens.find((x) => x.id === r.imagem_id && x.client_id === c.client_id);
+      if (o) fotos.push({ id: `k:${c.id}:${o.id}`, nome: texto(o.nome, 80) || "Foto de origem", papel: "origem", bucket: o.storage_bucket || "mesa", caminho: o.storage_path });
+    }
+    geradas.filter((g) => g.client_id === c.client_id && clonesNasTags(g.tags).indexOf(c.id.toLowerCase()) >= 0).slice(0, 16)
+      .forEach((g) => fotos.push({ id: `k:${c.id}:${g.id}`, nome: texto(g.nome, 80) || "Gerada", papel: "gerada", bucket: g.storage_bucket || "mesa", caminho: g.storage_path }));
+    vistas.filter((v) => v.modelo_id === c.id && !vistaDoCloneArquivada(v)).slice(0, 8)
+      .forEach((v) => fotos.push({ id: `k:${c.id}:${v.id}`, nome: v.vista ? `Vista: ${v.vista.replace(/_/g, " ")}` : "Vista", papel: "vista", bucket: v.storage_bucket || "mesa", caminho: v.storage_path }));
+    return { c, fotos };
+  });
+  const todas = montados.flatMap((m) => m.fotos);
+  const urls = await urlsDasMiniaturas(todas);
+  let k = 0;
+  return montados.map((m) => ({
+    id: m.c.id,
+    nome: texto(m.c.nome, 80) || "Clone",
+    grupo: m.c.client_id === t.client_id ? "cliente" : "equipe",
+    fotos: m.fotos.map((f) => ({ id: f.id, nome: f.nome, papel: f.papel, url: urls[k++] })) as FotoDeClone[],
+  })).filter((m) => m.fotos.length > 0);
+}
+
+/**
+ * rostos_fotos { trabalho_id, parte? }: o que o navegador de fotos do rosto
+ * precisa, sem custo. parte "escolhidas": só as escolhidas agora, com
+ * miniatura e se ainda valem. Sem parte: também as leituras "tem pessoa" e os
+ * clones (fotos de origem, geradas e vistas aprovadas).
+ */
+async function fotosParaORosto(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const r = lerRostoDoTrabalho(t.direcao, t.client_id);
+  const casa = casaUmaVez();
+  const itens = r && r.fonte === "escolhidas" ? r.itens ?? [] : [];
+  const locais = await Promise.all(itens.map((i) => localDoItemEscolhido(t, i, casa).catch(() => null)));
+  const urls = await urlsDasMiniaturas(locais.filter((l): l is FotoDoRosto => !!l));
+  let k = 0;
+  const escolhidas = itens.map((id, i) => ({ id, disponivel: !!locais[i], nome: locais[i] ? locais[i]!.nome : null, url: locais[i] ? urls[k++] : null }));
+  if (corpo.parte === "escolhidas") return json({ escolhidas, custo_usd: 0 });
+  const [leituras, clones] = await Promise.all([
+    leiturasDePessoasGuardadas(t.client_id),
+    casa().then((c) => clonesParaORosto(t, c)).catch(() => []),
+  ]);
+  return json({ escolhidas, leituras, clones, custo_usd: 0 });
+}
+
+/**
+ * rostos_marcar { trabalho_id, itens }: leitura por visão barata (modelo de
+ * leitura do catálogo), uma vez por foto e guardada, que marca se a foto tem
+ * pessoa e rosto visível. Até 12 fotos por chamada, numa chamada só; as já
+ * lidas não pagam de novo. Clones não precisam (são pessoas).
+ */
+async function marcarPessoasNasFotos(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const pedidos = (Array.isArray(corpo.itens) ? corpo.itens : [])
+    .filter(ehItemEscolhido)
+    .map((x) => x.toLowerCase())
+    .filter((x, i, l) => x.indexOf("k:") !== 0 && l.indexOf(x) === i)
+    .slice(0, MAX_FOTOS_POR_LEITURA);
+  if (!pedidos.length) throw new ErroEstudio(400, "itens_invalidos", "Escolha as fotos para marcar.");
+  const guardadas = await leiturasDePessoasGuardadas(t.client_id);
+  const faltam = pedidos.filter((id) => !guardadas[id]);
+  if (!faltam.length) return json({ leituras: guardadas, lidas: 0, custo_usd: 0 });
+  const casa = casaUmaVez();
+  const locais = await Promise.all(faltam.map((id) => localDoItemEscolhido(t, id, casa).catch(() => null)));
+  const imagens = await Promise.all(locais.map(async (l, i) => {
+    if (!l) return null;
+    try {
+      const red = await reduzidaSemTransformacao(servico(), l.bucket, l.caminho, 768, 768, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM });
+      return red ? { bytes: red.bytes, mime: red.mime, nome: `foto-${i + 1}.${extensaoDe(red.mime)}` } as ImagemEntrada : null;
+    } catch {
+      return null;
+    }
+  }));
+  const ids = faltam.filter((_, i) => !!imagens[i]);
+  const enviadas = imagens.filter((x): x is ImagemEntrada => !!x);
+  if (!enviadas.length) return json({ leituras: guardadas, lidas: 0, custo_usd: 0 });
+  const leitor = await modeloDoPapel("leitura");
+  const lido = await chamarTexto({
+    clientId: t.client_id,
+    tarefa: "leitura_referencia",
+    agente: "leitor",
+    modeloId: leitor.id,
+    sistema: SISTEMA_PESSOAS_NAS_FOTOS,
+    mensagens: [{ papel: "usuario", conteudo: `São ${enviadas.length} fotos, numeradas de 1 a ${enviadas.length} na ordem.`, imagens: enviadas }],
+    esquemaJson: ESQUEMA_PESSOAS_NAS_FOTOS,
+    maxTokensSaida: 1_500,
+    referencia: { tipo: "estudio_trabalho", id: t.id },
+    criadoPor: ch.userId,
+  });
+  const novas = leiturasDePessoas(lido.json, ids, new Date().toISOString());
+  // Relê antes de gravar (outra leitura pode ter acabado agora) e guarda no máximo 4000 fotos.
+  const tudo = { ...(await leiturasDePessoasGuardadas(t.client_id)), ...novas };
+  const chaves = Object.keys(tudo).slice(-4000);
+  await guardarLeitura(caminhoDasPessoas(t.client_id), { versao: VERSAO_DA_LEITURA_DE_PESSOAS, fotos: Object.fromEntries(chaves.map((c) => [c, tudo[c]])) });
+  return json({ leituras: tudo, lidas: Object.keys(novas).length, custo_usd: arred(lido.custoUsd), saldo_usd: lido.saldoUsd });
+}
+
+/**
+ * conferir_rosto { trabalho_id, ordem, versao? }: SÓ AVISO, depois de gerar
+ * com rosto escolhido (sem laço de regerar). Leitura por visão dos traços na
+ * arte e nas fotos usadas, e o Jev (Noul) diz se parece outra pessoa. Fica na
+ * versão (conferencia_rosto): chamar de novo não paga.
+ */
+async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  const versaoPedida = corpo.versao == null || corpo.versao === "" ? null : Number(corpo.versao);
+  const alvo = versaoPedida == null ? versaoAtual(t, ordem) : t.cards.find((c) => c.ordem === ordem && c.versao === versaoPedida) ?? null;
+  if (!alvo) throw new ErroEstudio(404, "versao_inexistente", "Esta versão da lâmina não existe.");
+  const extra = alvo as unknown as Record<string, unknown>;
+  const ja = extra.conferencia_rosto;
+  if (ja && typeof ja === "object") return json({ trabalho_id: t.id, ordem, versao: alvo.versao, conferencia: ja, custo_usd: 0 });
+  const rosto = extra.rosto && typeof extra.rosto === "object" ? extra.rosto as Record<string, unknown> : null;
+  const usadas = (rosto && Array.isArray(rosto.fotos_usadas) ? rosto.fotos_usadas : [])
+    .filter((f): f is { bucket: string; caminho: string } => !!f && typeof f === "object" && typeof (f as Record<string, unknown>).bucket === "string" && typeof (f as Record<string, unknown>).caminho === "string")
+    .slice(0, MAX_FOTOS_ESCOLHIDAS);
+  if (!usadas.length) throw new ErroEstudio(409, "sem_rosto", "Esta versão não usou rosto escolhido.");
+  const usos: { usoId: string; custoUsd: number }[] = [];
+  let conferencia: ConferenciaDoRosto;
+  try {
+    const [arte, ...fotos] = await Promise.all([
+      reduzidaSemTransformacao(servico(), "mesa", alvo.storage_path, 1280, 1600, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM }),
+      ...usadas.slice(0, 2).map((f) => reduzidaSemTransformacao(servico(), f.bucket, f.caminho, 1024, 1024, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM }).catch(() => null)),
+    ]);
+    const reais = fotos.filter((f): f is ResultadoDaReducao => !!f);
+    if (!arte || !reais.length) throw new Error("imagens_indisponiveis");
+    const leitor = await modeloDoPapel("leitura");
+    const lido = await chamarTexto({
+      clientId: t.client_id,
+      tarefa: "verificacao",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_CONFERENCIA_DO_ROSTO,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Imagem 1 = arte gerada. Imagens 2 a ${reais.length + 1} = fotos reais da pessoa.`,
+        imagens: [{ bytes: arte.bytes, mime: arte.mime, nome: "arte.png" }, ...reais.map((f, i) => ({ bytes: f.bytes, mime: f.mime, nome: `real-${i + 1}.${extensaoDe(f.mime)}` }))],
+      }],
+      esquemaJson: ESQUEMA_CONFERENCIA_DO_ROSTO,
+      maxTokensSaida: 1_500,
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor: ch.userId,
+    });
+    usos.push({ usoId: lido.usoId, custoUsd: lido.custoUsd });
+    const l = (lido.json ?? {}) as Record<string, unknown>;
+    const pessoaNaArte = typeof l.pessoa_na_arte === "boolean" ? l.pessoa_na_arte : null;
+    let outra: number | null = null;
+    let erroJev: string | null = null;
+    if (pessoaNaArte !== false) {
+      try {
+        const res = await jevPerguntar({
+          state: { conferencia: { nas_fotos: texto(l.nas_fotos, 1200), na_arte: texto(l.na_arte, 1200), impressao_geral: texto(l.impressao_geral, 600) } },
+          questions: { outra_pessoa: PERGUNTA_OUTRA_PESSOA },
+        });
+        const cobrado = await cobrarJev(res, { clientId: t.client_id, tarefa: "verificacao", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId });
+        if (cobrado) usos.push(cobrado);
+        outra = probabilidadeNoul(res.answers.outra_pessoa);
+      } catch (e) {
+        erroJev = e instanceof JevErro ? e.codigo : "jev_indisponivel";
+      }
+    }
+    const a = avisoDaConferencia({ pessoaNaArte, outraPessoa: outra });
+    conferencia = {
+      outra_pessoa: outra == null ? null : Math.round(outra * 100) / 100,
+      aviso: a.aviso,
+      ...(pessoaNaArte === false ? { sem_pessoa: true } : {}),
+      resumo: a.texto,
+      conferida_em: new Date().toISOString(),
+      custo_usd: arred(usos.reduce((s, u) => s + u.custoUsd, 0)),
+      erro: erroJev,
+    };
+  } catch (e) {
+    // Saldo, cota e chave voltam como erro da chamada; o resto vira "indisponível" (só aviso).
+    if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
+    conferencia = { outra_pessoa: null, aviso: false, resumo: avisoDaConferencia({ pessoaNaArte: null, outraPessoa: null }).texto, conferida_em: new Date().toISOString(), custo_usd: 0, erro: codigoMotor(e) };
+  }
+  const custo = conferencia.custo_usd;
+  const caminhoAlvo = alvo.storage_path;
+  await mutarTrabalho(t.id, (atual) => ({
+    cards: atual.cards.map((c) =>
+      c.ordem === ordem && c.storage_path === caminhoAlvo
+        ? { ...c, conferencia_rosto: conferencia, custo_usd: arred(num(c.custo_usd) + custo), uso_ids: [...(c.uso_ids ?? []), ...usos.map((u) => u.usoId)] }
+        : c
+    ),
+    custo_usd: arred(num(atual.custo_usd) + custo),
+  }));
+  return json({ trabalho_id: t.id, ordem, versao: alvo.versao, conferencia, custo_usd: custo });
+}
+
+/** O que a versão guarda do rosto (frente R2): pose pedida, itens escolhidos e as fotos usadas (para a conferência). */
+function registroDoRosto(r: RostoEscolhido, usadas: { bucket: string; caminho: string }[]): Record<string, unknown> {
+  return {
+    ...(r.como ? { como: r.como } : {}),
+    ...(r.itens && r.itens.length ? { itens: r.itens } : {}),
+    ...(usadas.length ? { fotos_usadas: usadas.slice(0, MAX_FOTOS_ESCOLHIDAS) } : {}),
+  };
+}
+
+/**
+ * Lâmina normal (frente R2): a direção pede uma pessoa? Noul do Jev sobre a
+ * direção da lâmina. Falha: null (a lâmina segue como hoje, sem rosto).
+ */
+async function direcaoPedePessoa(t: Trabalho, card: CardDirecao, rosto: RostoEscolhido, criadoPor: string): Promise<number | null> {
+  try {
+    const layout = (card.layout ?? {}) as Record<string, unknown>;
+    const res = await jevPerguntar({
+      state: estadoDaPessoaNaLamina({
+        funcao: card.funcao,
+        texto_exato: card.texto_exato,
+        composicao: card.composicao,
+        imagem: typeof layout.imagem === "string" ? layout.imagem : null,
+        ilustracao: card.ilustracao,
+        ponto_focal: typeof layout.ponto_focal === "string" ? layout.ponto_focal : null,
+        conceito: t.direcao.conceito,
+        destacar: rosto.destacar,
+        como: rosto.como,
+      }),
+      questions: { pede_pessoa: PERGUNTA_PEDE_PESSOA },
+    });
+    await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }).catch(() => null);
+    return probabilidadeNoul(res.answers.pede_pessoa);
+  } catch {
+    return null;
+  }
 }
 
 // ------------------------------------------------ prancha de referências (frente E)
@@ -1610,7 +2001,8 @@ async function variedadeDaCapa(
     trabalhos = [];
   }
   const historico = capasNoHistorico(trabalhos, refId);
-  const titulo = molde ? molde.blocos.filter((b) => b.papel !== "marca" && b.papel !== "perfil").sort((a, b) => b.altura_da_letra - a.altura_da_letra)[0] ?? null : null;
+  // Frente R3: o texto decorativo de fundo não é o título da referência.
+  const titulo = blocosDeLeitura(molde).sort((a, b) => b.altura_da_letra - a.altura_da_letra)[0] ?? null;
   const escolha = escolherVariedade({
     fidelidade,
     historico,
@@ -2377,6 +2769,48 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     reserva = r.reservaUsada ?? null;
   }
 
+  // Frente R3 (dono, 26/09: "o texto tem que chegar ENXUTO sempre"): as lâminas 2 em diante acima do
+  // limite (_shared/limite-do-miolo.ts) são enxutas numa chamada só ao redator, no diretor e no roteiro;
+  // a capa não muda; sem laço. Nenhuma acima do limite: nada é chamado (o roteiro continua grátis).
+  // A tela mostra o custo antes (mesma regra) e, depois, quantas foram enxutas (miolo_enxuto de miolo_longo).
+  let mioloEnxuto: number[] = [];
+  let mioloLongo: number[] = [];
+  if (!postUnico && direcao.cards.length > 1 && corpo.enxugar_miolo !== false) {
+    const enxuto = await enxugarMiolo(direcao.cards, direcao.conceito, async (sistema, pedido) => {
+      const redator = await modeloDoPapel("diretor_arte");
+      const r = await chamarTexto({
+        clientId,
+        tarefa: "estudio",
+        agente: "diretor_arte",
+        modeloId: redator.id,
+        raciocinio: raciocinioPara(redator, ["low", "medium"]),
+        sistema,
+        mensagens: [{ papel: "usuario", conteudo: pedido }],
+        esquemaJson: ESQUEMA_MIOLO_ENXUTO,
+        maxTokensSaida: 3_000,
+        timeoutMs: 90_000,
+        referencia: { tipo: "estudio_trabalho", id: trabalhoId },
+        criadoPor: ch.userId,
+      });
+      if (typeof r.saldoUsd === "number") saldo = r.saldoUsd;
+      if (r.reservaUsada) reserva = r.reservaUsada;
+      return { json: r.json, custoUsd: r.custoUsd };
+    });
+    mioloLongo = enxuto.longas;
+    mioloEnxuto = enxuto.mudou;
+    if (enxuto.mudou.length) {
+      const n = enxuto.cards.length;
+      direcao.cards = enxuto.cards.map((c) =>
+        enxuto.mudou.indexOf(c.ordem) < 0
+          ? c
+          : { ...c, prompt_imagem: promptDaLamina(c, marca, { total: n, carrosselInfinito: direcao.carrossel_infinito, levaLogo: levaLogoFn(c.ordem, n), conceito: direcao.conceito, fioVisual: direcao.fio_visual ?? null }) }
+      );
+    }
+    custo = arred(custo + enxuto.custoUsd);
+  } else if (!postUnico) {
+    mioloLongo = direcao.cards.filter((c) => passaDoLimite(c, direcao.cards.length)).map((c) => c.ordem);
+  }
+
   // Formato escolhido na tela (o 4:5 fica sem o campo, como sempre foi).
   if (formato !== "feed_4x5") direcao.formato = formato;
   if (campanha) {
@@ -2413,7 +2847,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
-    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido });
+    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo });
   }
 
   const { data: criado, error } = await db
@@ -2434,7 +2868,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo });
 }
 
 // ------------------------------------------------------ referencias (Jev)
@@ -2849,7 +3283,8 @@ async function conferirCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
   if (!alvo) throw new ErroEstudio(404, "versao_inexistente", "Esta versão do card não existe. Gere o card antes de conferir.");
   const [kit, fontes] = await Promise.all([lerKit(t.client_id, t), lerFontes(t.client_id, t)]);
-  const conf = await verificar(ch, t, card, alvo.storage_path, kit, fontes);
+  // Frente R3: o termo decorativo que a versão escreveu na arte entra no texto esperado (não é palavra sobrando).
+  const conf = await verificar(ch, t, { ...card, texto_exato: textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }) }, alvo.storage_path, kit, fontes);
   const custo = arred(conf.usos.reduce((s, u) => s + u.custoUsd, 0));
   const verificacao: Verificacao = {
     ...conf.verificacao,
@@ -3603,6 +4038,24 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
   const temBase = (!!baseFoto && !replicar) || !!recorteNaLamina;
   const deslocamento = temBase ? 1 : 0;
+  // Frente R2 (26/09): lâmina normal (sem referência, foto, recorte nem elementos) com rosto
+  // escolhido, só quando a direção pede pessoa (Noul do Jev; falha = sem rosto). Sem rosto:
+  // nada é lido e nada muda. A referência automática da marca cede a vaga às fotos do rosto.
+  const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
+  const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId) : null;
+  const rostoDaNormal = rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null;
+  const fotosDaNormal = rostoDaNormal ? await fotosDoRostoEscolhido(t, rostoDaNormal).catch(() => [] as FotoDoRosto[]) : [];
+  if (rostoDaNormal && !fotosDaNormal.length) {
+    throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
+  }
+  if (rostoDaNormal && referenciaCedeAoRosto({
+    anexos: anexosDaLamina(candidatos, { base: temBase }).length + deslocamento,
+    limiteDoModelo: limiteDeReferencias(modeloImagem),
+    pedidas: Math.min(fotosDaNormal.length, maxFotosDoRosto(rostoDaNormal)),
+  })) {
+    for (let i = candidatos.length - 1; i >= 0; i--) if (candidatos[i].tipo === "identidade") candidatos.splice(i, 1);
+  }
+  const fotosUsadasDoRosto: { bucket: string; caminho: string }[] = [];
   const imagens: ImagemEntrada[] = [];
   const rotulos: string[] = [];
   const idsReferencias: string[] = [];
@@ -3648,16 +4101,32 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (!fotosDoRosto.length) {
       throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
     }
-    const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDoRosto.length });
+    const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDoRosto.length, max: maxFotosDoRosto(rostoEscolhido) });
     // Baixadas juntas; a que não abre fica de fora (a numeração segue contínua).
     const baixadas = await Promise.all(fotosDoRosto.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(() => null)));
-    baixadas.forEach((img) => {
+    baixadas.forEach((img, i) => {
       if (!img) return;
       imagens.push(img);
       rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);
       indicesDoRosto.push(imagens.length + deslocamento);
+      fotosUsadasDoRosto.push({ bucket: fotosDoRosto[i].bucket, caminho: fotosDoRosto[i].caminho });
     });
   }
+  // Frente R2: na lâmina normal as fotos do rosto entram no mesmo lugar (depois dos anexos da lâmina, antes do estilo).
+  if (rostoDaNormal) {
+    const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDaNormal.length, max: maxFotosDoRosto(rostoDaNormal) });
+    const baixadas = await Promise.all(fotosDaNormal.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(() => null)));
+    baixadas.forEach((img, i) => {
+      if (!img) return;
+      imagens.push(img);
+      rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);
+      indicesDoRosto.push(imagens.length + deslocamento);
+      fotosUsadasDoRosto.push({ bucket: fotosDaNormal[i].bucket, caminho: fotosDaNormal[i].caminho });
+    });
+  }
+  const blocoDoRostoNaNormal = rostoDaNormal && indicesDoRosto.length
+    ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!rostoDaNormal.destacar, pessoaNaReferencia: false, como: rostoDaNormal.como, modo: "lamina" })
+    : "";
   // Frente S2 (26/09): estilo do cliente, só com o interruptor do trabalho ligado e o estilo ativo.
   // Desligado (o padrão): null sem ler o banco, e nada abaixo muda. Ligado: as referências do
   // estilo entram DEPOIS das da lâmina e o bloco curto vai no fim do texto, antes das regras de render.
@@ -3716,11 +4185,15 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const versoesAntes = t.cards.filter((c) => c.ordem === ordem).length;
   const baseComCampanha = [
     base,
+    // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).
+    blocoDoRostoNaNormal,
     campanha ? blocoDaCampanha(campanha) : "",
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
     replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
     replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
+    // Frente R3: lâmina de conteúdo desenhada (recurso visual, não parágrafo). Capa, fechamento, replicar e anúncio: vazio.
+    replicar || ads ? "" : blocoDoMioloDesenhado({ ordem, total, blocos: cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : [{ papel: "apoio", texto: cardDoPrompt.texto_exato }], cenaFixa }),
     blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1),
     blocoDoEstilo,
     blocoDoTemplate,
@@ -3766,6 +4239,12 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         molde = null; // imagem que não abre (grande demais, formato): volta a ser só referência
       }
     }
+    // Frente R3: texto decorativo de fundo da referência (palavra gigante, marca d'água) vira um termo
+    // da copy desta lâmina (Choice do Jev entre candidatos, guardado). Sem decorativo no molde: null.
+    const termoDaLamina = await termoDecorativoDaLamina(
+      { molde: refsNoPrompt[0].molde, card, total, conceito: t.direcao.conceito, criativa: fidelidade === "criativa" },
+      depsDaAdaptacao(t, null, ch.userId),
+    );
     const replica = promptDoReplicar({
       card,
       marca,
@@ -3781,6 +4260,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       quadro: quadro.final,
       anuncio: quadro.formato ? { formato: quadro.formato } : null,
       post: quadro.post,
+      termoDecorativo: termoDaLamina ? termoDaLamina.termo : null,
       fidelidade,
     });
     // Frente E: variedade com memória (só na capa, fora de Idêntica) e a continuidade da série (prancha ou composição nova).
@@ -3805,7 +4285,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       }, depsDaCopia)
       : null;
     const blocoDoRostoAqui = indicesDoRosto.length
-      ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!(rostoEscolhido && rostoEscolhido.destacar), pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa") })
+      ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!(rostoEscolhido && rostoEscolhido.destacar), pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa"), como: rostoEscolhido ? rostoEscolhido.como : undefined })
       : "";
     const prompt = [
       replica.prompt,
@@ -3851,7 +4331,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
           : {}),
         // Frente R: o que o julgamento decidiu (serve, adaptou, a cena) e o rosto usado (só com rosto escolhido).
         ...(adaptacao ? { adaptacao_da_copy: adaptacao.registro } : {}),
-        ...(rostoEscolhido ? { rosto: { fonte: rostoEscolhido.fonte, id: rostoEscolhido.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoEscolhido.destacar } } : {}),
+        ...(rostoEscolhido ? { rosto: { fonte: rostoEscolhido.fonte, id: rostoEscolhido.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoEscolhido.destacar, ...registroDoRosto(rostoEscolhido, fotosUsadasDoRosto) } } : {}),
+        // Frente R3: o termo que trocou o texto decorativo da referência (a conferência espera ele na arte).
+        ...(termoDaLamina ? { termo_decorativo: termoDaLamina.termo, termo_decorativo_origem: termoDaLamina.origem } : {}),
         molde_editado: !!molde,
         // Molde medido por visão (layout da referência como especificação): quais referências tinham.
         molde_lido: refsNoPrompt.map((r) => ({ referencia_id: r.id, lido: !!r.molde })),
@@ -4005,7 +4487,17 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
     origem: "gerar",
     referencias: idsReferencias,
-    extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "normal", ...marcaDaLogo, ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }) },
+    extra: {
+      referencias_jev: escolhida.jev,
+      tamanho: img.tamanho,
+      modo: "normal",
+      // Frente R2: só com rosto escolhido (aplicado ou não, pela direção da lâmina).
+      ...(rostoNaNormal
+        ? { rosto: { fonte: rostoNaNormal.fonte, id: rostoNaNormal.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoNaNormal.destacar, aplicado: !!rostoDaNormal, pede_pessoa: pedePessoa, ...registroDoRosto(rostoNaNormal, fotosUsadasDoRosto) } }
+        : {}),
+      ...marcaDaLogo,
+      ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }),
+    },
   });
 }
 
@@ -5320,6 +5812,10 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
   if (conjunto && conjunto.rosto !== undefined) {
     rostoPedido = conjunto.rosto === null ? null : normalizarRosto(conjunto.rosto, t.client_id);
     if (conjunto.rosto !== null && !rostoPedido) throw new ErroEstudio(400, "rosto_invalido", "Rosto inválido. Escolha um rosto do cliente, da equipe ou fotos desta pasta.");
+    // Frente R2: fotos escolhidas nas pastas ou nos clones são conferidas já ao salvar (clone só com autorização válida).
+    if (rostoPedido && rostoPedido.fonte === "escolhidas" && !(await fotosDoRostoEscolhido(t, rostoPedido).catch(() => [] as FotoDoRosto[])).length) {
+      throw new ErroEstudio(409, "rosto_indisponivel", "Nenhuma das fotos escolhidas está disponível (apagada ou sem autorização válida). Escolha outras.");
+    }
   }
   const infinito = conjunto && typeof conjunto.carrossel_infinito === "boolean" ? conjunto.carrossel_infinito : undefined;
   // Formato do post orgânico (4:5, 3:4, 1:1 ou 9:16), para o conjunto inteiro. O anúncio tem formato por card.
@@ -6424,6 +6920,10 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   logos: logosDoTrabalho,
   prancha: pranchaDaReferencia,
   rostos: rostosDisponiveis,
+  // Frente R2: navegador de fotos do rosto (sem custo), leitura "tem pessoa" e conferência (só aviso).
+  rostos_fotos: fotosParaORosto,
+  rostos_marcar: marcarPessoasNasFotos,
+  conferir_rosto: conferirRosto,
   refinar_texto: refinarTexto,
   executar_acao_agente: executarAcaoDoDiretor,
   desfazer_acao_agente: desfazerAcaoDoDiretor,
@@ -6433,7 +6933,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
-const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto"]);
+const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

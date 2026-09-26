@@ -77,7 +77,8 @@ describe("ações do agente do mês na agenda gravada", () => {
     expect(fonte).toContain("executar_acao_agenda: executarAcaoNaAgenda");
     expect(fonte).toContain("desfazer_acao_agenda: desfazerAcaoNaAgenda");
     expect(fonte).toContain("acoes_na_agenda: {");
-    expect(fonte).toContain("blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas)");
+    // v2 (26/09): a agenda dos próximos 12 meses, com o detalhe de cada peça.
+    expect(fonte).toContain('blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas, "dos próximos 12 meses")');
     expect(fonte).toContain("registrar_geracao: registrarGeracao");
     expect(fonte).toContain("gerar_conteudos: {");
   });

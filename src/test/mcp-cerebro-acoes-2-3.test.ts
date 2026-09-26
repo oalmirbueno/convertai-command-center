@@ -90,8 +90,9 @@ const CLIENTE = "11111111-2222-4333-8444-555555555555";
 describe("o catálogo 2.3 está registrado", () => {
   const registro = tools.slice(tools.indexOf("const RAW_TOOLS: readonly ToolDefinition[] = ["), tools.indexOf("export const TOOLS: readonly ToolDefinition[]"));
 
-  it("versão 2.3.0 (o cliente MCP cacheia o catálogo)", () => {
-    expect(MCP_VERSION).toBe("2.3.0");
+  it("versão 2.3.0 ou depois (o cliente MCP cacheia o catálogo; a 2.4.0 trouxe aceleriq_client_instruction)", () => {
+    const [maior, menor] = MCP_VERSION.split(".").map(Number);
+    expect(maior > 2 || (maior === 2 && menor >= 3)).toBe(true);
   });
 
   it("dez ferramentas novas, com escopo granular e no registro", () => {

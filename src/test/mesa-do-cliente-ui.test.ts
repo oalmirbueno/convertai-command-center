@@ -155,6 +155,9 @@ describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo
     const gratis = prepararDoEstudio.slice(prepararDoEstudio.indexOf('modo === "roteiro" ? ('), prepararDoEstudio.indexOf("Montar do roteiro · grátis"));
     expect(gratis).toContain("<Button");
     expect(gratis).not.toContain("BotaoComCusto");
+    // Frente R3: com lâmina acima do limite de texto, o roteiro mostra o custo da chamada curta que enxuga.
+    expect(prepararDoEstudio).toContain('modo === "roteiro" && longas > 0 && partesEnxugar ? (');
+    expect(prepararDoEstudio).toContain("partes={partesEnxugar}");
   });
 });
 

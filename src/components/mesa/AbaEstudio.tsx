@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { textoDoMioloEnxuto } from "../../../supabase/functions/_shared/limite-do-miolo";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { emColunas, encaixarNaJanela, rolarAte, useAlturaDaEsteira, useFaixa } from "./EstudioAltura";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
+import EstudioAvisoDoRosto from "./EstudioAvisoDoRosto";
 import EstudioEntrega from "./EstudioEntrega";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
@@ -763,7 +765,13 @@ function DetalheDoItem({
       "estudio-arte",
       corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade }),
     );
-    if (escolhas.modo === "roteiro") toast.success("Direção montada do roteiro", { description: "Sem custo de IA. Confira as lâminas na prancheta e gere." });
+    // Frente R3: lâminas longas chegam enxutas (uma chamada curta); a tela diz quantas.
+    const enxuto = textoDoMioloEnxuto(r);
+    if (escolhas.modo === "roteiro") {
+      toast.success("Direção montada do roteiro", { description: enxuto ? `${enxuto} Confira na prancheta e gere.` : "Sem custo de IA. Confira as lâminas na prancheta e gere." });
+    } else if (enxuto) {
+      toast.info(enxuto);
+    }
     return r;
   };
   const aoPreparar = () => {
@@ -1366,6 +1374,7 @@ function DetalheDoItem({
               />
             }
             versao={versaoNaTela}
+            avisoDoRosto={<EstudioAvisoDoRosto trabalhoId={trabalho.id} versao={versaoNaTela as any} />}
             onAbrirFotos={() => abrirFerramenta("fotos", false)}
             onAbrirReferencias={() => {
               setRefsAlvo("lamina");
@@ -1468,6 +1477,7 @@ function DetalheDoItem({
           roteiro={roteiro}
           postUnico={postUnico}
           partesDiretor={partesDiretor}
+          partesEnxugar={partesRefinar}
           onPreparar={preparar}
           onConcluido={aoPreparar}
           aviso={

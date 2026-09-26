@@ -148,7 +148,15 @@ describe("1. Os outros níveis mudam só os blocos previstos", () => {
     expect(s.cabeca).toContain("- Grade: Título enorme");
     expect(s.cabeca).toContain("os secundários podem mudar de forma, quantidade e lugar");
     expect(s["4. ASSUNTO"]).toContain("outra pose, outro gesto e outro ângulo de câmera");
-    for (const k of ["1. TEXTO EXATO", "2. LOGO", "3. MARCA", "5. FORMATO", "PROIBIDO"]) expect(s[k], k).toBe(hoje[k]);
+    for (const k of ["2. LOGO", "3. MARCA", "5. FORMATO", "PROIBIDO"]) expect(s[k], k).toBe(hoje[k]);
+    // Frente R3 (intencional): o texto fica no lugar do molde, com duas linhas a mais no fim da seção
+    // (a liberdade da Próxima e o destaque pontual dentro da paleta). O resto da seção é o de Idêntica.
+    const a = hoje["1. TEXTO EXATO"].split("\n"), b = s["1. TEXTO EXATO"].split("\n");
+    expect(b.filter((l) => a.indexOf(l) < 0)).toEqual([
+      "- Liberdade da Próxima: cada bloco pode andar um pouco e mudar a quebra de linha, mantendo o lado, o alinhamento, a ordem de leitura e a camada (na frente ou atrás do assunto) que tem na referência.",
+      "- Destaque pontual: a palavra-chave da headline (uma só) com um traço grosso de #E8742A atrás ou embaixo dela; a letra fica na cor do bloco.",
+    ]);
+    expect(a.filter((l) => b.indexOf(l) < 0)).toEqual([]);
     expect(p.textoExato).toBe(HOJE.replicar[0].textoExato);
   });
 

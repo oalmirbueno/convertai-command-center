@@ -216,6 +216,7 @@ export default function EstudioBaseDaLamina({
   referenciaNaHora,
   total,
   fidelidade,
+  avisoDoRosto,
 }: {
   card: CardDaDirecao;
   refsDoConjunto: string[] | null | undefined;
@@ -247,6 +248,8 @@ export default function EstudioBaseDaLamina({
   total?: number;
   /** Controle da fidelidade à referência desta lâmina (frente E); só aparece quando a lâmina replica referência. */
   fidelidade?: ReactNode;
+  /** Frente R2: aviso da conferência do rosto escolhido (só aviso, EstudioAvisoDoRosto). */
+  avisoDoRosto?: ReactNode;
 }) {
   const base = baseDaLamina(card, refsDoConjunto, continuo);
   const foraDaEmenda = !!versao && versao.modo === "panorama" && versao.fora_da_emenda === true;
@@ -352,6 +355,7 @@ export default function EstudioBaseDaLamina({
           <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> Esta versão recompôs a foto pela referência; confira o rosto.
         </p>
       )}
+      {avisoDoRosto}
     </div>
   );
 }

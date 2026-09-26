@@ -320,6 +320,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   // MCP 2.3: cérebro do cliente e ações nas mesas
   aceleriq_cerebro_do_cliente: 'clients:read',
   aceleriq_cerebro_registrar: 'clients:write',
+  aceleriq_client_instruction: 'clients:write',
   aceleriq_mesa_calendario_pedido: 'mesas:write',
   aceleriq_mesa_calendario_gravar: 'mesas:write',
   aceleriq_mesa_campanha_criar: 'mesas:write',
@@ -2536,6 +2537,44 @@ const cerebroRegistrarTool: ToolDefinition = {
   },
 };
 
+// ─── Orientação para o planejamento do cliente (2.4.0, 26/09) ─────────
+import { orientacaoDoCliente as _orientacaoDoCliente } from './mcp-orientacao-services.ts';
+
+const clientInstructionTool: ToolDefinition = {
+  name: 'aceleriq_client_instruction',
+  title: 'Orientação para o planejamento do cliente',
+  description:
+    'Manda uma orientação ou um prompt para o planejamento de UM cliente (ex.: "a partir de novembro, falar com donos de clínica, não com agências"; um calendário de pautas; o tom certo). Fica na área MCP do Contexto do cliente, na Mesa, e vale para o planejamento por padrão: o agente do Mês, o pedido livre e o gerador de meses leem as orientações ativas; a equipe pode desligar. publico: descreva o público-alvo quando a orientação muda para quem os conteúdos falam; o agente do Mês pergunta ao Jev se esse público é real para o negócio antes de adaptar (real: adapta e propõe atualizar o contexto; não real: mantém o registrado e avisa; dúvida: pergunta à equipe). Não gera conteúdo nem mexe na agenda: para isso, aceleriq_calendario_pedido.',
+  scopes: ['clients:write'] as const,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      instrucao: { type: 'string', minLength: 3, maxLength: 60000, description: 'A orientação ou o prompt, inteiro (pode colar pautas, legendas e calendário).' },
+      titulo: { type: 'string', maxLength: 200, description: 'Título curto para a lista do painel.' },
+      publico: { type: 'string', maxLength: 1200, description: 'Público-alvo que a orientação pede, quando muda para quem os conteúdos falam.' },
+      vale_para_planejamento: { type: 'boolean', description: 'Padrão true. false guarda sem entrar no planejamento até a equipe ligar.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'instrucao', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: UUID,
+      instrucao: z.string().min(3).max(60000),
+      titulo: z.string().max(200).optional(),
+      publico: z.string().max(1200).optional(),
+      vale_para_planejamento: z.boolean().optional(),
+      idempotency_key: CHAVE_IDEMPOTENTE,
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await _orientacaoDoCliente(parsed.data as Parameters<typeof _orientacaoDoCliente>[0], ctx);
+  },
+};
+
 // ─── Project Memory (persistent, large context per client/project) ─────────
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
 
@@ -3380,6 +3419,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas. Os ids das fotos aprovadas sao os que se anexam a campanha.', pelo_mcp: 'aceleriq_mesa_foto_contexto (leitura); anexar foto a campanha: aceleriq_mesa_campanha_salvar' },
   { area: 'Mesa do cliente', rota: '/mesa', para: 'Calendario do mes com o estrategista, campanhas (briefing, imagens, conteudos) e o Estudio de arte com entrega e aprovacao.', pelo_mcp: 'aceleriq_mesa_calendario_pedido, aceleriq_mesa_calendario_gravar, aceleriq_mesa_campanha_criar, aceleriq_mesa_campanha_salvar, aceleriq_mesa_enviar_para_aprovacao (acao, OAuth)' },
   { area: 'Cerebro do cliente', rota: '/mesa', para: 'O que o cliente ja ensinou por area (preferencias, o que evitar, ajustes, reprovacoes com motivo, o que performou), com o resumo que entra no prompt de cada agente.', pelo_mcp: 'aceleriq_cerebro_do_cliente (leitura), aceleriq_cerebro_registrar (escrita, sem duplicar)' },
+  { area: 'MCP do cliente', rota: '/mesa', para: 'Contexto do cliente > MCP: o que chegou pelo MCP (orientações, dossiê, memórias, arquivos, rascunho do Estúdio) e o que vale para o planejamento do agente do Mês e dos geradores.', pelo_mcp: 'aceleriq_client_instruction (orientação ou prompt para o planejamento, com o público quando muda), aceleriq_upsert_current_dossier, aceleriq_upsert_project_memory, aceleriq_upload_file' },
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
   { area: 'Contratos', rota: '/contratos', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
@@ -4040,6 +4080,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.
   cerebroDoClienteTool,
   cerebroRegistrarTool,
+  // MCP 2.4: orientação para o planejamento do cliente (área MCP do Contexto).
+  clientInstructionTool,
   calendarioPedidoTool,
   calendarioGravarTool,
   campanhaCriarTool,

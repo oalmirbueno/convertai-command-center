@@ -7,6 +7,7 @@ import { useMarcaDaMesa } from "./MesaContexto";
 import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
+import { laminasLongasDoRoteiro } from "../../../supabase/functions/_shared/limite-do-miolo";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -182,6 +183,11 @@ export interface InfoDoRoteiro {
   laminas: number;
   /** Contínuo pedido pelo estrategista (null = não disse). */
   continuo: boolean | null;
+  /**
+   * Lâminas (da 2 em diante) acima do limite de texto (frente R3): a preparação
+   * as enxuga numa chamada curta, com custo; 0 ou ausente (cache antigo) = grátis.
+   */
+  longas?: number;
 }
 
 /**
@@ -464,7 +470,7 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
       const doItem = itens.find((i) => !!i && typeof i === "object" && i.task_id === id) || null;
       const cards = doItem && Array.isArray(doItem.cards) ? (doItem.cards as unknown[]) : [];
       const continuo = doItem && typeof doItem.carrossel_infinito === "boolean" ? (doItem.carrossel_infinito as boolean) : null;
-      roteiros[id] = { laminas: cards.length, continuo };
+      roteiros[id] = { laminas: cards.length, continuo, longas: laminasLongasDoRoteiro(cards).length };
     }
   }
   return roteiros;

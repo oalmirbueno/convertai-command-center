@@ -30,6 +30,24 @@
 
 import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } from "./conhecimento-ads.ts";
 import { type FidelidadeDaReferencia, FIDELIDADES } from "./fidelidade-da-referencia.ts";
+import {
+  blocosDecorativos,
+  blocosDeLeitura,
+  capacidadeDoBloco,
+  dividirNasPartes,
+  hierarquiaDeCor,
+  jogadaSolta,
+  linhaDaHierarquia,
+  linhaDoDecorativo,
+  naOrdemDeLeitura,
+  linhaDoDestaque,
+  pedacosDoTitulo,
+  separarCoresRepetidas,
+  textoDaCamada,
+  candidatosDoTermo,
+  termoNoDesenho,
+  termoPadrao,
+} from "./jogada-do-texto.ts";
 
 /** Formato do criativo de anúncio (o carrossel de anúncio usa lâminas feed 4:5). */
 export type FormatoCriativo = Exclude<FormatoAds, "carrossel">;
@@ -828,10 +846,15 @@ export function promptDaLamina(
   const fonteTexto = marca.fontes.find((f) => f.papel === "texto")?.nome || marca.tipografiaCitada?.texto || fonteTitulo;
 
   const tamanhos = tamanhosDaLamina(blocos, capa);
+  // Frente R3 (dono, 26/09: "texto numa cor só da marca"): cor por papel dentro da paleta. A headline fica
+  // na cor de hoje; o apoio vai a um neutro legível diferente dela (sem foto de fundo); a palavra-chave
+  // ganha o destaque. Criativo de anúncio (Mesa Ads) fica como está.
+  const hierarquia = anuncio ? null : hierarquiaDeCor({ paleta, fundo: opcoes.fotoReal ? null : corFundo, titulo: corTexto });
+  const corDoApoio = hierarquia && !opcoes.fotoReal ? hierarquia.apoio || corTexto : corTexto;
   const linhasBlocos = blocos.map((b, i) => {
     const t = tamanhos[i];
     const fonte = b.papel === "headline" || b.papel === "numero" ? fonteTitulo : fonteTexto;
-    const cor = b.papel === "cta" || b.papel === "numero" ? corDestaque || corTexto : corTexto;
+    const cor = b.papel === "cta" || b.papel === "numero" ? corDestaque || corTexto : b.papel === "apoio" || b.papel === "subtitulo" ? corDoApoio : corTexto;
     return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}", letra de cerca de ${t.px} px numa arte de ${quadro.largura} x ${quadro.altura}, peso ${t.peso}` +
       `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}.`;
   });
@@ -880,6 +903,7 @@ export function promptDaLamina(
     "2. TEXTO EXATO (escrito pela própria arte, integrado à composição; só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
     `- Área do texto: ${descreverPosicao(caixa)}, alinhamento ${layout.alinhamento === "centro" ? "ao centro" : `à ${layout.alinhamento}`}, todos os blocos no mesmo eixo e com a mesma margem.`,
     ...linhasBlocos,
+    hierarquia ? linhaDaHierarquia({ ...hierarquia, apoio: corDoApoio }, blocos.some((b) => b.papel === "apoio" || b.papel === "subtitulo")) : "",
     temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
     `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
     "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
@@ -987,11 +1011,16 @@ export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCri
 // feita uma vez e guardada. Cada bloco do molde é mapeado em código para um
 // bloco de texto desta lâmina.
 
-/** Versão do formato do molde guardado: sobe quando o esquema muda (o cache antigo é lido de novo). */
-export const VERSAO_DO_MOLDE = 1;
+/**
+ * Versão do formato do molde guardado: sobe quando o esquema muda (o cache antigo é lido de novo).
+ * 2 (frente R3, 26/09): texto decorativo de fundo (papel decorativo, com a palavra) e a camada de cada bloco.
+ */
+export const VERSAO_DO_MOLDE = 2;
 
-export type PapelNoMolde = "titulo" | "subtitulo" | "texto" | "rotulo" | "cta" | "numero" | "marca" | "perfil";
-const PAPEIS_NO_MOLDE: PapelNoMolde[] = ["titulo", "subtitulo", "texto", "rotulo", "cta", "numero", "marca", "perfil"];
+export type PapelNoMolde = "titulo" | "subtitulo" | "texto" | "rotulo" | "cta" | "numero" | "marca" | "perfil" | "decorativo";
+const PAPEIS_NO_MOLDE: PapelNoMolde[] = ["titulo", "subtitulo", "texto", "rotulo", "cta", "numero", "marca", "perfil", "decorativo"];
+export type CamadaNoMolde = "frente" | "atras_do_assunto" | "sobre_o_assunto";
+const CAMADAS_NO_MOLDE: CamadaNoMolde[] = ["frente", "atras_do_assunto", "sobre_o_assunto"];
 
 export type BlocoDoMolde = Caixa & {
   papel: PapelNoMolde;
@@ -1004,6 +1033,10 @@ export type BlocoDoMolde = Caixa & {
   peso: string;
   cor: string | null;
   alinhamento: "esquerda" | "centro" | "direita";
+  /** Camada em relação ao assunto (molde 2); ausente no molde antigo = na frente. */
+  camada?: CamadaNoMolde;
+  /** Só no papel decorativo: a palavra como aparece na referência (para trocar, nunca para copiar). */
+  texto_decorativo?: string;
 };
 
 export type MoldeDaReferencia = {
@@ -1048,7 +1081,7 @@ export const ESQUEMA_MOLDE = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["papel", "x0", "y0", "x1", "y1", "altura_da_letra", "linhas", "caixa_alta", "familia", "largura_da_letra", "peso", "cor", "alinhamento"],
+          required: ["papel", "x0", "y0", "x1", "y1", "altura_da_letra", "linhas", "caixa_alta", "familia", "largura_da_letra", "peso", "cor", "alinhamento", "camada", "texto_decorativo"],
           properties: {
             papel: { type: "string", enum: PAPEIS_NO_MOLDE },
             ...caixaNoEsquema,
@@ -1060,6 +1093,8 @@ export const ESQUEMA_MOLDE = {
             peso: { type: "string", enum: ["black", "negrito", "medio", "regular", "fino"] },
             cor: { type: "string" },
             alinhamento: { type: "string", enum: ["esquerda", "centro", "direita"] },
+            camada: { type: "string", enum: CAMADAS_NO_MOLDE },
+            texto_decorativo: { type: "string" },
           },
         },
       },
@@ -1079,7 +1114,7 @@ export const ESQUEMA_MOLDE = {
 
 export const SISTEMA_MOLDE = `Você mede o LAYOUT de uma peça de referência para um estúdio replicar a mesma estrutura com outra marca e outro texto. Meça; não copie o texto nem a marca da peça.
 Coordenadas: porcentagem do quadro da imagem, de 0 a 100, com 0 no canto superior esquerdo (x para a direita, y para baixo). Cada caixa é a menor caixa que contém o elemento.
-- blocos: CADA bloco de texto visível, do maior para o menor, inclusive textos pequenos de canto, o @perfil (papel perfil) e a marca ou logo da peça (papel marca). papel: titulo (o maior texto), subtitulo, texto (corrido), rotulo (texto pequeno de canto, selo, data), cta (chamada para ação ou botão), numero (número protagonista). altura_da_letra: altura de uma letra maiúscula em % da altura do quadro. linhas: quantas linhas o bloco tem. caixa_alta: se está todo em maiúsculas. familia, largura_da_letra (condensada, normal, larga) e peso como se veem. cor: hex aproximado da letra. alinhamento do bloco.
+- blocos: CADA bloco de texto visível, do maior para o menor, inclusive textos pequenos de canto, o @perfil (papel perfil) e a marca ou logo da peça (papel marca). papel: titulo (o maior texto que se lê primeiro), subtitulo, texto (corrido), rotulo (texto pequeno de canto, selo, data), cta (chamada para ação ou botão), numero (número protagonista), decorativo (palavra ou número gigante de fundo, marca d'água ou palavra-tema que funciona como textura atrás do conteúdo, e não como o título lido primeiro). Quando o título está quebrado em partes em lugares diferentes, cada parte é um bloco titulo. altura_da_letra: altura de uma letra maiúscula em % da altura do quadro. linhas: quantas linhas o bloco tem. caixa_alta: se está todo em maiúsculas. familia, largura_da_letra (condensada, normal, larga) e peso como se veem. cor: hex aproximado da letra. alinhamento do bloco. camada: frente (o comum), atras_do_assunto (o assunto passa na frente e cobre parte das letras) ou sobre_o_assunto (as letras passam por cima do assunto). texto_decorativo: só no papel decorativo, a palavra como aparece; nos outros, string vazia.
 - assunto: o elemento visual principal (pessoa, produto, objeto, cena; nenhum quando a peça é só tipografia), com a caixa dele, uma descrição curta SEM marcas nem nomes e o enquadramento (plano, ângulo, recorte pela borda, olhar).
 - elementos: formas, faixas, fios, setas, telas de celular, molduras, ícones, texturas e fotos secundárias, até 8, com caixa e cor em hex.
 - fundo: como é o fundo (cor lisa, foto, gradiente, textura); cor_do_fundo: hex da cor dominante do fundo.
@@ -1120,11 +1155,14 @@ export function normalizarMolde(bruto: unknown): MoldeDaReferencia | null {
         peso: umDe(x.peso, ["black", "negrito", "medio", "regular", "fino"] as const, "regular"),
         cor: hexOk(x.cor),
         alinhamento: umDe(x.alinhamento, ["esquerda", "centro", "direita"] as const, "esquerda"),
-      };
+        // Molde 2 (frente R3): camada e a palavra do texto decorativo (só nele); o molde antigo segue sem os campos.
+        ...(x.camada !== undefined ? { camada: umDe(x.camada, CAMADAS_NO_MOLDE, "frente") } : {}),
+        ...(x.papel === "decorativo" && textoCurto(x.texto_decorativo, 40) ? { texto_decorativo: textoCurto(x.texto_decorativo, 40) } : {}),
+      } as BlocoDoMolde;
     })
     .filter((b) => b.x1 - b.x0 >= 0.5 && b.y1 - b.y0 >= 0.3)
     .slice(0, 12);
-  if (!blocos.some((b) => b.papel !== "marca" && b.papel !== "perfil")) return null;
+  if (!blocos.some((b) => b.papel !== "marca" && b.papel !== "perfil" && b.papel !== "decorativo")) return null;
   const a = o.assunto && typeof o.assunto === "object" ? o.assunto as Record<string, unknown> : null;
   const tipo = a ? umDe(a.tipo, ["pessoa", "produto", "objeto", "cena", "nenhum"] as const, "nenhum") : "nenhum";
   const elementos = (Array.isArray(o.elementos) ? o.elementos : [])
@@ -1176,7 +1214,12 @@ export function moldeNoQuadro(m: MoldeDaReferencia, origem: { largura: number; a
 
 /** O lugar de cada bloco de texto desta lâmina no molde, os blocos do molde que ficam sem texto e o lugar da marca. */
 export type MapaNoMolde = {
-  lugares: { bloco: BlocoTexto; alvo: BlocoDoMolde | null }[];
+  /**
+   * `partes` (frente R3): a referência quebra o título em blocos em lugares
+   * diferentes; a headline se divide neles, na ordem de leitura (o `alvo` é a
+   * primeira parte). Sem quebra: ausente.
+   */
+  lugares: { bloco: BlocoTexto; alvo: BlocoDoMolde | null; partes?: { texto: string; alvo: BlocoDoMolde }[] }[];
   vagos: BlocoDoMolde[];
   marca: BlocoDoMolde | null;
 };
@@ -1191,8 +1234,8 @@ export type MapaNoMolde = {
  */
 export function mapearNoMolde(blocos: BlocoTexto[], m: MoldeDaReferencia): MapaNoMolde {
   const area = (b: Caixa) => (b.x1 - b.x0) * (b.y1 - b.y0);
-  const livres = m.blocos
-    .filter((b) => b.papel !== "marca" && b.papel !== "perfil")
+  // O texto decorativo de fundo (frente R3) não recebe texto da lâmina: ele tem linha própria.
+  const livres = blocosDeLeitura(m)
     .sort((a, b) => b.altura_da_letra - a.altura_da_letra || area(b) - area(a));
   const tirar = (...testes: ((b: BlocoDoMolde) => boolean)[]) => {
     for (const t of testes) {
@@ -1204,12 +1247,30 @@ export function mapearNoMolde(blocos: BlocoTexto[], m: MoldeDaReferencia): MapaN
   const qualquer = () => true;
   const ordem: PapelBloco[] = ["headline", "numero", "subtitulo", "apoio", "cta", "selo"];
   const alvos = new Map<number, BlocoDoMolde | null>();
+  const partes = new Map<number, { texto: string; alvo: BlocoDoMolde }[]>();
   blocos
     .map((b, i) => ({ b, i }))
     .sort((x, y) => ordem.indexOf(x.b.papel) - ordem.indexOf(y.b.papel) || x.i - y.i)
     .forEach(({ b, i }) => {
       let alvo: BlocoDoMolde | null = null;
-      if (b.papel === "headline" || b.papel === "numero") alvo = tirar((x) => x.papel === "titulo" || x.papel === "numero", qualquer);
+      if (b.papel === "headline" || b.papel === "numero") {
+        alvo = tirar((x) => x.papel === "titulo" || x.papel === "numero", qualquer);
+        // Título quebrado na referência (frente R3): a headline se divide nos pedaços, na ordem de leitura.
+        const pedacos = alvo && b.papel === "headline" && !partes.size ? pedacosDoTitulo(alvo, livres) : [];
+        if (alvo && pedacos.length) {
+          const ordemDeLeitura = naOrdemDeLeitura([alvo].concat(pedacos));
+          const textos = dividirNasPartes(b.texto, ordemDeLeitura.map(capacidadeDoBloco));
+          if (textos.length > 1) {
+            const usados = ordemDeLeitura.slice(0, textos.length);
+            usados.forEach((u) => {
+              const k = livres.indexOf(u);
+              if (k >= 0) livres.splice(k, 1);
+            });
+            partes.set(i, textos.map((t, k) => ({ texto: t, alvo: usados[k] })));
+            alvo = usados[0];
+          }
+        }
+      }
       else if (b.papel === "cta") alvo = tirar((x) => x.papel === "cta", (x) => x.papel === "rotulo", (x) => x.papel === "texto", (x) => x.papel !== "titulo" && x.papel !== "numero");
       else if (b.papel === "subtitulo") alvo = tirar((x) => x.papel === "subtitulo", (x) => x.papel === "texto", (x) => x.papel !== "cta");
       else if (b.papel === "selo") alvo = tirar((x) => x.papel === "rotulo", (x) => x.papel !== "cta" && x.papel !== "titulo");
@@ -1217,7 +1278,7 @@ export function mapearNoMolde(blocos: BlocoTexto[], m: MoldeDaReferencia): MapaN
       alvos.set(i, alvo);
     });
   return {
-    lugares: blocos.map((b, i) => ({ bloco: b, alvo: alvos.get(i) ?? null })),
+    lugares: blocos.map((b, i) => (partes.has(i) ? { bloco: b, alvo: alvos.get(i) ?? null, partes: partes.get(i) } : { bloco: b, alvo: alvos.get(i) ?? null })),
     vagos: livres,
     marca: m.blocos.find((b) => b.papel === "marca") || m.blocos.find((b) => b.papel === "perfil") || null,
   };
@@ -1255,7 +1316,7 @@ function corLegivelNoFundo(cor: string | null, fundo: string | null, paleta: Mar
 }
 
 const ROTULO_DO_PAPEL_NO_MOLDE: Record<PapelNoMolde, string> = {
-  titulo: "TÍTULO", subtitulo: "SUBTÍTULO", texto: "TEXTO", rotulo: "TEXTO PEQUENO", cta: "CTA", numero: "NÚMERO", marca: "MARCA", perfil: "@PERFIL",
+  titulo: "TÍTULO", subtitulo: "SUBTÍTULO", texto: "TEXTO", rotulo: "TEXTO PEQUENO", cta: "CTA", numero: "NÚMERO", marca: "MARCA", perfil: "@PERFIL", decorativo: "TEXTO DECORATIVO",
 };
 
 /** Texto do bloco no molde: em caixa alta quando o bloco da referência é todo em maiúsculas. */
@@ -1300,6 +1361,12 @@ export type EntradaDoReplicar = {
    * posição), o lugar da logo, o formato e a linha das formas gráficas.
    */
   fidelidade?: FidelidadeDaReferencia | null;
+  /**
+   * Termo que substitui o texto decorativo de fundo da referência (frente R3):
+   * escolhido pelo Jev entre candidatos da copy. Sem ele (ou sem texto
+   * decorativo no molde), vale o termo padrão tirado da copy.
+   */
+  termoDecorativo?: string | null;
 };
 
 /**
@@ -1374,7 +1441,7 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
 
   // Layout medido (a regra de layout desta lâmina).
   const pos = (c: Caixa) => descreverPosicao(c);
-  const titulosDoMolde = m ? m.blocos.filter((b) => b.papel !== "marca" && b.papel !== "perfil").sort((a, b) => b.altura_da_letra - a.altura_da_letra) : [];
+  const titulosDoMolde = blocosDeLeitura(m).sort((a, b) => b.altura_da_letra - a.altura_da_letra);
   const desenho = (b: BlocoDoMolde) => [b.familia, b.largura_da_letra !== "normal" ? b.largura_da_letra : "", `peso ${b.peso}`, b.caixa_alta ? "caixa alta" : ""].filter(Boolean).join(", ");
   const layout: string[] = fid === "inspirada"
     ? m
@@ -1428,14 +1495,28 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     : [];
 
   // Texto exato por papel, no lugar do bloco equivalente do molde.
-  const linhaDoBloco = (b: BlocoTexto, alvo: BlocoDoMolde | null) => {
+  // Frente R3: cores da referência que viram a MESMA da marca separam de novo (a maior fica com a de hoje).
+  const coresNoMolde = new Map<BlocoDoMolde, string | null>();
+  if (mapa) {
+    const alvos: BlocoDoMolde[] = [];
+    mapa.lugares.forEach((l) => (l.partes ? l.partes.map((p) => p.alvo) : l.alvo ? [l.alvo] : []).forEach((a) => alvos.push(a)));
+    alvos.sort((a, b) => b.altura_da_letra - a.altura_da_letra);
+    const separadas = separarCoresRepetidas(
+      alvos.map((a) => ({ corDaReferencia: a.cor, corNaMarca: corLegivelNoFundo(corDaMarcaNoPapel(a.cor, paleta), fundoNaMarca, paleta) })),
+      paleta,
+      fundoNaMarca,
+    );
+    alvos.forEach((a, i) => coresNoMolde.set(a, separadas[i]));
+  }
+  const linhaDoBloco = (b: BlocoTexto, alvo: BlocoDoMolde | null, parte = "") => {
     const titulo = b.papel === "headline" || b.papel === "numero";
     const fonte = titulo ? fonteTitulo : fonteTexto;
     const t = textoNoMolde(b, alvo).replace(/\n/g, " / ");
     if (!alvo) {
       return `- ${b.papel.toUpperCase()}: "${t}"${fonte ? `, fonte ${fonte}` : ""}; ${m ? "a referência não tem bloco para ele: fica logo abaixo do bloco de texto principal, na mesma coluna e no mesmo alinhamento, menor que ele" : "no lugar e na escala do texto equivalente da referência (o título dela vira a headline, o texto menor vira o apoio)"}.`;
     }
-    const corNaMarca = corLegivelNoFundo(corDaMarcaNoPapel(alvo.cor, paleta), fundoNaMarca, paleta);
+    const corNaMarca = coresNoMolde.has(alvo) ? coresNoMolde.get(alvo) ?? null : corLegivelNoFundo(corDaMarcaNoPapel(alvo.cor, paleta), fundoNaMarca, paleta);
+    const camada = textoDaCamada(alvo.camada);
     const altura = Math.max(2.1, alvo.altura_da_letra);
     const estilo = [alvo.familia, alvo.largura_da_letra !== "normal" ? alvo.largura_da_letra : "", `peso ${alvo.peso}`].filter(Boolean).join(", ");
     // Texto maior que o bloco da referência (caracteres por linha pela altura da letra): cresce em linhas a partir do mesmo lugar.
@@ -1445,35 +1526,60 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     const cresce = !titulo && tamanhoDoTexto > cabe * 1.3
       ? `; o texto é maior que o da referência: use mais linhas (cerca de ${Math.ceil(tamanhoDoTexto / porLinha)}) crescendo a partir desse lugar, no mesmo alinhamento, sem invadir o título nem o assunto`
       : "";
-    return `- ${b.papel.toUpperCase()}: "${t}" no lugar do ${ROTULO_DO_PAPEL_NO_MOLDE[alvo.papel]} da referência, ${pos(alvo)}, ` +
+    return `- ${b.papel.toUpperCase()}${parte ? ` (${parte})` : ""}: "${t}" no lugar do ${ROTULO_DO_PAPEL_NO_MOLDE[alvo.papel]} da referência, ${pos(alvo)}, ` +
       `${alvo.caixa_alta ? "em CAIXA ALTA, " : ""}letra maiúscula com cerca de ${Math.round(altura * 10) / 10}% da altura do quadro (${px(altura, Q.altura)} px), ` +
       `${alvo.linhas > 1 && b.texto.indexOf("\n") < 0 && !cresce ? `em cerca de ${alvo.linhas} linhas, ` : ""}alinhado ${alvo.alinhamento === "centro" ? "ao centro" : `à ${alvo.alinhamento}`}` +
-      `${fonte ? `, fonte ${fonte} com o desenho da referência (${estilo})` : `, no desenho da referência (${estilo})`}${corNaMarca ? `, cor ${corNaMarca}` : ""}${cresce}.`;
+      `${fonte ? `, fonte ${fonte} com o desenho da referência (${estilo})` : `, no desenho da referência (${estilo})`}${corNaMarca ? `, cor ${corNaMarca}` : ""}${cresce}${camada ? `; ${camada}` : ""}.`;
   };
+  // Headline quebrada como o título da referência: uma linha por parte, cada uma no seu bloco.
+  const linhasDoLugar = (l: MapaNoMolde["lugares"][number]): string[] =>
+    l.partes && l.partes.length > 1
+      ? [`- A headline se divide em ${l.partes.length} blocos, como o título da referência: cada parte no seu lugar, lidas em sequência, com o mesmo desenho.`]
+        .concat(l.partes.map((p, k) => linhaDoBloco({ ...l.bloco, texto: p.texto }, p.alvo, `parte ${k + 1} de ${l.partes!.length}`)))
+      : [linhaDoBloco(l.bloco, l.alvo)];
+  // Cor por papel (frente R3) e texto decorativo de fundo trocado pelo termo do assunto.
+  const fundoDaHierarquia = fundoNaMarca || papelDaCor(paleta, "fundo", "primaria", "primária", "principal");
+  const hierarquia = hierarquiaDeCor({ paleta, fundo: fundoDaHierarquia });
+  const decorativo = blocosDecorativos(m).sort((a, b) => b.altura_da_letra - a.altura_da_letra)[0] ?? null;
+  const termo = decorativo && fid !== "criativa"
+    ? (e.termoDecorativo && e.termoDecorativo.trim()) || termoPadrao(candidatosDoTermo(blocos, e.card.texto_exato), decorativo.texto_decorativo)
+    : null;
+  const linhaDecorativa = decorativo && termo
+    ? linhaDoDecorativo({ fidelidade: fid, bloco: decorativo, termo, posicao: pos(decorativo), cor: corDaMarcaNoPapel(decorativo.cor, paleta) })
+    : "";
   // Inspirada e Criativa: o texto não tem posição (a composição é nova); na Inspirada o desenho da letra ainda vem do molde.
   const linhaSolta = (b: BlocoTexto, alvo: BlocoDoMolde | null) => {
     const titulo = b.papel === "headline" || b.papel === "numero";
     const fonte = titulo ? fonteTitulo : fonteTexto;
     const doMolde = fid === "inspirada" ? alvo : null;
     const t = (doMolde ? textoNoMolde(b, doMolde) : b.texto).replace(/\n/g, " / ");
-    const papel = titulo ? "o maior texto da lâmina" : b.papel === "cta" ? "a chamada para ação, destacada" : b.papel === "selo" ? "texto pequeno de selo" : "menor que o título e agrupado com ele";
-    return `- ${b.papel.toUpperCase()}: "${t}", ${papel}${fonte ? `, fonte ${fonte}` : ""}${doMolde ? `, no desenho da referência (${desenho(doMolde)})` : ""}.`;
+    const papel = titulo ? "o maior texto da lâmina" : b.papel === "cta" ? "a chamada para ação, destacada" : b.papel === "selo" ? "texto pequeno de selo" : "menor que o título";
+    const cor = titulo ? hierarquia.titulo : b.papel === "cta" ? hierarquia.cta : hierarquia.apoio;
+    return `- ${b.papel.toUpperCase()}: "${t}", ${papel}${fonte ? `, fonte ${fonte}` : ""}${doMolde ? `, no desenho da referência (${desenho(doMolde)})` : ""}${cor ? `, cor ${cor}` : ""}.`;
   };
   const texto = solta
     ? [
       "1. TEXTO EXATO (só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
       ...(mapa && fid === "inspirada" ? mapa.lugares.map((l) => linhaSolta(l.bloco, l.alvo)) : blocos.map((b) => linhaSolta(b, null))),
       temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
-      "- O lugar de cada bloco segue a composição nova desta lâmina, com hierarquia clara, os blocos no mesmo eixo e respiro em volta.",
+      // Frente R3: jogada própria no lugar do antigo "os blocos no mesmo eixo" (que travava o texto num molde só).
+      ...jogadaSolta({ fidelidade: fid, ordem: e.card.ordem, molde: m, papeis: blocos.map((b) => b.papel), temAssunto: e.fotos.length > 0 || !!(m && m.assunto), capa }),
+      linhaDaHierarquia(hierarquia, blocos.some((b) => b.papel === "apoio" || b.papel === "subtitulo")),
+      linhaDecorativa,
       "- Entrelinha dos títulos de 1,0 a 1,1, sem acento encostando na linha de cima; nenhuma letra cortada nem deformada.",
     ]
     : [
     "1. TEXTO EXATO (só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
-    ...(mapa ? mapa.lugares.map((l) => linhaDoBloco(l.bloco, l.alvo)) : blocos.map((b) => linhaDoBloco(b, null))),
+    ...(mapa ? mapa.lugares.reduce((todas: string[], l) => todas.concat(linhasDoLugar(l)), []) : blocos.map((b) => linhaDoBloco(b, null))),
     temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
     mapa && mapa.vagos.length
       ? `- Blocos de texto da referência sem texto nesta lâmina (${mapa.vagos.map((v) => `${ROTULO_DO_PAPEL_NO_MOLDE[v.papel].toLowerCase()} em ${pos(v)}`).join("; ")}): ficam sem texto nenhum; o espaço continua vazio ou com o elemento gráfico da referência.`
       : "",
+    linhaDecorativa,
+    fid === "proxima" && m
+      ? "- Liberdade da Próxima: cada bloco pode andar um pouco e mudar a quebra de linha, mantendo o lado, o alinhamento, a ordem de leitura e a camada (na frente ou atrás do assunto) que tem na referência."
+      : "",
+    fid === "proxima" ? linhaDoDestaque(hierarquia) : "",
     "- Entrelinha dos títulos de 1,0 a 1,1, sem acento encostando na linha de cima; nenhuma letra cortada nem deformada.",
   ];
 
@@ -1588,7 +1694,9 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     solta ? proibicoes.replace(FORMAS_SO_DA_REFERENCIA, FORMAS_NO_ESTILO) : proibicoes,
   ].filter((l) => l !== "").join("\n");
   const mapaUsado = fid === "criativa" ? null : mapa;
-  return { prompt, textoExato: textoExatoNoMolde(e.card.texto_exato, mapaUsado), mapa: mapaUsado };
+  // O termo decorativo também é texto escrito na arte: entra no texto exato das regras finais.
+  const exato = textoExatoNoMolde(e.card.texto_exato, mapaUsado);
+  return { prompt, textoExato: linhaDecorativa && decorativo && termo ? `${exato}\n${termoNoDesenho(termo, decorativo)}` : exato, mapa: mapaUsado };
 }
 
 const FORMAS_SO_DA_REFERENCIA = "Faixas e formas gráficas só as da referência, nas cores da marca.";

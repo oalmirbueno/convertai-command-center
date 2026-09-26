@@ -108,7 +108,11 @@ describe("estudio-arte: uma lamina por chamada", () => {
     const abertos = (antes.match(/\bfor \(/g) ?? []).length;
     // Fontes, fotos-elemento da equipe e referências (e, no replicar, fotos,
     // referências e anexos em ordem): todos fecham antes do gerador.
-    expect(abertos).toBeLessThanOrEqual(6);
+    // + frente R2 (26/09): na lâmina normal com rosto escolhido, a referência automática
+    // da marca cede a vaga às fotos do rosto; o laço só tira candidatos da lista, numa
+    // linha, e fecha antes de montar os anexos (não chama o gerador nem o Jev).
+    expect(abertos).toBeLessThanOrEqual(7);
+    expect(gerar).toContain('for (let i = candidatos.length - 1; i >= 0; i--) if (candidatos[i].tipo === "identidade") candidatos.splice(i, 1);');
     expect(antes.lastIndexOf("}")).toBeGreaterThan(antes.lastIndexOf("for ("));
   });
 
@@ -159,7 +163,8 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(c).toContain("const ordem = lerOrdem(corpo);");
     expect(c).toContain("alvo = versaoAtual(t, ordem);");
     expect(c).toContain("c.ordem === ordem && c.versao === versao");
-    expect(c).toContain("await verificar(ch, t, card, alvo.storage_path, kit, fontes)");
+    // Frente R3: o termo decorativo que a versão escreveu na arte entra no texto esperado.
+    expect(c).toContain("await verificar(ch, t, { ...card, texto_exato: textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }) }, alvo.storage_path, kit, fontes)");
     expect(c).not.toContain("chamarImagem(");
   });
 

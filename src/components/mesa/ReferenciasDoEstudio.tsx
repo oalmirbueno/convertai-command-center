@@ -251,6 +251,12 @@ export default function ReferenciasDoEstudio({
             ))}
           </div>
         )}
+        {/* Frente R2 (26/09): sem referência, o rosto vale na lâmina normal quando a direção pede pessoa. */}
+        {extrasDoEstudio && escolhidas.length === 0 && (
+          <div className="min-w-0 pt-1">
+            <EstudioRostoDaReferencia trabalhoId={trabalho.id} clientId={clientId} direcao={trabalho.direcao} bloqueado={entregue} onSalvar={salvarConfig} />
+          </div>
+        )}
       </div>
 
       <SeletorDeReferencias

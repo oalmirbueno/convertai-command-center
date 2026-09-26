@@ -85,6 +85,50 @@ import {
 } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
+  conferirLaminas,
+  DESCRICAO_DO_TEXTO_DA_LAMINA,
+  PALAVRAS_DA_CAPA,
+  PALAVRAS_DO_APOIO,
+  PALAVRAS_DO_TITULO,
+  REGRA_DE_MENOS_TEXTO,
+  textoDoAviso,
+} from "../_shared/menos-texto-nas-laminas.ts";
+import {
+  acaoDeAtualizarPublico,
+  blocoDaDecisaoDoPublico,
+  blocoDosArquivos,
+  caberNoOrcamento,
+  decidirPublico,
+  estadoDoPublico,
+  estimarTokens,
+  MAX_CHARS_DO_MCP_NO_MES,
+  MAX_CHARS_DO_MCP_NOS_GERADORES,
+  MAX_CHARS_MENSAGEM_DO_MES,
+  MAX_CHARS_POR_MENSAGEM_DO_HISTORICO,
+  MAX_MENSAGENS_DO_HISTORICO,
+  MESES_DA_AGENDA_LONGA,
+  MODELO_DO_AGENTE_DO_MES,
+  normalizarArquivos,
+  normalizarCriacao,
+  PAPEL_DO_AGENTE_DO_MES,
+  PERGUNTAS_DO_PUBLICO,
+  raciocinioDoMes,
+  REGRAS_DO_AGENTE_DO_MES,
+  resumoDosArquivos,
+  TETO_TOKENS_DO_PEDIDO,
+  TURNOS_COM_ARQUIVOS,
+  type ArquivoLido,
+  type DecisaoDoPublico,
+} from "./agente-mes-v2.ts";
+import { contextoMcpAtivo, itensMcpDoCliente, paraATela, FONTES_MCP, TABELA_DOS_ITENS_MCP, type FonteMcp } from "../_shared/contexto-mcp.ts";
+import {
+  acaoGuardadaNaMensagem,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import {
   blocoDaAgendaParaAcoes,
   campanhasComApelido,
   normalizarAcoesNaAgenda,
@@ -94,9 +138,12 @@ import {
   type AcaoNaAgenda,
   type CampanhaComApelido,
   type CampanhaDaAgenda,
+  type CamposDeTexto,
+  type EdicaoDeTexto,
   type PecaComApelido,
   type PecaDaAgenda,
   janelaDoPedidoLivre,
+  MAX_PECAS_NA_AGENDA_LONGA,
 } from "./acoes-agenda.ts";
 import {
   AGENTE_ESCOLHE,
@@ -263,6 +310,8 @@ type Item = {
   instrucao_arte?: string;
   /** Etapa da campanha (aquecimento, lançamento...), só em conteúdo de campanha. */
   etapa?: string;
+  /** Lâminas que passaram do limite de palavras e foram encurtadas no código (menos-texto-nas-laminas.ts). */
+  avisos_de_texto?: string[];
 };
 
 type Proposta = {
@@ -375,7 +424,7 @@ function normalizarFase(v: unknown): string {
   return s === "1" || s === "2" || s === "3" ? s : "2";
 }
 
-function normalizarCards(v: unknown, formato: Formato): Card[] {
+function normalizarCards(v: unknown, formato: Formato, avisos: string[] = []): Card[] {
   const lista = Array.isArray(v) ? v : [];
   let cards = lista
     .map((c, i) => {
@@ -391,14 +440,18 @@ function normalizarCards(v: unknown, formato: Formato): Card[] {
     .filter((c) => c.texto || c.ilustracao)
     .sort((a, b) => a.ordem - b.ordem);
   if (formato === "estatico") cards = cards.slice(0, 1);
-  return cards.slice(0, 20).map((c, i) => ({ ...c, ordem: i + 1 }));
+  // Menos texto nas lâminas: o que ainda passa do limite sai cortado no fim de frase, com aviso (sem nova chamada).
+  const conferido = conferirLaminas(cards.slice(0, 20).map((c, i) => ({ ...c, ordem: i + 1 })));
+  for (const a of conferido.avisos) avisos.push(textoDoAviso(a));
+  return conferido.cards;
 }
 
 export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: string): Item {
   const o = (bruto ?? {}) as Record<string, unknown>;
   const cardsBrutos = Array.isArray(o.cards) ? o.cards : [];
   const formato = normalizarFormato(o.formato, cardsBrutos);
-  const cards = normalizarCards(cardsBrutos, formato);
+  const avisosDeTexto: string[] = [];
+  const cards = normalizarCards(cardsBrutos, formato, avisosDeTexto);
   const tipo = String(o.tipo_conteudo ?? "") === "extra_sazonal" ? "extra_sazonal" : "principal";
   return {
     tema_id: texto(o.tema_id, 40),
@@ -425,6 +478,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     framework: normalizarFramework(o.framework),
     ...(texto(o.instrucao_arte, 600) ? { instrucao_arte: texto(o.instrucao_arte, 600) } : {}),
     ...(texto(o.etapa, 60) ? { etapa: texto(o.etapa, 60) } : {}),
+    ...(avisosDeTexto.length ? { avisos_de_texto: avisosDeTexto } : {}),
   };
 }
 
@@ -497,7 +551,7 @@ const ESQUEMA_TEMA = obj({
 const ESQUEMA_CARD = obj({
   ordem: S("integer"),
   funcao: S("string"),
-  texto: S("string"),
+  texto: S("string", { description: DESCRICAO_DO_TEXTO_DA_LAMINA }),
   ilustracao: S("string"),
   estilo: S("string"),
 });
@@ -685,6 +739,8 @@ type Contexto = {
   prompt: string;
   /** Marca por projeto (ex.: Acerbi ou CME, _shared/marca.ts); ausente no cliente sem marca. */
   marca?: string | null;
+  /** Itens do MCP que a equipe deixou valendo (orientações, dossiê, memórias, arquivos), já em texto (_shared/contexto-mcp.ts). */
+  mcp?: string;
 };
 
 const corta = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : v ?? null);
@@ -735,7 +791,11 @@ async function montarContexto(
   inicio: string,
   fim: string,
   marcaDoPedido: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
+  opcoes: { limiteMcp?: number } = {},
 ): Promise<Contexto> {
+  // Itens do MCP ativos para o cliente: todos os geradores leem (o agente do Mês lê com teto maior, à parte).
+  const limiteMcp = opcoes.limiteMcp ?? MAX_CHARS_DO_MCP_NOS_GERADORES;
+  const mcpP = limiteMcp > 0 ? contextoMcpAtivo(servico, clientId, limiteMcp) : Promise.resolve({ texto: "", ativos: 0 });
   const marca = await marcaDoPedido;
   const hoje = new Date();
   const ha60 = new Date(hoje.getTime() - 60 * 86_400_000).toISOString();
@@ -876,6 +936,7 @@ async function montarContexto(
     planos: planosUnicos((planos.data ?? []) as Array<{ texto: string }>),
     datasOcupadas,
     prompt,
+    mcp: (await mcpP).texto,
   };
 }
 
@@ -909,7 +970,7 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     ...(ctx.cerebro === null ? { memoria_do_estrategista: ctx.memoria } : { cerebro_do_cliente: ctx.cerebro || null }),
     planos_combinados_com_a_equipe: ctx.planos,
   };
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}`;
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
@@ -940,6 +1001,8 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Siga o cérebro do cliente (cerebro_do_cliente): o que evitar, ajustes pedidos, reprovações com motivo e o que performou; regra do dono vale sobre sugestão sua.
 - Português do Brasil, sem travessões.
 - Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
+- CONTEXTO VINDO DO MCP (itens ativos) vale como contexto do cliente: siga as orientações.
+${REGRA_DE_MENOS_TEXTO}
 - Responda somente com o JSON pedido.`;
 
 /** Base de marketing de cada momento (Frente H), com teto: calendário editorial ou plano de campanha, voz, títulos, CTA e anti-genérico. */
@@ -1036,6 +1099,25 @@ async function resolverModelo(
   const explicito = typeof raciocinio === "string" && raciocinio.trim() ? raciocinio.trim() : null;
   const r = explicito ?? raciocinioPadrao(modelo.raciocinio ?? [], opcoes.pesquisaWeb === true, opcoes.preferido);
   return { modelo, raciocinio: r || undefined, raciocinioExplicito: explicito !== null };
+}
+
+/**
+ * Modelo do agente do Mês (dono, 26/09: "mais de 1 milhão de tokens e o Sol 6
+ * alto"): o pedido explícito; senão o marcado no catálogo com o papel
+ * "agente_mes"; senão o GPT-6 Sol (openrouter:openai/gpt-6-sol). Raciocínio
+ * alto. Só este agente: o padrão do estrategista das outras telas não muda.
+ */
+async function resolverModeloDoMes(modeloId: unknown, raciocinio: unknown): Promise<{ modelo: ModeloIa; raciocinio: string | undefined }> {
+  let modelo: ModeloIa | null = null;
+  if (typeof modeloId === "string" && modeloId.trim()) modelo = await carregarModelo(modeloId.trim(), "texto");
+  if (!modelo) modelo = await modeloPadrao(PAPEL_DO_AGENTE_DO_MES);
+  if (!modelo) modelo = await carregarModelo(MODELO_DO_AGENTE_DO_MES, "texto").catch(() => null);
+  if (!modelo) {
+    console.warn("[agente-calendario] GPT-6 Sol fora do catálogo; agente do mês no modelo do estrategista");
+    modelo = await modeloPadrao(AGENTE);
+  }
+  if (!modelo) throw new ErroHttp(409, "sem_modelo_padrao", "Nenhum modelo do catálogo está ativo para o agente do mês.");
+  return { modelo, raciocinio: raciocinioDoMes(modelo.raciocinio ?? [], raciocinio) };
 }
 
 /**
@@ -2995,7 +3077,8 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
-- copy: a legenda completa do post.
+- copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas.
+- Menos texto nas lâminas: capa só com o gancho curto (até ${PALAVRAS_DA_CAPA} palavras); cada lâmina seguinte com UMA ideia, título curto (até ${PALAVRAS_DO_TITULO} palavras) na 1ª linha e apoio curto (até ${PALAVRAS_DO_APOIO} palavras) na 2ª, em sequência passo a passo até o CTA; linguagem clara para o cliente final, sem jargão. Confira cada lâmina antes de responder e reescreva agora a que passar.
 - tipo_conteudo: principal (ou extra_sazonal para data comemorativa).
 - status: planejado.
 - tipo_editorial e framework: um de cada, pela base de técnica; a funcao de cada card nomeia o passo do framework.
@@ -3020,8 +3103,10 @@ const ESQUEMA_PEDIDO = {
 async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const mensagem = texto(corpo.mensagem, 4000);
+  // 60 mil caracteres: o refazer e o criar do agente do Mês mandam 12 linhas com a referência de cada uma.
+  const mensagem = texto(corpo.mensagem, 60_000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer que o agente prepare.");
+  const arquivosDoPedido = normalizarArquivos(corpo.arquivos);
   const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
   const { fim, uteis } = janelaDoPedidoLivre(inicio, mensagem);
 
@@ -3052,7 +3137,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 ${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
-${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
+${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
 
 TAREFA: faça exatamente o que o pedido diz.
 - Quantidade: a pedida (se não disser, 1 conteúdo).
@@ -3105,7 +3190,14 @@ ${REGRAS_DOS_ITENS}`;
 
   const resposta = texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`;
   await registrarMensagens(servico, conversaId, clientId, [
-    { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((c) => ({ caminho: c })) },
+    {
+      papel: "usuario",
+      conteudo: mensagem,
+      anexos: [
+        ...anexos.caminhos.map((c) => ({ caminho: c })),
+        ...(arquivosDoPedido.lidos.length || arquivosDoPedido.nao_lidos.length ? [resumoDosArquivos(arquivosDoPedido.lidos, arquivosDoPedido.nao_lidos, null)] : []),
+      ],
+    },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
   ]);
   return json({ proposta, resposta, conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
@@ -4335,11 +4427,36 @@ export const ESQUEMA_PLANEJAMENTO = {
           type: "array",
           items: obj({ ref: S("string"), nome: S("string"), status: S("string"), periodo_inicio: S("string"), periodo_fim: S("string") }),
         },
+        editar_textos: {
+          type: "array",
+          items: obj({
+            ref: S("string"),
+            titulo: S("string"),
+            tema: S("string"),
+            gancho: S("string"),
+            copy: S("string"),
+            cta: S("string"),
+            publico: S("string"),
+            cards: { type: "array", items: obj({ ordem: S("integer"), texto: S("string", { description: DESCRICAO_DO_TEXTO_DA_LAMINA }) }) },
+          }),
+        },
       }),
       type: ["object", "null"],
     },
     gerar_conteudos: {
       ...obj({ resumo: S("string"), meses: { type: "array", items: S("string") }, frequencia_semanal: S(["integer", "null"]) }),
+      type: ["object", "null"],
+    },
+    criar_conteudos: {
+      ...obj({
+        resumo: S("string"),
+        orientacao: S("string"),
+        itens: { type: "array", items: obj({ data: S("string"), formato: S("string"), tema: S("string"), referencia: S("string") }) },
+      }),
+      type: ["object", "null"],
+    },
+    atualizar_publico: {
+      ...obj({ publico: S("string"), motivo: S("string") }),
       type: ["object", "null"],
     },
   }),
@@ -4485,15 +4602,58 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
 
 type ContextoDasAcoes = { pecas: PecaComApelido[]; campanhas: CampanhaComApelido[]; projeto: { id: string; nome: string } | null; frequencia: number | null };
 
+const linhaCurta = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+
+/** Público, gancho, lâminas e legenda do item gravado, numa linha (o agente acha o que casa com o pedido). */
+export function detalheDaPeca(item: Record<string, unknown> | null | undefined): string {
+  if (!item) return "";
+  const partes: string[] = [];
+  if (item.publico) partes.push(`público: ${linhaCurta(item.publico, 220)}`);
+  if (item.gancho) partes.push(`gancho: ${linhaCurta(item.gancho, 200)}`);
+  const cards = Array.isArray(item.cards) ? (item.cards as Array<Record<string, unknown>>) : [];
+  if (cards.length) partes.push(`lâminas: ${cards.slice(0, 10).map((c, i) => `${Number(c.ordem) || i + 1}) ${linhaCurta(c.texto, 160)}`).join(" ")}`);
+  if (item.cta) partes.push(`cta: ${linhaCurta(item.cta, 120)}`);
+  if (item.copy) partes.push(`legenda: ${linhaCurta(item.copy, 320)}`);
+  return partes.join("; ");
+}
+
+/** Item gravado de cada tarefa (propostas gravadas que citam a tarefa), em lotes de 80 ids. */
+async function itensGravadosDasTarefas(servico: SupabaseClient, clientId: string, taskIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const porTarefa = new Map<string, Record<string, unknown>>();
+  const ids = taskIds.filter((x) => UUID.test(x));
+  for (let k = 0; k < ids.length; k += 80) {
+    const lote = ids.slice(k, k + 80);
+    const { data } = await servico.from("calendario_propostas").select("itens, criado_em").eq("client_id", clientId).eq("status", "gravada")
+      .overlaps("task_ids", lote).order("criado_em", { ascending: false }).limit(60);
+    for (const p of (data ?? []) as Array<{ itens: unknown }>) {
+      for (const i of Array.isArray(p.itens) ? (p.itens as Array<Record<string, unknown>>) : []) {
+        const t = typeof i?.task_id === "string" ? i.task_id : "";
+        if (t && lote.indexOf(t) >= 0 && !porTarefa.has(t)) porTarefa.set(t, i);
+      }
+    }
+  }
+  return porTarefa;
+}
+
 /**
  * Peças da agenda (arte e vídeo) da marca aberta, do começo do mês até o fim
  * do 3º mês seguinte, com apelido para o agente (acoes-agenda.ts), mais as
  * campanhas do cliente (c1, c2...), a campanha de cada peça (pela proposta que
  * a gravou) e o projeto de social da marca (para gerar meses inteiros).
+ * Agente do Mês v2: `desde` e `meses` alargam a janela (12 meses), `max` sobe o
+ * teto de peças e `detalhe` junta público, gancho, lâminas e legenda de cada uma.
  */
-async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string, marca: MarcaDoCliente | null, mes: string): Promise<ContextoDasAcoes> {
-  const inicio = `${mes}-01`;
-  const ate = fimDoMes(somarMesesAoMes(mes, 3));
+async function pecasDaAgendaParaAcoes(
+  servico: SupabaseClient,
+  clientId: string,
+  marca: MarcaDoCliente | null,
+  mes: string,
+  opcoes: { desde?: string; meses?: number; max?: number; detalhe?: boolean } = {},
+): Promise<ContextoDasAcoes> {
+  const desde = opcoes.desde && /^\d{4}-\d{2}$/.test(opcoes.desde) ? opcoes.desde : mes;
+  const inicio = `${desde}-01`;
+  const ate = fimDoMes(somarMesesAoMes(desde, opcoes.meses ?? 3));
+  const limite = Math.min(1000, Math.max(400, (opcoes.max ?? 0) + 50));
   const { data: projetos } = await servico.from("projects").select("id, name, project_type").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
   const listaDeProjetos = (projetos ?? []) as Array<{ id: string; name: string | null; project_type: string | null }>;
   const ids = await projetosDoClienteNaMarca(servico, clientId, marca, listaDeProjetos.map((p) => p.id));
@@ -4504,7 +4664,7 @@ async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string,
   const [tarefas, campanhas, propostas] = await Promise.all([
     ids.length
       ? servico.from("tasks").select("id, title, due_date, delivery_type, status").in("project_id", ids).is("deleted_at", null)
-        .gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(400)
+        .gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(limite)
       : Promise.resolve({ data: [] as unknown[] }),
     servico.from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(30),
     servico.from("calendario_propostas").select("parametros, itens, task_ids").eq("client_id", clientId).not("parametros->>campanha_id", "is", null)
@@ -4522,15 +4682,22 @@ async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string,
     }
     for (const t of Array.isArray(p.task_ids) ? p.task_ids : []) if (daProposta && !campanhaDaTarefa.has(t)) campanhaDaTarefa.set(t, daProposta);
   }
-  const pecas = ((tarefas.data ?? []) as PecaDaAgenda[]).map((t) => {
+  let pecas = ((tarefas.data ?? []) as PecaDaAgenda[]).map((t) => {
     const c = campanhaDaTarefa.get(t.id);
     return c && nomeDaCampanha.has(c) ? { ...t, campanha: nomeDaCampanha.get(c) ?? null } : t;
   });
+  if (opcoes.detalhe && pecas.length) {
+    const itens = await itensGravadosDasTarefas(servico, clientId, pecas.map((p) => p.id)).catch(() => new Map<string, Record<string, unknown>>());
+    pecas = pecas.map((p) => {
+      const d = detalheDaPeca(itens.get(p.id));
+      return d ? { ...p, detalhe: d } : p;
+    });
+  }
   const { data: plano } = await servico.from("agente_memoria").select("texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
     .like("texto", `${PREFIXO_PLANO}${mes}:%`).order("criado_em", { ascending: false }).limit(1);
   const textoDoPlanoDoMes = String(((plano ?? []) as Array<{ texto: string }>)[0]?.texto ?? "");
   const f = /frequ[êe]ncia[^0-9]{0,30}(\d{1,2})/i.exec(textoDoPlanoDoMes);
-  return { pecas: pecasComApelido(pecas), campanhas: campanhasComApelido(listaDeCampanhas), projeto, frequencia: f ? Number(f[1]) : null };
+  return { pecas: pecasComApelido(pecas, opcoes.max), campanhas: campanhasComApelido(listaDeCampanhas), projeto, frequencia: f ? Number(f[1]) : null };
 }
 
 /** A proposta pedida ou a aberta mais recente do estrategista que começa neste mês. */
@@ -4694,52 +4861,157 @@ export function diferencaDaProposta(antes: { temas: Tema[]; itens: Item[] }, dep
   };
 }
 
+/** Arquivos lidos de um pedido, guardados no bucket mesa para os pedidos seguintes. */
+const PREFIXO_DA_LEITURA = "pedidos/leitura-";
+
+async function guardarLeitura(servico: SupabaseClient, clientId: string, lidos: ArquivoLido[]): Promise<string | null> {
+  if (!lidos.length) return null;
+  const caminho = `${clientId}/${PREFIXO_DA_LEITURA}${crypto.randomUUID()}.json`;
+  const corpo = JSON.stringify({ lidos: lidos.map((a) => ({ nome: a.nome, tipo: a.tipo, origem: a.origem, texto: a.texto })) });
+  const { error } = await servico.storage.from("mesa").upload(caminho, new Blob([corpo], { type: "application/json" }), { contentType: "application/json", upsert: false });
+  if (error) {
+    console.error("[agente-calendario] leitura dos arquivos nao guardada", { client_id: clientId, erro: error.message });
+    return null;
+  }
+  return caminho;
+}
+
+/** Texto dos arquivos dos últimos pedidos desta conversa (os que foram guardados). */
+async function leiturasAnteriores(servico: SupabaseClient, clientId: string, caminhos: string[]): Promise<ArquivoLido[]> {
+  const saida: ArquivoLido[] = [];
+  for (const c of caminhos) {
+    if (!c.startsWith(`${clientId}/${PREFIXO_DA_LEITURA}`) || c.indexOf("..") >= 0) continue;
+    try {
+      const { data } = await servico.storage.from("mesa").download(c);
+      if (!data) continue;
+      const j = JSON.parse(await data.text()) as { lidos?: unknown[] };
+      const n = normalizarArquivos({ lidos: j.lidos });
+      saida.push(...n.lidos);
+    } catch {
+      // leitura antiga que não abre: segue sem ela
+    }
+  }
+  return saida;
+}
+
+/**
+ * Público do pedido (dono, 26/09): o Jev julga se o público que o pedido traz é
+ * real para este cliente, com o estado nomeado (negócio, oferta, público
+ * registrado, o pedido e evidências). Sem Jev (sem chave, fora do ar), o
+ * agente segue o público registrado. Cobrança na carteira do cliente.
+ */
+async function julgarPublico(
+  clientId: string,
+  entrada: { negocio: unknown; oferta: unknown; publico: unknown; prompt: string; evidencias: unknown[] },
+  referenciaId: string,
+  userId: string,
+): Promise<DecisaoDoPublico> {
+  if (String(entrada.prompt || "").trim().length < 25) return { decisao: "sem_publico_novo", traz: null, coerente: null, frase: "" };
+  try {
+    const r = await jevPerguntar({ state: estadoDoPublico(entrada), questions: PERGUNTAS_DO_PUBLICO });
+    await cobrarJev(r, { clientId, tarefa: "conversa", referencia: { tipo: REF_AGENTE_DO_MES, id: referenciaId }, criadoPor: userId });
+    return decidirPublico(r.answers);
+  } catch (e) {
+    console.warn("[agente-calendario] jev do publico indisponivel", { codigo: e instanceof JevErro ? e.codigo : "erro" });
+    return decidirPublico(null);
+  }
+}
+
+const textoDoCampo = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+
 /**
  * planejar_mes { client_id, mensagem, mes (AAAA-MM ou AAAA-MM-01), proposta_id?,
- * anexos?, modelo_id?, raciocinio? }: o agente do mês conversando sobre o
- * planejamento (estratégia, datas, campanhas, frequência, formatos, pilares)
- * deste mês e dos próximos, com o prompt geral do cliente e mais contexto
- * (publicado, aprovado, métricas, campanhas, hypes e a agenda dos próximos
- * meses). O que a conversa decide vira o plano combinado do mês (memória do
- * estrategista, que o gerador de meses segue). Mudança na proposta aberta do
- * mês NÃO é gravada aqui: volta como sugestão na mensagem do agente
- * (anexo tipo mudanca, com a diferença) e só entra com aplicar_mudanca.
+ * anexos?, arquivos?, modelo_id?, raciocinio? }: o agente do mês conversando e
+ * fazendo. v2 (26/09): GPT-6 Sol com raciocínio alto (resolverModeloDoMes),
+ * contexto grande (agenda dos próximos 12 meses com o detalhe de cada peça,
+ * contexto completo do cliente, itens do MCP ativos, conversa recente,
+ * arquivos lidos no navegador e os dos pedidos anteriores), num orçamento de
+ * tokens que nunca corta a mensagem do dono. O que a conversa decide vira o
+ * plano combinado do mês. Mudança na proposta aberta, ações na agenda
+ * gravada (inclusive reescrever textos), conteúdos novos de material colado
+ * (criar_conteudos) e a troca do público do contexto chegam como cartões:
+ * nada muda sem a equipe confirmar.
  */
 async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const mensagem = texto(corpo.mensagem, 4000);
+  const mensagem = texto(corpo.mensagem, MAX_CHARS_MENSAGEM_DO_MES);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer conversar sobre o mês.");
   const mes = mesDoPedido(corpo.mes);
   if (!mes) throw new ErroHttp(400, "mes_invalido", "Informe o mês do planejamento (AAAA-MM).");
   const inicio = `${mes}-01`;
   const fim = fimDoMes(mes);
+  const hoje = hojeSaoPaulo();
+  const mesDeHoje = hoje.slice(0, 7);
+  const arquivos = normalizarArquivos(corpo.arquivos);
 
   const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim);
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
+  const marcaP = marcaDaChamada(servico, clientId, corpo);
 
-  const [ctx, extra, imagens, conversaId, acoesCtx] = await Promise.all([
-    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
+  const [ctx, extra, imagens, conversaId, acoesCtx, mcp, kit] = await Promise.all([
+    // O MCP entra à parte, com teto maior e dentro do orçamento.
+    montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 }),
     contextoDoPlanejamento(servico, clientId, mes),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
-    marcaDaChamada(servico, clientId, corpo).then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes))
-      .catch((): ContextoDasAcoes => ({ pecas: [], campanhas: [], projeto: null, frequencia: null })),
+    marcaP.then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes, {
+      desde: mes < mesDeHoje ? mes : mesDeHoje,
+      meses: MESES_DA_AGENDA_LONGA - 1,
+      max: MAX_PECAS_NA_AGENDA_LONGA,
+      detalhe: true,
+    })).catch((): ContextoDasAcoes => ({ pecas: [], campanhas: [], projeto: null, frequencia: null })),
+    contextoMcpAtivo(servico, clientId, MAX_CHARS_DO_MCP_NO_MES),
+    servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
   ]);
   const pecasDaAgenda = acoesCtx.pecas;
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+  const contextoDoKit = ((kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {}) as Record<string, unknown>;
+  const publicoAtual = textoDoCampo(contextoDoKit.publico).trim();
 
+  // Conversa recente (até 24 mensagens, 40 mil caracteres cada, 240 mil no total, as mais novas primeiro).
   const { data: historico } = await servico
     .from("agente_mensagens")
-    .select("papel, conteudo")
+    .select("papel, conteudo, anexos")
     .eq("conversa_id", conversaId)
     .eq("client_id", clientId)
     .order("criado_em", { ascending: false })
-    .limit(16);
-  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
-    .reverse()
-    .filter((m) => m.papel === "usuario" || m.papel === "agente")
-    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 3000) }));
+    .limit(MAX_MENSAGENS_DO_HISTORICO);
+  const linhasDoHistorico = (historico ?? []) as Array<{ papel: string; conteudo: string; anexos: unknown }>;
+  const anteriores: Array<{ papel: "usuario" | "agente"; conteudo: string }> = [];
+  let usadoNoHistorico = 0;
+  for (const m of linhasDoHistorico) {
+    if (m.papel !== "usuario" && m.papel !== "agente") continue;
+    const c = String(m.conteudo || "").slice(0, MAX_CHARS_POR_MENSAGEM_DO_HISTORICO);
+    if (usadoNoHistorico + c.length > 240_000) break;
+    usadoNoHistorico += c.length;
+    anteriores.unshift({ papel: m.papel as "usuario" | "agente", conteudo: c });
+  }
+  const caminhosDeLeitura: string[] = [];
+  for (const m of linhasDoHistorico) {
+    if (m.papel !== "usuario" || caminhosDeLeitura.length >= TURNOS_COM_ARQUIVOS) continue;
+    for (const a of Array.isArray(m.anexos) ? (m.anexos as Array<Record<string, unknown>>) : []) {
+      if (a && a.tipo === "arquivos_lidos" && typeof a.caminho_texto === "string" && a.caminho_texto) caminhosDeLeitura.push(a.caminho_texto);
+    }
+  }
+
+  const promptDoPedido = [mensagem, arquivos.lidos.map((a) => a.texto).join("\n").slice(0, 6000), mcp.texto.slice(0, 3000)].filter(Boolean).join("\n\n");
+  const [modeloDoMes, lidosAntes, decisaoDoPublico] = await Promise.all([
+    resolverModeloDoMes(corpo.modelo_id, corpo.raciocinio),
+    leiturasAnteriores(servico, clientId, caminhosDeLeitura),
+    julgarPublico(clientId, {
+      negocio: contextoDoKit.negocio,
+      oferta: contextoDoKit.oferta,
+      publico: contextoDoKit.publico,
+      prompt: promptDoPedido,
+      evidencias: [
+        ctx.dossie ? ctx.dossie.slice(0, 1500) : "",
+        textoDoCampo(contextoDoKit.diferenciais).slice(0, 800),
+        extra.aprovados_pelo_cliente_nos_ultimos_90_dias.slice(0, 12).map((a) => a.titulo).join("; "),
+        extra.publicados_nos_ultimos_90_dias.slice(0, 12).map((a) => a.titulo).join("; "),
+      ],
+    }, conversaId, chamador.userId),
+  ]);
+  const { modelo, raciocinio } = modeloDoMes;
 
   const blocoDaProposta = proposta
     ? `\nPROPOSTA DO ESTRATEGISTA PARA ESTE MÊS (JSON; ${editavel ? "pode sugerir mudanças" : "já gravada na agenda: não muda por aqui"}):\n${JSON.stringify({
@@ -4751,28 +5023,39 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     })}\n`
     : "\nAinda não existe proposta aberta do estrategista para este mês.\n";
 
-  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: proposta?.parametros ?? {} })}
+  const tarefa = `
+MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
+${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
+${mensagem}
+${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}
+${REGRAS_DO_AGENTE_DO_MES}
 
-CONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):
-${JSON.stringify(extra)}${blocoDoPlano(ctx, inicio)}
-${blocoDaProposta}${blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas)}
-MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hojeSaoPaulo()}.
-MENSAGEM DA EQUIPE: ${mensagem}
-${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências ou fotos). Use o conteúdo delas com fidelidade.\n` : ""}
-TAREFA: você é o estrategista planejando o mês junto com a equipe, numa conversa de verdade (não um formulário). Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda e o plano combinado.
-- Converse sobre estratégia, datas, campanhas, frequência, formatos e pilares deste mês e, quando fizer sentido, dos próximos meses. Traga números reais quando existirem e diga quando um dado não existe.
-- Se faltar algo importante para decidir, faça no máximo 2 perguntas objetivas no fim da resposta.
-- Nunca invente dado, resultado, data ou evento.
+TAREFA: você é o estrategista planejando e executando o mês junto com a equipe. Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda, o plano combinado, o MCP e os arquivos.
+- Nunca invente dado, resultado, data ou evento. Traga números reais quando existirem e diga quando um dado não existe.
 Devolva:
-- resposta: sua fala na conversa, em português claro, de 2 a 10 frases (pode usar lista curta).
+- resposta: sua fala, curta e direta (1 a 4 frases; lista curta só quando ajudar), dizendo o que vai acontecer.
 - plano_do_mes: o plano COMPLETO combinado para ${mes} (resumo de 2 a 6 frases com o que foi decidido, frequencia_semanal, pilares, formatos, datas e campanhas), só quando esta conversa decidiu ou mudou algo do mês; senão null. Mantenha o que já estava combinado e continua valendo.
 - proximos_meses: para cada mês seguinte sobre o qual a conversa decidiu algo, { mes: "AAAA-MM", plano } com o plano completo daquele mês; senão null.
 - mudancas: ${editavel
     ? `só quando a equipe pedir para mudar a proposta do mês (trocar, tirar ou acrescentar temas ou conteúdos, mudar datas). resumo: o que muda, em 1 a 3 frases. temas: só os temas novos ou alterados (mantenha o id do alterado; tema novo recebe id novo). temas_removidos: ids dos temas que saem. itens: só os conteúdos novos ou alterados, completos (mantenha o tema_id do alterado). itens_removidos: tema_id dos conteúdos que saem. Conteúdo com "gravado": true já está na agenda e não muda aqui. A equipe vê a mudança antes de aplicar. Sem pedido de mudança, null.`
     : "sempre null (não há proposta aberta para este mês; para gerar o mês, a equipe usa o gerador de meses, que segue o plano combinado)."}
 ${REGRA_DAS_ACOES_NA_AGENDA}
-Datas só de segunda a sexta entre ${inicio} e ${fim}. Formato só carrossel ou estatico.
+- criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel ou estatico; reels, vídeo e story viram carrossel e você avisa), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
+- atualizar_publico: só quando a DECISÃO SOBRE O PÚBLICO mandar adaptar: { publico (o público novo, completo, como deve ficar no contexto), motivo (1 frase) }. Senão null.
+Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato só carrossel ou estatico.
 ${editavel ? REGRAS_DOS_ITENS : ""}`;
+
+  const tokensDoHistorico = anteriores.reduce((n, m) => n + estimarTokens(m.conteudo), 0);
+  const orcamento = caberNoOrcamento([
+    { chave: "arquivos", texto: blocoDosArquivos(arquivos.lidos), prioridade: 95, minimo: 60_000 },
+    { chave: "contexto", texto: `${contextoEmTexto(ctx, { inicio, fim, parametros: proposta?.parametros ?? {} })}${blocoDoPlano(ctx, inicio)}`, prioridade: 90, minimo: 24_000 },
+    { chave: "agenda", texto: blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas, "dos próximos 12 meses"), prioridade: 85, minimo: 40_000 },
+    { chave: "proposta", texto: blocoDaProposta, prioridade: 80, minimo: 8_000 },
+    { chave: "mcp", texto: mcp.texto, prioridade: 70, minimo: 8_000 },
+    { chave: "planejamento", texto: `\nCONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):\n${JSON.stringify(extra)}`, prioridade: 50, minimo: 4_000 },
+    { chave: "arquivos_anteriores", texto: blocoDosArquivos(lidosAntes, "ARQUIVOS DE PEDIDOS ANTERIORES DESTA CONVERSA"), prioridade: 40 },
+  ], TETO_TOKENS_DO_PEDIDO, estimarTokens(sistemaDoCalendario(ctx, "mes")) + estimarTokens(tarefa) + tokensDoHistorico + imagens.imagens.length * 1_600);
+  const pedido = `${orcamento.partes.map((x) => x.texto).filter(Boolean).join("\n")}\n${tarefa}`;
 
   const s = await chamarTexto({
     clientId,
@@ -4783,6 +5066,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
     raciocinio,
+    // Lista longa de conteúdos (criar_conteudos, editar_textos) cabe inteira na resposta.
+    maxTokensSaida: 48_000,
     esquemaJson: ESQUEMA_PLANEJAMENTO,
     referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
     criadoPor: chamador.userId,
@@ -4793,7 +5078,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const planos: Array<{ mes: string; texto: string; id: string | null }> = [];
   const doMes = r.plano_do_mes ? textoDoPlano(mes, r.plano_do_mes) : null;
   if (doMes) planos.push({ mes, texto: doMes, id: await salvarPlano(servico, clientId, mes, doMes, conversaId) });
-  for (const x of (Array.isArray(r.proximos_meses) ? r.proximos_meses : []).slice(0, 6)) {
+  for (const x of (Array.isArray(r.proximos_meses) ? r.proximos_meses : []).slice(0, 12)) {
     const o = (x ?? {}) as Record<string, unknown>;
     const m = mesDoPedido(o.mes);
     if (!m || m <= mes || planos.some((p) => p.mes === m)) continue;
@@ -4820,18 +5105,47 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     }
   }
 
-  // Apagar ou mudar de data peças já gravadas: só a lista; a equipe confirma (executar_acao_agenda).
+  // Peças já gravadas (apagar, refazer, datas, formatos, textos, campanhas): só a lista; a equipe confirma.
   const acaoNaAgenda = normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas);
   // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
-  const geracao = normalizarGeracao(r.gerar_conteudos, hojeSaoPaulo().slice(0, 7), acoesCtx.projeto, acoesCtx.frequencia ?? 3);
+  const geracao = normalizarGeracao(r.gerar_conteudos, mesDeHoje, acoesCtx.projeto, acoesCtx.frequencia ?? 3);
+  // Material colado ou anexado: conteúdos novos nas datas e formatos dele (a tela cria em lotes, com custo antes).
+  const criacao = normalizarCriacao(r.criar_conteudos, hoje);
+  // Público novo e real: proposta de atualizar o contexto (Confirmar e Desfazer).
+  const acaoDoPublico = acaoDeAtualizarPublico(r.atualizar_publico, publicoAtual, decisaoDoPublico, clientId);
 
   const resposta = texto(r.resposta, 6000) || "Anotado.";
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
   if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
   if (geracao) anexosDaResposta.push(geracao);
+  if (criacao) anexosDaResposta.push(criacao);
+  if (acaoDoPublico) anexosDaResposta.push(acaoDoPublico as unknown as Record<string, unknown>);
+  if (decisaoDoPublico.decisao === "adaptar" || decisaoDoPublico.decisao === "manter" || decisaoDoPublico.decisao === "perguntar") {
+    anexosDaResposta.push({ tipo: "decisao_publico", ...decisaoDoPublico });
+  }
+  const contextoUsado = {
+    tipo: "contexto_usado",
+    modelo: modelo.id,
+    raciocinio: raciocinio ?? null,
+    tokens: orcamento.tokens,
+    pecas: pecasDaAgenda.length,
+    mcp: mcp.ativos,
+    arquivos: arquivos.lidos.length + lidosAntes.length,
+    cortes: orcamento.cortes.map((c) => c.chave),
+  };
+  anexosDaResposta.push(contextoUsado);
+
+  const caminhoDaLeitura = await guardarLeitura(servico, clientId, arquivos.lidos);
   await registrarMensagens(servico, conversaId, clientId, [
-    { papel: "usuario", conteudo: mensagem, anexos: imagens.caminhos.map((c) => ({ caminho: c })) },
+    {
+      papel: "usuario",
+      conteudo: mensagem,
+      anexos: [
+        ...imagens.caminhos.map((c) => ({ caminho: c })),
+        ...(arquivos.lidos.length || arquivos.nao_lidos.length ? [resumoDosArquivos(arquivos.lidos, arquivos.nao_lidos, caminhoDaLeitura)] : []),
+      ],
+    },
   ]);
   const { data: msgAgente, error: erroMsg } = await servico
     .from("agente_mensagens")
@@ -4849,6 +5163,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   if (erroMsg || !msgAgente) {
     throw new ErroHttp(503, "resposta_nao_guardada", "O agente respondeu, mas a resposta não foi guardada. Tente de novo.", { uso_id: s.usoId, custo_usd: s.custoUsd });
   }
+  console.log("[agente-calendario] planejar_mes v2", { client_id: clientId, modelo: modelo.id, raciocinio, tokens: orcamento.tokens, cortes: orcamento.cortes, pecas: pecasDaAgenda.length, mcp: mcp.ativos, arquivos: arquivos.lidos.length, publico: decisaoDoPublico.decisao });
 
   return json({
     resposta,
@@ -4856,6 +5171,11 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     mudanca,
     acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes } : null,
     gerar_conteudos: geracao,
+    criar_conteudos: criacao,
+    acao_publico: acaoDoPublico,
+    decisao_publico: decisaoDoPublico,
+    contexto_usado: contextoUsado,
+    arquivos: { lidos: arquivos.lidos.length, nao_lidos: arquivos.nao_lidos.length, cortados: arquivos.cortados },
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,
@@ -5158,6 +5478,193 @@ async function arquivarPecas(servico: SupabaseClient, chamador: Chamador, client
   return saida;
 }
 
+type AntesDoTexto = {
+  title: string;
+  description: string | null;
+  proposta_id: string | null;
+  indice: number | null;
+  item: Record<string, unknown> | null;
+  post_id: string | null;
+  post: { title: string | null; default_caption: string | null } | null;
+};
+type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?: string; antes?: AntesDoTexto; campos?: string[] };
+
+/** Item de proposta com os textos novos (lâminas conferidas pela regra de menos texto). */
+export function itemComTextosNovos(item: Record<string, unknown>, campos: CamposDeTexto): Record<string, unknown> {
+  const novo: Record<string, unknown> = { ...item };
+  for (const k of ["tema", "gancho", "copy", "cta", "publico"] as const) if (campos[k]) novo[k] = campos[k];
+  if (campos.cards && campos.cards.length && Array.isArray(item.cards)) {
+    const porOrdem = new Map(campos.cards.map((c) => [c.ordem, c.texto]));
+    const cards = (item.cards as Array<Record<string, unknown>>).map((c, i) => {
+      const ordem = Number(c.ordem) || i + 1;
+      return porOrdem.has(ordem) ? { ...c, texto: porOrdem.get(ordem) } : c;
+    }) as Array<{ ordem: number; funcao?: string; texto: string }>;
+    const conferido = conferirLaminas(cards);
+    novo.cards = conferido.cards;
+    if (conferido.avisos.length) novo.avisos_de_texto = conferido.avisos.map(textoDoAviso);
+  }
+  return novo;
+}
+
+/** Descrição da tarefa sem roteiro gravado: os textos novos por cima do que já estava. */
+export function descricaoComTextosNovos(antes: string | null, campos: CamposDeTexto): string {
+  const linhas: string[] = ["Texto revisado pelo agente do mês:"];
+  if (campos.tema) linhas.push(`Tema: ${campos.tema}`);
+  if (campos.publico) linhas.push(`Público: ${campos.publico}`);
+  if (campos.gancho) linhas.push(`Gancho: ${campos.gancho}`);
+  for (const c of campos.cards || []) linhas.push(`Card ${c.ordem}: ${c.texto}`);
+  if (campos.cta) linhas.push(`CTA: ${campos.cta}`);
+  if (campos.copy) linhas.push("", `Legenda (copy):\n${campos.copy}`);
+  const topo = linhas.join("\n");
+  const resto = String(antes || "").trim();
+  return (resto ? `${topo}\n\nTexto anterior:\n${resto}` : topo).slice(0, LIMITE_DESCRICAO);
+}
+
+/**
+ * editar_textos na execução: lê cada peça (travas iguais às do mudar formato),
+ * troca título, descrição, o item da proposta gravada (o Estúdio lê o roteiro
+ * dali) e o post editorial ligado; guarda o antes para o Desfazer. Propostas
+ * são regravadas uma vez cada (várias peças da mesma proposta não se atropelam).
+ */
+async function reescreverTextos(servico: SupabaseClient, clientId: string, edicoes: EdicaoDeTexto[]): Promise<ResultadoDoTexto[]> {
+  type Preparado = { ed: EdicaoDeTexto; tarefa: { id: string; title: string; description: string | null }; postId: string | null };
+  const resultados: ResultadoDoTexto[] = [];
+  const prontos: Preparado[] = [];
+  for (let k = 0; k < edicoes.length; k += 8) {
+    await Promise.all(edicoes.slice(k, k + 8).map(async (ed) => {
+      try {
+        const t = await tarefaDoCliente(servico, ed.task_id, clientId);
+        if (t.deleted_at) throw new Error("Esta peça não está mais na agenda.");
+        const trava = await travaDaPeca(servico, clientId, t.id);
+        if (trava) throw new Error(trava);
+        const [{ data: tarefa }, { data: vinculo }] = await Promise.all([
+          servico.from("tasks").select("id, title, description").eq("id", t.id).maybeSingle(),
+          servico.from("editorial_post_internal").select("post_id").eq("task_id", t.id).maybeSingle(),
+        ]);
+        if (!tarefa) throw new Error("Esta peça não está mais na agenda.");
+        prontos.push({ ed, tarefa: tarefa as Preparado["tarefa"], postId: (vinculo as { post_id?: string } | null)?.post_id ?? null });
+      } catch (e) {
+        resultados.push({ task_id: ed.task_id, titulo: ed.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível reescrever." });
+      }
+    }));
+  }
+  if (!prontos.length) return resultados;
+
+  // Proposta gravada de cada peça (o roteiro que o Estúdio lê).
+  const porTarefa = new Map<string, { propostaId: string; indice: number }>();
+  const propostas = new Map<string, { id: string; itens: Array<Record<string, unknown>>; campanhaId: string | null }>();
+  const ids = prontos.map((x) => x.tarefa.id);
+  for (let k = 0; k < ids.length; k += 80) {
+    const lote = ids.slice(k, k + 80);
+    const { data } = await servico.from("calendario_propostas").select("id, itens, parametros, criado_em").eq("client_id", clientId).eq("status", "gravada")
+      .overlaps("task_ids", lote).order("criado_em", { ascending: false }).limit(80);
+    for (const p of (data ?? []) as Array<{ id: string; itens: unknown; parametros: Record<string, unknown> | null }>) {
+      const itens = Array.isArray(p.itens) ? (p.itens as Array<Record<string, unknown>>) : [];
+      itens.forEach((i, indice) => {
+        const t = typeof i?.task_id === "string" ? i.task_id : "";
+        if (t && lote.indexOf(t) >= 0 && !porTarefa.has(t)) {
+          porTarefa.set(t, { propostaId: p.id, indice });
+          if (!propostas.has(p.id)) propostas.set(p.id, { id: p.id, itens: itens.slice(), campanhaId: typeof p.parametros?.campanha_id === "string" ? p.parametros.campanha_id : null });
+        }
+      });
+    }
+  }
+  const campanhas = new Map<string, CampanhaNoItem | null>();
+  const campanhaDoItem = async (id: string | null): Promise<CampanhaNoItem | null> => {
+    if (!id || !UUID.test(id)) return null;
+    if (!campanhas.has(id)) {
+      const c = await carregarCampanha(servico, id).catch(() => null);
+      campanhas.set(id, c && c.client_id === clientId ? await campanhaNaAgenda(servico, c).catch(() => null) : null);
+    }
+    return campanhas.get(id) ?? null;
+  };
+
+  const tocadas = new Set<string>();
+  for (const x of prontos) {
+    const { ed, tarefa } = x;
+    try {
+      const onde = porTarefa.get(tarefa.id) || null;
+      const prop = onde ? propostas.get(onde.propostaId) || null : null;
+      const itemAntes = prop && onde ? prop.itens[onde.indice] : null;
+      let titulo = ed.campos.titulo || "";
+      let descricao: string;
+      if (prop && onde && itemAntes) {
+        const novo = itemComTextosNovos(itemAntes, ed.campos);
+        prop.itens[onde.indice] = novo;
+        tocadas.add(prop.id);
+        if (!titulo && ed.campos.tema && tituloNormal(String(tarefa.title || "")) === tituloNormal(String(itemAntes.tema || ""))) titulo = ed.campos.tema;
+        const campanha = await campanhaDoItem((typeof novo.campanha_id === "string" ? novo.campanha_id : null) || prop.campanhaId);
+        descricao = descricaoDoItem(novo as unknown as Item, prop.id, onde.indice, campanha);
+      } else {
+        if (!titulo && ed.campos.tema) titulo = ed.campos.tema;
+        descricao = descricaoComTextosNovos(tarefa.description, ed.campos);
+      }
+      let post: AntesDoTexto["post"] = null;
+      if (x.postId && (titulo || ed.campos.copy)) {
+        const { data: p } = await servico.from("editorial_posts").select("title, default_caption").eq("id", x.postId).maybeSingle();
+        post = (p as AntesDoTexto["post"]) ?? null;
+        const mudar: Record<string, unknown> = {};
+        if (titulo) mudar.title = titulo.slice(0, 200);
+        if (ed.campos.copy) mudar.default_caption = ed.campos.copy;
+        if (post && Object.keys(mudar).length) await servico.from("editorial_posts").update(mudar).eq("id", x.postId);
+      }
+      const mudarTarefa: Record<string, unknown> = { description: descricao };
+      if (titulo) mudarTarefa.title = titulo.slice(0, 200);
+      const { error } = await servico.from("tasks").update(mudarTarefa).eq("id", tarefa.id).is("deleted_at", null);
+      if (error) throw new Error("Não foi possível reescrever esta peça. Tente de novo.");
+      resultados.push({
+        task_id: tarefa.id,
+        titulo: ed.titulo,
+        ok: true,
+        campos: Object.keys(ed.campos),
+        antes: {
+          title: tarefa.title,
+          description: tarefa.description,
+          proposta_id: prop ? prop.id : null,
+          indice: onde ? onde.indice : null,
+          item: itemAntes,
+          post_id: post ? x.postId : null,
+          post,
+        },
+      });
+    } catch (e) {
+      resultados.push({ task_id: ed.task_id, titulo: ed.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível reescrever." });
+    }
+  }
+  for (const id of tocadas) {
+    const prop = propostas.get(id);
+    if (!prop) continue;
+    const { error } = await servico.from("calendario_propostas").update({ itens: prop.itens }).eq("id", id).eq("client_id", clientId);
+    if (error) console.error("[agente-calendario] roteiro reescrito nao gravado na proposta", { proposta_id: id, code: error.code });
+  }
+  return resultados;
+}
+
+/** Desfaz o editar_textos: volta título, descrição, post e o item da proposta (quando ele ainda é o da peça). */
+async function desfazerTextos(servico: SupabaseClient, clientId: string, lista: ResultadoDoTexto[]): Promise<number> {
+  let voltaram = 0;
+  const porProposta = new Map<string, Array<{ indice: number; task_id: string; item: Record<string, unknown> }>>();
+  for (const r of lista.filter((x) => x.ok && x.antes)) {
+    const a = r.antes as AntesDoTexto;
+    const { error } = await servico.from("tasks").update({ title: a.title, description: a.description }).eq("id", r.task_id);
+    if (!error) voltaram++;
+    if (a.post_id && a.post) await servico.from("editorial_posts").update({ title: a.post.title, default_caption: a.post.default_caption }).eq("id", a.post_id);
+    if (a.proposta_id && a.item && a.indice !== null) {
+      const l = porProposta.get(a.proposta_id) || [];
+      l.push({ indice: a.indice, task_id: r.task_id, item: a.item });
+      porProposta.set(a.proposta_id, l);
+    }
+  }
+  for (const [id, trocas] of porProposta) {
+    const { data } = await servico.from("calendario_propostas").select("itens").eq("id", id).eq("client_id", clientId).maybeSingle();
+    const itens = Array.isArray((data as { itens?: unknown } | null)?.itens) ? ((data as { itens: Array<Record<string, unknown>> }).itens).slice() : null;
+    if (!itens) continue;
+    for (const t of trocas) if (itens[t.indice] && itens[t.indice].task_id === t.task_id) itens[t.indice] = t.item;
+    await servico.from("calendario_propostas").update({ itens }).eq("id", id).eq("client_id", clientId);
+  }
+  return voltaram;
+}
+
 /**
  * executar_acao_agenda { mensagem_id, descartar? }: o botão de confirmar da
  * equipe. Apaga (arquivar_item_agenda, com as mesmas travas: pedido do
@@ -5215,6 +5722,9 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     }
   }
 
+  // Reescrever textos (sem gerar do zero): título, tema, gancho, lâminas, copy, CTA e público.
+  const textos = await reescreverTextos(servico, m.client_id, Array.isArray(acao.editar_textos) ? acao.editar_textos : []);
+
   const campanhas: ResultadoDaCampanha[] = [];
   for (const ed of Array.isArray(acao.editar_campanhas) ? acao.editar_campanhas : []) {
     try {
@@ -5242,8 +5752,9 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   const movidos = mudancas.filter((r) => r.ok).length;
   const trocados = formatos.filter((r) => r.ok).length;
   const editadas = campanhas.filter((r) => r.ok).length;
-  const total = resultados.length + refeitos.length + mudancas.length + formatos.length + campanhas.length;
-  const falhas = total - apagados - refeitosOk - movidos - trocados - editadas;
+  const reescritos = textos.filter((r) => r.ok).length;
+  const total = resultados.length + refeitos.length + mudancas.length + formatos.length + campanhas.length + textos.length;
+  const falhas = total - apagados - refeitosOk - movidos - trocados - editadas - reescritos;
   const anexo = await gravar({
     ...acao,
     executada_em: new Date().toISOString(),
@@ -5253,6 +5764,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     mudancas,
     formatos,
     campanhas_editadas: campanhas,
+    textos,
   });
   const partes: string[] = [];
   if (apagados) partes.push(`${apagados} ${apagados === 1 ? "peça apagada" : "peças apagadas"}`);
@@ -5260,6 +5772,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   if (movidos) partes.push(`${movidos} ${movidos === 1 ? "data mudada" : "datas mudadas"}`);
   if (trocados) partes.push(`${trocados} ${trocados === 1 ? "formato mudado" : "formatos mudados"}`);
   if (editadas) partes.push(`${editadas} ${editadas === 1 ? "campanha editada" : "campanhas editadas"}`);
+  if (reescritos) partes.push(`${reescritos} ${reescritos === 1 ? "peça reescrita" : "peças reescritas"}`);
   if (falhas) partes.push(`${falhas} não ${falhas === 1 ? "pôde ser feita" : "puderam ser feitas"} (motivo na lista)`);
   await registrarMensagens(servico, m.conversa_id, m.client_id, [
     { papel: "sistema", conteudo: `Agenda: ${partes.join(", ") || "nada mudou"}. Dá para desfazer.` },
@@ -5267,10 +5780,10 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_acao_na_agenda", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
-    input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, refazer: refazer.length, mudar_data: mudancas.length, mudar_formato: formatos.length, editar_campanhas: campanhas.length },
+    input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, refazer: refazer.length, mudar_data: mudancas.length, mudar_formato: formatos.length, editar_campanhas: campanhas.length, editar_textos: textos.length },
     success: falhas === 0, statusCode: 200, durationMs: 0, resultRef: m.id,
   });
-  return json({ anexo, apagados, refeitos: refeitosOk, movidos, formatos: trocados, campanhas: editadas, falhas });
+  return json({ anexo, apagados, refeitos: refeitosOk, movidos, formatos: trocados, campanhas: editadas, textos: reescritos, falhas });
 }
 
 /** desfazer_acao_agenda { mensagem_id }: devolve o que foi apagado ou refeito, as datas, os formatos e as campanhas de antes. */
@@ -5296,6 +5809,7 @@ async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     const { error } = await servico.from("tasks").update({ delivery_type: r.de }).eq("id", r.task_id).eq("delivery_type", r.para as string);
     if (!error) voltaram++;
   }
+  voltaram += await desfazerTextos(servico, m.client_id, (Array.isArray(acao.textos) ? acao.textos : []) as ResultadoDoTexto[]);
   for (const r of ((Array.isArray(acao.campanhas_editadas) ? acao.campanhas_editadas : []) as ResultadoDaCampanha[]).filter((x) => x.ok && x.antes)) {
     const { error } = await servico.from("mesa_campanhas").update(r.antes as Record<string, unknown>).eq("id", r.campanha_id).eq("client_id", m.client_id);
     if (!error) voltaram++;
@@ -5345,7 +5859,126 @@ async function registrarGeracao(servico: SupabaseClient, chamador: Chamador, cor
   return json({ anexo: anexos[i] });
 }
 
+// ------------------------------------------------------------ MCP do cliente (26/09)
+
+/** itens_mcp { client_id }: o que chegou pelo MCP para o cliente e o que vale para o planejamento. */
+async function itensMcp(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const { itens, tabela } = await itensMcpDoCliente(servico, clientId);
+  return json({ itens: paraATela(itens), tabela });
+}
+
+/** ativar_item_mcp { client_id, fonte, item_id, ativo }: liga ou desliga um item como contexto do planejamento. */
+async function ativarItemMcp(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const fonte = String(corpo.fonte ?? "") as FonteMcp;
+  const itemId = String(corpo.item_id ?? "");
+  if (FONTES_MCP.indexOf(fonte) < 0 || !UUID.test(itemId)) throw new ErroHttp(400, "item_mcp_invalido", "Item do MCP inválido.");
+  if (typeof corpo.ativo !== "boolean") throw new ErroHttp(400, "ativo_invalido", "Diga se o item vale (ativo true ou false).");
+  const { itens } = await itensMcpDoCliente(servico, clientId);
+  const item = itens.find((i) => i.fonte === fonte && i.id === itemId);
+  if (!item) throw new ErroHttp(404, "item_mcp_inexistente", "Este item do MCP não é deste cliente ou não existe mais.");
+  const { error } = await servico.from(TABELA_DOS_ITENS_MCP).upsert(
+    { client_id: clientId, fonte, item_id: itemId, ativo: corpo.ativo, atualizado_por: chamador.userId, atualizado_em: new Date().toISOString() },
+    { onConflict: "client_id,fonte,item_id" },
+  );
+  if (error) {
+    const falta = error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message || "");
+    throw new ErroHttp(falta ? 409 : 503, falta ? "falta_sql_mcp" : "item_mcp_nao_gravado", falta ? "A escolha ainda não pode ser guardada: falta aplicar o SQL M-01 no banco." : "Não foi possível guardar a escolha. Tente de novo.");
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_item_mcp", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["clients:write"],
+    input: { client_id: clientId, fonte, item_id: itemId, ativo: corpo.ativo }, success: true, statusCode: 200, durationMs: 0, resultRef: itemId,
+  });
+  return json({ item: { ...paraATela([item])[0], ativo: corpo.ativo, padrao: false } });
+}
+
+/** Proposta acao_agente do agente do Mês (hoje: atualizar o público do contexto), com o acesso conferido. */
+async function propostaDoMes(chamador: Chamador, corpo: Record<string, unknown>) {
+  try {
+    return await acaoGuardadaNaMensagem(clienteServico(), corpo.mensagem_id, (clientId) => exigirAcessoAoCliente(chamador, clientId), { acaoId: corpo.acao_id, agente: "mes" });
+  } catch (e) {
+    if (e instanceof ErroDaAcao) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+}
+
+async function lerContextoDoKit(servico: SupabaseClient, clientId: string): Promise<{ existe: boolean; contexto: Record<string, unknown> }> {
+  const { data, error } = await servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle();
+  if (error) throw new Error("Não foi possível ler o contexto do cliente.");
+  const c = (data as { contexto?: unknown } | null)?.contexto;
+  return { existe: !!data, contexto: c && typeof c === "object" && !Array.isArray(c) ? { ...(c as Record<string, unknown>) } : {} };
+}
+
+async function gravarPublicoNoKit(servico: SupabaseClient, clientId: string, publico: unknown, existe: boolean, contexto: Record<string, unknown>, userId: string) {
+  const novo = { ...contexto };
+  if (publico === null || publico === undefined || publico === "") delete novo.publico;
+  else novo.publico = publico;
+  const agora = new Date().toISOString();
+  const { error } = existe
+    ? await servico.from("cliente_kit_marca").update({ contexto: novo, contexto_atualizado_em: agora, atualizado_por: userId }).eq("client_id", clientId)
+    : await servico.from("cliente_kit_marca").insert({ client_id: clientId, contexto: novo, contexto_atualizado_em: agora, atualizado_por: userId });
+  if (error) throw new Error("Não foi possível gravar o público no contexto. Tente de novo.");
+}
+
+/** executar_acao_agente { mensagem_id, acao_id?, descartar? }: a equipe confirmou (ou cancelou) a troca do público do contexto. */
+async function executarAcaoDoMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDoMes(chamador, corpo);
+  const clientId = guardada.mensagem.client_id;
+  let r;
+  try {
+    r = await confirmarAcaoGuardada(guardada, async (item) => {
+      if (item.operacao !== "atualizar_publico" || item.alvo_id !== clientId) throw new Error("Operação desconhecida.");
+      const atual = await lerContextoDoKit(servico, clientId);
+      const antes = atual.contexto.publico ?? null;
+      await gravarPublicoNoKit(servico, clientId, String(item.para ?? ""), atual.existe, atual.contexto, chamador.userId);
+      return { desfazer: { publico_antes: antes } };
+    }, { descartar: corpo.descartar === true, userId: chamador.userId, lote: 1 });
+  } catch (e) {
+    if (e instanceof ErroDaAcao) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  const feitos = r.resultados.filter((x) => x.ok).length;
+  if (guardada.mensagem.conversa_id) {
+    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{ papel: "sistema", conteudo: `Público do contexto: ${textoDoResultado(r.resultados)}.` }]);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_publico_do_contexto", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["clients:write"],
+    input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: feitos === r.resultados.length, statusCode: 200, durationMs: 0, resultRef: guardada.mensagem.id,
+  });
+  return json({ anexo: r.anexo, feitos, falhas: r.resultados.length - feitos });
+}
+
+/** desfazer_acao_agente { mensagem_id, acao_id? }: o público do contexto volta ao de antes. */
+async function desfazerAcaoDoMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDoMes(chamador, corpo);
+  const clientId = guardada.mensagem.client_id;
+  let r;
+  try {
+    r = await desfazerAcaoGuardada(guardada, async (x) => {
+      const atual = await lerContextoDoKit(servico, clientId);
+      await gravarPublicoNoKit(servico, clientId, (x.desfazer || {}).publico_antes ?? null, atual.existe, atual.contexto, chamador.userId);
+    }, { userId: chamador.userId });
+  } catch (e) {
+    if (e instanceof ErroDaAcao) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+  if (guardada.mensagem.conversa_id) {
+    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{ papel: "sistema", conteudo: "Público do contexto: voltou ao de antes." }]);
+  }
+  return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  itens_mcp: itensMcp,
+  ativar_item_mcp: ativarItemMcp,
+  executar_acao_agente: executarAcaoDoMes,
+  desfazer_acao_agente: desfazerAcaoDoMes,
   executar_acao_agenda: executarAcaoNaAgenda,
   desfazer_acao_agenda: desfazerAcaoNaAgenda,
   registrar_geracao: registrarGeracao,
@@ -5375,7 +6008,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos"]);
+const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

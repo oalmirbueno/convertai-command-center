@@ -99,11 +99,22 @@ describe("custo do Jev na carteira", () => {
   it("toda pergunta ao Jev da Mesa é cobrada do cliente", () => {
     // Temas (aderência e potencial), hypes da semana (relevância para o cliente) e
     // plano de imagens da campanha (qual foto em cada lâmina, 25/09).
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(3);
+    // + o público do pedido no agente do Mês (26/09).
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(4);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(3);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(3);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(3);
+    // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
+    // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
+    // direcaoPedePessoa (Noul "a direção pede pessoa?", uma por geração da lâmina normal com
+    // rosto escolhido, fora de laço). Cada pergunta, uma cobrança; nenhuma se repete.
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(5);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(4);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(5);
+    // Cada jevPerguntar do Estúdio tem o seu cobrarJev logo depois (uma cobrança por pergunta).
+    const perguntas = estudio.split("await jevPerguntar(").slice(1);
+    for (const trecho of perguntas) expect(trecho.slice(0, 1200)).toContain("await cobrarJev(");
+    // A conferência do rosto devolve o guardado sem pagar de novo.
+    const conferir = estudio.slice(estudio.indexOf("async function conferirRosto("), estudio.indexOf("function registroDoRosto("));
+    expect(conferir).toContain("if (ja && typeof ja === \"object\") return json({ trabalho_id: t.id, ordem, versao: alvo.versao, conferencia: ja, custo_usd: 0 });");
   });
 });
 

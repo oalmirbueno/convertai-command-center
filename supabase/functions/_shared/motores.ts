@@ -802,6 +802,24 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     ligacao: { arquivo: ESTUDIO, trechos: ["const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "      blocoDoRostoAqui,"] },
     intocado: "Sem rosto escolhido (o padrão): nada é lido, nenhuma imagem entra e o prompt é byte a byte o de hoje.",
   },
+  {
+    id: "rosto_v2",
+    em: "2026-09-26",
+    pedido: "Dono: \"posso buscar qualquer foto que tiver pessoas, abrir a pasta, selecionar qualquer foto e também o clone já gerado; detalhar sorrindo, assim; e com base na foto ele tem que variar e compor com a imagem\".",
+    o_que: "Fonte escolhidas (1 a 3 fotos do acervo, Workspace, Arquivos ou de um clone, inclusive as geradas, conferidas na geração), campo como (pose e expressão) no bloco ROSTO ESCOLHIDO, que agora pede recriar a pessoa na composição e integrar na luz da arte. Lâmina normal leva o rosto quando o Noul do Jev diz que a direção pede pessoa (a referência automática cede a vaga). A versão guarda as fotos usadas; conferir_rosto é só aviso.",
+    modulo: "estudio-arte/rosto-na-geracao.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "    blocoDoRostoNaNormal,"] },
+    intocado: "Sem rosto escolhido (o padrão): nada é lido, o Jev não é chamado, nenhuma imagem entra e o prompt da lâmina normal e do replicar é byte a byte o de hoje (fixtures lamina-normal-hoje.json e replicar-identica-hoje.json).",
+  },
+  {
+    id: "composicao_dinamica",
+    em: "2026-09-26",
+    pedido: "Dono: \"nas referências ele não segue a jogada de texto, fica travado\"; \"atrás estava escrito 'melhor' e ele copiou\"; \"os textos ficam numa cor só\"; \"o card 2 é um textão, tem que chegar refinado\".",
+    o_que: "Molde 2 com texto decorativo e camada; headline dividida nos blocos do título da referência; jogada própria em Inspirada e Criativa (muda por lâmina); termo decorativo da copy (Choice do Jev, guardado); cor por papel dentro da paleta; lâminas 2+ acima do limite enxutas na preparação (uma chamada) e desenhadas na geração.",
+    modulo: "_shared/jogada-do-texto.ts e estudio-arte/composicao-dinamica.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const termoDaLamina = await termoDecorativoDaLamina(", "const enxuto = await enxugarMiolo(direcao.cards, direcao.conceito,"] },
+    intocado: "Idêntica sem título quebrado, sem decorativo e sem cores repetidas: o prompt é o de hoje; criativo de anúncio (Mesa Ads) sem a cor por papel nem o miolo desenhado; montar do roteiro continua grátis quando nenhuma lâmina passa do limite (com lâmina longa, a tela mostra o custo da chamada curta antes).",
+  },
 ];
 
 // ------------------------------------------------------------------ consultas

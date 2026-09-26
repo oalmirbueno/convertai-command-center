@@ -198,7 +198,7 @@ export function colagemEhImagem(dados: { files?: FileList | File[] | null; getDa
 }
 
 /** Área que aceita arrastar e soltar imagens (e colar prints). */
-export function ZonaDeAnexos({ anexos, children, className = "" }: { anexos: ControleDeAnexos; children: ReactNode; className?: string }) {
+export function ZonaDeAnexos({ anexos, children, className = "", rotulo = "Solte as imagens aqui" }: { anexos: ControleDeAnexos; children: ReactNode; className?: string; rotulo?: string }) {
   const [sobre, setSobre] = useState(false);
   const temArquivo = (e: DragEvent) => {
     const tipos = e.dataTransfer ? e.dataTransfer.types : null;
@@ -233,7 +233,7 @@ export function ZonaDeAnexos({ anexos, children, className = "" }: { anexos: Con
       {children}
       {sobre && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/90 text-[12.5px] font-medium text-foreground">
-          Solte as imagens aqui
+          {rotulo}
         </div>
       )}
     </div>

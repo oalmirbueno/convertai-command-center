@@ -137,12 +137,15 @@ export interface CorpoDoPlanejamento {
   mes: string;
   anexos?: string[];
   propostaId?: string | null;
+  /** Arquivos lidos no navegador (leituraDeArquivos.ts): texto dos lidos e motivo dos não lidos. */
+  arquivos?: { lidos: unknown[]; nao_lidos: unknown[] } | null;
 }
 
 export function corpoDoPlanejamento(p: CorpoDoPlanejamento): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "planejar_mes", client_id: p.clientId, mensagem: p.mensagem, mes: String(p.mes).slice(0, 7) };
   if (p.anexos && p.anexos.length) corpo.anexos = p.anexos.slice(0, MAX_ANEXOS);
   if (p.propostaId) corpo.proposta_id = p.propostaId;
+  if (p.arquivos && (p.arquivos.lidos.length || p.arquivos.nao_lidos.length)) corpo.arquivos = p.arquivos;
   return corpo;
 }
 
@@ -175,22 +178,151 @@ export function restaurarItemDaAgenda(clientId: string, taskId: string, memoriaI
 
 // ------------------------------------------------------------------ estimativa
 
+// ------------------------------------------------------------------ agente do Mês v2 (26/09)
+
 /**
- * Conversa de planejamento: uma chamada do estrategista com o contexto do
- * cliente e mais o do planejamento (publicado, aprovado, campanhas, hypes e a
- * agenda dos próximos meses), e as imagens anexadas.
+ * Espelhos de supabase/functions/agente-calendario/agente-mes-v2.ts (o teste
+ * agente-mes-v2 confere que batem): o agente do Mês usa o GPT-6 Sol com
+ * raciocínio alto; um modelo marcado no catálogo com o papel "agente_mes"
+ * vale por cima. As outras telas seguem o padrão do estrategista.
  */
-export const partesDoPlanejamento = (catalogo: ModeloIa[], anexos: number): ParteDaEstimativa[] => {
-  const m = padraoPara(catalogo, "estrategista");
+export const MODELO_DO_AGENTE_DO_MES = "openrouter:openai/gpt-6-sol";
+export const RACIOCINIO_DO_AGENTE_DO_MES = "high";
+export const PAPEL_DO_AGENTE_DO_MES = "agente_mes";
+export const CHARS_POR_TOKEN = 3.2;
+/** Contexto fixo do planejamento v2: cliente, agenda de 12 meses com o detalhe de cada peça, MCP e plano. */
+export const TOKENS_DO_CONTEXTO_DO_MES = 90_000;
+
+/** Modelo do agente do Mês no catálogo da tela (mesma regra do servidor); sem ele, o do estrategista. */
+export function modeloDoAgenteDoMes(catalogo: ModeloIa[]): ModeloIa | null {
+  const ativos = (catalogo || []).filter((m) => m && m.ativo !== false && (m as { disponivel?: boolean }).disponivel !== false && (!m.tipo || m.tipo === "texto"));
+  const doPapel = ativos.find((m) => (m.padrao_para || []).indexOf(PAPEL_DO_AGENTE_DO_MES) >= 0);
+  if (doPapel) return doPapel;
+  return ativos.find((m) => m.id === MODELO_DO_AGENTE_DO_MES) || padraoPara(catalogo, "estrategista");
+}
+
+/**
+ * Conversa de planejamento: uma chamada do agente do Mês (GPT-6 Sol, alto)
+ * com o contexto do cliente, o do planejamento, a agenda dos próximos 12
+ * meses, o MCP, a mensagem e os arquivos lidos (caracteres) e as imagens.
+ */
+export const partesDoPlanejamento = (catalogo: ModeloIa[], anexos: number, caracteres = 0): ParteDaEstimativa[] => {
+  const m = modeloDoAgenteDoMes(catalogo);
   return [
     {
       modeloId: m ? m.id : null,
       tipo: "texto",
-      tokensEntrada: TAMANHOS.conversarMes.entrada + 8000 + anexos * TAMANHOS.imagemAnexos.entrada,
-      tokensSaida: saidaPorRaciocinio("medium") + 2000,
+      tokensEntrada: TOKENS_DO_CONTEXTO_DO_MES + Math.ceil(Math.max(0, caracteres) / CHARS_POR_TOKEN) + anexos * TAMANHOS.imagemAnexos.entrada,
+      tokensSaida: saidaPorRaciocinio(RACIOCINIO_DO_AGENTE_DO_MES) + 6000,
     },
   ];
 };
+
+/** Conteúdos novos a partir de material colado ou anexado (anexo "criar_conteudos" de planejar_mes). */
+export interface ItemParaCriar {
+  data: string;
+  formato: "carrossel" | "estatico";
+  formato_pedido?: string | null;
+  tema: string;
+  referencia: string;
+}
+
+export interface CriacaoDeConteudos {
+  tipo: "criar_conteudos";
+  resumo: string;
+  orientacao: string;
+  itens: ItemParaCriar[];
+  ignorados?: number;
+}
+
+export function criacaoDaMensagem(anexos: unknown[] | null | undefined): CriacaoDeConteudos | null {
+  for (const a of anexos || []) {
+    const o = a && typeof a === "object" ? (a as Record<string, unknown>) : null;
+    if (o && o.tipo === "criar_conteudos" && Array.isArray(o.itens)) {
+      return { ...(o as unknown as CriacaoDeConteudos), orientacao: String(o.orientacao || ""), itens: o.itens as ItemParaCriar[] };
+    }
+  }
+  return null;
+}
+
+/** Espelho de LOTE_DA_CRIACAO (uma geração do pedido livre por lote). */
+export const LOTE_DA_CRIACAO = 12;
+
+/**
+ * Texto do pedido livre de um lote da criação. Espelho de pedidoParaCriar em
+ * supabase/functions/agente-calendario/agente-mes-v2.ts.
+ */
+export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia">>, orientacao?: string | null): string {
+  const linhas = itens.map((i) => {
+    const ref = String(i.referencia || "").replace(/\s+/g, " ").trim();
+    return `- ${i.data} · ${i.formato === "estatico" ? "estático" : "carrossel"} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}`;
+  });
+  const base = `Crie estes conteúdos, um para cada linha, exatamente na data e no formato indicados. Siga o tema e a referência do material de cada linha, adaptando ao cliente (negócio, oferta, público e tom de voz do contexto):\n${linhas.join("\n")}`;
+  const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 600);
+  return o ? `${base}\nOrientação da equipe para todos: ${o}` : base;
+}
+
+/** Decisão do Jev sobre o público do pedido (anexo "decisao_publico"). */
+export interface DecisaoDoPublico {
+  decisao: "adaptar" | "manter" | "perguntar" | "sem_publico_novo" | "indisponivel";
+  traz: number | null;
+  coerente: number | null;
+  frase: string;
+}
+
+export function decisaoDoPublicoDaMensagem(anexos: unknown[] | null | undefined): DecisaoDoPublico | null {
+  for (const a of anexos || []) {
+    const o = a && typeof a === "object" ? (a as Record<string, unknown>) : null;
+    if (o && o.tipo === "decisao_publico" && typeof o.decisao === "string") return o as unknown as DecisaoDoPublico;
+  }
+  return null;
+}
+
+/** O que o agente leu nesta resposta (anexo "contexto_usado"). */
+export interface ContextoUsado {
+  modelo: string;
+  raciocinio: string | null;
+  tokens: number;
+  pecas: number;
+  mcp: number;
+  arquivos: number;
+  cortes: string[];
+}
+
+export function contextoUsadoDaMensagem(anexos: unknown[] | null | undefined): ContextoUsado | null {
+  for (const a of anexos || []) {
+    const o = a && typeof a === "object" ? (a as Record<string, unknown>) : null;
+    if (o && o.tipo === "contexto_usado") return o as unknown as ContextoUsado;
+  }
+  return null;
+}
+
+/** Frase curta do que o agente leu: "Li 312 peças, 4 itens do MCP e 3 arquivos." */
+export function fraseDoContextoUsado(c: ContextoUsado | null): string {
+  if (!c) return "";
+  const partes: string[] = [];
+  if (c.pecas) partes.push(`${c.pecas} ${c.pecas === 1 ? "peça" : "peças"} da agenda`);
+  if (c.mcp) partes.push(`${c.mcp} ${c.mcp === 1 ? "item" : "itens"} do MCP`);
+  if (c.arquivos) partes.push(`${c.arquivos} ${c.arquivos === 1 ? "arquivo" : "arquivos"}`);
+  const lista = partes.length > 1 ? `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}` : partes[0] || "";
+  return lista ? `Li ${lista}.${c.cortes && c.cortes.length ? " Parte do contexto foi resumida para caber." : ""}` : "";
+}
+
+/** Arquivos que foram num pedido do dono (anexo "arquivos_lidos" da mensagem dele). */
+export interface ArquivosLidosDaMensagem {
+  lidos: { nome: string; tipo: string; tamanho: number; caracteres: number; origem: string | null }[];
+  nao_lidos: { nome: string; motivo: string }[];
+}
+
+export function arquivosDaMensagem(anexos: unknown[] | null | undefined): ArquivosLidosDaMensagem | null {
+  for (const a of anexos || []) {
+    const o = a && typeof a === "object" ? (a as Record<string, unknown>) : null;
+    if (o && o.tipo === "arquivos_lidos") {
+      return { lidos: Array.isArray(o.lidos) ? (o.lidos as ArquivosLidosDaMensagem["lidos"]) : [], nao_lidos: Array.isArray(o.nao_lidos) ? (o.nao_lidos as ArquivosLidosDaMensagem["nao_lidos"]) : [] };
+    }
+  }
+  return null;
+}
 
 // ------------------------------------------------------------------ mensagens
 
@@ -264,6 +396,11 @@ export interface ResultadoDaAcaoNaAgenda {
   para?: string;
 }
 
+/** Reescrever textos de uma peça gravada (sem gerar do zero). */
+export interface EdicaoDeTextoNaAgenda extends ItemDaAcaoNaAgenda {
+  campos: { titulo?: string; tema?: string; gancho?: string; copy?: string; cta?: string; publico?: string; cards?: { ordem: number; texto: string }[] };
+}
+
 export interface AcaoNaAgenda {
   tipo: "acao_agenda";
   resumo: string;
@@ -274,7 +411,10 @@ export interface AcaoNaAgenda {
   /** Saem da agenda e são geradas de novo pelo pedido livre (custo mostrado antes). */
   refazer: ItemDaAcaoNaAgenda[];
   editar_campanhas: EdicaoDeCampanha[];
+  /** Título, tema, gancho, lâminas, copy, CTA e público novos, sem gerar do zero (sem custo). */
+  editar_textos: EdicaoDeTextoNaAgenda[];
   ignorados?: string[];
+  textos?: ResultadoDaAcaoNaAgenda[];
   executada_em?: string;
   descartada_em?: string;
   desfeita_em?: string;
@@ -297,6 +437,7 @@ export function acaoNaAgendaDaMensagem(anexos: unknown[] | null | undefined): Ac
         mudar_formato: Array.isArray(o.mudar_formato) ? (o.mudar_formato as ItemDaAcaoNaAgenda[]) : [],
         refazer: Array.isArray(o.refazer) ? (o.refazer as ItemDaAcaoNaAgenda[]) : [],
         editar_campanhas: Array.isArray(o.editar_campanhas) ? (o.editar_campanhas as EdicaoDeCampanha[]) : [],
+        editar_textos: Array.isArray(o.editar_textos) ? (o.editar_textos as EdicaoDeTextoNaAgenda[]) : [],
       };
     }
   }
@@ -366,6 +507,6 @@ export const registrarGeracao = (mensagemId: string, descartar = false) =>
  * planeja o mês, que é quem lê a agenda e prepara a lista para confirmar.
  */
 const PEDIDO_DE_AGENDA =
-  /(^|[^a-zà-ú])(apag|limp[ae]|remov|exclu|delet|mud[ae]\S* (a |as |o |os )?(datas?|formatos?)|mov[ae] |refa[çc]a|refazer|gere de novo|troque o formato|(crie|gere|preencha) (todos os|todo o|os) (conte[úu]dos|m[êe]s|pr[óo]ximos))/i;
+  /(^|[^a-zà-ú])(apag|limp[ae]|remov|exclu|delet|mud[ae]\S* (a |as |o |os )?(datas?|formatos?)|mov[ae] |refa[çc]a|refazer|gere de novo|troque o formato|(crie|gere|preencha) (todos os|todo o|os) (conte[úu]dos|m[êe]s|pr[óo]ximos)|revis[ae]\S* (todos|todas|tudo|os meses|a agenda)|reescrev|troque o p[úu]blico)/i;
 
 export const ehPedidoNaAgenda = (mensagem: string) => PEDIDO_DE_AGENDA.test(String(mensagem || ""));

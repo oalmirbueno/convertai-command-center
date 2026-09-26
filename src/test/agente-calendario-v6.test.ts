@@ -54,7 +54,9 @@ describe("agente-calendario v6: planejar_mes", () => {
     // Frente H: o mesmo prompt e as mesmas regras de saída, com a base de marketing do mês no meio.
     expect(planejar).toContain('sistema: sistemaDoCalendario(ctx, "mes")');
     // Marca por projeto (docs/marcas): o contexto do mês é o da marca escolhida no topo.
-    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo))");
+    // v2 (26/09): a marca da chamada é lida uma vez e o MCP entra à parte, dentro do orçamento de tokens.
+    expect(planejar).toContain("const marcaP = marcaDaChamada(servico, clientId, corpo);");
+    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 })");
     expect(planejar).toContain("contextoDoPlanejamento(servico, clientId, mes)");
     expect(planejar).toContain("conversaDoAgenteDoMes(servico, clientId, chamador.userId)");
     expect(planejar).not.toContain("pesquisaWeb: true");
