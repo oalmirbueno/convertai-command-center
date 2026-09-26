@@ -1353,6 +1353,14 @@
       "remote_name": "receitas_de_edicao",
       "remote_statements_sha256": "9b2f968fd1c375dbdec5a829350f51101ee124940fb6ebb4acae1b58d2b25ada",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926060000",
+      "path": "supabase/migrations/20260926060000_mesa_mcp_itens.sql",
+      "local_sha256": "446faf32a007e2d4861e349c87df75a6d036faf960543260e8d4b84ef4e82d60",
+      "remote_name": "mesa_mcp_itens",
+      "remote_statements_sha256": "3c175895462ad4e40b33f5f5f23139b01c2d166f874aebb1ba62bdaf5e752e16",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
