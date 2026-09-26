@@ -177,7 +177,7 @@ describe("conversa com o diretor: as mudanças passam pelas regras da casa", () 
   it("o esquema pede todos os campos (saída estrita) e as instruções trazem as regras da casa", () => {
     const campos = (ESQUEMA_CONVERSA.schema.properties.mudancas.items.properties.campos as { required: string[] }).required;
     expect(campos).toEqual(expect.arrayContaining(["estilo", "imagem", "tratamento", "cor_destaque", "foto_acervo", "texto_exato"]));
-    expect(ESQUEMA_CONVERSA.schema.required).toEqual(["resposta", "mudancas", "memoria"]);
+    expect(ESQUEMA_CONVERSA.schema.required).toEqual(["resposta", "mudancas", "memoria", "acoes"]);
     expect(INSTRUCOES_CONVERSA).toContain("Nunca escureça a foto nem a capa");
     expect(INSTRUCOES_CONVERSA).toContain("Sem caixa, faixa, painel");
     expect(INSTRUCOES_CONVERSA).toContain("texto_pode_mudar");

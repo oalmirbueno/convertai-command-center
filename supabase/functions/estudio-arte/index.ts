@@ -162,6 +162,31 @@ import {
 import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
 import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { auditLog } from "../_shared/mcp-audit.ts";
+import {
+  type AcaoDoAgente,
+  type AcaoGuardada,
+  acaoGuardadaNaMensagem,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  type ItemDaAcaoDoAgente,
+  type ResultadoDoItem,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import {
+  arquivarVersoesDaLamina,
+  blocoDasAcoesDoDiretor,
+  devolverVersoesDaLamina,
+  MOTIVO_CONTINUO,
+  MOTIVO_ENTREGUE,
+  normalizarAcoesDoDiretor,
+  ordemInversa,
+  ordensParaGerarDeNovo,
+  reordenarTrabalho,
+  trocarTextoDaLamina,
+  type TrabalhoParaAcoes,
+} from "./acoes-do-diretor.ts";
 import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { conhecimentoEstudioPara } from "../_shared/conhecimento-dos-agentes.ts";
@@ -5069,6 +5094,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
     emFoco !== null ? `Lâmina em foco: ${emFoco}${imagens ? " (a imagem anexada é a versão atual dela)" : versaoEmFoco ? "" : " (ainda sem arte gerada)"}.` : "",
     `MENSAGEM DA EQUIPE: ${mensagem}`,
+    blocoDasAcoesDoDiretor(t as unknown as TrabalhoParaAcoes),
   ].filter(Boolean).join("\n\n");
 
   const r = await chamarTexto({
@@ -5096,7 +5122,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
   const resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
-  if (!resposta && !mudancas.length) {
+  // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer): só a lista; a equipe confirma.
+  const acaoProposta = normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes);
+  if (!resposta && !mudancas.length && !acaoProposta) {
     throw new ErroEstudio(502, "conversa_vazia", "O diretor não respondeu desta vez. Tente de novo ou pergunte de outro jeito.", { uso_id: r.usoId, custo_usd: r.custoUsd });
   }
 
@@ -5106,7 +5134,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     {
       papel: "agente",
       conteudo: resposta || "Seguem as mudanças que eu sugiro.",
-      anexos: [{ tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: [] }],
+      anexos: [
+        { tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: [] },
+        ...(acaoProposta ? [acaoProposta] : []),
+      ],
       uso_id: r.usoId,
     },
   ]);
@@ -5119,6 +5150,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     resposta: resposta || "Seguem as mudanças que eu sugiro.",
     mudancas,
     avisos,
+    acao: acaoProposta,
     em_foco: emFoco,
     texto_pode_mudar: textoPodeMudar,
     custo_usd: r.custoUsd,
@@ -5343,6 +5375,186 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ porta
 
+// ------------------------------------------------------------------ ações do diretor (propor e confirmar)
+
+const comoErroDoEstudio = (e: unknown) => (e instanceof ErroDaAcao ? new ErroEstudio(e.status, e.codigo, e.message) : e);
+
+/** O trabalho ainda aceita mudança por aqui (não entregue nem agendado). */
+function exigirTrabalhoAberto(x: Trabalho) {
+  if (estaEntregue(x)) throw new Error(MOTIVO_ENTREGUE);
+}
+
+/** Uma operação do diretor, já confirmada pela equipe. Devolve o que o Desfazer precisa. */
+async function executarItemDoDiretor(trabalhoId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null } | void> {
+  const ordem = Number(item.alvo_id);
+  switch (item.operacao) {
+    case "reordenar": {
+      const nova = String(item.para ?? "").split(",").map(Number);
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (!ehAds(x) && x.direcao.carrossel_infinito && x.direcao.cards.length > 1) throw new Error(MOTIVO_CONTINUO);
+        const ordens = x.direcao.cards.map((c) => c.ordem).sort((a, b) => a - b).join(",");
+        if (nova.slice().sort((a, b) => a - b).join(",") !== ordens) throw new Error("As lâminas mudaram desde a proposta. Peça de novo ao diretor.");
+        return reordenarTrabalho(x as unknown as TrabalhoParaAcoes, nova) as unknown as Record<string, unknown>;
+      });
+      return { desfazer: { ordem: ordemInversa(nova) } };
+    }
+    case "mudar_formato": {
+      let de: string | null = null;
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (ehAds(x)) throw new Error("O formato do criativo de anúncio é escolhido na Mesa Ads.");
+        de = typeof x.direcao.formato === "string" ? x.direcao.formato : null;
+        return { direcao: { ...x.direcao, formato: String(item.para) } };
+      });
+      return { desfazer: { formato: de } };
+    }
+    case "trocar_texto": {
+      let antes: Record<string, unknown> = {};
+      let depois = "";
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        const r = trocarTextoDaLamina(x as unknown as TrabalhoParaAcoes, ordem, String(item.para ?? ""));
+        antes = r.antes;
+        const card = (r.patch.direcao.cards as Array<{ ordem: number; texto_exato?: string }>).find((c) => c.ordem === ordem);
+        depois = String(card?.texto_exato ?? "");
+        return r.patch as unknown as Record<string, unknown>;
+      });
+      return { desfazer: { ordem, ...antes, texto_depois: depois } };
+    }
+    case "arquivar_versoes": {
+      let versoes: number[] = [];
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        const r = arquivarVersoesDaLamina(x as unknown as TrabalhoParaAcoes, ordem);
+        versoes = r.versoes;
+        return r.patch as unknown as Record<string, unknown>;
+      });
+      return { desfazer: { ordem, versoes } };
+    }
+    case "refazer": {
+      // Quem gera é a tela (gerar_card, com o custo mostrado antes): aqui só confere que ainda dá.
+      const x = await lerTrabalho(trabalhoId);
+      exigirTrabalhoAberto(x);
+      if (!x.direcao.cards.some((c) => c.ordem === ordem)) throw new Error(`A lâmina ${ordem} não existe mais.`);
+      return;
+    }
+    default:
+      throw new Error("Operação desconhecida.");
+  }
+}
+
+/** Desfaz uma operação do diretor com o que ela guardou. */
+async function desfazerItemDoDiretor(trabalhoId: string, r: ResultadoDoItem) {
+  const d = (r.desfazer ?? {}) as Record<string, unknown>;
+  const ordem = Number(d.ordem);
+  switch (r.operacao) {
+    case "reordenar": {
+      const volta = Array.isArray(d.ordem) ? (d.ordem as unknown[]).map(Number) : [];
+      await mutarTrabalho(trabalhoId, (x) => {
+        if (volta.length !== x.direcao.cards.length) throw new Error("As lâminas mudaram depois. Mude a ordem pela tela.");
+        return reordenarTrabalho(x as unknown as TrabalhoParaAcoes, volta) as unknown as Record<string, unknown>;
+      });
+      return;
+    }
+    case "mudar_formato": {
+      await mutarTrabalho(trabalhoId, (x) => {
+        const direcao = { ...x.direcao } as Record<string, unknown>;
+        if (typeof d.formato === "string" && d.formato) direcao.formato = d.formato;
+        else delete direcao.formato;
+        return { direcao };
+      });
+      return;
+    }
+    case "trocar_texto": {
+      await mutarTrabalho(trabalhoId, (x) => {
+        const cards = x.direcao.cards.map((c) => {
+          if (c.ordem !== ordem) return c;
+          if (typeof d.texto_depois === "string" && c.texto_exato !== d.texto_depois) throw new Error("O texto da lâmina mudou depois. Ajuste pela tela.");
+          const volta = { ...c, texto_exato: String(d.texto_exato ?? c.texto_exato) } as CardDirecao;
+          if (Array.isArray(d.blocos)) volta.blocos = d.blocos as CardDirecao["blocos"];
+          else volta.blocos = blocosDoTexto(volta.texto_exato, c.funcao);
+          return volta;
+        });
+        return { direcao: { ...x.direcao, cards } };
+      });
+      return;
+    }
+    case "arquivar_versoes": {
+      const versoes = Array.isArray(d.versoes) ? (d.versoes as unknown[]).map(Number) : [];
+      await mutarTrabalho(trabalhoId, (x) => devolverVersoesDaLamina(x as unknown as TrabalhoParaAcoes, ordem, versoes) as unknown as Record<string, unknown>);
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+/** A proposta guardada na mensagem do diretor, com o trabalho conferido (mesmo cliente, com acesso). */
+async function propostaDoDiretor(ch: Chamador, corpo: Record<string, unknown>) {
+  let guardada: AcaoGuardada;
+  try {
+    guardada = await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), { acaoId: corpo.acao_id, agente: "estudio" });
+  } catch (e) {
+    throw comoErroDoEstudio(e);
+  }
+  const trabalhoId = String((guardada.acao.contexto ?? {}).trabalho_id ?? "");
+  const t = await trabalhoComAcesso(ch, trabalhoId);
+  if (t.client_id !== guardada.mensagem.client_id) throw new ErroEstudio(403, "trabalho_de_outro_cliente", "O trabalho não é deste cliente.");
+  return { guardada, t };
+}
+
+/**
+ * executar_acao_agente { mensagem_id, acao_id?, descartar? }: a equipe
+ * confirmou (ou cancelou) o que o diretor propôs na conversa. Executa item a
+ * item, na ordem da proposta; o que não pôde volta com o motivo. As lâminas a
+ * refazer voltam em gerar_de_novo: a tela gera pelo caminho de sempre.
+ */
+async function executarAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown>) {
+  const { guardada, t } = await propostaDoDiretor(ch, corpo);
+  const inicio = Date.now();
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  try {
+    r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoDiretor(t.id, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 });
+  } catch (e) {
+    throw comoErroDoEstudio(e);
+  }
+  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  const feitos = r.resultados.filter((x) => x.ok).length;
+  const falhas = r.resultados.length - feitos;
+  if (guardada.mensagem.conversa_id) {
+    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ${textoDoResultado(r.resultados)}.` }]).catch(() => null);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "estudio_acao_do_diretor", origin: "mesa:estudio-arte",
+    keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:write"],
+    input: { client_id: t.client_id, trabalho_id: t.id, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
+    success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
+  });
+  return json({ anexo: r.anexo, feitos, falhas, gerar_de_novo: ordensParaGerarDeNovo(r.anexo), trabalho: await lerTrabalho(t.id) });
+}
+
+/** desfazer_acao_agente { mensagem_id, acao_id? }: volta o que a ação mudou (refazer não tem volta: a versão nova fica, a anterior também). */
+async function desfazerAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown>) {
+  const { guardada, t } = await propostaDoDiretor(ch, corpo);
+  let r: { anexo: AcaoDoAgente; voltaram: number; falharam: Array<{ ref: string; titulo: string; motivo: string }> };
+  try {
+    r = await desfazerAcaoGuardada(guardada, (x) => desfazerItemDoDiretor(t.id, x), { userId: ch.userId });
+  } catch (e) {
+    throw comoErroDoEstudio(e);
+  }
+  if (guardada.mensagem.conversa_id) {
+    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }]).catch(() => null);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "estudio_desfazer_acao_do_diretor", origin: "mesa:estudio-arte",
+    keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:write"],
+    input: { client_id: t.client_id, trabalho_id: t.id, mensagem_id: guardada.mensagem.id },
+    success: r.falharam.length === 0, statusCode: 200, durationMs: 0, resultRef: t.id,
+  });
+  return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, trabalho: await lerTrabalho(t.id) });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   preparar,
   configurar,
@@ -5359,6 +5571,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   reabrir,
   logos: logosDoTrabalho,
   refinar_texto: refinarTexto,
+  executar_acao_agente: executarAcaoDoDiretor,
+  desfazer_acao_agente: desfazerAcaoDoDiretor,
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */

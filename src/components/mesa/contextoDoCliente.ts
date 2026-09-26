@@ -94,6 +94,9 @@ export interface RespostaDoMontar {
 export interface RespostaDaConversa {
   resposta: string;
   mudou: string[];
+  /** Ação proposta (logos, referências, acervo, workspace): só com a confirmação. */
+  acao?: unknown;
+  mensagem_id?: string | null;
   memorias: number;
   kit: KitDoContexto | null;
   custo_usd: number | null;
@@ -101,9 +104,11 @@ export interface RespostaDaConversa {
 }
 
 export interface MensagemDoContexto {
-  papel: "usuario" | "agente";
+  id?: string;
+  papel: "usuario" | "agente" | "sistema";
   conteudo: string;
   criado_em: string;
+  anexos?: unknown[] | null;
 }
 
 export const chaveDoContexto = (clientId: string) => ["mesa", "contexto", clientId];

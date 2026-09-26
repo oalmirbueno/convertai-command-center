@@ -62,6 +62,8 @@
  *   (variações pelo contexto do cliente), clone_transferir (outro cliente, com os arquivos), preset uniforme_marca
  *   (logo oficial do kit da marca anexada), estimar clone_sugerir; books_listar, book_criar, book_ler, book_salvar,
  *   book_diretor, book_gerar e estimar book_gerar|book_diretor; modelo_detalhar sempre num gerador com 4K de verdade
+ * - 25/09 à noite (clones.ts e clones-edicao.ts; SQL opcional Z-clones-edicao.sql): clone_fotos_editar, clone_imagem_arquivar,
+ *   clone_variacao_refazer, clone_duplicar; fotos_reais_ids em clone_folha_gerar e clone_variacao_gerar (rota em ...CLONES.acoes)
  * - ferramentas_estimar, upscale, remover_fundo, ferramenta_retomar (ferramentas-pro.ts; API externa, segredo FAL_KEY)
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
@@ -92,6 +94,25 @@ import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, resolverMarca } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { auditLog } from "../_shared/mcp-audit.ts";
+import {
+  type AcaoDoAgente,
+  type AcaoGuardada,
+  acaoGuardadaNaMensagem,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  type ResultadoDoItem,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import { executarNoAcervo, type FotoDoAcervo, reverterNoAcervo } from "../_shared/acoes-do-acervo.ts";
+import {
+  blocoDasAcoesDaMesaFoto,
+  type CampanhaDaMesaFoto,
+  ESQUEMA_DAS_ACOES_DA_MESA_FOTO,
+  normalizarAcoesDaMesaFoto,
+  pedeAcaoNasFotos,
+} from "./acoes-da-mesa-foto.ts";
 import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
@@ -821,6 +842,8 @@ const ESQUEMA_AGENTE = {
       imagem_ids: lista(S("string")),
       referencias_estilo_ids: lista(S("string")),
     })),
+    // Aprovar, arquivar, organizar e mandar fotos para campanha: só a lista; a equipe confirma (acoes-da-mesa-foto.ts).
+    acoes: ESQUEMA_DAS_ACOES_DA_MESA_FOTO,
   }),
 };
 
@@ -3464,6 +3487,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       .order("destaque", { ascending: false }).limit(40),
     kitsDoCliente(clientId).catch(() => [] as KitExistente[]),
   ]);
+  // Pedido de aprovar, arquivar, organizar ou mandar fotos: a lista das fotos entra no prompt (com apelidos, nunca id).
+  const dadosDasAcoes = pedeAcaoNasFotos(mensagem) ? await dadosDasAcoesNasFotos(clientId).catch(() => null) : null;
   const categoria = kit ? categoriaDoKit(kit.tipo) : null;
   const prompts = ((biblioteca.data as { id: string; client_id: string | null; categoria: string; titulo: string; destaque: boolean }[] | null) ?? [])
     .sort((a, b) => Number(b.categoria === categoria) - Number(a.categoria === categoria))
@@ -3529,7 +3554,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}`,
+    sistema: `${SISTEMA_AGENTE}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}${dadosDasAcoes ? `\n${blocoDasAcoesDaMesaFoto(dadosDasAcoes.fotos, dadosDasAcoes.campanhas)}` : "\n- acoes: sempre null nesta mensagem."}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE,
     maxTokensSaida: 12_000,
@@ -3561,9 +3586,12 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     }], { tomadaIds: [] });
     if (extra) sugestoes.push(extra);
   }
+  const acaoProposta = dadosDasAcoes ? normalizarAcoesDaMesaFoto(r.acoes, dadosDasAcoes.fotos, dadosDasAcoes.campanhas, clientId) : null;
+  const anexosDoAgente: unknown[] = sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [];
+  if (acaoProposta) anexosDoAgente.push(acaoProposta);
   const mensagemIds = await gravarMensagens(conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.registro },
-    { papel: "agente", conteudo: resposta, anexos: sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [], uso_id: saida.usoId },
+    { papel: "agente", conteudo: resposta, anexos: anexosDoAgente, uso_id: saida.usoId },
   ]);
   return json({
     conversa_id: conversaId,
@@ -3573,6 +3601,9 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     // A conversa não grava kit: kit sai salvo de identificar_produto ou kit_sugerir.
     kit_ids: [],
     mensagem_ids: mensagemIds,
+    // A ação só vale com a mensagem guardada (é por ela que a confirmação acha a lista).
+    acao: acaoProposta && mensagemIds[1] ? acaoProposta : null,
+    mensagem_id: mensagemIds[1] ?? null,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
     reserva_usada: saida.reservaUsada ?? null,
@@ -3960,6 +3991,76 @@ ${PADRAO_PUBLICITARIO}`,
 const BIBLIOTECA_EM_LOTE = acoesDaBibliotecaEmLote(FERRAMENTAS, { ehAdmin, atualizarItemDaBiblioteca, modeloDeImagem });
 const FERRAMENTAS_PRO = acoesDasFerramentasPro(FERRAMENTAS);
 
+// ------------------------------------------------------------------ ações nas fotos (propor e confirmar)
+
+const comoErroDaFoto = (e: unknown) => (e instanceof ErroDaAcao ? new ErroHttp(e.status, e.codigo, e.message) : e);
+
+/** Fotos ativas do cliente e campanhas abertas, para o diretor propor ações (apelidos, nunca id). */
+async function dadosDasAcoesNasFotos(clientId: string) {
+  const [fotos, campanhas] = await Promise.all([
+    servico().from("cliente_imagens").select("id, nome, pasta, tags, ativa, aprovada, origem, gerada").eq("client_id", clientId).eq("ativa", true)
+      .order("criado_em", { ascending: false }).limit(80),
+    servico().from("mesa_campanhas").select("id, nome, status").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(20),
+  ]);
+  return {
+    fotos: ((fotos.data ?? []) as FotoDoAcervo[]),
+    campanhas: ((campanhas.data ?? []) as CampanhaDaMesaFoto[]),
+  };
+}
+
+async function propostaDasFotos(ch: Chamador, corpo: Record<string, unknown>): Promise<AcaoGuardada> {
+  try {
+    return await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), { acaoId: corpo.acao_id, agente: "foto" });
+  } catch (e) {
+    throw comoErroDaFoto(e);
+  }
+}
+
+/** executar_acao_agente { mensagem_id, acao_id?, descartar? }: a equipe confirmou (ou cancelou) o que o diretor propôs nas fotos. */
+async function executarAcaoNasFotos(ch: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDasFotos(ch, corpo);
+  const clientId = guardada.mensagem.client_id;
+  const inicio = Date.now();
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  try {
+    // Lote de 1: várias fotos na mesma campanha não se atropelam na lista de imagens.
+    r = await confirmarAcaoGuardada(guardada, (item) => executarNoAcervo(servico(), clientId, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 });
+  } catch (e) {
+    throw comoErroDaFoto(e);
+  }
+  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  const feitos = r.resultados.filter((x) => x.ok).length;
+  const falhas = r.resultados.length - feitos;
+  if (guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Fotos: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "foto_acao_do_diretor", origin: "mesa:mesa-foto",
+    keyId: `mesa:mesa-foto:${ch.userId}`, scopes: ["files:write"],
+    input: { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
+    success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
+  });
+  return json({ anexo: r.anexo, feitos, falhas });
+}
+
+/** desfazer_acao_agente { mensagem_id, acao_id? }: volta o que a ação mudou nas fotos. */
+async function desfazerAcaoNasFotos(ch: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDasFotos(ch, corpo);
+  const clientId = guardada.mensagem.client_id;
+  let r: { anexo: AcaoDoAgente; voltaram: number; falharam: Array<{ ref: string; titulo: string; motivo: string }> };
+  try {
+    r = await desfazerAcaoGuardada(guardada, (x) => reverterNoAcervo(servico(), clientId, x), { userId: ch.userId });
+  } catch (e) {
+    throw comoErroDaFoto(e);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "foto_desfazer_acao_do_diretor", origin: "mesa:mesa-foto",
+    keyId: `mesa:mesa-foto:${ch.userId}`, scopes: ["files:write"],
+    input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: r.falharam.length === 0, statusCode: 200, durationMs: 0, resultRef: guardada.mensagem.id,
+  });
+  return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
   acervo_registrar: acervoRegistrar,
@@ -3982,6 +4083,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   referencia_importar: referenciaImportar,
   agente_conversar: agenteConversar,
   agente_aplicar: agenteAplicar,
+  executar_acao_agente: executarAcaoNasFotos,
+  desfazer_acao_agente: desfazerAcaoNasFotos,
   // v2 (docs/mesa-foto/CONTRATO-V2.md)
   produto_identificar: produtoIdentificar,
   variacoes_planejar: variacoesPlanejar,

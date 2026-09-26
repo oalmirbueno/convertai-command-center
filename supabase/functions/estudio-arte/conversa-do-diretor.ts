@@ -28,6 +28,7 @@ import {
   type ZonaTexto,
 } from "../_shared/direcao-arte.ts";
 import { panoramaApagado, type PanoramaGravado } from "../_shared/carrossel-continuo.ts";
+import { ESQUEMA_DAS_ACOES_DO_DIRETOR } from "./acoes-do-diretor.ts";
 
 export const ZONAS_DA_CONVERSA: ZonaTexto[] = [
   "topo-esquerda", "topo-centro", "centro-esquerda", "centro", "base-esquerda", "base-centro", "base-direita", "coluna-esquerda", "coluna-direita",
@@ -91,10 +92,12 @@ export const ESQUEMA_CONVERSA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "mudancas", "memoria"],
+    required: ["resposta", "mudancas", "memoria", "acoes"],
     properties: {
       resposta: { type: "string" },
       memoria: { type: "string" },
+      // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer): acoes-do-diretor.ts.
+      acoes: ESQUEMA_DAS_ACOES_DO_DIRETOR,
       mudancas: {
         type: "array",
         items: {

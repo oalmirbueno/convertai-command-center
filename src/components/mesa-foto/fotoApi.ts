@@ -1,3 +1,4 @@
+import { acaoDoAnexo, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -2045,6 +2046,9 @@ export interface MensagemDoDiretor {
   proximo_passo?: string;
   kit_ids?: string[];
   identificacao?: IdentificacaoDoProduto | null;
+  /** Ação proposta nas fotos (aprovar, arquivar, organizar, mandar para campanha) e a mensagem guardada dela. */
+  acao?: AcaoDoAgente | null;
+  mensagemId?: string | null;
 }
 
 export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
@@ -2081,6 +2085,10 @@ export interface RespostaDoDiretor {
   kit_ids: string[];
   /** Quando o diretor já rodou produto_identificar na conversa. */
   identificacao: IdentificacaoDoProduto | null;
+  /** Aprovar, arquivar, organizar ou mandar fotos: só com a confirmação da equipe. */
+  acao: AcaoDoAgente | null;
+  /** A mensagem do diretor guardada (é por ela que a confirmação acha a lista). */
+  mensagem_id: string | null;
 }
 
 export async function conversarComDiretor(p: {
@@ -2122,6 +2130,8 @@ export async function conversarComDiretor(p: {
     custo_usd: numeroOuNulo(data && data.custo_usd),
     kit_ids: kitIds,
     identificacao: ident ? normalizarIdentificacao(ident) : null,
+    acao: acaoDoAnexo(data && data.acao),
+    mensagem_id: textoOuNulo(data && data.mensagem_id),
   };
 }
 

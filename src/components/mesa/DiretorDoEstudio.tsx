@@ -10,6 +10,8 @@ import { useMesa } from "./MesaContexto";
 import { Ditado } from "./Ditado";
 import { Cronometro } from "./Cronometro";
 import type { Trabalho } from "./useItensDoMes";
+import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import {
   aplicarMudancasDoDiretor,
   ATALHOS_DO_DIRETOR,
@@ -284,6 +286,20 @@ export default function DiretorDoEstudio({
     );
   };
 
+  // Ações que o diretor propôs: só a confirmação executa; as lâminas a refazer vão para o fluxo normal do Estúdio.
+  const pedirAcao = async (mensagemId: string, a: AcaoDoAgente, pedido: PedidoDaAcao) => {
+    const r: any = await chamarAcaoDoAgente("estudio-arte", mensagemId, a.id, pedido);
+    if (pedido !== "descartar") {
+      onAtualizar();
+      void queryClient.invalidateQueries({ queryKey: chave });
+      const ordens: number[] = r && Array.isArray(r.gerar_de_novo) ? r.gerar_de_novo : [];
+      if (pedido === "confirmar" && ordens.length) void onRefazer(ordens);
+    }
+    return r;
+  };
+  const ordensARefazer = (a: AcaoDoAgente) =>
+    a.itens.filter((i) => i.operacao === "refazer").map((i) => Number(i.alvo_id)).filter((n) => Number.isInteger(n));
+
   const respostaDoDiretor = (m: MensagemDoDiretor) => {
     const pendentes = m.mudancas.filter((x) => m.aplicadas.indexOf(x.id) < 0);
     const ordensDeTodas = ordensParaRefazer(pendentes);
@@ -336,6 +352,34 @@ export default function DiretorDoEstudio({
             )}
           </div>
         )}
+        {(m.acoes || []).map((a) => {
+          const refazer = ordensARefazer(a);
+          return (
+            <CartaoDeAcao
+              key={a.id}
+              acao={a}
+              titulo="O diretor vai fazer"
+              onPedido={(p) => pedirAcao(m.id, a, p)}
+              observacao={refazer.length ? "Refazer gera de novo pelo fluxo normal do Estúdio." : undefined}
+              renderConfirmar={
+                refazer.length
+                  ? (confirmar, ocupadoNoCartao) => (
+                      <BotaoComCusto
+                        rotulo={rotuloDeRefazer(refazer, "Confirmar e refazer")}
+                        titulo="Confirmar o que o diretor vai fazer"
+                        descricao="Faz a lista e refaz as lâminas pelo fluxo normal do estúdio (gerar, conferir, corrigir)."
+                        className="h-8"
+                        disabled={ocupadoNoCartao || ocupado || bloqueado}
+                        partes={() => partesRefazer(refazer, false)}
+                        executar={confirmar}
+                        fecharAoConfirmar
+                      />
+                    )
+                  : undefined
+              }
+            />
+          );
+        })}
       </div>
     );
   };
@@ -397,6 +441,14 @@ export default function DiretorDoEstudio({
       </div>
 
       <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+        <OQuePossoFazer
+          capacidades={["reordenar as lâminas", "refazer lâminas", "trocar um texto em várias", "mudar o formato", "arquivar versões antigas"]}
+          atalhos={[
+            { rotulo: "Reorganizar as lâminas", texto: "Reorganize a ordem das lâminas para a história fluir melhor." },
+            { rotulo: "Mudar para 9:16", texto: "Mude o formato deste trabalho para 9:16." },
+          ]}
+          onAtalho={preencher}
+        />
         <div className="flex flex-wrap" role="group" aria-label="Atalhos para o diretor">
           {ordemEmFoco ? (
             <button

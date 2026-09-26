@@ -83,7 +83,19 @@ import {
   resolverMarca,
 } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
-import { blocoDaAgendaParaAcoes, normalizarAcoesNaAgenda, pecasComApelido, REGRA_DAS_ACOES_NA_AGENDA, type AcaoNaAgenda, type PecaComApelido, type PecaDaAgenda } from "./acoes-agenda.ts";
+import {
+  blocoDaAgendaParaAcoes,
+  campanhasComApelido,
+  normalizarAcoesNaAgenda,
+  normalizarGeracao,
+  pecasComApelido,
+  REGRA_DAS_ACOES_NA_AGENDA,
+  type AcaoNaAgenda,
+  type CampanhaComApelido,
+  type CampanhaDaAgenda,
+  type PecaComApelido,
+  type PecaDaAgenda,
+} from "./acoes-agenda.ts";
 import {
   AGENTE_ESCOLHE,
   arcoDaCampanha,
@@ -4315,8 +4327,18 @@ export const ESQUEMA_PLANEJAMENTO = {
       ...obj({
         resumo: S("string"),
         apagar: { type: "array", items: S("string") },
+        refazer: { type: "array", items: S("string") },
         mudar_data: { type: "array", items: obj({ ref: S("string"), data: S("string") }) },
+        mudar_formato: { type: "array", items: obj({ ref: S("string"), formato: S("string") }) },
+        editar_campanhas: {
+          type: "array",
+          items: obj({ ref: S("string"), nome: S("string"), status: S("string"), periodo_inicio: S("string"), periodo_fim: S("string") }),
+        },
       }),
+      type: ["object", "null"],
+    },
+    gerar_conteudos: {
+      ...obj({ resumo: S("string"), meses: { type: "array", items: S("string") }, frequencia_semanal: S(["integer", "null"]) }),
       type: ["object", "null"],
     },
   }),
@@ -4460,26 +4482,54 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
   };
 }
 
+type ContextoDasAcoes = { pecas: PecaComApelido[]; campanhas: CampanhaComApelido[]; projeto: { id: string; nome: string } | null; frequencia: number | null };
+
 /**
  * Peças da agenda (arte e vídeo) da marca aberta, do começo do mês até o fim
- * do 3º mês seguinte, com apelido para o agente (acoes-agenda.ts).
+ * do 3º mês seguinte, com apelido para o agente (acoes-agenda.ts), mais as
+ * campanhas do cliente (c1, c2...), a campanha de cada peça (pela proposta que
+ * a gravou) e o projeto de social da marca (para gerar meses inteiros).
  */
-async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string, marca: MarcaDoCliente | null, mes: string): Promise<PecaComApelido[]> {
+async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string, marca: MarcaDoCliente | null, mes: string): Promise<ContextoDasAcoes> {
   const inicio = `${mes}-01`;
   const ate = fimDoMes(somarMesesAoMes(mes, 3));
-  const { data: projetos } = await servico.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200);
-  const ids = await projetosDoClienteNaMarca(servico, clientId, marca, ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id));
-  if (!ids.length) return [];
-  const { data } = await servico
-    .from("tasks")
-    .select("id, title, due_date, delivery_type, status")
-    .in("project_id", ids)
-    .is("deleted_at", null)
-    .gte("due_date", inicio)
-    .lte("due_date", ate)
-    .order("due_date")
-    .limit(400);
-  return pecasComApelido((data ?? []) as PecaDaAgenda[]);
+  const { data: projetos } = await servico.from("projects").select("id, name, project_type").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
+  const listaDeProjetos = (projetos ?? []) as Array<{ id: string; name: string | null; project_type: string | null }>;
+  const ids = await projetosDoClienteNaMarca(servico, clientId, marca, listaDeProjetos.map((p) => p.id));
+  const naMarca = listaDeProjetos.filter((p) => ids.indexOf(p.id) >= 0);
+  const social = naMarca.filter((p) => p.project_type === "social_media");
+  const escolhido = (social.length ? social : naMarca)[0] ?? null;
+  const projeto = escolhido ? { id: escolhido.id, nome: String(escolhido.name || "projeto de social") } : null;
+  const [tarefas, campanhas, propostas] = await Promise.all([
+    ids.length
+      ? servico.from("tasks").select("id, title, due_date, delivery_type, status").in("project_id", ids).is("deleted_at", null)
+        .gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(400)
+      : Promise.resolve({ data: [] as unknown[] }),
+    servico.from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(30),
+    servico.from("calendario_propostas").select("parametros, itens, task_ids").eq("client_id", clientId).not("parametros->>campanha_id", "is", null)
+      .order("criado_em", { ascending: false }).limit(100),
+  ]);
+  const listaDeCampanhas = ((campanhas.data ?? []) as CampanhaDaAgenda[]).filter((c) => c && UUID.test(String(c.id)));
+  const nomeDaCampanha = new Map(listaDeCampanhas.map((c) => [c.id, c.nome]));
+  // Tarefa → campanha: o item gravado leva campanha_id; sem ele, vale a campanha da proposta.
+  const campanhaDaTarefa = new Map<string, string>();
+  for (const p of (propostas.data ?? []) as Array<{ parametros: Record<string, unknown> | null; itens: unknown; task_ids: string[] | null }>) {
+    const daProposta = typeof p.parametros?.campanha_id === "string" ? p.parametros.campanha_id : null;
+    for (const i of Array.isArray(p.itens) ? (p.itens as Array<{ task_id?: string | null; campanha_id?: string | null }>) : []) {
+      const c = i.campanha_id || daProposta;
+      if (i.task_id && c && !campanhaDaTarefa.has(i.task_id)) campanhaDaTarefa.set(i.task_id, c);
+    }
+    for (const t of Array.isArray(p.task_ids) ? p.task_ids : []) if (daProposta && !campanhaDaTarefa.has(t)) campanhaDaTarefa.set(t, daProposta);
+  }
+  const pecas = ((tarefas.data ?? []) as PecaDaAgenda[]).map((t) => {
+    const c = campanhaDaTarefa.get(t.id);
+    return c && nomeDaCampanha.has(c) ? { ...t, campanha: nomeDaCampanha.get(c) ?? null } : t;
+  });
+  const { data: plano } = await servico.from("agente_memoria").select("texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
+    .like("texto", `${PREFIXO_PLANO}${mes}:%`).order("criado_em", { ascending: false }).limit(1);
+  const textoDoPlanoDoMes = String(((plano ?? []) as Array<{ texto: string }>)[0]?.texto ?? "");
+  const f = /frequ[êe]ncia[^0-9]{0,30}(\d{1,2})/i.exec(textoDoPlanoDoMes);
+  return { pecas: pecasComApelido(pecas), campanhas: campanhasComApelido(listaDeCampanhas), projeto, frequencia: f ? Number(f[1]) : null };
 }
 
 /** A proposta pedida ou a aberta mais recente do estrategista que começa neste mês. */
@@ -4667,13 +4717,15 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim);
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
-  const [ctx, extra, imagens, conversaId, pecasDaAgenda] = await Promise.all([
+  const [ctx, extra, imagens, conversaId, acoesCtx] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     contextoDoPlanejamento(servico, clientId, mes),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
-    marcaDaChamada(servico, clientId, corpo).then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes)).catch(() => [] as PecaComApelido[]),
+    marcaDaChamada(servico, clientId, corpo).then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes))
+      .catch((): ContextoDasAcoes => ({ pecas: [], campanhas: [], projeto: null, frequencia: null })),
   ]);
+  const pecasDaAgenda = acoesCtx.pecas;
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
   const { data: historico } = await servico
@@ -4702,7 +4754,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 
 CONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):
 ${JSON.stringify(extra)}${blocoDoPlano(ctx, inicio)}
-${blocoDaProposta}${blocoDaAgendaParaAcoes(pecasDaAgenda)}
+${blocoDaProposta}${blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas)}
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hojeSaoPaulo()}.
 MENSAGEM DA EQUIPE: ${mensagem}
 ${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências ou fotos). Use o conteúdo delas com fidelidade.\n` : ""}
@@ -4768,12 +4820,15 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   }
 
   // Apagar ou mudar de data peças já gravadas: só a lista; a equipe confirma (executar_acao_agenda).
-  const acaoNaAgenda = normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda);
+  const acaoNaAgenda = normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas);
+  // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
+  const geracao = normalizarGeracao(r.gerar_conteudos, hojeSaoPaulo().slice(0, 7), acoesCtx.projeto, acoesCtx.frequencia ?? 3);
 
   const resposta = texto(r.resposta, 6000) || "Anotado.";
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
   if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
+  if (geracao) anexosDaResposta.push(geracao);
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: imagens.caminhos.map((c) => ({ caminho: c })) },
   ]);
@@ -4799,6 +4854,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     planos,
     mudanca,
     acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes } : null,
+    gerar_conteudos: geracao,
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,
@@ -5065,14 +5121,51 @@ async function acaoDaMensagem(servico: SupabaseClient, chamador: Chamador, mensa
 }
 
 type ResultadoDaAcao = { task_id: string; titulo: string; ok: boolean; motivo?: string; memoria_id?: string | null; de?: string | null; para?: string };
+type ResultadoDaCampanha = { campanha_id: string; titulo: string; ok: boolean; motivo?: string; antes?: Record<string, unknown>; depois?: Record<string, unknown> };
+
+/** Motivo que impede mexer numa peça gravada (publicação agendada ou no ar, arte aprovada ou agendada). Null quando pode. */
+async function travaDaPeca(servico: SupabaseClient, clientId: string, taskId: string): Promise<string | null> {
+  const { data: vinculo } = await servico.from("editorial_post_internal").select("post_id").eq("task_id", taskId).maybeSingle();
+  const postId = (vinculo as { post_id?: string } | null)?.post_id ?? null;
+  if (postId) {
+    const { data: pubs } = await servico.from("editorial_publications").select("status").eq("post_id", postId).in("status", ["scheduled", "published"]).limit(1);
+    if ((pubs ?? []).length) return "A publicação desta peça já está agendada ou no ar. Mude pela Agenda.";
+  }
+  const { data: trabalhos } = await servico.from("estudio_trabalhos").select("entrega_status").eq("client_id", clientId).eq("task_id", taskId).limit(5);
+  if (((trabalhos ?? []) as Array<{ entrega_status: string | null }>).some((w) => w.entrega_status && ENTREGAS_QUE_TRAVAM.includes(w.entrega_status))) {
+    return "A arte desta peça já foi aprovada ou agendada. Ela não muda por aqui para a aprovação não se perder.";
+  }
+  return null;
+}
+
+/** Apaga (arquiva) uma lista de peças em lotes de 5, com as travas do arquivar_item_agenda. */
+async function arquivarPecas(servico: SupabaseClient, chamador: Chamador, clientId: string, itens: Array<{ task_id: string; titulo: string }>): Promise<ResultadoDaAcao[]> {
+  const saida: ResultadoDaAcao[] = [];
+  for (let k = 0; k < itens.length; k += 5) {
+    const lote = itens.slice(k, k + 5);
+    const feitos = await Promise.all(lote.map(async (it): Promise<ResultadoDaAcao> => {
+      try {
+        const r = await arquivarItemDaAgenda(servico, chamador, { client_id: clientId, task_id: it.task_id, confirmar_arte: true });
+        const j = (await r.json()) as { memoria_id?: string | null; ja_estava_apagado?: boolean };
+        return { task_id: it.task_id, titulo: it.titulo, ok: true, memoria_id: j.memoria_id ?? null, motivo: j.ja_estava_apagado ? "já estava fora da agenda" : undefined };
+      } catch (e) {
+        return { task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível apagar." };
+      }
+    }));
+    saida.push(...feitos);
+  }
+  return saida;
+}
 
 /**
  * executar_acao_agenda { mensagem_id, descartar? }: o botão de confirmar da
  * equipe. Apaga (arquivar_item_agenda, com as mesmas travas: pedido do
- * cliente, publicação agendada ou no ar, arte aprovada) e muda datas. Arte já
- * feita no Estúdio não trava: a lista que a equipe confirmou já mostrava a
- * peça, e a arte fica guardada no Estúdio. Cada peça responde por si; o que
- * não pôde sair volta com o motivo. Dá para desfazer (desfazer_acao_agenda).
+ * cliente, publicação agendada ou no ar, arte aprovada), refaz (apaga igual;
+ * a tela gera de novo pelo pedido livre, com o custo mostrado antes), muda
+ * datas e formatos, e edita campanhas. Arte já feita no Estúdio não trava o
+ * apagar: a lista que a equipe confirmou já mostrava a peça, e a arte fica
+ * guardada no Estúdio. Cada item responde por si; o que não pôde volta com o
+ * motivo. Dá para desfazer (desfazer_acao_agenda).
  */
 async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const { m, acao, gravar } = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
@@ -5080,22 +5173,10 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   if (acao.descartada_em) throw new ErroHttp(409, "acao_descartada", "Esta ação foi descartada. Peça de novo ao agente.");
   if (corpo.descartar === true) return json({ anexo: await gravar({ ...acao, descartada_em: new Date().toISOString() }) });
 
-  const resultados: ResultadoDaAcao[] = [];
   const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];
-  // Em lotes de 5: cada apagar faz de 3 a 5 leituras curtas.
-  for (let k = 0; k < apagar.length; k += 5) {
-    const lote = apagar.slice(k, k + 5);
-    const feitos = await Promise.all(lote.map(async (it): Promise<ResultadoDaAcao> => {
-      try {
-        const r = await arquivarItemDaAgenda(servico, chamador, { client_id: m.client_id, task_id: it.task_id, confirmar_arte: true });
-        const j = (await r.json()) as { memoria_id?: string | null; ja_estava_apagado?: boolean };
-        return { task_id: it.task_id, titulo: it.titulo, ok: true, memoria_id: j.memoria_id ?? null, motivo: j.ja_estava_apagado ? "já estava fora da agenda" : undefined };
-      } catch (e) {
-        return { task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível apagar." };
-      }
-    }));
-    resultados.push(...feitos);
-  }
+  const refazer = Array.isArray(acao.refazer) ? acao.refazer : [];
+  const resultados = await arquivarPecas(servico, chamador, m.client_id, apagar);
+  const refeitos = await arquivarPecas(servico, chamador, m.client_id, refazer);
 
   const mudancas: ResultadoDaAcao[] = [];
   for (const it of Array.isArray(acao.mudar_data) ? acao.mudar_data : []) {
@@ -5116,13 +5197,68 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     }
   }
 
+  const formatos: ResultadoDaAcao[] = [];
+  for (const it of Array.isArray(acao.mudar_formato) ? acao.mudar_formato : []) {
+    try {
+      const t = await tarefaDoCliente(servico, it.task_id, m.client_id);
+      if (t.deleted_at) throw new Error("Esta peça não está mais na agenda.");
+      const trava = await travaDaPeca(servico, m.client_id, t.id);
+      if (trava) throw new Error(trava);
+      const { data: antes } = await servico.from("tasks").select("delivery_type").eq("id", t.id).maybeSingle();
+      const de = (antes as { delivery_type?: string | null } | null)?.delivery_type ?? null;
+      const { error } = await servico.from("tasks").update({ delivery_type: it.formato_para }).eq("id", t.id).is("deleted_at", null);
+      if (error) throw new Error("Não foi possível mudar o formato. Tente de novo.");
+      formatos.push({ task_id: t.id, titulo: it.titulo, ok: true, de, para: it.formato_para });
+    } catch (e) {
+      formatos.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível mudar o formato.", para: it.formato_para });
+    }
+  }
+
+  const campanhas: ResultadoDaCampanha[] = [];
+  for (const ed of Array.isArray(acao.editar_campanhas) ? acao.editar_campanhas : []) {
+    try {
+      const c = await carregarCampanha(servico, ed.campanha_id);
+      if (c.client_id !== m.client_id) throw new Error("Esta campanha não é deste cliente.");
+      const campos = (ed.campos ?? {}) as Record<string, unknown>;
+      const depois: Record<string, unknown> = {};
+      const antes: Record<string, unknown> = {};
+      for (const k of ["nome", "status", "periodo_inicio", "periodo_fim"]) {
+        if (campos[k] === undefined || campos[k] === null || campos[k] === "") continue;
+        depois[k] = campos[k];
+        antes[k] = (c as unknown as Record<string, unknown>)[k] ?? null;
+      }
+      if (!Object.keys(depois).length) throw new Error("Nada para mudar nesta campanha.");
+      const { error } = await servico.from("mesa_campanhas").update(depois).eq("id", c.id).eq("client_id", m.client_id);
+      if (error) throw new Error("Não foi possível editar a campanha. Confira o período e tente de novo.");
+      campanhas.push({ campanha_id: c.id, titulo: c.nome, ok: true, antes, depois });
+    } catch (e) {
+      campanhas.push({ campanha_id: ed.campanha_id, titulo: ed.nome_atual, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível editar a campanha." });
+    }
+  }
+
   const apagados = resultados.filter((r) => r.ok).length;
+  const refeitosOk = refeitos.filter((r) => r.ok).length;
   const movidos = mudancas.filter((r) => r.ok).length;
-  const falhas = resultados.length + mudancas.length - apagados - movidos;
-  const anexo = await gravar({ ...acao, executada_em: new Date().toISOString(), executada_por: chamador.userId, resultados, mudancas });
+  const trocados = formatos.filter((r) => r.ok).length;
+  const editadas = campanhas.filter((r) => r.ok).length;
+  const total = resultados.length + refeitos.length + mudancas.length + formatos.length + campanhas.length;
+  const falhas = total - apagados - refeitosOk - movidos - trocados - editadas;
+  const anexo = await gravar({
+    ...acao,
+    executada_em: new Date().toISOString(),
+    executada_por: chamador.userId,
+    resultados,
+    refeitos,
+    mudancas,
+    formatos,
+    campanhas_editadas: campanhas,
+  });
   const partes: string[] = [];
   if (apagados) partes.push(`${apagados} ${apagados === 1 ? "peça apagada" : "peças apagadas"}`);
+  if (refeitosOk) partes.push(`${refeitosOk} ${refeitosOk === 1 ? "peça saiu para ser refeita" : "peças saíram para ser refeitas"}`);
   if (movidos) partes.push(`${movidos} ${movidos === 1 ? "data mudada" : "datas mudadas"}`);
+  if (trocados) partes.push(`${trocados} ${trocados === 1 ? "formato mudado" : "formatos mudados"}`);
+  if (editadas) partes.push(`${editadas} ${editadas === 1 ? "campanha editada" : "campanhas editadas"}`);
   if (falhas) partes.push(`${falhas} não ${falhas === 1 ? "pôde ser feita" : "puderam ser feitas"} (motivo na lista)`);
   await registrarMensagens(servico, m.conversa_id, m.client_id, [
     { papel: "sistema", conteudo: `Agenda: ${partes.join(", ") || "nada mudou"}. Dá para desfazer.` },
@@ -5130,21 +5266,20 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_acao_na_agenda", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
-    input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, mudar_data: mudancas.length },
+    input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, refazer: refazer.length, mudar_data: mudancas.length, mudar_formato: formatos.length, editar_campanhas: campanhas.length },
     success: falhas === 0, statusCode: 200, durationMs: 0, resultRef: m.id,
   });
-  return json({ anexo, apagados, movidos, falhas });
+  return json({ anexo, apagados, refeitos: refeitosOk, movidos, formatos: trocados, campanhas: editadas, falhas });
 }
 
-/** desfazer_acao_agenda { mensagem_id }: devolve o que foi apagado e as datas de antes. */
+/** desfazer_acao_agenda { mensagem_id }: devolve o que foi apagado ou refeito, as datas, os formatos e as campanhas de antes. */
 async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const { m, acao, gravar } = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
   if (!acao.executada_em) throw new ErroHttp(409, "acao_nao_feita", "Esta ação ainda não foi feita.");
   if (acao.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Esta ação já foi desfeita.");
-  const resultados = (Array.isArray(acao.resultados) ? acao.resultados : []) as ResultadoDaAcao[];
-  const mudancas = (Array.isArray(acao.mudancas) ? acao.mudancas : []) as ResultadoDaAcao[];
+  const lista = (v: unknown) => (Array.isArray(v) ? v : []) as ResultadoDaAcao[];
   let voltaram = 0;
-  for (const r of resultados.filter((x) => x.ok && !x.motivo)) {
+  for (const r of lista(acao.resultados).concat(lista(acao.refeitos)).filter((x) => x.ok && !x.motivo)) {
     try {
       await restaurarItemDaAgenda(servico, chamador, { client_id: m.client_id, task_id: r.task_id, memoria_id: r.memoria_id });
       voltaram++;
@@ -5152,20 +5287,67 @@ async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
       // segue com as outras
     }
   }
-  for (const r of mudancas.filter((x) => x.ok && x.de)) {
+  for (const r of lista(acao.mudancas).filter((x) => x.ok && x.de)) {
     const { error } = await servico.from("tasks").update({ due_date: r.de }).eq("id", r.task_id).eq("due_date", r.para as string);
+    if (!error) voltaram++;
+  }
+  for (const r of lista(acao.formatos).filter((x) => x.ok && x.de)) {
+    const { error } = await servico.from("tasks").update({ delivery_type: r.de }).eq("id", r.task_id).eq("delivery_type", r.para as string);
+    if (!error) voltaram++;
+  }
+  for (const r of ((Array.isArray(acao.campanhas_editadas) ? acao.campanhas_editadas : []) as ResultadoDaCampanha[]).filter((x) => x.ok && x.antes)) {
+    const { error } = await servico.from("mesa_campanhas").update(r.antes as Record<string, unknown>).eq("id", r.campanha_id).eq("client_id", m.client_id);
     if (!error) voltaram++;
   }
   const anexo = await gravar({ ...acao, desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId });
   await registrarMensagens(servico, m.conversa_id, m.client_id, [
-    { papel: "sistema", conteudo: `Agenda: ação desfeita (${voltaram} ${voltaram === 1 ? "peça voltou" : "peças voltaram"} como estava).` },
+    { papel: "sistema", conteudo: `Agenda: ação desfeita (${voltaram} ${voltaram === 1 ? "item voltou" : "itens voltaram"} como estava).` },
   ]);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_desfazer_acao_na_agenda", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { client_id: m.client_id, mensagem_id: m.id }, success: true, statusCode: 200, durationMs: 0, resultRef: m.id,
+  });
   return json({ anexo, voltaram });
+}
+
+/**
+ * registrar_geracao { mensagem_id, descartar? }: a tela começou (ou cancelou)
+ * a geração de meses inteiros que o agente propôs (anexo gerar_conteudos). Só
+ * marca na conversa, para o cartão não oferecer de novo; quem gera é o
+ * gerador de meses, com o custo mostrado antes.
+ */
+async function registrarGeracao(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const id = String(corpo.mensagem_id ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: msg, error } = await servico.from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(500, "mensagem_indisponivel", "Não foi possível ler a mensagem do agente.");
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  const mm = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
+  await exigirAcessoAoCliente(chamador, mm.client_id);
+  const anexos = Array.isArray(mm.anexos) ? (mm.anexos as Record<string, unknown>[]).slice() : [];
+  const i = anexos.findIndex((a) => a && a.tipo === "gerar_conteudos");
+  if (i < 0) throw new ErroHttp(404, "geracao_inexistente", "Esta mensagem não tem geração de meses.");
+  const g = anexos[i];
+  if (g.executada_em || g.descartada_em) throw new ErroHttp(409, "geracao_ja_decidida", "Esta geração já foi começada ou cancelada.");
+  const agora = new Date().toISOString();
+  anexos[i] = corpo.descartar === true ? { ...g, descartada_em: agora } : { ...g, executada_em: agora, executada_por: chamador.userId };
+  await servico.from("agente_mensagens").update({ anexos }).eq("id", mm.id).eq("client_id", mm.client_id);
+  if (corpo.descartar !== true) {
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: "mesa_gerar_meses_pelo_agente", origin: "mesa:agente-calendario",
+      keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+      input: { client_id: mm.client_id, mensagem_id: mm.id, meses: g.meses, frequencia_semanal: g.frequencia_semanal },
+      success: true, statusCode: 200, durationMs: 0, resultRef: mm.id,
+    });
+  }
+  return json({ anexo: anexos[i] });
 }
 
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   executar_acao_agenda: executarAcaoNaAgenda,
   desfazer_acao_agenda: desfazerAcaoNaAgenda,
+  registrar_geracao: registrarGeracao,
   planejar_mes: planejarMes,
   aplicar_mudanca: aplicarMudanca,
   tirar_item: tirarItem,

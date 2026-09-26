@@ -42,6 +42,8 @@ import {
   type SugestaoDoAgente,
 } from "./fotoApi";
 import { lerDaSessao } from "./sessao";
+import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import { chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 
 /**
  * O diretor de fotografia, à mão em qualquer etapa: botão flutuante no
@@ -495,6 +497,8 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
 
 function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConversa: string[] }) {
   const { irPara } = useMesaFoto();
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
   if (m.papel === "usuario") {
     return (
       <div className="ml-10 min-w-0">
@@ -551,6 +555,19 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
             ),
           )}
         </ul>
+      )}
+      {m.acao && m.mensagemId && (
+        <div className="mt-2">
+          <CartaoDeAcao
+            acao={m.acao}
+            titulo="O diretor vai fazer nas fotos"
+            observacao="Sem custo. Nenhuma foto é apagada, e dá para desfazer."
+            onPedido={(p) => chamarAcaoDoAgente("mesa-foto", String(m.mensagemId), m.acao ? m.acao.id : "", p)}
+            onFeito={(p) => {
+              if (p !== "descartar") invalidarFotos(queryClient, clientId);
+            }}
+          />
+        </div>
       )}
       {m.custo_usd !== null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
     </div>
@@ -658,6 +675,8 @@ export default function AgenteDiretor({
             proximo_passo: r.proximo_passo,
             kit_ids: r.kit_ids,
             identificacao: r.identificacao,
+            acao: r.acao,
+            mensagemId: r.mensagem_id,
           },
         ]),
       );
@@ -742,6 +761,10 @@ export default function AgenteDiretor({
           <Conversa mensagens={mensagens} pendente={pendente} anexos={anexos.concat(estilosQueCabem)} />
           <div className="border-t border-border p-3">
             {!!erro && <AvisoDeErro erro={erro} className="mb-2" />}
+            <OQuePossoFazer
+              className="mb-1.5"
+              capacidades={["aprovar e arquivar fotos em lote", "organizar em pastas e etiquetas", "mandar fotos aprovadas para uma campanha"]}
+            />
             <div className="mb-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
               {ATALHOS_DO_DIRETOR.map((a) => {
                 const Icone = a.icone;

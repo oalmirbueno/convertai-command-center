@@ -7,6 +7,8 @@ import { chamarFuncao, padraoDoContexto, TAMANHOS, type ParteDaEstimativa } from
 import { AvisoDeErro, EstimativaInline, avisarCustoReal } from "./Custo";
 import { Ditado } from "./Ditado";
 import { useMesa } from "./MesaContexto";
+import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import {
   chaveDoHistorico,
   ROTULOS_DO_QUE_MUDOU,
@@ -67,7 +69,7 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
       queryClient.setQueryData<MensagemDoContexto[]>(chaveDoHistorico(alvo), (antes) =>
         (antes || []).concat([
           { papel: "usuario", conteudo: msg, criado_em: agora },
-          { papel: "agente", conteudo: resposta, criado_em: agora },
+          { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: data && data.acao ? [data.acao] : [] },
         ]),
       );
       setUltimo({ clientId: alvo, mudou: Array.isArray(data?.mudou) ? data.mudou : [], memorias: Number(data?.memorias || 0) });
@@ -112,14 +114,32 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
             Nenhuma conversa ainda. Exemplos: "a cor principal é o verde da fachada", "o público são mães de 30 a 45 anos", "nunca usar fundo preto".
           </p>
         )}
-        {mensagens.map((m, i) => (
-          <div
-            key={`${m.criado_em}-${i}`}
-            className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}
-          >
-            <p className="whitespace-pre-wrap">{m.conteudo}</p>
-          </div>
-        ))}
+        {mensagens.map((m, i) =>
+          m.papel === "sistema" ? (
+            <p key={`${m.criado_em}-${i}`} className="text-center text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>
+          ) : (
+            <div key={`${m.criado_em}-${i}`} className="min-w-0 space-y-2">
+              <div
+                className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}
+              >
+                <p className="whitespace-pre-wrap">{m.conteudo}</p>
+              </div>
+              {m.papel === "agente" && m.id &&
+                acoesDaMensagem(m.anexos).map((a) => (
+                  <CartaoDeAcao
+                    key={a.id}
+                    acao={a}
+                    titulo="O agente vai fazer"
+                    observacao="Sem custo. Nada é apagado, e dá para desfazer."
+                    onPedido={(p) => chamarAcaoDoAgente("agente-contexto", String(m.id), a.id, p)}
+                    onFeito={(p) => {
+                      if (p !== "descartar") invalidar(clientId, { historico: true });
+                    }}
+                  />
+                ))}
+            </div>
+          ),
+        )}
         {pendente && (
           <>
             <div className="ml-6 rounded-lg bg-primary/10 px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
@@ -141,8 +161,17 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
 
       {erro && erro.clientId === clientId && <AvisoDeErro erro={erro.erro} className="mt-3 shrink-0" />}
 
+      <OQuePossoFazer
+        className="mt-3 shrink-0"
+        capacidades={["trocar a logo por uma do acervo", "arquivar referências e fotos", "organizar fotos em pastas", "mover, renomear e arquivar arquivos do workspace"]}
+        atalhos={[
+          { rotulo: "Organizar o workspace", texto: "Organize os arquivos do workspace deste cliente em pastas por assunto." },
+          { rotulo: "Arquivar referências velhas", texto: "Arquive as referências que não combinam mais com a marca." },
+        ]}
+        onAtalho={(t) => setTexto(t)}
+      />
       <Textarea
-        className="mt-3 shrink-0 resize-none"
+        className="mt-2 shrink-0 resize-none"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={(e) => {

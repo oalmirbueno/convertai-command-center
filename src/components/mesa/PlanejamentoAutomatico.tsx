@@ -486,6 +486,73 @@ function LinhaDoMes({
   );
 }
 
+// ------------------------------------------------------------------ pelo agente do mês
+
+/**
+ * Pedido ao agente do mês "crie todos os conteúdos de outubro" (25/09 à
+ * noite): o cartão da conversa confirma com o custo e roda ESTE motor, o
+ * mesmo do "Planejar e preencher a agenda", com o mesmo andamento.
+ */
+export interface GeracaoPeloAgente {
+  /** Meses AAAA-MM-01. */
+  meses: string[];
+  frequenciaSemanal: number;
+  modeloId: string;
+  raciocinio?: string;
+  projetoId: string;
+}
+
+/** Publicações de cada mês e a estimativa de custo (temas e detalhe de cada mês). */
+export function estimativaDaGeracao(g: Pick<GeracaoPeloAgente, "meses" | "frequenciaSemanal" | "modeloId" | "raciocinio">) {
+  const porSemana = Math.max(1, Math.min(14, Math.round(g.frequenciaSemanal) || 3));
+  const alvos = g.meses.map((m) => publicacoesDoMes(m, porSemana));
+  const partes = alvos.reduce((acc: ParteDaEstimativa[], alvo) => acc.concat(partesDoMes({ modeloId: g.modeloId, raciocinio: g.raciocinio }, alvo, null)), []);
+  return { alvos, total: alvos.reduce((t, n) => t + n, 0), partes };
+}
+
+/** Começa a geração. Null quando já há uma rodada deste cliente em andamento. */
+export function iniciarGeracaoPeloAgente(
+  f: { clientId: string; queryClient: QueryClient; atualizarCusto: () => void },
+  g: GeracaoPeloAgente,
+): Promise<{ custo_usd: number; gravados: number; falhas: number }> | null {
+  const atual = execucoes[f.clientId];
+  if (atual && atual.rodando) return null;
+  const { alvos } = estimativaDaGeracao(g);
+  const linhas: Record<string, EstadoDoMes> = {};
+  g.meses.forEach((m, i) => {
+    linhas[m] = { mes: m, fase: "espera", alvo: alvos[i], propostaId: null, escolheu: false, detalhou: false, custo: 0, itens: null, erro: null };
+  });
+  execucoes[f.clientId] = {
+    meses: g.meses.slice(),
+    linhas,
+    config: {
+      frequenciaSemanal: Math.max(1, Math.min(14, Math.round(g.frequenciaSemanal) || 3)),
+      modeloId: g.modeloId,
+      raciocinio: g.raciocinio || undefined,
+      projetoId: g.projetoId,
+      escolha: escolhaLivre(),
+    },
+    rodando: false,
+    parar: false,
+  };
+  avisar(f.clientId);
+  return rodarFila(f, g.meses);
+}
+
+/** Andamento da rodada do cliente (a do agente ou a da tela), para o cartão da conversa. */
+export function useAndamentoDaGeracao(clientId: string): { rodando: boolean; gravados: number; total: number; falhas: number; custo: number } | null {
+  const ex = useExecucao(clientId);
+  if (!ex) return null;
+  const linhas = ex.meses.map((m) => ex.linhas[m]).filter((l): l is EstadoDoMes => !!l);
+  return {
+    rodando: ex.rodando,
+    gravados: linhas.filter((l) => l.fase === "gravado").length,
+    total: linhas.length,
+    falhas: linhas.filter((l) => l.fase === "erro").length,
+    custo: linhas.reduce((t, l) => t + (l.custo || 0), 0),
+  };
+}
+
 export default function PlanejamentoAutomatico() {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;

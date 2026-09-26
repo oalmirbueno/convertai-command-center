@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { inicioDoMes, somarMeses } from "@/lib/mesa/api";
+import { inicioDoMes, padraoPara, somarMeses, usd } from "@/lib/mesa/api";
+import { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import { estimativaDaGeracao, iniciarGeracaoPeloAgente, useAndamentoDaGeracao } from "./PlanejamentoAutomatico";
+import { raciocinioPadraoDaTela } from "./MesConhecimento";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "./Custo";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
@@ -21,6 +24,7 @@ import {
   lerConversaDoAgente,
   lerHypes,
   lerPropostas,
+  partesDoPedido as partesDoPedidoLivre,
   pedidoLivre,
   periodoCurto,
   type MensagemDoAgente,
@@ -35,7 +39,12 @@ import {
   desfazerAcaoNaAgenda,
   ehPedidoNaAgenda,
   executarAcaoNaAgenda,
+  geracaoDaMensagem,
+  pedidoParaRefazer,
+  registrarGeracao,
   type AcaoNaAgenda,
+  type EdicaoDeCampanha,
+  type GeracaoDeConteudos,
   corpoDoPlano,
   esquecerPlano,
   lerPlanosCombinados,
@@ -72,6 +81,12 @@ export interface PedidoEmAndamento {
 }
 
 const SEM_CAMPANHA = "nenhuma";
+
+/** Atalhos de ação na agenda (o agente prepara a lista e a equipe confirma). */
+const ATALHOS_DE_ACAO = (nomeDoMes: string) => [
+  { rotulo: `Criar todos os conteúdos de ${nomeDoMes}`, texto: `Crie todos os conteúdos de ${nomeDoMes}.` },
+  { rotulo: "Refazer conteúdos", texto: "Refaça os conteúdos " },
+];
 const CHAVE_DO_MODO = "mesa:agente:modo";
 
 const chaveDasEscondidas = (clientId: string) => `mesa:agente:escondidas:${clientId}`;
@@ -221,45 +236,66 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
 
 // ------------------------------------------------------------------ ação na agenda
 
+const ROTULO_DO_ESTADO_DA_CAMPANHA: Record<string, string> = { planejada: "planejada", gravada: "gravada", encerrada: "encerrada" };
+
+function camposDaCampanha(c: EdicaoDeCampanha["campos"]): string {
+  const partes: string[] = [];
+  if (c.nome) partes.push(`nome: ${c.nome}`);
+  if (c.status) partes.push(`estado: ${ROTULO_DO_ESTADO_DA_CAMPANHA[c.status] || c.status}`);
+  if (c.periodo_inicio || c.periodo_fim) partes.push(`período: ${c.periodo_inicio ? diaCurto(c.periodo_inicio) : "igual"} a ${c.periodo_fim ? diaCurto(c.periodo_fim) : "igual"}`);
+  return partes.join(" · ");
+}
+
 /**
- * O que o agente vai fazer na agenda já gravada (apagar ou mudar a data),
- * peça por peça. Só acontece ao confirmar; depois, dá para desfazer.
+ * O que o agente vai fazer na agenda já gravada (apagar, refazer, mudar a
+ * data ou o formato) e nas campanhas, item por item. Só acontece ao
+ * confirmar; depois, dá para desfazer. Refazer tira da agenda e gera de novo
+ * pelo pedido livre: o custo aparece no botão antes de confirmar.
  */
 export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string; acao: AcaoNaAgenda }) {
-  const { clientId } = useMesa();
+  const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
   const [atual, setAtual] = useState<AcaoNaAgenda>(acao);
   const estado = atual.desfeita_em ? "desfeita" : atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
-  const total = atual.apagar.length + atual.mudar_data.length;
-  const todos = (atual.resultados || []).concat(atual.mudancas || []);
-  const falhas = todos.filter((r) => !r.ok);
-  const motivoDe = (taskId: string) => {
-    const r = todos.find((x) => x.task_id === taskId);
+  const total = atual.apagar.length + atual.mudar_data.length + atual.mudar_formato.length + atual.refazer.length + atual.editar_campanhas.length;
+  const todos = (atual.resultados || []).concat(atual.mudancas || [], atual.formatos || [], atual.refeitos || []);
+  const campanhasFeitas = atual.campanhas_editadas || [];
+  const falhas = todos.filter((r) => !r.ok).length + campanhasFeitas.filter((r) => !r.ok).length;
+  const motivoDe = (taskId: string, lista?: typeof todos) => {
+    const r = (lista || todos).find((x) => x.task_id === taskId);
     return r && !r.ok ? r.motivo || "Não foi possível." : null;
+  };
+  const refazendo = atual.refazer.length > 0;
+
+  const depois = (tipo: "confirmar" | "descartar" | "desfazer", data: any) => {
+    if (data && data.anexo) setAtual(acaoNaAgendaDaMensagem([data.anexo]) || atual);
+    if (tipo !== "descartar") {
+      atualizarAgenda(queryClient, clientId);
+      if (tipo === "confirmar") {
+        const partes = [
+          data.apagados ? `${data.apagados} ${data.apagados === 1 ? "peça apagada" : "peças apagadas"}` : "",
+          data.refeitos ? `${data.refeitos} ${data.refeitos === 1 ? "peça refeita" : "peças refeitas"}` : "",
+          data.movidos ? `${data.movidos} ${data.movidos === 1 ? "data mudada" : "datas mudadas"}` : "",
+          data.formatos ? `${data.formatos} ${data.formatos === 1 ? "formato mudado" : "formatos mudados"}` : "",
+          data.campanhas ? `${data.campanhas} ${data.campanhas === 1 ? "campanha editada" : "campanhas editadas"}` : "",
+        ].filter(Boolean);
+        toast.success(partes.join(" e ") || "Nada mudou", {
+          description: data.falhas ? `${data.falhas} não ${data.falhas === 1 ? "pôde ser feita" : "puderam ser feitas"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
+        });
+      } else {
+        toast.success("Agenda como estava", { description: `${data.voltaram || 0} ${data.voltaram === 1 ? "item voltou" : "itens voltaram"}.` });
+      }
+    }
+    void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
   };
 
   const agir = async (tipo: "confirmar" | "descartar" | "desfazer") => {
     setFazendo(tipo);
     try {
       const data = tipo === "desfazer" ? await desfazerAcaoNaAgenda(mensagemId) : await executarAcaoNaAgenda(mensagemId, tipo === "descartar");
-      if (data && data.anexo) setAtual(acaoNaAgendaDaMensagem([data.anexo]) || atual);
-      if (tipo !== "descartar") {
-        atualizarAgenda(queryClient, clientId);
-        if (tipo === "confirmar") {
-          const partes = [
-            data.apagados ? `${data.apagados} ${data.apagados === 1 ? "peça apagada" : "peças apagadas"}` : "",
-            data.movidos ? `${data.movidos} ${data.movidos === 1 ? "data mudada" : "datas mudadas"}` : "",
-          ].filter(Boolean);
-          toast.success(partes.join(" e ") || "Nada mudou", {
-            description: data.falhas ? `${data.falhas} não ${data.falhas === 1 ? "pôde ser feita" : "puderam ser feitas"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
-          });
-        } else {
-          toast.success("Agenda como estava", { description: `${data.voltaram || 0} ${data.voltaram === 1 ? "peça voltou" : "peças voltaram"}.` });
-        }
-      }
-      void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+      depois(tipo, data);
     } catch (e) {
       avisarErro(e, tipo === "desfazer" ? "Não foi possível desfazer" : tipo === "descartar" ? "Não foi possível cancelar" : "Não foi possível mexer na agenda");
     } finally {
@@ -267,15 +303,38 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
     }
   };
 
-  const linha = (i: AcaoNaAgenda["apagar"][number], sinal: "sai" | "muda") => {
-    const motivo = motivoDe(i.task_id);
-    const quando = sinal === "muda" && i.para ? `${i.data ? diaCurto(i.data) : "sem data"} para ${diaCurto(i.para)}` : i.data ? diaCurto(i.data) : "sem data";
+  // Refazer: tira da agenda e, com o que saiu de fato, pede ao agente os conteúdos novos (mesmo fluxo do Criar conteúdos).
+  const confirmarERefazer = async () => {
+    setFazendo("confirmar");
+    try {
+      const data = await executarAcaoNaAgenda(mensagemId, false);
+      depois("confirmar", data);
+      const novo = data && data.anexo ? acaoNaAgendaDaMensagem([data.anexo]) : null;
+      const sairam = (novo && novo.refeitos ? novo.refeitos : []).filter((r) => r.ok && !r.motivo).map((r) => r.task_id);
+      const itens = atual.refazer.filter((i) => sairam.indexOf(i.task_id) >= 0);
+      if (!itens.length) return data;
+      const nova = await pedidoLivre({ clientId, mensagem: pedidoParaRefazer(itens), anexos: [], campanhaId: null });
+      await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+      return nova;
+    } finally {
+      setFazendo(null);
+    }
+  };
+
+  const linha = (i: AcaoNaAgenda["apagar"][number], sinal: "sai" | "muda" | "formato" | "refaz") => {
+    const motivo = motivoDe(i.task_id, sinal === "sai" ? atual.resultados : sinal === "muda" ? atual.mudancas : sinal === "formato" ? atual.formatos : atual.refeitos);
+    const quando =
+      sinal === "muda" && i.para
+        ? `${i.data ? diaCurto(i.data) : "sem data"} para ${diaCurto(i.para)}`
+        : `${i.data ? diaCurto(i.data) : "sem data"}${sinal === "formato" ? ` · ${i.formato} para ${i.formato_para_nome || i.formato_para || ""}` : ""}`;
+    const Icone = sinal === "sai" ? Trash2 : sinal === "refaz" ? Sparkles : RefreshCw;
     return (
       <li key={`${sinal}-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
-        {sinal === "sai" ? <Trash2 className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" /> : <RefreshCw className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />}
+        <Icone className={`mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 ${sinal === "sai" ? "text-destructive" : "text-primary"}`} />
         <span className="min-w-0 [overflow-wrap:anywhere]">
+          {sinal === "refaz" && <span className="text-muted-foreground">Refazer: </span>}
           <span className="font-medium">{i.titulo}</span>
-          <span className="text-muted-foreground"> · {quando}{i.formato ? ` · ${i.formato}` : ""}</span>
+          <span className="text-muted-foreground"> · {quando}{sinal !== "formato" && i.formato ? ` · ${i.formato}` : ""}</span>
           {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
         </span>
       </li>
@@ -286,32 +345,63 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
     <section className="mr-6 min-w-0 rounded-2xl border border-destructive/30 bg-card p-3.5" data-acao-agenda={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
-        Mudança na agenda gravada · {total} {total === 1 ? "peça" : "peças"}
+        Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
       </p>
       {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
         {atual.apagar.map((i) => linha(i, "sai"))}
+        {atual.refazer.map((i) => linha(i, "refaz"))}
         {atual.mudar_data.map((i) => linha(i, "muda"))}
+        {atual.mudar_formato.map((i) => linha(i, "formato"))}
+        {atual.editar_campanhas.map((c) => {
+          const r = campanhasFeitas.find((x) => x.campanha_id === c.campanha_id);
+          return (
+            <li key={`c-${c.campanha_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+              <Wand2 className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                <span className="text-muted-foreground">Campanha: </span>
+                <span className="font-medium">{c.nome_atual}</span>
+                <span className="text-muted-foreground"> · {camposDaCampanha(c.campos)}</span>
+                {r && !r.ok && <span className="block text-[11.5px] text-destructive">{r.motivo || "Não foi possível."}</span>}
+              </span>
+            </li>
+          );
+        })}
       </ul>
       <div className="mt-2.5 flex flex-wrap items-center">
         {estado === "aberta" && (
           <>
-            <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo}>
-              {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-              {atual.apagar.length && !atual.mudar_data.length ? `Confirmar e apagar ${atual.apagar.length}` : "Confirmar"}
-            </Button>
+            {refazendo ? (
+              <BotaoComCusto
+                rotulo={`Confirmar e refazer ${atual.refazer.length}`}
+                titulo="Refazer conteúdos"
+                descricao="Tira as peças da agenda e o agente gera conteúdos novos nas mesmas datas e formatos, prontos para gravar."
+                partes={() => partesDoPedidoLivre(catalogo, 0)}
+                executar={confirmarERefazer}
+                fecharAoConfirmar
+                disabled={!!fazendo}
+                className="mb-1 mr-1.5 h-8"
+              />
+            ) : (
+              <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo}>
+                {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                {atual.apagar.length && total === atual.apagar.length ? `Confirmar e apagar ${atual.apagar.length}` : "Confirmar"}
+              </Button>
+            )}
             <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" onClick={() => void agir("descartar")} disabled={!!fazendo}>
               {fazendo === "descartar" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Cancelar
             </Button>
-            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Sem custo. A arte já feita fica guardada no Estúdio, e dá para desfazer.</span>
+            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">
+              {refazendo ? "A arte já feita fica guardada no Estúdio, e dá para desfazer." : "Sem custo. A arte já feita fica guardada no Estúdio, e dá para desfazer."}
+            </span>
           </>
         )}
         {estado === "feita" && (
           <>
             <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
-              Feito{falhas.length ? ` · ${falhas.length} não ${falhas.length === 1 ? "pôde" : "puderam"}` : ""}
+              Feito{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
             <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
               {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
@@ -323,6 +413,108 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
             {estado === "desfeita" ? "Desfeito: a agenda voltou como estava" : "Cancelado: nada mudou"}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ gerar meses inteiros
+
+/**
+ * "Crie todos os conteúdos de outubro": o agente propõe os meses e a
+ * frequência; o custo aparece no botão e só ao confirmar o gerador de meses
+ * (o mesmo do "Planejar e preencher a agenda") começa. O andamento aparece
+ * aqui e na aba Mês.
+ */
+export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; geracao: GeracaoDeConteudos }) {
+  const mesa = useMesa();
+  const { clientId, catalogo } = mesa;
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [atual, setAtual] = useState<GeracaoDeConteudos>(geracao);
+  const [cancelando, setCancelando] = useState(false);
+  const andamento = useAndamentoDaGeracao(clientId);
+  const padrao = padraoPara(catalogo, "estrategista");
+  const modeloId = padrao ? padrao.id : "";
+  const raciocinio = padrao ? raciocinioPadraoDaTela(padrao.raciocinio) : undefined;
+  const meses = atual.meses.map((m) => `${m.slice(0, 7)}-01`);
+  const estimativa = estimativaDaGeracao({ meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio });
+  const estado = atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
+
+  const comecar = async () => {
+    if (!atual.project_id) throw new Error("O cliente não tem projeto de social ativo. Crie o projeto e peça de novo.");
+    const data = await registrarGeracao(mensagemId);
+    if (data && data.anexo) setAtual({ ...atual, ...(data.anexo as GeracaoDeConteudos) });
+    const rodada = iniciarGeracaoPeloAgente(
+      { clientId, queryClient, atualizarCusto: mesa.atualizarCusto },
+      { meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, projetoId: atual.project_id },
+    );
+    if (!rodada) throw new Error("Já há uma geração de meses em andamento para este cliente. Espere terminar.");
+    void rodada.then((r) => {
+      const aviso = r.falhas ? toast.warning : toast.success;
+      aviso("Conteúdos do agente do mês", { description: `${r.gravados} ${r.gravados === 1 ? "mês gravado" : "meses gravados"}${r.falhas ? `, ${r.falhas} com erro (tente pela aba Mês)` : ""}. Custo real: ${usd(r.custo_usd)}.` });
+    });
+    return { custo_usd: null };
+  };
+
+  const cancelar = async () => {
+    setCancelando(true);
+    try {
+      const data = await registrarGeracao(mensagemId, true);
+      if (data && data.anexo) setAtual({ ...atual, ...(data.anexo as GeracaoDeConteudos) });
+    } catch (e) {
+      avisarErro(e, "Não foi possível cancelar");
+    } finally {
+      setCancelando(false);
+    }
+  };
+
+  return (
+    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-geracao={estado}>
+      <p className="flex items-center text-[12px] font-semibold">
+        <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-primary" />
+        Gerar os conteúdos · {atual.meses.length} {atual.meses.length === 1 ? "mês" : "meses"}
+      </p>
+      {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      <p className="mt-1.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
+        <span className="capitalize">{atual.meses.map((m) => nomeDoMes(m)).join(", ")}</span> · {atual.frequencia_semanal} por semana · cerca de {estimativa.total}{" "}
+        {estimativa.total === 1 ? "publicação" : "publicações"}
+        {atual.projeto_nome ? ` · projeto ${atual.projeto_nome}` : ""}. Segue o plano combinado de cada mês.
+      </p>
+      <div className="mt-2.5 flex flex-wrap items-center">
+        {estado === "aberta" && (
+          <>
+            <BotaoComCusto
+              rotulo={`Confirmar e gerar ${atual.meses.length} ${atual.meses.length === 1 ? "mês" : "meses"}`}
+              titulo="Gerar os conteúdos do mês"
+              descricao="Para cada mês: propõe temas, escolhe os melhores pela nota do Jev, detalha e grava na agenda."
+              partes={() => estimativa.partes}
+              executar={comecar}
+              fecharAoConfirmar
+              disabled={!modeloId || !atual.project_id || cancelando || !!(andamento && andamento.rodando)}
+              className="mb-1 mr-1.5 h-8"
+            />
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" onClick={() => void cancelar()} disabled={cancelando}>
+              {cancelando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Cancelar
+            </Button>
+            {!atual.project_id && <span className="mb-1 ml-auto text-[11px] text-destructive">Cliente sem projeto de social ativo.</span>}
+          </>
+        )}
+        {estado === "feita" && (
+          <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+            {andamento && andamento.rodando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+            {andamento
+              ? `${andamento.gravados} de ${andamento.total} ${andamento.total === 1 ? "mês gravado" : "meses gravados"}${andamento.falhas ? ` · ${andamento.falhas} com erro` : ""}`
+              : "Geração começada. O andamento fica na aba Mês."}
+          </span>
+        )}
+        {estado === "descartada" && (
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+            <X className="mr-1 h-3 w-3" />
+            Cancelado: nada foi gerado
           </span>
         )}
       </div>
@@ -677,6 +869,7 @@ export default function AgenteDoMes({
               const idsDaMsg = propostasDaMensagem(m);
               const mudanca = m.papel === "agente" ? mudancaDaMensagem(m.anexos) : null;
               const acaoNaAgenda = m.papel === "agente" ? acaoNaAgendaDaMensagem(m.anexos) : null;
+              const geracao = m.papel === "agente" ? geracaoDaMensagem(m.anexos) : null;
               const mesesDoPlano = m.papel === "agente" ? planosDaMensagem(m.anexos) : [];
               return (
                 <div key={m.id} className="min-w-0 space-y-2">
@@ -697,6 +890,7 @@ export default function AgenteDoMes({
                   )}
                   {mudanca && <CartaoDaMudanca mensagemId={m.id} mudanca={mudanca} />}
                   {acaoNaAgenda && <CartaoDaAcaoNaAgenda mensagemId={m.id} acao={acaoNaAgenda} />}
+                  {geracao && <CartaoDaGeracao mensagemId={m.id} geracao={geracao} />}
                   {imagens.length > 0 && (
                     <div className="ml-10 flex flex-wrap justify-end">
                       {imagens.map((c) => (
@@ -750,6 +944,13 @@ export default function AgenteDoMes({
           </div>
 
           <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+            {!ajustando && (
+              <OQuePossoFazer
+                capacidades={["criar os conteúdos do mês", "apagar", "refazer", "mudar data e formato", "editar campanhas"]}
+                atalhos={planejando ? [] : ATALHOS_DE_ACAO(nome)}
+                onAtalho={preencher}
+              />
+            )}
             {!ajustando && (
               <div className="flex flex-wrap" role="group" aria-label="Atalhos de pedido">
                 {atalhos.map((a) => (

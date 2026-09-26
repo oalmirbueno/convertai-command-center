@@ -56,6 +56,28 @@ import {
 import { conhecimentoContexto } from "../_shared/conhecimento-dos-agentes.ts";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import type { AreaDoCerebro, CategoriaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+import { auditLog } from "../_shared/mcp-audit.ts";
+import {
+  type AcaoDoAgente,
+  type AcaoGuardada,
+  acaoGuardadaNaMensagem,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  type ItemDaAcaoDoAgente,
+  type ResultadoDoItem,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import { executarNoAcervo, type FotoDoAcervo, reverterNoAcervo } from "../_shared/acoes-do-acervo.ts";
+import { executarNoWorkspace, type NoDoWorkspace, reverterNoWorkspace } from "../_shared/acoes-do-workspace.ts";
+import {
+  blocoDasAcoesDoContexto,
+  type DadosDoContexto,
+  ESQUEMA_DAS_ACOES_DO_CONTEXTO,
+  normalizarAcoesDoContexto,
+  pedeAcaoNoContexto,
+  type ReferenciaDoCliente,
+} from "./acoes-do-contexto.ts";
 
 /**
  * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
@@ -734,9 +756,11 @@ const ESQUEMA_CONVERSA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "estilo", "regras", "paleta", "contexto", "memoria"],
+    required: ["resposta", "estilo", "regras", "paleta", "contexto", "memoria", "acoes"],
     properties: {
       resposta: { type: "string" },
+      // Logos, referências, acervo e workspace: só a lista; a equipe confirma (acoes-do-contexto.ts).
+      acoes: ESQUEMA_DAS_ACOES_DO_CONTEXTO,
       estilo: { type: ["string", "null"] },
       regras: { type: ["string", "null"] },
       paleta: {
@@ -818,6 +842,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const anteriores = ((historico.data as { papel: string; conteudo: string }[] | null) ?? []).reverse();
 
+  // Pedido de mexer em logo, referência, foto ou arquivo: as listas entram no prompt (com apelidos, nunca id).
+  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch(() => null) : null;
   // Papel próprio do agente de contexto no catálogo (padrão barato); sem ele, o de leitura.
   const estrategista = await modeloDoContexto();
   const estado = {
@@ -834,7 +860,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "contexto",
     modeloId: estrategista.id,
     raciocinio: raciocinioPara(estrategista, ["low", "medium"]),
-    sistema: `${SISTEMA_CONVERSA}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}`,
+    sistema: `${SISTEMA_CONVERSA}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}${dadosDasAcoes ? `\n${blocoDasAcoesDoContexto(dadosDasAcoes)}` : "\n- acoes: sempre null nesta mensagem."}`,
     mensagens: [
       ...anteriores.map((m) => ({ papel: (m.papel === "agente" ? "agente" : "usuario") as "agente" | "usuario", conteudo: texto(m.conteudo, 3000) })),
       { papel: "usuario", conteudo: mensagem },
@@ -886,18 +912,22 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     if (!g.gravada) console.error("agente-contexto: memoria nao gravada", { client_id: clientId, erro: g.erro });
   }
 
-  const resposta = texto(o.resposta, 4000) || "Pronto.";
+  const acaoProposta = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
+  const resposta = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : "Pronto.");
   // client_id é obrigatório em agente_mensagens: sem ele o insert falhava calado e a conversa nunca ficava salva.
   const agora = Date.now();
-  const { error: erroMensagens } = await db.from("agente_mensagens").insert([
+  const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
     { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString() },
-    { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString() },
-  ]);
+    { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString(), anexos: acaoProposta ? [acaoProposta] : [] },
+  ]).select("id, papel");
   if (erroMensagens) console.error("agente-contexto: conversa nao gravada", { client_id: clientId, erro: erroMensagens.message });
+  const mensagemId = ((gravadas ?? []) as Array<{ id: string; papel: string }>).find((m) => m.papel === "agente")?.id ?? null;
 
   return json({
     resposta,
     mudou,
+    acao: acaoProposta && mensagemId ? acaoProposta : null,
+    mensagem_id: mensagemId,
     memorias: memorias.length,
     kit: await lerKit(clientId),
     custo_usd: r.custoUsd,
@@ -920,7 +950,7 @@ async function historico(ch: Chamador, corpo: Record<string, unknown>) {
   if (!conversa) return json({ mensagens: [] });
   const { data: msgs } = await servico()
     .from("agente_mensagens")
-    .select("papel, conteudo, criado_em")
+    .select("id, papel, conteudo, criado_em, anexos")
     .eq("conversa_id", conversa.id)
     .order("criado_em", { ascending: true })
     .limit(60);
@@ -1124,6 +1154,140 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ kit: await lerKit(clientId), caminho: destino });
 }
 
+// ------------------------------------------------------------------ ações (propor e confirmar)
+
+const comoErroDoContexto = (e: unknown) => (e instanceof ErroDaAcao ? new ErroContexto(e.status, e.codigo, e.message) : e);
+
+/** O que o agente de contexto pode mexer: logos do kit, referências, acervo e workspace do cliente. */
+async function dadosParaAcoes(clientId: string): Promise<DadosDoContexto> {
+  const db = servico();
+  const [kit, refs, fotos, nos] = await Promise.all([
+    lerKit(clientId),
+    db.from("cliente_referencias").select("id, papel, origem, tags, leitura, destaque").eq("client_id", clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(60),
+    db.from("cliente_imagens").select("id, nome, pasta, tags, ativa, aprovada, origem, gerada").eq("client_id", clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(80),
+    db.from("workspace_nodes").select("id, parent_id, kind, name, inbox_token").eq("scope", "client").eq("client_id", clientId).order("name").limit(300),
+  ]);
+  // Sem a coluna de recebimento (ou de destaque/aprovação), relê só o essencial: a lista não some.
+  const refsOk = refs.error
+    ? await db.from("cliente_referencias").select("id, papel, origem, tags, leitura").eq("client_id", clientId).eq("ativa", true).limit(60)
+    : refs;
+  const fotosOk = fotos.error
+    ? await db.from("cliente_imagens").select("id, nome, pasta, tags, ativa, origem").eq("client_id", clientId).eq("ativa", true).limit(80)
+    : fotos;
+  const nosOk = nos.error
+    ? await db.from("workspace_nodes").select("id, parent_id, kind, name").eq("scope", "client").eq("client_id", clientId).order("name").limit(300)
+    : nos;
+  return {
+    kit: kit ? { logo_path: kit.logo_path ?? null, logo_alt_path: kit.logo_alt_path ?? null, logo_file_id: kit.logo_file_id ?? null } : null,
+    referencias: (refsOk.data ?? []) as ReferenciaDoCliente[],
+    fotos: (fotosOk.data ?? []) as FotoDoAcervo[],
+    nos: (nosOk.data ?? []) as NoDoWorkspace[],
+  };
+}
+
+/** Uma operação do agente de contexto, já confirmada. */
+async function executarItemDoContexto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
+  const db = servico();
+  if (item.operacao === "trocar_logo") {
+    const alternativa = item.alvo_id === "alternativa";
+    const antes = await lerKit(clientId);
+    const caminhoAntes = alternativa ? antes?.logo_alt_path ?? null : antes?.logo_path ?? null;
+    try {
+      await definirLogo(ch, { client_id: clientId, origem: "acervo", id: String(item.para), alternativa });
+    } catch (e) {
+      if (e instanceof ErroContexto && e.codigo === "logo_grande_demais") throw new Error("A imagem é grande demais para virar logo aqui. Troque pela tela de Logos, que reduz antes de gravar.");
+      throw e;
+    }
+    return { desfazer: { alternativa, caminho: caminhoAntes } };
+  }
+  if (item.operacao === "arquivar_referencia") {
+    const { data } = await db.from("cliente_referencias").select("id, client_id, ativa").eq("id", item.alvo_id).maybeSingle();
+    const r = data as { id: string; client_id: string; ativa: boolean } | null;
+    if (!r || r.client_id !== clientId) throw new Error("Esta referência não está mais com o cliente.");
+    if (!r.ativa) return { aviso: "já estava arquivada" };
+    const { error } = await db.from("cliente_referencias").update({ ativa: false }).eq("id", r.id).eq("client_id", clientId);
+    if (error) throw new Error("Não foi possível arquivar a referência.");
+    return { desfazer: { ativa: true } };
+  }
+  if (["arquivar_foto", "mover_foto", "marcar_foto", "tirar_marca"].indexOf(item.operacao) >= 0) return executarNoAcervo(db, clientId, item);
+  if (["mover", "renomear", "arquivar"].indexOf(item.operacao) >= 0) return executarNoWorkspace(db, clientId, ch.userId, item);
+  throw new Error("Operação desconhecida.");
+}
+
+async function desfazerItemDoContexto(clientId: string, r: ResultadoDoItem) {
+  const db = servico();
+  const d = (r.desfazer ?? {}) as Record<string, unknown>;
+  if (r.operacao === "trocar_logo") {
+    const alternativa = d.alternativa === true;
+    const { error } = await db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_path" : "logo_path"]: (d.caminho as string | null) ?? null, atualizado_em: new Date().toISOString() }).eq("client_id", clientId);
+    if (error) throw new Error("Não foi possível voltar a logo de antes.");
+    await db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId).then(() => undefined, () => undefined);
+    return;
+  }
+  if (r.operacao === "arquivar_referencia") {
+    const { error } = await db.from("cliente_referencias").update({ ativa: true }).eq("id", r.alvo_id).eq("client_id", clientId);
+    if (error) throw new Error("Não foi possível devolver a referência.");
+    return;
+  }
+  if (["arquivar_foto", "mover_foto", "marcar_foto", "tirar_marca"].indexOf(r.operacao) >= 0) return reverterNoAcervo(db, clientId, r);
+  if (["mover", "renomear", "arquivar"].indexOf(r.operacao) >= 0) return reverterNoWorkspace(db, clientId, r);
+}
+
+async function propostaDoContexto(ch: Chamador, corpo: Record<string, unknown>): Promise<AcaoGuardada> {
+  try {
+    return await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), { acaoId: corpo.acao_id, agente: "contexto" });
+  } catch (e) {
+    throw comoErroDoContexto(e);
+  }
+}
+
+/** executar_acao_agente { mensagem_id, acao_id?, descartar? }: a equipe confirmou (ou cancelou) o que o agente de contexto propôs. */
+async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDoContexto(ch, corpo);
+  const clientId = guardada.mensagem.client_id;
+  const inicio = Date.now();
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  try {
+    r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoContexto(ch, clientId, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 3 });
+  } catch (e) {
+    throw comoErroDoContexto(e);
+  }
+  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  const feitos = r.resultados.filter((x) => x.ok).length;
+  const falhas = r.resultados.length - feitos;
+  if (guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "contexto_acao_do_agente", origin: "mesa:agente-contexto",
+    keyId: `mesa:agente-contexto:${ch.userId}`, scopes: ["files:write"],
+    input: { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
+    success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
+  });
+  return json({ anexo: r.anexo, feitos, falhas, kit: await lerKit(clientId) });
+}
+
+/** desfazer_acao_agente { mensagem_id, acao_id? }: volta o que a ação mudou. */
+async function desfazerAcaoDoContexto(ch: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await propostaDoContexto(ch, corpo);
+  const clientId = guardada.mensagem.client_id;
+  let r: { anexo: AcaoDoAgente; voltaram: number; falharam: Array<{ ref: string; titulo: string; motivo: string }> };
+  try {
+    r = await desfazerAcaoGuardada(guardada, (x) => desfazerItemDoContexto(clientId, x), { userId: ch.userId });
+  } catch (e) {
+    throw comoErroDoContexto(e);
+  }
+  if (guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }).then(() => undefined, () => undefined);
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "contexto_desfazer_acao_do_agente", origin: "mesa:agente-contexto",
+    keyId: `mesa:agente-contexto:${ch.userId}`, scopes: ["files:write"],
+    input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: r.falharam.length === 0, statusCode: 200, durationMs: 0, resultRef: guardada.mensagem.id,
+  });
+  return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, kit: await lerKit(clientId) });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   ler,
   montar,
@@ -1133,6 +1297,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   acervo_classificar: acervoClassificar,
   definir_logo: definirLogo,
   fontes_da_biblioteca: fontesDaBiblioteca,
+  executar_acao_agente: executarAcaoDoContexto,
+  desfazer_acao_agente: desfazerAcaoDoContexto,
 };
 
 Deno.serve(async (req) => {

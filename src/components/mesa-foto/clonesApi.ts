@@ -57,7 +57,7 @@ export interface Clone {
   invariantes: string[];
   motor_preferido_id: string | null;
   ancora_imagem_id: string | null;
-  identidade_real: { imagem_id: string; principal: boolean }[];
+  identidade_real: { imagem_id: string; principal: boolean; adicionada_em?: string | null }[];
   autorizacao: AutorizacaoDoClone | null;
   autorizacao_valida: { ok: boolean; motivo: string | null };
   capa_url: string | null;
@@ -92,12 +92,23 @@ export interface ResumoDaFolhaDoClone {
   frente_aprovada: boolean;
 }
 
+/**
+ * Vista da folha do clone: além da imagem, se foi feita com as fotos de
+ * origem antigas (continua guardada, mas não vai mais ao gerador como
+ * identidade) e se foi apagada (arquivada, dá para restaurar).
+ */
+export type VistaDoClone = ImagemDaPersona & { desatualizada: boolean; arquivada: boolean; fontes_reais: string[] };
+
 export interface CloneAberto {
   clone: Clone;
   reais: (FotoDoAcervo & { principal: boolean })[];
-  imagens: ImagemDaPersona[];
+  imagens: VistaDoClone[];
+  /** Vistas apagadas (arquivadas): ficam para restaurar. */
+  arquivadas: VistaDoClone[];
   folha: ResumoDaFolhaDoClone;
   variacoes: FotoDoAcervo[];
+  /** Variações apagadas (inativas no acervo): ficam para restaurar. */
+  variacoes_arquivadas: FotoDoAcervo[];
   motores: MotorDoClone[];
   presets: PresetDoClone[];
 }
@@ -145,7 +156,7 @@ export function normalizarClone(v: any): Clone | null {
     motor_preferido_id: texto(v.motor_preferido_id) || null,
     ancora_imagem_id: texto(v.ancora_imagem_id) || null,
     identidade_real: Array.isArray(v.identidade_real)
-      ? v.identidade_real.filter((r: any) => r && r.imagem_id).map((r: any) => ({ imagem_id: String(r.imagem_id), principal: r.principal === true }))
+      ? v.identidade_real.filter((r: any) => r && r.imagem_id).map((r: any) => ({ imagem_id: String(r.imagem_id), principal: r.principal === true, adicionada_em: texto(r.adicionada_em) || null }))
       : [],
     autorizacao: aut,
     autorizacao_valida: val ? { ok: val.ok === true, motivo: texto(val.motivo) || null } : { ok: !!aut && aut.confirmada && !aut.revogada_em, motivo: null },
@@ -184,6 +195,33 @@ export function useClones(clientId: string, ativo = true) {
   });
 }
 
+/** Fotos reais que foram ao gerador nesta vista (fontes tipo foto_real). */
+function fontesReais(v: any): string[] {
+  return (Array.isArray(v && v.fontes) ? v.fontes : [])
+    .filter((f: any) => f && (f.tipo === "foto_real" || f.tipo === "real") && f.id)
+    .map((f: any) => String(f.id));
+}
+
+export function normalizarVistaDoClone(v: any, cloneId = ""): VistaDoClone | null {
+  const i = normalizarImagemDaPersona(v, cloneId);
+  if (!i) return null;
+  const avisos: string[] = Array.isArray(v.avisos) ? v.avisos.map(texto) : [];
+  return {
+    ...i,
+    desatualizada: v.desatualizada === true,
+    arquivada: v.arquivada === true || !!v.arquivada_em || avisos.some((a) => a.indexOf("arquivada_em:") === 0),
+    fontes_reais: fontesReais(v),
+  };
+}
+
+/** Uma vista qualquer (a que a função devolve ao gerar) como vista do clone: nova, atual, não apagada. */
+export const comoVistaDoClone = (i: ImagemDaPersona | VistaDoClone): VistaDoClone => ({
+  desatualizada: false,
+  arquivada: false,
+  fontes_reais: [],
+  ...i,
+});
+
 export function normalizarCloneAberto(data: any): CloneAberto | null {
   const clone = normalizarClone(data && data.clone ? { ...data.clone, autorizacao_valida: data.autorizacao_valida } : null);
   if (!clone) return null;
@@ -193,14 +231,20 @@ export function normalizarCloneAberto(data: any): CloneAberto | null {
       return f ? { ...f, principal: r.principal === true } : null;
     })
     .filter(Boolean) as (FotoDoAcervo & { principal: boolean })[];
-  const imagens = (Array.isArray(data.imagens) ? data.imagens : []).map((i: any) => normalizarImagemDaPersona(i, clone.id)).filter(Boolean) as ImagemDaPersona[];
-  const variacoes = (Array.isArray(data.variacoes) ? data.variacoes : []).map((i: any) => normalizarFoto(i)).filter(Boolean) as FotoDoAcervo[];
+  const vistas = (lista: any) => (Array.isArray(lista) ? lista : []).map((i: any) => normalizarVistaDoClone(i, clone.id)).filter(Boolean) as VistaDoClone[];
+  const todas = vistas(data.imagens);
+  const imagens = todas.filter((i) => !i.arquivada);
+  const arquivadas = vistas(data.arquivadas).concat(todas.filter((i) => i.arquivada));
+  const fotos = (lista: any) => (Array.isArray(lista) ? lista : []).map((i: any) => normalizarFoto(i)).filter(Boolean) as FotoDoAcervo[];
+  const variacoes = fotos(data.variacoes);
   const f = data.folha && typeof data.folha === "object" ? data.folha : {};
   return {
     clone,
     reais,
     imagens,
+    arquivadas,
     variacoes,
+    variacoes_arquivadas: fotos(data.variacoes_arquivadas),
     folha: {
       vistas: Array.isArray(f.vistas) ? f.vistas.map((v: any) => ({ vista: texto(v.vista), geradas: Number(v.geradas) || 0, aprovada_id: texto(v.aprovada_id) || null })) : [],
       aprovadas: Number(f.aprovadas) || 0,
@@ -259,7 +303,9 @@ export function cloneAbertoProvisorio(c: Clone, fotos: FotoDoAcervo[], motores: 
     clone: c,
     reais,
     imagens: [],
+    arquivadas: [],
     variacoes,
+    variacoes_arquivadas: [],
     folha: { vistas: [], aprovadas: 0, total: VISTAS_DO_CLONE.length, pronto: false, frente_aprovada: false },
     motores,
     presets,
@@ -272,6 +318,7 @@ export function cloneAbertoProvisorio(c: Clone, fotos: FotoDoAcervo[], motores: 
  */
 export function invalidarClone(queryClient: QueryClient, clientId: string, id?: string | null) {
   void queryClient.invalidateQueries({ queryKey: chaveDosClones(clientId) });
+  void queryClient.invalidateQueries({ queryKey: ["mesa-foto", "clones-arquivados", clientId] });
   if (id) void queryClient.invalidateQueries({ queryKey: chaveDoClone(id) });
 }
 
@@ -309,9 +356,10 @@ export function mudarCloneAberto(queryClient: QueryClient, id: string, mudar: (a
 }
 
 /** Vista nova da folha na tela na hora em que a função devolve (URL assinada já no cache). */
-export function guardarVistaDoClone(queryClient: QueryClient, id: string, imagem: ImagemDaPersona) {
+export function guardarVistaDoClone(queryClient: QueryClient, id: string, imagem: ImagemDaPersona | VistaDoClone) {
   if (imagem.url) semearUrl(queryClient, imagem.storage_bucket, imagem.storage_path, imagem.url);
-  mudarCloneAberto(queryClient, id, (a) => ({ ...a, imagens: a.imagens.filter((i) => i.id !== imagem.id).concat([imagem]) }));
+  const vista = comoVistaDoClone(imagem);
+  mudarCloneAberto(queryClient, id, (a) => ({ ...a, imagens: a.imagens.filter((i) => i.id !== vista.id).concat([vista]) }));
 }
 
 /** Variação nova (ou mudada, ex.: aprovada) no clone aberto em cache. */
@@ -407,9 +455,12 @@ export async function criarClone(clientId: string, r: RascunhoDoClone): Promise<
   return normalizarClone(data && data.clone);
 }
 
-export async function gerarVistaDoClone(p: { modeloId: string; vista: string; qualidade: Qualidade }): Promise<{ imagem: ImagemDaPersona | null; custo_usd?: number }> {
-  const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_folha_gerar", modelo_id: p.modeloId, vista: p.vista, qualidade: p.qualidade });
-  const imagem = normalizarImagemDaPersona(data && data.imagem, p.modeloId);
+export async function gerarVistaDoClone(p: { modeloId: string; vista: string; qualidade: Qualidade; fotos?: string[] | null }): Promise<{ imagem: VistaDoClone | null; custo_usd?: number }> {
+  const corpo: Record<string, unknown> = { acao: "clone_folha_gerar", modelo_id: p.modeloId, vista: p.vista, qualidade: p.qualidade };
+  // Só quando a equipe escolheu as fotos de origem desta geração (sem escolha, vão todas).
+  if (p.fotos && p.fotos.length) corpo.fotos_reais_ids = p.fotos;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const imagem = normalizarVistaDoClone(data && data.imagem, p.modeloId);
   if (imagem && !imagem.url && data && typeof data.url === "string") imagem.url = data.url;
   return { imagem, custo_usd: data && data.custo_usd };
 }
@@ -548,6 +599,125 @@ export async function editarClone(modeloId: string, campos: Record<string, unkno
 export async function pacoteDoClone(modeloId: string): Promise<unknown> {
   const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_pacote", modelo_id: modeloId });
   return data && data.pacote;
+}
+
+// ------------------------------------------------------------------ editar depois de criado (25/09 à noite)
+
+/** Lado menor mínimo da foto de origem (a função confere a mesma regra: clones-edicao.ts). */
+export const LADO_MINIMO_FOTO_REAL = 256;
+
+/** Por que a foto não serve de origem (null = serve). Mesma regra da criação e da edição. */
+export function problemaDaFotoDeOrigem(f: Pick<FotoDoAcervo, "gerada" | "modo" | "ativa" | "largura" | "altura" | "referencia_web">): string | null {
+  if (f.gerada || f.modo === "clone") return "Foto gerada por IA não vira identidade.";
+  if (f.referencia_web) return "Foto da internet não vira identidade.";
+  if (f.ativa === false) return "Foto arquivada no acervo.";
+  if (f.largura && f.altura && Math.min(f.largura, f.altura) < LADO_MINIMO_FOTO_REAL) return `Foto pequena demais (menos de ${LADO_MINIMO_FOTO_REAL} px).`;
+  return null;
+}
+
+/** Fotos de origem em edição na tela (antes de salvar). */
+export interface FotosDeOrigem {
+  ids: string[];
+  principal: string | null;
+}
+
+export const fotosDeOrigemDoClone = (c: Clone): FotosDeOrigem => ({
+  ids: c.identidade_real.map((r) => r.imagem_id),
+  principal: (c.identidade_real.find((r) => r.principal) || c.identidade_real[0] || { imagem_id: null as string | null }).imagem_id,
+});
+
+/** O que mudou nas fotos de origem (nada = não mostra "Salvar"). */
+export function mudancaNasFotos(c: Clone, r: FotosDeOrigem): { entraram: string[]; sairam: string[]; principal: boolean; alguma: boolean } {
+  const antes = fotosDeOrigemDoClone(c);
+  const entraram = r.ids.filter((id) => antes.ids.indexOf(id) < 0);
+  const sairam = antes.ids.filter((id) => r.ids.indexOf(id) < 0);
+  const principal = (r.principal || r.ids[0] || null) !== antes.principal;
+  return { entraram, sairam, principal, alguma: entraram.length > 0 || sairam.length > 0 || principal };
+}
+
+export async function editarFotosDoClone(modeloId: string, r: FotosDeOrigem): Promise<{ clone: Clone | null; desatualizadas: string[]; avisos: string[] }> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_fotos_editar", modelo_id: modeloId, imagem_ids: r.ids, principal_id: r.principal || r.ids[0] || null });
+  return { clone: normalizarClone(data && data.clone), desatualizadas: lista(data && data.desatualizadas), avisos: lista(data && data.avisos) };
+}
+
+/** Marca na tela as vistas feitas com as fotos antigas (a função devolve os ids) e troca o clone. */
+export function marcarFotosNovas(queryClient: QueryClient, c: Clone, desatualizadas: string[], reais?: (FotoDoAcervo & { principal: boolean })[]) {
+  mudarCloneAberto(queryClient, c.id, (a) => ({
+    ...a,
+    clone: { ...a.clone, ...c, capa_url: c.capa_url || a.clone.capa_url, autorizacao_valida: a.clone.autorizacao_valida },
+    reais: reais || a.reais,
+    imagens: a.imagens.map((i) => ({ ...i, desatualizada: desatualizadas.indexOf(i.id) >= 0 })),
+  }));
+}
+
+/** Apagar (arquivar) uma vista da folha ou uma variação; restaurar desfaz. */
+export async function arquivarImagemDoClone(modeloId: string, imagemId: string, origem: "folha" | "acervo", restaurar = false) {
+  const corpo: Record<string, unknown> = { acao: "clone_imagem_arquivar", modelo_id: modeloId, imagem_id: imagemId, origem };
+  if (restaurar) corpo.restaurar = true;
+  return await chamarFuncao<any>("mesa-foto", corpo);
+}
+
+/** Tira da tela (ou devolve) uma vista na hora, antes da função responder. */
+export function moverVistaNoCache(queryClient: QueryClient, cloneId: string, vistaId: string, apagar: boolean) {
+  mudarCloneAberto(queryClient, cloneId, (a) => {
+    const de = apagar ? a.imagens : a.arquivadas;
+    const achada = de.find((i) => i.id === vistaId);
+    if (!achada) return a;
+    // Restaurar não deixa duas aprovadas na mesma vista (como na função).
+    const outraAprovada = !apagar && achada.aprovada === true && a.imagens.some((i) => i.id !== vistaId && i.papel === "vista" && i.vista === achada.vista && i.aprovada === true);
+    const movida = { ...achada, arquivada: apagar, aprovada: outraAprovada ? null : achada.aprovada };
+    return apagar
+      ? { ...a, imagens: a.imagens.filter((i) => i.id !== vistaId), arquivadas: [movida].concat(a.arquivadas) }
+      : { ...a, arquivadas: a.arquivadas.filter((i) => i.id !== vistaId), imagens: a.imagens.concat([movida]) };
+  });
+}
+
+export function moverVariacaoNoCache(queryClient: QueryClient, cloneId: string, fotoId: string, apagar: boolean) {
+  mudarCloneAberto(queryClient, cloneId, (a) => {
+    const de = apagar ? a.variacoes : a.variacoes_arquivadas;
+    const achada = de.find((v) => v.id === fotoId);
+    if (!achada) return a;
+    const movida = { ...achada, ativa: !apagar };
+    return apagar
+      ? { ...a, variacoes: a.variacoes.filter((v) => v.id !== fotoId), variacoes_arquivadas: [movida].concat(a.variacoes_arquivadas) }
+      : { ...a, variacoes_arquivadas: a.variacoes_arquivadas.filter((v) => v.id !== fotoId), variacoes: [movida].concat(a.variacoes) };
+  });
+}
+
+/** Gerar de novo uma variação (o mesmo pedido), escolhendo ou não as fotos de origem. */
+export async function refazerVariacaoDoClone(p: { modeloId: string; imagemId: string; qualidade: Qualidade; fotos?: string[] | null }): Promise<{ imagem: FotoDoAcervo | null; url: string | null; custo_usd?: number; avisos: string[] }> {
+  const corpo: Record<string, unknown> = { acao: "clone_variacao_refazer", modelo_id: p.modeloId, imagem_id: p.imagemId, qualidade: p.qualidade };
+  if (p.fotos && p.fotos.length) corpo.fotos_reais_ids = p.fotos;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const url = data && data.imagem && typeof data.imagem.url === "string" ? data.imagem.url : data && typeof data.url === "string" ? data.url : null;
+  return { imagem: normalizarFoto(data && data.imagem), url, custo_usd: data && data.custo_usd, avisos: lista(data && data.avisos) };
+}
+
+/** Duplicar: mesmas fotos de origem e a mesma autorização (a função confere de novo). */
+export async function duplicarClone(modeloId: string, nome: string, levarFolha: boolean): Promise<{ clone: Clone | null; copiadas: number; avisos: string[] }> {
+  const corpo: Record<string, unknown> = { acao: "clone_duplicar", modelo_id: modeloId, levar_folha: levarFolha };
+  if (nome.trim()) corpo.nome = nome.trim();
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return { clone: normalizarClone(data && data.clone), copiadas: Number(data && data.copiadas) || 0, avisos: lista(data && data.avisos) };
+}
+
+export const nomeDaCopiaDoClone = (nome: string) => `${String(nome || "Clone").replace(/\s*\(c[oó]pia(?: \d+)?\)\s*$/i, "").trim() || "Clone"} (cópia)`.slice(0, 80);
+
+export const chaveDosArquivados = (clientId: string) => ["mesa-foto", "clones-arquivados", clientId];
+
+/** Clones apagados (arquivados) do cliente: só quando a seção "Arquivados" abre. */
+export function useClonesArquivados(clientId: string, ativo: boolean) {
+  return useQuery({
+    queryKey: chaveDosArquivados(clientId),
+    enabled: ativo && !!clientId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async (): Promise<Clone[]> => {
+      const data = await chamarFuncao<any>("mesa-foto", { acao: "clones_listar", client_id: clientId, arquivados: true });
+      return ((data && Array.isArray(data.clones) ? data.clones : []) as any[]).map(normalizarClone).filter(Boolean) as Clone[];
+    },
+  });
 }
 
 // ------------------------------------------------------------------ custo

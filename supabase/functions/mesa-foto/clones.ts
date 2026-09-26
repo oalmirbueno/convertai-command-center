@@ -32,6 +32,14 @@
  *   move clone, folha e fotos do acervo ligadas, com os arquivos; custo e uso já cobrados ficam no cliente antigo)
  * - clone_imagem_decidir ficou leve (sem assinar URL de novo; a tela já tem a imagem e aprova na hora).
  * - estimar aceita acao_alvo clone_folha, clone_variacao, clone_conferir e clone_sugerir.
+ * 25/09 à noite (pedido do dono: mudar, tirar e trocar fotos depois de criado, apagar e clonar; regras em clones-edicao.ts):
+ * - clone_fotos_editar { modelo_id, imagem_ids[1..4], principal_id? } -> { clone, mudanca, desatualizadas, folha }
+ *   (mesmo limite e qualidade da criação; a folha fica guardada, marcada "feita com as fotos antigas")
+ * - clone_folha_gerar e clone_variacao_gerar aceitam fotos_reais_ids (quais fotos de origem vão nesta geração)
+ * - clone_variacao_refazer { modelo_id, imagem_id, fotos_reais_ids?, qualidade? } -> como clone_variacao_gerar (o mesmo pedido)
+ * - clone_imagem_arquivar { modelo_id, imagem_id, origem: 'folha'|'acervo', restaurar? } -> { imagem, clone, folha } (apagar com desfazer)
+ * - clone_duplicar { modelo_id, nome?, levar_folha? } -> { clone, copiadas, avisos } (mesmas fotos de origem e a MESMA autorização, conferida de novo)
+ * - clones_listar { arquivados: true } lista só os arquivados (para restaurar com clone_editar { arquivar: false }).
  */
 
 import {
@@ -94,13 +102,31 @@ import {
   tamanhoDaVista,
   TRACOS_DO_ROSTO,
 } from "./clones-regras.ts";
+import {
+  autorizacaoDaCopia,
+  avisosArquivados,
+  avisosRestaurados,
+  caminhoDoPedido,
+  colunaQueFalta,
+  type EntradaReal,
+  formatoPelaMedida,
+  fotosEscolhidasParaGerar,
+  nomeDaCopia,
+  novaIdentidadeReal,
+  pedidoDaDescricao,
+  validarFotosDeOrigem,
+  vistaArquivada,
+  vistaDesatualizada,
+} from "./clones-edicao.ts";
 
 const REF_CLONE = "foto_clone";
 const LADO_IDENTIDADE = 1280;
 const QUALIDADES: Qualidade[] = ["baixa", "media", "alta"];
 const MIGRATION = "a migration 04 (docs/mesa-foto/migrations/04_clones.sql) foi aplicada?";
 
-type IdentidadeReal = { imagem_id: string; client_id: string; principal: boolean };
+type IdentidadeReal = EntradaReal;
+/** Vista da folha com as colunas novas (opcionais: sem o SQL Z, a marca fica em avisos). */
+type VistaLida = LinhaImagemPersona & { arquivada_em?: string | null };
 
 export type LinhaClone = {
   id: string;
@@ -159,11 +185,18 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     if (!v.ok) throw new ErroDeRegra(422, "autorizacao_invalida", v.motivo ?? "Autorização inválida.");
   }
 
-  async function imagensDaFolha(id: string): Promise<LinhaImagemPersona[]> {
+  /** Todas as imagens da folha, inclusive as apagadas (arquivadas): a transferência leva tudo. */
+  async function imagensDaFolha(id: string): Promise<VistaLida[]> {
     const { data, error } = await db().from("foto_modelo_imagens").select("*").eq("modelo_id", id).order("criado_em", { ascending: true }).limit(300);
     if (error) throw new ErroDeRegra(503, "clones_indisponivel", "Não foi possível ler a folha do clone.");
-    return (data as LinhaImagemPersona[] | null) ?? [];
+    return (data as VistaLida[] | null) ?? [];
   }
+
+  /** A folha que conta (status, identidade, pacote): sem as vistas apagadas. */
+  const ativasDa = (folha: VistaLida[]) => folha.filter((i) => !vistaArquivada(i));
+
+  /** A vista como a tela recebe: com "feita com as fotos antigas" e "apagada". */
+  const comMarcas = (c: LinhaClone) => (i: VistaLida) => ({ ...i, desatualizada: i.papel === "vista" && vistaDesatualizada(i, c.identidade_real), arquivada: vistaArquivada(i) });
 
   async function fotosReais(c: LinhaClone): Promise<(ImagemDoAcervoLida & { principal: boolean })[]> {
     const lidas = await f.lerImagens(c.client_id, c.identidade_real.map((r) => r.imagem_id));
@@ -181,10 +214,17 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     return ((data as unknown as ImagemDoAcervoLida[] | null) ?? []).filter((i) => i.ativa !== false);
   }
 
+  /** Variações apagadas (inativas no acervo): ficam para restaurar. */
+  async function variacoesApagadas(c: LinhaClone): Promise<ImagemDoAcervoLida[]> {
+    const { data } = await db().from("cliente_imagens").select(f.camposImagem).eq("client_id", c.client_id).contains("tags", [`clone:${c.id}`]).eq("ativa", false)
+      .order("atualizado_em", { ascending: false }).limit(24);
+    return (data as unknown as ImagemDoAcervoLida[] | null) ?? [];
+  }
+
   const comUrl = async <T extends { storage_bucket: string; storage_path: string }>(i: T) => ({ ...i, url: await f.urlAssinada(i.storage_bucket, i.storage_path) });
 
-  async function atualizarStatus(c: LinhaClone, imagens?: LinhaImagemPersona[]): Promise<LinhaClone> {
-    const lista = imagens ?? (await imagensDaFolha(c.id));
+  async function atualizarStatus(c: LinhaClone, imagens?: VistaLida[]): Promise<LinhaClone> {
+    const lista = ativasDa(imagens ?? (await imagensDaFolha(c.id)));
     const novo = statusDoClone(c.status, lista);
     const frente = lista.find((i) => i.papel === "vista" && i.vista === "frente" && i.aprovada === true) ?? null;
     const ancora = frente?.id ?? null;
@@ -212,10 +252,15 @@ export function acoesDeClones(f: FerramentasDaMesa) {
    * logo e referência de estilo). Devolve também os traços já lidos pela
    * conferência das vistas aprovadas (para repetir no prompt, sem custo).
    */
-  async function identidadesBaixadas(c: LinhaClone, vista: VistaDaPersona | null, m: ModeloIa, modo: "folha" | "variacao" = "folha", vagasReservadas = 0): Promise<{ fontes: FonteDeIdentidade[]; imagens: ImagemEntrada[]; tracos: string[] }> {
-    const [reais, folha] = await Promise.all([fotosReais(c), imagensDaFolha(c.id)]);
+  async function identidadesBaixadas(c: LinhaClone, vista: VistaDaPersona | null, m: ModeloIa, modo: "folha" | "variacao" = "folha", vagasReservadas = 0, soReais: string[] | null = null): Promise<{ fontes: FonteDeIdentidade[]; imagens: ImagemEntrada[]; tracos: string[]; puladas: number }> {
+    const [todasReais, folha] = await Promise.all([fotosReais(c), imagensDaFolha(c.id)]);
+    // Quando a equipe escolhe as fotos de origem desta geração, vão só elas (a principal, se escolhida, na frente).
+    const reais = soReais ? todasReais.filter((r) => soReais.indexOf(r.id) >= 0) : todasReais;
     if (!reais.length) throw new ErroDeRegra(409, "sem_fotos_reais", "As fotos reais deste clone saíram do acervo. Escolha as fotos de novo.");
-    const aprovadas = folha.filter((i) => i.papel === "vista" && i.aprovada === true);
+    // Vista apagada não conta; vista feita com as fotos antigas continua guardada mas não vai ao gerador como identidade.
+    const aprovadasTodas = ativasDa(folha).filter((i) => i.papel === "vista" && i.aprovada === true);
+    const aprovadas = aprovadasTodas.filter((i) => !vistaDesatualizada(i, c.identidade_real));
+    const puladas = aprovadasTodas.length - aprovadas.length;
     const reaisFontes = reais.map((r) => ({ id: r.id, tipo: "real" as const, vista: null, principal: r.principal }));
     const folhaFontes = aprovadas.map((a) => ({ id: a.id, tipo: "folha" as const, vista: a.vista }));
     const doGerador = limiteDeReferencias(m) || MAX_IDENTIDADES_NO_GERADOR;
@@ -231,7 +276,7 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       const a = aprovadas.find((x) => x.id === fo.id)!;
       return f.baixarReduzida(a.storage_bucket, a.storage_path, LADO_IDENTIDADE, `folha-${a.vista ?? "vista"}`);
     });
-    return { fontes, imagens, tracos };
+    return { fontes, imagens, tracos, puladas };
   }
 
   /**
@@ -284,7 +329,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const clientId = idDe(corpo.client_id, "client_id");
     await f.garantirAcesso(ch, clientId);
     let q = db().from("foto_modelos").select("*").eq("client_id", clientId).eq("origem", ORIGEM_CLONE).order("atualizado_em", { ascending: false }).limit(100);
-    if (corpo.incluir_arquivados !== true) q = q.neq("status", "arquivada");
+    // Arquivado some das listas e dos seletores das mesas; a seção "Arquivados" pede só eles para restaurar.
+    if (corpo.arquivados === true) q = q.eq("status", "arquivada");
+    else if (corpo.incluir_arquivados !== true) q = q.neq("status", "arquivada");
     const { data, error } = await q;
     if (error) throw new ErroDeRegra(503, "clones_indisponivel", `Não foi possível ler os clones (${MIGRATION}).`);
     const lista = ((data as LinhaClone[] | null) ?? []).map((c) => ({ ...c, identidade_real: Array.isArray(c.identidade_real) ? c.identidade_real : [] }));
@@ -327,14 +374,8 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const descricao = limpoOuNulo(corpo.descricao, 1000);
     const invariantes = listaDeTextos(corpo.invariantes, 12, 200);
     garantirPermitidoNoClone(nome, descricao ?? "", ...invariantes);
-    const ids = lerFotosReais(corpo.imagem_ids);
-    const achadas = await f.lerImagens(clientId, ids);
-    const faltando = ids.filter((id) => !achadas.some((a) => a.id === id));
-    if (faltando.length) throw new ErroDeRegra(404, "imagem_fora_do_cliente", "Há foto que não está no acervo deste cliente.", { imagem_ids: faltando });
-    const geradas = achadas.filter((a) => a.gerada === true || (a.tags ?? []).includes("referencia_web"));
-    if (geradas.length) {
-      throw new ErroDeRegra(422, "foto_nao_e_real", "O clone nasce só de fotos REAIS da pessoa: foto gerada por IA ou da internet não vira identidade.", { imagem_ids: geradas.map((g) => g.id) });
-    }
+    // Mesma regra da edição (clone_fotos_editar): 1 a 4, do acervo, reais, ativas e com tamanho mínimo.
+    const ids = validarFotosDeOrigem(corpo.imagem_ids, await f.lerImagens(clientId, lerFotosReais(corpo.imagem_ids)));
     // Autorização: a do kit de pessoa (quando veio de um) preenche o que a equipe não mandou.
     let base: Record<string, unknown> = {};
     if (corpo.kit_id != null && corpo.kit_id !== "") {
@@ -370,7 +411,7 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       versao: 1,
       origem: ORIGEM_CLONE,
       autorizacao,
-      identidade_real: ids.map((id) => ({ imagem_id: id, client_id: clientId, principal: id === principalPedido })),
+      identidade_real: novaIdentidadeReal([], ids, principalPedido, clientId, new Date().toISOString()).identidade,
       etica: { clone_de_pessoa_real: true, autorizada: true, adulta: true, sintetica: false, sem_semelhanca: false, marcado_por: ch.userId, marcado_em: new Date().toISOString() },
       criado_por: ch.userId,
     }).select("*").single();
@@ -387,7 +428,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
 
   async function cloneLer(ch: Chamador, corpo: Record<string, unknown>) {
     const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
-    const [reais, folha, variacoes] = await Promise.all([fotosReais(c), imagensDaFolha(c.id), variacoesDoClone(c)]);
+    const [reais, todas, variacoes, apagadas] = await Promise.all([fotosReais(c), imagensDaFolha(c.id), variacoesDoClone(c), variacoesApagadas(c)]);
+    const folha = ativasDa(todas);
+    const arquivadas = todas.filter((i) => vistaArquivada(i)).slice(-24);
     const refs = Math.min(reais.length + folha.filter((i) => i.aprovada === true).length, MAX_IDENTIDADES_NO_GERADOR);
     const motores = await Promise.all(MOTORES_DO_CLONE.map(async (mo) => {
       try {
@@ -400,9 +443,12 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     return f.json({
       clone: c,
       reais: await f.emParalelo(reais, 4, comUrl),
-      imagens: await f.emParalelo(folha, 6, comUrl),
+      imagens: await f.emParalelo(folha.map(comMarcas(c)), 6, comUrl),
+      // Apagadas (arquivadas) ficam guardadas para restaurar; nada é excluído de vez.
+      arquivadas: await f.emParalelo(arquivadas.map(comMarcas(c)), 6, comUrl),
       folha: resumoDaFolhaDoClone(folha),
       variacoes: await f.emParalelo(variacoes.slice(0, 60), 6, comUrl),
+      variacoes_arquivadas: await f.emParalelo(apagadas.slice(0, 24), 6, comUrl),
       motores,
       presets: PRESETS_DE_VARIACAO.map((p) => ({ id: p.id, rotulo: p.rotulo, ...p.pedido })),
       formatos: Object.keys(FORMATOS_DA_VARIACAO),
@@ -441,12 +487,31 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       if (!autorizacaoValida((patch.autorizacao as AutorizacaoDoClone | undefined) ?? c.autorizacao).ok) {
         throw new ErroDeRegra(422, "autorizacao_invalida", "Para reabrir o clone, registre uma autorização válida.");
       }
-      patch.status = statusDoClone("rascunho", await imagensDaFolha(c.id));
+      patch.status = statusDoClone("rascunho", ativasDa(await imagensDaFolha(c.id)));
     }
     if (!Object.keys(patch).length) return f.json({ clone: c, avisos, custo_usd: 0 });
-    const { data, error } = await db().from("foto_modelos").update(patch).eq("id", c.id).select("*").single();
-    if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível gravar o clone.");
+    // Quando e quem arquivou (colunas do SQL Z; sem elas, só o status muda).
+    const extras: Record<string, unknown> = {};
+    if (patch.status === "arquivada" && c.status !== "arquivada") Object.assign(extras, { arquivado_em: new Date().toISOString(), arquivado_por: ch.userId });
+    if (c.status === "arquivada" && patch.status && patch.status !== "arquivada") Object.assign(extras, { arquivado_em: null, arquivado_por: null });
+    const data = await atualizarComColunasNovas("foto_modelos", c.id, patch, extras);
+    if (!data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível gravar o clone.");
     return f.json({ clone: data, avisos, custo_usd: 0 });
+  }
+
+  /** Update tentando as colunas novas do SQL Z; se ainda não existem, grava só o resto (degradado). */
+  async function atualizarComColunasNovas(tabela: string, id: string, patch: Record<string, unknown>, extras: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    if (Object.keys(extras).length) {
+      const r = await db().from(tabela).update({ ...patch, ...extras }).eq("id", id).select("*").maybeSingle();
+      if (!r.error) return (r.data as Record<string, unknown> | null) ?? null;
+      if (!colunaQueFalta(r.error)) return null;
+    }
+    if (!Object.keys(patch).length) {
+      const r = await db().from(tabela).select("*").eq("id", id).maybeSingle();
+      return (r.data as Record<string, unknown> | null) ?? null;
+    }
+    const r = await db().from(tabela).update(patch).eq("id", id).select("*").maybeSingle();
+    return r.error ? null : ((r.data as Record<string, unknown> | null) ?? null);
   }
 
   async function cloneFolhaGerar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -454,9 +519,10 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     garantirGeravel(c);
     const vista = lerVista(corpo.vista);
     if (!vista || !FOLHA_DO_CLONE.includes(vista)) throw new ErroDeRegra(400, "vista_invalida", `Vista inválida. Use: ${FOLHA_DO_CLONE.join(", ")}.`);
+    const soReais = fotosEscolhidasParaGerar(corpo.fotos_reais_ids, c.identidade_real);
     const m = await motorDaChamada(c, corpo.modelo_imagem_id);
     const p = padraoDo(m);
-    const { fontes, imagens } = await identidadesBaixadas(c, vista, m);
+    const { fontes, imagens } = await identidadesBaixadas(c, vista, m, "folha", 0, soReais);
     const prompt = promptDaFolhaDoClone({ nome: c.nome, vista, fontes, invariantes: c.invariantes });
     const qualidade = lerQualidade(corpo.qualidade, p.qualidade);
     const resolucao = lerResolucao(corpo.resolucao) ?? p.resolucao;
@@ -512,8 +578,8 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     c = await prenderMotor(c, saida.modeloId);
     const todas = await imagensDaFolha(c.id);
     c = await atualizarStatus(c, todas);
-    const linha = data as LinhaImagemPersona;
-    return f.json({ imagem: await comUrl(linha), url: await f.urlAssinada(linha.storage_bucket, linha.storage_path), clone: c, folha: resumoDaFolhaDoClone(todas), ...respostaDaGeracao(saida) });
+    const linha = data as VistaLida;
+    return f.json({ imagem: await comUrl(comMarcas(c)(linha)), url: await f.urlAssinada(linha.storage_bucket, linha.storage_path), clone: c, folha: resumoDaFolhaDoClone(ativasDa(todas)), ...respostaDaGeracao(saida) });
   }
 
   async function cloneImagemDecidir(ch: Chamador, corpo: Record<string, unknown>) {
@@ -521,10 +587,11 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const { data: achada, error: e0 } = await db().from("foto_modelo_imagens").select("*").eq("id", imagemId).maybeSingle();
     if (e0) throw new ErroDeRegra(503, "clones_indisponivel", "Não foi possível ler a imagem.");
     if (!achada) throw new ErroDeRegra(404, "imagem_inexistente", "Imagem do clone não encontrada.");
-    const img = achada as LinhaImagemPersona;
+    const img = achada as VistaLida;
     const c = await cloneComAcesso(ch, img.modelo_id);
     const decisao = String(corpo.decisao ?? "");
     if (decisao !== "aprovar" && decisao !== "rejeitar") throw new ErroDeRegra(400, "decisao_invalida", "decisao: aprovar ou rejeitar.");
+    if (decisao === "aprovar" && vistaArquivada(img)) throw new ErroDeRegra(409, "vista_apagada", "Esta vista foi apagada. Restaure antes de aprovar.");
     // Uma vista aprovada por posição: aprovar outra da mesma vista tira a aprovação da anterior.
     if (decisao === "aprovar" && img.vista) {
       await db().from("foto_modelo_imagens").update({ aprovada: null }).eq("modelo_id", c.id).eq("papel", "vista").eq("vista", img.vista).eq("aprovada", true).neq("id", img.id);
@@ -535,7 +602,7 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     // aprova na hora); uma leitura da folha só para o status. Nada de visão nem Jev no aprovar.
     const todas = await imagensDaFolha(c.id);
     const atual = await atualizarStatus(c, todas);
-    return f.json({ imagem: data, clone: atual, folha: resumoDaFolhaDoClone(todas), custo_usd: 0 });
+    return f.json({ imagem: data, clone: atual, folha: resumoDaFolhaDoClone(ativasDa(todas)), custo_usd: 0 });
   }
 
   type ExtrasDaVariacao = {
@@ -569,7 +636,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const estilo = extras.estilo && extras.estilo.imagens.length ? extras.estilo : null;
     const vagas = (logo ? 1 : 0) + (estilo ? estilo.imagens.length : 0);
     const vistaMaisPerto: VistaDaPersona = pedido.enquadramento === "corpo_inteiro" ? "corpo_inteiro" : pedido.enquadramento === "meio_corpo" ? "meio_corpo" : "frente";
-    const { fontes, imagens, tracos } = await identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas);
+    const soReais = fotosEscolhidasParaGerar(corpo.fotos_reais_ids, c.identidade_real);
+    const { fontes, imagens, tracos, puladas } = await identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas, soReais);
+    if (puladas) avisos.push(`${puladas} ${puladas === 1 ? "vista aprovada foi feita" : "vistas aprovadas foram feitas"} com as fotos antigas e não entrou como identidade. Gere a folha de novo com as fotos novas.`);
     const referencias = [...imagens, ...(estilo ? estilo.imagens : []), ...(logo ? [logo.imagem] : [])];
     const prompt = promptDaVariacaoDoClone({
       nome: c.nome,
@@ -631,6 +700,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     }
     c = await prenderMotor(c, saida.modeloId);
     const nova = data as unknown as ImagemDoAcervoLida;
+    // O pedido ao lado do arquivo, para "Gerar de novo" repetir a mesma foto (se falhar, a descrição serve de reserva).
+    const doPedido = JSON.stringify({ pedido, formato, qualidade, com_logo: !!logo, com_estilo: !!estilo, fotos_reais_ids: soReais, gerado_em: new Date().toISOString() });
+    await db().storage.from("mesa").upload(caminhoDoPedido(caminho), new Blob([doPedido], { type: "application/json" }), { contentType: "application/json", upsert: true }).catch(() => null);
     const url = await f.urlAssinada("mesa", caminho);
     return {
       imagem: { ...nova, url },
@@ -648,6 +720,194 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const r = await gerarVariacao(ch, c, corpo);
     const resposta = respostaDaGeracao(r.saida);
     return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, ...resposta, avisos: [...r.avisos, ...resposta.avisos] });
+  }
+
+  // ---------------------------------------------------------------- editar depois de criado (25/09 à noite)
+
+  /**
+   * clone_fotos_editar: tirar, pôr, trocar e marcar a principal nas fotos de
+   * origem a qualquer momento, com o mesmo limite e a mesma qualidade da
+   * criação. A folha fica guardada; as vistas feitas com as fotos antigas
+   * voltam marcadas (desatualizadas) e não vão mais ao gerador como identidade.
+   * Nada é gerado aqui (sem custo, sem laço de correção).
+   */
+  async function cloneFotosEditar(ch: Chamador, corpo: Record<string, unknown>) {
+    let c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    garantirGeravel(c);
+    const ids = validarFotosDeOrigem(corpo.imagem_ids, await f.lerImagens(c.client_id, lerFotosReais(corpo.imagem_ids)));
+    const agora = new Date().toISOString();
+    const mudanca = novaIdentidadeReal(c.identidade_real, ids, corpo.principal_id, c.client_id, agora);
+    const resumo = { entraram: mudanca.entraram, sairam: mudanca.sairam, principal_mudou: mudanca.principal_mudou };
+    if (!mudanca.igual) {
+      const etica = c.etica ?? {};
+      const log = Array.isArray((etica as Record<string, unknown>).fotos_de_origem) ? (etica as { fotos_de_origem: unknown[] }).fotos_de_origem : [];
+      const { data, error } = await db().from("foto_modelos").update({
+        identidade_real: mudanca.identidade,
+        etica: { ...etica, fotos_de_origem: [...log, { em: agora, por: ch.userId, ...resumo }].slice(-10) },
+      }).eq("id", c.id).select("*").single();
+      if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", `Não foi possível gravar as fotos de origem (${MIGRATION}).`);
+      c = { ...(data as LinhaClone), identidade_real: mudanca.identidade, invariantes: (data as LinhaClone).invariantes ?? [] };
+    }
+    const folha = ativasDa(await imagensDaFolha(c.id));
+    const desatualizadas = folha.filter((i) => i.papel === "vista" && vistaDesatualizada(i, c.identidade_real)).map((i) => i.id);
+    const avisos: string[] = [];
+    if (desatualizadas.length) avisos.push(`${desatualizadas.length} ${desatualizadas.length === 1 ? "vista foi feita" : "vistas foram feitas"} com as fotos antigas. Continuam guardadas; gere de novo com as fotos novas quando quiser.`);
+    return f.json({ clone: c, mudanca: resumo, desatualizadas, folha: resumoDaFolhaDoClone(folha), avisos, custo_usd: 0 });
+  }
+
+  /**
+   * clone_imagem_arquivar: "apagar" uma vista da folha ou uma variação, com
+   * desfazer (restaurar: true). Vista: marcada como arquivada (fora do status
+   * e da identidade); variação: inativa no acervo. O arquivo fica no Storage.
+   */
+  async function cloneImagemArquivar(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    const imagemId = idDe(corpo.imagem_id, "imagem_id");
+    const restaurar = corpo.restaurar === true;
+    const agora = new Date().toISOString();
+    if (String(corpo.origem ?? "folha") === "acervo") {
+      const [a] = await f.lerImagens(c.client_id, [imagemId]);
+      if (!a || !(a.tags ?? []).includes(`clone:${c.id}`)) throw new ErroDeRegra(404, "imagem_inexistente", "Esta imagem não é uma variação deste clone.");
+      const { data, error } = await db().from("cliente_imagens").update({ ativa: restaurar }).eq("id", a.id).eq("client_id", c.client_id).select(f.camposImagem).single();
+      if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível apagar a variação.");
+      return f.json({ imagem: await comUrl(data as unknown as ImagemDoAcervoLida), origem: "acervo", arquivada: !restaurar, custo_usd: 0 });
+    }
+    const { data: achada, error: e0 } = await db().from("foto_modelo_imagens").select("*").eq("id", imagemId).eq("modelo_id", c.id).maybeSingle();
+    if (e0) throw new ErroDeRegra(503, "clones_indisponivel", "Não foi possível ler a vista.");
+    if (!achada) throw new ErroDeRegra(404, "imagem_inexistente", "Esta imagem não é da folha deste clone.");
+    const img = achada as VistaLida;
+    const patch: Record<string, unknown> = { avisos: restaurar ? avisosRestaurados(img.avisos) : avisosArquivados(img.avisos, agora) };
+    // Restaurar não deixa duas aprovadas na mesma vista: se outra já foi aprovada, a restaurada volta sem aprovação.
+    if (restaurar && img.aprovada === true && img.vista) {
+      const outra = ativasDa(await imagensDaFolha(c.id)).some((i) => i.id !== img.id && i.papel === "vista" && i.vista === img.vista && i.aprovada === true);
+      if (outra) patch.aprovada = null;
+    }
+    const salva = await atualizarComColunasNovas("foto_modelo_imagens", img.id, patch, { arquivada_em: restaurar ? null : agora });
+    if (!salva) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível apagar a vista.");
+    const todas = await imagensDaFolha(c.id);
+    const atual = await atualizarStatus(c, todas);
+    return f.json({ imagem: await comUrl(comMarcas(atual)(salva as unknown as VistaLida)), origem: "folha", arquivada: !restaurar, clone: atual, folha: resumoDaFolhaDoClone(ativasDa(todas)), custo_usd: 0 });
+  }
+
+  /**
+   * clone_variacao_refazer: a mesma variação de novo (o pedido guardado ao
+   * lado do arquivo; sem ele, o que a descrição guardou), com a opção de
+   * escolher as fotos de origem. UMA foto nova; a antiga fica (apagar é à parte).
+   */
+  async function cloneVariacaoRefazer(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    garantirGeravel(c);
+    const [antiga] = await f.lerImagens(c.client_id, [idDe(corpo.imagem_id, "imagem_id")]);
+    if (!antiga || !(antiga.tags ?? []).includes(`clone:${c.id}`)) throw new ErroDeRegra(404, "imagem_inexistente", "Esta imagem não é uma variação deste clone.");
+    let salvo: Record<string, unknown> | null = null;
+    try {
+      const { data } = await db().storage.from(antiga.storage_bucket || "mesa").download(caminhoDoPedido(antiga.storage_path));
+      if (data) salvo = JSON.parse(await data.text()) as Record<string, unknown>;
+    } catch {
+      salvo = null;
+    }
+    const avisos: string[] = [];
+    let pedido = salvo && salvo.pedido && typeof salvo.pedido === "object" ? (salvo.pedido as Record<string, unknown>) : null;
+    if (!pedido) {
+      pedido = pedidoDaDescricao(antiga.descricao, antiga.nome, PRESETS_DE_VARIACAO);
+      if (!pedido) throw new ErroDeRegra(409, "pedido_desconhecido", "Não achei o pedido desta foto. Monte a variação de novo em \"O que muda\".");
+      avisos.push("Esta foto é de antes do registro do pedido: usei o que a descrição guardou.");
+    }
+    if (salvo && salvo.com_estilo === true) avisos.push("A foto original veio do Book com referência de estilo; esta sai só com o pedido.");
+    const formato = corpo.formato ?? (salvo ? salvo.formato : null) ?? formatoPelaMedida(antiga.largura, antiga.altura);
+    const r = await gerarVariacao(ch, c, {
+      pedido,
+      formato,
+      qualidade: corpo.qualidade ?? (salvo ? salvo.qualidade : undefined),
+      fotos_reais_ids: corpo.fotos_reais_ids,
+      aplicar_logo: (salvo && salvo.com_logo === true) || (antiga.tags ?? []).includes("uniforme_da_marca") ? true : undefined,
+      marca_id: corpo.marca_id,
+    }, { tags: [`refeita_de:${antiga.id}`] });
+    const resposta = respostaDaGeracao(r.saida);
+    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, substitui: antiga.id, ...resposta, avisos: [...avisos, ...r.avisos, ...resposta.avisos] });
+  }
+
+  /**
+   * clone_duplicar: um clone novo da MESMA pessoa (ex.: outro visual), com as
+   * mesmas fotos de origem e a MESMA autorização, conferida de novo (revogada
+   * ou vencida recusa: nenhum clone nasce sem autorização válida). Leva as
+   * vistas aprovadas e atuais da folha como cópia (arquivos copiados, sem
+   * custo); as variações ficam no clone original.
+   */
+  async function cloneDuplicar(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    const autorizacao = autorizacaoDaCopia(c.autorizacao, c.id);
+    const nome = nomeDaCopia(c.nome, corpo.nome);
+    garantirPermitidoNoClone(nome);
+    const idsAtuais = c.identidade_real.map((r) => r.imagem_id);
+    validarFotosDeOrigem(idsAtuais, await f.lerImagens(c.client_id, idsAtuais));
+    const agora = new Date().toISOString();
+    const { transferencias: _t, fotos_de_origem: _f, ...eticaBase } = (c.etica ?? {}) as Record<string, unknown>;
+    const { data, error } = await db().from("foto_modelos").insert({
+      client_id: c.client_id,
+      client_origem_id: c.client_id,
+      nome,
+      descricao: c.descricao,
+      ficha: c.ficha,
+      invariantes: c.invariantes,
+      referencias: [],
+      status: "rascunho",
+      versao: 1,
+      origem: ORIGEM_CLONE,
+      autorizacao,
+      identidade_real: c.identidade_real.map((r) => ({ ...r, client_id: c.client_id })),
+      etica: { ...eticaBase, clone_de_pessoa_real: true, autorizada: true, adulta: true, sintetica: false, duplicado_de: c.id, duplicado_por: ch.userId, duplicado_em: agora },
+      motor_preferido_id: c.motor_preferido_id,
+      criado_por: ch.userId,
+    }).select("*").single();
+    if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", `Não foi possível duplicar o clone (${MIGRATION}).`);
+    let novo = { ...(data as LinhaClone), identidade_real: Array.isArray((data as LinhaClone).identidade_real) ? (data as LinhaClone).identidade_real : [], invariantes: (data as LinhaClone).invariantes ?? [] };
+    const avisos: string[] = [];
+    let copiadas = 0;
+    if (corpo.levar_folha !== false) {
+      const aprovadas = ativasDa(await imagensDaFolha(c.id)).filter((i) => i.papel === "vista" && i.aprovada === true && !vistaDesatualizada(i, c.identidade_real));
+      for (const a of aprovadas) {
+        const bucket = a.storage_bucket || "mesa";
+        const ext = (a.storage_path.split(".").pop() || "png").slice(0, 5);
+        const para = `${novo.client_id}/foto/clones/${novo.id}/folha-${a.vista ?? "vista"}-copia-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+        const copia = await db().storage.from(bucket).copy(a.storage_path, para);
+        if (copia.error) continue;
+        const { error: e2 } = await db().from("foto_modelo_imagens").insert({
+          modelo_id: novo.id,
+          papel: "vista",
+          vista: a.vista,
+          storage_bucket: bucket,
+          storage_path: para,
+          mime: a.mime,
+          largura: a.largura,
+          altura: a.altura,
+          sha256: a.sha256,
+          motor_id: a.motor_id,
+          qualidade: a.qualidade,
+          resolucao: a.resolucao,
+          seed: a.seed,
+          prompt: a.prompt,
+          fontes: Array.isArray(a.fontes) ? a.fontes : [],
+          derivada_de: a.id,
+          conferencia: a.conferencia,
+          aprovada: true,
+          versao_modelo: 1,
+          gerada: true,
+          custo_usd: 0,
+          avisos: avisosRestaurados(a.avisos),
+          criado_por: ch.userId,
+        });
+        if (e2) {
+          await db().storage.from(bucket).remove([para]).catch(() => null);
+          continue;
+        }
+        copiadas++;
+      }
+      if (aprovadas.length > copiadas) avisos.push(`${aprovadas.length - copiadas} ${aprovadas.length - copiadas === 1 ? "vista não foi copiada" : "vistas não foram copiadas"}; gere de novo no clone novo.`);
+      if (copiadas) novo = await atualizarStatus(novo);
+    }
+    avisos.push(`Mesmas fotos de origem e a mesma autorização de ${autorizacao.quem} (${autorizacao.data}).`);
+    return f.json({ clone: { ...novo, autorizacao_valida: autorizacaoValida(novo.autorizacao) }, copiadas, avisos, custo_usd: 0 });
   }
 
   // ---------------------------------------------------------------- variações pelo contexto do cliente
@@ -813,6 +1073,14 @@ ${JSON.stringify({ cliente: contexto.dados, campanha: contexto.campanha, pedido_
       }
       if (!error) copiados.push(a);
     }
+    // O pedido de cada variação vai junto (sem ele, "Gerar de novo" usa a descrição); falha aqui não para a transferência.
+    const pedidosAntigos = [...plano.mover, ...plano.copiar]
+      .filter((m) => m.de !== m.para && m.de.indexOf("/foto/clones/") >= 0)
+      .map((m) => ({ bucket: bucketDe(m.id), de: caminhoDoPedido(m.de), para: caminhoDoPedido(m.para), moveu: plano.mover.some((x) => x.id === m.id) }));
+    for (const a of pedidosAntigos) {
+      const { error } = await db().storage.from(a.bucket).copy(a.de, a.para);
+      if (!error) copiados.push(a);
+    }
 
     // 5) Banco (com desfazer se algo falhar no meio).
     const desfazer: (() => Promise<unknown>)[] = [];
@@ -901,7 +1169,7 @@ ${JSON.stringify({ cliente: contexto.dados, campanha: contexto.campanha, pedido_
     const { data: cloneNovo, error: erroClone } = await db().from("foto_modelos").update({
       client_id: destino,
       client_origem_id: destino,
-      identidade_real: c.identidade_real.map((r) => ({ imagem_id: novoIdDe(r.imagem_id), client_id: destino, principal: r.principal })),
+      identidade_real: c.identidade_real.map((r) => ({ ...r, imagem_id: novoIdDe(r.imagem_id), client_id: destino, principal: r.principal })),
       etica,
     }).eq("id", c.id).select("*").single();
     if (erroClone || !cloneNovo) await falhou("o clone", erroClone);
@@ -916,6 +1184,7 @@ ${JSON.stringify({ cliente: contexto.dados, campanha: contexto.campanha, pedido_
       const { error } = await db().storage.from(a.bucket).remove([a.caminho]);
       if (error) naoApagados++;
     }
+    for (const a of pedidosAntigos.filter((x) => x.moveu)) await db().storage.from(a.bucket).remove([a.de]).catch(() => null);
     const avisos: string[] = ["O custo e o uso de IA já cobrados continuam no cliente antigo."];
     if (plano.copiar.length) avisos.push(`${plano.copiar.length} ${plano.copiar.length === 1 ? "foto ficou também" : "fotos ficaram também"} no cliente antigo porque outra coisa de lá usa (kit, derivada, Canvas ou outro clone); no cliente novo entrou uma cópia.`);
     if (plano.reaproveitar.length) avisos.push(`${plano.reaproveitar.length} ${plano.reaproveitar.length === 1 ? "foto já existia" : "fotos já existiam"} no cliente novo: o clone passou a usar a de lá.`);
@@ -1063,7 +1332,8 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
    */
   async function clonePacote(ch: Chamador, corpo: Record<string, unknown>) {
     const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
-    const [reais, folha] = await Promise.all([fotosReais(c), imagensDaFolha(c.id)]);
+    const [reais, todas] = await Promise.all([fotosReais(c), imagensDaFolha(c.id)]);
+    const folha = ativasDa(todas);
     const aprovadas = folha.filter((i) => i.papel === "vista" && i.aprovada === true);
     const resumo = resumoDaFolhaDoClone(folha);
     const url = (b: string, p: string) => f.urlAssinada(b, p);
@@ -1074,7 +1344,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       identidade: {
         fotos_reais: await Promise.all(reais.map(async (r) => ({ imagem_id: r.id, principal: r.principal, largura: r.largura, altura: r.altura, url: await url(r.storage_bucket, r.storage_path) }))),
         ancora: c.ancora_imagem_id,
-        folha: await Promise.all(aprovadas.map(async (a) => ({ imagem_id: a.id, vista: a.vista, largura: a.largura, altura: a.altura, motor_id: a.motor_id, url: await url(a.storage_bucket, a.storage_path) }))),
+        folha: await Promise.all(aprovadas.map(async (a) => ({ imagem_id: a.id, vista: a.vista, largura: a.largura, altura: a.altura, motor_id: a.motor_id, feita_com_fotos_antigas: vistaDesatualizada(a, c.identidade_real), url: await url(a.storage_bucket, a.storage_path) }))),
         invariantes: c.invariantes,
         motor_preferido_id: c.motor_preferido_id,
       },
@@ -1100,7 +1370,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       if (UUID.test(String(corpo.modelo_id ?? ""))) {
         const c = await cloneComAcesso(ch, String(corpo.modelo_id));
         motorId = c.motor_preferido_id || motorId;
-        const folha = await imagensDaFolha(c.id);
+        const folha = ativasDa(await imagensDaFolha(c.id));
         refs = Math.min(MAX_IDENTIDADES_NO_GERADOR, c.identidade_real.length + folha.filter((i) => i.aprovada === true).length);
       }
       const m = await carregarModelo(motorId || MOTOR_PADRAO_DO_CLONE.modelo_imagem_id, "imagem");
@@ -1134,6 +1404,10 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       clone_pacote: clonePacote,
       clone_variacoes_sugerir: cloneVariacoesSugerir,
       clone_transferir: cloneTransferir,
+      clone_fotos_editar: cloneFotosEditar,
+      clone_imagem_arquivar: cloneImagemArquivar,
+      clone_variacao_refazer: cloneVariacaoRefazer,
+      clone_duplicar: cloneDuplicar,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarClones,
     // Para o Book (book.ts): a mesma variação, com as mesmas regras e a mesma autorização.
@@ -1144,7 +1418,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
 }
 
 /** Ações de Clones que chamam IA ou baixam imagens (respondem com fôlego). */
-export const ACOES_LONGAS_DE_CLONES = ["clone_folha_gerar", "clone_variacao_gerar", "clone_conferir", "clone_ler", "clones_listar", "clone_criar", "clone_pacote", "clone_variacoes_sugerir", "clone_transferir"];
+export const ACOES_LONGAS_DE_CLONES = ["clone_folha_gerar", "clone_variacao_gerar", "clone_conferir", "clone_ler", "clones_listar", "clone_criar", "clone_pacote", "clone_variacoes_sugerir", "clone_transferir", "clone_fotos_editar", "clone_variacao_refazer", "clone_duplicar"];
 
 /** Alvos que a ação estimar repassa para Clones. */
 export const ALVOS_DE_ESTIMATIVA_DE_CLONES = ["clone_folha", "clone_variacao", "clone_conferir", "clone_sugerir"];

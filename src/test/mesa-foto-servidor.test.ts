@@ -1781,7 +1781,9 @@ describe("clones: autorização e regras duras", () => {
   it("a função: autorização exigida, foto gerada não vira identidade, motor preso, variação no acervo marcada, Jev só aviso", () => {
     const c = ler("supabase/functions/mesa-foto/clones.ts");
     expect(c).toContain("lerAutorizacaoDoClone(mesclada)");
-    expect(c).toContain('"foto_nao_e_real"');
+    // A regra das fotos de origem (criação e edição) mora em clones-edicao.ts desde 25/09 à noite.
+    expect(c).toContain("validarFotosDeOrigem(corpo.imagem_ids");
+    expect(ler("supabase/functions/mesa-foto/clones-edicao.ts")).toContain('"foto_nao_e_real"');
     expect(c).toContain("garantirGeravel(c);");
     expect(c).toContain('"motor_do_clone"');
     expect(c).toContain("mesmoModelo: true");
@@ -1996,7 +1998,7 @@ describe("26/09: clones (identidade da folha, contexto, uniforme, transferência
     expect(c).toContain("clone_transferir: cloneTransferir,");
     expect(c).toContain("clone_variacoes_sugerir: cloneVariacoesSugerir,");
     expect(c).toContain('"sem_logo_da_marca"');
-    expect(c).toContain('identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas)');
+    expect(c).toContain('identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas, soReais)');
     const decidir = c.slice(c.indexOf("async function cloneImagemDecidir"), c.indexOf("type ExtrasDaVariacao"));
     expect(decidir).toContain("return f.json({ imagem: data, clone: atual");
     expect(decidir).not.toContain("chamarTexto");

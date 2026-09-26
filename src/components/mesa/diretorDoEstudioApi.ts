@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, padraoPara, TAMANHOS, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { acoesDaMensagem, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 
 /**
  * Conversa com o diretor de arte dentro do Estúdio (pedido do dono em 24/09:
@@ -64,6 +65,8 @@ export interface MensagemDoDiretor {
   mudancas: MudancaDoDiretor[];
   avisos: string[];
   aplicadas: string[];
+  /** Ações que o diretor propôs (reordenar, formato, trocar texto, arquivar versões, refazer): só com a confirmação. */
+  acoes?: AcaoDoAgente[];
 }
 
 export interface ConversaDoDiretor {
@@ -188,7 +191,7 @@ export async function lerConversaDoDiretor(trabalhoId: string): Promise<Conversa
     .reverse()
     .map((m) => {
       const papel: MensagemDoDiretor["papel"] = m.papel === "usuario" || m.papel === "agente" ? m.papel : "sistema";
-      return { id: String(m.id), papel, conteudo: String(m.conteudo || ""), criado_em: String(m.criado_em || ""), ...lerAnexosDaMensagem(m.anexos) };
+      return { id: String(m.id), papel, conteudo: String(m.conteudo || ""), criado_em: String(m.criado_em || ""), ...lerAnexosDaMensagem(m.anexos), acoes: acoesDaMensagem(m.anexos) };
     });
   return { conversaId, mensagens };
 }
