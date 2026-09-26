@@ -24,8 +24,14 @@ export const ehPeca = (tipo?: string | null) => FORMATOS_DE_PECA.indexOf(String(
 /** Máximo de peças listadas para o agente e de ações num pedido só. */
 export const MAX_PECAS_PARA_O_AGENTE = 150;
 export const MAX_ACOES_POR_PEDIDO = 120;
-/** Refazer gera de novo com IA: um pedido só não passa disto. */
+/**
+ * Refazer gera de novo com IA em lotes deste tamanho (uma geração por lote). A
+ * lista do pedido pode ter mais: o painel refaz lote atrás de lote até acabar
+ * (dono, 26/09: "era para ser para todos os meses", e o agente parava em 12).
+ */
 export const MAX_REFAZER_POR_PEDIDO = 12;
+/** Teto de peças num pedido de refazer (a agenda de vários meses cabe inteira). */
+export const MAX_REFAZER_NA_LISTA = 60;
 
 export type PecaDaAgenda = { id: string; title: string; due_date: string | null; delivery_type: string | null; status: string | null; campanha?: string | null };
 export type PecaComApelido = PecaDaAgenda & { ref: string };
@@ -146,7 +152,7 @@ export function normalizarAcoesNaAgenda(bruto: unknown, pecas: PecaComApelido[],
   for (const r of (Array.isArray(o.refazer) ? o.refazer : []).slice(0, MAX_ACOES_POR_PEDIDO)) {
     const ref = texto(r, 12).toLowerCase();
     const p = porRef.get(ref);
-    if (!p || usados.has(ref) || refazer.length >= MAX_REFAZER_POR_PEDIDO) {
+    if (!p || usados.has(ref) || refazer.length >= MAX_REFAZER_NA_LISTA) {
       if (ref) ignorados.push(ref);
       continue;
     }
@@ -290,11 +296,14 @@ function somarMeses(mes: string, n: number): string {
 }
 
 /** Texto do pedido livre que gera de novo as peças refeitas (mesmas datas e formatos, abordagem nova). */
-export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcao, "titulo" | "data" | "formato">>): string {
+export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcao, "titulo" | "data" | "formato">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => `- ${i.data ?? "sem data"} · ${i.formato} · no lugar de "${umaLinha(i.titulo, 140)}"`);
-  return `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
+  const base = `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
+  // O motivo do pedido (ex.: falar com o público real, não com agências) vale para todas as linhas.
+  const o = umaLinha(orientacao || "", 400);
+  return o ? `${base}\nOrientação da equipe para todas: ${o}` : base;
 }
 
 /** Texto da regra no prompt do agente do mês. */
-export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro"), no máximo ${MAX_REFAZER_POR_PEDIDO}. mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, reels, story ou video. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
+export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro", "revise"), TODAS as que casam com o pedido, até ${MAX_REFAZER_NA_LISTA} (o painel refaz em lotes de ${MAX_REFAZER_POR_PEDIDO}, um atrás do outro; nunca diga que o resto fica para depois). mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, reels, story ou video. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
 - gerar_conteudos: só quando a equipe PEDIR para criar ou gerar os conteúdos de um mês inteiro ou de vários ("crie todos os conteúdos de outubro", "preencha os próximos 3 meses"). meses: lista AAAA-MM; frequencia_semanal: a do plano combinado, ou a que a equipe pediu. resumo: 1 frase. A equipe vê o custo e confirma; o gerador de meses segue o plano combinado de cada mês. Sem pedido desse tipo, null.`;

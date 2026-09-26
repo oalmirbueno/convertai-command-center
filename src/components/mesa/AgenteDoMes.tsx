@@ -43,6 +43,7 @@ import {
   executarAcaoNaAgenda,
   geracaoDaMensagem,
   pedidoParaRefazer,
+  lotesDoRefazer,
   registrarGeracao,
   type AcaoNaAgenda,
   type EdicaoDeCampanha,
@@ -315,8 +316,16 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
       const sairam = (novo && novo.refeitos ? novo.refeitos : []).filter((r) => r.ok && !r.motivo).map((r) => r.task_id);
       const itens = atual.refazer.filter((i) => sairam.indexOf(i.task_id) >= 0);
       if (!itens.length) return data;
-      const nova = await pedidoLivre({ clientId, mensagem: pedidoParaRefazer(itens), anexos: [], campanhaId: null });
-      await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+      // Lote atrás de lote (12 por geração) até refazer tudo o que saiu; o resumo do
+      // agente (o porquê do pedido) vai junto para as peças novas seguirem a orientação.
+      const lotes = lotesDoRefazer(itens);
+      let nova: any = null;
+      for (let n = 0; n < lotes.length; n++) {
+        if (lotes.length > 1) toast.message(`Refazendo lote ${n + 1} de ${lotes.length}`, { id: `refazer-${mensagemId}` });
+        nova = await pedidoLivre({ clientId, mensagem: pedidoParaRefazer(lotes[n], atual.resumo), anexos: [], campanhaId: null });
+        await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+      }
+      if (lotes.length > 1) toast.success(`${itens.length} peças refeitas em ${lotes.length} lotes`, { id: `refazer-${mensagemId}` });
       return nova;
     } finally {
       setFazendo(null);
@@ -378,7 +387,14 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                 rotulo={`Confirmar e refazer ${atual.refazer.length}`}
                 titulo="Refazer conteúdos"
                 descricao="Tira as peças da agenda e o agente gera conteúdos novos nas mesmas datas e formatos, prontos para gravar."
-                partes={() => partesDoPedidoLivre(catalogo, 0)}
+                partes={() => {
+                  // Uma geração por lote de 12: o custo mostrado soma todos os lotes.
+                  const uma = partesDoPedidoLivre(catalogo, 0);
+                  const n = lotesDoRefazer(atual.refazer).length;
+                  const todas: typeof uma = [];
+                  for (let i = 0; i < Math.max(1, n); i++) todas.push(...uma);
+                  return todas;
+                }}
                 executar={confirmarERefazer}
                 fecharAoConfirmar
                 disabled={!!fazendo}

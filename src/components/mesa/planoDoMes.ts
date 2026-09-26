@@ -314,9 +314,21 @@ export const desfazerAcaoNaAgenda = (mensagemId: string) =>
  * formatos, abordagem nova). Espelho de pedidoParaRefazer em
  * supabase/functions/agente-calendario/acoes-agenda.ts.
  */
-export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcaoNaAgenda, "titulo" | "data" | "formato">>): string {
+export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcaoNaAgenda, "titulo" | "data" | "formato">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => `- ${i.data || "sem data"} · ${i.formato} · no lugar de "${String(i.titulo || "").replace(/\s+/g, " ").trim().slice(0, 140)}"`);
-  return `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
+  const base = `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
+  const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 400);
+  return o ? `${base}\nOrientação da equipe para todas: ${o}` : base;
+}
+
+/** Lote de uma geração do refazer (espelho de MAX_REFAZER_POR_PEDIDO no servidor). */
+export const LOTE_DO_REFAZER = 12;
+
+/** Divide as peças em lotes de LOTE_DO_REFAZER, na ordem da agenda. */
+export function lotesDoRefazer<T>(itens: T[], tamanho = LOTE_DO_REFAZER): T[][] {
+  const lotes: T[][] = [];
+  for (let i = 0; i < itens.length; i += tamanho) lotes.push(itens.slice(i, i + tamanho));
+  return lotes;
 }
 
 /**
