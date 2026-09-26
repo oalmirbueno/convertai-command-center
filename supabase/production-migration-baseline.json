@@ -1209,6 +1209,70 @@
       "remote_name": "foto_canvas_cenas_historia_personagem",
       "remote_statements_sha256": "fade3618e8acc59155365bc6e75235f180a47a113a1d50ffc9d832e1679a380c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031000",
+      "path": "supabase/migrations/20260926031000_mesa_publicidade.sql",
+      "local_sha256": "f92ab83d4ecf44473b6bc2a9a9a187f470374495e5b65e0e5941bacf898942ef",
+      "remote_name": "mesa_publicidade",
+      "remote_statements_sha256": "df44668884c6e2beb394e9c1f190dab37d8d37ff1ebaaba2b1a9b5e367f8f4e6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031100",
+      "path": "supabase/migrations/20260926031100_mesa_videos.sql",
+      "local_sha256": "6de7b81824da399fd1040844fc2c1025bac5d6008073c27bc07995b700343f15",
+      "remote_name": "mesa_videos",
+      "remote_statements_sha256": "9a7d26f660ca48ecb39a7a4a3efc24d755f1494526600f3d4e9199502c5b188e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031200",
+      "path": "supabase/migrations/20260926031200_mesa_roteiros.sql",
+      "local_sha256": "51e5f5e2b034c00bc478ed9a743f645085ad5c3f954e75c2cc2ba8ae9c4f99c3",
+      "remote_name": "mesa_roteiros",
+      "remote_statements_sha256": "bba1728fce72a5deee0bf03884fefe8693efd5857918f8fe5dbffa8ff94b54ef",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031300",
+      "path": "supabase/migrations/20260926031300_roteiros_para_video.sql",
+      "local_sha256": "b197018f1fca0bc4bf837152dc90597f88a2bb4d74bec70849511ebfa5c22cf1",
+      "remote_name": "roteiros_para_video",
+      "remote_statements_sha256": "703e461c484409e73f51934d935362a0dcabeddfc28fc81f41eda74a8b49c4dc",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031400",
+      "path": "supabase/migrations/20260926031400_lista_de_mesas_final.sql",
+      "local_sha256": "59331b4757c88645b343392dd754ae41a4bf4d7c5e78a510740922ffeb944324",
+      "remote_name": "lista_de_mesas_final",
+      "remote_statements_sha256": "8f1ab7961219ad75d36f7bab1204773a3eec52197e831bf7789bd2f00fa1459c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031500",
+      "path": "supabase/migrations/20260926031500_mesa_ads_gestao_escopos.sql",
+      "local_sha256": "276567afd4b454a85f49148aab3f46779a0e750425b2c3cb725fb4affa5867ad",
+      "remote_name": "mesa_ads_gestao_escopos",
+      "remote_statements_sha256": "465e8241847211c72b349fdc8789d0537da90e59980d81a24342145c2a7c9a93",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031600",
+      "path": "supabase/migrations/20260926031600_mesa_foto_clones_edicao.sql",
+      "local_sha256": "476a2eeb3ac1110ebdc1b3c14c5bd0d2cd78a7b2ddefc6c6527b2fc62db26870",
+      "remote_name": "mesa_foto_clones_edicao",
+      "remote_statements_sha256": "6612343c6c4aea35d2d25204cba61617780c243d8a09ba1b63482ba204fe167f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926031633",
+      "path": "supabase/migrations/20260926031633_hermes_decidir_sem_laco.sql",
+      "local_sha256": "d84ad85c4d10f503aebcbe868c4a8c5f2a0685d0182a56d365228a709d747c19",
+      "remote_name": "hermes_decidir_sem_laco",
+      "remote_statements_sha256": "75192e5c93cc9e2781ab5d4ed2e9db8b1d99f601db7044f8e3dd73c559821822",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
