@@ -1289,6 +1289,14 @@
       "remote_name": "limpeza_do_hermes_e_notificacoes",
       "remote_statements_sha256": "cf4997688f3e3a5fc078df77335256d781de4937d0e53a3f964f5f19f3dafcad",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926041000",
+      "path": "supabase/migrations/20260926041000_miniaturas_leitura_das_copias.sql",
+      "local_sha256": "1d227b3b4dad17b2044a94665656221201c7b192d29aeb931e26f4b0c766722d",
+      "remote_name": "miniaturas_leitura_das_copias",
+      "remote_statements_sha256": "8b88567f04fc2cf9816b5c4f648534f6c6e2890ebaae41a8a8128dc9fb947aa6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
