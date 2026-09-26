@@ -38,3 +38,26 @@ describe("agente do Mês: refazer em lotes", () => {
     expect(pedidoParaRefazerDaTela(lote)).toBe(semOrientacao);
   });
 });
+
+import { janelaDoPedidoLivre } from "../../supabase/functions/agente-calendario/acoes-agenda";
+
+describe("pedido livre: datas citadas valem", () => {
+  it("sem data citada, janela de 30 dias só com dias úteis", () => {
+    const { fim, uteis } = janelaDoPedidoLivre("2026-09-26", "três conteúdos sobre site");
+    expect(fim).toBe("2026-10-26");
+    expect(uteis[0]).toBe("2026-09-28");
+    expect(uteis.every((d) => d <= "2026-10-26")).toBe(true);
+  });
+
+  it("refazer de novembro e dezembro estica a janela até a última data citada (26/09: tudo caía em 26/10)", () => {
+    const msg = "- 2026-11-02 · carrossel · no lugar de \"A\"\n- 2026-12-25 · carrossel · no lugar de \"B\"\n- 2026-11-28 · estático · no lugar de \"C\"";
+    const { fim, uteis } = janelaDoPedidoLivre("2026-09-26", msg);
+    expect(fim).toBe("2026-12-25");
+    expect(uteis).toContain("2026-11-02");
+    expect(uteis).toContain("2026-12-25");
+    // 28/11/2026 é sábado, mas a peça já estava nesse dia: vale.
+    expect(uteis).toContain("2026-11-28");
+    // Data no passado ou além de 12 meses não mexe na janela.
+    expect(janelaDoPedidoLivre("2026-09-26", "2026-01-01 e 2028-01-01").fim).toBe("2026-10-26");
+  });
+});

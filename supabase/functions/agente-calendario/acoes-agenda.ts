@@ -304,6 +304,35 @@ export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcao, "titulo" | "data
   return o ? `${base}\nOrientação da equipe para todas: ${o}` : base;
 }
 
+const somarDiasIso = (data: string, n: number) => {
+  const d = new Date(`${data}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const ehDiaUtilIso = (data: string) => {
+  const s = new Date(`${data}T12:00:00.000Z`).getUTCDay();
+  return s >= 1 && s <= 5;
+};
+
+/**
+ * Janela de datas do pedido livre: 30 dias a partir do início, esticada até a
+ * última data AAAA-MM-DD que o pedido cita (até 12 meses). Sem isso, refazer
+ * peças de novembro e dezembro jogava todas para o último dia útil dos 30 dias
+ * (26/09: 12 peças de novembro caíram em 26/10). Datas citadas que não são dia
+ * útil (uma peça de sábado que já estava na agenda) também valem.
+ */
+export function janelaDoPedidoLivre(inicio: string, mensagem: string): { fim: string; uteis: string[] } {
+  let fim = somarDiasIso(inicio, 30);
+  const teto = somarDiasIso(inicio, 366);
+  const citadas = (String(mensagem || "").match(/\b\d{4}-\d{2}-\d{2}\b/g) || []).filter((d) => DATA.test(d) && d >= inicio && d <= teto);
+  for (const d of citadas) if (d > fim) fim = d;
+  const uteis: string[] = [];
+  for (let d = inicio; d <= fim && uteis.length < 400; d = somarDiasIso(d, 1)) if (ehDiaUtilIso(d)) uteis.push(d);
+  for (const d of citadas) if (uteis.indexOf(d) < 0) uteis.push(d);
+  uteis.sort();
+  return { fim, uteis };
+}
+
 /** Texto da regra no prompt do agente do mês. */
 export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro", "revise"), TODAS as que casam com o pedido, até ${MAX_REFAZER_NA_LISTA} (o painel refaz em lotes de ${MAX_REFAZER_POR_PEDIDO}, um atrás do outro; nunca diga que o resto fica para depois). mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, reels, story ou video. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
 - gerar_conteudos: só quando a equipe PEDIR para criar ou gerar os conteúdos de um mês inteiro ou de vários ("crie todos os conteúdos de outubro", "preencha os próximos 3 meses"). meses: lista AAAA-MM; frequencia_semanal: a do plano combinado, ou a que a equipe pediu. resumo: 1 frase. A equipe vê o custo e confirma; o gerador de meses segue o plano combinado de cada mês. Sem pedido desse tipo, null.`;

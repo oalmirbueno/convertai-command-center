@@ -96,6 +96,7 @@ import {
   type CampanhaDaAgenda,
   type PecaComApelido,
   type PecaDaAgenda,
+  janelaDoPedidoLivre,
 } from "./acoes-agenda.ts";
 import {
   AGENTE_ESCOLHE,
@@ -3022,8 +3023,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const mensagem = texto(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer que o agente prepare.");
   const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
-  const fim = somarDias(inicio, 30);
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const { fim, uteis } = janelaDoPedidoLivre(inicio, mensagem);
 
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
