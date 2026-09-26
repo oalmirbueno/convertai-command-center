@@ -181,7 +181,9 @@ describe("rota e casca", () => {
     expect(rota).toContain("<Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense>");
     expect(rota).toContain('<Navigate to="/dashboard" replace />');
     // A regra da largura da Mesa já cobre /mesa-ads.
-    expect(ler("src/components/AppLayout.tsx")).toContain('location.pathname.indexOf("/mesa") === 0');
+    // 26/09: todas as páginas usam a tela larga das mesas (1840 px), sem exceção por rota.
+    expect(ler("src/components/AppLayout.tsx")).toContain('"max-w-[1840px]"');
+    expect(ler("src/components/AppLayout.tsx")).not.toContain('"max-w-[1280px]"');
     expect("/mesa-ads".indexOf("/mesa")).toBe(0);
     // Onde a Mesa aparece (Central), a Mesa Ads aparece ao lado.
     const central = ler("src/pages/AdminExperience.tsx");

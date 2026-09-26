@@ -667,7 +667,12 @@ describe("copy: pacote completo", () => {
     fireEvent.click(screen.getByRole("button", { name: /Gerar pacote completo/ }));
     await waitFor(() => expect(chamadasDe("copy_pacote")).toEqual([{ acao: "copy_pacote", criativo_id: "c-1" }]));
     const pacote = await screen.findByRole("region", { name: "Pacote de copy" });
+    // 26/09: só os textos principais nascem abertos; o resto começa recolhido.
     expect(within(pacote).getByText("Problema, agitação e solução")).toBeTruthy();
+    expect(within(pacote).queryByLabelText("24 de 40 caracteres")).toBeNull();
+    fireEvent.click(within(pacote).getByRole("button", { name: "Recolher tudo" }));
+    expect(within(pacote).queryByText("Problema, agitação e solução")).toBeNull();
+    fireEvent.click(within(pacote).getByRole("button", { name: "Abrir tudo" }));
     expect(within(pacote).getByLabelText("24 de 40 caracteres")).toBeTruthy();
     expect(within(pacote).getByLabelText("48 de 40 caracteres").className).toContain("text-warning");
     expect(within(pacote).getByLabelText("39 de 30 caracteres").className).toContain("text-warning");

@@ -350,7 +350,9 @@ describe("rota, casca e troca entre mesas", () => {
     expect(rota).toContain('<Navigate to="/dashboard" replace />');
     // Mesma rota-mãe da /mesa-ads (linhas vizinhas).
     expect(app.indexOf('path="/mesa-foto"')).toBeGreaterThan(app.indexOf('path="/mesa-ads"'));
-    expect(ler("src/components/AppLayout.tsx")).toContain('location.pathname.indexOf("/mesa") === 0');
+    // 26/09: todas as páginas usam a tela larga das mesas (1840 px), sem exceção por rota.
+    expect(ler("src/components/AppLayout.tsx")).toContain('"max-w-[1840px]"');
+    expect(ler("src/components/AppLayout.tsx")).not.toContain('"max-w-[1280px]"');
   });
 
   it("a Central ganha Mesa Foto ao lado de Mesa e Mesa Ads, e as duas mesas mostram a troca rápida", () => {

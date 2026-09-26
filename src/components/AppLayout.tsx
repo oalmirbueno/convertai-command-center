@@ -291,7 +291,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
-      <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
+      <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
         style={{
           top: 'calc(env(safe-area-inset-top) + 12px)',
           background: 'rgba(17, 17, 19, 0.85)',
@@ -591,13 +591,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main
         className={cn(
           "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
-          // A Mesa (estúdio, calendário, campanhas) usa a tela larga: em 1280 px
-          // o estúdio ficava espremido com espaço vazio dos lados (dono, 23/09).
-          location.pathname.indexOf("/mesa") === 0
-            ? "max-w-[1840px]"
-            : location.pathname === "/calendario"
-              ? "max-w-[1400px]"
-              : "max-w-[1280px]",
+          // Tela larga em todas as páginas, igual às mesas: com 1280/1400 px o painel
+          // ficava espremido com espaço vazio dos lados (dono, 23/09 e 26/09).
+          "max-w-[1840px]",
         )}
         style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         data-tour="finish"

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, FileArchive, Loader2, Package, Send } from "lucide-react";
+import { ChevronRight, Download, FileArchive, Loader2, Package, Send } from "lucide-react";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -57,14 +58,40 @@ function Contagem({ atual, limite }: { atual: number; limite: number }) {
   );
 }
 
-function Grupo({ titulo, children, contagem }: { titulo: string; children: ReactNode; contagem: number }) {
+/** Grupos do pacote que podem ser recolhidos (dono, 26/09: o pacote inteiro ficava longo demais). */
+export const GRUPOS_DO_PACOTE = ["textos", "titulos", "descricoes", "ctas", "ganchos", "gestor"] as const;
+export type GrupoDoPacote = (typeof GRUPOS_DO_PACOTE)[number];
+/** Aberto ao gerar: só os textos principais; o resto começa recolhido. */
+export const ABERTOS_DE_INICIO: GrupoDoPacote[] = ["textos"];
+
+function Grupo({
+  titulo,
+  children,
+  contagem,
+  aberto,
+  aoAlternar,
+}: {
+  titulo: string;
+  children: ReactNode;
+  contagem: number;
+  aberto: boolean;
+  aoAlternar: () => void;
+}) {
   if (!contagem) return null;
   return (
     <div className="min-w-0">
-      <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
-        {titulo} ({contagem})
-      </p>
-      {children}
+      <button
+        type="button"
+        onClick={aoAlternar}
+        aria-expanded={aberto}
+        className="mb-1.5 flex w-full min-w-0 items-center rounded text-left text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <ChevronRight className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? "rotate-90" : ""}`} />
+        <span className="min-w-0 flex-1 truncate">
+          {titulo} ({contagem})
+        </span>
+      </button>
+      {aberto && children}
     </div>
   );
 }
@@ -188,6 +215,14 @@ export default function PacoteDaCopy({
   }, [criativo.id, chaveGravada]);
 
   const markdown = pacote ? pacoteEmMarkdown(nome, pacote) : "";
+  // Grupos abertos, lembrados por cliente (sair e voltar mantém o que estava recolhido).
+  const [abertos, setAbertos] = useEstadoDaTela<GrupoDoPacote[]>(`ads:pacote-abertos:${clientId}`, ABERTOS_DE_INICIO, {
+    validar: (v) => Array.isArray(v),
+  });
+  const estaAberto = (g: GrupoDoPacote) => abertos.indexOf(g) >= 0;
+  const alternar = (g: GrupoDoPacote) =>
+    setAbertos((atual) => (atual.indexOf(g) >= 0 ? atual.filter((x) => x !== g) : atual.concat(g)));
+  const tudoRecolhido = abertos.length === 0;
 
   return (
     <section className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-4" aria-label="Pacote de copy">
@@ -238,9 +273,18 @@ export default function PacoteDaCopy({
               <Download className="mr-1 h-3.5 w-3.5" /> Baixar .md
             </Button>
             <EnvioAoGestor corpo={() => ({ criativo_ids: [criativo.id] })} />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="mb-1 ml-auto h-8"
+              onClick={() => setAbertos(tudoRecolhido ? GRUPOS_DO_PACOTE.slice() : [])}
+            >
+              {tudoRecolhido ? "Abrir tudo" : "Recolher tudo"}
+            </Button>
           </div>
 
-          <Grupo titulo="Textos principais" contagem={pacote.textos_principais.length}>
+          <Grupo titulo="Textos principais" contagem={pacote.textos_principais.length} aberto={estaAberto("textos")} aoAlternar={() => alternar("textos")}>
             <ul className="space-y-2">
               {pacote.textos_principais.map((t, i) => (
                 <li key={i} className="min-w-0 rounded-lg border border-border bg-background p-2.5">
@@ -256,7 +300,7 @@ export default function PacoteDaCopy({
             </ul>
           </Grupo>
 
-          <Grupo titulo={`Títulos (até ${LIMITE_TITULO})`} contagem={pacote.titulos.length}>
+          <Grupo titulo={`Títulos (até ${LIMITE_TITULO})`} contagem={pacote.titulos.length} aberto={estaAberto("titulos")} aoAlternar={() => alternar("titulos")}>
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.titulos.map((t, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
@@ -269,7 +313,7 @@ export default function PacoteDaCopy({
             </ul>
           </Grupo>
 
-          <Grupo titulo={`Descrições (até ${LIMITE_DESCRICAO})`} contagem={pacote.descricoes.length}>
+          <Grupo titulo={`Descrições (até ${LIMITE_DESCRICAO})`} contagem={pacote.descricoes.length} aberto={estaAberto("descricoes")} aoAlternar={() => alternar("descricoes")}>
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.descricoes.map((t, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
@@ -282,7 +326,7 @@ export default function PacoteDaCopy({
             </ul>
           </Grupo>
 
-          <Grupo titulo="Botões (CTA)" contagem={pacote.ctas.length}>
+          <Grupo titulo="Botões (CTA)" contagem={pacote.ctas.length} aberto={estaAberto("ctas")} aoAlternar={() => alternar("ctas")}>
             <ul className="space-y-1.5">
               {pacote.ctas.map((c, i) => (
                 <li key={i} className="flex min-w-0 items-start rounded-lg border border-border bg-background px-2.5 py-1.5">
@@ -296,7 +340,7 @@ export default function PacoteDaCopy({
             </ul>
           </Grupo>
 
-          <Grupo titulo="Ganchos (primeira linha)" contagem={pacote.ganchos.length}>
+          <Grupo titulo="Ganchos (primeira linha)" contagem={pacote.ganchos.length} aberto={estaAberto("ganchos")} aoAlternar={() => alternar("ganchos")}>
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.ganchos.map((g, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
@@ -309,7 +353,16 @@ export default function PacoteDaCopy({
 
           {pacote.gestor && (
             <div className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-3">
-              <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Orientação ao gestor de tráfego</p>
+              <button
+                type="button"
+                onClick={() => alternar("gestor")}
+                aria-expanded={estaAberto("gestor")}
+                className="flex w-full min-w-0 items-center text-left text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${estaAberto("gestor") ? "rotate-90" : ""}`} />
+                Orientação ao gestor de tráfego
+              </button>
+              {estaAberto("gestor") && (
               <dl className="mt-1.5 space-y-1.5">
                 {CAMPOS_DO_GESTOR.filter((c) => pacote.gestor && pacote.gestor[c.chave]).map((c) => (
                   <div key={c.chave} className="min-w-0">
@@ -318,6 +371,7 @@ export default function PacoteDaCopy({
                   </div>
                 ))}
               </dl>
+              )}
             </div>
           )}
         </>

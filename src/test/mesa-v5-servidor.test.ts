@@ -142,7 +142,9 @@ describe("refazer que refaz (dono, 23/09 noite)", () => {
     expect(v).toContain("!esperaLogo && !v.logo_presente ? null");
   });
   it("a Mesa usa a tela larga", () => {
-    expect(ler("src/components/AppLayout.tsx")).toContain('location.pathname.indexOf("/mesa") === 0');
+    // 26/09: todas as páginas usam a tela larga das mesas (1840 px), sem exceção por rota.
+    expect(ler("src/components/AppLayout.tsx")).toContain('"max-w-[1840px]"');
+    expect(ler("src/components/AppLayout.tsx")).not.toContain('"max-w-[1280px]"');
   });
 });
 

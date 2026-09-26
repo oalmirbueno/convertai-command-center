@@ -68,9 +68,8 @@ describe("editorial design task workspace contract", () => {
     expect(page).not.toContain(
       "xl:grid-cols-[minmax(0,1fr)_300px]",
     );
-    // A Agenda continua com 1400 px. A Mesa ganhou 1840 px antes dela no mesmo
-    // ternário (23/09), o que muda só a indentação desta linha.
-    expect(layout).toMatch(/location\.pathname === "\/calendario"\s*\?\s*"max-w-\[1400px\]"/);
+    // 26/09: a Agenda usa a mesma tela larga das mesas e das outras páginas.
+    expect(layout).toContain('"max-w-[1840px]"');
     expect(page).not.toContain("<EditorialTaskInbox");
     expect(views).toContain(
       // Cinco colunas desde que "Programado" entrou no kanban editorial
