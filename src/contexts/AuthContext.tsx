@@ -207,13 +207,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         let { data: { session } } = await supabase.auth.getSession();
-        if (session?.refresh_token) {
-          const { data: refreshed, error: refErr } = await supabase.auth.refreshSession();
-          if (refErr && isNetworkAuthError(refErr)) {
-            // Sem rede ou servidor fora: a sessão local continua valendo. O
-            // SDK tenta de novo sozinho quando a conexão volta. Deslogar aqui
-            // era o defeito: cliente sem sinal por um segundo perdia o acesso.
-            console.warn("[Auth] refresh sem rede; mantendo a sessão local:", refErr.message);
+        // Token local ainda válido por mais de 1 minuto: abre com ele e renova
+        // em segundo plano (26/09: com o gateway do Supabase lento, a renovação
+        // ficava pendente e o painel parava na logo, mesmo com token bom).
+        const tokenAindaVale = !!session?.expires_at && session.expires_at * 1000 - Date.now() > 60_000;
+        if (session?.refresh_token && tokenAindaVale) {
+          void supabase.auth.refreshSession().then(async ({ error: refErr }) => {
+            if (!refErr || isNetworkAuthError(refErr)) return;
+            // Refresh token inválido ou já rotacionado: saída limpa (SIGNED_OUT cuida da tela).
+            console.warn("[Auth] refresh failed, signing out:", refErr.message);
+            await supabase.auth.signOut();
+          }).catch(() => undefined);
+        } else if (session?.refresh_token) {
+          // Token vencido: espera a renovação, mas no máximo 8 s; depois segue
+          // com a sessão local e o SDK tenta de novo sozinho.
+          const esgotou = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+          const resposta = await Promise.race([supabase.auth.refreshSession(), esgotou]);
+          const refreshed = resposta ? resposta.data : { session: null };
+          const refErr = resposta ? resposta.error : null;
+          if (!resposta || (refErr && isNetworkAuthError(refErr))) {
+            // Sem rede, servidor fora ou lento demais: a sessão local continua
+            // valendo. O SDK tenta de novo sozinho quando a conexão volta.
+            // Deslogar aqui era o defeito: cliente sem sinal por um segundo perdia o acesso.
+            console.warn("[Auth] refresh sem rede; mantendo a sessão local:", refErr ? refErr.message : "tempo esgotado");
           } else if (refErr) {
             // Refresh token inválido ou já rotacionado: saída limpa.
             console.warn("[Auth] refresh failed, signing out:", refErr.message);
