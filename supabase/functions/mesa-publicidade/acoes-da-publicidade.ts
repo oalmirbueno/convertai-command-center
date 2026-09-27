@@ -24,13 +24,15 @@ import {
   type Alvo,
   type AlvoComApelido,
   blocoDosAlvos,
+  type CaminhoDoAgente,
   esquemaDasAcoes,
   type ItemDaAcaoDoAgente,
   normalizarAcaoDoAgente,
   regraDasAcoes,
   type RegraDaOperacao,
 } from "../_shared/acoes-do-agente.ts";
-import { type CampanhaDePublicidade, ROTULO_DA_MUDANCA, type RevisaoDePublicidade } from "./regras.ts";
+import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
+import { type CampanhaDePublicidade, enderecoDoDestino, ROTULO_DA_MUDANCA, type RevisaoDePublicidade } from "./regras.ts";
 
 export const OPERACOES_DA_PUBLICIDADE = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio"];
 export const ESQUEMA_DAS_ACOES_DA_PUBLICIDADE = esquemaDasAcoes(OPERACOES_DA_PUBLICIDADE);
@@ -228,4 +230,49 @@ export function normalizarAcoesDaPublicidade(bruto: unknown, c: CampanhaDePublic
     contexto: { client_id: c.client_id, campanha_id: c.id },
     semDesfazer: (itens: ItemDaAcaoDoAgente[]) => itens.every((i) => OPERACOES_SEM_REVERSO.indexOf(i.operacao) >= 0),
   });
+}
+
+/**
+ * O "Ir para" da Publicidade (dono, 27/09: "quando termina ele dá o caminho
+ * pra mim apertar e ir"). Conta só o que deu certo (antes de fazer, o que foi
+ * pedido):
+ * - fotos mandadas para a Mesa Ads ou a Mesa: abre o Estúdio de lá já com as
+ *   fotos (o mesmo endereço do "Usar" da Mesa Foto);
+ * - tomadas pedidas: etapa Tomadas; territórios: Direção; foto reprovada:
+ *   Revisão; briefing e nome: a Campanha. Sempre com a campanha aberta.
+ */
+export function caminhoDaPublicidade(
+  c: { client_id: string; id: string | null },
+  acao: Pick<AcaoDoAgente, "itens" | "resultados">,
+  opcoes: { abrirSozinho?: boolean } = {},
+): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const ops: string[] = [];
+  const enviadas: Record<string, string[]> = { ads: [], mesa: [] };
+  for (const i of acao.itens) {
+    const r = feitos ? feitos.find((x) => x.ref === i.ref && x.operacao === i.operacao) : null;
+    if (feitos && !r) continue;
+    ops.push(i.operacao);
+    if (r && (i.operacao === "mandar_para_ads" || i.operacao === "mandar_para_mesa")) {
+      const ids = r.desfazer && Array.isArray(r.desfazer.imagem_ids) ? (r.desfazer.imagem_ids as unknown[]).map(String) : [];
+      enviadas[i.operacao === "mandar_para_ads" ? "ads" : "mesa"].push(...ids);
+    }
+  }
+  const destinoFeito = enviadas.ads.length ? "ads" : enviadas.mesa.length ? "mesa" : null;
+  if (destinoFeito) {
+    const destino = enderecoDoDestino(destinoFeito, c.client_id, Array.from(new Set(enviadas[destinoFeito])));
+    const rotulo = destinoFeito === "ads" ? "Abrir no Estúdio da Mesa Ads" : "Abrir no Estúdio da Mesa";
+    return opcoes.abrirSozinho ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
+  }
+  const tem = (op: string) => ops.indexOf(op) >= 0;
+  const [etapa, rotulo] = tem("pedir_tomadas")
+    ? ["tomadas", "Ver as tomadas"]
+    : tem("propor_territorios") || tem("aprovar_territorio")
+    ? ["direcao", "Ver a direção"]
+    : tem("reprovar_foto")
+    ? ["revisao", "Ver a revisão"]
+    : tem("mandar_para_ads") || tem("mandar_para_mesa")
+    ? ["envio", "Ver o envio"]
+    : ["campanha", "Ver a campanha"];
+  return caminhoNaArea("mesa_publicidade", { clientId: c.client_id, etapa, estado: { campanha: c.id }, rotulo, abrirSozinho: opcoes.abrirSozinho });
 }

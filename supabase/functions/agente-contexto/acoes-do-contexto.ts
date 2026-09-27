@@ -22,11 +22,13 @@ import {
   type Alvo,
   type AlvoComApelido,
   blocoDosAlvos,
+  type CaminhoDoAgente,
   esquemaDasAcoes,
   normalizarAcaoDoAgente,
   regraDasAcoes,
   type RegraDaOperacao,
 } from "../_shared/acoes-do-agente.ts";
+import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { alvosDoAcervo, DESCRICOES_DO_ACERVO, type FotoDoAcervo, regrasDoAcervo } from "../_shared/acoes-do-acervo.ts";
 import { alvosDoWorkspace, DESCRICOES_DO_WORKSPACE, type NoDoWorkspace, regrasDoWorkspace, rotuloDoDestino } from "../_shared/acoes-do-workspace.ts";
 
@@ -138,4 +140,59 @@ export function blocoDasAcoesDoContexto(d: DadosDoContexto): string {
       arquivar: DESCRICOES_DO_WORKSPACE.arquivar,
     }),
   ].join("");
+}
+
+const OPERACOES_DO_ACERVO_NO_CONTEXTO = ["arquivar_foto", "mover_foto", "marcar_foto", "tirar_marca"];
+const OPERACOES_DO_WORKSPACE_NO_CONTEXTO = ["mover", "renomear", "arquivar"];
+const OPERACOES_DE_TAREFA = ["criar_tarefa", "atualizar_tarefa"];
+const OPERACOES_DE_PROJETO = ["criar_projeto", "atualizar_projeto", "criar_marco"];
+
+/**
+ * O "Ir para" do agente de contexto (dono, 27/09: "quando termina ele dá o
+ * caminho pra mim apertar e ir e já fica tudo certinho"). Conta só o que deu
+ * certo (antes de fazer, o que foi pedido), pela ordem do que mais importa:
+ * - tarefa: uma só abre o detalhe dela no Kanban (task=); várias ou projeto
+ *   abrem o Kanban no projeto (project=);
+ * - acervo: a Mesa Foto no acervo (com a foto aberta quando é uma só e não foi arquivada);
+ * - workspace: o Workspace do cliente;
+ * - kit, contexto, logo, referências, decisões, caminho, brand book: a aba Contexto da Mesa.
+ */
+export function caminhoDoContexto(clientId: string, acao: Pick<AcaoDoAgente, "itens" | "resultados">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const tarefas: string[] = [];
+  const projetos: string[] = [];
+  const fotos: string[] = [];
+  let arquivouFoto = false;
+  let workspace = false;
+  let kit = false;
+  for (const i of acao.itens) {
+    const r = feitos ? feitos.find((x) => x.ref === i.ref && x.operacao === i.operacao) : null;
+    if (feitos && !r) continue;
+    const d = (r && r.desfazer) || {};
+    if (OPERACOES_DE_TAREFA.indexOf(i.operacao) >= 0) {
+      const id = i.operacao === "criar_tarefa" ? String(d.tarefa_id || "") : i.alvo_id;
+      if (id && tarefas.indexOf(id) < 0) tarefas.push(id);
+    } else if (OPERACOES_DE_PROJETO.indexOf(i.operacao) >= 0) {
+      const id = i.operacao === "criar_projeto" ? String(d.projeto_id || "") : i.operacao === "atualizar_projeto" ? i.alvo_id : "";
+      if (id && projetos.indexOf(id) < 0) projetos.push(id);
+    } else if (OPERACOES_DO_ACERVO_NO_CONTEXTO.indexOf(i.operacao) >= 0) {
+      if (i.operacao === "arquivar_foto") arquivouFoto = true;
+      else if (fotos.indexOf(i.alvo_id) < 0) fotos.push(i.alvo_id);
+    } else if (OPERACOES_DO_WORKSPACE_NO_CONTEXTO.indexOf(i.operacao) >= 0) {
+      workspace = true;
+    } else {
+      kit = true;
+    }
+  }
+  const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
+  if (tarefas.length === 1) return caminhoNaArea("kanban", { ...base, estado: { task: tarefas[0] }, rotulo: "Abrir a tarefa no Kanban" });
+  if (tarefas.length > 1 || projetos.length) {
+    return caminhoNaArea("kanban", { ...base, estado: projetos.length === 1 ? { project: projetos[0] } : {}, rotulo: tarefas.length > 1 ? `Ver as ${tarefas.length} tarefas no Kanban` : "Ver o projeto no Kanban" });
+  }
+  if (fotos.length || arquivouFoto) {
+    return caminhoNaArea("mesa_foto", { ...base, etapa: "acervo", estado: fotos.length === 1 && !arquivouFoto ? { imagem: fotos[0] } : {}, rotulo: "Ver no acervo da Mesa Foto" });
+  }
+  if (workspace) return caminhoNaArea("workspace", { ...base, rotulo: "Abrir o Workspace do cliente" });
+  if (kit) return caminhoNaArea("mesa", { ...base, etapa: "contexto", rotulo: "Ver o kit da marca" });
+  return null;
 }

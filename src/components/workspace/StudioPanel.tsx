@@ -29,6 +29,7 @@ import {
   botao, campo, campoTexto, superficie, texto, etiqueta, foco, useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela,
 } from "@/components/sistema";
 import { CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente } from "@/components/sistema/PainelDoAgente";
+import { CaminhoDoTexto } from "@/components/agentes/CaminhoPronto";
 
 
 /**
@@ -3369,6 +3370,8 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     },
                   }}
                 >{m.content}</ReactMarkdown>
+                {/* Frente AG (27/09): a área que a resposta citou vira o botão "Abrir" com o cliente. */}
+                <CaminhoDoTexto texto={m.content} clientId={clientId} />
               </article>
             )
           ))}

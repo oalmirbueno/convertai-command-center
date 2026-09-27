@@ -228,6 +228,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       acao_id: m.acao ? m.acao.id : undefined,
     };
     if (pedido === "descartar") corpo.descartar = true;
+    if (pedido === "parar") corpo.parar = true;
     return chamarMesaVideos<RespostaDaAcao>(corpo);
   };
 

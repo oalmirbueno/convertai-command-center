@@ -10,7 +10,8 @@
  * Puro: sem Deno, sem banco. A tela, a função mesa-videos e os testes usam o mesmo.
  */
 
-import { type AcaoDoAgente, type Alvo, comApelido, normalizarAcaoDoAgente, type RegraDaOperacao } from "./acoes-do-agente.ts";
+import { type AcaoDoAgente, type Alvo, type CaminhoDoAgente, comApelido, normalizarAcaoDoAgente, type RegraDaOperacao } from "./acoes-do-agente.ts";
+import { caminhoNaArea } from "./mapa-do-painel.ts";
 
 export type MesaDoAgente = "videos" | "edicao";
 
@@ -152,3 +153,20 @@ export function camposDoEnvio(operacao: string, agora: string): { edicao_desde: 
 
 /** Agentes cujas propostas a função mesa-videos executa (o diretor entrou na frente V-A). */
 export const AGENTES_DA_MESA_DE_VIDEO = ["organizador_de_takes", AGENTE_DO_ENVIO, "diretor_de_video"] as const;
+
+/**
+ * O "Ir para" das ações das mesas de vídeo (frente AG, 27/09: "quando termina
+ * ele dá o caminho pra mim apertar e ir"):
+ * - vídeos mandados para a Edição: a Entrada da Mesa Edição (parte vídeos);
+ * - takes organizados: a etapa Organizar da Mesa Edição;
+ * - planos gerados pelo diretor: os Resultados da Mesa Vídeos (fila e prontos).
+ * Nada deu certo: sem caminho.
+ */
+export function caminhoDaMesaDeVideo(clientId: string, acao: Pick<AcaoDoAgente, "agente" | "resultados">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  if (acao.resultados && acao.resultados.length && !acao.resultados.some((r) => r.ok)) return null;
+  const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
+  if (acao.agente === AGENTE_DO_ENVIO) return caminhoNaArea("mesa_edicao", { ...base, etapa: "entrada", estado: { parte: "videos" }, rotulo: "Abrir na Mesa Edição" });
+  if (acao.agente === "organizador_de_takes") return caminhoNaArea("mesa_edicao", { ...base, etapa: "organizar", rotulo: "Ver os takes organizados" });
+  if (acao.agente === "diretor_de_video") return caminhoNaArea("mesa_videos", { ...base, etapa: "resultados", rotulo: "Ver em Resultados" });
+  return null;
+}

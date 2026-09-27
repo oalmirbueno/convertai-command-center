@@ -67,6 +67,9 @@ import {
   type AcaoDoAgente,
   type AcaoGuardada,
   acaoGuardadaNaMensagem,
+  anexosComCaminho,
+  caminhoNasAcoes,
+  comCaminho,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
@@ -80,6 +83,7 @@ import { executarNoAcervo, type FotoDoAcervo, reverterNoAcervo } from "../_share
 import { executarNoWorkspace, type NoDoWorkspace, reverterNoWorkspace } from "../_shared/acoes-do-workspace.ts";
 import {
   blocoDasAcoesDoContexto,
+  caminhoDoContexto,
   type DadosDoContexto,
   ESQUEMA_DAS_ACOES_DO_CONTEXTO,
   normalizarAcoesDoContexto,
@@ -118,7 +122,7 @@ import {
 import { type DependenciasDoExecutor, ehOperacaoDoKit, executarItemDoPlano, type MemoriaDoPlano, reverterItemDoPlano } from "./executor-do-plano.ts";
 import { organizarPorTipo } from "./organizar-por-tipo.ts";
 // Frente AG (26/09): o agente conhece o painel e o que a equipe ensina na conversa já vem feito, com Desfazer.
-import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from "./kit-na-conversa.ts";
 
 /**
@@ -978,7 +982,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
 
   const acaoProposta = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
   const resposta = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : "Pronto.");
-  const anexosDaResposta = [kitFeito, acaoProposta].filter((x): x is AcaoDoAgente => !!x);
+  // Frente AG (27/09): cada cartão leva o "Ir para" (kit na aba Contexto, foto no acervo, arquivo no Workspace);
+  // sem cartão, a área que a resposta citou. "Faz e me leva" abre sozinho ao terminar.
+  const anexosDaResposta = anexosComCaminho(
+    caminhoNasAcoes([kitFeito, acaoProposta].filter((x): x is AcaoDoAgente => !!x), (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }),
+    caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }),
+  );
   // client_id é obrigatório em agente_mensagens: sem ele o insert falhava calado e a conversa nunca ficava salva.
   const agora = Date.now();
   const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
@@ -1312,7 +1321,7 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
   const guardada = await propostaDoContexto(ch, corpo);
   const clientId = guardada.mensagem.client_id;
   const inicio = Date.now();
-  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[]; terminou: boolean };
   // Plano, brand book e pasta nova correm um item de cada vez, na ordem (o projeto antes
   // dos marcos, a pasta nasce uma vez só); o resto, três ao mesmo tempo.
   const memoria: MemoriaDoPlano = new Map();
@@ -1326,16 +1335,21 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
         ehOperacaoDoPlano(item.operacao) || ehOperacaoDoKit(item.operacao)
           ? executarItemDoPlano(servico(), clientId, item, acao, memoria, deps)
           : executarItemDoContexto(ch, clientId, item),
-      { descartar: corpo.descartar === true, userId: ch.userId, lote: emOrdem ? 1 : 3 },
+      // Frente AG (27/09): acervo e workspace vão em passos de 6 (andamento e Parar na tela). O plano
+      // fica numa chamada só: a memória do plano (o projeto novo antes das tarefas) vive nesta chamada.
+      {
+        descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: emOrdem ? 1 : 3,
+        porVez: emOrdem ? undefined : 6, caminho: (feita) => caminhoDoContexto(clientId, feita),
+      },
     );
   } catch (e) {
     throw comoErroDoContexto(e);
   }
-  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  if (corpo.descartar === true && !r.anexo.executada_em) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  if (guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "contexto_acao_do_agente", origin: "mesa:agente-contexto",
@@ -1581,7 +1595,8 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
 
   const acaoDoPlano = normalizarPlanoDoCliente({ plano: o.plano, contexto: o.contexto, decisoes: o.decisoes, caminho: o.caminho }, plano, clientId);
   const acaoDosArquivos = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
-  const anexos = [acaoDoPlano, acaoDosArquivos].filter(Boolean) as AcaoDoAgente[];
+  // Frente AG (27/09): o plano e os arquivos levam o "Ir para" (Kanban com o projeto e a tarefa, aba Contexto...).
+  const anexos = caminhoNasAcoes([acaoDoPlano, acaoDosArquivos].filter(Boolean) as AcaoDoAgente[], (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }) as AcaoDoAgente[];
   const resposta = texto(o.resposta, 5000) || (anexos.length ? "A lista está pronta para você confirmar." : "Pronto.");
   const agora = Date.now();
   const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
@@ -1854,16 +1869,18 @@ async function importarBrandBook(ch: Chamador, corpo: Record<string, unknown>) {
   });
 
   const conversaId = await garantirConversa(clientId, ch.userId);
+  // Frente AG (27/09): o cartão leva o "Ir para" (o kit na aba Contexto).
+  const comCaminhoDoKit = acao ? comCaminho(acao, caminhoDoContexto(clientId, acao)) : null;
   const resposta = acao
     ? `Li o brand book (${arquivos.map((a) => a.nome).join(", ")}). ${acao.itens.length ? "A proposta para o kit está pronta para você confirmar." : "Nada entrou no kit como está."}${leitura.observacoes ? ` Observação: ${texto(leitura.observacoes, 300)}` : ""}`
     : "Li o brand book, mas não achei cor, fonte ou logo novas para o kit.";
   const { data: gravada } = await servico()
     .from("agente_mensagens")
-    .insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, anexos: acao ? [acao] : [] })
+    .insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, anexos: comCaminhoDoKit ? [comCaminhoDoKit] : [] })
     .select("id")
     .single();
   const mensagemId = (gravada as { id: string } | null)?.id ?? null;
-  return json({ resposta, acao: mensagemId ? acao : null, mensagem_id: mensagemId, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, reserva_usada: r.reservaUsada ?? null });
+  return json({ resposta, acao: mensagemId ? comCaminhoDoKit : null, mensagem_id: mensagemId, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, reserva_usada: r.reservaUsada ?? null });
 }
 
 /** organizar_por_tipo { client_id }: sem IA. Propõe a estrutura de pastas por tipo para os arquivos soltos. */
@@ -1875,14 +1892,16 @@ async function organizarPorTipoAcao(ch: Chamador, corpo: Record<string, unknown>
   if (!proposta.itens.length) return json({ resposta: proposta.resumo, acao: null, mensagem_id: null });
   const acao = normalizarAcoesDoContexto({ resumo: proposta.resumo, itens: proposta.itens }, dados, clientId);
   if (!acao) return json({ resposta: "Nada para organizar por tipo.", acao: null, mensagem_id: null });
+  // Frente AG (27/09): o cartão leva o "Ir para" (o Workspace do cliente).
+  const comCaminhoDoWorkspace = comCaminho(acao, caminhoDoContexto(clientId, acao));
   const conversaId = await garantirConversa(clientId, ch.userId);
   const { data: gravada } = await servico()
     .from("agente_mensagens")
-    .insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: proposta.resumo, anexos: [acao] })
+    .insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: proposta.resumo, anexos: [comCaminhoDoWorkspace] })
     .select("id")
     .single();
   const mensagemId = (gravada as { id: string } | null)?.id ?? null;
-  return json({ resposta: proposta.resumo, acao: mensagemId ? acao : null, mensagem_id: mensagemId });
+  return json({ resposta: proposta.resumo, acao: mensagemId ? comCaminhoDoWorkspace : null, mensagem_id: mensagemId });
 }
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {

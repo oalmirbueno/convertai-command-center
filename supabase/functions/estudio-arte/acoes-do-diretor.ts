@@ -29,6 +29,9 @@ import {
   type AcaoDoAgente,
   type AlvoComApelido,
   blocoDosAlvos,
+  anexosComCaminho,
+  type CaminhoDoAgente,
+  comCaminho,
   esquemaDasAcoes,
   type ItemDaAcaoDoAgente,
   normalizarAcaoDoAgente,
@@ -36,6 +39,7 @@ import {
   type RegraDaOperacao,
 } from "../_shared/acoes-do-agente.ts";
 import { blocosDoTexto, FORMATOS_DO_POST, QUADRO_DO_POST, type FormatoDoPost } from "../_shared/direcao-arte.ts";
+import { caminhoDaResposta, caminhoNaArea, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 
 export const OPERACOES_DO_DIRETOR = ["reordenar", "mudar_formato", "trocar_texto", "arquivar_versoes", "refazer"];
 
@@ -290,4 +294,32 @@ export function devolverVersoesDaLamina(t: TrabalhoParaAcoes, ordem: number, ver
 export function ordensParaGerarDeNovo(acao: Pick<AcaoDoAgente, "itens" | "resultados">): number[] {
   const ok = new Set((acao.resultados || []).filter((r) => r.ok && r.operacao === "refazer").map((r) => r.ref));
   return acao.itens.filter((i: ItemDaAcaoDoAgente) => i.operacao === "refazer" && ok.has(i.ref)).map((i) => Number(i.alvo_id)).filter((n) => Number.isInteger(n));
+}
+
+// ------------------------------------------------------------------ o caminho (frente AG, 27/09)
+
+/**
+ * O "Ir para" do diretor (dono, 27/09: "quando termina ele dá o caminho pra
+ * mim apertar e ir"): o item no Estúdio da Mesa (aba estudio, task = o item
+ * da agenda), que é onde a arte mudou. Criativo de anúncio (sem item da
+ * agenda) fica sem caminho: o diretor já está ao lado dele na Mesa Ads. A
+ * tela esconde o botão quando a pessoa já está nesse endereço.
+ */
+export function caminhoDoTrabalho(t: { client_id: string; task_id?: string | null; tipo?: string | null }, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  if (t.tipo === "ads" || !t.task_id) return null;
+  return caminhoNaArea("mesa", { clientId: t.client_id, etapa: "estudio", estado: { task: t.task_id }, rotulo: "Ver no Estúdio", abrirSozinho: opcoes.abrirSozinho });
+}
+
+/**
+ * Os anexos da resposta do diretor com o caminho de outra área que ele citou
+ * ("Isso é na Mesa Ads (/mesa-ads)"): o botão "Abrir" fica na mensagem. Quando
+ * a proposta já leva o caminho, não repete.
+ */
+export function anexosDaRespostaDoDiretor(anexos: unknown[], resposta: string, clientId: string, pedido: string): unknown[] {
+  return anexosComCaminho(anexos, caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(pedido) || pedeParaLevar(pedido) }));
+}
+
+/** A proposta com o caminho do trabalho; "faz e me leva" no pedido abre sozinho depois de confirmar. */
+export function comCaminhoDoDiretor(acao: AcaoDoAgente | null, t: { client_id: string; task_id?: string | null; tipo?: string | null }, pedido: string): AcaoDoAgente | null {
+  return acao ? comCaminho(acao, caminhoDoTrabalho(t, { abrirSozinho: pedeParaLevar(pedido) })) : null;
 }

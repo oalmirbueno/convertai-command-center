@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -347,6 +348,20 @@ export default function Workspace() {
     },
     enabled: isStaff,
   });
+
+  // "Ir para" dos agentes (27/09): /workspace?client=<id> abre o workspace desse
+  // cliente (o resto do estado continua guardado no navegador). O parâmetro sai
+  // do endereço depois de lido, para voltar ao comportamento de sempre.
+  const [parametros, setParametros] = useSearchParams();
+  const clienteDoEndereco = parametros.get("client");
+  useEffect(() => {
+    if (!clienteDoEndereco || !clients) return;
+    if ((clients as any[]).some((c) => c.id === clienteDoEndereco) && clientId !== clienteDoEndereco) nav.setClient(clienteDoEndereco);
+    const resto = new URLSearchParams(parametros);
+    resto.delete("client");
+    setParametros(resto, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteDoEndereco, clients]);
 
   // Cliente guardado que saiu da lista (arquivado, sem acesso): volta ao Global.
   useEffect(() => {

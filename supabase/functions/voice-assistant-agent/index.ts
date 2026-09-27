@@ -22,6 +22,7 @@ import { contextoParaAgente, type AreaDoCerebro } from "../_shared/cerebro-do-cl
 import {
   acaoGuardadaNaMensagem,
   type AcaoDoAgente,
+  comCaminho,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
@@ -40,6 +41,7 @@ import {
   OPCAO_AQUI,
   OPCAO_NENHUMA,
   pedeParaAbrir,
+  pedeParaLevar,
   perguntasDoRoteador,
   type Roteamento,
 } from "../_shared/mapa-do-painel.ts";
@@ -53,6 +55,7 @@ import {
   alvosDoLancador,
   type AlvosDoLancador,
   blocoDasAcoesDoLancador,
+  caminhoDoLancador,
   type DadosDoLancador,
   executarItemDoLancador,
   normalizarAcoesDoLancador,
@@ -210,6 +213,8 @@ interface RequestBody {
   mensagem_id?: string;
   acao_id?: string;
   descartar?: boolean;
+  /** Frente AG (27/09): encerra a sequência em passos no meio (o que foi feito fica, com o Desfazer). */
+  parar?: boolean;
 }
 
 // ─── Pré-contexto (cliente + serviço) ──────────────────────────────────
@@ -639,6 +644,10 @@ async function tratarAcoesDoLancador(
   const destinoFinal = destino ? { ...destino, direto: abrir && !acao } : null;
 
   if (!acao || !clientId) return { acao: null, mensagemId: null, destino: destinoFinal, direto: null };
+  // Frente AG (27/09): o cartão leva o "Ir para" (a tarefa no Kanban, a nota no contexto);
+  // "crie e me leva" abre sozinho ao terminar (o Jev já respondeu "abrir" nesta chamada).
+  const levar = rota && rota.abrir !== null ? rota.abrir >= 0.7 : pedeParaLevar(texto);
+  acao = comCaminho(acao, caminhoDoLancador(clientId, acao, { abrirSozinho: levar }));
 
   // "Ele já vai fazendo": ordem clara (Jev; sem Jev, verbo de ordem no começo), sem custo e com Desfazer.
   const pedidoClaro = rota && rota.ordem !== null ? rota.ordem >= 0.75 : pareceOrdem(texto);
@@ -647,6 +656,7 @@ async function tratarAcoesDoLancador(
     const deps = dependenciasDoLancador(supabase, clientId, userId);
     const inicio = Date.now();
     acao = await executarDireto(acao, (item, a) => executarItemDoLancador(supabase, clientId, item, a, deps), { userId });
+    acao = comCaminho(acao, caminhoDoLancador(clientId, acao));
     const falhas = (acao.resultados || []).filter((r) => !r.ok).length;
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: "aceleriq_acao_direta", origin: "painel:voice-assistant-agent",
@@ -704,12 +714,15 @@ async function acaoGuardadaDoLancador(
       return jsonResposta({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
     }
     const deps = dependenciasDoLancador(supabase, clientId, userId);
-    const r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItemDoLancador(supabase, clientId, item, acao, deps), { descartar: body.descartar === true, userId, lote: 1 });
-    if (body.descartar === true) return jsonResposta({ anexo: r.anexo, custo_usd: 0 });
+    // Frente AG (27/09): em passos de 5 (andamento e Parar no cartão) e o "Ir para" com o que foi feito.
+    const r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItemDoLancador(supabase, clientId, item, acao, deps), {
+      descartar: body.descartar === true, parar: body.parar === true, userId, lote: 1, porVez: 5, caminho: (feita) => caminhoDoLancador(clientId, feita),
+    });
+    if (body.descartar === true && !r.anexo.executada_em) return jsonResposta({ anexo: r.anexo, custo_usd: 0 });
     const feitos = r.resultados.filter((x) => x.ok).length;
     const falhas = r.resultados.length - feitos;
-    if (guardada.mensagem.conversa_id) {
-      await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+    if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
+      await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
     }
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: "aceleriq_executar_acao_do_agente", origin: "painel:voice-assistant-agent",

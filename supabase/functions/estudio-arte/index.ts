@@ -231,6 +231,10 @@ import {
   MOTIVO_CONTINUO,
   MOTIVO_ENTREGUE,
   normalizarAcoesDoDiretor,
+  // Frente AG (27/09): o "Ir para" do diretor (o item no Estúdio) e da área que a resposta citou.
+  anexosDaRespostaDoDiretor,
+  caminhoDoTrabalho,
+  comCaminhoDoDiretor,
   ordemInversa,
   ordensParaGerarDeNovo,
   reordenarTrabalho,
@@ -7146,7 +7150,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer): só a lista; a equipe confirma.
-  const acaoProposta = normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes);
+  const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes), t, mensagem);
   if (!resposta && !mudancas.length && !acaoProposta) {
     throw new ErroEstudio(502, "conversa_vazia", "O diretor não respondeu desta vez. Tente de novo ou pergunte de outro jeito.", { uso_id: r.usoId, custo_usd: r.custoUsd });
   }
@@ -7157,10 +7161,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     {
       papel: "agente",
       conteudo: resposta || "Seguem as mudanças que eu sugiro.",
-      anexos: [
+      anexos: anexosDaRespostaDoDiretor([
         { tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: [] },
         ...(acaoProposta ? [acaoProposta] : []),
-      ],
+      ], resposta, t.client_id, mensagem),
       uso_id: r.usoId,
     },
   ]);
@@ -7538,7 +7542,8 @@ async function executarAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
   const inicio = Date.now();
   let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
   try {
-    r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoDiretor(t.id, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 });
+    // Numa chamada só (sem passos): o "refazer" volta em gerar_de_novo e a tela gera uma vez.
+    r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoDiretor(t.id, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1, caminho: () => caminhoDoTrabalho(t) });
   } catch (e) {
     throw comoErroDoEstudio(e);
   }

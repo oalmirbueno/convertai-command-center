@@ -9,6 +9,7 @@ import { Ditado } from "./Ditado";
 import { useMesa } from "./MesaContexto";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import {
   chaveDoHistorico,
@@ -54,6 +55,8 @@ export default function AgenteDeContexto({
   const [enviando, setEnviando] = useState<{ clientId: string; mensagem: string } | null>(null);
   const [erro, setErro] = useState<{ clientId: string; erro: unknown } | null>(null);
   const [ultimo, setUltimo] = useState<{ clientId: string; mudou: string[]; memorias: number } | null>(null);
+  // A resposta que acabou de chegar nesta tela: só ela pode abrir sozinha ("faz e me leva").
+  const [recebida, setRecebida] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement>(null);
 
   // Atalho do Hub do plano: preenche a caixa (a pessoa revisa e envia).
@@ -94,6 +97,7 @@ export default function AgenteDeContexto({
         ]),
       );
       setUltimo({ clientId: alvo, mudou: Array.isArray(data?.mudou) ? data.mudou : [], memorias: Number(data?.memorias || 0) });
+      setRecebida(data && data.mensagem_id ? String(data.mensagem_id) : null);
       avisarCustoReal("Agente de contexto respondeu", data, atualizarCusto);
       invalidar(alvo, { historico: true });
     } catch (e) {
@@ -228,11 +232,13 @@ export default function AgenteDeContexto({
             >
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
             </div>
+            {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
             {m.papel === "agente" && m.id &&
               acoesDaMensagem(m.anexos).map((a) => (
                 <CartaoDeAcao
                   key={a.id}
                   acao={a}
+                  recemFeita={!!m.id && m.id === recebida}
                   titulo={a.executada_direto ? "O agente fez" : "O agente vai fazer"}
                   observacao="Sem custo. Nada é apagado, e dá para desfazer."
                   onPedido={(p) => chamarAcaoDoAgente("agente-contexto", String(m.id), a.id, p)}

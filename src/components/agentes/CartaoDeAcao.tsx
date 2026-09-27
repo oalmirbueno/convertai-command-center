@@ -1,11 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Loader2, Undo2, Wand2, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRight, Check, Loader2, Square, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import CaminhoPronto from "./CaminhoPronto";
 import { textoDoErro } from "@/lib/mesa/api";
 import {
   acaoDoAnexo,
+  emAndamento,
   estadoDaAcao,
   frasesDoResultado,
   MAX_ITENS_POR_ACAO,
@@ -15,12 +16,21 @@ import {
   type RespostaDaAcao,
 } from "@/lib/agentes/acoesDoAgente";
 
+/** Teto de passos numa confirmação (nenhuma sequência passa disso: 120 itens de 1 em 1). */
+const MAX_PASSOS = 130;
+
 /**
  * Cartão genérico da ação que um agente propôs (contrato comum em
  * supabase/functions/_shared/acoes-do-agente.ts): a lista exata, item por
  * item, com Confirmar e Cancelar. Só a confirmação executa. Depois, cada item
  * mostra o motivo quando não pôde, e o Desfazer aparece quando há reverso.
  * Não depende da Mesa: quem usa passa a chamada (onPedido).
+ *
+ * Acompanhamento (dono, 27/09: "observando as ações de forma clara e poder
+ * parar"): quando a função do agente faz em passos, o cartão segue passo a
+ * passo, marca cada item feito, mostra "3 de 12" e o botão Parar. Parar
+ * termina depois do passo em curso; o que já foi feito fica, com o Desfazer.
+ * Função que faz tudo de uma vez segue igual (um clique, um passo).
  */
 export default function CartaoDeAcao({
   acao,
@@ -29,6 +39,7 @@ export default function CartaoDeAcao({
   titulo,
   renderConfirmar,
   observacao,
+  recemFeita = false,
 }: {
   acao: AcaoDoAgente;
   onPedido: (pedido: PedidoDaAcao) => Promise<RespostaDaAcao>;
@@ -39,62 +50,121 @@ export default function CartaoDeAcao({
   renderConfirmar?: (confirmar: () => Promise<RespostaDaAcao | null>, ocupado: boolean) => ReactNode;
   /** Linha pequena ao lado dos botões (ex.: "Sem custo."). */
   observacao?: string;
+  /**
+   * A ação chegou agora já feita (execução direta nesta conversa): com
+   * `caminho.abrir_sozinho` ("faz e me leva"), a tela vai sozinha. Reabrir a
+   * conversa não passa isto, então não navega.
+   */
+  recemFeita?: boolean;
 }) {
   const [atual, setAtual] = useState<AcaoDoAgente>(acao);
   const [fazendo, setFazendo] = useState<PedidoDaAcao | null>(null);
   // Só vai sozinho quando a confirmação acontece nesta tela (reabrir a conversa não navega).
-  const [acabouAgora, setAcabouAgora] = useState(false);
+  const [acabouAgora, setAcabouAgora] = useState(recemFeita && !!acao.executada_direto);
+  // Parar pedido no meio da sequência: vale depois do passo em curso.
+  const pararPedido = useRef(false);
+  const [parando, setParando] = useState(false);
   useEffect(() => setAtual(acao), [acao]);
   const estado = estadoDaAcao(atual);
   const resultados = atual.resultados || [];
-  const motivoDe = (i: ItemDaAcaoDoAgente) => {
-    const r = resultados.find((x) => x.ref === i.ref && x.operacao === i.operacao);
-    return r && !r.ok ? r.motivo || "Não foi possível." : null;
-  };
+  const resultadoDe = (i: ItemDaAcaoDoAgente) => resultados.find((x) => x.ref === i.ref && x.operacao === i.operacao) || null;
   const falhas = resultados.filter((r) => !r.ok).length;
   const temReverso = !atual.sem_desfazer && resultados.some((r) => r.ok && r.desfazer);
+  const andando = emAndamento(atual);
+  const parada = estado === "feita" && !!atual.parada_em;
+
+  /** Confirma e, quando a função faz em passos, segue até terminar ou até pedirem Parar. */
+  const confirmarEmPassos = async (primeiro: PedidoDaAcao): Promise<{ r: RespostaDaAcao | null; novo: AcaoDoAgente | null }> => {
+    let r: RespostaDaAcao | null = await onPedido(primeiro);
+    let novo = r ? acaoDoAnexo(r.anexo) : null;
+    let passos = 1;
+    while (novo && emAndamento(novo) && passos < MAX_PASSOS) {
+      setAtual(novo);
+      const antes = (novo.resultados || []).length;
+      if (pararPedido.current) {
+        r = await onPedido("parar");
+        novo = r ? acaoDoAnexo(r.anexo) : novo;
+        break;
+      }
+      r = await onPedido("confirmar");
+      const seguinte = r ? acaoDoAnexo(r.anexo) : null;
+      passos++;
+      // Passo que não andou (função antiga ou falha): para aqui, sem laço.
+      if (!seguinte || (emAndamento(seguinte) && (seguinte.resultados || []).length <= antes)) {
+        novo = seguinte || novo;
+        break;
+      }
+      novo = seguinte;
+    }
+    return { r, novo };
+  };
 
   const agir = async (pedido: PedidoDaAcao): Promise<RespostaDaAcao | null> => {
-    setFazendo(pedido);
+    setFazendo(pedido === "parar" ? "confirmar" : pedido);
+    if (pedido === "confirmar") {
+      pararPedido.current = false;
+      setParando(false);
+    }
     try {
-      const r = await onPedido(pedido);
-      const novo = r && acaoDoAnexo(r.anexo);
+      const passo = pedido === "confirmar" ? await confirmarEmPassos("confirmar") : null;
+      const r = passo ? passo.r : await onPedido(pedido);
+      const novo = passo ? passo.novo : r && acaoDoAnexo(r.anexo);
       if (novo) setAtual(novo);
-      if (pedido === "confirmar") {
+      if (pedido === "confirmar" || pedido === "parar") {
         setAcabouAgora(true);
-        const f = frasesDoResultado(novo ? novo.resultados : undefined);
-        toast.success(f.titulo, { description: novo && novo.sem_desfazer && !novo.resultados?.some((x) => !x.ok) ? "Pronto." : f.descricao });
+        const f = frasesDoResultado(novo ? novo.resultados : undefined, novo && novo.parada_em ? novo.itens.length : undefined);
+        toast.success(f.titulo, { description: novo && novo.sem_desfazer && !novo.resultados?.some((x) => !x.ok) && !novo.parada_em ? "Pronto." : f.descricao });
       } else if (pedido === "desfazer") {
         toast.success("Voltou como estava", { description: `${(r && r.voltaram) || 0} ${r && r.voltaram === 1 ? "item voltou" : "itens voltaram"}.` });
       }
       onFeito?.(pedido, r || {});
       return r || {};
     } catch (e) {
-      toast.error(pedido === "desfazer" ? "Não foi possível desfazer" : pedido === "descartar" ? "Não foi possível cancelar" : "Não foi possível fazer", {
+      toast.error(pedido === "desfazer" ? "Não foi possível desfazer" : pedido === "descartar" ? "Não foi possível cancelar" : pedido === "parar" ? "Não foi possível parar" : "Não foi possível fazer", {
         description: textoDoErro(e),
         duration: 9000,
       });
       return null;
     } finally {
       setFazendo(null);
+      setParando(false);
+      pararPedido.current = false;
     }
   };
 
+  const pedirParar = () => {
+    pararPedido.current = true;
+    setParando(true);
+  };
+
   const total = atual.itens.length;
+  const feitosAgora = resultados.length;
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-acao-agente={estado}>
+    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-acao-agente={estado} data-andamento={andando ? `${feitosAgora}/${total}` : undefined}>
       <p className="flex items-center text-[12px] font-semibold">
         <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 truncate">{titulo || "O agente vai fazer"} · {total} {total === 1 ? "item" : "itens"}</span>
       </p>
       {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {(andando || (fazendo === "confirmar" && feitosAgora > 0)) && (
+        <div className="mt-2" role="status" aria-live="polite">
+          <p className="text-[11.5px] text-muted-foreground">
+            {fazendo ? (parando ? "Parando depois deste passo" : "Fazendo") : "Parou no meio"}: {feitosAgora} de {total}
+          </p>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((feitosAgora / Math.max(1, total)) * 100)}%` }} />
+          </div>
+        </div>
+      )}
       {total > 0 && (
         <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
           {atual.itens.map((i) => {
-            const motivo = motivoDe(i);
+            const r = resultadoDe(i);
+            const motivo = r && !r.ok ? r.motivo || "Não foi possível." : null;
             const para = i.para_rotulo || (i.para !== null && i.para !== undefined && i.para !== "" ? String(i.para) : "");
             return (
-              <li key={`${i.operacao}-${i.ref}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+              <li key={`${i.operacao}-${i.ref}`} className={`flex min-w-0 items-start py-1 text-[12px] leading-snug ${(andando || parada) && !r ? "opacity-60" : ""}`} data-item-feito={r ? (r.ok ? "sim" : "nao") : undefined}>
+                {r && r.ok && <Check className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-success" aria-label="feito" />}
                 <span className="mr-1.5 mt-px shrink-0 rounded bg-muted px-1.5 py-px text-[10.5px] font-medium">{i.rotulo}</span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">
                   <span className="font-medium">{i.titulo}</span>
@@ -135,7 +205,25 @@ export default function CartaoDeAcao({
         </p>
       )}
       <div className="mt-2.5 flex flex-wrap items-center">
-        {estado === "aberta" && total > 0 && (
+        {estado === "aberta" && fazendo === "confirmar" && feitosAgora > 0 && (
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={pedirParar} disabled={parando} data-parar-sequencia="">
+            {parando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Square className="mr-1.5 h-3 w-3" />}
+            {parando ? "Parando" : "Parar"}
+          </Button>
+        )}
+        {estado === "aberta" && andando && !fazendo && (
+          <>
+            <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")}>
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+              Continuar
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" onClick={() => void agir("parar")}>
+              Parar aqui
+            </Button>
+            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">O que já foi feito fica, e dá para desfazer.</span>
+          </>
+        )}
+        {estado === "aberta" && total > 0 && !andando && !(fazendo === "confirmar" && feitosAgora > 0) && (
           <>
             {renderConfirmar ? (
               <span className="mb-1 mr-1.5">{renderConfirmar(() => agir("confirmar"), !!fazendo)}</span>
@@ -158,9 +246,10 @@ export default function CartaoDeAcao({
           <>
             <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
-              {atual.executada_direto ? "Feito na hora" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
+              {parada ? `Parado · ${resultados.filter((r) => r.ok).length} de ${total} feitos` : atual.executada_direto ? "Feito na hora" : "Feito"}
+              {falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
-            <CaminhoPronto caminho={atual.caminho} abrirSozinho={acabouAgora && !falhas && !!atual.caminho && atual.caminho.abrir_sozinho === true} />
+            <CaminhoPronto caminho={atual.caminho} abrirSozinho={acabouAgora && !falhas && !parada && !!atual.caminho && atual.caminho.abrir_sozinho === true} />
             {temReverso && (
               <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
                 {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}

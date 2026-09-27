@@ -11,6 +11,8 @@ import { Ditado } from "./Ditado";
 import { Cronometro } from "./Cronometro";
 import type { Trabalho } from "./useItensDoMes";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CaminhoPronto from "@/components/agentes/CaminhoPronto";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import {
@@ -309,8 +311,13 @@ export default function DiretorDoEstudio({
       <div key={m.id} className="min-w-0 space-y-2">
         {m.conteudo && (
           <Bolha papel="agente">
-            <p className="whitespace-pre-wrap">{m.conteudo}</p>
+            <TextoDoAgente texto={m.conteudo} />
           </Bolha>
+        )}
+        {m.caminho && (
+          <div className="flex min-w-0 flex-wrap">
+            <CaminhoPronto caminho={m.caminho} />
+          </div>
         )}
         {m.avisos.length > 0 && (
           <ul className="mr-4 space-y-0.5 rounded-lg border border-warning/40 px-2.5 py-1.5">

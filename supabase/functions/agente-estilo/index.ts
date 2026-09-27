@@ -56,6 +56,8 @@ import { filtrarReferenciasDaMarca, lerContextoDaMarca, marcaDoPedido, marcaPara
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
+  anexosComCaminho,
+  caminhoNasAcoes,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
@@ -65,7 +67,9 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { conhecimentoEstilo } from "../_shared/conhecimento-estilo.ts";
 // Frente AG (26/09): o agente de estilo conhece o painel inteiro.
-import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
+// Frente AG (27/09): o "Ir para" das ações (o Estúdio, onde o estilo e os templates são usados).
+import { caminhoDoEstilo } from "./acoes-do-estilo.ts";
 import {
   type BancoDoEstilo,
   BUCKET_DO_ESTILO,
@@ -599,6 +603,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente T: cartão dos templates (e o da combinação, quando pedida) ao lado do cartão do estilo.
   const doTemplate = tpl && saida.json ? await acoesDosTemplatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, j, tpl, { candidatas: alvos.candidatas, gerador, conversaId }).catch(() => null) : null;
   if (doTemplate) anexosDoAgente.push(...doTemplate.anexos);
+  // Frente AG (27/09): cada cartão leva o "Ir para"; sem cartão, a área que a resposta citou.
+  const comCaminhos = anexosComCaminho(
+    caminhoNasAcoes(anexosDoAgente, (a) => caminhoDoEstilo(p.clientId, a), { abrirSozinho: pedeParaLevar(textoDoPedido) }),
+    caminhoDaResposta(resposta, p.clientId, { abrirSozinho: pedeParaAbrir(textoDoPedido) || pedeParaLevar(textoDoPedido) }),
+  );
+  anexosDoAgente.splice(0, anexosDoAgente.length, ...comCaminhos);
   const base = Date.now();
   const { data: gravadas } = await servico()
     .from("agente_mensagens")
@@ -1011,7 +1021,7 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = guardada.mensagem.client_id;
   const p = pedidoDaAcao(guardada.acao, clientId);
   let custo = 0;
-  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[]; terminou: boolean };
   try {
     r = await confirmarAcaoGuardada(
       guardada,
@@ -1021,15 +1031,16 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
         return { desfazer: feito.desfazer, aviso: feito.aviso };
       },
       // Um por vez: todos mexem no mesmo estilo, na ordem certa (grava, referências, aprende, liga, testa).
-      { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 },
+      // Frente AG (27/09): em passos de 2 (andamento e Parar na tela) e o "Ir para" com o que foi feito.
+      { descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1, porVez: 2, caminho: (feita) => caminhoDoEstilo(clientId, feita) },
     );
   } catch (e) {
     throw comoErro(e);
   }
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  if (corpo.descartar !== true && guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Estilo: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Estilo: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: corpo.descartar === true ? "estilo_descartar_acao_do_agente" : "estilo_executar_acao_do_agente", origin: "mesa:agente-estilo",

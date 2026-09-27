@@ -57,6 +57,8 @@ export type AreaDoPainel = {
   etapas?: string[];
   /** A tela abre já com o cliente (?client=<id>). */
   comCliente: boolean;
+  /** Nome do parâmetro do cliente quando a tela lê outro (Anúncios lê ?cliente=). Padrão: client. */
+  parametroDoCliente?: string;
   /** O que se faz lá, em poucas palavras. */
   faz: string;
   /** Agente da área (chave de AGENTES_DO_PAINEL), quando há. */
@@ -83,7 +85,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   { chave: "arquivos", nome: "Arquivos", rota: "/arquivos", comCliente: true, faz: "arquivos e versões", palavras: ["arquivos", "arquivo", "upload", "enviar arquivo"] },
   { chave: "workspace", nome: "Workspace", rota: "/workspace", comCliente: true, faz: "pastas e documentos", agente: "workspace", palavras: ["workspace", "pasta", "documento", "nota do workspace"] },
   { chave: "metricas", nome: "Métricas", rota: "/metricas", comCliente: true, faz: "números do Instagram", palavras: ["metrica", "seguidores", "alcance", "engajamento", "instagram numeros"] },
-  { chave: "anuncios", nome: "Anúncios", rota: "/anuncios", comCliente: true, faz: "relatório de anúncios", palavras: ["relatorio de anuncio", "resultado dos anuncios"] },
+  { chave: "anuncios", nome: "Anúncios", rota: "/anuncios", comCliente: true, parametroDoCliente: "cliente", faz: "relatório de anúncios", palavras: ["relatorio de anuncio", "resultado dos anuncios"] },
   { chave: "relatorios", nome: "Relatórios", rota: "/relatorios", comCliente: true, faz: "relatórios do cliente", palavras: ["relatorio"] },
   { chave: "comercial", nome: "Comercial", rota: "/comercial", comCliente: false, faz: "CRM, leads e metas (/comercial/crm)", palavras: ["crm", "lead", "oportunidade", "comercial", "venda", "prospect"] },
   {
@@ -97,7 +99,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     palavras: ["ads", "anuncio", "campanha de anuncio", "trafego", "meta ads", "verba", "orcamento", "criativo", "publico", "pixel"],
   },
   {
-    chave: "mesa_foto", nome: "Mesa Foto", rota: "/mesa-foto", parametro: "etapa", etapas: ["acervo", "kits", "preparar", "ensaio", "revisar", "usar", "biblioteca", "clones", "book", "canvas"], comCliente: true,
+    chave: "mesa_foto", nome: "Mesa Foto", rota: "/mesa-foto", parametro: "etapa", etapas: ["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "book", "canvas"], comCliente: true,
     faz: "fotos, ensaios, clones, books", agente: "foto",
     palavras: ["foto", "fotos", "ensaio", "acervo", "clone", "book", "canvas", "modelo sintetica", "fotografia"],
   },
@@ -185,7 +187,7 @@ export function linkDaArea(chave: unknown, opcoes: { clientId?: string | null; e
   const a = areaPorChave(chave);
   if (!a) return null;
   const partes: string[] = [];
-  if (a.comCliente && opcoes.clientId && UUID.test(String(opcoes.clientId))) partes.push(`client=${encodeURIComponent(String(opcoes.clientId))}`);
+  if (a.comCliente && opcoes.clientId && UUID.test(String(opcoes.clientId))) partes.push(`${a.parametroDoCliente || "client"}=${encodeURIComponent(String(opcoes.clientId))}`);
   const etapa = String(opcoes.etapa || "").trim().toLowerCase();
   if (a.parametro && etapa && a.etapas && a.etapas.indexOf(etapa) >= 0) partes.push(`${a.parametro}=${encodeURIComponent(etapa)}`);
   return partes.length ? `${a.rota}?${partes.join("&")}` : a.rota;
@@ -307,6 +309,7 @@ export function blocoDoMapaDoPainel(agente: string, opcoes: { nivel?: NivelDoMap
   const regra = [
     "Use o mapa para sugerir o próximo passo com o nome certo da área.",
     "Pedido que é de outra área: não diga que não sabe; responda curto \"Isso é na <área>. Abro para você?\" e cite a rota (ex.: /mesa-ads). A tela vira link com o cliente.",
+    "Pedido para fazer algo que você não tem na lista de ações: diga numa frase o que falta (qual área e qual botão de lá) e cite a rota; nunca diga que fez.",
     "Nunca invente área, rota nem ação. Financeiro, cofre e equipe são só de pessoa: agente não mexe.",
   ].join(" ");
   if (nivel === "minimo") {
@@ -393,4 +396,67 @@ export function lerRoteamento(answers: unknown, limiar = 0.5): Roteamento {
 export function pedeParaAbrir(texto: unknown): boolean {
   const t = semAcento(String(texto == null ? "" : texto)).trim();
   return /^(por favor,?\s+)?(abr[ae]|abrir|me leva|leva|lev[ae]|vai para|va para|ir para|mostr[ae]|me mostra)\b/.test(t);
+}
+
+/**
+ * "Faz e me leva" (dono, 27/09), sem o Jev (reserva): além de fazer, a pessoa
+ * pede para ir à tela do resultado ("e me leva lá", "abre pra mim", "quero
+ * ver"). Diferente de "leva isso para a Agenda", que é mover o item (ação):
+ * aqui só conta quando o pedido é para a PESSOA ir. Na dúvida, não: o botão
+ * "Ir para" continua lá.
+ */
+export function pedeParaLevar(texto: unknown): boolean {
+  const t = ` ${semAcento(String(texto == null ? "" : texto)).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim()} `;
+  return / (me leva|me leve|me levar|me mostra|me mostre|me manda la|abre pra mim|abre para mim|abra pra mim|abra para mim|e abre|e abra|ja abre|ja abra|abre la|abre ele|abre ela|quero ver|deixa aberto|e me leva) /.test(t);
+}
+
+/** Nome de parâmetro que pode ir no endereço (roteiro, trabalho, task...). */
+const PARAMETRO_DO_ESTADO = /^[a-z][a-z_]{0,30}$/;
+
+/**
+ * Endereço da área com o estado da tela (dono, 27/09: "ele dá o caminho pra
+ * mim apertar e ir e já fica tudo certinho"): cliente, etapa e o item aberto
+ * (ex.: { roteiro: id }). Parâmetro com nome estranho, vazio ou longo fica de
+ * fora; client e a etapa só pelos campos próprios. Sempre rota interna.
+ */
+export function linkComEstado(
+  chave: unknown,
+  opcoes: { clientId?: string | null; etapa?: string | null; estado?: Record<string, string | number | null | undefined> } = {},
+): string | null {
+  const a = areaPorChave(chave);
+  const base = linkDaArea(chave, opcoes);
+  if (!a || !base) return null;
+  const extras: string[] = [];
+  const estado = opcoes.estado || {};
+  for (const k of Object.keys(estado)) {
+    if (!PARAMETRO_DO_ESTADO.test(k) || k === "client" || k === a.parametroDoCliente || k === a.parametro) continue;
+    const v = estado[k] === null || estado[k] === undefined ? "" : String(estado[k]).trim();
+    if (!v || v.length > 200) continue;
+    extras.push(`${k}=${encodeURIComponent(v)}`);
+  }
+  if (!extras.length) return base;
+  return `${base}${base.indexOf("?") >= 0 ? "&" : "?"}${extras.join("&")}`;
+}
+
+/** O caminho pronto ({ rotulo, destino, abrir_sozinho? }) para uma área do mapa. Sem rótulo: "Abrir <área>". */
+export function caminhoNaArea(
+  chave: unknown,
+  opcoes: { clientId?: string | null; etapa?: string | null; estado?: Record<string, string | number | null | undefined>; rotulo?: string; abrirSozinho?: boolean } = {},
+): { rotulo: string; destino: string; abrir_sozinho?: boolean } | null {
+  const a = areaPorChave(chave);
+  const destino = linkComEstado(chave, opcoes);
+  if (!a || !destino) return null;
+  const rotulo = String(opcoes.rotulo || `Abrir ${a.nome}`).replace(/\s+/g, " ").trim().slice(0, 60);
+  return opcoes.abrirSozinho ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
+}
+
+/**
+ * O caminho de uma resposta sem ação: a primeira área que o agente citou
+ * (com o cliente). Área só de pessoa também leva (a pessoa mexe lá).
+ */
+export function caminhoDaResposta(texto: unknown, clientId: string | null | undefined, opcoes: { abrirSozinho?: boolean } = {}): { rotulo: string; destino: string; abrir_sozinho?: boolean } | null {
+  const d = destinoNaResposta(texto, clientId || null);
+  if (!d) return null;
+  const rotulo = `Abrir ${d.nome}`.slice(0, 60);
+  return opcoes.abrirSozinho ? { rotulo, destino: d.link, abrir_sozinho: true } : { rotulo, destino: d.link };
 }

@@ -134,7 +134,17 @@ export type AcaoDoAgente = {
   desfeita_por?: string | null;
   /** Botão "Ir para" depois de feito (ver CaminhoDoAgente). */
   caminho?: CaminhoDoAgente | null;
+  /**
+   * Sequência feita em passos (confirmarAcaoGuardada com porVez): quantos já
+   * foram e o total. A tela mostra "3 de 12" e o botão Parar entre um passo e
+   * outro. Ausente: a proposta foi feita de uma vez (como sempre foi).
+   */
+  andamento?: AndamentoDaAcao | null;
+  /** A equipe parou a sequência no meio: o que já foi feito fica, com o Desfazer. */
+  parada_em?: string | null;
 };
+
+export type AndamentoDaAcao = { feitos: number; total: number; atualizado_em?: string };
 
 /**
  * Para onde ir quando a ação termina (pedido do dono, 27/09: "quando termina
@@ -156,7 +166,69 @@ export function caminhoSeguro(c: unknown): CaminhoDoAgente | null {
   return o.abrir_sozinho === true ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
 }
 
-const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+/**
+ * O caminho também vale para resposta sem ação (27/09: "isso em todos ele dá
+ * o caminho"): um anexo próprio na mensagem do agente, guardado com ela, para
+ * o botão continuar lá quando a conversa é reaberta. Só rota interna.
+ */
+export const TIPO_DO_CAMINHO = "caminho_do_agente";
+export type AnexoDoCaminho = CaminhoDoAgente & { tipo: typeof TIPO_DO_CAMINHO };
+
+export function anexoDoCaminho(c: unknown): AnexoDoCaminho | null {
+  const s = caminhoSeguro(c);
+  return s ? { tipo: TIPO_DO_CAMINHO, ...s } : null;
+}
+
+/**
+ * O caminho de uma mensagem: o anexo próprio ou, na falta dele, o da última
+ * ação feita. Null quando não há (ou não é rota interna).
+ */
+export function caminhoDosAnexos(anexos: unknown): CaminhoDoAgente | null {
+  if (!Array.isArray(anexos)) return null;
+  for (const a of anexos) {
+    if (a && typeof a === "object" && (a as Record<string, unknown>).tipo === TIPO_DO_CAMINHO) {
+      const c = caminhoSeguro(a);
+      if (c) return c;
+    }
+  }
+  return null;
+}
+
+/**
+ * Os anexos da resposta com o caminho no fim: quando alguma ação da mensagem
+ * já leva o seu caminho (o cartão mostra "Ir para"), não repete; senão, soma
+ * o anexo de caminho (resposta sem ação que cita outra área, resultado
+ * gerado...). Caminho inválido não entra.
+ */
+export function anexosComCaminho(anexos: unknown[], c: unknown): unknown[] {
+  const lista = Array.isArray(anexos) ? anexos.slice() : [];
+  const temNaAcao = lista.some((a) => !!a && typeof a === "object" && (a as Record<string, unknown>).tipo === TIPO_DA_ACAO && !!caminhoSeguro((a as Record<string, unknown>).caminho));
+  const anexo = temNaAcao ? null : anexoDoCaminho(c);
+  if (anexo) lista.push(anexo);
+  return lista;
+}
+
+/** Põe o caminho em cada ação dos anexos (os outros anexos ficam como estão). */
+export function caminhoNasAcoes(anexos: unknown[], fn: (acao: AcaoDoAgente) => unknown, opcoes: { abrirSozinho?: boolean } = {}): unknown[] {
+  return (Array.isArray(anexos) ? anexos : []).map((a) => {
+    if (!a || typeof a !== "object" || (a as Record<string, unknown>).tipo !== TIPO_DA_ACAO) return a;
+    const acao = a as AcaoDoAgente;
+    return comCaminho(acao, fn(acao), opcoes);
+  });
+}
+
+/**
+ * Põe o caminho na proposta (null não mexe). `abrir_sozinho` do pedido ("faz e
+ * me leva") vence: o caminho recalculado depois de feito não o perde.
+ */
+export function comCaminho<T extends { caminho?: CaminhoDoAgente | null }>(acao: T, c: unknown, opcoes: { abrirSozinho?: boolean } = {}): T {
+  const s = caminhoSeguro(c);
+  if (!s) return acao;
+  const abrir = opcoes.abrirSozinho === true || s.abrir_sozinho === true || !!(acao.caminho && acao.caminho.abrir_sozinho === true);
+  return { ...acao, caminho: abrir ? { ...s, abrir_sozinho: true } : { rotulo: s.rotulo, destino: s.destino } };
+}
+
+const texto =(v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const umaLinha = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 /**
@@ -559,6 +631,7 @@ export function acaoDoAnexo(a: unknown): AcaoDoAgente | null {
     ignorados: Array.isArray(o.ignorados) ? (o.ignorados as unknown[]).map(String) : [],
     recusados: Array.isArray(o.recusados) ? (o.recusados as RecusaDoItem[]) : [],
     acima_do_teto: typeof o.acima_do_teto === "number" && o.acima_do_teto > 0 ? o.acima_do_teto : undefined,
+    ...(o.caminho !== undefined ? { caminho: caminhoSeguro(o.caminho) } : {}),
   };
 }
 
@@ -568,22 +641,58 @@ export function acoesDosAnexos(anexos: unknown): AcaoDoAgente[] {
   return anexos.map(acaoDoAnexo).filter((a): a is AcaoDoAgente => !!a);
 }
 
+/** Itens da proposta que ainda não têm resultado (sequência em passos). */
+export function pendentesDaAcao(acao: Pick<AcaoDoAgente, "itens" | "resultados">): ItemDaAcaoDoAgente[] {
+  const feitos = new Set((acao.resultados || []).map((r) => `${r.operacao}|${r.ref}`));
+  return acao.itens.filter((i) => !feitos.has(`${i.operacao}|${i.ref}`));
+}
+
+/** Quantos itens vão por passo quando a função pede passos e não diz quantos. */
+export const ITENS_POR_PASSO = 5;
+
 /**
  * Confirma (ou cancela) a proposta: executa item a item, grava o resultado na
  * própria proposta e devolve o anexo novo. Quem chama cuida da auditoria e da
- * frase na conversa.
+ * frase na conversa (só quando `terminou`).
+ *
+ * Acompanhamento e parar (dono, 27/09: "um acompanhamento meu humano
+ * observando as ações de forma clara e poder parar ou interferir"), opcional e
+ * compatível (sem as opções novas, tudo é feito de uma vez, como antes):
+ * - porVez: faz só os próximos N itens pendentes e grava `andamento`; a tela
+ *   chama de novo até terminar e mostra "3 de 12" com o botão Parar. Também
+ *   deixa cada chamada curta (limite de 150 s da função).
+ * - parar (ou descartar com parte já feita): encerra a sequência. O que já foi
+ *   feito fica feito, com o Desfazer; o resto não acontece.
+ * - caminho: calcula o "Ir para" com o que foi feito (ex.: o id criado). O
+ *   abrir_sozinho da proposta ("faz e me leva") é mantido.
  */
 export async function confirmarAcaoGuardada(
   guardada: AcaoGuardada,
   executor: (item: ItemDaAcaoDoAgente, acao: AcaoDoAgente) => Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string } | void>,
-  opcoes: { descartar?: boolean; userId: string; lote?: number },
-): Promise<{ anexo: AcaoDoAgente; resultados: ResultadoDoItem[] }> {
+  opcoes: { descartar?: boolean; userId: string; lote?: number; porVez?: number; parar?: boolean; caminho?: (feita: AcaoDoAgente) => unknown },
+): Promise<{ anexo: AcaoDoAgente; resultados: ResultadoDoItem[]; terminou: boolean }> {
   const { acao, gravar } = guardada;
   exigirEstado(acao, "confirmar");
-  if (opcoes.descartar) return { anexo: await gravar({ ...acao, descartada_em: new Date().toISOString() }), resultados: [] };
-  const resultados = await executarItemAItem(acao.itens, (it) => executor(it, acao), opcoes.lote ?? 5);
-  const anexo = await gravar({ ...acao, executada_em: new Date().toISOString(), executada_por: opcoes.userId, resultados });
-  return { anexo, resultados };
+  const agora = new Date().toISOString();
+  const jaFeitos = acao.resultados || [];
+  const fechar = (a: AcaoDoAgente): AcaoDoAgente => (opcoes.caminho ? comCaminho(a, opcoes.caminho(a)) : a);
+  if ((opcoes.parar || opcoes.descartar) && jaFeitos.length) {
+    const parada = fechar({ ...acao, executada_em: agora, executada_por: opcoes.userId, parada_em: agora, andamento: { feitos: jaFeitos.length, total: acao.itens.length, atualizado_em: agora } });
+    return { anexo: await gravar(parada), resultados: [], terminou: true };
+  }
+  if (opcoes.descartar || opcoes.parar) return { anexo: await gravar({ ...acao, descartada_em: agora }), resultados: [], terminou: true };
+  const pendentes = pendentesDaAcao(acao);
+  const porVez = typeof opcoes.porVez === "number" && opcoes.porVez > 0 ? Math.floor(opcoes.porVez) : 0;
+  const agoraVao = porVez ? pendentes.slice(0, porVez) : pendentes;
+  const resultados = await executarItemAItem(agoraVao, (it) => executor(it, acao), opcoes.lote ?? 5);
+  const todos = jaFeitos.concat(resultados);
+  const terminou = pendentes.length <= agoraVao.length;
+  const andamento: AndamentoDaAcao | undefined = porVez || acao.andamento ? { feitos: todos.length, total: acao.itens.length, atualizado_em: new Date().toISOString() } : undefined;
+  const novo: AcaoDoAgente = terminou
+    ? fechar({ ...acao, executada_em: new Date().toISOString(), executada_por: opcoes.userId, resultados: todos, ...(andamento ? { andamento } : {}) })
+    : { ...acao, resultados: todos, andamento };
+  const anexo = await gravar(novo);
+  return { anexo, resultados, terminou };
 }
 
 /** Desfaz a proposta já feita e grava. */

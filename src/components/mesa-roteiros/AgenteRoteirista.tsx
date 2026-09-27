@@ -8,6 +8,7 @@ import { chamarFuncao, padraoPara, usd } from "@/lib/mesa/api";
 import { TAMANHO_DA_CONVERSA } from "../../../supabase/functions/_shared/roteiro-modelo";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -42,6 +43,8 @@ export interface MensagemDoAgente {
   conteudo: string;
   anexos: unknown[];
   custo_usd: number | null;
+  /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
+  nova?: boolean;
 }
 
 export function normalizarHistorico(data: any): { conversaId: string | null; mensagens: MensagemDoAgente[] } {
@@ -130,6 +133,7 @@ export default function AgenteRoteirista({
             conteudo: String((d && d.resposta) || ""),
             anexos: d && Array.isArray(d.anexos) ? d.anexos : [],
             custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null,
+            nova: true,
           },
         ]),
       );
@@ -222,11 +226,13 @@ export default function AgenteRoteirista({
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd !== null && <p className="mt-1 text-[11px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
+              {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
               {m.id &&
                 acoes.map((a) => (
                   <div key={a.id} className="mt-2">
                     <CartaoDeAcao
                       acao={a}
+                      recemFeita={!!m.nova}
                       titulo="O agente vai fazer nos roteiros"
                       observacao={
                         a.custo_estimado_usd

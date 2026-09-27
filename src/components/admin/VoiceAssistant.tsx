@@ -1453,6 +1453,7 @@ export default function VoiceAssistant({
                         {a.resposta && <TextoDoAgente texto={a.resposta} clientId={answers.client_id || null} className="text-[12.5px] leading-5 text-foreground" />}
                         <CartaoDeAcao
                           acao={a.acao}
+                          recemFeita
                           titulo="O Aceleriq faz"
                           observacao="Sem custo. Dá para desfazer."
                           onPedido={(p) => chamarAcaoDoLancador(a.mensagemId, a.acao.id, p)}

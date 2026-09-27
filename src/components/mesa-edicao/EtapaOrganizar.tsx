@@ -192,6 +192,7 @@ export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
       acao_id: proposta.acao.id,
     };
     if (pedido === "descartar") corpo.descartar = true;
+    if (pedido === "parar") corpo.parar = true;
     return chamarMesaVideos<RespostaDaAcao>(corpo);
   };
 

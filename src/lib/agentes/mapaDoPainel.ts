@@ -74,6 +74,7 @@ export async function chamarAcaoDoLancador(mensagemId: string, acaoId: string, p
     acao_id: acaoId,
   };
   if (pedido === "descartar") corpo.descartar = true;
+  if (pedido === "parar") corpo.parar = true;
   const { data, error } = await supabase.functions.invoke("voice-assistant-agent", { body: corpo });
   let mensagem = "";
   if (error) {

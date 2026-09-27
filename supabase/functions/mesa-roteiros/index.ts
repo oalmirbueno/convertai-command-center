@@ -109,10 +109,12 @@ import {
 } from "./acoes-dos-roteiros.ts";
 // Frente AG (26/09): editar sem IA, aprovar e marcar gravado; mapa do painel; contexto do cliente; "ele já vai fazendo".
 import { conteudoEditado, lerEdicaoDeTexto, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
-import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
-import { executarDireto, podeExecutarDireto } from "../_shared/acoes-do-agente.ts";
+import { anexosComCaminho, comCaminho, executarDireto, podeExecutarDireto } from "../_shared/acoes-do-agente.ts";
+// Frente AG (27/09): o "Ir para" de cada ação e resposta, e a sequência em passos com Parar.
+import { caminhoDosRoteiros } from "./acoes-dos-roteiros.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -1093,9 +1095,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   let acao = normalizarAcoesDosRoteiros(j.acoes, roteirosOrdenados, listas.pecas, clientId, custoDaGeracao(modelo));
+  // "Faz e me leva" (27/09): o cartão leva o caminho; com o pedido de ir junto, abre sozinho ao terminar.
+  let levar = pedeParaLevar(mensagem);
+  if (acao) acao = comCaminho(acao, caminhoDosRoteiros(clientId, acao, { abrirSozinho: levar }));
   // "Ele já vai fazendo" (regra 6): editar texto, aprovar e marcar gravado não custam e têm Desfazer; pedido claro vai direto.
   if (acao && podeExecutarDireto(acao, regrasDeEdicao(), { pedidoClaro: true }).direto) {
     const ordem = await ehOrdemClara(mensagem, { agente: "roteirista da Mesa Roteiros", resumo: acao.resumo });
+    levar = ordem.levar;
     if (ordem.clara) {
       acao = await executarDireto(acao, async (item) => {
         const feito = await executarItem(ch, clientId, item);
@@ -1105,9 +1111,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
         correlationId: crypto.randomUUID(), toolName: "roteiros_acao_direta", origin: "mesa:mesa-roteiros", keyId: `mesa:mesa-roteiros:${ch.userId}`, scopes: ["mesa:write"],
         input: { client_id: clientId, operacoes: acao.itens.map((i) => i.operacao), fonte: ordem.fonte }, success: !(acao.resultados || []).some((x) => !x.ok), statusCode: 200, durationMs: 0, resultRef: acao.id,
       });
+      const feita: AcaoDoAgente = acao;
+      acao = { ...feita, caminho: null };
+      acao = comCaminho(acao, caminhoDosRoteiros(clientId, feita, { abrirSozinho: levar }));
     }
   }
-  const anexos = acao ? [acao] : [];
+  // Resposta sem ação que cita outra área: o botão "Abrir <área>" fica guardado na mensagem.
+  const anexos = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
   const base = Date.now();
   const { data: gravadas } = await servico()
     .from("agente_mensagens")
@@ -1256,8 +1266,9 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const guardada = await propostaGuardada(ch, corpo);
   const clientId = guardada.mensagem.client_id;
   let custo = 0;
-  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
+  let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[]; terminou: boolean };
   try {
+    // Em passos de 4 (um lote): a tela mostra "4 de 12" e o Parar entre um passo e outro.
     r = await confirmarAcaoGuardada(
       guardada,
       async (item) => {
@@ -1265,15 +1276,17 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
         custo += feito.custo;
         return { desfazer: feito.desfazer, aviso: feito.aviso };
       },
-      { descartar: corpo.descartar === true, userId: ch.userId, lote: 4 },
+      { descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 4, porVez: 4, caminho: (feita) => caminhoDosRoteiros(clientId, feita) },
     );
   } catch (e) {
     throw comoErroDoRoteiro(e);
   }
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  if (corpo.descartar !== true && guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Roteiros: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  // A frase na conversa sai uma vez, no fim da sequência (ou quando a equipe para), com tudo o que foi feito.
+  const encerrada = r.terminou && !!r.anexo.executada_em;
+  if (encerrada && guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Roteiros: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: corpo.descartar === true ? "roteiros_descartar_acao_do_agente" : "roteiros_executar_acao_do_agente", origin: "mesa:mesa-roteiros",

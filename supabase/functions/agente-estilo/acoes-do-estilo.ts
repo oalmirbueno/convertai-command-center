@@ -19,12 +19,14 @@ import {
   type Alvo,
   type AlvoComApelido,
   blocoDosAlvos,
+  type CaminhoDoAgente,
   comApelido,
   esquemaDasAcoes,
   normalizarAcaoDoAgente,
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
+import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import {
   CAMPOS_DAS_REGRAS,
   type EstiloDoCliente,
@@ -37,6 +39,24 @@ import {
 } from "../_shared/estilo-do-cliente.ts";
 
 export const AGENTE_DO_ESTILO = "estilo";
+
+/** Operações que só mudam o que o painel do estilo já mostra (teste, gosto): sem "Ir para". */
+const SO_NO_PAINEL = ["gerar_teste", "registrar_aprendizado", "gerar_teste_template", "registrar_gosto_template"];
+
+/**
+ * O "Ir para" do estilo e dos templates (dono, 27/09: "quando termina ele dá
+ * o caminho pra mim apertar e ir"): o estilo e os templates são usados no
+ * Estúdio (o interruptor "Usar estilo do cliente" e o seletor de template
+ * ficam lá), então o caminho é o Estúdio da Mesa do cliente. Teste e gosto
+ * aparecem no próprio painel: sem caminho. Conta só o que deu certo.
+ */
+export function caminhoDoEstilo(clientId: string, acao: Pick<AcaoDoAgente, "itens" | "resultados">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const ops = acao.itens.filter((i) => !feitos || feitos.some((r) => r.ref === i.ref && r.operacao === i.operacao)).map((i) => i.operacao);
+  if (!ops.some((op) => SO_NO_PAINEL.indexOf(op) < 0)) return null;
+  const rotulo = ops.some((op) => op.indexOf("template") >= 0) && !ops.some((op) => op.indexOf("estilo") >= 0) ? "Usar o template no Estúdio" : "Usar no Estúdio";
+  return caminhoNaArea("mesa", { clientId, etapa: "estudio", rotulo, abrirSozinho: opcoes.abrirSozinho });
+}
 
 export const OPERACOES_DO_ESTILO = ["gravar_estilo", "registrar_aprendizado", "ligar_estilo", "desligar_estilo", "gerar_teste", "usar_referencia", "tirar_referencia"] as const;
 export type OperacaoDoEstilo = (typeof OPERACOES_DO_ESTILO)[number];

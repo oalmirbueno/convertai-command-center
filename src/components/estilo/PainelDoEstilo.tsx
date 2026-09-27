@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { Check, ImagePlus, Loader2, Palette, Send, ThumbsDown, ThumbsUp, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -188,7 +189,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
       setMensagens((l) =>
-        l.concat([{ id: d && d.mensagem_id ? String(d.mensagem_id) : null, papel: "agente", conteudo: String((d && d.resposta) || ""), anexos: d && Array.isArray(d.anexos) ? d.anexos : [], custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null }]),
+        l.concat([{ id: d && d.mensagem_id ? String(d.mensagem_id) : null, papel: "agente", conteudo: String((d && d.resposta) || ""), anexos: d && Array.isArray(d.anexos) ? d.anexos : [], custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null, nova: true }]),
       );
       if (d && typeof d.aviso_dos_templates === "string") toast.info(d.aviso_dos_templates);
       atualizarCusto();
@@ -380,10 +381,11 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                   m.papel === "usuario" ? "bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
                 )}
               >
-                <TextoDoAgente texto={m.conteudo} />
+                <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd != null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
             </div>
+            {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
             {leitura && (
               <details className="mt-1.5 rounded-md bg-muted/40 px-3 py-2">
                 <summary className="cursor-pointer text-[12px] text-muted-foreground">Leitura das referências</summary>
@@ -400,6 +402,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                       <PropostasDaAcao acao={a} />
                       <CartaoDeAcao
                         acao={a}
+                        recemFeita={!!m.nova}
                         titulo="O agente vai fazer nos templates"
                         observacao={a.custo_estimado_usd ? `Custo estimado: ${usd(a.custo_estimado_usd)}. Imagens de teste não voltam.` : "Dá para desfazer."}
                         onPedido={(p) => chamarAcaoDoAgente("agente-estilo", String(m.id), a.id, p, { client_id: clientId })}
@@ -422,6 +425,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                     )}
                     <CartaoDeAcao
                       acao={a}
+                      recemFeita={!!m.nova}
                       titulo="O agente vai fazer no estilo"
                       observacao={a.custo_estimado_usd ? `Custo estimado: ${usd(a.custo_estimado_usd)}. Imagens de teste não voltam.` : "Sem custo. Dá para desfazer."}
                       onPedido={(p) => chamarAcaoDoAgente("agente-estilo", String(m.id), a.id, p, { client_id: clientId })}

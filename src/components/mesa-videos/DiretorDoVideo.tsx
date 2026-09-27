@@ -94,6 +94,7 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
   const onPedido = (m: Mensagem) => (pedido: PedidoDaAcao): Promise<RespostaDaAcao> => {
     const corpo: Record<string, unknown> = { acao: pedido === "desfazer" ? "desfazer_acao_agente" : "executar_acao_agente", mensagem_id: m.mensagem_id, acao_id: m.acao ? m.acao.id : undefined };
     if (pedido === "descartar") corpo.descartar = true;
+    if (pedido === "parar") corpo.parar = true;
     return chamarMesaVideos<RespostaDaAcao>(corpo);
   };
 

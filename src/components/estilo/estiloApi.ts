@@ -56,6 +56,8 @@ export interface MensagemDoEstilo {
   conteudo: string;
   anexos: any[];
   custo_usd?: number | null;
+  /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
+  nova?: boolean;
 }
 
 /** Frente AP: arte entregue que pode virar referência do estilo (só entra com o clique da equipe). */

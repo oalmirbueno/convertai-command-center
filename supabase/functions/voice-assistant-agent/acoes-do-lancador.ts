@@ -22,11 +22,13 @@ import {
   type Alvo,
   type AlvoComApelido,
   blocoDosAlvos,
+  type CaminhoDoAgente,
   comApelido,
   normalizarAcaoDoAgente,
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
+import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 
 export const AGENTE_DO_LANCADOR = "aceleriq";
 /** agente_conversas aceita estes agentes sem migração: o lançador conversa como estrategista, na referência própria. */
@@ -326,3 +328,37 @@ export async function reverterItemDoLancador(
 
 /** Pedido claro sem o Jev: a regra comum do contrato (verbo de ordem no começo). */
 export { pareceOrdem } from "../_shared/acoes-do-agente.ts";
+
+/**
+ * O "Ir para" do Aceleriq (dono, 27/09: "quando termina ele dá o caminho pra
+ * mim apertar e ir e já fica tudo certinho"). Conta só o que deu certo (antes
+ * de fazer, o que foi pedido):
+ * - uma tarefa (criada, lembrete, concluída ou com prazo novo): o detalhe dela
+ *   no Kanban (task= abre o diálogo e acerta o filtro do projeto);
+ * - várias: o Kanban do cliente (no projeto, quando é um só);
+ * - só nota: a aba Contexto da Mesa, onde ficam os aprendizados do cliente.
+ */
+export function caminhoDoLancador(clientId: string, acao: Pick<AcaoDoAgente, "itens" | "resultados">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const tarefas: string[] = [];
+  const projetos: string[] = [];
+  let nota = false;
+  for (const i of acao.itens) {
+    const r = feitos ? feitos.find((x) => x.ref === i.ref && x.operacao === i.operacao) : null;
+    if (feitos && !r) continue;
+    if (i.operacao === "registrar_nota") {
+      nota = true;
+      continue;
+    }
+    const id = i.operacao === "criar_tarefa" || i.operacao === "agendar_lembrete" ? String((r && r.desfazer && r.desfazer.tarefa_id) || "") : i.alvo_id;
+    if (id && tarefas.indexOf(id) < 0) tarefas.push(id);
+    if (i.operacao === "criar_tarefa" && i.alvo_id && projetos.indexOf(i.alvo_id) < 0) projetos.push(i.alvo_id);
+  }
+  const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
+  if (tarefas.length === 1) return caminhoNaArea("kanban", { ...base, estado: { task: tarefas[0] }, rotulo: "Abrir a tarefa no Kanban" });
+  if (tarefas.length > 1) return caminhoNaArea("kanban", { ...base, estado: projetos.length === 1 ? { project: projetos[0] } : {}, rotulo: `Ver as ${tarefas.length} tarefas no Kanban` });
+  // Antes de fazer, a tarefa criada ainda não tem id: o Kanban do projeto (ou do cliente).
+  if (!feitos && projetos.length) return caminhoNaArea("kanban", { ...base, estado: projetos.length === 1 ? { project: projetos[0] } : {}, rotulo: "Ver no Kanban" });
+  if (nota) return caminhoNaArea("mesa", { ...base, etapa: "contexto", rotulo: "Ver no contexto do cliente" });
+  return null;
+}

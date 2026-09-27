@@ -18,12 +18,14 @@ import {
   type AcaoDoAgente,
   type AlvoComApelido,
   blocoDosAlvos,
+  type CaminhoDoAgente,
   comApelido,
   esquemaDasAcoes,
   normalizarAcaoDoAgente,
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
+import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { ehTipoDeRoteiro, modoDoTipo, ROTULO_DO_FORMATO, ROTULO_DO_STATUS, type StatusDoRoteiro, type TipoDeRoteiro } from "../_shared/roteiro-modelo.ts";
 import { DESCRICOES_DE_EDICAO, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
 
@@ -252,6 +254,42 @@ export function normalizarAcoesDosRoteiros(
   const comIa = acao.itens.filter((i) => OPERACOES_COM_IA.indexOf(i.operacao) >= 0).length;
   acao.custo_estimado_usd = comIa ? Math.round(comIa * Math.max(0, custoPorGeracaoUsd) * 1e6) / 1e6 : 0;
   return acao;
+}
+
+/**
+ * O "Ir para" dos roteiros (dono, 27/09: "quando termina ele dá o caminho pra
+ * mim apertar e ir e já fica tudo certinho"). Conta só o que deu certo (ou,
+ * antes de fazer, o que foi pedido):
+ * - um roteiro gerado: abre ele na etapa Roteiro;
+ * - um roteiro mudado (gancho, tom, texto, aprovado, gravado): abre na Revisão,
+ *   que mostra a versão nova ao lado da anterior (a prova do antes e depois);
+ * - vários: a Revisão com a lista; só arquivados ou nada aberto: a Agenda.
+ */
+export function caminhoDosRoteiros(
+  clientId: string,
+  acao: Pick<AcaoDoAgente, "itens" | "resultados">,
+  opcoes: { abrirSozinho?: boolean } = {},
+): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const ids: string[] = [];
+  let gerado = false;
+  for (const i of acao.itens) {
+    if (i.operacao === "arquivar_roteiro") continue;
+    const r = feitos ? feitos.find((x) => x.ref === i.ref && x.operacao === i.operacao) : null;
+    if (feitos && !r) continue;
+    const id = i.operacao === "gerar_roteiro" ? String((r && r.desfazer && r.desfazer.roteiro_id) || "") : i.alvo_id;
+    if (i.operacao === "gerar_roteiro") gerado = true;
+    if (id && ids.indexOf(id) < 0) ids.push(id);
+  }
+  const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
+  if (ids.length === 1) {
+    return gerado
+      ? caminhoNaArea("mesa_roteiros", { ...base, etapa: "roteiro", estado: { roteiro: ids[0] }, rotulo: "Abrir o roteiro" })
+      : caminhoNaArea("mesa_roteiros", { ...base, etapa: "revisao", estado: { roteiro: ids[0] }, rotulo: "Ver o roteiro na Revisão" });
+  }
+  if (ids.length > 1) return caminhoNaArea("mesa_roteiros", { ...base, etapa: "revisao", rotulo: `Ver os ${ids.length} roteiros` });
+  if (gerado) return caminhoNaArea("mesa_roteiros", { ...base, etapa: "agenda", rotulo: "Ver na Agenda de roteiros" });
+  return caminhoNaArea("mesa_roteiros", { ...base, etapa: "agenda", rotulo: "Abrir a Mesa Roteiros" });
 }
 
 /** Peças com data nos próximos N dias (a "semana" do pedido), a partir de hoje. */

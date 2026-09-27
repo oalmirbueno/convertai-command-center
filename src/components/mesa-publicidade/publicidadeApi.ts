@@ -157,6 +157,8 @@ export interface MensagemDoAgente {
   conteudo: string;
   anexos: unknown[];
   custo_usd: number | null;
+  /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
+  nova?: boolean;
 }
 
 export function normalizarMensagens(data: any): { conversaId: string | null; mensagens: MensagemDoAgente[] } {
@@ -185,8 +187,10 @@ export async function conversarComOAgente(p: { clientId: string; campanha: Campa
       id: texto(data && data.mensagem_id) || null,
       papel: "agente" as const,
       conteudo: texto(data && data.resposta),
-      anexos: data && data.acao ? [data.acao] : [],
+      // Frente AG (27/09): os anexos vêm com o caminho da resposta; função antiga manda só a ação.
+      anexos: data && Array.isArray(data.anexos) && data.anexos.length ? data.anexos : data && data.acao ? [data.acao] : [],
       custo_usd: data && typeof data.custo_usd === "number" ? data.custo_usd : null,
+      nova: true,
     },
     custo_usd: data && data.custo_usd,
   };

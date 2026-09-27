@@ -94,6 +94,7 @@ import {
   acaoDoEnvioParaEdicao,
   AGENTE_DO_ENVIO,
   AGENTES_DA_MESA_DE_VIDEO,
+  caminhoDaMesaDeVideo,
   camposDoEnvio,
   CONFIANCA_MINIMA,
   intencaoPorPalavras,
@@ -533,12 +534,17 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const executor = doDiretor
     ? (item: ItemDaAcaoDoAgente, acao: AcaoDoAgente) => executarItemDoDiretor(baseDa(ch), clientId, item, acao, guardada.mensagem.id)
     : (item: ItemDaAcaoDoAgente) => executarNoTake(clientId, item);
+  // Frente AG (27/09): em passos (os planos pagos de 2 em 2, os takes de 9 em 9), com andamento e Parar
+  // no cartão, e o "Ir para" com o que foi feito (Entrada da Edição, Organizar, Resultados).
   const r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] } = await confirmarAcaoGuardada(guardada, executor, {
     descartar: corpo.descartar === true,
+    parar: corpo.parar === true,
     userId: ch.userId,
     lote: 3,
+    porVez: doDiretor ? 2 : 9,
+    caminho: (feita) => caminhoDaMesaDeVideo(clientId, feita),
   });
-  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  if (corpo.descartar === true && !r.anexo.executada_em) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
   await auditar(ch, doDiretor ? "video_diretor_gerar_planos" : guardada.acao.agente === AGENTE_DO_ENVIO ? "video_enviar_para_edicao" : "video_organizar_takes", { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) }, falhas === 0, guardada.mensagem.id);

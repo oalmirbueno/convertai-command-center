@@ -10,7 +10,8 @@
  * lookbehind, grupo nomeado nem classe Unicode (a tela roda no Safari 11). Sem travessão.
  */
 
-import { apelidoDoTipo, type AlvoComApelido, type RegraDaOperacao, type ValorPara } from "./acoes-do-agente.ts";
+import { type AcaoDoAgente, apelidoDoTipo, type AlvoComApelido, type CaminhoDoAgente, type RegraDaOperacao, type ValorPara } from "./acoes-do-agente.ts";
+import { caminhoNaArea } from "./mapa-do-painel.ts";
 
 // ------------------------------------------------------------------ limites
 
@@ -616,4 +617,22 @@ export function alvosDasPautas(pautas: Array<PautaDoPerfil & { data?: string }>)
     detalhe: [p.formato === "carrossel" ? "carrossel" : "estático", p.pilar, p.referencia ? `inspirado em ${p.referencia}` : ""].filter(Boolean).join(" · "),
     dados: {},
   }));
+}
+
+/**
+ * O "Ir para" do agente dos perfis (frente AG, 27/09: "quando termina ele dá
+ * o caminho pra mim apertar e ir"). Conta só o que deu certo (antes de
+ * confirmar, o que foi pedido):
+ * - pautas na agenda: o plano do Mês da Mesa, no mês da primeira data;
+ * - posts levados ao estilo: o Estúdio, onde fica o botão Estilo com a proposta.
+ */
+export function caminhoDosPerfis(clientId: string, acao: Pick<AcaoDoAgente, "itens" | "resultados">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
+  const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
+  const vale = acao.itens.filter((i) => !feitos || feitos.some((r) => r.ref === i.ref && r.operacao === i.operacao));
+  const datas = vale.filter((i) => i.operacao === "agendar" && DATA.test(String(i.para || ""))).map((i) => String(i.para)).sort();
+  if (datas.length) {
+    return caminhoNaArea("mesa", { clientId, etapa: "mes", estado: { mes: `${datas[0].slice(0, 7)}-01` }, rotulo: datas.length === 1 ? "Ver a pauta no plano do mês" : `Ver as ${datas.length} pautas no plano do mês`, abrirSozinho: opcoes.abrirSozinho });
+  }
+  if (vale.some((i) => i.operacao === "levar_ao_estilo")) return caminhoNaArea("mesa", { clientId, etapa: "estudio", rotulo: "Ver o estilo no Estúdio", abrirSozinho: opcoes.abrirSozinho });
+  return null;
 }

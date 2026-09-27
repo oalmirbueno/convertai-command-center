@@ -63,8 +63,10 @@ import { conhecimentoCalendarioPara } from "../_shared/conhecimento-dos-agentes.
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
+  anexosComCaminho,
   blocoDosAlvos,
   comApelido,
+  comCaminho,
   desfazerAcaoGuardada,
   ErroDaAcao,
   esquemaDasAcoes,
@@ -74,10 +76,11 @@ import {
   type ResultadoDoItem,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
-import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import {
   alvosDasPautas,
   avisoDoPlanoForaDoMes,
+  caminhoDosPerfis,
   datasComMesSeguinte,
   datasDoPlanoDoMes,
   decidirPautas,
@@ -1516,12 +1519,17 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const texto = limpo(j.resposta, 3000) || "Não entendi. Pode dizer de outro jeito?";
   const escolhidos = posts.filter((p) => alvos.some((a) => a.id === p.id));
   const acao = j.acoes ? propostaDeEstilo(perfil, escolhidos, "", j.acoes) : null;
+  // Frente AG (27/09): o cartão leva o "Ir para"; sem cartão, a área que a resposta citou.
+  const anexos = anexosComCaminho(
+    acao ? [comCaminho(acao, caminhoDosPerfis(clientId, acao, { abrirSozinho: pedeParaLevar(mensagem) }))] : [],
+    caminhoDaResposta(texto, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }),
+  );
   const [, mensagemId] = await gravarMensagens(conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem },
-    { papel: "agente", conteudo: texto, anexos: acao ? [acao] : [], uso_id: r.usoId },
+    { papel: "agente", conteudo: texto, anexos, uso_id: r.usoId },
   ]);
   await registrarRodada({ clientId, perfilId: perfil.id, tipo: "conversa", status: "ok", custo: r.custoUsd, criadoPor: ch.userId, inicio });
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos: acao ? [acao] : [], ir_para: destinoNaResposta(texto, clientId), custo_usd: arred(r.custoUsd), reserva_usada: r.reservaUsada ?? null });
+  return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos, ir_para: destinoNaResposta(texto, clientId), custo_usd: arred(r.custoUsd), reserva_usada: r.reservaUsada ?? null });
 }
 
 // ------------------------------------------------------------------ executar e desfazer
@@ -1703,7 +1711,9 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
     custo += r.custo;
   }
   if (acao.itens.some((i) => i.operacao === "agendar")) resultados = resultados.concat(await executarAgendar(ch, acao, c, marcaId, projeto));
-  const anexo = await guardada.gravar({ ...acao, executada_em: new Date().toISOString(), executada_por: ch.userId, resultados });
+  // Frente AG (27/09): o cartão feito leva o "Ir para" (as pautas no plano do mês, o estilo no Estúdio).
+  const feita = { ...acao, executada_em: new Date().toISOString(), executada_por: ch.userId, resultados };
+  const anexo = await guardada.gravar(comCaminho(feita, caminhoDosPerfis(c, feita)));
   const feitos = resultados.filter((r) => r.ok).length;
   if (guardada.mensagem.conversa_id) {
     await gravarMensagens(guardada.mensagem.conversa_id, c, [{ papel: "sistema", conteudo: `Confirmado: ${textoDoResultado(resultados)}.` }]);

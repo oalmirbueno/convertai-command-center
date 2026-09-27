@@ -174,6 +174,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
     if (!proposta) return Promise.reject(new Error("Sem proposta."));
     const corpo: Record<string, unknown> = { acao: pedido === "desfazer" ? "desfazer_acao_agente" : "executar_acao_agente", mensagem_id: proposta.mensagem_id, acao_id: proposta.acao.id };
     if (pedido === "descartar") corpo.descartar = true;
+    if (pedido === "parar") corpo.parar = true;
     return chamarMesaVideos<RespostaDaAcao>(corpo);
   };
 

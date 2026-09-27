@@ -46,6 +46,8 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   acaoGuardadaNaMensagem,
   type AcaoDoAgente,
+  anexosComCaminho,
+  comCaminho,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
@@ -56,7 +58,7 @@ import {
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 // Frente AG (26/09): mapa do painel, contexto do cliente com cache e "ele já vai fazendo".
-import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import {
@@ -98,6 +100,7 @@ import {
 } from "./regras.ts";
 import {
   blocoDasAcoesDaPublicidade,
+  caminhoDaPublicidade,
   ESQUEMA_DAS_ACOES_DA_PUBLICIDADE,
   lerEdicaoDoBriefing,
   normalizarAcoesDaPublicidade,
@@ -966,12 +969,15 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
   let acao: AcaoDoAgente | null = comAcoes && c ? normalizarAcoesDaPublicidade(r.acoes, c) : null;
+  // Frente AG (27/09): o cartão leva o "Ir para" (campanha e etapa certas); "faz e me leva" abre sozinho ao terminar.
+  if (acao && c) acao = comCaminho(acao, caminhoDaPublicidade(c, acao, { abrirSozinho: pedeParaLevar(mensagem) }));
   // "Ele já vai fazendo" (regra 6): briefing e nome, sem custo e com Desfazer, vão direto quando o pedido é ordem clara.
   if (acao && c && c.id && podeExecutarDireto(acao, REGRAS_DA_PUBLICIDADE, { pedidoClaro: true }).direto) {
     const ordem = await ehOrdemClara(mensagem, { agente: "diretor de campanha da Mesa Publicidade", resumo: acao.resumo });
     if (ordem.clara) {
       const campanhaId = c.id;
       acao = await executarDireto(acao, (item) => executarItem(ch, campanhaId, item), { userId: ch.userId });
+      acao = comCaminho({ ...acao, caminho: null }, caminhoDaPublicidade(c, acao, { abrirSozinho: ordem.levar }));
       await auditLog({
         correlationId: crypto.randomUUID(), toolName: "publicidade_acao_direta", origin: "mesa:mesa-publicidade",
         keyId: `mesa:mesa-publicidade:${ch.userId}`, scopes: ["files:write"],
@@ -980,10 +986,12 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       });
     }
   }
+  // Resposta sem ação que cita outra área: o botão "Abrir <área>" fica guardado na mensagem.
+  const anexosDaResposta = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
   const base = Date.now();
   const { data: gravadas } = await servico().from("agente_mensagens").insert([
     { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base).toISOString(), papel: "usuario", conteudo: mensagem, anexos: [] },
-    { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base + 1).toISOString(), papel: "agente", conteudo: resposta, anexos: acao ? [acao] : [], uso_id: saida.usoId || null },
+    { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base + 1).toISOString(), papel: "agente", conteudo: resposta, anexos: anexosDaResposta, uso_id: saida.usoId || null },
   ]).select("id, papel");
   const mensagemId = ((gravadas || []) as Linha[]).find((m) => m.papel === "agente");
   return json({
@@ -991,6 +999,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     mensagem_id: mensagemId ? String(mensagemId.id) : null,
     resposta,
     acao: mensagemId ? acao : null,
+    anexos: mensagemId ? anexosDaResposta : [],
     ir_para: destinoNaResposta(resposta, clientId),
     campanha: acao && acao.executada_em && c && c.id ? await lerCampanha(ch, c.id).catch(() => null) : undefined,
     custo_usd: saida.custoUsd,
@@ -1059,7 +1068,8 @@ async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDo
     const destino: DestinoDoAtivo = item.operacao === "mandar_para_ads" ? "ads" : "mesa";
     const r = await encaminharAtivos(ch, e, destino, [revisao.id]);
     if (!r.imagem_ids.length) throw new ErroDaAcao(409, "nao_enviada", r.ficam.length ? r.ficam[0].motivo : "Nada para enviar.");
-    return { desfazer: { encaminhamento_ids: r.encaminhamento_ids }, aviso: `Abrir: ${r.endereco}` };
+    // imagem_ids e destino: o "Ir para" abre o Estúdio de lá já com estas fotos (o Desfazer só lê os encaminhamentos).
+    return { desfazer: { encaminhamento_ids: r.encaminhamento_ids, imagem_ids: r.imagem_ids, destino }, aviso: `Abrir: ${r.endereco}` };
   }
   throw new ErroDaAcao(400, "operacao_desconhecida", "Operação desconhecida.");
 }
@@ -1069,12 +1079,17 @@ async function executarAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>
   const campanhaId = String((guardada.acao.contexto || {}).campanha_id || "");
   if (!ehUuid(campanhaId)) throw new ErroHttp(409, "sem_campanha", "Esta ação não está ligada a uma campanha salva.");
   const inicio = Date.now();
-  const r = await confirmarAcaoGuardada(guardada, (item) => executarItem(ch, campanhaId, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 });
-  if (corpo.descartar === true) return json({ anexo: r.anexo });
+  // Frente AG (27/09): em passos de 3 (a tela mostra o andamento e o Parar) e o "Ir para" com o que foi feito.
+  const clienteDaCampanha = guardada.mensagem.client_id;
+  const r = await confirmarAcaoGuardada(guardada, (item) => executarItem(ch, campanhaId, item), {
+    descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1, porVez: 3,
+    caminho: (feita) => caminhoDaPublicidade({ client_id: clienteDaCampanha, id: campanhaId }, feita),
+  });
+  if (corpo.descartar === true && !r.anexo.executada_em) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  if (guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: guardada.mensagem.client_id, papel: "sistema", conteudo: `Publicidade: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+  if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
+    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: guardada.mensagem.client_id, papel: "sistema", conteudo: `Publicidade: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "publicidade_acao_do_agente", origin: "mesa:mesa-publicidade",

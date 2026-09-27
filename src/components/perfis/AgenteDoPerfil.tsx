@@ -6,6 +6,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { avisarCustoReal, useAvisarErro } from "@/components/mesa/Custo";
@@ -77,6 +78,8 @@ export default function AgenteDoPerfil({
   const [quantidade, setQuantidade] = useEstadoDaTela<number>(`mesa:perfis:quantidade:${perfil.id}`, 8, { validar: (v) => typeof v === "number" && v >= MIN_PAUTAS && v <= MAX_PAUTAS });
   const [trabalhando, setTrabalhando] = useState<string | null>(null);
   const [pedidoAgora, setPedidoAgora] = useState<string | null>(null);
+  // A resposta que acabou de chegar nesta tela: só ela pode abrir sozinha ("faz e me leva").
+  const [recebida, setRecebida] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -90,6 +93,7 @@ export default function AgenteDoPerfil({
     try {
       const r = await chamarPerfis<any>(acao, clientId, marcaId, { perfil_id: perfil.id, ...extra });
       if (acao === "conversar") setRascunho("");
+      setRecebida(r && r.mensagem_id ? String(r.mensagem_id) : null);
       if (Number(r && r.custo_usd) > 0) avisarCustoReal(rotulo, r, atualizarCusto);
       onMudou();
       return true;
@@ -211,11 +215,13 @@ export default function AgenteDoPerfil({
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {pautas && <PautasDoAnexo anexo={pautas} />}
             </div>
+            {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
             {m.id &&
               acoes.map((a) => (
                 <div key={a.id} className="mt-2 min-w-0">
                   <CartaoDeAcao
                     acao={a}
+                    recemFeita={!!m.id && m.id === recebida}
                     titulo={a.itens.some((x) => x.operacao === "agendar") ? "Vai para a agenda" : "Vai para o estilo"}
                     observacao={a.itens.some((x) => x.operacao === "levar_ao_estilo") ? "O estilo só muda com a confirmação no agente de estilo." : undefined}
                     onPedido={(pedido) => chamarAcaoDoAgente("perfis-instagram", m.id as string, a.id, pedido, { client_id: clientId, ...(marcaId ? { marca_id: marcaId } : {}) })}

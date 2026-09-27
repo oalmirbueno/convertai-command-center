@@ -61,6 +61,42 @@ export interface AcaoDoAgente {
   desfeita_em?: string | null;
   /** Botão "Ir para" depois de feito (espelho do servidor). */
   caminho?: CaminhoDoAgente | null;
+  /** Sequência feita em passos: quantos já foram e o total (a tela mostra "3 de 12" e o Parar). */
+  andamento?: { feitos: number; total: number; atualizado_em?: string } | null;
+  /** A equipe parou a sequência no meio: o que foi feito fica, com o Desfazer. */
+  parada_em?: string | null;
+}
+
+/**
+ * Anexo de caminho numa resposta sem ação (espelho do servidor): o botão
+ * "Ir para" continua na mensagem quando a conversa é reaberta.
+ */
+export const TIPO_DO_CAMINHO = "caminho_do_agente";
+
+/** O caminho de uma mensagem (anexo próprio). Null quando não há ou não é rota interna. */
+export function caminhoDosAnexos(anexos: unknown): CaminhoDoAgente | null {
+  if (!Array.isArray(anexos)) return null;
+  for (const a of anexos) {
+    if (a && typeof a === "object" && (a as Record<string, unknown>).tipo === TIPO_DO_CAMINHO) {
+      const c = caminhoSeguro(a);
+      if (c) return c;
+    }
+  }
+  return null;
+}
+
+/** Itens ainda sem resultado (sequência em passos). */
+export function pendentesDaAcao(a: Pick<AcaoDoAgente, "itens" | "resultados">): ItemDaAcaoDoAgente[] {
+  const feitos: Record<string, boolean> = {};
+  (a.resultados || []).forEach((r) => {
+    feitos[`${r.operacao}|${r.ref}`] = true;
+  });
+  return a.itens.filter((i) => !feitos[`${i.operacao}|${i.ref}`]);
+}
+
+/** A sequência começou e não terminou (nem foi parada): falta continuar ou parar. */
+export function emAndamento(a: Pick<AcaoDoAgente, "itens" | "resultados" | "executada_em" | "descartada_em" | "desfeita_em">): boolean {
+  return estadoDaAcao(a) === "aberta" && (a.resultados || []).length > 0 && pendentesDaAcao(a).length > 0;
 }
 
 /**
@@ -81,6 +117,26 @@ export function caminhoSeguro(c: unknown): CaminhoDoAgente | null {
   if (!rotulo || !destino || destino.length > 600) return null;
   if (destino.charAt(0) !== "/" || destino.charAt(1) === "/" || destino.charAt(1) === "\\") return null;
   return o.abrir_sozinho === true ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
+}
+
+/**
+ * A pessoa já está no destino do caminho? Mesmo caminho e todos os parâmetros
+ * do destino iguais no endereço atual (o atual pode ter outros, como mes ou
+ * marca). Aí o botão "Ir para" não aparece (seria só ruído).
+ */
+export function jaEstaAqui(destino: string, atual: string): boolean {
+  const partir = (s: string) => {
+    const i = s.indexOf("?");
+    return { caminho: (i >= 0 ? s.slice(0, i) : s).replace(/\/+$/, "") || "/", busca: new URLSearchParams(i >= 0 ? s.slice(i + 1) : "") };
+  };
+  const d = partir(String(destino || ""));
+  const a = partir(String(atual || ""));
+  if (d.caminho !== a.caminho) return false;
+  let igual = true;
+  d.busca.forEach((valor, chave) => {
+    if (a.busca.get(chave) !== valor) igual = false;
+  });
+  return igual;
 }
 
 export type EstadoDaAcao = "aberta" | "feita" | "descartada" | "desfeita";
@@ -119,7 +175,11 @@ export function acoesDaMensagem(anexos: unknown[] | null | undefined): AcaoDoAge
   return out;
 }
 
-export type PedidoDaAcao = "confirmar" | "descartar" | "desfazer";
+/**
+ * "parar": encerra a sequência em passos no meio (o que já foi feito fica,
+ * com o Desfazer). Só aparece quando a função do agente faz em passos.
+ */
+export type PedidoDaAcao = "confirmar" | "descartar" | "desfazer" | "parar";
 
 export interface RespostaDaAcao {
   anexo?: unknown;
@@ -148,16 +208,22 @@ export function chamarAcaoDoAgente(
     acao_id: acaoId,
   };
   if (pedido === "descartar") corpo.descartar = true;
+  if (pedido === "parar") corpo.parar = true;
   return chamarFuncao<RespostaDaAcao>(funcao, corpo);
 }
 
 /** Frase curta do resultado, para o aviso na tela. */
-export function frasesDoResultado(resultados: ResultadoDoItem[] | undefined): { titulo: string; descricao: string } {
+export function frasesDoResultado(resultados: ResultadoDoItem[] | undefined, total?: number): { titulo: string; descricao: string } {
   const lista = resultados || [];
   const ok = lista.filter((r) => r.ok).length;
   const falhas = lista.length - ok;
+  const parou = typeof total === "number" && total > lista.length;
   return {
-    titulo: ok ? `${ok} ${ok === 1 ? "item feito" : "itens feitos"}` : "Nada mudou",
-    descricao: falhas ? `${falhas} não ${falhas === 1 ? "pôde ser feito" : "puderam ser feitos"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
+    titulo: ok ? `${ok} ${ok === 1 ? "item feito" : "itens feitos"}${parou ? ` de ${total}` : ""}` : parou ? "Parado antes de começar" : "Nada mudou",
+    descricao: falhas
+      ? `${falhas} não ${falhas === 1 ? "pôde ser feito" : "puderam ser feitos"}. O motivo está na lista.`
+      : parou
+        ? "Parado: o resto não foi feito. Dá para desfazer o que foi."
+        : "Dá para desfazer no cartão.",
   };
 }
