@@ -270,7 +270,8 @@ describe("Mesa Vídeos: motores do fal sem semente", () => {
     const fal = c.motores.filter((m) => m.provedor === "fal" && !m.situacao && m.preco);
     expect(fal.length).toBeGreaterThan(10);
     fal.forEach((m) => expect(estadoDoMotor(m, { temChave })).toBe("pronto"));
-    expect(estadoDoMotor(c.motores.find((m) => m.id === "runway-gen4.5")!, { temChave })).toBe("a_integrar");
+    // Frente V-C: a Runway tem executor próprio; só com FAL_KEY ela pede a chave dela.
+    expect(estadoDoMotor(c.motores.find((m) => m.id === "runway-gen4.5")!, { temChave })).toBe("precisa_chave");
     expect(estadoDoMotor(c.motores.find((m) => m.id === "sora-2")!, { temChave })).toBe("encerrado");
     // Sem FAL_KEY: "precisa de chave" (o nome do segredo aparece, nunca o valor).
     expect(estadoDoMotor(c.motores.find((m) => m.id === "seedance-2.5")!, { temChave: () => false })).toBe("precisa_chave");

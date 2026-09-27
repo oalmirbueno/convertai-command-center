@@ -8,7 +8,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, resolucaoNoMotor } from "../../../supabase/functions/_shared/modelos-de-video";
-import { BotaoDeGerar, EscolherImagem, SeletorDeMotor } from "./PecasDoGerador";
+import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
 
 /**
@@ -16,6 +16,8 @@ import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
  * inicial e final, referências de personagem ou produto e 1 a 4 variações,
  * com o custo antes. A tela só mostra o que o motor escolhido faz (último
  * quadro, referências, áudio, resoluções e durações dele).
+ * Frente V-C (26/09): Runway e Higgsfield entram na mesma lista (escolha
+ * manual); com a Higgsfield aparece a câmera pronta (33 movimentos).
  */
 
 interface Rascunho {
@@ -31,9 +33,11 @@ interface Rascunho {
   inicial: string | null;
   final: string | null;
   referencias: string[];
+  /** Movimento pronto de câmera (Higgsfield). */
+  camera?: string;
 }
 
-const INICIAL: Rascunho = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [] };
+const INICIAL: Rascunho = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [], camera: "" };
 
 export default function GeradorLivre() {
   const { clientId, atualizarCusto } = useMesa();
@@ -52,7 +56,7 @@ export default function GeradorLivre() {
   const motivo = !motor
     ? "Nenhum motor faz isso neste nível."
     : estado && estado.estado !== "pronto"
-      ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}.`
+      ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}${estado.chave ? ` (${estado.chave})` : ""}.`
       : !r.prompt.trim()
         ? "Escreva o que acontece."
         : null;
@@ -75,6 +79,7 @@ export default function GeradorLivre() {
       quadro_inicial_path: r.inicial,
       quadro_final_path: r.final,
       referencias_paths: r.referencias,
+      camera: motor.cap.camera && r.camera ? r.camera : null,
       uid: novoUid(),
       custo_confirmado_usd: usd,
     });
@@ -146,6 +151,7 @@ export default function GeradorLivre() {
             Áudio do motor
           </label>
         )}
+        {motor && motor.cap.camera && <SeletorDeCamera valor={r.camera || ""} onEscolher={(v) => mudar({ camera: v })} />}
         <CampoDeFormulario rotulo="Evitar">
           <input className={campo} value={r.negativo} maxLength={600} onChange={(e) => mudar({ negativo: e.target.value })} placeholder="Opcional" />
         </CampoDeFormulario>

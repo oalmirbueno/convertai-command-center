@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, BookmarkPlus, FolderOpen, LayoutTemplate, Loader2, Wand2 } from "lucide-react";
+import { Archive, BookmarkPlus, FolderOpen, LayoutTemplate, Loader2, Mic, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import Secao from "@/components/sistema/Secao";
@@ -8,7 +8,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
-import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { gravarEstadoDaTela, lerEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMotoresDaMesa, useProjetoDoDiretor, useProjetosSalvos, useTemplatesDeVideo } from "@/lib/mesa-videos/api";
@@ -18,6 +18,7 @@ import { projetoDoKit, projetoDoTemplate, type TemplateDeVideo } from "../../../
 import { AvisoDeAtivacao } from "./Comuns";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos } from "./videosApi";
+import { chaveDoRascunhoDoAvatar, RASCUNHO_DO_AVATAR, type RascunhoDoAvatar, roteiroDoKitUgc } from "./rascunhoDoAvatar";
 
 /**
  * Kit (frente V-A): kits de vídeo por nicho (móveis planejados, antes e
@@ -25,6 +26,8 @@ import { chamarMesaVideos } from "./videosApi";
  * esporte, filme curto, paisagismo, jurídico, assistência técnica, games e
  * moda) e os templates salvos (do cliente e da agência). "Usar" monta o
  * primeiro rascunho da bíblia e do roteiro sem IA; lacuna vazia vira pergunta.
+ * Frente V-C (26/09): no kit UGC, "Avatar falando" leva o gancho para o modo
+ * de avatar da HeyGen (avatar de estoque ou clone com autorização).
  */
 
 interface Rascunho {
@@ -72,6 +75,16 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
       action: temPlanos ? { label: "Desfazer", onClick: () => desfazer() } : undefined,
     });
     irPara("biblia");
+  };
+
+  // Kit UGC com a HeyGen: o gancho e o convite viram o começo do roteiro do Avatar falando (nada gera nem cobra aqui).
+  const usarComAvatar = () => {
+    const chave = chaveDoRascunhoDoAvatar(clientId);
+    const atual = lerEstadoDaTela<Partial<RascunhoDoAvatar> | null>(chave, null, (v) => !!v && typeof v === "object");
+    const produto = String(valores.produto || "").trim();
+    gravarEstadoDaTela(chave, { ...RASCUNHO_DO_AVATAR, ...(atual || {}), roteiro: roteiroDoKitUgc(valores), formato: "9:16", titulo: (produto ? `UGC: ${produto}` : "UGC falado").slice(0, 120) });
+    toast.success("Roteiro do UGC no Avatar falando", { description: "Complete o meio com a demonstração e escolha quem fala." });
+    irPara("gerar", { modo: "avatar" });
   };
 
   const usarTemplate = (t: TemplateDeVideo) => {
@@ -164,6 +177,12 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
 
         <div className="mt-4 flex min-w-0 items-center justify-end">
           <span className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>Usar não gera nem cobra.</span>
+          {kit.id === "ugc" && (
+            <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={usarComAvatar} aria-label="Fazer o UGC com avatar falando">
+              <Mic className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Avatar falando</span>
+            </button>
+          )}
           <button type="button" className={botao.primario} onClick={usarKit}>
             <Wand2 className="mr-1.5 h-3.5 w-3.5" />
             Usar o kit

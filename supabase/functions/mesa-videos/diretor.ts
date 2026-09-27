@@ -19,7 +19,8 @@
 import { chamarTexto, cobrarJev, IaMotorErro } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
-import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+import { caminhoDaMiniatura, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+import { leituraParaAVisao } from "../_shared/video-armazenar.ts";
 import type { AcaoDoAgente, ItemDaAcaoDoAgente } from "../_shared/acoes-do-agente.ts";
 import {
   acaoDeGerarPlanos,
@@ -232,8 +233,10 @@ export async function diretorAvaliar(b: BaseDaFuncao, corpo: Record<string, unkn
   const imagens: { id: string; bytes: Uint8Array; mime: string }[] = [];
   const semImagem: string[] = [];
   for (const a of arquivos) {
-    // Vídeo: a miniatura própria (primeiro quadro). Imagem: reduzida sem transformação.
-    const r = await reduzidaSemTransformacao(b.servico(), BUCKET, a.storage_path, 1024, 1024, { folga: 1.1 });
+    // Vídeo: a miniatura própria (primeiro quadro), nunca o vídeo baixado. Imagem: a cópia leve
+    // (pedida à copias-leves quando falta), nunca o original grande aberto aqui.
+    const l = leituraParaAVisao(a);
+    const r = await reduzidaSemTransformacao(b.servico(), BUCKET, l.miniatura ? caminhoDaMiniatura(a.storage_path) : a.storage_path, l.caixa, l.caixa, l.opcoes).catch(() => null);
     if (r && r.cabe && /^image\//.test(r.mime)) imagens.push({ id: a.id, bytes: r.bytes, mime: r.mime });
     else semImagem.push(a.id);
   }

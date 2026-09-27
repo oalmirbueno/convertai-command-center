@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
@@ -9,6 +9,8 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { ESTADOS_EM_ANDAMENTO, TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
+import { motorPorId } from "../../../supabase/functions/_shared/modelos-de-video";
+import { provedorCancela } from "../../../supabase/functions/_shared/video-executor";
 import { gravarMiniaturaDoVideo } from "@/lib/mesa-videos/quadros";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type ArquivoDeVideo, type PedidoDeVideo } from "./videosApi";
 
@@ -17,6 +19,9 @@ import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type A
  * gerador (variações), com custo. SEM LAÇO: ao abrir, UMA consulta dos
  * pedidos em andamento; depois só o botão "Conferir". Vídeo pronto sem
  * miniatura ganha a sua aqui (primeiro quadro, no navegador).
+ * Frente V-C (26/09): avatar falando (HeyGen) aparece com o próprio nome; na
+ * Runway e na Higgsfield dá para cancelar o que ainda não terminou (uma
+ * chamada, nada cobrado do que foi cancelado).
  */
 
 const ROTULO: Record<string, string> = {
@@ -71,6 +76,20 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
   const jaConferiu = useRef(false);
   const pedidos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => TIPOS_DO_GERADOR.indexOf(p.tipo as string) >= 0).slice(0, 30);
   const emAndamento = pedidos.filter((p) => ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0);
+
+  const cancelar = async (pedidoId: string) => {
+    setConferindo(pedidoId);
+    try {
+      const r = await chamarMesaVideos<{ cancelados?: number }>({ acao: "gerar_cancelar", pedido_id: pedidoId });
+      void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+      if (r && r.cancelados) toast.success("Cancelado", { description: "Nada foi cobrado do que foi cancelado." });
+      else toast.warning("Não deu para cancelar", { description: "Já começou a gerar. Quando terminar, aparece aqui." });
+    } catch (e) {
+      toast.error("Não foi possível cancelar", { description: textoDoErro(e) });
+    } finally {
+      setConferindo(null);
+    }
+  };
 
   const conferir = async (pedidoId: string | null) => {
     setConferindo(pedidoId || "todos");
@@ -128,7 +147,9 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
         {pedidos.map((p) => {
           const envios = enviosDe(p);
           const custo = p.custo_estimado && typeof (p.custo_estimado as { usd?: number }).usd === "number" ? (p.custo_estimado as { usd: number }).usd : null;
-          const alvo = p.alvo as { titulo?: string; motor?: string };
+          const alvo = p.alvo as { titulo?: string; motor?: string; modo?: string };
+          const motorDoPedido = motorPorId(p.executor);
+          const podeCancelar = ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (p.estado as string) !== "baixando" && !!motorDoPedido && provedorCancela(motorDoPedido.provedor);
           const par = p.parametros as { prompt?: string };
           return (
             <li key={p.id} className="flex min-w-0 items-start py-2.5" data-geracao={p.id}>
@@ -141,7 +162,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
               </div>
               <div className="mr-2 min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium">
-                  {ROTULO_DO_TIPO[p.tipo as string] || p.tipo} · {alvo.titulo || alvo.motor || p.executor}
+                  {alvo.modo === "avatar" ? "Avatar falando" : ROTULO_DO_TIPO[p.tipo as string] || p.tipo} · {alvo.titulo || alvo.motor || p.executor}
                 </p>
                 <p className={juntar(texto.auxiliar, "truncate")} title={par.prompt || ""}>
                   {envios.filter((e) => e.estado === "pronto").length} de {envios.length} prontas{custo !== null ? ` · US$ ${custo.toFixed(2).replace(".", ",")}` : ""}
@@ -152,6 +173,11 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
               {ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (
                 <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void conferir(p.id)} aria-label={`Conferir ${alvo.titulo || "pedido"}`} title={(p.estado as string) === "baixando" ? "Baixar de novo" : "Conferir"}>
                   {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                </button>
+              )}
+              {podeCancelar && (
+                <button type="button" className={juntar(botao.icone, "ml-1")} disabled={!!conferindo} onClick={() => void cancelar(p.id)} aria-label={`Cancelar ${alvo.titulo || "pedido"}`} title="Cancelar no provedor">
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </li>

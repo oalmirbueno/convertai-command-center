@@ -17,10 +17,22 @@
  * Puro onde dá: o corpo de cada motor, a leitura do resultado e as regras de
  * consulta são funções sem rede (testadas). As chamadas recebem a chave e o
  * fetch por parâmetro (a função passa Deno.env; o teste passa um falso).
+ *
+ * Frente V-C (26/09/2026): Runway, Higgsfield e HeyGen entram com a mesma
+ * interface (`ExecutorDoProvedor`: enviar, consultar, resultado e cancelar
+ * quando o provedor deixa), em `video-provedor-*.ts`. `executorDoProvedor`
+ * escolhe pelo provedor do motor; o fal continua igual por baixo.
  */
 
 import { type AnguloDeCamera, parametrosDoAngulo, promptDoAngulo, type ManterNoAngulo } from "./video-angulo.ts";
 import { duracaoNoMotor, type MotorDeVideo, resolucaoNoMotor } from "./modelos-de-video.ts";
+// Frente V-C (26/09): Runway, Higgsfield e HeyGen, cada um no seu executor com a mesma interface.
+import { type Credenciais, type ExecutorDoProvedor, pedirJson, semVazios, type SituacaoNoProvedor } from "./video-provedor-comum.ts";
+import { corpoDaRunway, EXECUTOR_DA_RUNWAY, faltaNaRunway } from "./video-provedor-runway.ts";
+import { corpoDaHiggsfield, EXECUTOR_DA_HIGGSFIELD, movimentoValido } from "./video-provedor-higgsfield.ts";
+import { corpoDoAvatar, type EntradaDoAvatar, EXECUTOR_DA_HEYGEN, faltaNoAvatar } from "./video-provedor-heygen.ts";
+
+export type { SituacaoNoProvedor } from "./video-provedor-comum.ts";
 
 export const FAL_FILA = "https://queue.fal.run/";
 export const TIMEOUT_DO_PROVEDOR_MS = 20_000;
@@ -28,7 +40,7 @@ export const TIMEOUT_DO_PROVEDOR_MS = 20_000;
 export const INTERVALO_MINIMO_DA_CONSULTA_MS = 15_000;
 export const VARIACOES_MAX = 4;
 
-export type ModoDaGeracao = "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "angulo";
+export type ModoDaGeracao = "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "angulo" | "avatar";
 
 export interface EntradaDaGeracao {
   modo: ModoDaGeracao;
@@ -45,23 +57,18 @@ export interface EntradaDaGeracao {
   video_url?: string | null;
   angulo?: AnguloDeCamera | null;
   manter?: ManterNoAngulo;
+  /** Movimento de câmera pronto (Higgsfield: camera_movement). */
+  camera?: string | null;
+  /** Avatar falando (HeyGen): quem fala, voz, legendas. O roteiro vai em `prompt`. */
+  avatar?: EntradaDoAvatar | null;
 }
-
-const semVazios = (o: Record<string, unknown>) => {
-  const s: Record<string, unknown> = {};
-  Object.keys(o).forEach((k) => {
-    const v = o[k];
-    if (v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length)) return;
-    s[k] = v;
-  });
-  return s;
-};
 
 /** Qual endpoint do motor atende ao modo. Lança Error com a frase quando nenhum. */
 export function endpointDaGeracao(m: MotorDeVideo, e: Pick<EntradaDaGeracao, "modo" | "quadro_inicial_url" | "quadro_final_url">): string {
   const ep = m.endpoints;
   let alvo: string | undefined;
   if (e.modo === "angulo") alvo = ep.angulo;
+  else if (e.modo === "avatar") alvo = ep.avatar;
   else if (e.modo === "estender") alvo = ep.estender;
   else if (e.modo === "referencia") alvo = ep.referencia || ep.imagem;
   else if (e.modo === "primeiro_ultimo") alvo = ep.ultimo;
@@ -130,6 +137,13 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
       return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, generate_audio: audio });
     case "hunyuan":
       return semVazios({ prompt, image_url: ini, aspect_ratio: ini ? undefined : ar, seed });
+    case "runway":
+      return corpoDaRunway(m, e);
+    case "higgsfield":
+      return corpoDaHiggsfield(m, e);
+    case "heygen_avatar":
+    case "heygen_foto":
+      return corpoDoAvatar(m, e);
     case "qwen_angulo":
     case "flux2_angulo": {
       if (!e.angulo) throw new Error("Falta o ângulo.");
@@ -151,7 +165,19 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
 
 /** Confere antes de enviar: o que falta para o modo pedido. null = pode. */
 export function faltaParaGerar(m: MotorDeVideo, e: EntradaDaGeracao): string | null {
+  if (e.modo === "avatar" || m.familia === "avatar") {
+    if (m.familia !== "avatar" || e.modo !== "avatar") return `${m.rotulo} não faz este tipo de geração.`;
+    const f = faltaNoAvatar(e);
+    if (f) return f;
+    if (m.dialeto === "heygen_foto" && (!e.avatar || e.avatar.tipo !== "foto")) return "Este motor fala a partir de uma foto.";
+    if (m.dialeto === "heygen_avatar" && (!e.avatar || e.avatar.tipo !== "estoque")) return "Este motor fala com um avatar de estoque.";
+  }
   if (e.modo !== "angulo" && !String(e.prompt || "").trim()) return "Escreva o que acontece no vídeo.";
+  if (m.dialeto === "runway") {
+    const f = faltaNaRunway(m, e);
+    if (f) return f;
+  }
+  if (e.camera && (!m.cap.camera || !movimentoValido(e.camera))) return m.cap.camera ? "Movimento de câmera desconhecido." : `${m.rotulo} não tem movimentos de câmera prontos.`;
   if ((e.modo === "primeiro_quadro" || e.modo === "primeiro_ultimo" || e.modo === "angulo") && !e.quadro_inicial_url) return "Escolha o quadro inicial.";
   if (e.modo === "primeiro_ultimo" && !e.quadro_final_url) return "Escolha o último quadro.";
   if (e.modo === "estender" && !e.video_url) return "Escolha o vídeo para continuar.";
@@ -181,30 +207,11 @@ export interface EnvioAoProvedor {
   storage_path: string | null;
   uso_id: string | null;
   custo_usd: number | null;
+  /** Duração real informada pelo provedor (HeyGen cobra por ela). */
+  duracao_s?: number | null;
 }
 
 type Buscar = typeof fetch;
-
-async function pedirJson(f: Buscar, url: string, init: RequestInit, timeoutMs = TIMEOUT_DO_PROVEDOR_MS): Promise<{ status: number; corpo: Record<string, unknown> | null }> {
-  let r: Response;
-  // AbortSignal.timeout existe no Deno; onde não existe (testes), vai sem prazo.
-  const A = AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal };
-  const sinal = typeof A.timeout === "function" ? A.timeout(timeoutMs) : undefined;
-  try {
-    r = await f(url, { ...init, signal: sinal });
-  } catch (e) {
-    const nome = e instanceof Error ? e.name : "";
-    throw new Error(nome === "TimeoutError" || nome === "AbortError" ? "O provedor não respondeu a tempo." : "Falha de rede com o provedor.");
-  }
-  const texto = await r.text().catch(() => "");
-  let corpo: Record<string, unknown> | null = null;
-  try {
-    corpo = texto ? (JSON.parse(texto) as Record<string, unknown>) : null;
-  } catch {
-    corpo = null;
-  }
-  return { status: r.status, corpo };
-}
 
 /** Motivo curto do erro do provedor (sem ecoar a chave nem o corpo inteiro). */
 export function motivoDoProvedor(status: number, corpo: Record<string, unknown> | null): string {
@@ -237,8 +244,6 @@ export async function enviarAoFal(endpoint: string, corpo: Record<string, unknow
   if (!id || !/^https:\/\//.test(st) || !/^https:\/\//.test(rs)) throw new Error("O provedor não devolveu o número do pedido.");
   return { request_id: id, status_url: st, response_url: rs };
 }
-
-export type SituacaoNoProvedor = { estado: "fila" | "gerando" | "pronto" | "erro"; posicao: number | null; erro: string | null };
 
 /** Lê o status devolvido pelo fal. */
 export function lerSituacao(corpo: Record<string, unknown> | null): SituacaoNoProvedor {
@@ -315,4 +320,38 @@ export function estadoDoPedidoPelosEnvios(envios: Pick<EnvioAoProvedor, "estado"
 export function chaveDaGeracao(tipo: string, uid: string): string {
   const u = String(uid || "").replace(/[^a-z0-9-]/gi, "").slice(0, 64);
   return `${tipo}:${u || "sem-uid"}`;
+}
+
+// ------------------------------------------------------------------ provedores (frente V-C, 26/09/2026)
+
+/** O fal na mesma interface dos outros provedores (fila com status e resultado em URLs devolvidas pelo fal). */
+export const EXECUTOR_DO_FAL: ExecutorDoProvedor = {
+  provedor: "fal",
+  rotulo: "fal.ai",
+  enviar: (endpoint, corpo, c) => enviarAoFal(endpoint, corpo, { chave: c.chave, fetchImpl: c.fetchImpl }),
+  consultar: (e, c) => consultarNoFal(e.status_url, { chave: c.chave, fetchImpl: c.fetchImpl }),
+  resultado: (e, c) => resultadoDoFal(e.response_url, { chave: c.chave, fetchImpl: c.fetchImpl }),
+};
+
+const EXECUTORES: Record<string, ExecutorDoProvedor> = {
+  fal: EXECUTOR_DO_FAL,
+  runway: EXECUTOR_DA_RUNWAY,
+  higgsfield: EXECUTOR_DA_HIGGSFIELD,
+  heygen: EXECUTOR_DA_HEYGEN,
+};
+
+/** Executor do provedor do motor (null = provedor sem executor: "a integrar"). */
+export function executorDoProvedor(provedor: string | null | undefined): ExecutorDoProvedor | null {
+  return (provedor && Object.prototype.hasOwnProperty.call(EXECUTORES, provedor) && EXECUTORES[provedor]) || null;
+}
+
+/** O provedor deixa cancelar pela API? (Runway e Higgsfield sim; fal e HeyGen não por aqui.) */
+export const provedorCancela = (provedor: string | null | undefined): boolean => {
+  const x = executorDoProvedor(provedor);
+  return !!(x && x.cancelar);
+};
+
+/** Credenciais pelos NOMES dos segredos (quem chama lê o ambiente; aqui só monta). */
+export function credenciaisPorNome(m: Pick<MotorDeVideo, "chave_env" | "segredo_env">, ler: (nome: string) => string): Credenciais {
+  return { chave: m.chave_env ? ler(m.chave_env) : "", segredo: m.segredo_env ? ler(m.segredo_env) : null };
 }

@@ -15,6 +15,10 @@
  * - gerar_status { pedido_id } | gerar_status_cliente { client_id } -> { pedidos }
  * - quadro_registrar { client_id, storage_path, origem_arquivo_id?, posicao? } -> { arquivo }
  * - motores_sincronizar { } (cron semanal desligado ou admin) -> { novos, sumiram }
+ * Frente V-C (26/09): Runway, Higgsfield e HeyGen pelo mesmo núcleo (executor por provedor).
+ * - avatar_gerar { client_id, fonte: "estoque" | "clone", avatar_id? | clone_id?, voz_id, roteiro, formato, resolucao?, legendas?, velocidade?, uid, custo_confirmado_usd } -> { ok, pedido_id, custo_estimado }
+ * - heygen_catalogo { tipo: "avatares" | "vozes", token? } -> { itens, proximo }
+ * - gerar_cancelar { pedido_id } (Runway e Higgsfield) -> { pedidos, cancelados }
  *
  * Custo: sem `custo_confirmado_usd` a ação NÃO gera; devolve 409
  * confirmar_custo com a estimativa (a tela mostra e a pessoa confirma). Se a
@@ -24,10 +28,12 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarImagem, garantirSaldo, IaMotorErro, modeloPadrao } from "../_shared/ia-motor.ts";
-import { caminhoDaMiniatura } from "../_shared/imagem-reduzida.ts";
+import { caminhoDaMiniatura, MAX_PIXELS_REDUCAO_NA_FUNCAO, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { reduzirParaCaber } from "../_shared/imagem-local.ts";
 import {
   catalogoEmUso,
+  chavesQueFaltam,
+  custoDaVariacaoPronta,
   custoDoMotor,
   estadoDoMotor,
   type LinhaDoCatalogoDeVideo,
@@ -41,21 +47,23 @@ import {
 } from "../_shared/modelos-de-video.ts";
 import {
   chaveDaGeracao,
-  consultarNoFal,
   corpoDaGeracao,
+  credenciaisPorNome,
   endpointDaGeracao,
   type EntradaDaGeracao,
   type EnvioAoProvedor,
-  enviarAoFal,
   estadoDoPedidoPelosEnvios,
+  executorDoProvedor,
   faltaParaGerar,
   type ModoDaGeracao,
   passouDoPrazo,
   podeConsultar,
-  resultadoDoFal,
 } from "../_shared/video-executor.ts";
 import { normalizarAngulo, normalizarManter, normalizarVariacoes } from "../_shared/video-angulo.ts";
-import { guardarDoProvedor } from "../_shared/video-armazenar.ts";
+import { fotoParaEditar, guardarDoProvedor, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO } from "../_shared/video-armazenar.ts";
+import type { Credenciais, ExecutorDoProvedor, RefDoEnvio } from "../_shared/video-provedor-comum.ts";
+import { movimentoValido } from "../_shared/video-provedor-higgsfield.ts";
+import { cloneLiberadoParaVideo, duracaoEstimadaDaFala, listarAvataresDaHeygen, listarVozesDaHeygen, ROTEIRO_MAX_CARACTERES } from "../_shared/video-provedor-heygen.ts";
 
 export interface BaseDaFuncao {
   servico: () => SupabaseClient;
@@ -80,13 +88,20 @@ const linha = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").
 const numero = (v: unknown, padrao: number) => (isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : padrao);
 
 function temChave(nome: string): boolean {
-  if (!nome) return false;
+  return !!lerSegredo(nome);
+}
+
+/** Valor do segredo (só no servidor; nunca volta para a tela nem para o registro). */
+function lerSegredo(nome: string): string {
+  if (!nome) return "";
   try {
-    return !!(Deno.env.get(nome) || "").trim();
+    return (Deno.env.get(nome) || "").trim();
   } catch {
-    return false;
+    return "";
   }
 }
+
+const credenciaisDoMotor = (m: MotorDeVideo): Credenciais => credenciaisPorNome(m, lerSegredo);
 
 /** Erro de tabela/coluna que falta: o SQL V-01 não foi aplicado. */
 function semSql(b: BaseDaFuncao, error: { message?: string; code?: string } | null): Error {
@@ -111,8 +126,10 @@ async function motorPronto(b: BaseDaFuncao, id: string): Promise<{ motor: MotorD
   const m = motorPorId(id, c.motores);
   if (!m) throw b.erro(400, "motor_desconhecido", "Motor de vídeo desconhecido.");
   const estado = estadoDoMotor(m, { temChave, desligados: c.desligados });
-  if (estado !== "pronto") throw b.erro(409, `motor_${estado}`, `${m.rotulo}: ${ROTULO_DO_ESTADO_DO_MOTOR[estado].toLowerCase()}.`, { estado });
-  if (m.provedor !== "fal") throw b.erro(409, "motor_a_integrar", `${m.rotulo} ainda não gera por aqui.`);
+  // Só o NOME do segredo que falta (nunca o valor).
+  const faltam = estado === "precisa_chave" ? chavesQueFaltam(m, temChave) : [];
+  if (estado !== "pronto") throw b.erro(409, `motor_${estado}`, `${m.rotulo}: ${ROTULO_DO_ESTADO_DO_MOTOR[estado].toLowerCase()}${faltam.length ? ` (${faltam.join(" e ")})` : ""}.`, { estado, chave: faltam.join(", ") || null });
+  if (!executorDoProvedor(m.provedor)) throw b.erro(409, "motor_a_integrar", `${m.rotulo} ainda não gera por aqui.`);
   return { motor: m, motores: c.motores };
 }
 
@@ -131,8 +148,8 @@ export async function motoresEstado(b: BaseDaFuncao) {
       rotulo: m.rotulo,
       linha: m.linha,
       versao: m.versao,
-      // Só o NOME do segredo que falta (nunca o valor).
-      chave: estado === "precisa_chave" ? m.chave_env : null,
+      // Só o NOME do segredo que falta (nunca o valor); par (Higgsfield) vem com os dois nomes.
+      chave: estado === "precisa_chave" ? chavesQueFaltam(m, temChave).join(", ") || m.chave_env : null,
       custo_5s: custoDoMotor(m, { duracao_s: 5 }),
     };
   });
@@ -185,13 +202,13 @@ async function conferirSaldo(b: BaseDaFuncao, clientId: string, usd: number) {
 }
 
 /** Registra o uso de UMA variação pronta na carteira (ia_registrar_uso, chave da agência). */
-async function cobrar(b: BaseDaFuncao, clientId: string, pedidoId: string, motor: string, usd: number, imagens: number): Promise<string | null> {
+async function cobrar(b: BaseDaFuncao, clientId: string, pedidoId: string, motor: string, usd: number, imagens: number, provedor = "fal"): Promise<string | null> {
   const { data, error } = await b.servico().rpc("ia_registrar_uso", {
     _client_id: clientId,
     _tarefa: TAREFA_DO_USO,
     _agente: AGENTE_DO_USO,
     _modelo_id: `video:${motor}`,
-    _provedor: "fal",
+    _provedor: provedor,
     _tokens_entrada: 0,
     _tokens_saida: 0,
     _tokens_cache: 0,
@@ -227,12 +244,16 @@ interface PedidoDeGeracao {
   projetoId: string | null;
   planoRef: string | null;
   titulo: string | null;
+  /** Campos a mais nos parâmetros do pedido (câmera, avatar); nunca URL assinada nem chave. */
+  extras?: Record<string, unknown>;
 }
 
 /** Valida, confere custo e saldo, grava o pedido e envia cada variação UMA vez. */
 export async function enviarGeracao(b: BaseDaFuncao, p: PedidoDeGeracao): Promise<Record<string, unknown>> {
   const falta = faltaParaGerar(p.motor, p.entrada);
   if (falta) throw b.erro(400, "entrada_incompleta", falta);
+  const executor = executorDoProvedor(p.motor.provedor);
+  if (!executor) throw b.erro(409, "motor_a_integrar", `${p.motor.rotulo} ainda não gera por aqui.`);
   const custo = custoDoMotor(p.motor, { duracao_s: p.entrada.duracao_s, resolucao: p.entrada.resolucao, audio: p.entrada.audio, variacoes: p.variacoes, referencias: (p.entrada.referencias_urls || []).length });
   exigirConfirmacao(b, custo.usd, p.confirmado, custo.detalhe);
   const chave = chaveDaGeracao(p.tipo, p.uid);
@@ -266,6 +287,9 @@ export async function enviarGeracao(b: BaseDaFuncao, p: PedidoDeGeracao): Promis
         quadro_final_path: p.caminhos.quadro_final,
         referencias_paths: p.caminhos.referencias,
         endpoint,
+        camera: p.entrada.camera || null,
+        provedor: p.motor.provedor,
+        ...(p.extras || {}),
       },
       custo_estimado: custoEstimado,
       executor: p.motor.id,
@@ -282,12 +306,13 @@ export async function enviarGeracao(b: BaseDaFuncao, p: PedidoDeGeracao): Promis
   const pedidoId = (criado as { id: string }).id;
 
   const envios: EnvioAoProvedor[] = [];
-  const chaveDoProvedor = (Deno.env.get(p.motor.chave_env) || "").trim();
+  const credenciais = credenciaisDoMotor(p.motor);
   for (let n = 1; n <= p.variacoes; n++) {
     const entrada = { ...p.entrada, seed: typeof p.entrada.seed === "number" ? p.entrada.seed + n - 1 : p.entrada.seed };
     const base: EnvioAoProvedor = { n, request_id: "", status_url: "", response_url: "", endpoint, estado: "erro", enviado_em: new Date().toISOString(), consultado_em: null, posicao: null, erro: null, arquivo_id: null, storage_path: null, uso_id: null, custo_usd: null };
     try {
-      const r = await enviarAoFal(endpoint, corpoDaGeracao(p.motor, entrada), { chave: chaveDoProvedor });
+      // Chave de idempotência (a HeyGen usa): o mesmo pedido e variação nunca paga duas vezes.
+      const r = await executor.enviar(endpoint, corpoDaGeracao(p.motor, entrada), credenciais, { idempotencia: `${pedidoId}-${n}` });
       envios.push({ ...base, ...r, estado: "enviado" });
     } catch (e) {
       // Sem nova tentativa: o erro fica registrado e nada é cobrado.
@@ -333,6 +358,8 @@ async function entradaDoCorpo(b: BaseDaFuncao, clientId: string, corpo: Record<s
     quadro_final_url: fim,
     referencias_urls: refUrls.filter((u): u is string => !!u),
     video_url: video,
+    // Movimento pronto de câmera (Higgsfield); outro motor ignora.
+    camera: motor.cap.camera ? movimentoValido(corpo.camera) : null,
   };
   if (motor.formatos.indexOf(entrada.formato) < 0) throw b.erro(400, "formato_nao_aceito", `${motor.rotulo} não faz ${entrada.formato}.`);
   return { entrada, caminhos: { quadro_inicial: qi, quadro_final: qf, referencias: refs, video_arquivo_id: videoArquivoId } };
@@ -482,9 +509,13 @@ export async function antesDepoisImagem(b: BaseDaFuncao, corpo: Record<string, u
   if (!descricao) throw b.erro(400, "descricao_vazia", `Diga como é o ${direcao}.`);
   const modelo = await modeloPadrao("imagem");
   if (!modelo) throw b.erro(409, "sem_modelo_de_imagem", "Nenhum modelo de imagem padrão ativo no painel.");
-  const { data: arq, error: eArq } = await b.servico().storage.from(BUCKET).download(origem);
-  if (eArq || !arq) throw b.erro(404, "arquivo_indisponivel", "Foto não encontrada.");
-  const bytes = new Uint8Array(await arq.arrayBuffer());
+  // Cópia leve (até 2048 px; pedida à copias-leves quando falta), nunca o original inteiro sem teto.
+  const L = LEITURA_DA_FOTO_PARA_EDITAR;
+  const leitura = await reduzidaSemTransformacao(b.servico(), BUCKET, origem, L.caixa, L.caixa, L.opcoes).catch(() => null);
+  const foto = fotoParaEditar(leitura);
+  if (foto.erro === "foto_ilegivel") throw b.erro(404, "arquivo_indisponivel", "Não deu para ler a foto (arquivo ou formato).");
+  if (foto.erro === "foto_grande_demais") throw b.erro(413, "foto_grande_demais", "A foto é grande demais para editar aqui. Abra a foto na Mesa Foto (grava a cópia leve) e tente de novo.");
+  const bytes = foto.bytes as Uint8Array;
   const prompt = direcao === "depois"
     ? `Edit this exact photo to show the AFTER state: ${descricao}. Keep the same camera position, lens, framing, perspective, light and everything else identical. Photorealistic, no text.`
     : `Edit this exact photo to show the BEFORE state: ${descricao}. Keep the same camera position, lens, framing, perspective, light and everything else identical. Photorealistic, no text.`;
@@ -520,7 +551,8 @@ export async function antesDepoisImagem(b: BaseDaFuncao, corpo: Record<string, u
 
 async function gravarMiniaturaDaImagem(b: BaseDaFuncao, caminho: string, bytes: Uint8Array) {
   try {
-    const r = await reduzirParaCaber(bytes, 640, 640, { qualidadeJpeg: 82 });
+    // Teto de pixels da função (imagem maior não é aberta aqui: a tela mostra o original).
+    const r = await reduzirParaCaber(bytes, 640, 640, { qualidadeJpeg: 82, maxPixels: MAX_PIXELS_REDUCAO_NA_FUNCAO });
     if (!r) return;
     await b.servico().storage.from(BUCKET).upload(caminhoDaMiniatura(caminho), r.bytes, { contentType: r.mime, upsert: true, cacheControl: "86400" });
   } catch {
@@ -575,9 +607,55 @@ export async function quadroRegistrar(b: BaseDaFuncao, corpo: Record<string, unk
 
 type LinhaDoPedido = { id: string; client_id: string; tipo: string; alvo: Record<string, unknown>; parametros: Record<string, unknown>; custo_estimado: Record<string, unknown>; executor: string; estado: string; resultado: { envios?: EnvioAoProvedor[] } | null; consultado_em?: string | null };
 
-async function baixarResultado(b: BaseDaFuncao, p: LinhaDoPedido, motor: MotorDeVideo | null, e: EnvioAoProvedor, chave: string) {
-  const r = await resultadoDoFal(e.response_url, { chave });
-  const url = r.urls[0];
+const refDoEnvio = (e: EnvioAoProvedor): RefDoEnvio => ({ request_id: e.request_id, status_url: e.status_url, response_url: e.response_url, endpoint: e.endpoint });
+
+/** Miniatura pronta do provedor (imagem pequena, uma chamada; sem ela a tela grava do vídeo). */
+async function miniaturaDoProvedor(b: BaseDaFuncao, caminho: string, url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const tamanho = Number(r.headers.get("content-length") || 0);
+    if (!r.ok || !/^image\//.test(r.headers.get("content-type") || "") || tamanho > 3 * 1024 * 1024) {
+      await r.body?.cancel().catch(() => undefined);
+      return false;
+    }
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.byteLength > 3 * 1024 * 1024) return false;
+    await gravarMiniaturaDaImagem(b, caminho, bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** O quadro inicial já lido nesta consulta (as variações do mesmo pedido usam o mesmo quadro). */
+type CacheDoQuadro = { lido?: boolean; bytes?: Uint8Array | null; mime?: string };
+
+/**
+ * Miniatura do vídeo a partir do quadro inicial pela CÓPIA LEVE (640 px; pedida
+ * à copias-leves quando falta), lida uma vez por consulta: nunca o original de
+ * até 20 MB aberto aqui a cada variação. Sem cópia, a tela grava do vídeo.
+ */
+async function miniaturaDoQuadro(b: BaseDaFuncao, caminhoDoVideo: string, quadro: string, cache: CacheDoQuadro) {
+  if (!cache.lido) {
+    cache.lido = true;
+    const L = LEITURA_DA_MINIATURA_DO_QUADRO;
+    const r = await reduzidaSemTransformacao(b.servico(), BUCKET, quadro, L.caixa, L.caixa, L.opcoes).catch(() => null);
+    cache.bytes = r && r.cabe ? r.bytes : null;
+    cache.mime = r ? r.mime : undefined;
+  }
+  if (!cache.bytes) return;
+  try {
+    await b.servico().storage.from(BUCKET).upload(caminhoDaMiniatura(caminhoDoVideo), cache.bytes, { contentType: cache.mime || "image/jpeg", upsert: true, cacheControl: "86400" });
+  } catch {
+    /* sem miniatura: a tela grava do vídeo */
+  }
+}
+
+async function baixarResultado(b: BaseDaFuncao, p: LinhaDoPedido, motor: MotorDeVideo | null, e: EnvioAoProvedor, executor: ExecutorDoProvedor, credenciais: Credenciais, cacheDoQuadro: CacheDoQuadro = {}) {
+  const r = await executor.resultado(refDoEnvio(e), credenciais);
+  // Avatar com legenda pedida: a versão com a legenda gravada (se o provedor devolveu).
+  const avatar = p.parametros.avatar && typeof p.parametros.avatar === "object" ? (p.parametros.avatar as { legendas?: boolean }) : null;
+  const url = avatar && avatar.legendas && r.legendado_url ? r.legendado_url : r.urls[0];
   const video = r.tipo === "video";
   const pasta = video ? "gerados" : "angulos";
   // A extensão sai do tipo pedido; o mime real vem do provedor (a imagem de ângulo quase sempre é PNG).
@@ -592,11 +670,13 @@ async function baixarResultado(b: BaseDaFuncao, p: LinhaDoPedido, motor: MotorDe
   });
   const mime = g.mime;
   // Miniatura própria (nunca transformação do Storage): imagem reduzida aqui;
-  // vídeo com quadro inicial usa o quadro (é o primeiro quadro); sem quadro, a tela grava do vídeo.
+  // miniatura pronta do provedor (HeyGen) quando vem; vídeo com quadro inicial usa o quadro
+  // (é o primeiro quadro); sem nada disso, a tela grava do vídeo.
   if (!video && g.conteudo) await gravarMiniaturaDaImagem(b, caminho, g.conteudo);
-  else if (video && p.parametros.quadro_inicial_path) {
-    const { data } = await b.servico().storage.from(BUCKET).download(String(p.parametros.quadro_inicial_path));
-    if (data && data.size <= 20 * 1024 * 1024) await gravarMiniaturaDaImagem(b, caminho, new Uint8Array(await data.arrayBuffer()));
+  else if (video && r.miniatura_url && (await miniaturaDoProvedor(b, caminho, r.miniatura_url))) {
+    /* feita pela miniatura do provedor */
+  } else if (video && p.parametros.quadro_inicial_path) {
+    await miniaturaDoQuadro(b, caminho, String(p.parametros.quadro_inicial_path), cacheDoQuadro);
   }
   const prompt = String(p.parametros.prompt || "");
   const arquivo = (await registrarArquivo(b, p.client_id, {
@@ -605,10 +685,10 @@ async function baixarResultado(b: BaseDaFuncao, p: LinhaDoPedido, motor: MotorDe
     nome: `${String(p.alvo.titulo || (motor ? motor.rotulo : p.executor))} ${e.n}`,
     mime,
     bytes: g.bytes || 0,
-    duracao: video ? Number(p.parametros.duracao_s) || null : null,
+    duracao: video ? (typeof r.duracao_s === "number" && r.duracao_s > 0 ? Math.round(r.duracao_s * 100) / 100 : Number(p.parametros.duracao_s) || null) : null,
     nota: `${motor ? motor.rotulo : p.executor}: ${prompt}`.slice(0, 600),
     pedidoId: p.id,
-    origem: { motor: p.executor, endpoint: e.endpoint, pedido: p.id, variacao: e.n, plano: p.alvo.plano_ref || null, projeto: p.alvo.projeto_id || null, tipo: p.tipo },
+    origem: { motor: p.executor, provedor: motor ? motor.provedor : null, endpoint: e.endpoint, pedido: p.id, variacao: e.n, plano: p.alvo.plano_ref || null, projeto: p.alvo.projeto_id || null, tipo: p.tipo, modo: p.alvo.modo || null, legendado: !!(avatar && avatar.legendas && r.legendado_url) },
     cenaRef: p.alvo.plano_ref ? String(p.alvo.plano_ref) : null,
     grupo: p.alvo.titulo ? String(p.alvo.titulo) : null,
   })) as { id: string };
@@ -637,9 +717,12 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
   if (!travado) return p;
   const c = await catalogo(b);
   const motor = motorPorId(p.executor, c.motores);
-  const chave = motor ? (Deno.env.get(motor.chave_env) || "").trim() : "";
+  // O executor do provedor do motor (fal, Runway, Higgsfield, HeyGen); a chave só pelo nome do segredo.
+  const executor = motor ? executorDoProvedor(motor.provedor) : null;
+  const credenciais: Credenciais = motor ? credenciaisDoMotor(motor) : { chave: "" };
   const prazoMin = motor ? motor.prazo_min : 30;
   const porVariacao = Number(p.custo_estimado && p.custo_estimado.por_variacao) || 0;
+  const cacheDoQuadro: CacheDoQuadro = {};
   for (const e of envios) {
     if (e.estado === "enviado" || e.estado === "gerando") {
       if (passouDoPrazo(e, prazoMin, agora)) {
@@ -647,11 +730,20 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
         e.erro = `Passou do prazo de ${prazoMin} min sem terminar. Nada foi cobrado.`;
         continue;
       }
+      if (!executor) {
+        e.estado = "erro";
+        e.erro = "O motor deste pedido saiu do catálogo. Nada foi cobrado.";
+        continue;
+      }
       try {
-        const s = await consultarNoFal(e.status_url, { chave });
+        const s = await executor.consultar(refDoEnvio(e), credenciais);
         e.consultado_em = new Date().toISOString();
         e.posicao = s.posicao;
-        if (s.estado === "gerando") e.estado = "gerando";
+        if (typeof s.duracao_s === "number" && s.duracao_s > 0) e.duracao_s = s.duracao_s;
+        if (s.estado === "gerando") {
+          e.estado = "gerando";
+          e.erro = null;
+        } else if (s.estado === "fila") e.erro = null;
         else if (s.estado === "erro") {
           e.estado = "erro";
           e.erro = s.erro;
@@ -663,13 +755,18 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
       }
     }
     if (e.estado === "baixando") {
-      // Cobra uma vez só (o provedor já gerou), antes de baixar.
-      if (!e.uso_id && porVariacao > 0) {
-        e.uso_id = await cobrar(b, p.client_id, p.id, p.executor, porVariacao, p.tipo === "angulo" ? 1 : 0);
-        e.custo_usd = porVariacao;
+      if (!executor) {
+        e.erro = "O motor deste pedido saiu do catálogo.";
+        continue;
+      }
+      // Cobra uma vez só (o provedor já gerou), antes de baixar. Avatar: pela duração real, até o confirmado.
+      const valor = custoDaVariacaoPronta(motor, porVariacao, e.duracao_s, String(p.parametros.resolucao || ""));
+      if (!e.uso_id && valor > 0) {
+        e.uso_id = await cobrar(b, p.client_id, p.id, p.executor, valor, p.tipo === "angulo" ? 1 : 0, motor ? motor.provedor : "fal");
+        e.custo_usd = valor;
       }
       try {
-        const r = await baixarResultado(b, p, motor, e, chave);
+        const r = await baixarResultado(b, p, motor, e, executor, credenciais, cacheDoQuadro);
         e.arquivo_id = r.arquivo_id;
         e.storage_path = r.storage_path;
         e.estado = "pronto";
@@ -705,6 +802,145 @@ export async function gerarStatusCliente(b: BaseDaFuncao, corpo: Record<string, 
   const saida: LinhaDoPedido[] = [];
   for (const p of (data || []) as LinhaDoPedido[]) saida.push(await consultarPedido(b, p));
   return b.json({ pedidos: saida });
+}
+
+// ------------------------------------------------------------------ cancelar (Runway e Higgsfield; frente V-C)
+
+/**
+ * Cancela no provedor as variações ainda na fila ou gerando (UMA chamada por
+ * variação, sem repetir). Só Runway e Higgsfield deixam; nada é cobrado do
+ * que foi cancelado. A Higgsfield só cancela o que ainda está na fila.
+ */
+export async function gerarCancelar(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const id = String(corpo.pedido_id || "");
+  if (!UUID.test(id)) throw b.erro(400, "pedido_id_invalido", "pedido_id precisa ser um UUID.");
+  const { data, error } = await b.servico().from("video_pedidos").select("*").eq("id", id).maybeSingle();
+  if (error) throw semSql(b, error);
+  if (!data) throw b.erro(404, "pedido_inexistente", "Pedido não encontrado.");
+  const p = data as LinhaDoPedido;
+  await b.garantirAcesso(p.client_id);
+  const c = await catalogo(b);
+  const motor = motorPorId(p.executor, c.motores);
+  const executor = motor ? executorDoProvedor(motor.provedor) : null;
+  if (!motor || !executor || !executor.cancelar) throw b.erro(409, "cancelar_indisponivel", "Este provedor não cancela pela API. O pedido termina sozinho ou vence no prazo; erro não é cobrado.");
+  const credenciais = credenciaisDoMotor(motor);
+  const envios = ((p.resultado && p.resultado.envios) || []).slice();
+  let cancelados = 0;
+  for (const e of envios) {
+    if (e.estado !== "enviado" && e.estado !== "gerando") continue;
+    try {
+      const ok = await executor.cancelar(refDoEnvio(e), credenciais);
+      if (ok) {
+        e.estado = "erro";
+        e.erro = "Cancelado. Nada foi cobrado.";
+        cancelados++;
+      } else e.erro = "Já começou a gerar: não deu para cancelar.";
+    } catch (err) {
+      e.erro = err instanceof Error ? err.message : "Não deu para cancelar.";
+    }
+  }
+  const estado = cancelados && envios.every((e) => e.estado === "erro") ? "cancelado" : estadoDoPedidoPelosEnvios(envios);
+  const { data: salvo } = await b.servico().from("video_pedidos").update({ estado, resultado: { ...(p.resultado || {}), envios }, atualizado_em: new Date().toISOString() }).eq("id", p.id).select("*").single();
+  await b.auditar("video_cancelar", { client_id: p.client_id, pedido_id: p.id, motor: motor.id, cancelados }, cancelados > 0, p.id);
+  return b.json({ pedidos: [(salvo as LinhaDoPedido) || { ...p, estado, resultado: { envios } }], cancelados });
+}
+
+// ------------------------------------------------------------------ avatar falando (HeyGen; frente V-C)
+
+const FORMATOS_DO_AVATAR = ["9:16", "16:9", "1:1", "4:5"];
+
+/**
+ * Roteiro vira pessoa falando (HeyGen). Quem fala: avatar de estoque ou a foto
+ * principal de um CLONE da Mesa Foto, só com a autorização de imagem válida
+ * (a mesma regra da Mesa Foto) e a confirmação de que ela cobre vídeo com voz
+ * gerada por IA. Custo antes pela duração estimada da fala; cobra pela
+ * duração real, até o valor confirmado. O pedido é "gerar_livre" com
+ * alvo.modo "avatar" (sem SQL novo) e o vídeo cai nos Resultados.
+ */
+export async function avatarGerar(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await b.garantirAcesso(clientId);
+  const fonte = corpo.fonte === "clone" ? "clone" : "estoque";
+  const { motor } = await motorPronto(b, fonte === "clone" ? "heygen-foto" : "heygen-avatar-iv");
+  const roteiro = String(corpo.roteiro || corpo.prompt || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  if (!roteiro) throw b.erro(400, "roteiro_vazio", "Escreva o roteiro.");
+  if (roteiro.length > ROTEIRO_MAX_CARACTERES) throw b.erro(400, "roteiro_longo", `Roteiro longo demais (até ${ROTEIRO_MAX_CARACTERES} letras por vídeo).`);
+  const voz = linha(corpo.voz_id, 128).replace(/[^A-Za-z0-9_-]/g, "");
+  if (!voz) throw b.erro(400, "voz_faltando", "Escolha a voz.");
+  const formato = FORMATOS_DO_AVATAR.indexOf(String(corpo.formato)) >= 0 ? String(corpo.formato) : "9:16";
+  const velocidade = Math.max(0.5, Math.min(1.5, numero(corpo.velocidade, 1)));
+  const legendas = corpo.legendas === true;
+  let avatarId: string | null = null;
+  let fotoPath: string | null = null;
+  let fotoUrl: string | null = null;
+  let cloneId: string | null = null;
+  if (fonte === "clone") {
+    cloneId = String(corpo.clone_id || "");
+    if (!UUID.test(cloneId)) throw b.erro(400, "clone_id_invalido", "Escolha o clone.");
+    const { data: clone, error } = await b.servico().from("foto_modelos").select("id, client_id, origem, status, autorizacao, identidade_real").eq("id", cloneId).maybeSingle();
+    if (error) throw b.erro(503, "clones_indisponivel", "Não foi possível ler o clone agora.");
+    const liberado = cloneLiberadoParaVideo(clone as Record<string, unknown> | null, clientId);
+    if (!liberado.ok) throw b.erro(422, "autorizacao_invalida", liberado.motivo || "Clone sem autorização de imagem válida.");
+    if (corpo.confirma_uso_em_video !== true) throw b.erro(422, "confirmar_uso_em_video", "Confirme que a autorização desta pessoa cobre vídeo com voz gerada por IA.");
+    const reais = Array.isArray((clone as { identidade_real?: unknown }).identidade_real) ? ((clone as { identidade_real: { imagem_id?: string; principal?: boolean }[] }).identidade_real) : [];
+    const principal = reais.find((r) => r && r.principal) || reais[0];
+    if (!principal || !UUID.test(String(principal.imagem_id || ""))) throw b.erro(409, "clone_sem_foto", "O clone não tem foto real principal.");
+    const { data: img } = await b.servico().from("cliente_imagens").select("id, client_id, storage_bucket, storage_path, ativa").eq("id", String(principal.imagem_id)).maybeSingle();
+    const foto = img as { client_id: string; storage_bucket: string | null; storage_path: string; ativa: boolean | null } | null;
+    if (!foto || foto.client_id !== clientId || foto.ativa === false || !foto.storage_path) throw b.erro(409, "clone_sem_foto", "A foto principal do clone não está no acervo.");
+    const { data: assinada, error: eAss } = await b.servico().storage.from(foto.storage_bucket || BUCKET).createSignedUrl(foto.storage_path, URL_PARA_O_PROVEDOR_S);
+    if (eAss || !assinada || !assinada.signedUrl) throw b.erro(404, "arquivo_indisponivel", "A foto do clone não foi encontrada no armazenamento.");
+    fotoPath = foto.storage_path;
+    fotoUrl = assinada.signedUrl;
+  } else {
+    avatarId = linha(corpo.avatar_id, 128).replace(/[^A-Za-z0-9_-]/g, "");
+    if (!avatarId) throw b.erro(400, "avatar_faltando", "Escolha o avatar.");
+  }
+  const duracao = duracaoEstimadaDaFala(roteiro, velocidade);
+  const titulo = linha(corpo.titulo, 120) || "Avatar falando";
+  const entrada: EntradaDaGeracao = {
+    modo: "avatar",
+    prompt: roteiro,
+    duracao_s: duracao,
+    formato,
+    resolucao: linha(corpo.resolucao, 10) || null,
+    audio: true,
+    avatar: { tipo: fonte === "clone" ? "foto" : "estoque", avatar_id: avatarId, foto_url: fotoUrl, voz_id: voz, legendas, velocidade, locale: corpo.locale === "pt-BR" ? "pt-BR" : null, titulo },
+  };
+  const r = await enviarGeracao(b, {
+    clientId,
+    tipo: "gerar_livre",
+    motor,
+    entrada,
+    // A foto do clone só entra como quadro inicial quando está no bucket da mesa (miniatura de reserva).
+    caminhos: { quadro_inicial: fotoPath && fotoPath.indexOf(`${clientId}/`) === 0 ? fotoPath : null, quadro_final: null, referencias: [], video_arquivo_id: null },
+    variacoes: 1,
+    uid: linha(corpo.uid, 64),
+    confirmado: corpo.custo_confirmado_usd,
+    projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
+    planoRef: linha(corpo.plano_ref, 8) || null,
+    titulo,
+    // Nada de URL assinada no banco: só o que dá para auditar depois.
+    extras: { avatar: { fonte, avatar_id: avatarId, clone_id: cloneId, foto_path: fotoPath, voz_id: voz, legendas, velocidade, duracao_estimada_s: duracao, confirma_uso_em_video: fonte === "clone" } },
+  });
+  return b.json(r);
+}
+
+/** Avatares de estoque ou vozes em português da HeyGen (listas grátis; a tela guarda por uma hora). */
+export async function heygenCatalogo(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const tipo = corpo.tipo === "vozes" ? "vozes" : "avatares";
+  const c = await catalogo(b);
+  const m = motorPorId("heygen-avatar-iv", c.motores);
+  if (!m) throw b.erro(409, "motor_a_integrar", "HeyGen fora do catálogo.");
+  const faltam = chavesQueFaltam(m, temChave);
+  if (faltam.length) throw b.erro(409, "motor_precisa_chave", `HeyGen: precisa de chave (${faltam.join(" e ")}).`, { estado: "precisa_chave", chave: faltam.join(", ") });
+  const token = linha(corpo.token, 300) || null;
+  try {
+    const r = tipo === "vozes" ? await listarVozesDaHeygen(credenciaisDoMotor(m), token) : await listarAvataresDaHeygen(credenciaisDoMotor(m), token);
+    return b.json({ tipo, itens: r.itens, proximo: r.proximo });
+  } catch (e) {
+    throw b.erro(502, "provedor_recusou", e instanceof Error ? e.message : "A HeyGen não respondeu.");
+  }
 }
 
 // ------------------------------------------------------------------ sincronização do catálogo (semanal, desligada)

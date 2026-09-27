@@ -14,7 +14,8 @@ import { botao, campo, juntar, superficie, texto } from "@/components/sistema/es
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { subirQuadro } from "@/lib/mesa-videos/quadros";
 import type { MotorNaTela } from "@/lib/mesa-videos/api";
-import { atende, type CustoDoMotor, custoDoMotor, ROTULO_DO_NIVEL, textoDoCusto, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/_shared/modelos-de-video";
+import { atende, type CustoDoMotor, custoDoMotor, type MotorDeVideo, ROTULO_DO_NIVEL, textoDoCusto, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/_shared/modelos-de-video";
+import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
 import { useArquivosDeVideo } from "./videosApi";
 
 /**
@@ -111,6 +112,7 @@ export function SeletorDeMotor({
   onEscolher,
   onNivel,
   rotulo = "Motor",
+  aceitar,
 }: {
   lista: MotorNaTela[];
   requisito: RequisitoDoPedido;
@@ -119,15 +121,17 @@ export function SeletorDeMotor({
   onEscolher: (id: string) => void;
   onNivel: (n: NivelDoMotor) => void;
   rotulo?: string;
+  /** Aceita também motores que o requisito não pega (frente V-C: a Higgsfield no Ângulo). */
+  aceitar?: (m: MotorDeVideo) => boolean;
 }) {
   const doNivel = useMemo(
     () =>
       lista
-        .filter((x) => atende(x.motor, requisito) && !x.motor.situacao)
+        .filter((x) => (atende(x.motor, requisito) || (!!aceitar && aceitar(x.motor))) && !x.motor.situacao)
         // Normal = o mais barato que atende (inclui os Top); Top = a última geração; Rápido = rascunho.
         .filter((x) => requisito.modo === "angulo" || requisito.modo === "imagem" || (nivel === "normal" ? x.nivel !== "rapido" : x.nivel === nivel))
         .sort((a, b) => (custoDoMotor(a.motor, { duracao_s: 5 }).usd ?? 99) - (custoDoMotor(b.motor, { duracao_s: 5 }).usd ?? 99)),
-    [lista, requisito, nivel],
+    [lista, requisito, nivel, aceitar],
   );
   const atual = lista.find((x) => x.motor.id === valor) || null;
   const mostraNivel = requisito.modo !== "angulo" && requisito.modo !== "imagem";
@@ -268,6 +272,31 @@ export function EscolherImagem({ rotulo, valor, onEscolher, opcional = false }: 
           </RegiaoRolavel>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ câmera pronta (Higgsfield, frente V-C)
+
+const GRUPOS_DA_CAMERA = MOVIMENTOS_DA_HIGGSFIELD.reduce<string[]>((l, m) => (l.indexOf(m.grupo) < 0 ? l.concat([m.grupo]) : l), []);
+
+/** Movimento de câmera pronto do motor (Higgsfield Cinema Studio 4.0). Vazio = a câmera vai só pelo texto. */
+export function SeletorDeCamera({ valor, onEscolher, rotulo = "Câmera pronta", opcional = true }: { valor: string; onEscolher: (v: string) => void; rotulo?: string; opcional?: boolean }) {
+  return (
+    <div className="min-w-0" data-seletor-de-camera="">
+      <p className={juntar(texto.rotulo, "mb-1.5")}>{rotulo}</p>
+      <select className={campo} value={valor} onChange={(e) => onEscolher(e.target.value)} aria-label={rotulo}>
+        {opcional && <option value="">Pelo texto</option>}
+        {GRUPOS_DA_CAMERA.map((g) => (
+          <optgroup key={g} label={g}>
+            {MOVIMENTOS_DA_HIGGSFIELD.filter((m) => m.grupo === g).map((m) => (
+              <option key={m.valor} value={m.valor}>
+                {m.rotulo}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
     </div>
   );
 }

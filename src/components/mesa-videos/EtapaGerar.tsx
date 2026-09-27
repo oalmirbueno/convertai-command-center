@@ -18,13 +18,16 @@ import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, resolucaoNoM
 import { custoNaTela, ESTADOS_EM_ANDAMENTO, motoresProntos, novoUid, TIPOS_DO_GERADOR, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { AvisoDeAtivacao } from "./Comuns";
 import { MODOS_DO_GERAR, modoDoGerarValido, type ModoDoGerar } from "./modosDoGerar";
-import { BotaoDeGerar, SeletorDeMotor } from "./PecasDoGerador";
+import { BotaoDeGerar, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
+import { movimentoDaMesaNaHiggsfield } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
 
 // Frente V-A: os outros jeitos de gerar (baixam só quando abertos).
 const GeradorLivre = lazy(() => import("./GeradorLivre"));
 const FerramentaDeAngulo = lazy(() => import("./FerramentaDeAngulo"));
 const ContinuarVideo = lazy(() => import("./ContinuarVideo"));
 const AntesEDepois = lazy(() => import("./AntesEDepois"));
+// Frente V-C: HeyGen (avatar falando).
+const AvatarFalando = lazy(() => import("./AvatarFalando"));
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos, chaveDosPedidos, fotoDaCenaNoAcervo, useHistorias, usePedidos, useRoteirosAprovados, useVinculos, type PedidoDeVideo } from "./videosApi";
 
@@ -40,6 +43,10 @@ import { chamarMesaVideos, chaveDosPedidos, fotoDaCenaNoAcervo, useHistorias, us
  * (ia_modelos), que nunca teve. Agora usa o mesmo catálogo de motores do
  * gerador livre (MOTORES_DE_VIDEO + video_motores + estado da chave no
  * servidor). Pedidos antigos preparados continuam na fila para cancelar.
+ *
+ * Frente V-C (26/09): Runway e Higgsfield aparecem na lista de motores
+ * (escolha manual); com a Higgsfield, a Câmera vira a lista de movimentos
+ * prontos dela. Modo novo "Avatar falando" (HeyGen).
  */
 
 interface Rascunho {
@@ -55,9 +62,11 @@ interface Rascunho {
   fala: string;
   trilha: string;
   efeitos: string;
+  /** Movimento pronto da Higgsfield (frente V-C); vazio = o equivalente do movimento da mesa. */
+  camera?: string;
 }
 
-const RASCUNHO_VAZIO: Rascunho = { origem: "", nivel: "normal", motor: "", duracao: 5, resolucao: "", movimento: "parada", formato: "9:16", audio: false, variacoes: 1, fala: "", trilha: "", efeitos: "" };
+const RASCUNHO_VAZIO: Rascunho = { origem: "", nivel: "normal", motor: "", duracao: 5, resolucao: "", movimento: "parada", formato: "9:16", audio: false, variacoes: 1, fala: "", trilha: "", efeitos: "", camera: "" };
 
 interface Origem {
   valor: string;
@@ -78,12 +87,12 @@ export function fotoUsavel(foto: Origem["foto"], clientId: string): string | nul
   return foto.storage_path.indexOf(`${clientId}/`) === 0 ? foto.storage_path : null;
 }
 
-/** Texto do que acontece na cena (vai no prompt do motor). */
-export function promptDaCena(o: Pick<Origem, "rotulo" | "descricao">, r: Pick<Rascunho, "movimento" | "fala" | "trilha" | "efeitos">): string {
+/** Texto do que acontece na cena (vai no prompt do motor). `semCamera`: o motor recebe a câmera pronta à parte (Higgsfield). */
+export function promptDaCena(o: Pick<Origem, "rotulo" | "descricao">, r: Pick<Rascunho, "movimento" | "fala" | "trilha" | "efeitos">, semCamera = false): string {
   const mov = MOVIMENTOS_DE_CAMERA.find((m) => m.valor === r.movimento);
   const partes = [
     o.descricao ? o.descricao : o.rotulo,
-    mov && mov.valor !== "parada" ? `Câmera: ${mov.rotulo.toLowerCase()}.` : "Câmera parada.",
+    semCamera ? "" : mov && mov.valor !== "parada" ? `Câmera: ${mov.rotulo.toLowerCase()}.` : "Câmera parada.",
     r.fala.trim() ? `Fala: "${r.fala.trim()}".` : "",
     r.trilha.trim() ? `Trilha: ${r.trilha.trim()}.` : "",
     r.efeitos.trim() ? `Efeitos: ${r.efeitos.trim()}.` : "",
@@ -203,6 +212,8 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
   const audio = !!(motor && motor.cap.audio && rc.audio);
   const custo = custoNaTela(motor, { duracao_s: duracao, resolucao, audio, variacoes: rc.variacoes });
   const estado = motor ? motores.lista.find((x) => x.motor.id === motor.id) || null : null;
+  // Motor com câmera pronta (Higgsfield): o movimento escolhido ou o equivalente do movimento da mesa.
+  const cameraPronta = motor && motor.cap.camera ? rc.camera || movimentoDaMesaNaHiggsfield(rc.movimento) || "" : "";
   const motivo = !origem
     ? "Escolha a cena."
     : !motor
@@ -223,13 +234,14 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
       client_id: clientId,
       motor: motor.id,
       modo: quadro ? "primeiro_quadro" : "texto",
-      prompt: promptDaCena(origem, rc),
+      prompt: promptDaCena(origem, rc, !!cameraPronta),
       duracao_s: duracao,
       formato: rc.formato,
       resolucao,
       audio,
       variacoes: rc.variacoes,
       quadro_inicial_path: quadro,
+      camera: cameraPronta || null,
       plano_ref: origem.ref,
       titulo: origem.rotulo.slice(0, 120),
       uid: novoUid(),
@@ -254,6 +266,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
             {modo === "angulo" && <FerramentaDeAngulo />}
             {modo === "continuar" && <ContinuarVideo />}
             {modo === "antes_depois" && <AntesEDepois />}
+            {modo === "avatar" && <AvatarFalando />}
           </Suspense>
         </Secao>
       ) : (
@@ -342,15 +355,19 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
                     ))}
                   </select>
                 </CampoDeFormulario>
-                <CampoDeFormulario rotulo="Câmera">
-                  <select className={campo} value={rc.movimento} onChange={(e) => mudar({ movimento: e.target.value })} aria-label="Movimento de câmera">
-                    {MOVIMENTOS_DE_CAMERA.map((m) => (
-                      <option key={m.valor} value={m.valor}>
-                        {m.rotulo}
-                      </option>
-                    ))}
-                  </select>
-                </CampoDeFormulario>
+                {motor && motor.cap.camera ? (
+                  <SeletorDeCamera rotulo="Câmera" valor={cameraPronta} onEscolher={(v) => mudar({ camera: v })} />
+                ) : (
+                  <CampoDeFormulario rotulo="Câmera">
+                    <select className={campo} value={rc.movimento} onChange={(e) => mudar({ movimento: e.target.value })} aria-label="Movimento de câmera">
+                      {MOVIMENTOS_DE_CAMERA.map((m) => (
+                        <option key={m.valor} value={m.valor}>
+                          {m.rotulo}
+                        </option>
+                      ))}
+                    </select>
+                  </CampoDeFormulario>
+                )}
                 <div className="min-w-0">
                   <p className={juntar(texto.rotulo, "mb-1.5")}>Formato</p>
                   <SeletorCompacto rotulo="Formato" larguraTotal opcoes={(motor ? motor.formatos : ["9:16", "16:9", "1:1"]).map((f) => ({ valor: f, rotulo: f }))} valor={rc.formato} onEscolher={(v) => mudar({ formato: v, motor: "" })} />

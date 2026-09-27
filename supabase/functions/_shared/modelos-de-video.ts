@@ -19,6 +19,13 @@
  * modelos do provedor. A lista documentada acima continua como estava (o
  * pedido preparado da frente E2 usa ela).
  *
+ * Frente V-C (26/09/2026): Runway (Gen-4.5 e Gen-4 Turbo), Higgsfield
+ * (Cinema Studio 4.0, com os movimentos de câmera prontos) e HeyGen (avatar
+ * falando: avatar de estoque ou a foto de um clone com autorização) saem de
+ * "a integrar" e ganham executor próprio (`video-provedor-*.ts`). Ficam como
+ * `escolha_manual`: aparecem na lista para a equipe escolher, mas nunca viram
+ * o motor sugerido sozinhos (o que já estava pronto continua igual).
+ *
  * Puro: sem Deno, sem banco. A tela, a função mesa-videos e os testes usam o mesmo.
  */
 
@@ -208,8 +215,8 @@ export function travaDePessoaReal(m: ModeloDeVideo | null, temPessoaReal: boolea
 // precisa do valor antes).
 // ====================================================================================
 
-export type FamiliaDoMotor = "video" | "angulo" | "imagem";
-export type ProvedorDoMotor = "fal" | "runway" | "higgsfield" | "painel";
+export type FamiliaDoMotor = "video" | "angulo" | "imagem" | "avatar";
+export type ProvedorDoMotor = "fal" | "runway" | "higgsfield" | "heygen" | "painel";
 export type NivelDoMotor = "normal" | "top" | "rapido";
 
 /** Jeito de montar o corpo do pedido (cada modelo chama os campos de um jeito). */
@@ -229,6 +236,10 @@ export type DialetoDoMotor =
   | "hunyuan"
   | "qwen_angulo"
   | "flux2_angulo"
+  | "runway"
+  | "higgsfield"
+  | "heygen_avatar"
+  | "heygen_foto"
   | "painel"
   | "nenhum";
 
@@ -242,6 +253,10 @@ export interface CapacidadesDoMotor {
   estender: boolean;
   audio: boolean;
   pessoa_real: boolean;
+  /** Movimentos de câmera prontos por parâmetro (Higgsfield). */
+  camera?: boolean;
+  /** Pessoa falando um roteiro (avatar ou foto que fala, HeyGen). */
+  avatar?: boolean;
 }
 
 export interface PrecoDoMotor {
@@ -274,7 +289,13 @@ export interface MotorDeVideo {
   provedor: ProvedorDoMotor;
   /** Segredo da função com a chave (só o nome; o valor nunca sai do servidor). */
   chave_env: string;
-  endpoints: { texto?: string; imagem?: string; ultimo?: string; referencia?: string; estender?: string; angulo?: string };
+  /** Segundo segredo quando o provedor pede par (Higgsfield: id e segredo da chave). */
+  segredo_env?: string;
+  /** Nome do modelo na API do provedor, quando vai no corpo (Runway: "gen4.5"). */
+  modelo?: string;
+  /** Só quando a equipe escolhe: nunca vira o motor sugerido de um nível ou papel. */
+  escolha_manual?: boolean;
+  endpoints: { texto?: string; imagem?: string; ultimo?: string; referencia?: string; estender?: string; angulo?: string; avatar?: string };
   dialeto: DialetoDoMotor;
   duracoes: number[] | { min: number; max: number };
   resolucoes: string[];
@@ -467,20 +488,46 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     preco: { por_segundo: { "480p": 0.075 }, fonte: F("fal-ai/hunyuan-video-v1.5/image-to-video"), conferido_em: HOJE, incerto: true },
     papeis: ["barato"], prazo_min: 20, nota: "Pesos abertos, 480p.",
   },
-  // ------------------------------------------------------------------ fora do fal (a integrar) e encerrados
+  // ------------------------------------------------------------------ fora do fal (frente V-C: executor próprio, escolha manual)
+  // Runway: api.dev.runwayml.com, versão 2024-11-06; 1 crédito = US$ 0,01 (docs/video/PESQUISA-GERADOR.md, seção 9).
   {
-    id: "runway-gen4.5", rotulo: "Runway Gen-4.5", familia: "video", linha: "runway", versao: "4.5", principal: true, provedor: "runway", chave_env: "RUNWAYML_API_SECRET",
-    endpoints: {}, dialeto: "nenhum", duracoes: faixa(2, 10), resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: TODOS,
-    cap: cap({ texto: true, primeiro_quadro: true, referencias: 3, pessoa_real: true }),
+    id: "runway-gen4.5", rotulo: "Runway Gen-4.5", familia: "video", linha: "runway", versao: "4.5", principal: true, provedor: "runway", chave_env: "RUNWAYML_API_SECRET", modelo: "gen4.5", escolha_manual: true,
+    endpoints: { texto: "text_to_video", imagem: "image_to_video" }, dialeto: "runway", duracoes: faixa(2, 10), resolucoes: ["720p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, pessoa_real: true }),
     preco: { por_segundo: { padrao: 0.12 }, fonte: "https://docs.dev.runwayml.com/guides/pricing/", conferido_em: HOJE },
-    papeis: ["hero"], prazo_min: 30, nota: "Só pela API da Runway (não está no fal). Precisa de conta e chave da Runway.", situacao: "a_integrar", documentado: "runway-gen4",
+    papeis: ["hero", "movimento"], prazo_min: 30, nota: "API da Runway: 12 créditos por segundo (US$ 0,01 cada). Só o primeiro quadro; pelo texto só 9:16 ou 16:9. Sem áudio. Se a moderação recusar, a Runway cobra a tentativa da conta da agência (o cliente não paga).", documentado: "runway-gen4",
   },
   {
-    id: "higgsfield", rotulo: "Higgsfield", familia: "video", linha: "higgsfield", versao: "1", principal: true, provedor: "higgsfield", chave_env: "HIGGSFIELD_API_KEY",
-    endpoints: {}, dialeto: "nenhum", duracoes: faixa(3, 10), resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: TODOS,
-    cap: cap({ primeiro_quadro: true, ultimo_quadro: true }),
-    preco: null, papeis: ["movimento"], prazo_min: 30, nota: "API própria com mais de 50 modelos; presets de câmera pela API não confirmados. Os mesmos modelos já estão no fal.", situacao: "a_integrar",
+    id: "runway-gen4-turbo", rotulo: "Runway Gen-4 Turbo (rascunho)", familia: "video", linha: "runway", versao: "4", principal: false, rapido: true, provedor: "runway", chave_env: "RUNWAYML_API_SECRET", modelo: "gen4_turbo", escolha_manual: true,
+    endpoints: { imagem: "image_to_video" }, dialeto: "runway", duracoes: faixa(2, 10), resolucoes: ["720p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ primeiro_quadro: true, pessoa_real: true }),
+    preco: { por_segundo: { padrao: 0.05 }, fonte: "https://docs.dev.runwayml.com/guides/pricing/", conferido_em: HOJE },
+    papeis: ["rascunho", "barato"], prazo_min: 20, nota: "O mais rápido e barato da Runway (5 créditos por segundo). Só a partir de uma imagem, sem áudio.",
   },
+  // Higgsfield: api.higgsfield.ai, chave em par (id e segredo); movimentos de câmera do Cinema Studio 4.0.
+  {
+    id: "higgsfield-cinema-4", rotulo: "Higgsfield Cinema Studio 4.0", familia: "video", linha: "higgsfield", versao: "4.0", principal: true, provedor: "higgsfield", chave_env: "HIGGSFIELD_API_KEY", segredo_env: "HIGGSFIELD_API_SECRET", escolha_manual: true,
+    endpoints: { texto: "higgsfield/cinema-studio/4.0", imagem: "higgsfield/cinema-studio/4.0", referencia: "higgsfield/cinema-studio/4.0" }, dialeto: "higgsfield", duracoes: faixa(4, 15), resolucoes: ["480p", "720p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, referencias: 4, audio: true, camera: true }),
+    preco: { por_segundo: { padrao: 0.2057 }, fonte: "https://console.higgsfield.ai/explore", conferido_em: HOJE, incerto: true },
+    papeis: ["movimento", "hero"], prazo_min: 30, nota: "33 movimentos de câmera prontos (dolly, grua, órbita de drone, bullet time). A imagem entra como referência, não como quadro exato. Preço promocional do console: conferir no primeiro uso.",
+  },
+  // HeyGen: api.heygen.com/v3 (v1 e v2 saem do ar em 31/10/2026). Avatar IV cobra por segundo do vídeo pronto.
+  {
+    id: "heygen-avatar-iv", rotulo: "HeyGen avatar de estoque", familia: "avatar", linha: "heygen", versao: "iv", principal: true, provedor: "heygen", chave_env: "HEYGEN_API_KEY", escolha_manual: true,
+    endpoints: { avatar: "v3/videos" }, dialeto: "heygen_avatar", duracoes: faixa(3, 300), resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: TODOS,
+    cap: cap({ texto: true, audio: true, avatar: true }),
+    preco: { por_segundo: { "720p": 0.0667, "1080p": 0.0667 }, fonte: "https://developers.heygen.com/docs/enterprise-pricing", conferido_em: HOJE, incerto: true },
+    papeis: ["fala"], prazo_min: 30, nota: "Roteiro vira um avatar de estoque falando, motor Avatar IV. Cobra pela duração real (até o valor confirmado). Preço do plano sem contrato conferido só em fonte de terceiro.",
+  },
+  {
+    id: "heygen-foto", rotulo: "HeyGen foto falando (clone)", familia: "avatar", linha: "heygen", versao: "iv", principal: false, provedor: "heygen", chave_env: "HEYGEN_API_KEY", escolha_manual: true,
+    endpoints: { avatar: "v3/videos" }, dialeto: "heygen_foto", duracoes: faixa(3, 300), resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, audio: true, avatar: true, pessoa_real: true }),
+    preco: { por_segundo: { "720p": 0.05, "1080p": 0.05 }, fonte: "https://developers.heygen.com/docs/enterprise-pricing", conferido_em: HOJE, incerto: true },
+    papeis: ["fala"], prazo_min: 30, nota: "A foto principal de um clone vira a pessoa falando o roteiro (Avatar IV). Só com a autorização de imagem válida do clone, a mesma da Mesa Foto.",
+  },
+  // ------------------------------------------------------------------ encerrados
   {
     id: "sora-2", rotulo: "Sora 2", familia: "video", linha: "sora", versao: "2", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: {}, dialeto: "nenhum", duracoes: [4, 8, 12], resolucoes: ["720p"], resolucao_padrao: "720p", formatos: ["9:16", "16:9"],
@@ -586,14 +633,32 @@ export const ROTULO_DO_ESTADO_DO_MOTOR: Record<EstadoDoMotor, string> = {
   sem_preco: "Sem preço conferido",
 };
 
+/** Nomes dos segredos que o motor pede e que não existem (nunca o valor). */
+export function chavesQueFaltam(m: MotorDeVideo, temChave: (nome: string) => boolean): string[] {
+  if (m.provedor === "painel") return [];
+  return [m.chave_env, m.segredo_env || ""].filter((n) => !!n && !temChave(n));
+}
+
 /** Estado do motor: a função só sabe se a chave EXISTE (nunca o valor). */
 export function estadoDoMotor(m: MotorDeVideo, e: { temChave: (nome: string) => boolean; desligados?: string[] }): EstadoDoMotor {
   if (m.situacao === "encerrado") return "encerrado";
   if (m.situacao === "a_integrar") return "a_integrar";
   if ((e.desligados || []).indexOf(m.id) >= 0) return "desligado";
-  if (m.provedor !== "painel" && !e.temChave(m.chave_env)) return "precisa_chave";
+  if (m.provedor !== "painel" && (!m.chave_env || chavesQueFaltam(m, e.temChave).length)) return "precisa_chave";
   if (m.provedor !== "painel" && !m.preco) return "sem_preco";
   return "pronto";
+}
+
+/**
+ * Valor cobrado de UMA variação pronta. Regra geral: o valor por variação
+ * confirmado. Avatar (HeyGen) cobra pela duração real do vídeo: a tabela
+ * vezes os segundos reais, nunca mais que o confirmado.
+ */
+export function custoDaVariacaoPronta(m: MotorDeVideo | null, porVariacao: number, duracaoReal: number | null | undefined, resolucao?: string | null): number {
+  const teto = Math.max(0, Number(porVariacao) || 0);
+  if (!m || m.familia !== "avatar" || typeof duracaoReal !== "number" || !isFinite(duracaoReal) || duracaoReal <= 0) return teto;
+  const c = custoDoMotor(m, { duracao_s: Math.ceil(duracaoReal), resolucao: resolucao || null });
+  return c.usd === null ? teto : Math.min(teto, c.usd);
 }
 
 // ------------------------------------------------------------------ níveis
@@ -631,7 +696,7 @@ export const ROTULO_DO_NIVEL: Record<NivelDoMotor, string> = { normal: "Normal",
 export const ORDEM_DAS_LINHAS_TOP = ["seedance", "veo", "kling", "minimax-h3", "wan", "flux3", "gemini-omni", "happyhorse", "grok", "ltx", "pixverse", "hailuo", "hunyuan", "qwen-angulos", "flux2-angulos", "painel"];
 
 export interface RequisitoDoPedido {
-  modo: "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "imagem" | "angulo";
+  modo: "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "imagem" | "angulo" | "avatar";
   audio?: boolean;
   pessoa_real?: boolean;
   referencias?: number;
@@ -642,6 +707,7 @@ export interface RequisitoDoPedido {
 export function atende(m: MotorDeVideo, r: RequisitoDoPedido): boolean {
   if (r.modo === "angulo") return m.familia === "angulo";
   if (r.modo === "imagem") return m.familia === "imagem";
+  if (r.modo === "avatar") return m.familia === "avatar" && (!r.formato || m.formatos.indexOf(r.formato) >= 0) && (!r.pessoa_real || m.cap.pessoa_real);
   if (m.familia !== "video") return false;
   const c = m.cap;
   if (r.modo === "texto" && !c.texto) return false;
@@ -667,7 +733,8 @@ const precoDeComparacao = (m: MotorDeVideo) => {
  * rascunhos); Rápido = o rascunho mais barato que atende.
  */
 export function motorDoNivel(nivel: NivelDoMotor, r: RequisitoDoPedido, motores: MotorDeVideo[] = MOTORES_DE_VIDEO, prontos?: string[]): MotorDeVideo | null {
-  const ok = motores.filter((m) => usavel(m) && atende(m, r) && (!prontos || prontos.indexOf(m.id) >= 0));
+  // Motor de escolha manual (Runway, Higgsfield, HeyGen) nunca vira a sugestão sozinho.
+  const ok = motores.filter((m) => usavel(m) && !m.escolha_manual && atende(m, r) && (!prontos || prontos.indexOf(m.id) >= 0));
   if (nivel === "top") {
     const tops = ok.filter((m) => nivelDoMotor(m, motores) === "top");
     const ordenados = tops.slice().sort((a, b) => {

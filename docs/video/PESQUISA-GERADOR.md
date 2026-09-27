@@ -52,8 +52,10 @@ diverge (no catálogo fica `incerto: true` e a tela mostra "~").
 | PixVerse C1 | texto, imagem | 720p 0,05 · 0,065 com áudio (C) | 1 a 15 s | sim / ? | não | ? | opcional |
 | LTX-2.3 Pro / Fast | texto, imagem, extensão | 1080p 0,06 / Fast 0,04 (C); extensão 0,10 | 6 a 20 s (pares) | sim / sim | não | sim | sim |
 | Hunyuan 1.5 | texto, imagem | ~0,075 (T) | ~5 s, 480p | sim / não | não | não | não |
-| Runway Gen-4.5 | só API da Runway | 0,12 (C, créditos a US$ 0,01) | 2 a 10 s | sim / só primeiro | referências Gen-4 | ? | ? |
-| Higgsfield | API própria | varia por modelo (T) | | | | | |
+| Runway Gen-4.5 | API da Runway (seção 9.1, executor próprio) | 0,12 (C, créditos a US$ 0,01) | 2 a 10 s | sim / só primeiro | não | não | não |
+| Runway Gen-4 Turbo | API da Runway (seção 9.1) | 0,05 (C) | 2 a 10 s | só primeiro | não | não | não |
+| Higgsfield Cinema Studio 4.0 | API da Higgsfield (seção 9.2, executor próprio) | ~0,2057 (promocional) | 4 a 30 s | imagem como referência | até 30 | não | sim |
+| HeyGen Avatar IV | API da HeyGen (seção 9.3): roteiro vira pessoa falando | ~0,05 foto / ~0,0667 estoque | pela fala | foto ou avatar | não | não | voz |
 | Sora 2 | **encerrado** | | | | | | |
 
 Fontes principais: páginas `https://fal.ai/models/<endpoint>` de cada linha acima (link em cada
@@ -76,8 +78,9 @@ Veo, do H3 Max e do FLUX 3 (o catálogo usa o preço por segundo do próprio mot
 | Nano Banana 2 edit, Seedream 5 edit | edição pelo texto | ~0,07 a 0,08 por imagem (T) | sem parâmetro de câmera |
 | H3 Max Camera Controls | `minimax/h3-max/camera-controls` | ? | vídeo com a câmera em quadros-chave e o mundo parado; dá para tirar o último quadro como foto |
 
-Kling e Higgsfield não expõem controle de câmera por parâmetro na API (só pelo texto do prompt,
-e os presets da Higgsfield pela API não foram confirmados).
+Kling não expõe controle de câmera por parâmetro na API (só pelo texto do prompt). A Higgsfield
+expõe, no Cinema Studio 4.0, 33 movimentos prontos por parâmetro (`camera_movement`, seção 9.2):
+a ferramenta Ângulo usa esses movimentos quando a Higgsfield é escolhida (vídeo, não imagem).
 [Qwen 2511 no fal](https://fal.ai/models/fal-ai/qwen-image-edit-2511-multiple-angles/api) ·
 [LoRA aberta](https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA)
 
@@ -171,3 +174,159 @@ Valores de 26/09/2026, sem áudio (com fala no Veo, o plano dobra):
 O que mais pesa é o Seedance 2.5 no papel "hero" e "consistência" (US$ 0,47/s em 720p). Trocar o
 nível do plano para Normal (Wan 3.0 a 0,10/s, Kling O3 a 0,084/s) corta o custo em 3 a 5 vezes;
 o rascunho no nível Rápido custa centavos.
+
+## 9. Runway, Higgsfield e HeyGen (frente V-C, 26/09/2026)
+
+Pedido do dono: "vamos integrar o Higgsfield e o Runway, e o HeyGen também". Conferido nas docs
+oficiais em 26/09/2026, sem chamada paga. Resumo próprio; os números estão no catálogo em código
+com fonte e data. Os três ficam como **escolha manual**: aparecem nas listas de motor, mas nunca
+viram a sugestão automática de um nível ou papel (o que já estava pronto no fal continua igual).
+
+### 9.1 Runway (API de desenvolvedor)
+
+- **Acesso**: `https://api.dev.runwayml.com/v1/...`, cabeçalhos `Authorization: Bearer <chave>` e
+  `X-Runway-Version: 2024-11-06` (obrigatório). Segredo na função: **`RUNWAYML_API_SECRET`** (o nome
+  que o SDK oficial lê). A chave sai do portal de desenvolvedor (dev.runwayml.com), que é conta
+  separada do app da Runway. Primeira compra mínima de US$ 10 em créditos.
+- **Modelos de vídeo hoje**: `gen4.5` (texto e imagem, 2 a 10 s, só o primeiro quadro, sem áudio),
+  `gen4_turbo` (só imagem, 2 a 10 s), `veo3.1` e `veo3.1_fast` (primeiro e último quadro, áudio),
+  `aleph2` (vídeo para vídeo: edita um vídeo de 2 a 30 s com texto e quadros-chave), `act_two`
+  (atuação: um vídeo de referência move o personagem de uma imagem), `seedance2`, `seedance2_5` e
+  outros de terceiros. `gen4_aleph` e `gen3a_turbo` saíram em 30/07/2026.
+- **Proporções** (largura:altura): imagem para vídeo `720:1280`, `1280:720`, `960:960`, `832:1104`,
+  `1104:832`, `1584:672`; o texto para vídeo do Gen-4.5 só `720:1280` e `1280:720`.
+- **Preço**: 1 crédito = US$ 0,01. Gen-4.5 12 créditos/s (US$ 0,12/s), Gen-4 Turbo 5/s, Act-Two
+  5/s, Veo 3.1 20/s sem áudio e 40/s com, Aleph 2 28/s (mínimo 56 por geração), Seedance 2.5 de
+  20 a 68/s conforme a resolução.
+- **Tarefa**: o envio devolve `{ id }`; `GET /v1/tasks/{id}` diz `PENDING`, `THROTTLED` (na fila da
+  conta), `RUNNING` (com `progress`), `SUCCEEDED` (`output[]`), `FAILED` (`failureCode`) ou
+  `CANCELLED`; `DELETE /v1/tasks/{id}` cancela (ou apaga a que já terminou). Consulta no máximo a
+  cada 5 s (a mesa usa 15 s). O link do vídeo vence em 24 a 48 h: a mesa busca a tarefa de novo e
+  guarda no Storage na hora.
+- **Entrada**: URL HTTPS com resposta a HEAD, `Content-Type` e `Content-Length` certos, sem
+  redirecionamento, em até 10 s; imagem até 16 MB por URL (5 MB por data URI), JPEG, PNG ou WebP,
+  proporção entre 0,5 e 2. A mesa manda o link assinado do Storage (uma hora).
+- **Erros**: 400 com `issues`, 401, 429 (limite de gerações ao mesmo tempo ou do dia), 5xx.
+  Falta de crédito não tem código documentado (a mesa reconhece 402, 412 ou "credit" no texto).
+  Falha de moderação (`SAFETY.*`) **é cobrada pela Runway** e não é reembolsada; o cliente não paga
+  (a carteira só cobra vídeo pronto). Tier 1 da conta: 1 geração por vez e 50 por dia.
+- Fontes: [OpenAPI](https://docs.dev.runwayml.com/openapi.json),
+  [modelos](https://docs.dev.runwayml.com/guides/models/),
+  [preços](https://docs.dev.runwayml.com/guides/pricing/),
+  [entradas](https://docs.dev.runwayml.com/assets/inputs/),
+  [saídas](https://docs.dev.runwayml.com/assets/outputs/),
+  [falhas](https://docs.dev.runwayml.com/errors/task-failures/),
+  [limites por tier](https://docs.dev.runwayml.com/usage/tiers/),
+  [mudanças](https://docs.dev.runwayml.com/api-details/api_changelog/).
+
+### 9.2 Higgsfield
+
+- **Acesso**: API atual em `https://api.higgsfield.ai` (por `request_id`), cabeçalho
+  `Authorization: Key <id da chave>:<segredo da chave>`: a chave é um **par**. Segredos na função:
+  **`HIGGSFIELD_API_KEY`** (o id) e **`HIGGSFIELD_API_SECRET`** (o segredo). Nas docs os exemplos
+  usam `HF_API_KEY_ID` e `HF_API_KEY_SECRET`, e o SDK Python lê `HF_API_KEY` e `HF_API_SECRET`: na
+  mesa valem os dois nomes acima. O par sai do console (console.higgsfield.ai).
+- **Câmera**: o DoP com a lista `/v1/motions` (ids por conta) ficou só na API v1 antiga. Na API
+  atual o controle de câmera por parâmetro é o **Cinema Studio 4.0**
+  (`POST /higgsfield/cinema-studio/4.0`): `camera_movement` com 33 movimentos (dolly in e out,
+  dolly zoom, zoom brusco, grua, tilt, pedestal, pan, whip pan, arco, lateral, slider, tracking,
+  órbita de drone, afastar pelo alto, helicóptero, bullet time, snorricam, braço robótico, troca de
+  foco, POV, na mão, parada), duração de 4 a 30 s, 480p ou 720p, proporções 16:9, 4:3, 1:1, 3:4,
+  9:16 e 21:9, áudio ligado por padrão e `image_urls` (até 30) como **referência**, não como quadro
+  exato.
+- **Soul** (imagem, `POST /higgsfield-ai/soul/standard`, com personagem treinado pelo Soul ID) e
+  **Speak/lipsync** (só na v1 antiga) não entram agora.
+- **Assíncrono**: o envio devolve `{ status: "queued", request_id, status_url, cancel_url }`;
+  `GET /requests/{id}/status` diz `queued`, `in_progress`, `completed` (`video.url`), `failed`,
+  `nsfw` ou `canceled`; `POST /requests/{id}/cancel` só cancela na fila (202; 400 quando já começou).
+  Há webhook (`?hf_webhook=`), não usado (a mesa consulta quando a tela pede). Saída guardada por 7 dias.
+- **Preço**: cerca de US$ 0,0625 por crédito; Cinema Studio 4.0 a US$ 0,2057/s no console
+  (preço promocional, muda). Falha e `nsfw` não são cobrados. Existe `POST /estimate/{modelo}` que
+  devolve créditos e dólares (não usado; o catálogo marca o preço como estimado, "~").
+- **Erros**: 400 (e "concurrent": no máximo 4 pedidos ao mesmo tempo), 401, **403 = sem crédito**,
+  404, 422, 423 (modelo bloqueado por um tempo), 503. Não há 402, 429 nem chave de idempotência:
+  reenviar depois de um prazo vencido pode cobrar duas vezes (a mesa nunca reenvia sozinha).
+- Fontes: [autenticação](https://docs.higgsfield.ai/docs/authentication),
+  [pedidos](https://docs.higgsfield.ai/docs/concepts/requests),
+  [Cinema Studio 4.0](https://docs.higgsfield.ai/docs/models/cinema-studio-4/generate),
+  [modelos](https://docs.higgsfield.ai/docs/models),
+  [cobrança](https://docs.higgsfield.ai/docs/concepts/billing-and-retention),
+  [erros](https://docs.higgsfield.ai/docs/concepts/errors),
+  [console](https://console.higgsfield.ai/explore),
+  [SDK v1 antigo](https://github.com/higgsfield-ai/higgsfield-js).
+
+### 9.3 HeyGen (avatar falando)
+
+- **Versão**: usar a **v3**. A v1 e a v2 saem do ar em 31/10/2026.
+- **Acesso**: `https://api.heygen.com`, cabeçalho `X-Api-Key`. Segredo na função:
+  **`HEYGEN_API_KEY`** (o mesmo nome das docs). A chave sai de app.heygen.com, em Settings, API.
+  Escopos: `videos:write`, `videos:read`, `avatars:read` e `voices:read`.
+- **Gerar**: `POST /v3/videos` com `type: "avatar"` (`avatar_id` = id do "look", `script`,
+  `voice_id`, `voice_settings { speed, locale }`, `engine { type: "avatar_iv" }`) ou
+  `type: "image"` (uma foto por URL vira a pessoa falando, sem criar avatar). `resolution` 720p ou
+  1080p (4K suspenso), `aspect_ratio` 9:16, 16:9, 1:1, 4:5 ou 5:4, `caption { file_format: "srt",
+  style }` grava a legenda no vídeo (o `.srt` volta sempre). Aceita `Idempotency-Key`. Não há modo de
+  teste: toda chamada gasta.
+- **Listas grátis**: `GET /v3/avatars/looks?avatar_type=studio_avatar&ownership=public` e
+  `GET /v3/voices?type=public&language=Portuguese` (o filtro por `pt-BR` não está confirmado: a mesa
+  lista português e põe as vozes do Brasil primeiro).
+- **Status**: `GET /v3/videos/{id}` diz `pending`, `processing`, `completed` ou `failed` (e
+  `waiting` logo depois do envio), com `video_url`, `captioned_video_url`, `thumbnail_url`,
+  `duration`, `failure_code` e `failure_message`. Os links são assinados e vencem: a mesa guarda no
+  Storage. **Sem cancelar** pela API (`DELETE /v3/videos/{id}` apaga e a doc não diz se para a geração).
+- **Preço**: pagamento por uso em dólar (mínimo US$ 5, créditos valem 12 meses, 10 vídeos ao mesmo
+  tempo, sem crédito grátis desde fevereiro de 2026). Tabela oficial (Enterprise, 1 crédito =
+  US$ 0,50): Avatar IV 0,1 crédito/s = **US$ 0,05/s (cerca de US$ 3 por minuto)**. Fonte de terceiro
+  para o plano sem contrato: foto que fala US$ 0,05/s; avatar de estoque ou gêmeo digital
+  US$ 0,0667/s em 1080p. O catálogo usa 0,05 (foto) e 0,0667 (estoque), marcados "~", e **cobra pela
+  duração real do vídeo, nunca mais que o valor confirmado**.
+- **Limites**: roteiro até 5.000 letras por cena (a mesa limita a 3.000 para o custo caber na
+  confirmação), 25 quadros por segundo.
+- **Pessoa real**: gêmeo digital pede consentimento gravado pela própria API
+  (`POST /v3/avatars/{grupo}/consent`); a foto que fala não tem esse passo, mas a política da HeyGen
+  exige o consentimento explícito da pessoa retratada e ela pode pedir a remoção a qualquer momento.
+  Na mesa, **a foto só vem de um clone da Mesa Foto com a autorização de imagem válida** (confirmada,
+  sem revogação, dentro da validade, pessoa adulta e ciente de que é IA) e com a confirmação, no
+  clique, de que a autorização cobre vídeo com voz gerada por IA. Sem isso: bloqueado com o motivo.
+- **Erros** (`{ error: { code, message } }`): 401 `unauthorized`; 402 `insufficient_credit`; 403
+  escopo da chave; 400 `content_policy_violation`, `avatar_not_usable`, `voice_unavailable`,
+  `download_failed`; 409 pedido igual em andamento; 429 `rate_limit_exceeded`.
+- Fontes: [criar vídeo](https://developers.heygen.com/reference/create-video),
+  [status](https://developers.heygen.com/reference/get-video),
+  [foto para vídeo](https://developers.heygen.com/image-to-video),
+  [looks](https://developers.heygen.com/reference/list-avatar-looks),
+  [vozes](https://developers.heygen.com/reference/list-voices),
+  [chave](https://developers.heygen.com/docs/api-key),
+  [erros](https://developers.heygen.com/docs/error-codes),
+  [limites](https://developers.heygen.com/docs/usage-limits),
+  [preço Enterprise](https://developers.heygen.com/docs/enterprise-pricing),
+  [preço da API](https://help.heygen.com/en/articles/10060327-heygen-api-pricing-explained),
+  [consentimento](https://developers.heygen.com/docs/avatar-consent),
+  [política](https://www.heygen.com/moderation-policy),
+  [mudanças](https://developers.heygen.com/changelog).
+
+### 9.4 Como ficou na mesa
+
+| Motor (id) | Onde aparece | Preço | Capacidades |
+|---|---|---|---|
+| Runway Gen-4.5 (`runway-gen4.5`, Top da linha) | Cena do roteiro, Livre, Continuar (pelo último quadro), plano do roteiro | US$ 0,12/s | texto (9:16 e 16:9) e primeiro quadro; 2 a 10 s; sem áudio |
+| Runway Gen-4 Turbo (`runway-gen4-turbo`, Rápido) | os mesmos, a partir de imagem | US$ 0,05/s | primeiro quadro; 2 a 10 s |
+| Higgsfield Cinema Studio 4.0 (`higgsfield-cinema-4`) | Cena do roteiro e Livre (com a câmera pronta), Continuar, e a ferramenta Ângulo vira "câmera em vídeo" quando escolhida | ~US$ 0,2057/s | texto, imagem de referência, 33 movimentos, áudio; 4 a 15 s na mesa |
+| HeyGen avatar de estoque (`heygen-avatar-iv`) | Gerar, modo "Avatar falando"; Kit UGC ("Avatar falando") | ~US$ 0,0667/s | roteiro, voz em português, legenda, 4 formatos |
+| HeyGen foto falando (`heygen-foto`) | o mesmo modo, com um clone autorizado | ~US$ 0,05/s | pessoa real com autorização |
+
+Transição (primeiro e último quadro) não aparece para eles: nenhum dos cinco aceita o último quadro
+pela API usada aqui.
+
+### 9.5 Riscos e pontos em aberto
+
+- Preço da Higgsfield é promocional e o da HeyGen sem contrato vem de fonte de terceiro: conferir
+  na primeira geração de teste (o custo real aparece na conta do provedor).
+- A Runway cobra a tentativa recusada pela moderação e a Higgsfield não tem idempotência: nada
+  aqui reenvia sozinho, mas a conta da agência pode pagar uma recusa sem cobrar do cliente.
+- Na Higgsfield a imagem é referência, não quadro exato: para continuidade rígida, o Gen-4.5 ou os
+  motores do fal com primeiro quadro seguram melhor.
+- HeyGen: vídeo de pessoa real falando com voz sintética é o caso mais sensível. A autorização do
+  clone precisa citar vídeo e voz por IA na finalidade; a HeyGen pode derrubar o vídeo se a pessoa
+  pedir. v1 e v2 saem do ar em 31/10/2026 (a mesa já usa a v3).
+- Sem chave: os cinco aparecem como "Precisa de chave" com o nome do segredo que falta.

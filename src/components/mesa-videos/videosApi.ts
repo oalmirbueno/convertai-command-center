@@ -374,9 +374,17 @@ export function invalidarMesaDeVideos(queryClient: QueryClient, clientId: string
 
 // ------------------------------------------------------------------ função mesa-videos
 
-async function erroDaChamada(error: any): Promise<ErroDaMesa> {
+/**
+ * Erro da função mesa-videos para a tela. Frente V-C (pedido da AB): queda
+ * no meio (resposta com fôlego cortada, 546 de CPU ou memória, 504 de tempo)
+ * vira `funcao_interrompida`, como em src/lib/mesa/api.ts, e não mais
+ * "ainda não foi publicada". Função ausente (404) ou rede antes de responder
+ * continuam `funcao_indisponivel`.
+ */
+export async function erroDaChamada(error: any): Promise<ErroDaMesa> {
   const ctx = error && error.context;
   let corpo: Record<string, unknown> | null = null;
+  const status = ctx && typeof ctx.status === "number" ? ctx.status : 0;
   try {
     if (ctx && typeof ctx.clone === "function") corpo = await ctx.clone().json();
     else if (ctx && typeof ctx.json === "function") corpo = await ctx.json();
@@ -387,11 +395,20 @@ async function erroDaChamada(error: any): Promise<ErroDaMesa> {
     const codigo = String(corpo.error);
     return new ErroDaMesa(codigo, typeof corpo.mensagem === "string" ? corpo.mensagem : mensagemDoCodigo(codigo, corpo), corpo);
   }
-  const status = ctx && typeof ctx.status === "number" ? ctx.status : 0;
-  if (status === 404 || /Failed to send|not found|FunctionsFetchError/i.test(String((error && error.message) || ""))) {
-    return new ErroDaMesa("funcao_indisponivel", "A função da Mesa Vídeos ainda não foi publicada. Peça a publicação da função mesa-videos.");
+  const nome = String((error && error.name) || "");
+  const mensagem = String((error && error.message) || "");
+  // Sem corpo: função não publicada (404) ou relé e rede antes de responder.
+  if (status === 404 || nome === "FunctionsFetchError" || nome === "FunctionsRelayError" || /Failed to send|FunctionsFetchError/i.test(mensagem)) {
+    return new ErroDaMesa("funcao_indisponivel", "A função da Mesa Vídeos não respondeu: pode estar sendo publicada agora. Tente de novo em instantes; se continuar, peça a publicação da função mesa-videos.");
   }
-  return new ErroDaMesa("erro_desconhecido", String((error && error.message) || "Não foi possível concluir. Tente de novo."));
+  // Começou e parou no meio: resposta cortada (sem contexto) ou limite do servidor antes de responder.
+  const limite = status === 546 || status === 504 || (corpo !== null && corpo.code === "WORKER_LIMIT");
+  if (!ctx || limite) {
+    const detalhes = { funcao: "mesa-videos", causa: nome || "desconhecida", status_http: status || null, codigo_do_servidor: corpo && typeof corpo.code === "string" ? corpo.code : null };
+    console.warn("[mesa-videos] funcao_interrompida", detalhes);
+    return new ErroDaMesa("funcao_interrompida", mensagemDoCodigo("funcao_interrompida"), detalhes);
+  }
+  return new ErroDaMesa("erro_desconhecido", mensagem || "Não foi possível concluir. Tente de novo.");
 }
 
 export async function chamarMesaVideos<T = any>(corpo: Record<string, unknown>): Promise<T> {

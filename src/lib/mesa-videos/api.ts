@@ -15,6 +15,7 @@ import {
   nivelDoMotor,
 } from "../../../supabase/functions/_shared/modelos-de-video";
 import { normalizarProjetoDoDiretor, projetoVazio, type ProjetoDoDiretor, type TemplateDeVideo } from "../../../supabase/functions/_shared/diretor-de-video";
+import type { AvatarDaHeygen, VozDaHeygen } from "../../../supabase/functions/_shared/video-provedor-heygen";
 
 /**
  * Leituras e estado do gerador da Mesa Vídeos (frente V-A, 26/09/2026).
@@ -197,6 +198,27 @@ export function useProjetosSalvos(clientId: string) {
       }
       return { itens: ((data || []) as unknown[]).map((x) => normalizarProjetoDoDiretor(x)).filter((x): x is ProjetoDoDiretor => !!x), disponivel: true };
     },
+  });
+}
+
+// ------------------------------------------------------------------ HeyGen: avatares de estoque e vozes (frente V-C)
+
+export type { AvatarDaHeygen, VozDaHeygen };
+
+/**
+ * Lista da HeyGen (grátis): avatares de estoque ou vozes em português. Lê uma
+ * vez por hora e nunca repete sozinha; sem a chave, o erro traz o nome do
+ * segredo que falta (motor_precisa_chave).
+ */
+export function useCatalogoDaHeygen<T extends "avatares" | "vozes">(tipo: T, ligado: boolean) {
+  return useQuery({
+    queryKey: ["mesa-videos", "heygen", tipo],
+    enabled: ligado,
+    staleTime: 60 * 60_000,
+    gcTime: 2 * 60 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+    queryFn: () => chamarMesaVideos<{ itens: T extends "vozes" ? VozDaHeygen[] : AvatarDaHeygen[]; proximo: string | null }>({ acao: "heygen_catalogo", tipo }),
   });
 }
 

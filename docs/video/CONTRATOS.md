@@ -30,10 +30,26 @@ Código: `supabase/functions/mesa-videos/geracao.ts` e `diretor.ts`; regras pura
   provedor; sem tamanho, o corpo do provedor vai transmitido direto para o Storage
   (`duplex: "half"`). Link do provedor vencido vira erro registrado ("Baixar de novo" pede outra vez).
   Miniatura própria `<caminho>.mini.jpg` (nunca transformação do Storage): imagem reduzida no
-  servidor; vídeo com quadro inicial usa o quadro; vídeo sem quadro ganha a miniatura no navegador
-  (primeiro quadro) quando os Resultados abrem.
+  servidor; vídeo com miniatura pronta do provedor (HeyGen) usa ela; vídeo com quadro inicial usa a
+  **cópia leve** do quadro (640 px, `.mini.jpg` ou `.media.jpg`, pedida à função `copias-leves`
+  quando falta), lida uma vez por consulta do pedido e nunca o original grande aberto na função;
+  vídeo sem nada disso ganha a miniatura no navegador (primeiro quadro) quando os Resultados abrem.
+- **Leitura leve (frente V-C, pedido da AB).** `diretor_avaliar` lê a miniatura própria do vídeo
+  (nunca baixa o vídeo) e a cópia leve da imagem; `antes_depois_imagem` manda ao modelo a cópia de
+  até 2048 px e, sem cópia, o original só até 8 MB (`413 foto_grande_demais` acima). Regras puras em
+  `_shared/video-armazenar.ts` (`leituraParaAVisao`, `LEITURA_DA_MINIATURA_DO_QUADRO`,
+  `fotoParaEditar`).
+- **Queda da função.** Na tela, resposta cortada no meio, 546 (CPU ou memória) e 504 (tempo) viram
+  `funcao_interrompida` ("A função parou no meio..."); 404 e rede antes de responder continuam
+  `funcao_indisponivel` (`src/components/mesa-videos/videosApi.ts`, `erroDaChamada`).
 - **Motor sem chave.** `409 motor_precisa_chave` (a tela mostra "Precisa de chave" e o nome do
-  segredo, nunca o valor). Motor fora do fal: `409 motor_a_integrar`. Sora: `motor_encerrado`.
+  segredo, nunca o valor; no par da Higgsfield, `chave` traz os nomes que faltam). Provedor sem
+  executor: `409 motor_a_integrar`. Sora: `motor_encerrado`.
+- **Provedores (frente V-C).** fal, Runway, Higgsfield e HeyGen passam pelo mesmo núcleo
+  (`_shared/video-executor.ts`, `executorDoProvedor`; cada um em `_shared/video-provedor-*.ts`). A
+  cobrança registra o provedor certo em `ia_registrar_uso` (`_provedor`: `fal`, `runway`,
+  `higgsfield` ou `heygen`). Erro do provedor vira frase clara (sem crédito, chave inválida, conteúdo
+  recusado, limite de uso, parâmetros) e nunca é tentado de novo.
 - **Sem o SQL V-01**: `503 banco_sem_gerador` antes de gastar qualquer coisa.
 
 ## `angulo_gerar` (a V-B chama do editor)
@@ -88,6 +104,13 @@ Entrada:
 
 Saída: `{ ok, pedido_id, custo_estimado, enviados }`. Duração e resolução são presas ao que o
 motor aceita (o custo segue a duração presa).
+
+Frente V-C: campo opcional `"camera"` (um dos 33 movimentos da Higgsfield, por exemplo
+`"dolly-in"`, `"drone-orbit"`, `"bullet-time"`; lista em `_shared/video-provedor-higgsfield.ts`,
+`MOVIMENTOS_DA_HIGGSFIELD`). Só vale para motor com `cap.camera` (hoje `higgsfield-cinema-4`); em
+outro motor, `400 entrada_incompleta`. Motores novos: `runway-gen4.5` (texto em 9:16 ou 16:9, ou
+primeiro quadro), `runway-gen4-turbo` (primeiro quadro) e `higgsfield-cinema-4` (texto, imagem de
+referência e câmera pronta).
 
 ## `continuar_video` (a V-B chama do editor)
 
@@ -165,6 +188,41 @@ sozinho por `import.meta.glob`), com as props
   planos sem resultado. `diretor_editor_desfazer { versao_id }` volta (a versão vira rejeitada).
 - `template_salvar { client_id, projeto, nome, da_agencia }` e
   `template_arquivar { template_id, arquivar }` (arquivar, nunca apagar).
+
+## `avatar_gerar` (frente V-C: HeyGen, avatar falando)
+
+```json
+{ "acao": "avatar_gerar", "client_id": "uuid", "fonte": "estoque" | "clone",
+  "avatar_id": "id do look da HeyGen (estoque)", "clone_id": "uuid do clone da Mesa Foto (clone)",
+  "confirma_uso_em_video": true, "voz_id": "...", "locale": "pt-BR" | null,
+  "roteiro": "texto falado (até 3.000 letras)", "formato": "9:16" | "16:9" | "1:1" | "4:5",
+  "resolucao": "720p" | "1080p", "legendas": true, "velocidade": 0.5..1.5, "titulo": "...",
+  "uid": "...", "custo_confirmado_usd": 0.3 }
+```
+
+- Motor: `heygen-avatar-iv` (estoque) ou `heygen-foto` (clone). Custo antes pela duração estimada
+  da fala (`duracaoEstimadaDaFala`); na hora de cobrar, vale a duração real do vídeo, nunca mais que
+  o confirmado (`custoDaVariacaoPronta`).
+- Clone: `422 autorizacao_invalida` sem a autorização de imagem válida (mesma regra da Mesa Foto:
+  confirmada, sem revogação, na validade, adulta e ciente de IA; clone do cliente e não arquivado);
+  `422 confirmar_uso_em_video` sem a confirmação; `409 clone_sem_foto` sem foto real principal. A foto
+  vai por link assinado de uma hora; no pedido fica só o caminho.
+- O pedido é `tipo: "gerar_livre"` com `alvo.modo: "avatar"` (sem SQL novo) e
+  `parametros.avatar` (fonte, avatar_id, clone_id, foto_path, voz_id, legendas, velocidade,
+  duracao_estimada_s). Com `legendas`, o arquivo guardado é a versão com a legenda gravada.
+- Saída: `{ ok, pedido_id, custo_estimado }`. O resultado entra em `video_arquivos` (tipo `gerado`),
+  aparece nos Resultados e vai para a Edição pelo Aprovar.
+
+## `heygen_catalogo` e `gerar_cancelar` (frente V-C)
+
+- `heygen_catalogo { tipo: "avatares" | "vozes", token? }` -> `{ tipo, itens, proximo }`. Avatares
+  de estoque que o Avatar IV aceita (`{ id, nome, genero, previa, voz_padrao, orientacao }`) ou
+  vozes em português, Brasil primeiro (`{ id, nome, genero, idioma, previa, aceita_locale, brasil }`).
+  Listas grátis; sem a chave, `409 motor_precisa_chave`.
+- `gerar_cancelar { pedido_id }` -> `{ pedidos, cancelados }`. Uma chamada por variação na fila ou
+  gerando; só Runway (`DELETE /v1/tasks/{id}`) e Higgsfield (só na fila). Outro provedor:
+  `409 cancelar_indisponivel`. O que foi cancelado não é cobrado; tudo cancelado vira
+  `estado: "cancelado"`.
 
 ## Catálogo
 

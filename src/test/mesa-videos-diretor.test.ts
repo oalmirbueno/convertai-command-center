@@ -118,12 +118,14 @@ describe("catálogo de motores", () => {
     expect(custoDoMotor(veo, { duracao_s: 5 }).usd).toBe(0.8); // 5 s vira 4 s (o Veo aceita 4, 6 ou 8; empate fica com o menor)
     expect(custoDoMotor(motorPorId("wan-3.0")!, { duracao_s: 5, resolucao: "1080p", variacoes: 3 }).usd).toBe(3);
     expect(custoDoMotor(motorPorId("qwen-angulos-2511")!, { variacoes: 4 }).usd).toBe(0.148);
-    expect(custoDoMotor(motorPorId("higgsfield")!, { duracao_s: 5 }).usd).toBeNull();
+    // Frente V-C: a Higgsfield ganhou executor e preço (promocional, marcado como estimado).
+    expect(custoDoMotor(motorPorId("higgsfield-cinema-4")!, { duracao_s: 5 }).incerto).toBe(true);
+    expect(custoDoMotor(motorPorId("sora-2")!, { duracao_s: 5 }).usd).toBeNull();
     expect(textoDoCusto({ usd: 0.148, incerto: false })).toBe("US$ 0,15");
     expect(textoDoCusto({ usd: null, incerto: true })).toBe("Sem cotação");
   });
 
-  it("todo motor executável tem fonte, data e preço; Sora encerrado e Runway a integrar", () => {
+  it("todo motor executável tem fonte, data e preço; Sora encerrado e Runway pede a própria chave", () => {
     MOTORES_DE_VIDEO.filter((m) => !m.situacao && m.provedor === "fal").forEach((m) => {
       expect(m.preco, m.id).toBeTruthy();
       expect(m.preco!.fonte, m.id).toMatch(/^https:\/\//);
@@ -133,7 +135,8 @@ describe("catálogo de motores", () => {
     const tem = (nome: string) => !!Deno_ok(nome);
     const Deno_ok = (nome: string) => nome === "FAL_KEY";
     expect(estadoDoMotor(motorPorId("sora-2")!, { temChave: tem })).toBe("encerrado");
-    expect(estadoDoMotor(motorPorId("runway-gen4.5")!, { temChave: tem })).toBe("a_integrar");
+    // Frente V-C: a Runway tem executor; sem RUNWAYML_API_SECRET fica "precisa de chave".
+    expect(estadoDoMotor(motorPorId("runway-gen4.5")!, { temChave: tem })).toBe("precisa_chave");
     expect(estadoDoMotor(motorPorId("seedance-2.5")!, { temChave: () => false })).toBe("precisa_chave");
     expect(estadoDoMotor(motorPorId("seedance-2.5")!, { temChave: tem })).toBe("pronto");
     expect(estadoDoMotor(motorPorId("seedance-2.5")!, { temChave: tem, desligados: ["seedance-2.5"] })).toBe("desligado");
@@ -431,7 +434,7 @@ describe("agente diretor", () => {
 
 describe("tela do gerador", () => {
   it("modos do Gerar (mais de 4 vira seletor) e o agente entende diretor e ângulo", () => {
-    expect(MODOS_DO_GERAR.map((m) => m.valor)).toEqual(["cena", "livre", "angulo", "continuar", "antes_depois"]);
+    expect(MODOS_DO_GERAR.map((m) => m.valor)).toEqual(["cena", "livre", "angulo", "continuar", "antes_depois", "avatar"]);
     expect(modoDoGerarValido("x")).toBe("cena");
     expect(intencaoPorPalavras("videos", "quero ele de lado, outro ângulo")).toBe("angulo");
     expect(intencaoPorPalavras("videos", "abre o diretor para montar o filme")).toBe("diretor");

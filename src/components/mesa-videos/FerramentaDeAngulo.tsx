@@ -4,11 +4,12 @@ import { Rotate3d } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
-import { GrupoDeCampos } from "@/components/sistema/Formulario";
+import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { juntar, texto } from "@/components/sistema/estilos";
+import { campo, juntar, texto } from "@/components/sistema/estilos";
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
-import { motorDoNivel, motorPorId } from "../../../supabase/functions/_shared/modelos-de-video";
+import { duracaoNoMotor, duracoesDoMotor, type MotorDeVideo, motorDoNivel, motorPorId } from "../../../supabase/functions/_shared/modelos-de-video";
+import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
 import {
   ANGULOS_PRONTOS,
   azimuteDoPonto,
@@ -21,7 +22,7 @@ import {
   pontoDoAzimute,
   textoDoAngulo,
 } from "../../../supabase/functions/_shared/video-angulo";
-import { BotaoDeGerar, EscolherImagem, SeletorDeMotor } from "./PecasDoGerador";
+import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
 
 /**
@@ -30,9 +31,16 @@ import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
  * cima), a altura e a distância, e gera 1 a 4 variações do mesmo personagem
  * e cenário visto de outro ponto. Custo antes; resultado nos Resultados.
  * Safari 11: arrastar com mouse e toque (sem pointer events).
+ *
+ * Frente V-C (26/09): escolhendo a Higgsfield no motor, a ferramenta vira
+ * "câmera em vídeo": a imagem é o ponto de partida e um dos 33 movimentos
+ * prontos (dolly, grua, órbita de drone, bullet time) move a câmera num
+ * vídeo curto. O resultado vai para os Resultados como vídeo gerado.
  */
 
 const TAM = 148;
+/** Motor com câmera pronta em vídeo (Higgsfield) também serve à ferramenta. */
+const temCameraPronta = (m: MotorDeVideo) => !!m.cap.camera;
 
 export function ControleDeOrbita({ valor, onMudar }: { valor: AnguloDeCamera; onMudar: (a: AnguloDeCamera) => void }) {
   const caixa = useRef<SVGSVGElement>(null);
@@ -136,9 +144,22 @@ interface Rascunho {
   variacoes: number;
   motor: string;
   extra: string;
+  /** Câmera em vídeo (Higgsfield). */
+  camera?: string;
+  duracao?: number;
+  formato?: string;
 }
 
-const INICIAL: Rascunho = { imagem: null, angulo: { azimute: 90, elevacao: 0, distancia: "medio" }, pronto: "perfil_dir", manter: "ambos", variacoes: 2, motor: "", extra: "" };
+const INICIAL: Rascunho = { imagem: null, angulo: { azimute: 90, elevacao: 0, distancia: "medio" }, pronto: "perfil_dir", manter: "ambos", variacoes: 2, motor: "", extra: "", camera: "dolly-in", duracao: 5, formato: "9:16" };
+
+const MANTER_EM_INGLES: Record<ManterNoAngulo, string> = { personagem: "Keep the same person identical (face, hair, clothes).", cenario: "Keep the same place identical (walls, objects, light).", ambos: "Keep the same person and the same place identical." };
+
+/** Texto da câmera em vídeo (a Higgsfield pede prompt): o pedido da equipe ou um texto neutro de câmera. */
+export function promptDaCameraEmVideo(camera: string, manter: ManterNoAngulo, extra: string): string {
+  const m = MOVIMENTOS_DA_HIGGSFIELD.find((x) => x.valor === camera);
+  const base = extra.trim() || "The scene from the image comes alive with subtle natural motion.";
+  return `${base} Camera move: ${m ? m.valor.replace(/-/g, " ") : "slow dolly in"}. ${MANTER_EM_INGLES[manter] || MANTER_EM_INGLES.ambos} Photorealistic, no text.`.slice(0, 2400);
+}
 
 export default function FerramentaDeAngulo({ imagemInicial }: { imagemInicial?: string | null }) {
   const { clientId, atualizarCusto } = useMesa();
@@ -148,11 +169,40 @@ export default function FerramentaDeAngulo({ imagemInicial }: { imagemInicial?: 
   const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...x, ...m }));
   const sugerido = motorDoNivel("top", { modo: "angulo" }, motores.motores);
   const motor = motorPorId(r.motor, motores.motores) || sugerido;
-  const custo = custoNaTela(motor, { variacoes: r.variacoes });
+  const emVideo = !!motor && temCameraPronta(motor);
+  const camera = r.camera || "dolly-in";
+  const formato = r.formato || "9:16";
+  const duracao = motor && emVideo ? duracaoNoMotor(motor, r.duracao || 5) : 0;
+  const custo = emVideo ? custoNaTela(motor, { duracao_s: duracao, variacoes: r.variacoes }) : custoNaTela(motor, { variacoes: r.variacoes });
   const estado = motores.lista.find((x) => x.motor.id === (motor ? motor.id : ""));
-  const motivo = !r.imagem ? "Escolha a imagem." : !motor ? "Nenhum motor de ângulo." : estado && estado.estado !== "pronto" ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}.` : null;
+  const motivo = !r.imagem ? "Escolha a imagem." : !motor ? "Nenhum motor de ângulo." : estado && estado.estado !== "pronto" ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}${estado.chave ? ` (${estado.chave})` : ""}.` : null;
+  const rotuloDaCamera = (MOVIMENTOS_DA_HIGGSFIELD.find((x) => x.valor === camera) || { rotulo: camera }).rotulo;
+
+  const gerarEmVideo = async (usd: number) => {
+    if (!motor || !r.imagem) return;
+    const resp = await chamarMesaVideos<{ pedido_id: string }>({
+      acao: "gerar_video",
+      tipo: "gerar_livre",
+      client_id: clientId,
+      motor: motor.id,
+      modo: "primeiro_quadro",
+      prompt: promptDaCameraEmVideo(camera, r.manter, r.extra),
+      duracao_s: duracao,
+      formato,
+      variacoes: r.variacoes,
+      quadro_inicial_path: r.imagem,
+      camera,
+      titulo: `Câmera: ${rotuloDaCamera}`.slice(0, 120),
+      uid: novoUid(),
+      custo_confirmado_usd: usd,
+    });
+    void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+    atualizarCusto();
+    toast.success("Câmera em vídeo enviada", { description: `Pedido ${String(resp.pedido_id || "").slice(0, 8)}. O vídeo aparece nos Resultados.` });
+  };
 
   const gerar = async (usd: number) => {
+    if (emVideo) return gerarEmVideo(usd);
     if (!motor || !r.imagem) return;
     const resp = await chamarMesaVideos<{ pedido_id: string }>({
       acao: "angulo_gerar",
@@ -175,24 +225,46 @@ export default function FerramentaDeAngulo({ imagemInicial }: { imagemInicial?: 
     <div className="min-w-0 space-y-5" data-ferramenta-de-angulo="">
       <GrupoDeCampos>
         <EscolherImagem rotulo="Imagem de partida" valor={r.imagem} onEscolher={(c) => mudar({ imagem: c })} />
-        <SeletorDeMotor lista={motores.lista} requisito={{ modo: "angulo" }} valor={motor ? motor.id : ""} nivel="top" onNivel={() => undefined} onEscolher={(id) => mudar({ motor: id })} rotulo="Motor de ângulo" />
+        <SeletorDeMotor lista={motores.lista} requisito={{ modo: "angulo" }} aceitar={temCameraPronta} valor={motor ? motor.id : ""} nivel="top" onNivel={() => undefined} onEscolher={(id) => mudar({ motor: id })} rotulo="Motor de ângulo" />
       </GrupoDeCampos>
-      <div className="min-w-0">
-        <div className="mb-2 flex min-w-0 items-center">
-          <p className={juntar(texto.rotulo, "mr-2 flex-1")}>Ângulo</p>
-          <SeletorCompacto
-            rotulo="Ângulo pronto"
-            icone={<Rotate3d className="h-3.5 w-3.5" />}
-            opcoes={ANGULOS_PRONTOS.map((a) => ({ valor: a.valor, rotulo: a.rotulo }))}
-            valor={r.pronto}
-            onEscolher={(v) => {
-              const a = ANGULOS_PRONTOS.find((x) => x.valor === v);
-              if (a) mudar({ pronto: v, angulo: { ...r.angulo, azimute: a.azimute, elevacao: a.elevacao } });
-            }}
-          />
+      {emVideo && motor ? (
+        <GrupoDeCampos>
+          <SeletorDeCamera rotulo="Movimento da câmera" opcional={false} valor={camera} onEscolher={(v) => mudar({ camera: v })} />
+          <CampoDeFormulario rotulo="Duração">
+            <select className={campo} value={duracao} onChange={(e) => mudar({ duracao: Number(e.target.value) })}>
+              {duracoesDoMotor(motor).map((d) => (
+                <option key={d} value={d}>
+                  {d} s
+                </option>
+              ))}
+            </select>
+          </CampoDeFormulario>
+          <div className="min-w-0">
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Formato</p>
+            <SeletorCompacto rotulo="Formato" larguraTotal opcoes={motor.formatos.map((f) => ({ valor: f, rotulo: f }))} valor={formato} onEscolher={(v) => mudar({ formato: v })} />
+          </div>
+          <CampoDeFormulario rotulo="O que acontece" apoio="Opcional. A câmera se move; a pessoa e o lugar ficam.">
+            <input className={campo} value={r.extra} maxLength={600} onChange={(e) => mudar({ extra: e.target.value })} placeholder="Ex.: ela sorri e olha para a janela" />
+          </CampoDeFormulario>
+        </GrupoDeCampos>
+      ) : (
+        <div className="min-w-0">
+          <div className="mb-2 flex min-w-0 items-center">
+            <p className={juntar(texto.rotulo, "mr-2 flex-1")}>Ângulo</p>
+            <SeletorCompacto
+              rotulo="Ângulo pronto"
+              icone={<Rotate3d className="h-3.5 w-3.5" />}
+              opcoes={ANGULOS_PRONTOS.map((a) => ({ valor: a.valor, rotulo: a.rotulo }))}
+              valor={r.pronto}
+              onEscolher={(v) => {
+                const a = ANGULOS_PRONTOS.find((x) => x.valor === v);
+                if (a) mudar({ pronto: v, angulo: { ...r.angulo, azimute: a.azimute, elevacao: a.elevacao } });
+              }}
+            />
+          </div>
+          <ControleDeOrbita valor={r.angulo} onMudar={(a) => mudar({ angulo: a, pronto: "" })} />
         </div>
-        <ControleDeOrbita valor={r.angulo} onMudar={(a) => mudar({ angulo: a, pronto: "" })} />
-      </div>
+      )}
       <GrupoDeCampos>
         <div className="min-w-0">
           <p className={juntar(texto.rotulo, "mb-1.5")}>Manter igual</p>
@@ -203,7 +275,13 @@ export default function FerramentaDeAngulo({ imagemInicial }: { imagemInicial?: 
           <SeletorCompacto rotulo="Variações" larguraTotal opcoes={[1, 2, 3, 4].map((n) => ({ valor: String(n), rotulo: String(n) }))} valor={String(r.variacoes)} onEscolher={(v) => mudar({ variacoes: Number(v) })} />
         </div>
       </GrupoDeCampos>
-      <BotaoDeGerar custo={custo} rotulo="Gerar ângulo" motivo={motivo} onConfirmar={gerar} extra={`${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}, ${textoDoAngulo(r.angulo)}`} />
+      <BotaoDeGerar
+        custo={custo}
+        rotulo={emVideo ? "Gerar vídeo" : "Gerar ângulo"}
+        motivo={motivo}
+        onConfirmar={gerar}
+        extra={emVideo ? `${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}, ${rotuloDaCamera.toLowerCase()}, ${duracao} s` : `${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}, ${textoDoAngulo(r.angulo)}`}
+      />
     </div>
   );
 }

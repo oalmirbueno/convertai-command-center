@@ -178,3 +178,47 @@ export async function guardarDoProvedor(url: string, tipo: "video" | "imagem", d
   await subirPorTransmissao(destino, r.body);
   return { bytes: null, mime, conteudo: null, via: "transmissao" };
 }
+
+// ------------------------------------------------------------------ leitura leve de imagens (frente V-C, pedido da AB)
+//
+// Nenhuma leitura de imagem da mesa-videos abre o original grande dentro da
+// função (2 s de CPU, ~256 MB): vai a cópia leve (`<caminho>.mini.jpg` ou
+// `.media.jpg`, gravada pelo painel ou pedida à função copias-leves em outra
+// chamada, `_shared/imagem-reduzida.ts`). Os formatos abaixo são as opções de
+// `reduzidaSemTransformacao` (mesmos nomes; aqui sem importar para o teste do
+// painel ler sem Deno).
+
+export interface LeituraLeve {
+  /** Lado da caixa ("contain"). */
+  caixa: number;
+  /** true: ler a miniatura própria do vídeo (`<caminho>.mini.jpg`), nunca o vídeo. */
+  miniatura: boolean;
+  opcoes: { folga?: number; usarCopias?: boolean; maxBytes?: number; pedirCopia?: boolean; aceitarCopiaMaiorAte?: number; qualidadeJpeg?: number };
+}
+
+const MB = 1024 * 1024;
+
+/** Arquivo de vídeo (vídeo nunca é aberto como imagem: serve a miniatura própria). */
+export const ehArquivoDeVideo = (caminho: string, tipo?: string | null): boolean =>
+  /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(String(caminho || "")) || ["gerado", "bruto", "take", "entrega"].indexOf(String(tipo || "")) >= 0;
+
+/** Miniatura do vídeo gerado a partir do quadro inicial: a cópia leve, lida uma vez por consulta do pedido. */
+export const LEITURA_DA_MINIATURA_DO_QUADRO: LeituraLeve = { caixa: 640, miniatura: false, opcoes: { folga: 1.05, pedirCopia: true, aceitarCopiaMaiorAte: 400 * 1024, maxBytes: 20 * MB, qualidadeJpeg: 82 } };
+
+/** Imagem de um arquivo do gerador para a visão (diretor_avaliar): vídeo pela miniatura própria; imagem pela cópia leve. */
+export function leituraParaAVisao(a: { storage_path: string; tipo?: string | null }, caixa = 1024): LeituraLeve {
+  if (ehArquivoDeVideo(a.storage_path, a.tipo)) return { caixa, miniatura: true, opcoes: { folga: 1.1, usarCopias: false, maxBytes: 5 * MB } };
+  return { caixa, miniatura: false, opcoes: { folga: 1.1, pedirCopia: true, aceitarCopiaMaiorAte: 1.5 * MB, maxBytes: 25 * MB } };
+}
+
+/** Foto que vai ao modelo de imagem no antes e depois: até 2048 px pela cópia leve. */
+export const LEITURA_DA_FOTO_PARA_EDITAR: LeituraLeve = { caixa: 2048, miniatura: false, opcoes: { folga: 1.05, pedirCopia: true, aceitarCopiaMaiorAte: 6 * MB, maxBytes: 25 * MB } };
+/** Sem cópia leve, o original só segue até este tamanho (antes, ia inteiro, sem teto). */
+export const TETO_DO_ORIGINAL_PARA_EDITAR = 8 * MB;
+
+/** Bytes da foto para editar: a cópia que cabe ou o original só até o teto. */
+export function fotoParaEditar(r: { cabe: boolean; bytes: Uint8Array } | null): { bytes: Uint8Array; erro: null } | { bytes: null; erro: "foto_ilegivel" | "foto_grande_demais" } {
+  if (!r || !r.bytes || !r.bytes.byteLength) return { bytes: null, erro: "foto_ilegivel" };
+  if (r.cabe || r.bytes.byteLength <= TETO_DO_ORIGINAL_PARA_EDITAR) return { bytes: r.bytes, erro: null };
+  return { bytes: null, erro: "foto_grande_demais" };
+}
