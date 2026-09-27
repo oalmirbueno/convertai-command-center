@@ -36,9 +36,16 @@ describe("o aviso da equipe nasce no banco", () => {
     expect(migracao).not.toContain("LIMIT 1\n$$");
   });
 
-  it("o texto é idêntico ao da tela, para a deduplicação descartar a cópia", () => {
+  it("um fato, um aviso: a tela do cliente não manda cópia, o banco avisa", () => {
+    // Frente N (27/09): a cópia da tela (notifyAdmin) e a de
+    // decide_file_approval somavam dois ou três avisos (e e-mails) por
+    // decisão. O gatilho do banco é o único remetente; o texto dele segue
+    // igual ao da tela antiga, para a trava de 10 minutos descartar a cópia
+    // de um painel ainda aberto com o código anterior.
     const tela = ler("src/pages/ClientApprovals.tsx");
-    expect(tela).toContain('`Aprovação recebida: ${profile?.company_name || profile?.full_name || "Cliente"} aprovou "${file.file_name}". Pronto para agendar na Agenda.`');
+    expect(tela).not.toContain("notifyAdmin(");
+    expect(ler("src/pages/ClientRequests.tsx")).not.toContain("notifyAdmin(");
+    expect(ler("src/components/client/RequestButton.tsx")).not.toContain("notifyAdmin(");
     expect(migracao).toContain(`'Aprovação recebida: ' || _cliente || ' aprovou "' || COALESCE(_arquivo, 'material') || '". Pronto para agendar na Agenda.'`);
     expect(migracao).toContain(`'Ajustes solicitados: ' || _cliente || ' pediu mudanças em "' || COALESCE(_arquivo, 'material') || '".'`);
   });

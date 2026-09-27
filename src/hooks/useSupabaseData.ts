@@ -152,16 +152,21 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications", user?.id],
     queryFn: async () => {
+      // Filtro explícito por pessoa (usa o índice; a RLS continua valendo).
+      // Contagem de não lidas e tempo real: src/hooks/useAvisos.ts.
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(40);
       if (error) throw error;
       return data;
     },
     enabled: !!user,
-    refetchInterval: 10000,
+    // O aviso novo chega pelo canal em tempo real (useAvisosEmTempoReal);
+    // o intervalo é só a rede de segurança.
+    refetchInterval: 30000,
   });
 }
 

@@ -104,7 +104,12 @@ Deno.serve(async (req) => {
   // callers can trigger queue processing.
   const token = authHeader.slice('Bearer '.length).trim()
   const claims = parseJwtClaims(token)
-  if (claims?.role !== 'service_role') {
+  // Chamada interna (o empurrão do send-transactional-email): com as chaves
+  // novas a chave de serviço do runtime não traz role no token, então o
+  // segredo interno compartilhado autoriza, como no send-transactional-email.
+  const cronSecret = Deno.env.get('CRON_SECRET')?.trim()
+  const internalCron = Boolean(cronSecret && req.headers.get('x-cron-secret')?.trim() === cronSecret)
+  if (!internalCron && claims?.role !== 'service_role') {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } }

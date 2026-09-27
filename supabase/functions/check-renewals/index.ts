@@ -1,4 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cabecalhosDoEmailInterno } from "../_shared/email-interno.ts";
+import {
+  avisaAntes,
+  avisaVencido,
+  linkDoCliente,
+  textoAntes,
+  textoPausa,
+  textoVencido,
+} from "./marcos.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,9 +39,21 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get admin user id
-    const { data: adminId } = await supabase.rpc("get_admin_user_id");
-    if (!adminId) {
+    // Todo admin humano (antes: um só, sorteado por get_admin_user_id, que
+    // caía no admin temporário e deixava o dono sem o aviso). Robô e conta
+    // apagada ficam de fora.
+    const { data: adminRoles } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+    const adminIdsBrutos = Array.from(new Set(((adminRoles as { user_id: string }[] | null) ?? []).map((r) => r.user_id)));
+    const { data: adminProfiles } = adminIdsBrutos.length
+      ? await supabase.from("profiles").select("id, email, deleted_at").in("id", adminIdsBrutos)
+      : { data: [] as { id: string; email: string | null; deleted_at: string | null }[] };
+    const adminIds = ((adminProfiles as { id: string; email: string | null; deleted_at: string | null }[] | null) ?? [])
+      .filter((p) => !p.deleted_at && !/^n8n@/i.test(p.email ?? ""))
+      .map((p) => p.id);
+    if (adminIds.length === 0) {
       return new Response(JSON.stringify({ error: "No admin found" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -62,7 +83,10 @@ Deno.serve(async (req) => {
     ) => {
       if (!c.email) return;
       try {
-        await supabase.functions.invoke("send-transactional-email", {
+        // x-cron-secret: sem ele o send-transactional-email devolvia 401
+        // e o lembrete ao cliente não saía (ver _shared/email-interno.ts).
+        const { error: envioErro } = await supabase.functions.invoke("send-transactional-email", {
+          headers: cabecalhosDoEmailInterno(),
           body: {
             templateName: "billing-reminder",
             recipientEmail: c.email,
@@ -78,6 +102,7 @@ Deno.serve(async (req) => {
             },
           },
         });
+        if (envioErro) console.warn("billing email failed", c.id, envioErro.message);
       } catch (e) {
         console.warn("billing email failed", c.id, e);
       }
@@ -100,20 +125,29 @@ Deno.serve(async (req) => {
       .not("plan_status", "in", "(inactive,standby)")
       .neq("client_type", "one_off");
 
-    // Check existing notifications from today to avoid duplicates
+    // O que já foi avisado hoje, por pessoa: rodar duas vezes no mesmo dia
+    // não repete o aviso.
     const { data: existingNotifs } = await supabase
       .from("notifications")
-      .select("message")
-      .eq("user_id", adminId)
+      .select("user_id, message")
+      .in("user_id", adminIds)
       .eq("notification_type", "billing")
       .gte("created_at", todayStr + "T00:00:00Z");
 
     const existingMessages = new Set(
-      (existingNotifs || []).map((n: any) => n.message)
+      (existingNotifs || []).map((n: any) => `${n.user_id}|${n.message}`)
     );
 
     const notifications: any[] = [];
     let pausedCount = 0;
+    const avisarAdmins = (message: string, link: string) => {
+      for (const adminId of adminIds) {
+        const chave = `${adminId}|${message}`;
+        if (existingMessages.has(chave)) continue;
+        existingMessages.add(chave);
+        notifications.push({ user_id: adminId, message, notification_type: "billing", link });
+      }
+    };
 
     for (const c of clients || []) {
       const name = c.company_name || c.full_name;
@@ -121,19 +155,12 @@ Deno.serve(async (req) => {
       const diffDays = Math.ceil(
         (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const valueStr = c.plan_value ? ` — R$ ${Number(c.plan_value).toFixed(2)}` : "";
-      const msg =
-        diffDays === 0
-          ? `⚠️ O plano de "${name}" vence HOJE!${valueStr}`
-          : `📅 O plano de "${name}" vence em ${diffDays} dia(s) (${date.toLocaleDateString("pt-BR")})${valueStr}`;
-
-      if (!existingMessages.has(msg)) {
-        notifications.push({
-          user_id: adminId,
-          message: msg,
-          notification_type: "billing",
-          link: "/clientes",
-        });
+      // Só nos marcos (7, 3, 1 dia e no dia): o sino não é lista de cobrança.
+      if (avisaAntes(diffDays)) {
+        avisarAdmins(
+          textoAntes(name, diffDays, date.toLocaleDateString("pt-BR"), c.plan_value),
+          linkDoCliente(c.id),
+        );
       }
 
       // Client-facing billing email at key milestones (7/3/1 days, due day)
@@ -152,8 +179,6 @@ Deno.serve(async (req) => {
           (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
         )
       );
-      const valueStr = c.plan_value ? ` — R$ ${Number(c.plan_value).toFixed(2)}` : "";
-
       // Set overdue_since if not already set
       if (!c.overdue_since) {
         await supabase
@@ -186,34 +211,21 @@ Deno.serve(async (req) => {
           }
           pausedCount += activeProjects.length;
 
-          const pauseMsg = `🚫 Projetos de "${name}" foram PAUSADOS por inadimplência (${overdueDays} dias)`;
-          if (!existingMessages.has(pauseMsg)) {
-            notifications.push({
-              user_id: adminId,
-              message: pauseMsg,
-              notification_type: "billing",
-              link: "/clientes",
-            });
-          }
+          avisarAdmins(textoPausa(name, overdueDays), linkDoCliente(c.id));
 
           // Notify client too
           await supabase.from("notifications").insert({
             user_id: c.id,
-            message: `⚠️ Seus projetos foram pausados por pendência financeira. Entre em contato para regularizar.`,
+            message: "Seus projetos foram pausados por pendência financeira. Fale com a gente para regularizar.",
             notification_type: "billing",
             link: "/financeiro",
           });
         }
       }
 
-      const msg = `🔴 O plano de "${name}" está vencido há ${diffDays} dia(s)!${valueStr}`;
-      if (!existingMessages.has(msg)) {
-        notifications.push({
-          user_id: adminId,
-          message: msg,
-          notification_type: "billing",
-          link: "/clientes",
-        });
+      // Vencido: 1, 3, 7, 15 e 30 dias, depois a cada 30 (antes: todo dia).
+      if (avisaVencido(diffDays)) {
+        avisarAdmins(textoVencido(name, diffDays, c.plan_value), linkDoCliente(c.id));
       }
 
       // Client-facing overdue email at key milestones

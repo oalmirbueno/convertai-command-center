@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { notifyAdmin } from "@/lib/notifyHelpers";
 import {
   CabecalhoDePagina,
   CampoDeFormulario,
@@ -91,14 +90,8 @@ export default function ClientRequests() {
       });
       if (error) throw error;
 
-      // Aviso para a equipe pela função de servidor (chave de serviço): o
-      // cliente não tem permissão de RLS para inserir em notifications, e o
-      // insert direto falhava em silêncio. Mesmo caminho do RequestButton.
-      await notifyAdmin(
-        `Novo pedido de ${profile?.company_name || profile?.full_name}: ${title.trim()}`,
-        "request",
-        "/pedidos",
-      );
+      // O aviso da equipe (sino e e-mail) nasce no banco, no gatilho de
+      // client_requests (client_request_avisa_equipe): um fato, um aviso.
 
       toast.success("Pedido enviado");
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });

@@ -42,6 +42,15 @@ const ROTULO: Record<string, string> = {
   central_review_decidida: 'Revisão do Ciclo decidida',
   central_review_enviada: 'Mensagem enviada ao cliente',
   responsavel_designado: 'Responsável designado',
+  agendamento_atrasado: 'Post que não saiu',
+  teste: 'Teste de avisos',
+}
+
+// Nem todo aviso é decisão: o título acompanha o tipo.
+const TITULO: Record<string, string> = {
+  teste: 'o e-mail dos avisos está funcionando',
+  agendamento_atrasado: 'um post passou da hora e não saiu',
+  acesso: 'um cliente entrou no portal',
 }
 
 const AvisoDoPainelEmail = ({ name, message, kind, link, when }: AvisoDoPainelProps) => {
@@ -59,7 +68,9 @@ const AvisoDoPainelEmail = ({ name, message, kind, link, when }: AvisoDoPainelPr
             {rotulo}
           </Text>
           <Heading as="h1" style={{ color: '#FFFFFF', fontSize: 20, lineHeight: '28px', margin: '0 0 14px' }}>
-            {firstName ? `${firstName}, tem uma decisão esperando você` : 'Tem uma decisão esperando você'}
+            {TITULO[kind ?? '']
+              ? (firstName ? `${firstName}, ${TITULO[kind ?? '']}` : `Aviso: ${TITULO[kind ?? '']}`)
+              : (firstName ? `${firstName}, tem uma decisão esperando você` : 'Tem uma decisão esperando você')}
           </Heading>
           <Text style={{ color: '#E6E6E6', fontSize: 15, lineHeight: '24px', margin: '0 0 8px' }}>{message}</Text>
           {when && (

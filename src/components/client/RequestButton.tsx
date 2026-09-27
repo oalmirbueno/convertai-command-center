@@ -5,7 +5,6 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { notifyAdmin } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { CampoDeFormulario, SeletorCompacto, botao, campo, campoTexto, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import {
@@ -38,16 +37,18 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
     if (!title.trim() || !description.trim() || !user) return;
     setSubmitting(true);
     try {
-      await supabase.from("client_requests").insert({
+      const { error: pedidoErro } = await supabase.from("client_requests").insert({
         client_id: user.id,
         project_id: projectId,
         title: title.trim(),
         description: description.trim(),
         priority,
       });
+      // Pedido que não gravou não pode aparecer como enviado.
+      if (pedidoErro) throw pedidoErro;
 
-      // Notify admin
-      await notifyAdmin(`Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`, "request", "/pedidos");
+      // O aviso da equipe (sino e e-mail) nasce no banco, no gatilho de
+      // client_requests (client_request_avisa_equipe): um fato, um aviso.
 
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
       queryClient.invalidateQueries({ queryKey: ["project-updates"] });

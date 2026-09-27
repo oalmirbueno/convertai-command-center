@@ -3,9 +3,10 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
+import { useAvisosEmTempoReal, useContagemDeNaoLidas } from "@/hooks/useAvisos";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { avisoParaMostrar, mostrarAvisoNoNavegador } from "@/lib/avisosDoNavegador";
-import { safeInternalPath } from "@/lib/internalNavigation";
+import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import Lancador from "@/components/lancador/Lancador";
 import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
@@ -200,7 +201,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     window.addEventListener(EVENTO_ABRIR_AGENTE, ouvir);
     return () => window.removeEventListener(EVENTO_ABRIR_AGENTE, ouvir);
   }, [isAdmin, abrirAgente]);
-  const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
+  // Sino em tempo real e contagem de verdade (antes: só entre os 30 carregados).
+  useAvisosEmTempoReal();
+  const { data: contagemNaoLidas } = useContagemDeNaoLidas();
+  const unreadCount = typeof contagemNaoLidas === "number"
+    ? contagemNaoLidas
+    : (notifData || []).filter((n: any) => !n.read).length;
 
   // Aviso do navegador para a equipe: o sino so e visto por quem olha para
   // ele. A marca d'agua comeca no aviso mais novo ja carregado, para nao
@@ -216,7 +222,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const aviso = avisoParaMostrar(lista, marcaDeAvisos.current);
     if (!aviso) return;
     marcaDeAvisos.current = aviso.marca;
-    mostrarAvisoNoNavegador(aviso, (link) => { const destino = safeInternalPath(link); if (destino) navigate(destino); });
+    mostrarAvisoNoNavegador(aviso, (link) => {
+      const destino = safeInternalPath(link);
+      if (destino) navigate(destino);
+      // Post no ar: o aviso leva ao Instagram, como o clique no sino.
+      else { const publico = safePublicPostUrl(link); if (publico) window.open(publico, "_blank", "noopener,noreferrer"); }
+    });
   }, [notifData, isAdminOrTeam, navigate]);
 
   const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;

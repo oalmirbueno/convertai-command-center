@@ -1,40 +1,41 @@
 import { useState } from "react";
 import { useNotifications } from "@/hooks/useSupabaseData";
+import { useAvisosNaoLidos, useContagemDeNaoLidas, marcarTodasComoLidas } from "@/hooks/useAvisos";
+import { useAuth } from "@/contexts/AuthContext";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Bell, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, ArrowLeft, Instagram } from "lucide-react";
+import {
+  AlertTriangle, ArrowLeft, BarChart3, Bell, Bot, Briefcase, CheckCircle, CreditCard, FileArchive,
+  FolderOpen, Instagram, ListChecks, Package,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import { toast } from "sonner";
 import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
+import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
+import TesteDeAvisos from "@/components/avisos/TesteDeAvisos";
 
 function getNotifIcon(type: string) {
-  switch (type) {
-    case "approval": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
-    case "request": return { icon: <Package className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "project": case "update": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success/10 text-success" };
-    case "billing": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
-    case "task": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
-    case "report": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
+  switch (categoriaDoAviso(type)) {
+    case "decisao": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
+    case "pedido": return { icon: <Package className="w-4 h-4" />, bg: "bg-info/10 text-info" };
+    case "projeto": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success/10 text-success" };
+    case "cobranca": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
+    case "tarefa": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
+    case "relatorio": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
     // Post no ar: o aviso que leva para fora do painel merece cara própria.
-    case "publication": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success/10 text-success" };
+    case "publicacao": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success/10 text-success" };
+    case "entrega": return { icon: <FileArchive className="w-4 h-4" />, bg: "bg-success/10 text-success" };
+    case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
+    case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
+    case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info/10 text-info" };
     default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
   }
 }
 
 function getLinkLabel(notif: any): string {
-  if (!notif.link) return "Abrir";
-  // O link do post publicado sai do painel — dizer para onde evita o clique
-  // às cegas, e é o que o dono e o cliente querem: ver a peça no ar.
-  if (safePublicPostUrl(notif.link)) return "Ver publicação no Instagram";
-  if (notif.link.includes("/aprovacoes")) return "Ver Arquivo";
-  if (notif.link.includes("/projetos") || notif.link.includes("/dashboard")) return "Ver Projeto";
-  if (notif.link.includes("/relatorios")) return "Ver Relatório";
-  if (notif.link.includes("/financeiro")) return "Ver Financeiro";
-  if (notif.link.includes("/pedidos")) return "Ver Pedido";
-  if (notif.link.includes("/kanban")) return "Ver Tarefas";
-  return "Abrir";
+  return rotuloDoLink(notif?.link);
 }
 
 function timeAgo(dateStr: string): string {
@@ -81,11 +82,17 @@ interface Props {
 }
 
 export default function NotificationsPanel({ open, onOpenChange }: Props) {
+  const { user, profile } = useAuth();
   const { data: notifications } = useNotifications();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [avisosDoNavegador, setAvisosDoNavegador] = useState<EstadoDoAviso>(() => estadoDosAvisos());
+  const { data: contagem } = useContagemDeNaoLidas();
+  const { data: naoLidas } = useAvisosNaoLidos(open && tab === "unread");
+  const papel = profile?.role || "client";
+  const eEquipe = ["admin", "manager", "design", "traffic"].includes(papel);
+  const eAdmin = papel === "admin";
 
   const handleClick = async (n: any) => {
     if (!n.read) {
@@ -107,20 +114,26 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     }
   };
 
+  // Uma chamada só, e marca TODAS as pendentes (antes: uma chamada por aviso,
+  // e só as que estavam entre as 30 carregadas).
   const markAllRead = async () => {
-    const unread = (notifications || []).filter((n: any) => !n.read);
-    if (unread.length === 0) return;
-    for (const n of unread) {
-      await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+    if (!user?.id || unreadCount === 0) return;
+    try {
+      await marcarTodasComoLidas(user.id);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("Todas marcadas como lidas");
+    } catch {
+      toast.error("Não consegui marcar agora. Tente de novo.");
     }
-    queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    toast.success("Todas marcadas como lidas");
   };
 
-  const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
+  const listaCarregada = notifications || [];
+  const unreadCount = typeof contagem === "number"
+    ? contagem
+    : listaCarregada.filter((n: any) => !n.read).length;
   const displayNotifs = tab === "unread"
-    ? (notifications || []).filter((n: any) => !n.read)
-    : (notifications || []);
+    ? (naoLidas || listaCarregada.filter((n: any) => !n.read))
+    : listaCarregada;
   const groups = groupNotifications(displayNotifs);
 
   return (
@@ -174,7 +187,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
           </div>
           {/* Aviso fora do painel: o sino nao alcanca quem esta em outra aba.
               O e-mail ja sai sozinho para a equipe; aqui e o aviso na tela. */}
-          {avisosDoNavegador === "pedir" && (
+          {eEquipe && avisosDoNavegador === "pedir" && (
             <button
               type="button"
               onClick={async () => {
@@ -189,9 +202,10 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
               <span className="block text-[10.5px] text-muted-foreground">Aprovações e pedidos de clientes aparecem na tela mesmo com o painel em outra aba. Por e-mail eles já chegam.</span>
             </button>
           )}
-          {avisosDoNavegador === "bloqueado" && (
+          {eEquipe && avisosDoNavegador === "bloqueado" && (
             <p className="text-[10.5px] text-muted-foreground">Avisos do navegador bloqueados neste site. Os avisos importantes continuam chegando por e-mail.</p>
           )}
+          {eAdmin && <TesteDeAvisos idsNoSino={listaCarregada.map((n: any) => n.id)} />}
         </div>
 
         {/* Notifications list */}

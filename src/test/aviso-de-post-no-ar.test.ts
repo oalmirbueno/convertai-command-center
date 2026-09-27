@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { safePublicPostUrl } from "@/lib/internalNavigation";
+import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
 
 const raiz = resolve(__dirname, "../..");
 const ler = (c: string) => readFileSync(resolve(raiz, c), "utf8");
@@ -124,10 +125,13 @@ describe("o sininho sabe abrir o post", () => {
   });
 
   it("o aviso diz para onde leva antes do clique", () => {
-    expect(painel).toContain("Ver publicação no Instagram");
+    // Rótulos do sino moram em src/lib/avisos/rotulos.ts (frente N).
+    expect(painel).toContain("rotuloDoLink(notif?.link)");
+    expect(rotuloDoLink("https://www.instagram.com/p/abc/")).toBe("Ver publicação no Instagram");
   });
 
   it("publicação tem ícone próprio na lista", () => {
-    expect(painel).toContain('case "publication":');
+    expect(categoriaDoAviso("publication")).toBe("publicacao");
+    expect(painel).toContain('case "publicacao":');
   });
 });

@@ -4,7 +4,7 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
-import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, campo, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -13,7 +13,6 @@ import {
 import { AlertTriangle, CheckCircle2, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
-import { notifyAdmin } from "@/lib/notifyHelpers";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
@@ -157,6 +156,9 @@ export default function ClientApprovals() {
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
+  // Frente EA: no carrossel o cliente pode dizer qual lâmina (0 = o post todo).
+  // Vai no começo do texto ("Lâmina 3: ..."): a equipe abre o Estúdio nela.
+  const [feedbackLamina, setFeedbackLamina] = useState(0);
   const [previewFile, setPreviewFileRaw] = useState<any>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
   const previewSwipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -225,11 +227,8 @@ export default function ClientApprovals() {
         decision: "approved",
       });
       toast({ title: "Aprovado" });
-      void notifyAdmin(
-        `Aprovação recebida: ${profile?.company_name || profile?.full_name || "Cliente"} aprovou "${file.file_name}". Pronto para agendar na Agenda.`,
-        "approval",
-        "/calendario"
-      );
+      // O aviso da equipe nasce no banco (gatilho de file_approval_events):
+      // um fato, um aviso. A cópia que saía daqui duplicava o sino e o e-mail.
     } catch (error: any) {
       toast({
         title: "Erro ao aprovar",
@@ -250,14 +249,10 @@ export default function ClientApprovals() {
         fileId: file.id,
         expectedVersion: file.version,
         decision: "rejected",
-        feedback: feedbackText,
+        feedback: feedbackLamina > 0 ? `Lâmina ${feedbackLamina}: ${feedbackText.trim()}` : feedbackText,
       });
       toast({ title: "Pedido de ajuste enviado" });
-      void notifyAdmin(
-        `Ajustes solicitados: ${profile?.company_name || profile?.full_name || "Cliente"} pediu mudanças em "${file.file_name}".`,
-        "approval",
-        "/aprovacoes"
-      );
+      // Aviso da equipe: gatilho de file_approval_events (ver acima).
     } catch (error: any) {
       toast({
         title: "Erro ao enviar feedback",
@@ -267,6 +262,7 @@ export default function ClientApprovals() {
     }
     setFeedbackFileId(null);
     setFeedbackText("");
+    setFeedbackLamina(0);
     setPreviewFile(null);
   };
 
@@ -594,7 +590,7 @@ export default function ClientApprovals() {
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
-                onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
+                onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setFeedbackLamina(0); setPreviewFile(null); } }}>
                 Pedir ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
@@ -625,6 +621,22 @@ export default function ClientApprovals() {
       <Dialog open={!!feedbackFileId} onOpenChange={() => setFeedbackFileId(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Pedir ajuste</DialogTitle></DialogHeader>
+          {(() => {
+            const arquivo = feedbackFileId ? approvalFiles.find((c: any) => c.id === feedbackFileId) : null;
+            const total = arquivo ? getCarouselImages(arquivo).length : 0;
+            if (total < 2) return null;
+            return (
+              <label className="block">
+                <span className={juntar(texto.auxiliar, "mb-1 block")}>Em qual lâmina?</span>
+                <select className={campo} value={feedbackLamina} onChange={(e) => setFeedbackLamina(Number(e.target.value) || 0)}>
+                  <option value={0}>No post todo</option>
+                  {Array.from({ length: total }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>Lâmina {i + 1}</option>
+                  ))}
+                </select>
+              </label>
+            );
+          })()}
           <Textarea placeholder="O que precisa mudar? (mínimo 10 caracteres)"
             value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>

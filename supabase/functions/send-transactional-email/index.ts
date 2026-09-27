@@ -470,6 +470,10 @@ Deno.serve(async (req) => {
           headers: {
             Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
             'Content-Type': 'application/json',
+            // A chave de serviço do runtime não é JWT com role service_role
+            // nas chaves novas: sem o segredo interno o despachante devolvia
+            // 403 a cada e-mail (a fila só andava pelo cron).
+            ...(cronSecret ? { 'x-cron-secret': cronSecret } : {}),
           },
           body: JSON.stringify({ trigger: 'post-enqueue', queue: 'transactional_emails' }),
           signal: AbortSignal.timeout(3_000),
