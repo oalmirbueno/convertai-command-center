@@ -419,6 +419,21 @@ export function permissaoDeGestao(bruto: unknown): { disponivel: boolean; motivo
 }
 
 /**
+ * account_status da Meta que travam a conta (1 = ativa não entra). Com saldo
+ * em aberto (3) a Meta para a entrega e recusa mudanças com um "Permissions
+ * error" genérico (visto em 27/09 na Conta 01 Aceleriq, código 200).
+ */
+const SITUACAO_DA_CONTA: Record<number, string> = {
+  2: "está desativada na Meta. Veja a Qualidade da conta no Gerenciador de Anúncios.",
+  3: "está com pagamento pendente na Meta (saldo em aberto). Enquanto não quitar, a Meta não entrega os anúncios e recusa mudanças. Quite em Cobrança e pagamentos do Gerenciador de Anúncios e clique em Conferir agora.",
+  7: "está em análise de risco na Meta. Aguarde a análise ou veja a Qualidade da conta.",
+  8: "está com acerto de pagamento pendente na Meta. Confira em Cobrança e pagamentos do Gerenciador de Anúncios.",
+  9: "está no prazo de carência de pagamento na Meta. Confira em Cobrança e pagamentos.",
+  100: "está em fechamento na Meta.",
+  101: "foi fechada na Meta.",
+};
+
+/**
  * Onde a gestão vale de fato numa conta de anúncios. O escopo ads_management
  * no token não basta: no Login for Business ele vale só para as contas
  * marcadas na tela da Meta (granular_scopes.target_ids do debug_token), e o
@@ -436,6 +451,8 @@ export function bloqueioDaGestaoNaConta(debug: unknown, conta: unknown, contaId:
   if (alvos && alvos.length && alvos.indexOf(id) < 0) {
     return `A conta de anúncios ${nome} não foi marcada para gestão ao conectar. Clique em Conectar pedindo gestão e, na tela da Meta, marque essa conta de anúncios.`;
   }
+  const situacao = SITUACAO_DA_CONTA[Number(c.account_status)];
+  if (situacao) return `A conta de anúncios ${nome} ${situacao}`;
   const tarefas = Array.isArray(c.user_tasks) ? (c.user_tasks as unknown[]).map(String) : null;
   if (tarefas && tarefas.length && tarefas.indexOf("MANAGE") < 0 && tarefas.indexOf("ADVERTISE") < 0) {
     return `O perfil que conectou só analisa a conta ${nome} (${tarefas.join(", ")}). No Gerenciador de Negócios, dê a ele o papel de anunciante ou administrador dessa conta.`;

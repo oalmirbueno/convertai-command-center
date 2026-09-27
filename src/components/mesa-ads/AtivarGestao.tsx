@@ -37,9 +37,18 @@ function Situacao({ g }: { g: SituacaoDaGestao }) {
   return (
     <span className="inline-flex items-center text-[12.5px] font-medium text-warning">
       <KeyRound className="mr-1 h-4 w-4" />
-      {g.tem_token ? "Só leitura" : "Sem acesso de anúncios"}
+      {!g.tem_token ? "Sem acesso de anúncios" : precisaConectar(g) ? "Só leitura" : "Travada na conta da Meta"}
     </span>
   );
+}
+
+/**
+ * A permissão está no token, mas a conta trava (pagamento pendente, conta
+ * desativada, perfil só de análise): aí reconectar não resolve e os passos
+ * do login não aparecem. Conta não marcada no login pede reconectar.
+ */
+export function precisaConectar(g: SituacaoDaGestao): boolean {
+  return !g.tem_token || g.faltam.length > 0 || /não foi marcada/.test(g.motivo || "");
 }
 
 export default function AtivarGestao({
@@ -70,6 +79,7 @@ export default function AtivarGestao({
       const nova = await lerGestao(clientId, true);
       queryClient.setQueryData(chave, nova);
       if (nova && nova.disponivel) toast.success("Gestão ativa", { description: "O agente já pode fazer as ações na conta, sempre com a sua confirmação." });
+      else if (nova && !precisaConectar(nova)) toast.warning("A conta da Meta está travada", { description: nova.motivo || "Veja o motivo na seção." });
       else if (depoisDoLogin && nova) toast.warning("A Meta não liberou a gestão", { description: nova.faltam.length ? `Falta: ${nova.faltam.join(", ")}. Veja os passos.` : nova.motivo || "Veja os passos." });
     } catch (e) {
       toast.error("Não foi possível conferir", { description: textoDoErro(e) });
@@ -146,11 +156,14 @@ export default function AtivarGestao({
               <span className="font-medium">Falta:</span> {g.faltam.map((f) => NOME_DO_ESCOPO[f] || f).join(", ")}.
             </p>
           )}
-          <ol className="ml-4 list-decimal space-y-1">
-            {PASSOS_DA_GESTAO.map((p, k) => (
-              <li key={k} className="[overflow-wrap:anywhere]">{p}</li>
-            ))}
-          </ol>
+          {(!g || g.faltam.length > 0 || !g.tem_token) && (
+            <ol className="ml-4 list-decimal space-y-1">
+              {PASSOS_DA_GESTAO.map((p, k) => (
+                <li key={k} className="[overflow-wrap:anywhere]">{p}</li>
+              ))}
+            </ol>
+          )}
+          {(!g || precisaConectar(g)) && (
           <div className="flex min-w-0 flex-wrap items-center">
             {podeConectar ? (
               <Button type="button" size="sm" className="mb-1 mr-3 h-8" disabled={conectando} onClick={() => void conectar()}>
@@ -164,6 +177,7 @@ export default function AtivarGestao({
               O painel pede ads_management no login. Se a configuração do Login for Business não tiver a permissão, a Meta não mostra o pedido; depois do login, o painel confere e diz o que faltou.
             </AjudaRecolhida>
           </div>
+          )}
           {g && !g.guardada && <p className="text-[11px] text-muted-foreground">A conferência ainda não fica guardada no banco (SQL pendente): o painel confere de novo a cada 10 minutos.</p>}
         </div>
       )}

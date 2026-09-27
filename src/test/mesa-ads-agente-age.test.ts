@@ -466,3 +466,16 @@ describe("gestão por conta (escopo no token não basta)", () => {
     expect(await lerDebugDoToken("SEGREDO", "v21.0", falha)).toBeNull();
   });
 });
+
+describe("conta travada na Meta (account_status)", () => {
+  it("saldo em aberto (3) diz o motivo e o caminho, mesmo com permissão e papel certos", () => {
+    const debug = { data: { type: "USER", granular_scopes: [{ scope: "ads_management" }] } };
+    const m = bloqueioDaGestaoNaConta(debug, { name: "Conta 01 Aceleriq", account_status: 3, user_tasks: ["DRAFT", "ANALYZE", "ADVERTISE", "MANAGE"] }, "1871637719955892");
+    expect(m).toMatch(/Conta 01 Aceleriq está com pagamento pendente/);
+    expect(m).toMatch(/Cobrança e pagamentos/);
+  });
+
+  it("conta ativa (1) não trava", () => {
+    expect(bloqueioDaGestaoNaConta(null, { account_status: 1, user_tasks: ["MANAGE"] }, "1")).toBeNull();
+  });
+});
