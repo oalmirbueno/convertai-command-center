@@ -1498,6 +1498,58 @@ export function reduzirPorArea(img: Image, largura: number, altura: number): Ima
   return saida;
 }
 
+/**
+ * Metade do tamanho pela média de cada bloco 2x2 (alfa pré-multiplicado),
+ * em inteiro. É a mesma média de área na razão exata 2, bem mais barata que
+ * reduzirPorArea numa foto grande (AB2: copias-leves no limite de CPU).
+ */
+export function metadePorBloco(img: Image): Image {
+  const sw = img.width, sh = img.height;
+  const dw = Math.max(1, Math.floor(sw / 2)), dh = Math.max(1, Math.floor(sh / 2));
+  const src = img.bitmap;
+  const saida = new Image(dw, dh);
+  const ob = saida.bitmap;
+  const linha = sw * 4;
+  for (let y = 0; y < dh; y++) {
+    const l0 = (y * 2) * linha;
+    const l1 = Math.min(sh - 1, y * 2 + 1) * linha;
+    let o = y * dw * 4;
+    for (let x = 0; x < dw; x++) {
+      const c0 = x * 8;
+      const c1 = Math.min(sw - 1, x * 2 + 1) * 4;
+      const i00 = l0 + c0, i01 = l0 + c1, i10 = l1 + c0, i11 = l1 + c1;
+      const a00 = src[i00 + 3], a01 = src[i01 + 3], a10 = src[i10 + 3], a11 = src[i11 + 3];
+      const a = a00 + a01 + a10 + a11;
+      if (a === 1020) {
+        ob[o] = (src[i00] + src[i01] + src[i10] + src[i11] + 2) >> 2;
+        ob[o + 1] = (src[i00 + 1] + src[i01 + 1] + src[i10 + 1] + src[i11 + 1] + 2) >> 2;
+        ob[o + 2] = (src[i00 + 2] + src[i01 + 2] + src[i10 + 2] + src[i11 + 2] + 2) >> 2;
+        ob[o + 3] = 255;
+      } else if (a === 0) {
+        ob[o] = 0; ob[o + 1] = 0; ob[o + 2] = 0; ob[o + 3] = 0;
+      } else {
+        ob[o] = Math.min(255, Math.round((src[i00] * a00 + src[i01] * a01 + src[i10] * a10 + src[i11] * a11) / a));
+        ob[o + 1] = Math.min(255, Math.round((src[i00 + 1] * a00 + src[i01 + 1] * a01 + src[i10 + 1] * a10 + src[i11 + 1] * a11) / a));
+        ob[o + 2] = Math.min(255, Math.round((src[i00 + 2] * a00 + src[i01 + 2] * a01 + src[i10 + 2] * a10 + src[i11 + 2] * a11) / a));
+        ob[o + 3] = (a + 2) >> 2;
+      }
+      o += 4;
+    }
+  }
+  return saida;
+}
+
+/**
+ * Redução por média de área com atalho: enquanto a foto tem o dobro (ou mais)
+ * do alvo nos dois lados, divide por 2 em blocos 2x2 (barato); o resto sai de
+ * reduzirPorArea sobre a imagem já menor. Não abre nem clona o original.
+ */
+export function reduzirPorAreaRapido(img: Image, largura: number, altura: number): Image {
+  let atual = img;
+  while (atual.width >= largura * 2 && atual.height >= altura * 2) atual = metadePorBloco(atual);
+  return reduzirPorArea(atual, largura, altura);
+}
+
 /** Tamanho "contain" (cabe inteiro na caixa, sem ampliar e sem cortar). */
 export function tamanhoQueCabe(largura: number, altura: number, maxL: number, maxA: number): { largura: number; altura: number } {
   const escala = Math.min(1, maxL / largura, maxA / altura);

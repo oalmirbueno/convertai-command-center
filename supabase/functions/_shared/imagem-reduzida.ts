@@ -183,6 +183,11 @@ export async function reduzidaSemTransformacao(
     if (copia && mc && (cabeNaCaixa(dc, maxL, maxA, folga) || copia.byteLength <= (opcoes.aceitarCopiaMaiorAte ?? 0))) {
       return { cabe: true, bytes: copia, mime: mc, largura: dc?.largura ?? null, altura: dc?.altura ?? null, origem: "media" };
     }
+    // AB2: cópia recém-gravada maior que a caixa: reduzir a cópia (no máximo 2048 px) é barato, como no laço das cópias.
+    if (copia && mc) {
+      const r = await reduzirParaCaber(copia, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels: LADO_MEDIA * LADO_MEDIA });
+      if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "media" };
+    }
   }
   return { cabe: false, bytes: original, mime, largura: d?.largura ?? null, altura: d?.altura ?? null, origem: "original" };
 }

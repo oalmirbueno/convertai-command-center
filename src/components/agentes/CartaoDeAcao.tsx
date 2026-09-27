@@ -7,6 +7,7 @@ import {
   acaoDoAnexo,
   estadoDaAcao,
   frasesDoResultado,
+  MAX_ITENS_POR_ACAO,
   type AcaoDoAgente,
   type ItemDaAcaoDoAgente,
   type PedidoDaAcao,
@@ -122,6 +123,11 @@ export default function CartaoDeAcao({
       {atual.ignorados.length > 0 && estado === "aberta" && (
         <p className="mt-1 text-[11px] text-muted-foreground">
           {atual.ignorados.length} {atual.ignorados.length === 1 ? "pedido não entrou" : "pedidos não entraram"}: item que não existe na lista.
+        </p>
+      )}
+      {!!atual.acima_do_teto && estado === "aberta" && (
+        <p className="mt-1 text-[11px] text-muted-foreground" data-acima-do-teto={atual.acima_do_teto}>
+          {atual.acima_do_teto} {atual.acima_do_teto === 1 ? "item ficou" : "itens ficaram"} para um próximo pedido: o limite é {MAX_ITENS_POR_ACAO} por vez.
         </p>
       )}
       <div className="mt-2.5 flex flex-wrap items-center">

@@ -29,6 +29,8 @@
  * escrita grava no formato antigo (menos a área "geral", que precisa do SQL).
  */
 
+import { recortarDossie } from './dossie-recortado.ts';
+
 // ─── Vocabulário ─────────────────────────────────────────────
 
 /** Áreas do cérebro. Cada uma é lida por um agente (ver AGENTE_DA_AREA). */
@@ -561,7 +563,8 @@ export async function contextoParaAgente(
   const d = linhasDe(dossieR)[0];
   const limiteDossie = Math.min(Math.max(opcoes.limiteDossie ?? 4000, 500), 12_000);
   const corpo = d ? String(d.content ?? d.summary ?? '').trim() : '';
-  const dossie = corpo ? (corpo.length > limiteDossie ? `${corpo.slice(0, limiteDossie).trimEnd()}\n[dossiê cortado para caber]` : corpo) : null;
+  // AB2: grande demais, fica o começo curto e o FIM (o mais recente), com o marcador do meio.
+  const dossie = corpo ? recortarDossie(corpo, limiteDossie) : null;
   const texto = [cerebro, dossie ? `DOSSIÊ ATUAL DO CLIENTE (fatos do painel; vazio não quer dizer que não existe)\n${dossie}` : '']
     .filter(Boolean).join('\n\n');
   return { texto, cerebro, dossie, avisos: leitura.avisos };

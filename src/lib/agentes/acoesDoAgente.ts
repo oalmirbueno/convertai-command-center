@@ -9,6 +9,8 @@ import { chamarFuncao, type FuncaoDaMesa } from "@/lib/mesa/api";
  */
 
 export const TIPO_DA_ACAO = "acao_agente";
+/** Itens num pedido só (o mesmo do servidor). */
+export const MAX_ITENS_POR_ACAO = 120;
 
 export interface ItemDaAcaoDoAgente {
   ref: string;
@@ -46,6 +48,8 @@ export interface AcaoDoAgente {
   itens: ItemDaAcaoDoAgente[];
   ignorados: string[];
   recusados: RecusaDoItem[];
+  /** Pedidos válidos acima do teto de MAX_ITENS_POR_ACAO: ficam para um próximo pedido. */
+  acima_do_teto?: number;
   contexto?: Record<string, unknown>;
   sem_desfazer?: boolean;
   custo_estimado_usd?: number | null;

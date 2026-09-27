@@ -3,17 +3,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Library, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, padraoDoContexto, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { ehAmostraDaTipografia, gerarAmostrasDaTipografia } from "@/lib/mesa/amostraDaFonte";
+import { depsDaAmostraNoSupabase, fontesDaMarcaNaTela, lerFontesComMarca, useTipografiaDaMarca } from "@/lib/mesa/tipografiaDoCliente";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { BotaoComCusto, avisarCustoReal } from "./Custo";
 import BibliotecaDeFontes, { type PapelDaEscolha } from "./ContextoBibliotecaDeFontes";
 import LogosDaMarca from "./ContextoLogos";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { PaletaDaMarca } from "./ContextoPaleta";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import {
   chaveDasFontes,
   temTexto,
-  useFontesDoCliente,
   useInvalidarContexto,
   type CandidatoALogo,
   type CorDoKit,
@@ -66,9 +67,12 @@ function Subtitulo({ children, acao }: { children: string; acao?: ReactNode }) {
 
 export function FontesDaMarca() {
   const { clientId, catalogo, atualizarCusto } = useMesa();
+  const { marca } = useMarcaDaMesa();
   const queryClient = useQueryClient();
   const invalidar = useInvalidarContexto();
-  const fontes = useFontesDoCliente(clientId);
+  // Frente T2: as fontes da marca aberta (a CME vê as dela), com a mesma regra do servidor.
+  const tipografia = useTipografiaDaMarca(clientId, marca);
+  const fontes = { data: tipografia.data ? tipografia.data.daMarca : undefined, isLoading: tipografia.isLoading };
   const [galeria, setGaleria] = useState<PapelDaEscolha | null>(null);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const lista = fontes.data || [];
@@ -156,6 +160,14 @@ export function FontesDaMarca() {
               avisarCustoReal(f && temTexto(f.titulo) ? `Fontes escolhidas: ${f.titulo} e ${f.texto}` : "Fontes escolhidas da biblioteca", data, atualizarCusto);
               void queryClient.invalidateQueries({ queryKey: chaveDasFontes(clientId) });
               invalidar(clientId);
+              // Frente T2: a amostra da tipografia das fontes novas, desenhada em seguida.
+              void lerFontesComMarca(clientId)
+                .then((todas) => gerarAmostrasDaTipografia(clientId, fontesDaMarcaNaTela(todas, marca).filter((x) => !ehAmostraDaTipografia(x.amostra_path, clientId)), depsDaAmostraNoSupabase(clientId)))
+                .catch(() => null)
+                .then(() => {
+                  void queryClient.invalidateQueries({ queryKey: chaveDasFontes(clientId) });
+                  invalidar(clientId);
+                });
             }}
           />
           <span className="mb-1 text-[11px] text-muted-foreground">ou escolha você na galeria.</span>

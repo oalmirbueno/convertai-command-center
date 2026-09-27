@@ -59,8 +59,29 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
-import { decodificar, logoLimpa } from "../_shared/imagem-local.ts";
+import { logoLimpa } from "../_shared/imagem-local.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
+import {
+  avisoDasImagensDeFora,
+  avisoDoPeriodoCurto,
+  base64DasImagens,
+  dataCurta,
+  FOLGA_DO_ANEXO,
+  IMAGENS_LIDAS_AO_MESMO_TEMPO,
+  imagensNoTetoDaChamada,
+  LADO_DA_FOTO_LIDA,
+  LADO_DO_ANEXO,
+  MAX_BYTES_ANEXO,
+  MAX_BYTES_FOTO_LIDA,
+  MAX_BYTES_ORIGINAL,
+  MAX_PIXELS_ANEXO_NA_FUNCAO,
+  MAX_PIXELS_FOTO_NA_FUNCAO,
+  periodoDosConteudosDaCampanha,
+  quantidadeDaCampanha,
+  respostaComAvisos,
+} from "./tetos-do-pedido.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import {
   createEditorialItem,
@@ -142,6 +163,7 @@ import {
   type EdicaoDeTexto,
   type PecaComApelido,
   type PecaDaAgenda,
+  diasDaPropostaLivre,
   janelaDoPedidoLivre,
   MAX_PECAS_NA_AGENDA_LONGA,
 } from "./acoes-agenda.ts";
@@ -644,17 +666,17 @@ async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
 }
 
 /**
- * Dias úteis que valem para a proposta. Pedido livre e campanha nascem com o
- * período dos próprios itens (às vezes um dia só); ajustar a data precisa da
- * janela inteira: de hoje (ou do início, se antes) até 30 dias depois do fim.
+ * Dias úteis que valem para a proposta. Pedido livre e conteúdo rápido nascem
+ * com o período dos próprios itens (às vezes um dia só); ajustar a data precisa
+ * da janela do pedido (acoes-agenda.ts, diasDaPropostaLivre): de hoje (ou do
+ * início, se antes) até 30 dias depois de hoje, esticada até a última data
+ * citada no pedido e até o último conteúdo. Antes somava 30 dias ao FIM e a
+ * janela transbordava sem motivo (anti-bug 26/09, AB2).
  */
 function diasUteisDaProposta(p: Proposta): string[] {
   const origem = String((p.parametros ?? {}).origem ?? "");
   if (origem !== "pedido_livre" && origem !== "conteudo_rapido") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
-  const hoje = hojeSaoPaulo();
-  const inicio = p.periodo_inicio < hoje ? p.periodo_inicio : hoje;
-  const fimBase = p.periodo_fim > hoje ? p.periodo_fim : hoje;
-  return diasUteisDoPeriodo(inicio, somarDias(fimBase, 30));
+  return diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo());
 }
 
 async function carregarProposta(servico: SupabaseClient, id: unknown): Promise<Proposta> {
@@ -909,7 +931,7 @@ async function montarContexto(
       nome: perfilDados?.company_name?.trim() || perfilDados?.full_name?.trim() || "Cliente sem nome no cadastro",
       instagram: contaIg?.handle ? `@${contaIg.handle.replace(/^@/, "")}` : null,
     },
-    dossie: dossieDados ? `Versão ${dossieDados.version} (${String(dossieDados.effective_at).slice(0, 10)}):\n${dossieDados.content.slice(0, 14000)}` : null,
+    dossie: dossieDados ? `Versão ${dossieDados.version} (${String(dossieDados.effective_at).slice(0, 10)}):\n${recortarDossie(dossieDados.content, 14000)}` : null,
     movimentos: ((movimentos.data ?? []) as Array<Record<string, unknown>>).slice(0, 150).map((m) => ({
       quando: String(m.quando ?? "").slice(0, 10),
       tipo: m.tipo,
@@ -956,7 +978,7 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     objetivo_principal: p.parametros.objetivo ?? null,
     oferta_principal: p.parametros.oferta ?? null,
     regiao: p.parametros.regiao ?? null,
-    dossie_geral_atual: enxuto && ctx.dossie ? ctx.dossie.slice(0, 6000) : ctx.dossie,
+    dossie_geral_atual: enxuto && ctx.dossie ? recortarDossie(ctx.dossie, 6000) : ctx.dossie,
     movimentos_ultimos_60_dias: enxuto ? ctx.movimentos.slice(0, 25) : ctx.movimentos,
     metricas_instagram: enxuto
       ? { posts: { melhores_por_salvamento_e_compartilhamento: ctx.metricas.posts.melhores_por_salvamento_e_compartilhamento.slice(0, 3), total_lidos: ctx.metricas.posts.total_lidos } }
@@ -1015,11 +1037,21 @@ const CONHECIMENTO_DO_CALENDARIO: Record<MomentoDoCalendario, string> = {
 };
 
 /**
+ * Mapa do painel (frente AG) para as CONVERSAS do agente do Mês (chave "mes" em
+ * AGENTES_DO_PAINEL): ele sabe onde fica cada área e aponta a certa. As
+ * gerações (temas, detalhar, pedido livre, campanha, hypes) não levam: custo e
+ * foco (anti-bug 26/09, AB2).
+ */
+const MAPA_DO_PAINEL_NA_CONVERSA = blocoDoMapaDoPainel("mes");
+
+/**
  * Sistema do estrategista (COMO-INTEGRAR, opção 1): o prompt do banco (global,
  * complemento do cliente e base de técnica) inteiro, a base de marketing do
- * momento e as regras de saída, que continuam por último.
+ * momento e as regras de saída, que continuam por último. Na conversa, o mapa
+ * do painel entra antes das regras de saída.
  */
-function sistemaDoCalendario(ctx: Pick<Contexto, "prompt">, momento: MomentoDoCalendario): string {
+function sistemaDoCalendario(ctx: Pick<Contexto, "prompt">, momento: MomentoDoCalendario, uso: "geracao" | "conversa" = "geracao"): string {
+  if (uso === "conversa") return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n\n${MAPA_DO_PAINEL_NA_CONVERSA}\n${REGRAS_DE_SAIDA}`;
   return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n${REGRAS_DE_SAIDA}`;
 }
 
@@ -1870,7 +1902,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: sistemaDoCalendario(ctx, "mes"),
+    sistema: sistemaDoCalendario(ctx, "mes", "conversa"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA,
@@ -2449,7 +2481,6 @@ Regras dos itens:
 // ------------------------------------------- agente do mês, hypes e campanhas
 
 const MAX_ANEXOS_PEDIDO = 6;
-const MAX_BYTES_ANEXO = 12 * 1024 * 1024;
 const REF_AGENTE_DO_MES = "agente_do_mes";
 
 /** Hoje no fuso de São Paulo (AAAA-MM-DD). */
@@ -2472,28 +2503,95 @@ function mimeDaImagem(b: Uint8Array): string | null {
   return null;
 }
 
+/** Lê a lista com poucas ao mesmo tempo (memória da função); a leitura que falha vira null. Mesma ordem. */
+async function lerAosPoucos<T, R>(lista: T[], ler: (x: T, i: number) => Promise<R | null>): Promise<Array<R | null>> {
+  const r = await emParalelo(lista.length, IMAGENS_LIDAS_AO_MESMO_TEMPO, (i) => ler(lista[i], i));
+  return lista.map((_, i) => {
+    const x = r[i];
+    return x && x.status === "fulfilled" ? x.value : null;
+  });
+}
+
+/**
+ * Um anexo reduzido para o modelo ler (lado maior 2048, com folga): o próprio
+ * arquivo quando já cabe, a cópia leve do painel ou a pedida à copias-leves.
+ * Nunca abre aqui o original grande; null quando não deu.
+ */
+async function anexoParaLeitura(servico: SupabaseClient, caminho: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  try {
+    const r = await reduzidaSemTransformacao(servico, "mesa", caminho, LADO_DO_ANEXO, LADO_DO_ANEXO, {
+      folga: FOLGA_DO_ANEXO,
+      maxBytes: MAX_BYTES_ORIGINAL,
+      pedirCopia: true,
+      maxPixels: MAX_PIXELS_ANEXO_NA_FUNCAO,
+    });
+    // cabe: false traz os bytes do ORIGINAL, grande demais para abrir aqui: não vão ao modelo.
+    const mime = r && r.cabe ? mimeDaImagem(r.bytes) : null;
+    if (!r || !mime || r.bytes.byteLength > MAX_BYTES_ANEXO) return null;
+    return { bytes: r.bytes, mime };
+  } catch {
+    return null;
+  }
+}
+
+type AnexosDoPedido = {
+  imagens: ImagemEntrada[];
+  caminhos: string[];
+  ilegiveis: number;
+  acimaDoTeto: number;
+  /** Quantos anexos ficaram de fora (ilegíveis ou acima do teto). */
+  fora: number;
+  /** Aviso para a equipe e para o modelo; null quando todos entraram. */
+  aviso: string | null;
+};
+
 /**
  * Imagens anexadas ao pedido (prints, fotos): a tela sobe no bucket mesa em
- * <cliente>/pedidos/; aqui só entra caminho do próprio cliente.
+ * <cliente>/pedidos/; aqui só entra caminho do próprio cliente. Anti-bug 26/09
+ * (AB2): antes o anexo cru de até 12 MB ia inteiro (6 anexos, até 72 MB na
+ * memória e acima do teto do provedor). Agora cada um vem reduzido
+ * (anexoParaLeitura), poucos ao mesmo tempo, e o total respeita o teto de 24
+ * MB de base64 por chamada ao modelo. O que não coube fica de fora com aviso.
  */
-async function baixarAnexos(servico: SupabaseClient, clientId: string, bruto: unknown): Promise<{ imagens: ImagemEntrada[]; caminhos: string[] }> {
+async function baixarAnexos(servico: SupabaseClient, clientId: string, bruto: unknown): Promise<AnexosDoPedido> {
   const caminhos = (Array.isArray(bruto) ? bruto : [])
     .map((c) => String(c ?? ""))
     .filter((c) => c.startsWith(`${clientId}/`) && c.indexOf("..") < 0)
     .slice(0, MAX_ANEXOS_PEDIDO);
+  const lidos = await lerAosPoucos(caminhos, (c) => anexoParaLeitura(servico, c));
+  const noTeto = imagensNoTetoDaChamada(lidos);
   const imagens: ImagemEntrada[] = [];
   const validos: string[] = [];
-  for (const c of caminhos) {
-    const { data, error } = await servico.storage.from("mesa").download(c);
-    if (error || !data) continue;
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    const mime = mimeDaImagem(bytes);
-    if (!mime || bytes.byteLength > MAX_BYTES_ANEXO) continue;
-    imagens.push({ bytes, mime, nome: `anexo-${imagens.length + 1}.${mime.split("/")[1]}` });
-    validos.push(c);
+  for (const i of noTeto.ficam) {
+    const img = lidos[i]!;
+    imagens.push({ bytes: img.bytes, mime: img.mime, nome: `anexo-${imagens.length + 1}.${img.mime.split("/")[1]}` });
+    validos.push(caminhos[i]);
   }
-  return { imagens, caminhos: validos };
+  const fora = noTeto.ilegiveis + noTeto.acimaDoTeto;
+  if (fora) console.warn("[agente-calendario] anexos de fora", { client_id: clientId, ilegiveis: noTeto.ilegiveis, acima_do_teto: noTeto.acimaDoTeto });
+  return { imagens, caminhos: validos, ilegiveis: noTeto.ilegiveis, acimaDoTeto: noTeto.acimaDoTeto, fora, aviso: avisoDasImagensDeFora(noTeto, "anexo") };
 }
+
+/**
+ * Anexos que vão depois de outras imagens na mesma mensagem (as fotos da
+ * campanha vêm antes): corta do fim pelo teto que sobrou e refaz o aviso.
+ */
+function anexosDepoisDe(a: AnexosDoPedido, jaNaChamada: number): AnexosDoPedido {
+  const noTeto = imagensNoTetoDaChamada(a.imagens, jaNaChamada);
+  if (!noTeto.acimaDoTeto) return a;
+  const acimaDoTeto = a.acimaDoTeto + noTeto.acimaDoTeto;
+  return {
+    imagens: noTeto.ficam.map((i) => a.imagens[i]),
+    caminhos: noTeto.ficam.map((i) => a.caminhos[i]),
+    ilegiveis: a.ilegiveis,
+    acimaDoTeto,
+    fora: a.ilegiveis + acimaDoTeto,
+    aviso: avisoDasImagensDeFora({ ilegiveis: a.ilegiveis, acimaDoTeto }, "anexo"),
+  };
+}
+
+/** Linha do prompt quando algo ficou de fora: o modelo não responde como se tivesse visto. */
+const notaDoSistema = (aviso: string | null) => (aviso ? `\n(Aviso do sistema: ${aviso})\n` : "");
 
 /**
  * Projeto de social do cliente (para gravar sem perguntar), o mais recente.
@@ -2746,31 +2844,26 @@ async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string
 /**
  * Foto reduzida para o modelo ler (lado maior 768). Desde 26/09 sem a
  * transformação do Storage (cota estourada): a miniatura gravada pelo painel
- * ao lado do original ou o original reduzido aqui quando é pequeno o bastante
- * (_shared/imagem-reduzida.ts); senão, a redução local de sempre.
+ * ao lado do original, o original quando já cabe ou é pequeno (até 0,7 MP), ou
+ * a cópia pedida à copias-leves (_shared/imagem-reduzida.ts, pedirCopia).
+ * Anti-bug 26/09 (AB2): saiu a queda que abria o original aqui (até 25 MP,
+ * 12 fotos de uma vez passavam dos 2 s de CPU); a foto que não coube fica de
+ * fora (null) e quem chamou avisa (avisoDasImagensDeFora).
  */
 async function fotoParaLeitura(servico: SupabaseClient, f: FotoDaCampanha, nome: string): Promise<ImagemEntrada | null> {
-  const lado = 768;
   try {
-    const r = await reduzidaSemTransformacao(servico, f.storage_bucket || "mesa", f.storage_path, lado, lado, { maxBytes: 30 * 1024 * 1024 });
+    const r = await reduzidaSemTransformacao(servico, f.storage_bucket || "mesa", f.storage_path, LADO_DA_FOTO_LIDA, LADO_DA_FOTO_LIDA, {
+      maxBytes: MAX_BYTES_ORIGINAL,
+      pedirCopia: true,
+      maxPixels: MAX_PIXELS_FOTO_NA_FUNCAO,
+    });
+    // cabe: false traz os bytes do ORIGINAL, grande demais para abrir aqui: não vão ao modelo.
     const mime = r && r.cabe ? mimeDaImagem(r.bytes) : null;
-    if (r && mime && r.bytes.byteLength <= 3 * 1024 * 1024) return { bytes: r.bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
+    if (r && mime && r.bytes.byteLength <= MAX_BYTES_FOTO_LIDA) return { bytes: r.bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
   } catch {
-    // cai no original
+    // fica de fora
   }
-  try {
-    const { data, error } = await servico.storage.from(f.storage_bucket || "mesa").download(f.storage_path);
-    if (error || !data) return null;
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    const mime = mimeDaImagem(bytes);
-    if (!mime || bytes.byteLength > 30 * 1024 * 1024) return null;
-    if (bytes.byteLength <= 1_500_000) return { bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
-    const img = await decodificar(bytes);
-    const reduzida = img.width > lado || img.height > lado ? img.contain(lado, lado) : img;
-    return { bytes: await reduzida.encodeJPEG(82), mime: "image/jpeg", nome: `${nome}.jpg` };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /** Catálogo das fotos para o prompt: código curto (F1, F2...) em vez do UUID, que o modelo troca. */
@@ -3137,7 +3230,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 ${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
-${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
+${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}${notaDoSistema(anexos.aviso)}
 
 TAREFA: faça exatamente o que o pedido diz.
 - Quantidade: a pedida (se não disser, 1 conteúdo).
@@ -3188,7 +3281,8 @@ ${REGRAS_DOS_ITENS}`;
     .single();
   if (error || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "O agente preparou os conteúdos, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
 
-  const resposta = texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`;
+  // Imagem anexada que ficou de fora: a equipe lê o aviso na resposta.
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso]);
   await registrarMensagens(servico, conversaId, clientId, [
     {
       papel: "usuario",
@@ -3200,7 +3294,7 @@ ${REGRAS_DOS_ITENS}`;
     },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
   ]);
-  return json({ proposta, resposta, conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ proposta, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------------ conteúdo rápido (25/09)
@@ -3441,7 +3535,7 @@ async function editarItem(servico: SupabaseClient, chamador: Chamador, corpo: Re
 
 // ------------------------------------------------ conteúdos da campanha na hora
 
-const MAX_CONTEUDOS_POR_VEZ = 8;
+// Teto por vez (MAX_CONTEUDOS_POR_VEZ = 8) e período em tetos-do-pedido.ts.
 const CONTEUDOS_POR_LOTE = 2;
 
 /**
@@ -3453,27 +3547,31 @@ const CONTEUDOS_POR_LOTE = 2;
  * livres primeiro). Os conteúdos entram na proposta da campanha (criada se não
  * houver) e esperam a equipe escolher e mandar para a agenda (gravar com
  * tema_ids). Cada lote grava ao terminar. Resposta: { campanha, proposta,
- * novos, faltam, custo_usd, saldo_usd, tempos_ms }.
+ * novos, faltam, ignorados, avisos, custo_usd, saldo_usd, tempos_ms }.
+ * Anti-bug 26/09 (AB2): campanha curta fica no período real dela (antes era
+ * esticada para 14 dias) e o pedido acima de 8 avisa quantos ficaram de fora
+ * (`ignorados`, `avisos` e a mensagem da conversa).
  */
 async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const tempo = relogio();
   const c = await carregarCampanha(servico, corpo.campanha_id);
   await exigirAcessoAoCliente(chamador, c.client_id);
-  const pedidoQtd = Math.round(Number(corpo.quantidade));
   const escolha = lerEscolhaEditorial(corpo);
   const formatoPedido: Formato | null = corpo.formato === "carrossel" || corpo.formato === "estatico" ? corpo.formato : null;
 
   const hoje = hojeSaoPaulo();
-  const inicio = c.periodo_inicio && c.periodo_inicio > hoje ? c.periodo_inicio : hoje;
-  let fim = c.periodo_fim && c.periodo_fim >= inicio ? c.periodo_fim : somarDias(inicio, 21);
-  if (diasEntre(inicio, fim) < 5) fim = somarDias(inicio, 14);
+  const { inicio, fim } = periodoDosConteudosDaCampanha(c.periodo_inicio, c.periodo_fim, hoje);
   const uteis = diasUteisDoPeriodo(inicio, fim);
-  if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período da campanha não tem dia de segunda a sexta.");
+  if (!uteis.length) {
+    throw new ErroHttp(400, "periodo_sem_dia_util", `A campanha vai de ${dataCurta(inicio)} a ${dataCurta(fim)} e não tem dia de segunda a sexta. Aumente o período da campanha.`);
+  }
 
   const propostaAntiga = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
   const proposta0 = propostaAntiga && propostaAntiga.status !== "descartada" ? propostaAntiga : null;
   const existentes = proposta0?.itens ?? [];
-  const quantidade = Number.isFinite(pedidoQtd) && pedidoQtd >= 1 ? Math.min(MAX_CONTEUDOS_POR_VEZ, pedidoQtd) : existentes.length ? 3 : 5;
+  const pedidoDaQuantidade = quantidadeDaCampanha(corpo.quantidade, existentes.length);
+  const quantidade = pedidoDaQuantidade.quantidade;
+  const avisos = [pedidoDaQuantidade.aviso, avisoDoPeriodoCurto(uteis.length, quantidade)].filter((a): a is string => !!a);
 
   const [ctx, fotosDaCamp, projectId] = await Promise.all([
     montarContexto(servico, c.client_id, inicio, fim, marcaDaChamada(servico, c.client_id, corpo)),
@@ -3605,9 +3703,12 @@ ${REGRAS_DOS_ITENS}`;
     await registrarMensagens(servico, conversaId, c.client_id, [
       {
         papel: "agente",
-        conteudo: novos.size
-          ? `Gerei ${novos.size} conteúdo(s): ${[...novos.values()].map((i) => `${i.etapa ? `${i.etapa}: ` : ""}${i.tema} (${i.data})`).join("; ")}. Revise, escolha e mande para a agenda.`
-          : "Não consegui gerar os conteúdos agora.",
+        conteudo: respostaComAvisos(
+          novos.size
+            ? `Gerei ${novos.size} conteúdo(s): ${[...novos.values()].map((i) => `${i.etapa ? `${i.etapa}: ` : ""}${i.tema} (${i.data})`).join("; ")}. Revise, escolha e mande para a agenda.`
+            : "Não consegui gerar os conteúdos agora.",
+          avisos,
+        ),
         uso_id: usos[0] ?? null,
         anexos: [{ proposta_id: proposta.id }, ...usos.slice(1).map((id) => ({ uso_id: id }))],
       },
@@ -3621,9 +3722,9 @@ ${REGRAS_DOS_ITENS}`;
   if (falha && !novos.size) {
     const resposta = respostaDeErro(falha.reason);
     const corpoErro = await resposta.json();
-    return json({ ...corpoErro, campanha: campanhaFinal ?? c, proposta: atualizada, faltam, custo_usd: custo, tempos_ms: tempos }, resposta.status);
+    return json({ ...corpoErro, campanha: campanhaFinal ?? c, proposta: atualizada, faltam, ignorados: pedidoDaQuantidade.ignorados, avisos, custo_usd: custo, tempos_ms: tempos }, resposta.status);
   }
-  return json({ campanha: campanhaFinal ?? c, proposta: atualizada, novos: novos.size, faltam, custo_usd: Math.round(custo * 1e6) / 1e6, saldo_usd: saldo, tempos_ms: tempos });
+  return json({ campanha: campanhaFinal ?? c, proposta: atualizada, novos: novos.size, faltam, ignorados: pedidoDaQuantidade.ignorados, avisos, custo_usd: Math.round(custo * 1e6) / 1e6, saldo_usd: saldo, tempos_ms: tempos });
 }
 
 // ------------------------------------------------------------------ hypes
@@ -3810,7 +3911,7 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const briefingDaEquipe = normalizarBriefing(corpo.briefing);
   const imagensPedidas = normalizarImagensDaCampanha(corpo.imagens);
 
-  const [ctx, anexos, projectId, fotosAchadas] = await Promise.all([
+  const [ctx, anexosLidos, projectId, fotosAchadas] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
     projetoSocialDoCliente(servico, clientId, marcaDaChamada(servico, clientId, corpo)),
@@ -3820,18 +3921,23 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
     .map((imagem) => ({ imagem, foto: fotosAchadas.find((f) => f.id === imagem.imagem_id) }))
     .filter((x): x is { imagem: ImagemDaCampanha; foto: FotoDaCampanha } => !!x.foto);
   const imagensValidas = fotos.map((x) => x.imagem);
-  // As fotos da campanha vão à vista do estrategista (reduzidas), antes dos anexos do pedido.
-  const lidas = await Promise.all(fotos.map((x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`)));
+  // As fotos da campanha vão à vista do estrategista (reduzidas, poucas ao mesmo tempo), antes dos anexos do pedido.
+  const lidas = await lerAosPoucos(fotos, (x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`));
+  const fotosNoTeto = imagensNoTetoDaChamada(lidas);
+  const cabem = new Set(fotosNoTeto.ficam);
   const codigos = new Map<string, string>();
   const fotosVistas: { imagem: ImagemDaCampanha; foto: FotoDaCampanha }[] = [];
   const imagensDaChamada: ImagemEntrada[] = [];
   lidas.forEach((img, i) => {
-    if (!img) return;
+    if (!img || !cabem.has(i)) return;
     fotosVistas.push(fotos[i]);
     codigos.set(`F${fotosVistas.length}`, fotos[i].foto.id);
     imagensDaChamada.push({ ...img, nome: `F${fotosVistas.length}.${img.mime.split("/")[1]}` });
   });
+  // Os anexos vão depois das fotos, no que sobrou do teto de 24 MB da chamada.
+  const anexos = anexosDepoisDe(anexosLidos, base64DasImagens(imagensDaChamada));
   anexos.imagens.forEach((img) => imagensDaChamada.push(img));
+  const avisosDasImagens = [avisoDasImagensDeFora(fotosNoTeto, "foto"), anexos.aviso].filter((a): a is string => !!a);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
   // O id nasce antes: o uso de IA fica ligado à campanha, não ao cliente.
@@ -3839,7 +3945,7 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
-${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}
+${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}${notaDoSistema(avisosDasImagens.join(" ") || null)}
 TAREFA: crie a campanha completa para ${inicio} a ${fim}. Nada genérico: cada parte fala do produto em foco, da oferta e do público deste cliente.
 - nome: nome curto e memorável da campanha (é o tema, não o nome da marca).
 - objetivo: o resultado de negócio que a campanha busca, em 1 frase.
@@ -3963,13 +4069,13 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     const conversaId = await conversaDaCampanha(servico, campanha as Campanha, chamador.userId);
     await registrarMensagens(servico, conversaId, clientId, [
       { papel: "usuario", conteudo: pedidoTexto },
-      { papel: "agente", conteudo: texto(r.resposta, 2000) || "Campanha criada.", uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
+      { papel: "agente", conteudo: respostaComAvisos(texto(r.resposta, 2000) || "Campanha criada.", avisosDasImagens), uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
     ]);
   } catch (e) {
     console.error("[agente-calendario] conversa inicial da campanha nao gravada", { campanha_id: campanhaId, erro: String(e) });
   }
 
-  return json({ campanha, proposta, resposta: texto(r.resposta, 2000), project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta, resposta: respostaComAvisos(texto(r.resposta, 2000), avisosDasImagens), avisos: avisosDasImagens, project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 const ESQUEMA_AJUSTE_CAMPANHA = {
@@ -4174,7 +4280,7 @@ CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e N�
 ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
 
 PEDIDO DA EQUIPE: ${mensagem}
-${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}
+${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}
 ${fotosDaCamp.length ? `Os conteúdos seguem o briefing e usam as imagens da campanha: a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>".
 ` : ""}Aplique o pedido. Devolva:
 - resposta: o que você mudou ou respondeu, em até 4 frases.
@@ -4188,7 +4294,7 @@ ${REGRAS_DOS_ITENS}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: sistemaDoCalendario(ctx, "campanha"),
+    sistema: sistemaDoCalendario(ctx, "campanha", "conversa"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA_CAMPANHA,
@@ -4243,12 +4349,12 @@ ${REGRAS_DOS_ITENS}`;
     if (livres.length) propostaFinal = await salvarProposta(servico, proposta, { itens: final, status: "pronta" });
   }
 
-  const resposta = texto(r.resposta, 2000) || "Campanha atualizada.";
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || "Campanha atualizada.", [anexos.aviso]);
   await registrarMensagens(servico, conversaId, c.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: propostaFinal && propostaFinal !== proposta ? [{ proposta_id: propostaFinal.id }] : [] },
   ]);
-  return json({ campanha, proposta: propostaFinal, resposta, conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta: propostaFinal, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------ imagens, briefing e plano da campanha
@@ -4316,12 +4422,16 @@ async function campanhaPlanoImagens(servico: SupabaseClient, chamador: Chamador,
   if (!candidatas.length) {
     throw new ErroHttp(409, "campanha_sem_imagens", "Nenhuma imagem para analisar. Escolha imagens para a campanha ou sincronize o acervo do cliente na aba Contexto.");
   }
-  const lidas = await Promise.all(candidatas.map((x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`)));
+  // Poucas ao mesmo tempo, sem abrir original grande aqui e dentro do teto de 24 MB da chamada (anti-bug 26/09, AB2).
+  const lidas = await lerAosPoucos(candidatas, (x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`));
+  const fotosNoTeto = imagensNoTetoDaChamada(lidas);
+  const cabem = new Set(fotosNoTeto.ficam);
+  const avisoDasFotos = avisoDasImagensDeFora(fotosNoTeto, "foto");
   const vistas: { foto: FotoDaCampanha; imagem: ImagemDaCampanha | null }[] = [];
   const imagens: ImagemEntrada[] = [];
   const codigos = new Map<string, string>();
   lidas.forEach((img, i) => {
-    if (!img) return;
+    if (!img || !cabem.has(i)) return;
     vistas.push(candidatas[i]);
     codigos.set(`F${vistas.length}`, candidatas[i].foto.id);
     imagens.push({ ...img, nome: `F${vistas.length}.${img.mime.split("/")[1]}` });
@@ -4344,7 +4454,7 @@ async function campanhaPlanoImagens(servico: SupabaseClient, chamador: Chamador,
 ${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim }, briefing, identidade: c.identidade })}
 
 FOTOS (vêm anexadas nesta ordem; cite pelo código):
-${JSON.stringify(catalogoDasFotos(vistas))}
+${JSON.stringify(catalogoDasFotos(vistas))}${notaDoSistema(avisoDasFotos)}
 ${fonte === "acervo" ? "\nA equipe ainda não escolheu imagens para esta campanha: estas são fotos reais recentes do acervo do cliente. Use só as que servem de verdade e diga nas lacunas o que falta.\n" : ""}
 CONTEÚDOS DA CAMPANHA (JSON; item é a posição):
 ${JSON.stringify(conteudos)}
@@ -4386,7 +4496,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
   const custo = Math.round((s.custoUsd + decidido.custo) * 1e6) / 1e6;
   await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
   (data as Campanha).custo_usd = Math.round((Number((data as Campanha).custo_usd) + custo) * 1e6) / 1e6;
-  return json({ campanha: data, plano_imagens: decidido.plano, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha: data, plano_imagens: decidido.plano, avisos: avisoDasFotos ? [avisoDasFotos] : [], custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------ planejar o mês conversando
@@ -5004,7 +5114,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
       publico: contextoDoKit.publico,
       prompt: promptDoPedido,
       evidencias: [
-        ctx.dossie ? ctx.dossie.slice(0, 1500) : "",
+        ctx.dossie ? recortarDossie(ctx.dossie, 1500) : "",
         textoDoCampo(contextoDoKit.diferenciais).slice(0, 800),
         extra.aprovados_pelo_cliente_nos_ultimos_90_dias.slice(0, 12).map((a) => a.titulo).join("; "),
         extra.publicados_nos_ultimos_90_dias.slice(0, 12).map((a) => a.titulo).join("; "),
@@ -5027,7 +5137,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
 ${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
 ${mensagem}
-${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}
+${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}${notaDoSistema(imagens.aviso)}
 ${REGRAS_DO_AGENTE_DO_MES}
 
 TAREFA: você é o estrategista planejando e executando o mês junto com a equipe. Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda, o plano combinado, o MCP e os arquivos.
@@ -5054,7 +5164,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     { chave: "mcp", texto: mcp.texto, prioridade: 70, minimo: 8_000 },
     { chave: "planejamento", texto: `\nCONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):\n${JSON.stringify(extra)}`, prioridade: 50, minimo: 4_000 },
     { chave: "arquivos_anteriores", texto: blocoDosArquivos(lidosAntes, "ARQUIVOS DE PEDIDOS ANTERIORES DESTA CONVERSA"), prioridade: 40 },
-  ], TETO_TOKENS_DO_PEDIDO, estimarTokens(sistemaDoCalendario(ctx, "mes")) + estimarTokens(tarefa) + tokensDoHistorico + imagens.imagens.length * 1_600);
+  ], TETO_TOKENS_DO_PEDIDO, estimarTokens(sistemaDoCalendario(ctx, "mes", "conversa")) + estimarTokens(tarefa) + tokensDoHistorico + imagens.imagens.length * 1_600);
   const pedido = `${orcamento.partes.map((x) => x.texto).filter(Boolean).join("\n")}\n${tarefa}`;
 
   const s = await chamarTexto({
@@ -5063,7 +5173,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: sistemaDoCalendario(ctx, "mes"),
+    sistema: sistemaDoCalendario(ctx, "mes", "conversa"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
     raciocinio,
     // Lista longa de conteúdos (criar_conteudos, editar_textos) cabe inteira na resposta.
@@ -5114,7 +5224,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // Público novo e real: proposta de atualizar o contexto (Confirmar e Desfazer).
   const acaoDoPublico = acaoDeAtualizarPublico(r.atualizar_publico, publicoAtual, decisaoDoPublico, clientId);
 
-  const resposta = texto(r.resposta, 6000) || "Anotado.";
+  // Imagem anexada que ficou de fora (anti-bug 26/09, AB2): a equipe lê o aviso na resposta.
+  const resposta = respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]);
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
   if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
@@ -5176,6 +5287,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     decisao_publico: decisaoDoPublico,
     contexto_usado: contextoUsado,
     arquivos: { lidos: arquivos.lidos.length, nao_lidos: arquivos.nao_lidos.length, cortados: arquivos.cortados },
+    avisos: imagens.aviso ? [imagens.aviso] : [],
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,

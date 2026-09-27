@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { lerTodasAsPaginas } from "@/lib/paginasDoBanco";
 
 /**
  * O que está REALMENTE acontecendo com cada cliente, agora.
@@ -237,55 +238,64 @@ export async function lerSituacoes(
   const agora = agoraIso ? new Date(agoraIso).getTime() : Date.now();
   const seteDiasAtras = new Date(agora - 7 * 86_400_000).toISOString();
 
+  // AB2: o banco devolve no máximo 1.000 linhas por pedido e a carteira
+  // inteira passa disso (arquivos, diário). Cada consulta lê página a página
+  // (lerTodasAsPaginas), na ordem por id, em vez de contar pela metade.
   const [
     arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira,
     conexoes, metricas, briefings, dossies, adsDiario, marcos, pautasProntas,
   ] = await Promise.all([
-    supabase
+    lerTodasAsPaginas(() => (supabase as any)
       .from("files")
       .select("client_id, approval_status, agency_approval_status, visibility, locked_at, status, approval_requested_at")
       .in("client_id", clientIds)
       .is("archived_at", null)
-      .is("parent_file_id", null),
-    supabase
+      .is("parent_file_id", null)
+      .order("id", { ascending: true })),
+    lerTodasAsPaginas(() => (supabase as any)
       .from("editorial_publications")
       .select("client_id, status, scheduled_at, published_at")
       .in("client_id", clientIds)
-      .neq("status", "cancelled"),
+      .neq("status", "cancelled")
+      .order("id", { ascending: true })),
     // O diário e o que GENTE escreve (decisão, nota, marco, ritual). O próprio
     // Ciclo também grava em project_memory (plano congelado, etapa marcada,
     // "alerta virou tarefa"); contar isso como diário fazia "painel
     // atualizado" provar-se sozinho na segunda de manhã.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("project_memory")
       .select("client_id, created_at")
       .in("client_id", clientIds)
       .not("kind", "in", "(ciclo,ciclo_semana,checklist,avulso,entrega)")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })),
     // Tarefa NAO tem client_id: o vinculo com o cliente passa pelo
     // projeto. Buscar direto por client_id retorna erro que o catch
     // engole, e a contagem ficaria sempre zero sem ninguem perceber.
     // Tarefa apagada de leve (deleted_at) nao conta: contava, e o alerta
     // falava de tarefa que ninguem mais via.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("projects")
       .select("id, client_id, tasks(id, status, due_date, assigned_to, title, source, updated_at)")
       .in("client_id", clientIds)
       .is("deleted_at", null)
-      .is("tasks.deleted_at", null),
+      .is("tasks.deleted_at", null)
+      .order("id", { ascending: true })),
     // Pauta no calendario sem arte: primary_file_id nulo. E o buraco entre
     // "planejei o conteudo" e "existe conteudo" — o calendario parece
     // cheio e nao ha o que publicar.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("editorial_posts")
       .select("client_id, primary_file_id, production_status, title")
       .in("client_id", clientIds)
       .is("archived_at", null)
-      .is("primary_file_id", null),
-    (supabase as any)
+      .is("primary_file_id", null)
+      .order("id", { ascending: true })),
+    lerTodasAsPaginas(() => (supabase as any)
       .from("ads_campaigns")
       .select("client_id, effective_status, status, updated_at")
-      .in("client_id", clientIds),
+      .in("client_id", clientIds)
+      .order("id", { ascending: true })),
     (supabase as any)
       .from("ads_wallet")
       .select("client_id, balance, last_recharge_date")
@@ -297,47 +307,53 @@ export async function lerSituacoes(
       .from("external_account_connections")
       .select("client_id, provider, connection_status, disconnected_at, last_error_code")
       .in("client_id", clientIds),
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("social_metrics_weekly")
       .select("client_id, week_start, captured_at")
       .in("client_id", clientIds)
-      .order("week_start", { ascending: false }),
-    (supabase as any)
+      .order("week_start", { ascending: false })
+      .order("id", { ascending: true })),
+    lerTodasAsPaginas(() => (supabase as any)
       .from("briefings")
       .select("client_id, submitted")
       .in("client_id", clientIds)
-      .eq("submitted", true),
-    (supabase as any)
+      .eq("submitted", true)
+      .order("id", { ascending: true })),
+    lerTodasAsPaginas(() => (supabase as any)
       .from("client_dossiers")
       .select("client_id")
       .in("client_id", clientIds)
-      .eq("is_current", true),
+      .eq("is_current", true)
+      .order("id", { ascending: true })),
     // Os últimos 14 dias por dia e campanha: 7 recentes contra os 7
     // anteriores. Janela rolante de propósito — comparar semana cheia com
     // semana pela metade sempre acusaria queda falsa na segunda-feira.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("ads_campaign_daily")
       .select("client_id, campaign_name, day, spend, actions, frequency")
       .in("client_id", clientIds)
-      .gte("day", new Date(agora - 14 * 86_400_000).toISOString().slice(0, 10)),
+      .gte("day", new Date(agora - 14 * 86_400_000).toISOString().slice(0, 10))
+      .order("id", { ascending: true })),
     // Marcos da timeline: o ciclo ignorava a linha do tempo inteira, e o
     // marco vencido nao aparecia em lugar nenhum da rotina.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("projects")
       .select("id, client_id, milestones(id, title, status, target_date)")
       .in("client_id", clientIds)
       .is("deleted_at", null)
       .is("milestones.deleted_at", null)
-      .neq("milestones.status", "completed"),
+      .neq("milestones.status", "completed")
+      .order("id", { ascending: true })),
     // Conteudo PRONTO sem data: pauta com arte (production_status=ready) e
     // nenhuma publicacao agendada/publicada. E o "agenda vazia com material
     // na gaveta" - o pior dos dois mundos, e o painel nao acusava.
-    (supabase as any)
+    lerTodasAsPaginas(() => (supabase as any)
       .from("editorial_posts")
       .select("id, client_id, title, production_status, editorial_publications(status)")
       .in("client_id", clientIds)
       .is("archived_at", null)
-      .eq("production_status", "ready"),
+      .eq("production_status", "ready")
+      .order("id", { ascending: true })),
   ]);
 
   for (const projeto of (marcos.data ?? []) as Array<Record<string, unknown>>) {

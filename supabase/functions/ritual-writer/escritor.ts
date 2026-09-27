@@ -186,9 +186,11 @@ export interface RitualEscrito {
  * sem texto: quem chama usa o texto de reserva (nunca um erro para o cliente).
  */
 export async function escreverRitual(p: PedidoDoRitual): Promise<RitualEscrito | null> {
+  // AB2: 429 de tokens por minuto na OpenAI direta cai no mesmo modelo pelo OpenRouter (quando há chave).
   const providers = resolveAiProviderChain({
     primaryModels: PRIMARY_MODEL_CHAIN,
     lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
+    openRouterReserve: true,
   });
   const { response, provider } = await requestAiChatCompletion(providers, {
     messages: [

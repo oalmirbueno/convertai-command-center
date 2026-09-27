@@ -259,6 +259,19 @@ import {
   telaDeTrabalho,
 } from "./imagem.ts";
 import { abrirFoto, avisoDoRecorte, fracaoTransparenteDe, LADO_DO_RECORTE, recortePreservandoOriginal, telaDoRecorte } from "./recorte.ts";
+import {
+  aceitaRecorteRedesenhado,
+  AVISO_DO_RECORTE_ACEITO,
+  DERIVADA_DO_RECORTE_ACEITO,
+  detalhesDoRecorteDoGerador,
+  mensagemDoRecorteDesalinhado,
+  nomeDoRecorteDoGerador,
+  pastaDoRecorteDoGerador,
+  PROMESSA_DO_RECORTE_ACEITO,
+  recorteGuardadoMaisNovo,
+  TAGS_DO_RECORTE_ACEITO,
+} from "./recorte-do-gerador.ts";
+import { blocoDaIdentificacaoNoPedido, kitsComIdentificacao, legendaDaReferenciaWeb, produtoDaTela, referenciasWebDaTela } from "./kit-sugerir.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 
 const corsHeaders = {
@@ -1314,13 +1327,23 @@ async function kitSugerir(ch: Chamador, corpo: Record<string, unknown>) {
   const faltando = ids.filter((i) => !imagens.some((x) => x.id === i));
   if (faltando.length) throw new ErroHttp(404, "imagem_fora_do_cliente", "Há foto que não está no acervo deste cliente.", { imagem_ids: faltando });
   const ordem = ids.map((i) => imagens.find((x) => x.id === i)!);
+  // Anti-bug AB2 (26/09): o produto já identificado e as referências da internet que a tela manda entram na sugestão.
+  const produtoDaIdentificacao = produtoDaTela(corpo.produto);
+  const refsDaTela = referenciasWebDaTela(corpo.referencias_web);
+  const refDaTela = (id: string) => refsDaTela.find((x) => x.imagem_id === id) ?? null;
+  // Referência da internet que a tela cortou do lote (limite de fotos) entra no kit sem o leitor ver: só se for do cliente e da internet.
+  const refsForaDoLote = refsDaTela.filter((x) => ids.indexOf(x.imagem_id) < 0).map((x) => x.imagem_id);
+  const extrasDaWeb = refsForaDoLote.length
+    ? (await lerImagens(clientId, refsForaDoLote)).filter((i) => (i.tags ?? []).includes(TAG_REFERENCIA_WEB)).map((i) => i.id)
+    : [];
   const fotos = await emParalelo(ordem, 4, (img) => baixarReduzida(img.storage_bucket, img.storage_path, 768, img.nome));
   const leitor = await modeloDeTexto("leitura", corpo.modelo_id);
   const legenda = ordem.map((img, i) =>
     `Imagem ${i + 1}: id ${img.id}; arquivo "${img.nome}"${img.descricao ? `; leitura anterior: ${limpo(img.descricao, 300)}` : ""}${img.gerada ? "; IMAGEM GERADA (não é evidência)" : ""}${
-      (img.tags ?? []).includes(TAG_REFERENCIA_WEB) ? "; REFERÊNCIA DA INTERNET (foto oficial ou de loja do produto, uso interno)" : ""
+      (img.tags ?? []).includes(TAG_REFERENCIA_WEB) ? `; REFERÊNCIA DA INTERNET (foto oficial ou de loja do produto, uso interno)${legendaDaReferenciaWeb(refDaTela(img.id))}` : ""
     }`
   ).join("\n");
+  const blocoDoProduto = blocoDaIdentificacaoNoPedido(produtoDaIdentificacao, refsDaTela.filter((x) => ids.indexOf(x.imagem_id) >= 0));
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA_LEITURA,
@@ -1328,7 +1351,7 @@ async function kitSugerir(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: leitor.id,
     raciocinio: raciocinioPara(leitor),
     sistema: SISTEMA_KITS,
-    mensagens: [{ papel: "usuario", conteudo: `Organize estas ${ordem.length} fotos em kits.\n${legenda}`, imagens: fotos }],
+    mensagens: [{ papel: "usuario", conteudo: `Organize estas ${ordem.length} fotos em kits.\n${legenda}${blocoDoProduto}`, imagens: fotos }],
     esquemaJson: ESQUEMA_KITS,
     maxTokensSaida: 8_000,
     timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
@@ -1373,10 +1396,13 @@ async function kitSugerir(ch: Chamador, corpo: Record<string, unknown>) {
     .map((x) => ({ imagem_id: String(x.imagem_id), motivo: limpo(x.motivo, 300) }));
   // v2: sugestão vira kit salvo (rascunho). Kit rascunho do mesmo produto é
   // atualizado (as referências da internet de produto_identificar ficam).
-  const refsWeb = imagens.filter((i) => (i.tags ?? []).includes(TAG_REFERENCIA_WEB)).map((i) => i.id);
+  const webNoLote = imagens.filter((i) => (i.tags ?? []).includes(TAG_REFERENCIA_WEB)).map((i) => i.id);
+  const refsWeb = webNoLote.concat(extrasDaWeb);
+  // O kit do produto identificado leva a identificação da tela e as referências da internet que ficaram fora do lote.
+  const kitsDaSugestao = kitsComIdentificacao(kits as (KitFoto & { refs: RefDoKit[]; perguntas: string[] })[], produtoDaIdentificacao, { noLote: webNoLote, foraDoLote: extrasDaWeb });
   const salvos: unknown[] = [];
   const falhas: string[] = [];
-  for (const bruto of kits as (KitFoto & { refs: RefDoKit[]; perguntas: string[] })[]) {
+  for (const bruto of kitsDaSugestao) {
     if (bruto.tipo === "pessoa" || !bruto.refs.length) {
       // Kit de pessoa só salva com a autorização registrada pela equipe (kit_salvar).
       salvos.push({ ...bruto, id: null, salvo: false, motivo_nao_salvo: bruto.tipo === "pessoa" ? "autorizacao_pendente" : "sem_referencias" });
@@ -2876,12 +2902,44 @@ const ROTULO_DO_PREPARO: Record<ModoPreparar, string> = {
   limpar: "limpa",
 };
 
+/**
+ * Guarda a volta do gerador já paga (sem garantia de pixels) quando o recorte
+ * falha por redesenho: "Usar o recorte do gerador" usa esta versão sem nova
+ * chamada (recorte-do-gerador.ts). Falha de gravação: null (o erro segue).
+ */
+async function guardarRecorteDoGerador(clientId: string, imagemId: string, png: Uint8Array): Promise<string | null> {
+  const caminho = `${pastaDoRecorteDoGerador(clientId)}/${nomeDoRecorteDoGerador(imagemId, crypto.randomUUID())}`;
+  try {
+    await salvarNoMesa(caminho, png, "image/png");
+    return caminho;
+  } catch {
+    return null;
+  }
+}
+
+/** A volta do gerador desta foto guardada há pouco (a mais nova): aceitar o redesenho sem pagar de novo. */
+async function recorteDoGeradorGuardado(clientId: string, imagemId: string): Promise<{ caminho: string; bytes: Uint8Array } | null> {
+  const pasta = pastaDoRecorteDoGerador(clientId);
+  const { data, error } = await servico().storage.from("mesa").list(pasta, { search: imagemId, limit: 20, sortBy: { column: "created_at", order: "desc" } });
+  if (error || !data) return null;
+  const nome = recorteGuardadoMaisNovo(data as Array<{ name?: string | null; created_at?: string | null }>, imagemId, Date.now());
+  if (!nome) return null;
+  const caminho = `${pasta}/${nome}`;
+  try {
+    return { caminho, bytes: await baixar("mesa", caminho) };
+  } catch {
+    return null;
+  }
+}
+
 async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const imagem = await lerImagem(clientId, idDe(corpo.imagem_id, "imagem_id"));
   const modo = String(corpo.modo ?? "") as ModoPreparar;
   if (!MODOS_PREPARAR.includes(modo)) throw new ErroHttp(400, "modo_invalido", `Modo inválido. Use: ${MODOS_PREPARAR.join(", ")}.`);
+  // "Usar o recorte do gerador" (Estúdio): reaproveita a volta já paga; sem ela, gera uma vez e aceita o redesenho.
+  const aceitarRedesenhado = aceitaRecorteRedesenhado(corpo, modo);
   const protegidas: Area[] = lerAreas(corpo.areas_protegidas);
   const cenario = limpoOuNulo(corpo.cenario, 1200);
   if (modo === "cenario" && !cenario) throw new ErroHttp(400, "cenario_obrigatorio", "Descreva o cenário (superfície, fundo, props, luz).");
@@ -2976,15 +3034,24 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     reserva = s.reservaUsada ?? reserva;
   };
   // Objeto (e não let): o recorte grava por dentro da função abaixo.
-  const doRecorte: { info: { alinhou: boolean; erro: number; situacao: string; aviso: string | null } | null } = { info: null };
+  const doRecorte: {
+    info: { alinhou: boolean; erro: number; situacao: string; aviso: string | null } | null;
+    /** A equipe aceitou o recorte redesenhado pelo gerador (sem garantia de pixels). */
+    aceito: boolean;
+    /** Caminho da volta já paga que foi reaproveitada (sem nova chamada ao gerador). */
+    reaproveitado: string | null;
+  } = { info: null, aceito: false, reaproveitado: null };
   /**
    * "Tirar fundo" (dono, 25/09): o GPT Image devolve a tela com fundo
    * transparente e só o ALFA dele é usado, alinhado à foto original
    * (recorte.ts). A cor de cada pixel é a da foto original, na resolução em
    * que chegou. Fundo opaco, recorte vazio ou assunto redesenhado na volta
-   * viram erro explícito (nada é gravado; a chamada já foi cobrada).
+   * viram erro explícito (nada entra no acervo; a chamada já foi cobrada).
+   * Assunto redesenhado (AB2, 26/09): no "Tirar fundo" a volta já paga fica
+   * guardada para "Usar o recorte do gerador" sem pagar de novo; com
+   * `aceitarDesalinhado` (a equipe já aceitou), ela é o resultado.
    */
-  const recortar = async (): Promise<Uint8Array> => {
+  const recortar = async (opcoes: { aceitarDesalinhado?: boolean; guardarDesalinhado?: boolean } = {}): Promise<Uint8Array> => {
     const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
     if (!aceitaFundoTransparente(mImg)) {
       throw new ErroHttp(409, "fundo_transparente_nao_suportado", `O modelo de imagem ${mImg.rotulo ?? mImg.id} não gera fundo transparente. Escolha um GPT Image ou marque a área do assunto.`, {
@@ -3030,15 +3097,39 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     const r = await recortePreservandoOriginal(o, g, volta.tela);
     if (r.situacao === "vazio") throw falhou("recorte_vazio", "O gerador não achou o assunto (a máscara veio vazia). Marque a área do assunto e tente de novo.");
     if (r.situacao === "desalinhado") {
-      throw falhou("recorte_desalinhado", "O gerador redesenhou o assunto e a máscara não bate com a foto original. Tente de novo ou use uma foto com o assunto mais destacado do fundo.");
+      if (!opcoes.aceitarDesalinhado && !opcoes.guardarDesalinhado) {
+        throw falhou("recorte_desalinhado", "O gerador redesenhou o assunto e a máscara não bate com a foto original. Tente de novo ou use uma foto com o assunto mais destacado do fundo.");
+      }
+      // A volta do gerador (já cobrada) com o fundo transparente: PNG como veio; outro formato é regravado em PNG.
+      const pngDaVolta = mimeDe(volta.saida.png) === "image/png" ? volta.saida.png : await g.encode(1);
+      if (opcoes.aceitarDesalinhado) {
+        doRecorte.aceito = true;
+        doRecorte.info = { alinhou: r.alinhou, erro: Math.round(r.erro * 100) / 100, situacao: "redesenhado_aceito", aviso: AVISO_DO_RECORTE_ACEITO };
+        return pngDaVolta;
+      }
+      const guardado = await guardarRecorteDoGerador(clientId, imagem.id, pngDaVolta);
+      throw new ErroHttp(502, "recorte_desalinhado", mensagemDoRecorteDesalinhado(!!guardado), {
+        custo_usd: arred6(custo),
+        saldo_usd: saldo,
+        ...detalhesDoRecorteDoGerador(guardado),
+      });
     }
     doRecorte.info = { alinhou: r.alinhou, erro: Math.round(r.erro * 100) / 100, situacao: r.situacao, aviso: avisoDoRecorte(r) };
     return r.png;
   };
 
   if (modo === "fundo_transparente") {
-    final = await recortar();
-    rota = "recorte";
+    // Aceite do recorte do gerador: a volta já paga desta foto entra sem nova chamada (sem cobrança dupla).
+    const guardado = aceitarRedesenhado ? await recorteDoGeradorGuardado(clientId, imagem.id) : null;
+    if (guardado) {
+      final = guardado.bytes;
+      doRecorte.aceito = true;
+      doRecorte.reaproveitado = guardado.caminho;
+      doRecorte.info = { alinhou: false, erro: 0, situacao: "redesenhado_aceito", aviso: AVISO_DO_RECORTE_ACEITO };
+    } else {
+      final = await recortar({ aceitarDesalinhado: aceitarRedesenhado, guardarDesalinhado: true });
+    }
+    rota = doRecorte.aceito ? "gerador" : "recorte";
   } else if (modo === "fundo_branco") {
     if (recorteNaEntrada) {
       final = await comporSobreBranco(bytes);
@@ -3074,7 +3165,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     rota = "gerador";
   }
 
-  const derivada = derivadaDoPreparo(modo, rota);
+  // Recorte do gerador aceito: pixels do assunto refeitos (gerada), com o aviso na descrição e nas tags.
+  const derivada = doRecorte.aceito ? DERIVADA_DO_RECORTE_ACEITO : derivadaDoPreparo(modo, rota);
   const caminho = `${clientId}/foto/derivadas/${crypto.randomUUID()}.png`;
   await salvarNoMesa(caminho, final, "image/png");
   const sha = await sha256Hex(final);
@@ -3087,8 +3179,16 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     nome: `${imagem.nome} (${ROTULO_DO_PREPARO[modo]})`.slice(0, 160),
     pasta: "Mesa Foto / Preparadas",
     categoria: imagem.categoria,
-    tags: ["mesa_foto", `preparo:${modo}`, ...(derivada.gerada ? ["gerada"] : []), ...(modo === "fundo_transparente" ? ["sem_fundo"] : [])],
-    descricao: modo === "fundo_transparente"
+    tags: [
+      "mesa_foto",
+      `preparo:${modo}`,
+      ...(derivada.gerada ? ["gerada"] : []),
+      ...(modo === "fundo_transparente" ? ["sem_fundo"] : []),
+      ...(doRecorte.aceito ? TAGS_DO_RECORTE_ACEITO : []),
+    ],
+    descricao: doRecorte.aceito
+      ? AVISO_DO_RECORTE_ACEITO
+      : modo === "fundo_transparente"
       ? `Sem fundo: pixels originais do assunto; do gerador veio só a máscara, alinhada à foto original.${doRecorte.info?.aviso ? ` ${doRecorte.info.aviso}` : ""}`.slice(0, 1000)
       : PROMESSA_DO_MODO[derivada.modo],
     derivada_de: imagem.id,
@@ -3107,10 +3207,12 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     imagem: await comUrl(data as LinhaImagem),
     rota,
     modo_derivada: derivada.modo,
-    promessa: PROMESSA_DO_MODO[derivada.modo],
+    promessa: doRecorte.aceito ? PROMESSA_DO_RECORTE_ACEITO : PROMESSA_DO_MODO[derivada.modo],
     tamanho_de_trabalho: rota === "gerador" || modo !== "fundo_branco" || !recorteNaEntrada ? tamanho : null,
     recorte: doRecorte.info,
     aviso: doRecorte.info?.aviso ?? null,
+    // Reaproveitou a volta já paga: nenhuma chamada nova ao gerador (custo 0 aqui).
+    recorte_reaproveitado: !!doRecorte.reaproveitado,
     custo_usd: arred6(custo),
     saldo_usd: saldo,
     reserva_usada: reserva,

@@ -5,9 +5,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   resolveOpsReceivePortalSyncUrl,
-  opsBridgeRetiredResponse,
   resolveOpsUrlOrNull,
 } from "../_shared/ops-config.ts";
+import { respostaDePonteAposentada } from "../_shared/ponte-ops-aposentada.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -32,8 +32,9 @@ serve(async (req) => {
 
   // Ponte desligada: responde e explica, em vez de tentar enviar
   // para lugar nenhum. O OPTIONS acima continua respondendo, entao
-  // a auditoria enxerga a funcao viva.
-  if (!OPS_URL) return opsBridgeRetiredResponse(cors);
+  // a auditoria enxerga a funcao viva. 200 sem `ok: false`: o painel
+  // antigo (em cache) gravava sync_error no registro com o 503.
+  if (!OPS_URL) return respostaDePonteAposentada(cors);
 
   // Require shared webhook secret for this server-to-server proxy.
   const provided = req.headers.get("x-webhook-secret") ?? "";

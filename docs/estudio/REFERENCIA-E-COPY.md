@@ -54,12 +54,12 @@ teste trava esse comportamento. A tela avisa "Cliente sem cores no kit:
 usando as da referência." com o link para o Contexto
 (`EstudioAvisoSemFonte.tsx`, export `EstudioAvisoDoKit`).
 
-Kit sem fonte: continua como hoje (o `promptDoReplicar` usa o desenho da
-letra da referência, porque não há fonte do cliente). A tela da referência
-mostra "Cliente sem fonte no kit: usando a da referência." com o link
-"Definir fonte" para o Contexto, onde "Sugerir automaticamente"
-(`agente-contexto`, ação `fontes_da_biblioteca`, escolha pelo Jev) sugere o
-par de fontes (`src/components/mesa/ContextoCartaoMarca.tsx`).
+Kit sem fonte: MUDOU na frente T2 (26/09, dono: "não inventar"). A geração
+é recusada (409 `sem_tipografia`) e o Estúdio bloqueia com "Defina a
+tipografia do cliente" (Sugerir da biblioteca ou Definir no Contexto). A
+letra da referência nunca entra. A tela da referência mostra "Cliente sem
+fonte no kit: a arte não é gerada." com o link para o Contexto. Detalhes na
+seção Tipografia, abaixo.
 
 ## Rosto escolhido (acréscimo do dono)
 
@@ -286,6 +286,96 @@ capa; o anúncio (Mesa Ads). Fixtures `replicar-identica-hoje.json` e
 `lamina-normal-hoje.json` iguais; só mudaram duas linhas de teste que fixavam a
 chamada antiga do bloco da série no servidor.
 
+## Tipografia (frente T2, 26/09)
+
+Pedido do dono: "tem que seguir a tipografia correta de cada cliente, e cada
+cliente sem misturar, e não inventar, e seguir a consistência das fontes no
+carrossel."
+
+**Diagnóstico (o que havia antes).**
+
+- A fonte chegava ao gerador quase só pelo NOME no texto (`marca.fontes` no
+  `promptDaLamina` e no `promptDoReplicar`). Ia uma amostra só, a do título,
+  com teto 1, e o prompt dizia "se houver amostra anexada" sem citar o número
+  da imagem. A fonte do texto nunca tinha amostra anexada.
+- Todas as 24 fontes gravadas (11 clientes; o Rodrigo tem o par duplicado) vêm da biblioteca e apontam para
+  a amostra genérica da biblioteca (`biblioteca/fontes/<família>/amostra.png`),
+  não para uma prancha no peso usado.
+- Marca: o servidor já resolvia a marca do trabalho (`fontesDaMarca`), mas a
+  tela não: o Contexto, a biblioteca de fontes e o aviso do Estúdio liam todas
+  as fontes do cliente. Escolher fonte com a CME aberta trocava as do cliente
+  (Acerbi), e `fontes_da_biblioteca` contava e gravava sempre no cliente. A
+  CME não tem fonte própria e usa as do cliente (Abril Fatface e Lato), pela
+  regra da frente G.
+- Cache: nenhum cache de fonte no servidor (a lista de marcas guarda 30 s por
+  cliente); na tela, a chave era por cliente. Nada vazava entre clientes; a
+  amostra da biblioteca é a mesma família para todos.
+- Kit sem fonte: o `promptDaLamina` mandava seguir "a tipografia das artes da
+  marca anexadas" e o `promptDoReplicar`, "a da referência"; a tipografia
+  citada em documento entrava como reserva. Ou seja, a letra era inventada.
+- Lâminas com fontes diferentes: (1) "Gerar todas" roda 2 lâminas ao mesmo
+  tempo na fila (3 no caminho antigo), então a lâmina 2 nascia junto com a
+  capa, sem a capa como guia; (2) no replicar Idêntica e Próxima a capa não
+  vai anexada e cada lâmina seguia o desenho de letra da própria referência
+  (peso, caixa e largura mudavam); (3) o peso do título era "extra negrito ou
+  negrito"; (4) sem amostra do texto, o apoio variava.
+
+**O que mudou.**
+
+1. Amostra da tipografia (`src/lib/mesa/amostraDaFonte.ts`): o navegador
+   desenha, uma vez por fonte, uma prancha PNG de 1600 x 900 (fundo neutro,
+   nome pequeno, "AaBbCc 123" e uma frase com acentos em caixa alta e baixa)
+   a partir do ARQUIVO da fonte (do cliente ou o da biblioteca gravado no kit)
+   ou, sem arquivo, do Google Fonts pelo nome (API CSS2 por link; a CSP já
+   libera, nada mudou nela). Título em 700 e texto em 400 no Google; o arquivo
+   já é o próprio peso. Vai para `mesa/<cliente>/marca/<marca da fonte, se não
+   for a principal>/tipografia-<papel>-<id>.png` e fica em
+   `cliente_fontes.amostra_path` (sem SQL). Feita sozinha ao enviar a fonte,
+   ao escolher na biblioteca, depois do "Sugerir automaticamente" e ao mudar
+   o papel; botão "Gerar amostra da tipografia" no Contexto, em Fontes. A
+   amostra antiga do cliente sai do Storage; a da biblioteca, nunca.
+2. Na geração (`estudio-arte/tipografia-do-cliente.ts`, ligado no
+   `gerarCard`, que também serve a Mesa Ads): as amostras do título (anexo
+   `fonte`) e do texto (`fonte_texto`, só com família diferente) entram com o
+   papel "TIPOGRAFIA DO CLIENTE: use exatamente estas letras (desenho, peso,
+   proporção) no título/texto; não use outra fonte". Prioridade: lâmina (foto,
+   referência da equipe, logo, capa, sequência) > rosto > TIPOGRAFIA >
+   referência automática > estilo e template. A referência automática cede ao
+   rosto primeiro; depois a amostra do texto e a do título (`tipografiaQueCede`).
+   Só amostra da pasta do cliente ou da biblioteca. O bloco TIPOGRAFIA DO
+   CLIENTE entra nos dois prompts (depois da campanha no normal, depois da
+   continuidade no replicar) e fecha com "não use outra fonte: nem a da
+   referência, nem uma parecida".
+3. Série: família, peso e caixa fixos por papel (título, apoio, CTA). A capa
+   (ou a primeira lâmina gerada) é a âncora: a versão guarda `tipografia`
+   (chave cliente, marca e famílias; peso e caixa do título). As lâminas 2+
+   repetem peso e caixa da âncora, mesmo com referência própria, e citam a
+   imagem da capa quando ela vai anexada ("mesma fonte, peso e caixa do título
+   da capa (imagem N)"); sem a capa anexada (replicar Idêntica), a âncora vai
+   em texto. Âncora de outra chave (marca ou kit trocado) não vale. A lâmina
+   2+ pedida junto com a capa espera por ela: `gerar_card` devolve 409
+   `capa_pendente` enquanto a capa está na fila sem versão, e a fila espera 15 s
+   e tenta de novo (teto de passos de sempre); no caminho sem fila, a tela gera
+   a capa sozinha primeiro.
+4. Não inventar: kit sem fonte na marca do trabalho, 409 `sem_tipografia`
+   antes de qualquer custo. O Estúdio mostra "Defina a tipografia do cliente"
+   (`EstudioSemTipografia.tsx`), desliga os botões de gerar e oferece
+   "Sugerir da biblioteca" (`fontes_da_biblioteca` com `previa`: o Jev escolhe
+   o par, nada é gravado; a equipe confirma e a ação grava com `gravar`, na
+   marca do pedido, com a amostra e o Desfazer) e "Definir no Contexto". Kit
+   com uma fonte só: título e texto saem dela (a citada em documento não entra).
+5. Sem misturar: a tela usa a mesma regra do servidor
+   (`src/lib/mesa/tipografiaDoCliente.ts`, chave do cache com cliente e marca).
+   Com a CME aberta, o Contexto mostra e grava as fontes da CME (`marca_id`),
+   a biblioteca troca só as dela e avisa quando ela ainda usa as do cliente.
+
+**Fixtures.** Nenhum mudou: com título e texto no kit, a lista de fontes do
+prompt é a mesma, e o bloco novo entra fora do `promptDaLamina` e do
+`promptDoReplicar`. O caso "anúncio 9:16" sem fontes do
+`replicar-identica-hoje.json` continua como texto do compositor, mas não chega
+mais ao gerador (a geração é recusada antes). Testes em
+`src/test/tipografia-do-cliente.test.tsx`.
+
 ## Onde está
 
 | Peça | Arquivo |
@@ -304,3 +394,7 @@ chamada antiga do bloco da série no servidor.
 | Miolo rico (componentes, tipo, rotação) | `supabase/functions/estudio-arte/miolo-rico.ts` (via `blocoDoMioloDesenhado`) |
 | Testes da série e do miolo | `src/test/estudio-serie-e-miolo.test.ts` |
 | Registro | `_shared/motores.ts` (`referencia_adapta_copy`, `rosto_na_referencia`, `rosto_v2`, `composicao_dinamica`, `serie_e_miolo`) |
+| Tipografia na geração (kit, amostra com papel, âncora, recusa) | `supabase/functions/estudio-arte/tipografia-do-cliente.ts`; espera da capa em `fila-de-geracao.ts` |
+| Amostra no navegador e regra da marca na tela | `src/lib/mesa/amostraDaFonte.ts`, `src/lib/mesa/tipografiaDoCliente.ts` |
+| Bloqueio e Sugerir da biblioteca | `src/components/mesa/EstudioSemTipografia.tsx`; `agente-contexto` (`fontes_da_biblioteca` com `previa` e `gravar`) |
+| Testes da tipografia | `src/test/tipografia-do-cliente.test.tsx` |

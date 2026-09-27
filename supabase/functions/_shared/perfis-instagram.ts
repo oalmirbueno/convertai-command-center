@@ -548,6 +548,30 @@ export function datasComMesSeguinte(mes: string, hoje: string, n: number): strin
   return datas;
 }
 
+export type DatasDoPlano = { datas: string[]; noMes: number; foraDoMes: number };
+
+/**
+ * Datas do plano de um mês pedido (plano_igual). Anti-bug AB2 (26/09): com
+ * mais pautas do que dias úteis livres no mês pedido, as extras caíam todas
+ * no último dia útil. Agora cada pauta ganha um dia útil só dela: primeiro
+ * os do mês pedido (espalhados), o resto no mês seguinte; `foraDoMes` diz
+ * quantas saíram do mês pedido, para a resposta avisar.
+ */
+export function datasDoPlanoDoMes(mes: string, hoje: string, n: number): DatasDoPlano {
+  const datas = datasComMesSeguinte(mes, hoje, n);
+  const noMes = datas.filter((d) => d.slice(0, 7) === mes).length;
+  return { datas, noMes, foraDoMes: datas.length - noMes };
+}
+
+/** Aviso da resposta quando o plano não coube no mês pedido (vazio quando coube). */
+export function avisoDoPlanoForaDoMes(mes: string, plano: DatasDoPlano): string {
+  if (!plano.foraDoMes) return "";
+  const meses = plano.datas.map((d) => d.slice(0, 7)).filter((m, i, a) => m !== mes && a.indexOf(m) === i);
+  const dias = `${plano.noMes} ${plano.noMes === 1 ? "dia útil livre" : "dias úteis livres"}`;
+  const pautas = plano.foraDoMes === 1 ? "1 pauta passou" : `${plano.foraDoMes} pautas passaram`;
+  return `O mês ${mes} só tem ${dias}: ${pautas} para ${meses.join(" e ")}, uma por dia, sem repetir data.`;
+}
+
 // ------------------------------------------------------------------ ações do agente do perfil
 
 /** Post do perfil como alvo do agente (apelido p1..pN). */

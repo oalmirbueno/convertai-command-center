@@ -23,6 +23,7 @@ import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidge
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
 import { appPublicUrl } from "@/lib/publicUrl";
 import { isInternalClient } from "@/lib/clientFlags";
+import { acoesRapidasDoPapel } from "@/lib/acoesRapidasDoPapel";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -300,14 +301,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const quickActions = [
-    { label: "Novo Projeto", icon: Plus, action: () => setCreateProjectOpen(true) },
-    { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true) },
-    { label: "Nova Ata de Reunião", icon: FileText, action: () => setMeetingNotesOpen(true) },
+  // A equipe (design, tráfego, gestor) também abre este painel, mas criar
+  // projeto, criar cliente e a ata de reunião são só do admin no servidor
+  // (RLS de projects, manage-team e process-meeting-notes): o botão levava
+  // a um 403. Aparece só o que o papel consegue fazer.
+  const quickActions = acoesRapidasDoPapel(isAdmin, [
+    { label: "Novo Projeto", icon: Plus, action: () => setCreateProjectOpen(true), soAdmin: true },
+    { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true), soAdmin: true },
+    { label: "Nova Ata de Reunião", icon: FileText, action: () => setMeetingNotesOpen(true), soAdmin: true },
     { label: "Gerar Link Briefing", icon: Link2, action: () => setBriefingLinkOpen(true) },
     { label: "Gerar link de quiz", icon: ClipboardList, action: generateQuizLink },
     { label: "Upload", icon: Upload, action: () => navigate("/arquivos") },
-  ];
+  ]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -512,15 +517,19 @@ export default function AdminDashboard() {
                       <Clock className="w-3 h-3" />
                       {formatDate(p.deadline)}
                     </div>
+                    {/* Editar, status, progresso e excluir mudam o projeto: só o admin pode (RLS). */}
+                    {isAdmin && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
+                      aria-label="Ações do projeto"
                       className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
+                    )}
                   </div>
 
-                  {showMenu && (
+                  {isAdmin && showMenu && (
                     <div className="absolute right-4 top-full z-50 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
                       <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
                         className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors cursor-pointer bg-transparent border-none text-left">
@@ -709,7 +718,11 @@ export default function AdminDashboard() {
         project={drawerProject}
         open={!!drawerProject}
         onClose={() => setDrawerProject(null)}
-        onEdit={(p) => { setDrawerProject(null); setEditProject(p); }}
+        onEdit={(p) => {
+          setDrawerProject(null);
+          if (isAdmin) setEditProject(p);
+          else toast.info("Só o administrador edita projetos.");
+        }}
       />
 
       <ConfirmModal

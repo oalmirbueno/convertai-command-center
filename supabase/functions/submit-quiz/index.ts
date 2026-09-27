@@ -6,6 +6,8 @@ import {
   resolveOpsReceiveLeadUrl,
 } from "../_shared/ops-config.ts";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
+import { comOrigemDoPainel } from "../_shared/origem-do-painel.ts";
+import { emailDoLeadValido, ERRO_EMAIL_INVALIDO } from "./email-do-lead.ts";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -113,10 +115,9 @@ function cleanPayload(body: Record<string, unknown>): QuizPayload {
     }
     payload[field] = normalized;
   }
-  if (
-    payload.lead_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.lead_email)
-  ) {
-    throw new Error("invalid_payload");
+  if (!emailDoLeadValido(payload.lead_email)) {
+    // Erro próprio: vira 400 com código e frase clara (antes era "Invalid payload").
+    throw new Error("invalid_email");
   }
   return payload;
 }
@@ -241,11 +242,9 @@ async function pushToOps(payload: Record<string, unknown>): Promise<void> {
   console.log("[pushToOps] completed", { status: result.status });
 }
 
-serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  if (origin && origin !== APP_ORIGIN) {
-    return json({ error: "Origin not allowed" }, 403);
-  }
+// Origem conferida (e o CORS acertado) pelo embrulho: painel, www, prévia do
+// Lovable e localhost passam; o resto leva 403 antes de qualquer trabalho.
+serve(comOrigemDoPainel(APP_ORIGIN, async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -389,6 +388,9 @@ serve(async (req) => {
       idempotent,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "invalid_email") {
+      return json(ERRO_EMAIL_INVALIDO, 400);
+    }
     const invalid = error instanceof Error &&
       (error.message === "invalid_payload" || error instanceof SyntaxError);
     return json(
@@ -396,4 +398,4 @@ serve(async (req) => {
       invalid ? 400 : 500,
     );
   }
-});
+}));

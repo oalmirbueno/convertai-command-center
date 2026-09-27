@@ -1150,3 +1150,25 @@ Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (J
   const falhou = await folegoResponse(() => Promise.reject(new Error('quebrou')), false, 8, 5).text();
   assertEquals(JSON.parse(falhou).error.message, 'quebrou');
 });
+
+Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a descoberta publica', async () => {
+  const { decidirGet, descobertaDoMcp, getPedeStream } = await import('../_shared/mcp-descoberta.ts');
+  assertEquals(decidirGet({ authorization: null, accept: '*/*' }), 'desafio_oauth');
+  assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'text/event-stream' }), 'sem_stream');
+  assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'application/json, text/event-stream' }), 'sem_stream');
+  // O fetch do navegador manda */*: nao e pedido de stream.
+  assertEquals(decidirGet({ authorization: 'Bearer x', accept: '*/*' }), 'descoberta');
+  assertEquals(decidirGet({ authorization: 'Bearer x', accept: null }), 'descoberta');
+  assert(!getPedeStream('text/*'));
+  const d = descobertaDoMcp({
+    servidor: { name: 'aceleriq-mcp', version: '9.9.9' },
+    protocolVersion: MCP_PROTOCOL_VERSION,
+    toolCount: TOOLS.length,
+    segundoCerebroConfigurado: false,
+    agora: new Date('2026-09-26T12:00:00Z'),
+  });
+  assertEquals(d.status, 'ok');
+  assertEquals(d.toolCount, TOOLS.length);
+  assertEquals(d.serverTime, '2026-09-26T12:00:00.000Z');
+  assertEquals(Object.keys(d.secondBrain), ['configured']);
+});

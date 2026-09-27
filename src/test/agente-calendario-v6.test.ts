@@ -52,7 +52,8 @@ describe("agente-calendario v6: planejar_mes", () => {
     expect(planejar).toContain("timeoutMs: TIMEOUT_CALENDARIO_MS");
     expect(planejar).toContain("esquemaJson: ESQUEMA_PLANEJAMENTO");
     // Frente H: o mesmo prompt e as mesmas regras de saída, com a base de marketing do mês no meio.
-    expect(planejar).toContain('sistema: sistemaDoCalendario(ctx, "mes")');
+    // AB2 (26/09): conversa, então leva também o mapa do painel.
+    expect(planejar).toContain('sistema: sistemaDoCalendario(ctx, "mes", "conversa")');
     // Marca por projeto (docs/marcas): o contexto do mês é o da marca escolhida no topo.
     // v2 (26/09): a marca da chamada é lida uma vez e o MCP entra à parte, dentro do orçamento de tokens.
     expect(planejar).toContain("const marcaP = marcaDaChamada(servico, clientId, corpo);");

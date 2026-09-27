@@ -274,7 +274,9 @@ describe("cérebro do cliente: leitura e resumo", () => {
     });
     const c = await contextoParaAgente(db, CLIENTE, "arte", { limiteDossie: 1000, agora: new Date("2026-09-25") });
     expect(c.cerebro).toContain("Nunca fundo preto");
-    expect(c.dossie).toContain("[dossiê cortado para caber]");
+    // AB2: o corte guarda o começo curto e o fim (o mais recente), com o marcador do meio.
+    expect(c.dossie).toContain("[trecho do meio omitido]");
+    expect((c.dossie ?? "").length).toBeLessThanOrEqual(1000);
     expect(c.texto).toContain("DOSSIÊ ATUAL DO CLIENTE");
   });
 });

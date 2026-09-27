@@ -3,11 +3,12 @@ export type AiProviderEnvName =
   | "AI_API_KEY"
   | "AI_MODEL"
   | "OPENAI_API_KEY"
-  | "LOVABLE_API_KEY";
+  | "LOVABLE_API_KEY"
+  | "OPENROUTER_API_KEY";
 
 export type AiProviderEnvReader = (name: AiProviderEnvName) => string | undefined;
 
-export type AiProviderKind = "configured" | "openai" | "lovable";
+export type AiProviderKind = "configured" | "openai" | "lovable" | "openrouter";
 
 export interface AiProvider {
   kind: AiProviderKind;
@@ -20,6 +21,21 @@ export interface AiProvider {
 export interface AiProviderChainOptions {
   primaryModels: readonly string[];
   lovableModels?: readonly string[];
+  /**
+   * Rota de reserva (AB2, 26/09): os MESMOS modelos pelo OpenRouter, depois
+   * da OpenAI direta, quando há OPENROUTER_API_KEY. O OpenRouter é só a rota
+   * do modelo real (gpt-4.1 vira openai/gpt-4.1); o modelo não muda. Serve
+   * para o 429 de tokens por minuto da conta direta não derrubar o agente.
+   */
+  openRouterReserve?: boolean;
+}
+
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+/** Slug do OpenRouter para um modelo da OpenAI direta (o que já tem dono fica igual). */
+export function openRouterSlug(model: string): string {
+  const m = model.trim();
+  return m.includes("/") ? m : `openai/${m}`;
 }
 
 export type AiChatCompletionPayload = Record<string, unknown>;
@@ -165,6 +181,23 @@ export function resolveAiProviderChain(
       openAiApiKey,
       primaryModels,
     ));
+  }
+
+  const openRouterApiKey = optionalValue(env("OPENROUTER_API_KEY"));
+  if (options.openRouterReserve && openRouterApiKey) {
+    // O mesmo modelo pelo OpenRouter vem logo depois da conta direta dele,
+    // antes de cair para o modelo seguinte da cadeia.
+    const reserve = buildProviders(
+      "openrouter",
+      OPENROUTER_BASE_URL,
+      openRouterApiKey,
+      primaryModels.map(openRouterSlug),
+    );
+    const direct = providers.splice(0, providers.length);
+    for (const model of primaryModels) {
+      providers.push(...direct.filter((p) => p.model === model));
+      providers.push(...reserve.filter((p) => p.model === openRouterSlug(model)));
+    }
   }
 
   if (lovableApiKey && options.lovableModels?.length) {

@@ -26,6 +26,7 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { conferirRepeticao, escreverRitual, MOMENTO, RITUAL_BRIEF } from "./escritor.ts";
 import { lerContextoDoRitual } from "./contexto.ts";
 import { extrairMemoriaDoRitual } from "./memoria.ts";
@@ -91,7 +92,8 @@ Deno.serve(async (req) => {
     }
 
     const ritual = MOMENTO[String(body?.moment || "")] || String(body?.ritual || "");
-    const facts = String(body?.facts || "").slice(0, 12000);
+    // AB2: os fatos terminam com o dossiê; grande demais, fica o começo curto e o fim (o mais recente).
+    const facts = recortarDossie(String(body?.facts || ""), 12000);
     const clientName = String(body?.client_name || "Cliente").slice(0, 120);
     // Primeiro nome da pessoa de contato: a mensagem fala com gente, nao com CNPJ.
     const contactName = String(body?.contact_name || "").trim().split(/\s+/)[0]?.slice(0, 40) || "";

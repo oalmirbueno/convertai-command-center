@@ -11,9 +11,21 @@
  *
  * Nada bloqueia o caller. Se a edge function falhar, o registro permanece
  * visível com `sync_status = 'sync_error'` para retry posterior.
+ *
+ * A ponte com o Ops está APOSENTADA (o servidor só religa com
+ * OPS_LEGACY_BRIDGE_ENABLED=true). Chamar mesmo assim gravava
+ * `sync_error` em todo projeto, etapa e perfil salvo. Agora o painel só
+ * chama quando a ponte for religada também aqui
+ * (VITE_OPS_LEGACY_BRIDGE_ENABLED=true); desligada, não chama e não mexe
+ * no registro.
  */
 
 import { supabase } from "@/integrations/supabase/client";
+
+/** A ponte com o Ops foi religada no painel? Desligada por padrão. */
+export function ponteOpsLigada(): boolean {
+  return String(import.meta.env.VITE_OPS_LEGACY_BRIDGE_ENABLED ?? "").trim() === "true";
+}
 
 const PORTAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 if (!PORTAL_SUPABASE_URL) {
@@ -55,6 +67,8 @@ function push(
   opts: PushOptions = {},
 ) {
   if (!data) return;
+  // Ponte aposentada: nem chama, nem marca pendente, nem grava sync_error.
+  if (!ponteOpsLigada()) return;
 
   // Marca como pendente imediatamente (não-bloqueante).
   if (opts.table && opts.localId) {

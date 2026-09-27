@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CampoDeFormulario, Carregando, GrupoDeCampos, botao, foco, juntar, superficie, texto } from "@/components/sistema";
 import CascaPublica, { campoPublico, campoTextoPublico } from "@/components/publico/CascaPublica";
 import { supportWhatsAppUrl } from "@/lib/supportContact";
+import { emailDoLeadValido, FRASE_EMAIL_INVALIDO, motivoDoErroDoQuiz } from "@/lib/emailDoLead";
 
 // ============== Constants ==============
 
@@ -254,8 +255,13 @@ export default function QuizPublicPage() {
     setSavingHint(true);
     saveTimer.current = window.setTimeout(async () => {
       try {
+        // E-mail pela metade (ainda digitando) não derruba o salvamento do
+        // resto: vai vazio até ficar válido. O servidor recusa e-mail inválido.
+        const leadParaSalvar = emailDoLeadValido(nextLead.lead_email)
+          ? nextLead
+          : { ...nextLead, lead_email: "" };
         await supabase.functions.invoke("submit-quiz", {
-          body: { token, action: "save_progress", ...nextLead, ...nextAnswers },
+          body: { token, action: "save_progress", ...leadParaSalvar, ...nextAnswers },
         });
       } catch (e) {
         console.error("save_progress failed", e);
@@ -267,10 +273,14 @@ export default function QuizPublicPage() {
 
   // ---- Lead form ----
   const leadValid = useMemo(() => {
-    return lead.lead_name.trim().length >= 2;
+    return lead.lead_name.trim().length >= 2 && emailDoLeadValido(lead.lead_email);
   }, [lead]);
 
   const submitLead = () => {
+    if (!emailDoLeadValido(lead.lead_email)) {
+      toast.error(FRASE_EMAIL_INVALIDO);
+      return;
+    }
     if (!leadValid) {
       toast.error("Informe seu nome para continuar.");
       return;
@@ -310,6 +320,14 @@ export default function QuizPublicPage() {
       setResult({ score: r.score, plan: r.plan });
       setPhase("done");
     } catch (e: any) {
+      // O motivo vem no corpo do erro. E-mail inválido volta para o
+      // formulário do lead com a frase do servidor; o resto segue genérico.
+      const motivo = await motivoDoErroDoQuiz(e);
+      if (motivo.code === "email_invalido") {
+        toast.error(motivo.message || FRASE_EMAIL_INVALIDO);
+        setPhase("lead");
+        return;
+      }
       toast.error("Não conseguimos enviar. Tente novamente.");
       setPhase("quiz");
     }
@@ -479,6 +497,9 @@ function LeadForm({
   onSubmit: () => void;
   valid: boolean;
 }) {
+  // O aviso do e-mail aparece depois que a pessoa sai do campo, não a cada tecla.
+  const [emailTocado, setEmailTocado] = useState(false);
+  const emailComErro = emailTocado && !emailDoLeadValido(lead.lead_email);
   return (
     <CascaPublica
       titulo="Diagnóstico AI-First"
@@ -514,12 +535,13 @@ function LeadForm({
               className={campoPublico}
             />
           </CampoDeFormulario>
-          <CampoDeFormulario rotulo="E-mail (opcional)">
+          <CampoDeFormulario rotulo="E-mail (opcional)" erro={emailComErro ? FRASE_EMAIL_INVALIDO : undefined}>
             <input
               type="email"
               inputMode="email"
               value={lead.lead_email}
               onChange={(e) => onChange({ ...lead, lead_email: e.target.value })}
+              onBlur={() => setEmailTocado(true)}
               placeholder="voce@empresa.com"
               maxLength={200}
               autoComplete="email"

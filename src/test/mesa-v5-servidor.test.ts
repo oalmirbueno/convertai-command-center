@@ -202,7 +202,8 @@ describe("restante da auditoria (23/09 noite)", () => {
     expect(calendario).toContain("brutos.slice(0, f.max)");
   });
   it("pedido livre ajusta a data dentro de hoje a +30 dias", () => {
-    expect(corpoDe(calendario, "diasUteisDaProposta")).toContain("somarDias(fimBase, 30)");
+    // AB2 (26/09): a janela é a do pedido (hoje a +30, datas citadas), não mais 30 dias depois do fim (ab2-calendario.test.ts).
+    expect(corpoDe(calendario, "diasUteisDaProposta")).toContain("diasDaPropostaLivre(");
     expect(corpoDe(calendario, "conversar")).toContain("const uteis = diasUteisDaProposta(p);");
     expect(corpoDe(calendario, "gravarItens")).toContain("const uteis = diasUteisDaProposta(p);");
   });

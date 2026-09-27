@@ -24,6 +24,7 @@ import {
   textoDoErro,
   usd,
 } from "@/lib/mesa/api";
+import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, type Trabalho } from "./useItensDoMes";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -189,7 +190,8 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         const t = paraEntregar[n];
         setProgresso(`Entregando em Arquivos ${n + 1} de ${paraEntregar.length}…`);
         try {
-          await chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: t.id });
+          // AB2: entrega em partes (limite de CPU) continua sozinha.
+          await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: t.id }));
           ids.push(t.id);
         } catch (e) {
           falhas.push(textoDoErro(e));

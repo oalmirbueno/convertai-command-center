@@ -17,6 +17,7 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { recortarDossie } from "./dossie-recortado.ts";
 
 const txt = (v: unknown, max = 4000) => (v == null ? "" : String(v)).slice(0, max).trim();
 
@@ -27,16 +28,22 @@ const NOME_IMAGEM = /\.(png|jpe?g|webp)$/i;
 
 export type DocumentoDeMarca = { file_id: string; nome: string; tipo: string | null; texto: string; prioridade: boolean };
 
+/** Filtro do banco (PostgREST): só o que pode ter texto (sem imagem e sem vídeo; mime vazio passa e o nome decide depois). */
+export const FILTRO_SEM_IMAGEM_NEM_VIDEO = "mime_type.is.null,and(mime_type.not.ilike.image/*,mime_type.not.ilike.video/*)";
+
 /**
  * Texto dos documentos do cliente, os de identidade primeiro, até o limite
  * de caracteres (o texto inteiro de cada documento, na ordem das partes).
  */
 export async function lerDocumentosDeMarca(db: SupabaseClient, clientId: string, limite = 18_000): Promise<DocumentoDeMarca[]> {
+  // AB2: imagem e vídeo saem ANTES do limite. Antes os 400 mais recentes
+  // vinham com as fotos junto e um cliente com muita foto ficava sem documento.
   const { data: arquivos } = await db
     .from("files")
     .select("id, file_name, file_type, mime_type, created_at")
     .eq("client_id", clientId)
     .is("archived_at", null)
+    .or(FILTRO_SEM_IMAGEM_NEM_VIDEO)
     .order("created_at", { ascending: false })
     .limit(400);
   const candidatos = ((arquivos as { id: string; file_name: string; file_type: string | null; mime_type: string | null }[] | null) ?? [])
@@ -80,18 +87,41 @@ export async function lerDocumentosDeMarca(db: SupabaseClient, clientId: string,
   return saida;
 }
 
+type LinhaDoDossie = { content: string | null; summary: string | null; dossier_type: string | null; project_id?: string | null };
+
+/**
+ * Dossiês atuais juntos até o limite. O geral (contexto, sem projeto) vem
+ * primeiro; os de projeto complementam com um pedaço menor. Grande demais:
+ * fica o começo curto e o FIM (as seções mais recentes), nunca só o começo.
+ */
+export function juntarDossies(linhas: LinhaDoDossie[], limite: number): string {
+  const ordenadas = linhas.slice().sort((a, b) => {
+    const geral = (l: LinhaDoDossie) => ((l.dossier_type ?? "contexto") === "contexto" && !l.project_id ? 0 : 1);
+    return geral(a) - geral(b);
+  });
+  const pecas = ordenadas
+    .map((l) => `[${l.dossier_type ?? "dossiê"}]\n${l.summary ? `${l.summary}\n` : ""}${l.content ?? ""}`.trim())
+    .filter(Boolean);
+  const inteiro = pecas.join("\n\n");
+  if (inteiro.length <= limite) return inteiro;
+  const [principal, ...outras] = pecas;
+  const outrasCurtas = outras.map((p) => recortarDossie(p, Math.floor(limite * 0.15)));
+  const resto = limite - outrasCurtas.reduce((s, p) => s + p.length + 2, 0);
+  return [recortarDossie(principal, Math.max(resto, 0)), ...outrasCurtas].filter(Boolean).join("\n\n");
+}
+
 /** Dossiê atual do cliente (o mais recente marcado como atual). */
 export async function lerDossie(db: SupabaseClient, clientId: string, limite = 6000): Promise<string | null> {
   const { data } = await db
     .from("client_dossiers")
-    .select("content, summary, dossier_type, created_at")
+    .select("content, summary, dossier_type, project_id, created_at")
     .eq("client_id", clientId)
     .eq("is_current", true)
     .order("created_at", { ascending: false })
     .limit(3);
-  const linhas = (data as { content: string | null; summary: string | null; dossier_type: string | null }[] | null) ?? [];
+  const linhas = (data as LinhaDoDossie[] | null) ?? [];
   if (!linhas.length) return null;
-  return txt(linhas.map((l) => `[${l.dossier_type ?? "dossiê"}]\n${l.summary ? `${l.summary}\n` : ""}${l.content ?? ""}`).join("\n\n"), limite) || null;
+  return juntarDossies(linhas, limite) || null;
 }
 
 export type ArteAprovada = {
@@ -301,29 +331,38 @@ export type ResultadoAcervo = { novas: number; total: number };
  * pasta e uma categoria provável pelo nome. Sem IA e sem duplicar.
  */
 export async function sincronizarAcervo(db: SupabaseClient, clientId: string): Promise<ResultadoAcervo> {
+  // AB2: o banco devolve no máximo 1.000 linhas por pedido. Antes o que já
+  // estava no acervo vinha pela metade num cliente grande, a função tentava
+  // inserir de novo e o lote de 200 inteiro caía no índice único.
+  type Existente = { workspace_node_id: string | null; file_id: string | null };
+  type No = { id: string; parent_id: string | null; kind: string; name: string; mime: string | null; storage_path: string | null };
+  type ArqDoAcervo = { id: string; file_name: string; file_type: string | null; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
   const [existentes, nos, arquivos] = await Promise.all([
-    db.from("cliente_imagens").select("workspace_node_id, file_id").eq("client_id", clientId),
-    db.from("workspace_nodes").select("id, parent_id, kind, name, mime, storage_path").eq("client_id", clientId).limit(5000),
+    todasAsPaginas<Existente>((de, ate) =>
+      db.from("cliente_imagens").select("workspace_node_id, file_id").eq("client_id", clientId).order("id", { ascending: true }).range(de, ate), 20_000),
+    todasAsPaginas<No>((de, ate) =>
+      db.from("workspace_nodes").select("id, parent_id, kind, name, mime, storage_path").eq("client_id", clientId).order("id", { ascending: true }).range(de, ate), 5000),
     // Todas as pastas de Arquivos, inclusive materiais (muitos clientes guardam
     // as fotos reais ali, misturadas com artes). Lâmina filha de carrossel fica
     // de fora; arte pronta entra marcada como "arte" e a leitura separa o resto.
-    db.from("files")
-      .select("id, file_name, file_type, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
-      .eq("client_id", clientId)
-      .is("archived_at", null)
-      .is("parent_file_id", null)
-      .order("created_at", { ascending: false })
-      .limit(2000),
+    todasAsPaginas<ArqDoAcervo>((de, ate) =>
+      db.from("files")
+        .select("id, file_name, file_type, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
+        .eq("client_id", clientId)
+        .is("archived_at", null)
+        .is("parent_file_id", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(de, ate), 2000),
   ]);
   const jaNos = new Set<string>();
   const jaArquivos = new Set<string>();
-  for (const r of (existentes.data as { workspace_node_id: string | null; file_id: string | null }[] | null) ?? []) {
+  for (const r of existentes) {
     if (r.workspace_node_id) jaNos.add(r.workspace_node_id);
     if (r.file_id) jaArquivos.add(r.file_id);
   }
 
-  type No = { id: string; parent_id: string | null; kind: string; name: string; mime: string | null; storage_path: string | null };
-  const todos = (nos.data as No[] | null) ?? [];
+  const todos = nos;
   const porId = new Map(todos.map((n) => [n.id, n]));
   // Caminho legível da pasta ("Fotos / Quartos") e se está dentro de uma pasta de referência.
   const caminho = (n: No): { pasta: string | null; referencia: boolean } => {
@@ -355,9 +394,8 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
       categoria: categoriaPeloNome(c.pasta, n.name),
     });
   }
-  type Arq = { id: string; file_name: string; file_type: string | null; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
   const TIPO_DE_ARTE = /^(carrossel|carousel|creative|criativo|post|design|story|stories|arte)$/i;
-  for (const a of (arquivos.data as Arq[] | null) ?? []) {
+  for (const a of arquivos) {
     if (jaArquivos.has(a.id)) continue;
     if (!(MIME_IMAGEM.test(a.mime_type || "") || NOME_IMAGEM.test(a.file_name || ""))) continue;
     const c = caminhoDoArquivo(a);
@@ -375,13 +413,87 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
       categoria: ehArte ? "arte" : categoriaPeloNome(pasta, a.file_name || ""),
     });
   }
-  let novas = 0;
-  for (let i = 0; i < linhas.length; i += 200) {
-    const lote = linhas.slice(i, i + 200);
-    const { error } = await db.from("cliente_imagens").insert(lote);
-    if (error) console.error("contexto-cliente: acervo nao sincronizado", { client_id: clientId, erro: error.message });
-    else novas += lote.length;
-  }
+  // Lote que bate no índice único (outra chamada inseriu antes): tira as que já
+  // existem e grava o resto, em vez de perder o lote inteiro.
+  const r = await inserirSemDuplicar(linhas, {
+    inserir: (grupo) => db.from("cliente_imagens").insert(grupo),
+    existentes: async (grupo) => {
+      const nosDoGrupo = grupo.map((l) => l.workspace_node_id).filter((v): v is string => typeof v === "string");
+      const arqsDoGrupo = grupo.map((l) => l.file_id).filter((v): v is string => typeof v === "string");
+      const [a, b] = await Promise.all([
+        nosDoGrupo.length
+          ? db.from("cliente_imagens").select("workspace_node_id").eq("client_id", clientId).in("workspace_node_id", nosDoGrupo)
+          : Promise.resolve({ data: [] as unknown[] }),
+        arqsDoGrupo.length
+          ? db.from("cliente_imagens").select("file_id").eq("client_id", clientId).in("file_id", arqsDoGrupo)
+          : Promise.resolve({ data: [] as unknown[] }),
+      ]);
+      const nosJa = new Set(((a.data as { workspace_node_id: string }[] | null) ?? []).map((x) => x.workspace_node_id));
+      const arqsJa = new Set(((b.data as { file_id: string }[] | null) ?? []).map((x) => x.file_id));
+      return grupo.filter((l) => nosJa.has(String(l.workspace_node_id)) || arqsJa.has(String(l.file_id)));
+    },
+  });
+  if (r.falhas) console.error("contexto-cliente: acervo nao sincronizado", { client_id: clientId, falhas: r.falhas });
   const { count } = await db.from("cliente_imagens").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("ativa", true);
-  return { novas, total: count ?? 0 };
+  return { novas: r.novas, total: count ?? 0 };
+}
+
+/**
+ * Lê todas as páginas de uma consulta, até o teto. O banco devolve no máximo
+ * 1.000 linhas por pedido: `.limit(5000)` sozinho volta com 1.000 sem avisar.
+ */
+export async function todasAsPaginas<T>(
+  pagina: (de: number, ate: number) => PromiseLike<{ data: unknown; error: unknown }>,
+  teto: number,
+  tamanho = 1000,
+): Promise<T[]> {
+  const saida: T[] = [];
+  for (let de = 0; de < teto; de += tamanho) {
+    const quantas = Math.min(tamanho, teto - de);
+    const { data, error } = await pagina(de, de + quantas - 1);
+    if (error) break;
+    const linhas = (data as T[] | null) ?? [];
+    for (const l of linhas) saida.push(l);
+    if (linhas.length < quantas) break;
+  }
+  return saida;
+}
+
+type ErroDoBanco = { code?: string; message?: string } | null;
+const ehDuplicado = (e: ErroDoBanco) => !!e && (e.code === "23505" || /duplicate key|unique constraint/i.test(e.message || ""));
+
+/**
+ * Insere em lotes sem perder o lote inteiro no índice único: no conflito, lê
+ * de novo quais linhas do lote já existem, tira essas e grava o resto (uma a
+ * uma só se ainda houver conflito). Erro que não é duplicata conta como falha.
+ */
+export async function inserirSemDuplicar<L>(
+  linhas: L[],
+  ops: {
+    inserir: (grupo: L[]) => PromiseLike<{ error: ErroDoBanco }>;
+    existentes: (grupo: L[]) => Promise<L[]>;
+  },
+  lote = 200,
+): Promise<{ novas: number; duplicadas: number; falhas: number }> {
+  const r = { novas: 0, duplicadas: 0, falhas: 0 };
+  for (let i = 0; i < linhas.length; i += lote) {
+    const grupo = linhas.slice(i, i + lote);
+    const primeira = await ops.inserir(grupo);
+    if (!primeira.error) { r.novas += grupo.length; continue; }
+    if (!ehDuplicado(primeira.error)) { r.falhas += grupo.length; continue; }
+    const ja = new Set(await ops.existentes(grupo).catch(() => [] as L[]));
+    const restantes = grupo.filter((l) => !ja.has(l));
+    r.duplicadas += grupo.length - restantes.length;
+    if (!restantes.length) continue;
+    const segunda = await ops.inserir(restantes);
+    if (!segunda.error) { r.novas += restantes.length; continue; }
+    if (!ehDuplicado(segunda.error)) { r.falhas += restantes.length; continue; }
+    for (const l of restantes) {
+      const { error } = await ops.inserir([l]);
+      if (!error) r.novas++;
+      else if (ehDuplicado(error)) r.duplicadas++;
+      else r.falhas++;
+    }
+  }
+  return r;
 }

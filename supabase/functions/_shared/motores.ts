@@ -829,6 +829,15 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     ligacao: { arquivo: ESTUDIO, trechos: ["const serieDaCapa = herdaReferenciaDaCapa({", "blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa })", "componente: componenteDoMiolo, zona: zonaDoTexto })"] },
     intocado: "Capa sem mudança; lâmina com referência própria (Idêntica e os outros níveis) igual; referência sem nada só da capa replica como hoje; anúncio (Mesa Ads) com o bloco da série de sempre; fixtures replicar-identica-hoje.json e lamina-normal-hoje.json iguais.",
   },
+  {
+    id: "tipografia_do_cliente",
+    em: "2026-09-26",
+    pedido: "Dono: \"tem que seguir a tipografia correta de cada cliente, e cada cliente sem misturar, e não inventar, e seguir a consistência das fontes no carrossel\".",
+    o_que: "A fonte vem sempre do kit da marca do trabalho; kit sem fonte não gera (409 sem_tipografia). As amostras da tipografia (título e texto, desenhadas no navegador no peso usado) vão anexadas com o papel TIPOGRAFIA DO CLIENTE, na prioridade lâmina, rosto, tipografia, referência automática, estilo e template. O bloco TIPOGRAFIA DO CLIENTE fixa família, peso e caixa por papel em todas as lâminas; a capa (ou a primeira lâmina gerada) é a âncora e a versão guarda o registro; a lâmina 2+ pedida junto com a capa espera por ela na fila.",
+    modulo: "estudio-arte/tipografia-do-cliente.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const tipografia = tipografiaDoKit(fontes);", "candidatos.push(...anexosDaTipografia(tipografia, t.client_id)", "const blocoDaTipografiaAqui = blocoDaTipografia({"] },
+    intocado: "Com título e texto no kit, a lista de fontes do prompt é a mesma e o promptDaLamina e o promptDoReplicar não mudam (fixtures iguais); o bloco novo entra fora deles. Ajuste, correção e fundo contínuo seguem sem a recusa.",
+  },
 ];
 
 // ------------------------------------------------------------------ consultas

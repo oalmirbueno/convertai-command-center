@@ -16,8 +16,11 @@
  *   sobrescritos: viram sugestão (a não ser com forcar).
  * - conversar { client_id, mensagem }: conversa com o agente sobre a marca;
  *   ele aplica as mudanças pedidas no kit e na memória dos agentes.
- * - fontes_da_biblioteca { client_id }: escolhe (Jev) um par de fontes da
- *   biblioteca global da agência quando o cliente ainda não tem fonte.
+ * - fontes_da_biblioteca { client_id, marca_id?, previa?, gravar? }: escolhe
+ *   (Jev) um par de fontes da biblioteca global da agência quando a marca do
+ *   pedido ainda não tem fonte. Frente T2 (26/09): previa: true só sugere
+ *   (nada é gravado); gravar { titulo_id, texto_id } grava o par confirmado no
+ *   kit (sem Jev de novo), com o marca_id da marca que não é a principal.
  * - acervo_sincronizar { client_id }: sem IA. Traz as imagens reais do cliente
  *   (todas as pastas do workspace e Arquivos, fora referências e materiais
  *   entregues) para o acervo, com a pasta e uma categoria provável.
@@ -41,6 +44,8 @@ import {
   type ModeloIa,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
+// Frente T2: a fonte sugerida da biblioteca vai para o kit da marca do pedido (sem misturar marcas).
+import { colunasComMarca, fontesDaMarca, type MarcaLeve, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import {
@@ -704,7 +709,12 @@ function arquivoDaFamilia(f: FonteBiblioteca, papel: "titulo" | "texto"): string
   return melhor.arquivo;
 }
 
-async function escolherFontesDaBiblioteca(ch: Chamador, clientId: string) {
+/**
+ * Par sugerido. `gravar` false (frente T2, prévia): só devolve a escolha, com
+ * os ids da biblioteca, para a equipe confirmar. `marca`: a linha nova leva o
+ * marca_id da marca que não é a principal.
+ */
+async function escolherFontesDaBiblioteca(ch: Chamador, clientId: string, modo: { gravar?: boolean; marca?: MarcaLeve | null } = {}) {
   const db = servico();
   const { data } = await db
     .from("fontes_biblioteca")
@@ -767,29 +777,67 @@ async function escolherFontesDaBiblioteca(ch: Chamador, clientId: string) {
   const indice = Number(escolha.replace("par_", ""));
   const par = lista[Number.isFinite(indice) ? indice : -1]?.[1];
   if (!par) return null;
+  const sugerida = {
+    titulo: par.titulo.familia,
+    texto: par.texto.familia,
+    titulo_id: par.titulo.id,
+    texto_id: par.texto.id,
+    porque: par.porque,
+    confianca: res.answers.par?.confidence ?? null,
+  };
+  if (modo.gravar === false) return sugerida;
+  return (await gravarParDaBiblioteca(clientId, par.titulo, par.texto, modo.marca ?? null)) ? sugerida : null;
+}
 
+/** Grava o par (título e texto) da biblioteca no kit do cliente, na marca do pedido. */
+async function gravarParDaBiblioteca(clientId: string, fonteTitulo: FonteBiblioteca, fonteTexto: FonteBiblioteca, marca: MarcaLeve | null): Promise<boolean> {
+  const db = servico();
+  const daMarca = marcaParaGravar(marca);
+  const par = { titulo: fonteTitulo, texto: fonteTexto };
   // storage_path é obrigatório em cliente_fontes: o arquivo da própria biblioteca
   // (peso forte para título, regular para texto). Sem ele o insert falhava calado.
   const linhas = [
-    { client_id: clientId, nome: par.titulo.familia, papel: "titulo", storage_path: arquivoDaFamilia(par.titulo, "titulo"), amostra_path: par.titulo.amostra_path, biblioteca_id: par.titulo.id, origem: "biblioteca" },
-    { client_id: clientId, nome: par.texto.familia, papel: "texto", storage_path: arquivoDaFamilia(par.texto, "texto"), amostra_path: par.texto.amostra_path, biblioteca_id: par.texto.id, origem: "biblioteca" },
+    { client_id: clientId, nome: par.titulo.familia, papel: "titulo", storage_path: arquivoDaFamilia(par.titulo, "titulo"), amostra_path: par.titulo.amostra_path, biblioteca_id: par.titulo.id, origem: "biblioteca", ...daMarca },
+    { client_id: clientId, nome: par.texto.familia, papel: "texto", storage_path: arquivoDaFamilia(par.texto, "texto"), amostra_path: par.texto.amostra_path, biblioteca_id: par.texto.id, origem: "biblioteca", ...daMarca },
   ];
   const { error } = await db.from("cliente_fontes").insert(linhas);
   if (error) {
     console.error("agente-contexto: fontes da biblioteca nao gravadas", { client_id: clientId, erro: error.message });
-    return null;
+    return false;
   }
-  return { titulo: par.titulo.familia, texto: par.texto.familia, porque: par.porque, confianca: res.answers.par?.confidence ?? null };
+  return true;
 }
 
 async function fontesDaBiblioteca(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
-  const { count } = await servico().from("cliente_fontes").select("id", { count: "exact", head: true }).eq("client_id", clientId);
-  if (count) throw new ErroContexto(409, "cliente_ja_tem_fonte", "Este cliente já tem fonte definida. Remova as atuais para trocar pela biblioteca.");
-  const escolha = await escolherFontesDaBiblioteca(ch, clientId);
+  const db = servico();
+  // Frente T2: conta só as fontes que valem para a marca do pedido (a CME sem fonte própria usa as do cliente).
+  const marca = await marcaDoPedido(db, clientId, corpo).catch(() => null);
+  const { data: atuais } = await db.from("cliente_fontes").select(colunasComMarca("id", marca)).eq("client_id", clientId);
+  const daMarca = fontesDaMarca(((atuais as unknown) as { id: string; marca_id?: string | null }[] | null) ?? [], marca);
+  if (daMarca.length) throw new ErroContexto(409, "cliente_ja_tem_fonte", "Este cliente já tem fonte definida. Remova as atuais para trocar pela biblioteca.");
+  const gravar = corpo.gravar && typeof corpo.gravar === "object" ? corpo.gravar as Record<string, unknown> : null;
+  if (gravar) {
+    // Par confirmado pela equipe (depois da prévia): sem Jev de novo, só famílias ativas da biblioteca.
+    const ids = [texto(gravar.titulo_id, 64), texto(gravar.texto_id, 64)];
+    if (!ids.every((id) => UUID.test(id))) throw new ErroContexto(400, "par_invalido", "Par de fontes inválido.");
+    const { data } = await db
+      .from("fontes_biblioteca")
+      .select("id, familia, categoria, personalidade, usos, nichos, pareamentos, amostra_path, suporta_portugues, arquivos")
+      .eq("ativa", true)
+      .in("id", ids);
+    const lidas = (data as FonteBiblioteca[] | null) ?? [];
+    const titulo = lidas.find((f) => f.id === ids[0]);
+    const corpoFonte = lidas.find((f) => f.id === ids[1]);
+    if (!titulo || !corpoFonte) throw new ErroContexto(409, "par_indisponivel", "Uma das fontes sugeridas saiu da biblioteca. Peça a sugestão de novo.");
+    if (!(await gravarParDaBiblioteca(clientId, titulo, corpoFonte, marca))) throw new ErroContexto(503, "fontes_nao_gravadas", "Não foi possível gravar as fontes no kit.");
+    return json({ fontes_escolhidas: { titulo: titulo.familia, texto: corpoFonte.familia, titulo_id: titulo.id, texto_id: corpoFonte.id } });
+  }
+  const previa = corpo.previa === true;
+  const escolha = await escolherFontesDaBiblioteca(ch, clientId, { gravar: !previa, marca });
   if (!escolha) throw new ErroContexto(409, "biblioteca_vazia", "A biblioteca de fontes da agência ainda não tem pares suficientes.");
-  return json({ fontes_escolhidas: escolha });
+  return json(previa ? { sugestao: escolha } : { fontes_escolhidas: escolha });
 }
 
 // --------------------------------------------------------------- conversar

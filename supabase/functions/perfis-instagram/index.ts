@@ -75,9 +75,11 @@ import {
 import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
 import {
   alvosDasPautas,
+  avisoDoPlanoForaDoMes,
   datasComMesSeguinte,
-  datasDasPautas,
+  datasDoPlanoDoMes,
   decidirPautas,
+  diasUteisDoMes,
   DESCRICOES_DAS_OPERACOES,
   ehPapel,
   emPorcentagem,
@@ -1271,7 +1273,8 @@ function mesPedido(v: unknown): string {
 
 /** Monta a proposta de agenda (acao_agente "agendar") para as pautas aprovadas, com as datas. */
 function propostaDeAgenda(perfil: Perfil, pautas: PautaComData[], datas: string[], resumoTexto: string, mes: string | null): AcaoDoAgente | null {
-  const comData = pautas.map((p, i) => ({ ...p, data: datas[i] || datas[datas.length - 1] || "" })).filter((p) => p.data);
+  // Uma data por pauta, sem repetir (AB2 26/09): pauta sem data própria não vai para o último dia.
+  const comData = pautas.map((p, i) => ({ ...p, data: datas[i] || "" })).filter((p) => p.data);
   if (!comData.length) return null;
   const alvos = alvosDasPautas(comData);
   const acao = normalizarAcaoDoAgente(
@@ -1301,8 +1304,7 @@ async function planoIgual(ch: Chamador, corpo: Record<string, unknown>) {
   if (!posts.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes do plano.");
   const quantas = quantasPautas(corpo.quantidade);
   const mes = mesPedido(corpo.mes);
-  const datas = datasDasPautas(mes, hojeEmSaoPaulo(), quantas);
-  if (!datas.length) throw new ErroHttp(400, "mes_sem_dias", "Este mês não tem mais dias úteis. Escolha o próximo.");
+  if (!diasUteisDoMes(mes, hojeEmSaoPaulo()).length) throw new ErroHttp(400, "mes_sem_dias", "Este mês não tem mais dias úteis. Escolha o próximo.");
   const ctx = await contextoDoCliente(clientId);
   const pedidoDaEquipe = limpo(corpo.pedido, 800);
   // Gera a mais e escolhe (sem laço de correção).
@@ -1317,9 +1319,12 @@ async function planoIgual(ch: Chamador, corpo: Record<string, unknown>) {
   const custo = escritas.custo + conferido.custo;
   const conversaId = await conversaDoPerfil(ch, perfil);
   const aprovadas = conferido.aprovadas as PautaComData[];
-  const acao = propostaDeAgenda(perfil, aprovadas, datasDasPautas(mes, hojeEmSaoPaulo(), aprovadas.length), `Plano de ${mes} igual ao @${perfil.handle}, para ${ctx.nome}: ${aprovadas.length} pautas. Ao confirmar, entram na agenda do Mês.`, mes);
+  // Uma pauta por dia útil, sem repetir; o que não cabe no mês pedido vai para o seguinte, com aviso (AB2 26/09).
+  const plano = datasDoPlanoDoMes(mes, hojeEmSaoPaulo(), aprovadas.length);
+  const foraDoMes = avisoDoPlanoForaDoMes(mes, plano);
+  const acao = propostaDeAgenda(perfil, aprovadas, plano.datas, `Plano de ${mes} igual ao @${perfil.handle}, para ${ctx.nome}: ${aprovadas.length} pautas. Ao confirmar, entram na agenda do Mês.${foraDoMes ? ` ${foraDoMes}` : ""}`, mes);
   const texto = aprovadas.length
-    ? `Montei ${aprovadas.length} pautas para ${mes} no padrão do @${perfil.handle}, adaptadas a ${ctx.nome}.${escritas.observacao ? ` ${escritas.observacao}` : ""} A lista está pronta para confirmar.${textoDasBloqueadas(conferido.bloqueadas)}`
+    ? `Montei ${aprovadas.length} pautas para ${mes} no padrão do @${perfil.handle}, adaptadas a ${ctx.nome}.${escritas.observacao ? ` ${escritas.observacao}` : ""} A lista está pronta para confirmar.${foraDoMes ? ` ${foraDoMes}` : ""}${textoDasBloqueadas(conferido.bloqueadas)}`
     : `Nenhuma pauta passou na conferência de cópia${conferido.jevErro ? " (a conferência não respondeu agora)" : ""}. Peça de novo com outro foco.${textoDasBloqueadas(conferido.bloqueadas)}`;
   const anexos: unknown[] = [];
   if (acao) anexos.push(acao);

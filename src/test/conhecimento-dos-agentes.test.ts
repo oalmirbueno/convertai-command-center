@@ -186,10 +186,13 @@ describe("Calendário e campanhas: marketing por momento e cérebro", () => {
     expect(corpoDe(calendario, "sistemaDoCalendario")).toContain("return `${ctx.prompt}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
     expect(calendario).not.toContain("sistema: `${ctx.prompt}\\n${REGRAS_DE_SAIDA}`");
     // Frente O: as três frentes do propor_temas usam "temas" e a pesquisa do mês usa "diagnostico".
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(7);
+    // AB2 (26/09): as três conversas (planejar_mes, conversar e campanha_conversar) levam o mapa do painel ("conversa").
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(5);
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes", "conversa"\)/g)?.length).toBe(2);
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "temas"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(e\.ctx, "diagnostico"\)/g)?.length).toBe(1);
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(3);
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(2);
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha", "conversa"\)/g)?.length).toBe(1);
     for (const r of ["somente carrossel ou post estático", "Nunca reels, vídeo, stories ou live", "segunda a sexta", "sem travessões", "tipo_editorial e framework"]) expect(REGRAS_DE_SAIDA).toContain(r);
     expect(calendario).toContain("${BASE_DO_ESTRATEGISTA}");
   });

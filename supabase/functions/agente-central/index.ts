@@ -39,6 +39,7 @@ import { AREAS_DO_CEREBRO, type AreaDoCerebro } from "../_shared/cerebro-do-clie
 import { METODO_ACELERA } from "../_shared/metodo-acelera.ts";
 // Frente AG (26/09): mapa mínimo do painel, só com os nomes (roda em lote; a leitura pode chegar ao cliente, então sem rota).
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
 import { conferirRepeticao, escreverRitual, extractJson, PRIMARY_MODEL_CHAIN, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
 import { extrairMemoriaDoRitual } from "../ritual-writer/memoria.ts";
@@ -83,8 +84,16 @@ Português do Brasil, sem travessão. Só JSON: {"leitura":{...},"confirmacoes":
 /** Mapa mínimo do painel no fim do sistema de preparar (nome e rota de cada área). */
 const MAPA_DA_CENTRAL = String.fromCharCode(10, 10) + blocoDoMapaDoPainel("central", { nivel: "minimo", semRota: true });
 
+// AB2 (26/09): 14 x 429 da OpenAI (tokens por minuto) no "Atualizar todos".
+// O contexto encolheu (dossiê pela regra do recorte, fatos resumidos) e o
+// mesmo modelo tem a rota de reserva pelo OpenRouter quando há chave.
+export const LIMITE_DOSSIE_PREPARAR = 6000;
+export const LIMITE_CONTEXTO_PREPARAR = 6000;
+export const LIMITE_DOSSIE_FATOS = 4500;
+export const LIMITE_FATOS = 9000;
+
 async function perguntarIA(sistema: string, usuario: string): Promise<{ dados: Record<string, unknown>; modelo: string } | null> {
-  const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN });
+  const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN, openRouterReserve: true });
   const { response, provider } = await requestAiChatCompletion(providers, {
     messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }],
     temperature: 0.3,
@@ -175,7 +184,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
   const [perfil, dossie, contexto] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
-    lerContextoDoRitual(db, clientId, { ritual, limite: 8000 }),
+    lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
@@ -184,7 +193,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     `SERVIÇOS CONTRATADOS: ${n.servicos.join(", ") || "não marcados no cadastro"}`,
     `FASE CALCULADA PELO PAINEL: ${fase.nome} (${contexto.motivoDaFase})`,
     `MEMÓRIA, MUDANÇAS, PENDÊNCIAS, NÚMEROS, CÉREBRO E MÉTODO:\n${contexto.texto}`,
-    dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${dossie.content.slice(0, 9000)}` : "DOSSIÊ GERAL: não existe ainda.",
+    dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
   ].join("\n\n"));
   if (!r) return json({ error: "A IA não respondeu agora. Tente este cliente de novo." }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);
@@ -306,16 +315,18 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   const [perfil, dossieNovo, contexto] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
-    lerContextoDoRitual(db, clientId, { ritual }),
+    lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
   ]);
   const n = nomes(perfil);
   const fatos = fatosDoAgente({
     nome: n.nome, planoNome: perfil?.plan_name ? String(perfil.plan_name) : null, servicos: n.servicos,
-    dossie: (dossieNovo?.content ?? "").slice(0, 7000), versao: dossieNovo?.version ?? versao,
+    dossie: recortarDossie(dossieNovo?.content ?? "", LIMITE_DOSSIE_FATOS), versao: dossieNovo?.version ?? versao,
     leitura, respostas, contextoExtra,
-  }).slice(0, 12000);
+  });
+  // O dossiê fica no FIM dos fatos: o corte preserva o fim (o mais recente), nunca só o começo.
+  const fatosNoLimite = recortarDossie(fatos, LIMITE_FATOS);
   const escrito = RITUAL_BRIEF[ritual]
-    ? await escreverRitual({ ritual, clientName: n.nome, contactName: n.contato, facts: fatos, continuidade: contexto.texto }).catch(() => null)
+    ? await escreverRitual({ ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto }).catch(() => null)
     : null;
   const repeticao = escrito
     ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))

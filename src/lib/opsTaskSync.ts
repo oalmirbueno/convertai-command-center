@@ -11,8 +11,12 @@
  * ops_milestone_id, project_id e client_id em data, context e raiz.
  * O `portal-to-ops` ainda faz lookup definitivo, mas mandar isso na origem
  * deixa o pipeline robusto contra race conditions.
+ *
+ * A ponte está aposentada: sem VITE_OPS_LEGACY_BRIDGE_ENABLED=true o painel
+ * não chama o portal-to-ops (nem lê a tarefa para enriquecer o envio).
  */
 import { supabase } from "@/integrations/supabase/client";
+import { ponteOpsLigada } from "@/lib/opsSync";
 
 const PORTAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 if (!PORTAL_SUPABASE_URL) {
@@ -72,6 +76,7 @@ async function enrich(task_id: string) {
 }
 
 function send(payload: Record<string, unknown>) {
+  if (!ponteOpsLigada()) return;
   try {
     fetch(URL, {
       method: "POST",
@@ -89,6 +94,7 @@ function send(payload: Record<string, unknown>) {
 }
 
 async function dispatch(event: string, task_id: string) {
+  if (!ponteOpsLigada()) return;
   const extra = await enrich(task_id);
   send({ event, task_id, type: "task", source: "portal", ...(extra ?? {}) });
 }

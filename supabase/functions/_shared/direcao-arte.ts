@@ -191,7 +191,8 @@ export function valorDaCor(hex: string | null | undefined): number | null {
  * tela do recorte), nesta ordem de prioridade: fotos do cliente, referências
  * escolhidas pela equipe, logo, capa da série, fonte, arte da marca e selo.
  */
-export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "identidade" | "selo";
+// Frente T2 (26/09): "fonte" é a amostra da fonte do título e "fonte_texto" a do texto (quando a família é outra).
+export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "fonte_texto" | "identidade" | "selo";
 export const MAX_ANEXOS_DA_LAMINA = 6;
 const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   foto_cliente: 0,
@@ -202,10 +203,11 @@ const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   // Frente E (25/09): quadro de sequência da prancha de referência, logo depois da capa (lâminas 2..N).
   sequencia: 4.5,
   fonte: 5,
+  fonte_texto: 5.1,
   identidade: 6,
   selo: 7,
 };
-const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, identidade: 1, selo: 1 };
+const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, fonte_texto: 1, identidade: 1, selo: 1 };
 
 /** Os anexos que entram, na ordem em que vão (a ordem da lista entre iguais é mantida). */
 export function anexosDaLamina<T extends { tipo: TipoDoAnexo }>(candidatos: T[], opcoes: { base: boolean; max?: number }): T[] {

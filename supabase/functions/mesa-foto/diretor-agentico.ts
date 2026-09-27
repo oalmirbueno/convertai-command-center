@@ -94,6 +94,8 @@ export const ROTULO_DA_GERACAO: Record<string, string> = {
 /** Fotos por pedido (cada uma é uma geração paga) e por linha da resposta. */
 export const MAX_FOTOS_POR_PEDIDO = 16;
 export const MAX_FOTOS_POR_LINHA = 8;
+/** Linhas de `geracoes` lidas por resposta (as de depois contam como fora do limite, com aviso). */
+export const MAX_LINHAS_DE_GERACAO = 24;
 /** Leituras por visão feitas numa mensagem (as outras ficam para a próxima). */
 export const MAX_LEITURAS_POR_MENSAGEM = 4;
 export const MAX_FOTOS_NO_PACOTE = 60;
@@ -723,13 +725,18 @@ export function resumoDoPedido(g: Pick<PedidoDaGeracao, "cenario" | "pose" | "ro
  * uma foto por item (g1..gN), com o pedido guardado no contexto. Travas:
  * clone sem autorização válida ou arquivado, referência da internet, book
  * arquivado, prompt sem produto aberto e pedido sem o que gerar.
+ * Limites (anti-bug AB2, 26/09: antes cortavam calados): acima de
+ * MAX_FOTOS_POR_LINHA numa linha ou de `max` no pedido, o que sobra vai para
+ * `recusados` (operação "limite") com quantas fotos ficaram de fora, e o
+ * resumo do cartão diz o total.
  */
 export function normalizarGeracoesDoDiretor(
   bruto: unknown,
   p: PacoteDoDiretor,
   opcoes: { id?: string; kitId?: string | null; max?: number } = {},
 ): AcaoDoAgente | null {
-  const linhas = Array.isArray(bruto) ? bruto.slice(0, 24) : [];
+  const todas = Array.isArray(bruto) ? bruto : [];
+  const linhas = todas.slice(0, MAX_LINHAS_DE_GERACAO);
   const max = Math.max(1, Math.min(MAX_FOTOS_POR_PEDIDO, opcoes.max || MAX_FOTOS_POR_PEDIDO));
   const porRef = new Map<string, AlvoQualquer>();
   ([] as AlvoQualquer[]).concat(
@@ -744,9 +751,27 @@ export function normalizarGeracoesDoDiretor(
   const recusados: RecusaDoItem[] = [];
   const ignorados: string[] = [];
   let passou = false;
+  /** Fotos que passaram do limite do pedido (inclui as linhas além de MAX_LINHAS_DE_GERACAO). */
+  let foraDoPedido = 0;
+  /** Fotos cortadas pelo limite por linha, por alvo (apelido -> título e quantas). */
+  const cortadasNaLinha = new Map<string, { titulo: string; n: number }>();
   const recusar = (a: AlvoQualquer, operacao: string, motivo: string) => {
     if (!recusados.some((r) => r.ref === a.ref && r.operacao === operacao)) recusados.push({ ref: a.ref, titulo: a.titulo, operacao, motivo });
   };
+  /** Quantas fotos a linha pediu (1 a 100: número absurdo não vira aviso absurdo). */
+  const pedidasNaLinha = (m: Record<string, unknown>) => Math.max(1, Math.min(100, Math.floor(Number(m.quantidade) || 1)));
+  const linhaValida = (m: Record<string, unknown>) => {
+    const operacao = String(m.operacao ?? "").trim().toLowerCase();
+    const alvo = porRef.get(String(m.ref ?? "").trim().toLowerCase().slice(0, 12));
+    return OPERACOES_DE_GERACAO.indexOf(operacao) >= 0 && !!alvo && apelidoDoTipo(alvo.ref, [ALVO_DA_GERACAO[operacao]]);
+  };
+  // Linhas além do teto de linhas: não entram, mas contam no aviso de quantas ficaram de fora.
+  for (const b of todas.slice(MAX_LINHAS_DE_GERACAO)) {
+    const m = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+    if (!linhaValida(m)) continue;
+    passou = true;
+    foraDoPedido += Math.min(MAX_FOTOS_POR_LINHA, pedidasNaLinha(m));
+  }
 
   for (const b of linhas) {
     const m = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
@@ -819,10 +844,16 @@ export function normalizarGeracoesDoDiretor(
       }
     }
 
-    const vezes = Math.max(1, Math.min(MAX_FOTOS_POR_LINHA, Math.floor(Number(m.quantidade) || 1)));
+    const pedidas = pedidasNaLinha(m);
+    const vezes = Math.min(MAX_FOTOS_POR_LINHA, pedidas);
+    if (pedidas > vezes) {
+      const antes = cortadasNaLinha.get(alvo.ref);
+      cortadasNaLinha.set(alvo.ref, { titulo: alvo.titulo, n: (antes ? antes.n : 0) + pedidas - vezes });
+    }
     for (let v = 1; v <= vezes; v++) {
       if (itens.length >= max) {
         passou = true;
+        foraDoPedido += vezes - v + 1;
         break;
       }
       const refDoItem = `g${itens.length + 1}`;
@@ -854,14 +885,23 @@ export function normalizarGeracoesDoDiretor(
       });
     }
   }
-  if (passou) recusados.push({ ref: "-", titulo: "Fotos a mais", operacao: "limite", motivo: `No máximo ${max} fotos por pedido. Peça o resto depois.` });
+  const ficou = (k: number) => `${k} ${k === 1 ? "ficou" : "ficaram"} de fora`;
+  let cortadas = 0;
+  cortadasNaLinha.forEach((c, ref) => {
+    cortadas += c.n;
+    recusados.push({ ref, titulo: c.titulo, operacao: "limite", motivo: `No máximo ${MAX_FOTOS_POR_LINHA} fotos de uma vez para o mesmo item: ${ficou(c.n)}. Peça o resto depois.` });
+  });
+  if (passou) recusados.push({ ref: "-", titulo: "Fotos a mais", operacao: "limite", motivo: `No máximo ${max} fotos por pedido: ${ficou(foraDoPedido)}. Peça o resto depois.` });
   if (!itens.length && !recusados.length) return null;
   const n = itens.length;
+  const fora = cortadas + foraDoPedido;
   return {
     tipo: "acao_agente",
     agente: AGENTE_DE_GERACAO,
     id: opcoes.id || `geracao-${Date.now().toString(36)}`,
-    resumo: n ? `Vou gerar ${n} ${n === 1 ? "foto" : "fotos"}, uma por vez. O custo aparece antes de confirmar.` : "Nada para gerar.",
+    resumo: n
+      ? `Vou gerar ${n} ${n === 1 ? "foto" : "fotos"}, uma por vez. O custo aparece antes de confirmar.${fora ? ` Pelo limite, ${fora === 1 ? "1 foto ficou" : `${fora} fotos ficaram`} de fora: peça depois.` : ""}`
+      : "Nada para gerar.",
     itens,
     ignorados,
     recusados,

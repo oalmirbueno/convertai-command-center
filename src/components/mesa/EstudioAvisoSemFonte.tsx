@@ -1,15 +1,18 @@
 import { AjudaRecolhida } from "@/components/sistema";
-import { useFontesDoCliente, useKitDoCliente } from "./contextoDoCliente";
+import { useKitDoCliente } from "./contextoDoCliente";
+import { useMarcaDaMesa } from "./MesaContexto";
+import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
 
 /**
- * Aviso do kit na referência (frente R, 26/09). Sem fonte ou sem cor válida no
- * kit, o modo replicar usa a letra ou as cores da referência (não há as do
- * cliente para usar; decisão do dono, o prompt fica como está). O link leva ao
- * Contexto, onde a fonte é definida (ou sugerida da biblioteca pelo Jev,
- * "Sugerir automaticamente") e a paleta é montada. Kit completo, ou antes de
- * a leitura chegar: nada aparece. Export antigo mantido (EstudioAvisoSemFonte).
+ * Aviso do kit na referência (frente R, 26/09). Sem cor válida no kit, o modo
+ * replicar usa as cores da referência (não há as do cliente para usar; decisão
+ * do dono, o prompt fica como está). Frente T2 (26/09, dono: "não inventar"):
+ * sem fonte no kit da marca aberta a arte NÃO é gerada (a letra nunca vem da
+ * referência); o bloqueio com "Sugerir da biblioteca" fica no Estúdio
+ * (EstudioSemTipografia). O link leva ao Contexto. Kit completo, ou antes de a
+ * leitura chegar: nada aparece. Export antigo mantido (EstudioAvisoSemFonte).
  */
-export const TEXTO_SEM_FONTE = "Cliente sem fonte no kit: usando a da referência.";
+export const TEXTO_SEM_FONTE = "Cliente sem fonte no kit: a arte não é gerada.";
 export const TEXTO_SEM_CORES = "Cliente sem cores no kit: usando as da referência.";
 
 /** Igual ao servidor (hexOk): só #RRGGBB conta como cor do kit. */
@@ -31,9 +34,10 @@ function Linha({ texto, clientId, ajuda }: { texto: string; clientId: string; aj
 }
 
 export function EstudioAvisoDoKit({ clientId }: { clientId: string }) {
-  const fontes = useFontesDoCliente(clientId);
+  const { marca } = useMarcaDaMesa();
   const kit = useKitDoCliente(clientId);
-  const semFonte = !!fontes.data && fontes.data.length === 0;
+  // Frente T2: as fontes da marca aberta (a mesma regra do servidor).
+  const semFonte = useSemTipografia(clientId, marca);
   const semCor = kit.isSuccess && kitSemCor(kit.data as { paleta?: unknown } | null);
   if (!semFonte && !semCor) return null;
   return (
@@ -42,7 +46,7 @@ export function EstudioAvisoDoKit({ clientId }: { clientId: string }) {
         <Linha
           texto={TEXTO_SEM_FONTE}
           clientId={clientId}
-          ajuda="O kit da marca não tem fonte. A letra segue a hierarquia da referência, mas o desenho vem dela. Em Contexto, na marca, envie a fonte ou use Sugerir automaticamente."
+          ajuda="O kit da marca não tem fonte e o Estúdio não inventa letra nem copia a da referência. Em Contexto, em Fontes, envie a fonte ou escolha da biblioteca; no Estúdio, Sugerir da biblioteca propõe um par para você confirmar."
         />
       )}
       {semCor && (

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
+import { comOrigemDoPainel } from "../_shared/origem-do-painel.ts";
 import { notificationReadRows, notificationWriteResponse, type NotificationRow } from "../_shared/notification-write-response.ts";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
@@ -12,15 +13,12 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": APP_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Vary": "Origin",
 };
 
-Deno.serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  if (origin && origin !== APP_ORIGIN) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+// Origem conferida (e o CORS acertado) pelo embrulho: painel, www, prévia do
+// Lovable e localhost passam; o resto leva 403 antes de qualquer trabalho.
+Deno.serve(comOrigemDoPainel(APP_ORIGIN, async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -151,4 +149,4 @@ Deno.serve(async (req) => {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));

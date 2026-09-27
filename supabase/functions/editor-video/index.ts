@@ -70,6 +70,7 @@ import {
   trechosConferidos,
 } from "./ferramentas.ts";
 import { ESQUEMA_DA_RECEITA, normalizarReceita, sistemaDaReceita } from "./receita.ts";
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -398,7 +399,8 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
     { papel: "usuario", conteudo: `Pedido do dono: ${pedido}\n\nProjeto agora:\n${contexto}` },
     ...historicoValido(corpo.historico),
   ];
-  const sistema = sistemaDoAgente();
+  // AB2 (F): o agente de edição sabe onde cada coisa fica no painel (só na conversa, nunca na visão nem na receita).
+  const sistema = `${sistemaDoAgente()}\n\n${blocoDoMapaDoPainel("edicao")}`;
   const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistema.length + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
   if (gasto + estimativa > teto) {
     return json({ passo: { plano: "", chamadas: [], resposta: `O próximo passo passaria do teto de US$ ${teto.toFixed(2)}. Aumente o teto ou simplifique o pedido.`, terminou: true, recusadas: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });

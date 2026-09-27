@@ -46,6 +46,7 @@ import {
 import { jevPerguntar } from "../_shared/jev.ts";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import { montarBlocosDeDocumentos } from "./documentos-enviados.ts";
 import {
   AGENTE_DA_CONVERSA_DO_LANCADOR,
   AGENTE_DO_LANCADOR,
@@ -891,17 +892,10 @@ Deno.serve(async (req) => {
       ...incomingAttachments.map((a) => ({ fileName: a.fileName, text: a.text, source: "anexo" })),
       ...systemLoaded,
     ];
-    // Cap total ~60k chars para não estourar o contexto do provider.
-    const PER_DOC_CAP = 12000;
-    const TOTAL_CAP = 60000;
-    let used = 0;
-    const docBlocks: string[] = [];
-    for (const d of allDocs) {
-      const slice = d.text.slice(0, PER_DOC_CAP);
-      if (used + slice.length > TOTAL_CAP) break;
-      used += slice.length;
-      docBlocks.push(`\n\n[DOCUMENTO: ${d.fileName}${d.source ? ` · ${d.source}` : ""}]\n${slice}`);
-    }
+    // Cap total ~60k chars para não estourar o contexto do provider. O que
+    // passa do teto fica de fora, e a contagem devolvida é só dos enviados.
+    const documentosDoPedido = montarBlocosDeDocumentos(allDocs);
+    const docBlocks = documentosDoPedido.blocos;
     const attachmentBlock = docBlocks.length
       ? `\n\n## ${docBlocks.length} DOCUMENTO(S) DO CLIENTE — leia INTEIRO, extraia números, prazos e formatos com precisão cirúrgica:${docBlocks.join("")}`
       : "";
@@ -988,7 +982,9 @@ Deno.serve(async (req) => {
     parsed._model = usedModel;
     parsed._contractAutoLoaded = contractAutoLoaded;
     parsed._contractName = allDocs[0]?.fileName || null;
-    parsed._documentsCount = allDocs.length;
+    // Só os documentos que o modelo recebeu (antes contava também os que o teto cortou).
+    parsed._documentsCount = documentosDoPedido.enviados;
+    parsed._documentsLeftOut = documentosDoPedido.deFora;
     parsed._servico = servico;
 
     // Frente AG: ações (direto quando pode), destino no mapa e a frase para a conversa.

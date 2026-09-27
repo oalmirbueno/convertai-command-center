@@ -7,6 +7,7 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Cus
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import type { Trabalho } from "@/components/mesa/useItensDoMes";
 import { chamarFuncao, textoDoErro, type Qualidade } from "@/lib/mesa/api";
+import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import {
   chamarAds,
   chavesAds,
@@ -212,7 +213,8 @@ export default function AbaEstudioAds({
     const falhas: unknown[] = [];
     for (const c of lista) {
       try {
-        await chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: c.trabalho_id, nome: nomeDoCriativo(c, listaDePlanos) });
+        // AB2: entrega em partes (limite de CPU) continua sozinha.
+        await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: c.trabalho_id, nome: nomeDoCriativo(c, listaDePlanos) }));
         ok += 1;
       } catch (e) {
         falhas.push(e);

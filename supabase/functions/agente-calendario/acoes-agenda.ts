@@ -412,6 +412,28 @@ export function janelaDoPedidoLivre(inicio: string, mensagem: string): { fim: st
   return { fim, uteis };
 }
 
+/**
+ * Dias que valem para a proposta de um pedido livre ou de um conteúdo rápido
+ * (ajustar a data na conversa, editar à mão, repor e gravar). Anti-bug 26/09
+ * (AB2): antes era de hoje até 30 dias DEPOIS DO ÚLTIMO conteúdo, só de
+ * segunda a sexta. Peças de dezembro deixavam a data ir para janeiro sem
+ * ninguém pedir, e a peça de sábado que o pedido citou mudava de dia ao gravar.
+ * Agora vale a janela do pedido (janelaDoPedidoLivre): do primeiro conteúdo
+ * (ou de hoje) até 30 dias depois de hoje, esticada até a última data que o
+ * pedido cita e até o último conteúdo; data citada vale mesmo no fim de semana.
+ */
+export function diasDaPropostaLivre(p: { periodo_inicio: string; periodo_fim: string; mensagem?: unknown }, hoje: string): string[] {
+  const inicio = DATA.test(p.periodo_inicio) && p.periodo_inicio < hoje ? p.periodo_inicio : hoje;
+  const pedido = janelaDoPedidoLivre(inicio, String(p.mensagem ?? ""));
+  let fim = pedido.fim;
+  const hojeMais30 = somarDiasIso(hoje, 30);
+  if (hojeMais30 > fim) fim = hojeMais30;
+  if (DATA.test(p.periodo_fim) && p.periodo_fim > fim) fim = p.periodo_fim;
+  const dias = pedido.uteis.slice();
+  for (let d = somarDiasIso(pedido.fim, 1); d <= fim && dias.length < 800; d = somarDiasIso(d, 1)) if (ehDiaUtilIso(d)) dias.push(d);
+  return dias;
+}
+
 /** Texto da regra no prompt do agente do mês. */
 export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro", "revise"), TODAS as que casam com o pedido, até ${MAX_REFAZER_NA_LISTA} (o painel refaz em lotes de ${MAX_REFAZER_POR_PEDIDO}, um atrás do outro; nunca diga que o resto fica para depois). editar_textos: { ref, titulo, tema, gancho, copy, cta, publico, cards: [{ ordem, texto }] } para REESCREVER peças que já estão boas na estrutura mas erram no texto (público errado, falar com agência em vez do cliente final, tom, CTA): mais barato e fiel que refazer; vazio no campo que não muda; cards só com as lâminas que mudam, seguindo a regra de menos texto. Pedido amplo ("revise todos os meses", "tudo que fala com agência") vale para TODAS as peças que casam, lendo público, gancho, lâminas e legenda de cada uma: use editar_textos quando a peça só precisa de texto novo e refazer quando o tema inteiro não serve. mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, reels, story ou video. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
 - gerar_conteudos: só quando a equipe PEDIR para criar ou gerar os conteúdos de um mês inteiro ou de vários ("crie todos os conteúdos de outubro", "preencha os próximos 3 meses"). meses: lista AAAA-MM; frequencia_semanal: a do plano combinado, ou a que a equipe pediu. resumo: 1 frase. A equipe vê o custo e confirma; o gerador de meses segue o plano combinado de cada mês. Sem pedido desse tipo, null.`;

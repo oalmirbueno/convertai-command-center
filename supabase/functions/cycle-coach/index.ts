@@ -19,8 +19,11 @@ import {
   requestAiChatCompletion,
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
+/** Janela da agenda que o coach conta (próximos 7 dias e últimos 7 no ar). */
+const JANELA_DA_AGENDA_MS = 7 * 86_400_000;
 
 // As três etapas fixas do ciclo. As outras três giram por cliente e semana,
 // então o coach fala do NÚMERO delas em vez de inventar um nome que pode não
@@ -178,10 +181,15 @@ Deno.serve(async (req) => {
         .select("client_id, tasks(title, status, source, due_date, deleted_at)")
         .in("client_id", ids)
         .is("deleted_at", null),
+      // AB2: só a janela que o coach usa (7 dias para trás e 7 para frente).
+      // Sem filtro vinha a agenda inteira da carteira e o banco cortava em
+      // 1.000 linhas sem avisar, e a conta da semana saía errada.
       db.from("editorial_publications")
         .select("client_id, status, scheduled_at")
         .in("client_id", ids)
-        .in("status", ["scheduled", "published"]),
+        .in("status", ["scheduled", "published"])
+        .gte("scheduled_at", new Date(Date.now() - JANELA_DA_AGENDA_MS).toISOString())
+        .lte("scheduled_at", new Date(Date.now() + JANELA_DA_AGENDA_MS).toISOString()),
     ]);
     const planoDe = new Map<string, string[]>();
     for (const row of planosRes.data || []) {
@@ -190,8 +198,10 @@ Deno.serve(async (req) => {
     }
     const dossieDe = new Map<string, string>();
     for (const d of dossiesRes.data || []) {
-      const texto = String(d.summary || d.content || "").replace(/\s+/g, " ").trim();
-      if (texto) dossieDe.set(d.client_id, texto.slice(0, 260));
+      // Resumo: o começo. Só o conteúdo: o começo curto e o fim (o mais recente).
+      const resumo = String(d.summary || "").replace(/\s+/g, " ").trim();
+      const texto = resumo ? resumo.slice(0, 260) : recortarDossie(String(d.content || "").replace(/\s+/g, " ").trim(), 260).replace(/\s+/g, " ");
+      if (texto) dossieDe.set(d.client_id, texto);
     }
     const tarefasDe = new Map<string, { abertas: string[]; atrasadas: number }>();
     const hojeIso = new Date().toISOString().slice(0, 10);

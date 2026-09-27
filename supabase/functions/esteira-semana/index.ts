@@ -9,6 +9,7 @@
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
@@ -208,7 +209,8 @@ Deno.serve(async (req) => {
     const servicos = Object.entries((perfil.data?.services_config ?? {}) as Record<string, unknown>).filter(([, v]) => v === true).map(([k]) => k).join(", ") || "nao informado";
     const atuais = (dossie.data ?? []) as Array<Record<string, any>>;
     const d = atuais.find((x) => (x.dossier_type ?? "contexto") === "contexto" && x.project_id == null) ?? atuais[0];
-    const dossieTexto = String(d?.content || d?.summary || "").slice(0, 7000) || "(sem dossie escrito)";
+    // AB2: dossiê grande fica com o começo curto e o FIM (seções mais recentes), nunca só o começo.
+    const dossieTexto = recortarDossie(String(d?.content || d?.summary || ""), 7000) || "(sem dossie escrito)";
     const complementos = atuais.filter((x) => x && d && x.id !== d.id).map((x) => `- projeto v${x.version ?? "?"}: ${String(x.summary || x.content || "").slice(0, 300)}`).join("\n");
     // A versao anterior do geral: o que entrou de novo e a progressao.
     let mudancas: string[] = [];

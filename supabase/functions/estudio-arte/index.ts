@@ -321,7 +321,29 @@ import {
   telaDoTrecho,
   recortarNaProporcao,
 } from "../_shared/imagem-local.ts";
-import { reduzidaSemTransformacao, type ResultadoDaReducao } from "../_shared/imagem-reduzida.ts";
+import {
+  caminhoDaMedia,
+  LADO_MEDIA,
+  MAX_PIXELS_REDUCAO_NA_FUNCAO,
+  pedirCopiaLeve,
+  reduzidaSemTransformacao,
+  type ResultadoDaReducao,
+} from "../_shared/imagem-reduzida.ts";
+// Anti-bug AB2 (26/09): cópia leve em vez do original gigante e quantas imagens abrem por chamada.
+import {
+  abreAqui,
+  anexoCruServe,
+  caminhoDoRecorteFinal,
+  destinoDaReducao,
+  laminaJaNoFormato,
+  MAX_BYTES_ANEXO_SEM_COPIA,
+  MAX_PIXELS_LEITURA_EM_LOTE,
+  MAX_PIXELS_REDUZIR_ANEXO,
+  MAX_RECORTES_NA_ENTREGA,
+  mensagemDaEntregaEmPartes,
+  textoDoTamanho,
+} from "./imagens-leves.ts";
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import {
   geracaoDoPanorama,
   modeloFazPanorama,
@@ -353,6 +375,19 @@ import {
   temAlgoSoDaCapa,
 } from "./serie-da-capa.ts";
 import { componenteDaLamina, componenteGravado } from "./miolo-rico.ts";
+// Frente T2 (26/09): tipografia do cliente (kit da marca do trabalho, amostra com papel, âncora da série, sem inventar).
+import {
+  ancoraDaSerie,
+  anexosDaTipografia,
+  blocoDaTipografia,
+  CAPA_PENDENTE,
+  chaveDaTipografia,
+  esperaACapa,
+  registroDaLamina,
+  SEM_TIPOGRAFIA,
+  tipografiaDoKit,
+  tipografiaQueCede,
+} from "./tipografia-do-cliente.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -407,7 +442,6 @@ const MAX_CARDS = 20;
 // imagem anexada custa tokens de entrada no gerador.
 const MAX_REFERENCIAS = 2;
 const MAX_CANDIDATAS_JEV = 16;
-const MAX_AMOSTRAS_FONTE = 2;
 const MAX_BYTES_IMAGEM = 20 * 1024 * 1024;
 const TIMEOUT_PINTEREST_MS = 20_000;
 const FORMATOS_FORA_DO_ESTUDIO = new Set(["reel", "video", "short", "story", "article"]);
@@ -532,6 +566,81 @@ async function baixarImagem(bucket: string, caminho: string, nome: string): Prom
   const mime = mimeDe(bytes);
   if (!mime) throw new ErroEstudio(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
   return { bytes, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
+}
+
+/**
+ * Cópia média (lado maior até 2048 px) gravada ao lado do original, pelo
+ * painel ou pela copias-leves (anti-bug AB2, 26/09). `soPng`: só a cópia em
+ * PNG serve (recorte sem fundo: a de JPEG perderia a transparência). Null
+ * quando não existe ou não serve.
+ */
+async function copiaMediaGravada(bucket: string, caminho: string, soPng = false): Promise<ImagemEntrada | null> {
+  try {
+    const { data, error } = await servico().storage.from(bucket).download(caminhoDaMedia(caminho));
+    if (error || !data) return null;
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    const mime = mimeDe(bytes);
+    const d = dimensoesDoCabecalho(bytes);
+    if (!mime || !d || (soPng && mime !== "image/png") || Math.max(d.largura, d.altura) > LADO_MEDIA) return null;
+    return { bytes, mime, nome: `copia.${extensaoDe(mime)}` };
+  } catch {
+    return null;
+  }
+}
+
+/** A cópia média gravada ou, sem ela, pedida agora à copias-leves (outra chamada, com o próprio limite de CPU). */
+async function copiaMedia(bucket: string, caminho: string, soPng = false): Promise<ImagemEntrada | null> {
+  return (await copiaMediaGravada(bucket, caminho, soPng)) ??
+    ((await pedirCopiaLeve(bucket, caminho)) ? await copiaMediaGravada(bucket, caminho, soPng) : null);
+}
+
+/**
+ * A redução de sempre e, quando ela devolve o original caro de abrir aqui (sem
+ * a cópia leve ao lado), a cópia pedida à copias-leves e a mesma redução de
+ * novo, agora achando a cópia, como se o painel já a tivesse gravado (anti-bug
+ * AB2, 26/09). `comACopia`: a redução da segunda vez, quando a regra muda
+ * (logo). Nunca lança por causa da cópia: sem ela, volta o primeiro resultado
+ * (cabe: false, com o original), e quem chama decide sem abrir o que passa do teto.
+ */
+async function comCopiaLeve(
+  bucket: string,
+  caminho: string,
+  reduzir: () => Promise<ResultadoDaReducao | null>,
+  comACopia: () => Promise<ResultadoDaReducao | null> = reduzir,
+): Promise<ResultadoDaReducao | null> {
+  const r = await reduzir();
+  if (r && r.cabe) return r;
+  // Sem cópia ao lado: original caro de abrir aqui (cabe: false) ou acima de 20 MB (null, a copias-leves aceita até 30 MB).
+  if (!(await pedirCopiaLeve(bucket, caminho))) return r;
+  const deNovo = await comACopia().catch(() => null);
+  return deNovo && deNovo.cabe ? deNovo : r;
+}
+
+/**
+ * Anexo que vai ao gerador (ou ao leitor) como está, sem abrir aqui (anti-bug
+ * AB2, 26/09). Antes ia o arquivo cru inteiro (até 20 MB e 25 MP): passava do
+ * teto de 24 MB de imagens por pedido e o motor cortava os anexos do fim. O
+ * cru leve (até 6 MB e 6 MP, o caso de sempre) segue igual; o pesado vira a
+ * cópia média de 2048 px (a gravada ou pedida à copias-leves). Sem cópia, o
+ * cru até 12 MB; acima, erro claro (quem chama deixa o anexo de fora).
+ */
+async function anexoLeve(bucket: string, caminho: string, nome: string, soPng = false): Promise<ImagemEntrada> {
+  let cru: Uint8Array | null = null;
+  try {
+    cru = await baixar(bucket, caminho);
+  } catch (e) {
+    // Acima de 20 MB o cru não serve, mas a cópia ainda pode servir.
+    if (!(e instanceof ErroEstudio) || e.status !== 413) throw e;
+  }
+  const mime = cru ? mimeDe(cru) : null;
+  if (cru && !mime) throw new ErroEstudio(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
+  const comNome = (bytes: Uint8Array, m: string): ImagemEntrada => ({ bytes, mime: m, nome: `${nomeSeguro(nome)}.${extensaoDe(m)}` });
+  const d = cru ? dimensoesDoCabecalho(cru) : null;
+  if (cru && mime && anexoCruServe(cru.byteLength, d, MAX_PIXELS_REDUCAO_NA_FUNCAO)) return comNome(cru, mime);
+  const copia = await copiaMedia(bucket, caminho, soPng);
+  if (copia) return comNome(copia.bytes, copia.mime);
+  if (cru && mime && cru.byteLength <= MAX_BYTES_ANEXO_SEM_COPIA) return comNome(cru, mime);
+  throw new ErroEstudio(413, "imagem_grande_demais", `Uma imagem desta lâmina (${textoDoTamanho(d)}) é grande demais para enviar ao gerador. Use uma versão menor, com até 4000 px de lado e 12 MB.`);
 }
 
 /** Uma entrada de erro do motor vira resposta com o status certo. */
@@ -834,6 +943,28 @@ function versaoAtual(t: Trabalho, ordem: number): VersaoCard | null {
   return versoes.reduce((a, b) => (b.versao > a.versao ? b : a));
 }
 
+/**
+ * Frente T2: a capa deste trabalho está na fila para gerar (ainda sem versão)?
+ * A lâmina 2+ pedida junto espera por ela (âncora tipográfica). Sem a tabela
+ * da fila ou com erro: false (segue como antes).
+ */
+async function capaNaFila(t: Trabalho): Promise<boolean> {
+  try {
+    const { data, error } = await servico()
+      .from("estudio_fila")
+      .select("id")
+      .eq("trabalho_id", t.id)
+      .eq("client_id", t.client_id)
+      .eq("ordem", 1)
+      .in("status", ["fila", "rodando"])
+      .in("etapa", ["fundo", "gerar"])
+      .limit(1);
+    return !error && Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function cardDaDirecao(t: Trabalho, ordem: number): CardDirecao {
   const card = t.direcao.cards.find((c) => c.ordem === ordem);
   if (!card) throw new ErroEstudio(404, "card_inexistente", `A direção não tem o card ${ordem}.`);
@@ -1038,20 +1169,8 @@ async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]>
   return fontesDaMarca(((data as unknown) as (Fonte & { marca_id?: string | null })[] | null) ?? [], marca);
 }
 
-/** Amostras PNG das fontes (geradas no navegador), no maximo tres. */
-async function amostrasDasFontes(fontes: Fonte[]): Promise<{ imagem: ImagemEntrada; fonte: Fonte }[]> {
-  const saida: { imagem: ImagemEntrada; fonte: Fonte }[] = [];
-  const ordemPapel: Record<string, number> = { titulo: 0, destaque: 1, texto: 2 };
-  const comAmostra = fontes.filter((f) => f.amostra_path).sort((a, b) => (ordemPapel[a.papel] ?? 9) - (ordemPapel[b.papel] ?? 9));
-  for (const f of comAmostra.slice(0, MAX_AMOSTRAS_FONTE)) {
-    try {
-      saida.push({ imagem: await baixarImagem("mesa", f.amostra_path!, `fonte-${f.papel}-${f.nome}`), fonte: f });
-    } catch {
-      // Amostra sumida nao impede a lamina; a direcao ja descreve a fonte.
-    }
-  }
-  return saida;
-}
+// Frente T2: as amostras da tipografia (título e texto, com papel nomeado) saem de
+// anexosDaTipografia (tipografia-do-cliente.ts), só do kit da marca do trabalho.
 
 /**
  * Logo oficial: a escolhida de qualquer pasta (kit.logo_path, no bucket mesa,
@@ -1060,6 +1179,8 @@ async function amostrasDasFontes(fontes: Fonte[]): Promise<{ imagem: ImagemEntra
 async function baixarLogo(clientId: string, kit: Kit, alternativa = false): Promise<ImagemEntrada | null> {
   const bruta = await baixarLogoBruta(clientId, kit, alternativa);
   if (!bruta) return null;
+  // Anti-bug AB2: logo sem cópia e acima do teto não abre aqui (estourava a CPU); vai como veio, como já ia a de 7.800 px.
+  if (!abreAqui(dimensoesDoCabecalho(bruta.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO)) return bruta;
   // Sem o fundo falso (xadrez de transparência, branco ou creme): o gerador copiava como uma caixa.
   // Aparada (26/09): sem a margem vazia em volta, a logo anexada é a logo inteira e o gerador não a faz minúscula.
   try {
@@ -1076,9 +1197,20 @@ async function baixarLogo(clientId: string, kit: Kit, alternativa = false): Prom
  * Storage (cota estourada): a cópia média em PNG gravada pelo painel ou o
  * original reduzido aqui (imagem-reduzida.ts); grande demais para abrir, o
  * original, como antes.
+ *
+ * Anti-bug AB2 (26/09): sem a cópia em PNG e com o original caro de abrir
+ * aqui, a cópia é pedida à copias-leves (grava PNG quando a logo tem
+ * transparência, como o painel) e a cópia é reduzida, aceita em PNG ou, na
+ * logo sem transparência, em JPEG. Sem cópia possível, o original vai como
+ * veio e baixarLogo e logosDoKit não o abrem acima do teto.
  */
 async function baixarLogoReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada> {
-  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM });
+  const r = await comCopiaLeve(
+    bucket,
+    caminho,
+    async () => await reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM }),
+    async () => await reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { maxBytes: MAX_BYTES_IMAGEM }),
+  );
   if (r) return { bytes: r.bytes, mime: r.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(r.mime)}` };
   return await baixarImagem(bucket, caminho, nome);
 }
@@ -1169,7 +1301,8 @@ async function logosDoKit(clientId: string, kit: Kit, pedida: EscolhaDaLogo = "a
   const saida: LogoDoKit[] = [];
   for (const [id, imagem] of [["principal", principal], ["alternativa", alternativa]] as const) {
     if (!imagem) continue;
-    const medida = await analisarLogo(imagem.bytes).catch(() => null);
+    // Anti-bug AB2: acima do teto (logo sem cópia possível) não abre aqui; sem medida, vai a transparente, como antes.
+    const medida = abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO) ? await analisarLogo(imagem.bytes).catch(() => null) : null;
     saida.push({ id, imagem, medida });
   }
   // A pedida não abriu: fica a principal (melhor uma logo certa que nenhuma).
@@ -1728,8 +1861,10 @@ async function marcarPessoasNasFotos(ch: Chamador, corpo: Record<string, unknown
   const imagens = await Promise.all(locais.map(async (l, i) => {
     if (!l) return null;
     try {
-      const red = await reduzidaSemTransformacao(servico(), l.bucket, l.caminho, 768, 768, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM });
-      return red ? { bytes: red.bytes, mime: red.mime, nome: `foto-${i + 1}.${extensaoDe(red.mime)}` } as ImagemEntrada : null;
+      // Anti-bug AB2: até 12 fotos por chamada. Só reduz aqui o que é barato (0,7 MP); acima, a miniatura
+      // (640 px) que a copias-leves grava. Nunca o original grande: a foto que não coube fica sem leitura.
+      const red = await reduzidaSemTransformacao(servico(), l.bucket, l.caminho, 768, 768, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM, pedirCopia: true, maxPixels: MAX_PIXELS_LEITURA_EM_LOTE });
+      return red && red.cabe ? { bytes: red.bytes, mime: red.mime, nome: `foto-${i + 1}.${extensaoDe(red.mime)}` } as ImagemEntrada : null;
     } catch {
       return null;
     }
@@ -1781,11 +1916,16 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
   const usos: { usoId: string; custoUsd: number }[] = [];
   let conferencia: ConferenciaDoRosto;
   try {
-    const [arte, ...fotos] = await Promise.all([
+    // Anti-bug AB2: foto sem cópia e cara de abrir aqui pede a cópia à copias-leves; o original grande
+    // (cabe: false) nunca vai ao leitor: a foto fica de fora e, sem nenhuma, a conferência não roda.
+    const [arteReduzida, ...fotos] = await Promise.all([
       reduzidaSemTransformacao(servico(), "mesa", alvo.storage_path, 1280, 1600, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM }),
-      ...usadas.slice(0, 2).map((f) => reduzidaSemTransformacao(servico(), f.bucket, f.caminho, 1024, 1024, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM }).catch(() => null)),
+      ...usadas.slice(0, 2).map((f) =>
+        comCopiaLeve(f.bucket, f.caminho, async () => await reduzidaSemTransformacao(servico(), f.bucket, f.caminho, 1024, 1024, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM })).catch(() => null)
+      ),
     ]);
-    const reais = fotos.filter((f): f is ResultadoDaReducao => !!f);
+    const arte = arteReduzida && arteReduzida.cabe ? arteReduzida : null;
+    const reais = fotos.filter((f): f is ResultadoDaReducao => !!f && f.cabe);
     if (!arte || !reais.length) throw new Error("imagens_indisponiveis");
     const leitor = await modeloDoPapel("leitura");
     const lido = await chamarTexto({
@@ -1964,6 +2104,9 @@ async function quadrosDasPranchas(t: Trabalho, refs: Referencia[], ordem: number
 
 /** O quadro recortado da imagem da prancha (imagem-local, com o teto de pixels). Falha: null. */
 async function recortarQuadro(imagem: ImagemEntrada, q: { x0: number; y0: number; x1: number; y1: number }, nome: string): Promise<ImagemEntrada | null> {
+  // Anti-bug AB2: a imagem da referência já vem leve (imagemDaReferencia: a cópia de 2048 px quando o
+  // arquivo é pesado); acima do teto de pixels nada abre aqui e fica a imagem inteira, como na falha.
+  if (!abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO)) return null;
   try {
     const img = await decodificar(imagem.bytes);
     const r = retanguloDoQuadro(q, img.width, img.height);
@@ -2126,9 +2269,13 @@ type Referencia = {
   papel?: string | null;
 };
 
-/** Bytes da referencia: copia no bucket mesa ou o proprio arquivo do workspace. */
+/**
+ * Bytes da referencia: copia no bucket mesa ou o proprio arquivo do workspace.
+ * Anti-bug AB2 (26/09): pelo anexoLeve, o arquivo leve segue igual e o pesado
+ * vira a cópia de 2048 px (anexo, molde e quadro da prancha abrem a cópia).
+ */
 async function imagemDaReferencia(ref: Referencia): Promise<ImagemEntrada> {
-  if (ref.storage_path) return await baixarImagem("mesa", ref.storage_path, `referencia-${ref.id.slice(0, 8)}`);
+  if (ref.storage_path) return await anexoLeve("mesa", ref.storage_path, `referencia-${ref.id.slice(0, 8)}`);
   if (ref.workspace_node_id) {
     const { data } = await servico()
       .from("workspace_nodes")
@@ -2139,7 +2286,7 @@ async function imagemDaReferencia(ref: Referencia): Promise<ImagemEntrada> {
     if (!no || no.client_id !== ref.client_id || !no.storage_path) {
       throw new ErroEstudio(404, "referencia_sem_arquivo", "A imagem desta referência não está mais no workspace.");
     }
-    return await baixarImagem("workspace", no.storage_path, `referencia-${ref.id.slice(0, 8)}`);
+    return await anexoLeve("workspace", no.storage_path, `referencia-${ref.id.slice(0, 8)}`);
   }
   if (ref.file_id) {
     const { data } = await servico()
@@ -2150,7 +2297,7 @@ async function imagemDaReferencia(ref: Referencia): Promise<ImagemEntrada> {
     const f = data as { client_id: string; storage_bucket: string | null; storage_path: string | null; file_url: string | null } | null;
     const c = f && f.client_id === ref.client_id ? caminhoDoArquivo(f) : null;
     if (!c) throw new ErroEstudio(404, "referencia_sem_arquivo", "A arte desta referência não está mais em Arquivos.");
-    return await baixarImagem(c.bucket, c.caminho, `arte-da-marca-${ref.id.slice(0, 8)}`);
+    return await anexoLeve(c.bucket, c.caminho, `arte-da-marca-${ref.id.slice(0, 8)}`);
   }
   throw new ErroEstudio(404, "referencia_sem_arquivo", "Esta referência não tem imagem guardada.");
 }
@@ -2327,22 +2474,64 @@ async function fotoRealNaLamina(a: ImagemAcervo, largura = LARGURA_LAMINA, altur
  * aqui quando é pequeno o bastante (imagem-reduzida.ts). "cabe: false" traz o
  * original sem reduzir, o mesmo caminho de quando a transformação falhava.
  * Null: nada legível (quem chama baixa o original e responde o erro certo).
+ *
+ * Anti-bug AB2 (26/09): sem a cópia ao lado e com o original caro de abrir
+ * aqui (acima de 6 MP), a cópia é pedida à copias-leves e a mesma redução
+ * roda de novo, achando a cópia. "cabe: false" só sobra quando nem a cópia
+ * deu (acima de 16 MP ou falha); aí fotoDoBucketNaLamina não abre o original.
  */
 async function baixarReduzida(bucket: string, caminho: string): Promise<ResultadoDaReducao | null> {
-  return await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM });
+  return await comCopiaLeve(bucket, caminho, async () => await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM }));
 }
 
 /** Foto (do acervo ou trazida pela equipe) no formato da lâmina, recortada pelo foco. */
 async function fotoDoBucketNaLamina(bucket: string, caminho: string, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
   const reduzida = await baixarReduzida(bucket, caminho);
+  // Anti-bug AB2: sem cópia, o original só abre aqui até o teto de pixels (25 MP estourava a CPU); acima, erro claro.
+  if (reduzida && destinoDaReducao(reduzida, MAX_PIXELS_REDUCAO_NA_FUNCAO) === "grande_demais") {
+    throw new ErroEstudio(413, "foto_grande_demais", `A foto desta lâmina tem ${textoDoTamanho(reduzida)} e não pôde ser reduzida agora. Tente de novo em instantes; se continuar, use uma versão menor da foto (até 4000 x 4000 px).`);
+  }
   return await fotoNaLamina(reduzida ? reduzida.bytes : await baixar(bucket, caminho), largura, altura);
 }
 
-/** Foto de pessoa ou objeto anexada ao gerador como é (reduzida quando dá, sem decodificar aqui). */
+/**
+ * Foto de pessoa ou objeto anexada ao gerador como é (reduzida quando dá, sem
+ * decodificar aqui). Anti-bug AB2 (26/09): várias por lâmina (fotos do rosto,
+ * elementos no replicar), então só reduz aqui o que é barato (1,5 MP); acima,
+ * a cópia leve (a gravada ou pedida à copias-leves). Sem cópia, o original até
+ * 12 MB vai como está; acima, erro claro (quem chama deixa a foto de fora).
+ */
 async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada> {
-  const reduzida = await baixarReduzida(bucket, caminho);
+  const reduzida = await comCopiaLeve(bucket, caminho, async () => await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM, maxPixels: MAX_PIXELS_REDUZIR_ANEXO }));
+  if (reduzida && !reduzida.cabe && reduzida.bytes.byteLength > MAX_BYTES_ANEXO_SEM_COPIA) {
+    throw new ErroEstudio(413, "imagem_grande_demais", `A foto ${nome} (${textoDoTamanho(reduzida)}) é grande demais para enviar ao gerador. Use uma versão menor, com até 4000 px de lado.`);
+  }
   if (reduzida) return { bytes: reduzida.bytes, mime: reduzida.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(reduzida.mime)}` };
   return await baixarImagem(bucket, caminho, nome);
+}
+
+/**
+ * Bytes do recorte (PNG sem fundo) que recorteNaCaixa abre aqui (anti-bug AB2,
+ * 26/09). O recorte tem o tamanho da foto de onde saiu (até 25 MP) e abrir o
+ * arquivo cru estourava a CPU. Vai a cópia média em PNG (2048 px, a gravada ou
+ * pedida à copias-leves; a de JPEG perderia o recorte); sem ela, o arquivo cru
+ * até 2048 px, como antes, ou até o teto de pixels. Acima, erro claro.
+ */
+async function bytesDoRecorte(caminho: string): Promise<Uint8Array> {
+  const pronta = await copiaMediaGravada("mesa", caminho, true);
+  if (pronta) return pronta.bytes;
+  let cru: Uint8Array | null = null;
+  try {
+    cru = await baixar("mesa", caminho);
+  } catch (e) {
+    if (!(e instanceof ErroEstudio) || e.status !== 413) throw e;
+  }
+  const d = cru ? dimensoesDoCabecalho(cru) : null;
+  if (cru && d && Math.max(d.largura, d.altura) <= LADO_MEDIA) return cru;
+  const nova = (await pedirCopiaLeve("mesa", caminho)) ? await copiaMediaGravada("mesa", caminho, true) : null;
+  if (nova) return nova.bytes;
+  if (cru && abreAqui(d, MAX_PIXELS_REDUCAO_NA_FUNCAO)) return cru;
+  throw new ErroEstudio(413, "recorte_grande_demais", `A foto sem fundo desta lâmina (${textoDoTamanho(d)}) é grande demais para usar agora. Tente de novo em instantes; se continuar, tire o fundo de uma versão menor da foto (até 4000 x 4000 px).`);
 }
 
 async function modeloDoPapel(papel: "diretor_arte" | "leitura" | "imagem"): Promise<ModeloIa> {
@@ -3818,6 +4007,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   garantirEditavel(t);
   const card = cardDaDirecao(t, ordem);
   const total = totalCards(t);
+  // Frente T2: lâmina 2+ pedida junto com a capa espera a capa (a âncora tipográfica da série) na fila.
+  if (esperaACapa({ ordem, total, capaTemVersao: !!versaoAtual(t, 1), capaNaFila: ordem > 1 && total > 1 && !versaoAtual(t, 1) ? await capaNaFila(t) : false })) {
+    throw new ErroEstudio(CAPA_PENDENTE.status, CAPA_PENDENTE.codigo, CAPA_PENDENTE.mensagem);
+  }
   // Tamanho da lâmina: o formato do post (4:5 por padrão); no criativo de anúncio, o do formato do card.
   const quadro = quadroDoCard(t, card);
   const ads = ehAds(t);
@@ -3832,6 +4025,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
   // Marca do trabalho (kit, fontes, nome): o nome vai na leitura e na descrição da logo.
   const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
+  // Frente T2 (dono: "não inventar"): sem fonte no kit da marca do trabalho, não gera (nem a letra da
+  // referência, nem uma parecida). Com fonte, título e texto sempre do kit no prompt.
+  const tipografia = tipografiaDoKit(fontes);
+  if (!tipografia) throw new ErroEstudio(SEM_TIPOGRAFIA.status, SEM_TIPOGRAFIA.codigo, SEM_TIPOGRAFIA.mensagem);
+  marca.fontes = tipografia.fontes;
+  const marcaDaTipografia = await marcaDe(t.client_id, t).catch(() => null);
+  const chaveDaSerie = chaveDaTipografia(t.client_id, marcaDaTipografia ? marcaDaTipografia.id : null, tipografia);
 
   // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
   // ou trazida pela equipe (colada ou solta) como fundo.
@@ -3861,7 +4061,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     try {
       // Reduzida pelo Storage antes do recorte: foto da Mesa Foto pode ser 4K (limite de CPU).
       baseFoto = await fotoDoBucketNaLamina("mesa", fundoLivre.caminho, quadro.largura, quadro.altura);
-    } catch {
+    } catch (e) {
+      // Anti-bug AB2: foto grande demais para abrir aqui tem o seu próprio aviso (não é foto sumida).
+      if (e instanceof ErroEstudio && e.status === 413) throw e;
       throw new ErroEstudio(409, "foto_sumiu", "A foto de fundo desta lâmina não foi encontrada. Escolha outra na ferramenta Fotos.");
     }
   }
@@ -3922,9 +4124,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const layoutAtual = normalizarLayout(card.layout, card.funcao, card.ordem, total);
     const lugar = lugarDoRecorte(layoutAtual.zona_texto);
     try {
-      const r = await recorteNaCaixa(await baixar("mesa", recortado.caminho), quadro.largura, quadro.altura, lugar.caixa);
+      // Anti-bug AB2: abre a cópia leve do recorte (bytesDoRecorte), nunca o arquivo cru gigante.
+      const r = await recorteNaCaixa(await bytesDoRecorte(recortado.caminho), quadro.largura, quadro.altura, lugar.caixa);
       recorteNaLamina = { ...r, caixa: lugar.caixa };
-    } catch {
+    } catch (e) {
+      if (e instanceof ErroEstudio && e.status === 413) throw e;
       throw new ErroEstudio(409, "recorte_sumiu", "A foto sem fundo desta lâmina não foi encontrada ou não abriu. Tire o fundo de novo na ferramenta Fotos.");
     }
     const como = recortado.nota ? texto(recortado.nota, 200) : "pessoa ou produto do cliente";
@@ -3986,7 +4190,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         : el.recortada
         ? `RECORTE sem fundo trazido pela equipe (${como}): coloque esta pessoa ou objeto na lâmina exatamente como é, integrado à cena com a mesma luz e uma sombra de contato suave, sem caixa, moldura, contorno branco ou halo, e sem texto por cima dele`
         : `foto REAL trazida pela equipe (${como}): coloque esta pessoa ou objeto na lâmina exatamente como é, mesmo rosto, feições, cabelo, roupa e proporções, integrado à luz da cena; não redesenhe nem troque por outra pessoa`,
-      carregar: () => (replicar ? imagemReduzida("mesa", el.caminho, "elemento-real") : baixarImagem("mesa", el.caminho, "elemento-real")),
+      // Anti-bug AB2: fora do replicar ia o arquivo cru (até 20 MB); agora o leve segue igual e o pesado vai
+      // na cópia de 2048 px (em PNG no recorte, para não perder a transparência).
+      carregar: () => (replicar ? imagemReduzida("mesa", el.caminho, "elemento-real") : anexoLeve("mesa", el.caminho, "elemento-real", !!el.recortada)),
       fotoReplicar: replicar ? { descricao: como, papel: "elemento" } : undefined,
     });
   }
@@ -4093,8 +4299,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       carregar: async () => sequencia.imagem,
     });
   }
-  const [amostra] = await amostrasDasFontes(fontes);
-  if (amostra) candidatos.push({ tipo: "fonte", rotulo: `amostra da fonte ${amostra.fonte.nome} (${amostra.fonte.papel}): siga o desenho destas letras`, carregar: async () => amostra.imagem });
+  // Frente T2: amostras da tipografia do kit (título e, com família diferente, texto), com papel nomeado.
+  // Só da pasta do cliente ou da biblioteca; baixadas só se entrarem (arquivo sumido fica de fora).
+  candidatos.push(...anexosDaTipografia(tipografia, t.client_id).map((a) => ({ tipo: a.tipo, rotulo: a.rotulo, carregar: () => baixarImagem("mesa", a.caminho, a.nome) })));
   // Sem escolha da equipe e sem foto: só a capa busca UMA arte de referência da marca (Jev); o miolo segue a capa.
   const escolhida = replicar
     ? { refs: refsDaEquipe, jev: "escolha_da_equipe" }
@@ -4126,7 +4333,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     candidatos.push({
       tipo: "selo",
       rotulo: `selo da campanha "${campanha.nome}": use como está, pequeno, perto do título ou no canto oposto à logo, sem redesenhar`,
-      carregar: () => baixarImagem("mesa", selo, "selo-da-campanha"),
+      carregar: () => anexoLeve("mesa", selo, "selo-da-campanha", true),
     });
   }
 
@@ -4150,6 +4357,19 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   })) {
     for (let i = candidatos.length - 1; i >= 0; i--) if (candidatos[i].tipo === "identidade") candidatos.splice(i, 1);
   }
+  // Frente T2: lâmina > rosto > TIPOGRAFIA. Sem vaga para o rosto depois de a referência ceder, a amostra do
+  // texto e depois a do título cedem (no replicar, pelo teto de fotos do rosto escolhido).
+  const rostoPrevisto = rostoDaNormal || (replicar && !candidatos.some((c) => !!c.fotoReplicar) ? lerRostoDoTrabalho(t.direcao, t.client_id) : null);
+  if (rostoPrevisto) {
+    const queEntram = anexosDaLamina(candidatos, { base: temBase });
+    const cedem = tipografiaQueCede({
+      anexos: queEntram.length + deslocamento,
+      limiteDoModelo: limiteDeReferencias(modeloImagem),
+      pedidas: rostoDaNormal ? Math.min(fotosDaNormal.length, maxFotosDoRosto(rostoDaNormal)) : maxFotosDoRosto(rostoPrevisto),
+      tipos: queEntram.map((c) => c.tipo),
+    });
+    if (cedem.length) candidatos.splice(0, candidatos.length, ...candidatos.filter((c) => cedem.indexOf(c.tipo as "fonte" | "fonte_texto") < 0));
+  }
   const fotosUsadasDoRosto: { bucket: string; caminho: string }[] = [];
   const imagens: ImagemEntrada[] = [];
   const rotulos: string[] = [];
@@ -4159,6 +4379,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   let indiceDaLogo: number | null = null;
   let indiceDaCapa: number | null = null;
   let indiceDaSequencia: number | null = null;
+  // Frente T2: números das imagens das amostras da tipografia (título e texto).
+  const indicesDaTipografia: { titulo: number | null; texto: number | null } = { titulo: null, texto: null };
   // Frente R4 (caso A): índice da referência da capa anexada como guia da identidade.
   let indiceDaReferenciaDaSerie: number | null = null;
   const escolhidosDaLamina = anexosDaLamina(candidatos, { base: temBase });
@@ -4181,6 +4403,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (c.tipo === "logo") indiceDaLogo = indice;
     if (c.tipo === "capa") indiceDaCapa = indice;
     if (c.tipo === "sequencia") indiceDaSequencia = indice;
+    if (c.tipo === "fonte") indicesDaTipografia.titulo = indice;
+    if (c.tipo === "fonte_texto") indicesDaTipografia.texto = indice;
     if (c.tipo === "identidade" && imagemDaSerie) indiceDaReferenciaDaSerie = indice;
     if (c.ref) idsReferencias.push(c.ref.id);
     if (c.fotoReplicar) fotosReplicar.push({ indice, ...c.fotoReplicar });
@@ -4231,7 +4455,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const estiloDoCliente = await estiloNaGeracao(t, {
     db: servico() as never,
     marca: () => marcaDe(t.client_id, t),
-    baixar: baixarImagem,
+    // Anti-bug AB2: referência do estilo pesada vai na cópia de 2048 px (a leve segue igual).
+    baixar: anexoLeve,
     anexosDaLamina: imagens.length + deslocamento,
   });
   const indicesDoEstilo: number[] = [];
@@ -4245,7 +4470,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // sem ler o banco e sem mexer nas listas; escolhido, as âncoras entram depois das do estilo.
   const blocoDoTemplate = await templateNaLamina(t, { ordem, total, imagens, rotulos, deslocamento }, {
     db: servico() as never,
-    baixar: baixarImagem,
+    baixar: anexoLeve,
     modelo: modeloImagem,
     panorama,
     marca: { fontes: marca.fontes, paleta: marca.paleta },
@@ -4286,11 +4511,25 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const componenteDoMiolo = replicar || ads
     ? null
     : componenteDaLamina({ cards: t.direcao.cards, ordem, anterioresDestaLamina: t.cards.filter((c) => c.ordem === ordem).map((c) => componenteGravado(c)) });
+  // Frente T2: âncora tipográfica da série (a capa ou a primeira lâmina gerada, com a mesma chave de cliente,
+  // marca e fontes) e o bloco com família, peso e caixa fixos por papel, igual em todas as lâminas.
+  const ancoraTipografica = ancoraDaSerie(t.cards as unknown as { ordem: number; versao: number; tipografia?: unknown }[], ordem, chaveDaSerie);
+  const tituloDoMoldeDaLamina = replicar && refsNoPrompt.length && refsNoPrompt[0].molde ? refsNoPrompt[0].molde.blocos.find((b) => b.papel === "titulo") ?? null : null;
+  const registroDaTipografia = registroDaLamina({
+    tip: tipografia,
+    chave: chaveDaSerie,
+    ancora: ancoraTipografica,
+    tituloDoMolde: tituloDoMoldeDaLamina,
+    amostras: (indicesDaTipografia.titulo ? 1 : 0) + (indicesDaTipografia.texto ? 1 : 0),
+  });
+  const blocoDaTipografiaAqui = blocoDaTipografia({ registro: registroDaTipografia, indices: indicesDaTipografia, indiceDaCapa, ordem, total });
   const baseComCampanha = [
     base,
     // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).
     blocoDoRostoNaNormal,
     campanha ? blocoDaCampanha(campanha) : "",
+    // Frente T2: tipografia do cliente (amostras, família, peso e caixa por papel, âncora da série).
+    blocoDaTipografiaAqui,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
     // Frente R4: no post, a série herda da capa só a identidade (o anúncio segue com o bloco de sempre).
@@ -4328,6 +4567,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // O que a versão guarda da logo: gerada pelo gerador (nunca colada), qual do kit e a área aberta na máscara.
   const marcaDaLogo = {
+    // Frente T2: a tipografia desta versão (âncora das próximas lâminas da série).
+    tipografia: registroDaTipografia,
     logo_gerada: leva ? logoNaChamada : null,
     logo_escolhida: logoNaChamada && logo ? logo.id : null,
     ...(caixaDaLogoAqui ? { logo_area: caixaDaLogoAqui } : {}),
@@ -4413,6 +4654,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
       variedade ? variedade.bloco : "",
       continuidade,
+      // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).
+      blocoDaTipografiaAqui,
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -4918,7 +5161,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     const cruza = (a: Area, b: Area) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
     let recorteDeNovo: { imagem: Awaited<ReturnType<typeof recorteNaCaixa>>["recorte"]; posicao: Area; larguraDaTela: number } | null = null;
     try {
-      const pos = await recorteNaCaixa(await baixar("mesa", r.caminho), q.largura, q.altura, r.caixa);
+      // Anti-bug AB2: a cópia leve do recorte (bytesDoRecorte); grande demais cai aqui e fica o que o gerador manteve.
+      const pos = await recorteNaCaixa(await bytesDoRecorte(r.caminho), q.largura, q.altura, r.caixa);
       if (!abertas.some((a) => cruza(a, pos.posicao))) recorteDeNovo = { imagem: pos.recorte, posicao: pos.posicao, larguraDaTela: q.largura };
     } catch {
       // Recorte sumido: fica o que o gerador manteve.
@@ -5207,20 +5451,41 @@ function legendaComHashtags(legendaTexto: string | null, hashtags: string[] | nu
  * gastar CPU (o entregar passa por ate 10 laminas numa chamada so). Fora da
  * proporcao, o recorte pelo centro e feito aqui (imagem-local.ts). Se nem
  * isso der, entra a lamina como foi gerada e a resposta avisa.
+ *
+ * Anti-bug AB2 (26/09): recortar abre a lamina (cerca de 0,4 s de CPU cada) e
+ * a entrega de um carrossel antigo em 2:3 abria ate 10 numa chamada. O
+ * recorte agora fica guardado ao lado da lamina (caminhoDoRecorteFinal), feito
+ * uma vez, na conferencia (que ja recortava) ou na entrega; depois so e
+ * baixado, com os mesmos bytes. `abriu` diz se esta chamada abriu a lamina
+ * (a entrega limita quantas abre por chamada).
  */
 async function laminaFinal(
   caminho: string,
   alvo: { largura: number; altura: number } = { largura: LARGURA_FINAL, altura: ALTURA_FINAL },
-): Promise<{ bytes: Uint8Array; largura: number | null; altura: number | null; redimensionada: boolean }> {
+): Promise<{ bytes: Uint8Array; largura: number | null; altura: number | null; redimensionada: boolean; abriu: boolean }> {
   const original = await baixar("mesa", caminho);
   const d = dimensoesDoCabecalho(original);
   // Aceita qualquer tamanho na proporcao do alvo (ate 1,5 vez o alvo; acima disso reduz).
   if (d && Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01 && d.largura <= alvo.largura * 1.5) {
-    return { bytes: original, largura: d.largura, altura: d.altura, redimensionada: true };
+    return { bytes: original, largura: d.largura, altura: d.altura, redimensionada: true, abriu: false };
+  }
+  // Recorte ja guardado desta lamina neste formato: so baixa, sem abrir.
+  const guardado = caminhoDoRecorteFinal(caminho, alvo);
+  const pronto = await baixar("mesa", guardado).catch(() => null);
+  const dp = pronto ? dimensoesDoCabecalho(pronto) : null;
+  if (pronto && dp && mimeDe(pronto) === "image/png" && Math.abs(dp.largura / dp.altura - alvo.largura / alvo.altura) < 0.01) {
+    return { bytes: pronto, largura: dp.largura, altura: dp.altura, redimensionada: true, abriu: false };
   }
   const recorte = await recortarNaProporcao(original, alvo.largura, alvo.altura, { folga: 1.5 });
-  if (recorte) return { bytes: recorte.bytes, largura: recorte.largura, altura: recorte.altura, redimensionada: true };
-  return { bytes: original, largura: d?.largura ?? null, altura: d?.altura ?? null, redimensionada: false };
+  if (recorte) {
+    if (recorte.reduziu) {
+      await servico().storage.from("mesa")
+        .upload(guardado, new Blob([new Uint8Array(recorte.bytes)], { type: "image/png" }), { contentType: "image/png", upsert: true })
+        .catch(() => null);
+    }
+    return { bytes: recorte.bytes, largura: recorte.largura, altura: recorte.altura, redimensionada: true, abriu: recorte.reduziu };
+  }
+  return { bytes: original, largura: d?.largura ?? null, altura: d?.altura ?? null, redimensionada: false, abriu: true };
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -5269,6 +5534,8 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const fileIds: string[] = [];
   const formatos: { ordem: number; largura: number | null; altura: number | null; redimensionada: boolean }[] = [];
   let paiId: string | null = null;
+  // Anti-bug AB2: lâminas abertas nesta chamada para o recorte final (limite de CPU).
+  let aberturas = 0;
 
   for (let i = 0; i < total; i++) {
     const { card, versao } = ultimas[i];
@@ -5286,7 +5553,13 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
       continue;
     }
 
+    // Anti-bug AB2: fora da proporção e sem o recorte guardado, a lâmina abre aqui (cerca de 0,4 s de CPU).
+    // Passou do limite desta chamada: para com aviso claro; Entregar de novo continua (idempotente).
+    if (aberturas >= MAX_RECORTES_NA_ENTREGA && !laminaJaNoFormato((versao as unknown as { tamanho?: unknown }).tamanho, quadroFinal)) {
+      throw new ErroEstudio(409, "entrega_em_partes", mensagemDaEntregaEmPartes(fileIds.length, total), { entregues: fileIds.length, total });
+    }
     const lamina = await laminaFinal(versao!.storage_path, quadroFinal);
+    if (lamina.abriu) aberturas++;
     formatos.push({ ordem: card.ordem, largura: lamina.largura, altura: lamina.altura, redimensionada: lamina.redimensionada });
 
     // Mesmo caminho da tela de Arquivos: <cliente>/<grupo>/v1/<n>-<nome>.png
@@ -5401,6 +5674,8 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
   const fileIds: string[] = [];
   const arquivos: EntregaAnuncio["arquivos"] = [];
   let semRecorte = false;
+  // Anti-bug AB2: lâminas abertas nesta chamada para o recorte final (limite de CPU).
+  let aberturas = 0;
 
   for (let i = 0; i < total; i++) {
     const { card, versao } = ultimas[i];
@@ -5417,7 +5692,12 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
       continue;
     }
 
+    // Anti-bug AB2: no máximo MAX_RECORTES_NA_ENTREGA lâminas abertas por chamada; Entregar de novo continua.
+    if (aberturas >= MAX_RECORTES_NA_ENTREGA && !laminaJaNoFormato((versao as unknown as { tamanho?: unknown }).tamanho, quadro.final)) {
+      throw new ErroEstudio(409, "entrega_em_partes", mensagemDaEntregaEmPartes(fileIds.length, total), { entregues: fileIds.length, total });
+    }
     const lamina = await laminaFinal(versao!.storage_path, quadro.final);
+    if (lamina.abriu) aberturas++;
     if (!lamina.redimensionada) semRecorte = true;
     const fileId = crypto.randomUUID();
     const nome = ehCarrossel && i > 0 ? `${nomeBase} ${quadro.proporcao} (${i + 1}/${total})` : `${nomeBase} ${quadro.proporcao}`;
@@ -6330,6 +6610,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     prompt,
     ehAds(t) ? `${ANATOMIA_DO_ESTATICO}\n\n${POLITICAS_META}\n\n${REGRAS_DE_HONESTIDADE}` : "",
     INSTRUCOES_CONVERSA,
+    // Frente F (anti-bug AB2): o mapa do painel só na conversa, nunca no prompt de imagem.
+    blocoDoMapaDoPainel("estudio"),
     doDiretor.texto,
   ].filter(Boolean).join("\n\n");
   const pedido = [

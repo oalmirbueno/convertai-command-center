@@ -7,14 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { textoDoErro } from "@/lib/mesa/api";
+import { arquivoDoProprioCliente, gerarAmostrasDaTipografia } from "@/lib/mesa/amostraDaFonte";
+import { depsDaAmostraNoSupabase, useTipografiaDaMarca } from "@/lib/mesa/tipografiaDoCliente";
 import { useUrlsAssinadas } from "./ContextoMiniatura";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import {
   caminhoDaFonteDaBiblioteca,
   chaveDasFontes,
   paresDaFonte,
   useBibliotecaDeFontes,
-  useFontesDoCliente,
   useInvalidarContexto,
   type FonteDaBiblioteca,
   type FonteDoClienteLinha,
@@ -47,6 +48,8 @@ export interface TrocaDeFontes {
     amostra_path: string | null;
     biblioteca_id: string;
     origem: "biblioteca";
+    /** Frente T2: só na fonte de outra marca (a principal fica no cliente). */
+    marca_id?: string;
   }[];
   apagar: string[];
   /** Arquivos enviados (origem upload) que saem do Storage junto com a linha. */
@@ -56,12 +59,15 @@ export interface TrocaDeFontes {
 /**
  * O que muda em cliente_fontes para ficar com a escolha: a família nova entra
  * e a linha antiga daquele papel sai (qualquer origem). Papel sem mudança
- * não mexe em nada.
+ * não mexe em nada. Frente T2: `marcaId` (outra marca, como a CME) grava a
+ * fonte nova nela, e `atuais` são só as fontes dela; a amostra da tipografia
+ * desenhada para o cliente sai junto com a linha antiga (a da biblioteca, nunca).
  */
 export function planejarTrocaDeFontes(
   clientId: string,
   atuais: FonteDoClienteLinha[],
   escolha: Partial<Record<PapelDaEscolha, FonteDaBiblioteca>>,
+  marcaId?: string | null,
 ): TrocaDeFontes {
   const plano: TrocaDeFontes = { inserir: [], apagar: [], arquivosParaRemover: [] };
   for (const papel of ["titulo", "texto"] as PapelDaEscolha[]) {
@@ -77,12 +83,15 @@ export function planejarTrocaDeFontes(
       amostra_path: f.amostra_path,
       biblioteca_id: f.id,
       origem: "biblioteca",
+      ...(marcaId ? { marca_id: marcaId } : {}),
     });
     for (const a of doPapel) {
       plano.apagar.push(a.id);
       if (a.origem === "upload") {
         if (a.storage_path) plano.arquivosParaRemover.push(a.storage_path);
         if (a.amostra_path) plano.arquivosParaRemover.push(a.amostra_path);
+      } else if (arquivoDoProprioCliente(a.amostra_path, clientId)) {
+        plano.arquivosParaRemover.push(a.amostra_path as string);
       }
     }
   }
@@ -177,10 +186,20 @@ export default function BibliotecaDeFontes({
   papelInicial?: PapelDaEscolha;
 }) {
   const { clientId } = useMesa();
+  const { marca } = useMarcaDaMesa();
   const queryClient = useQueryClient();
   const invalidar = useInvalidarContexto();
   const biblioteca = useBibliotecaDeFontes(aberto);
-  const atuais = useFontesDoCliente(clientId);
+  // Frente T2: as fontes da marca aberta. Outra marca (CME) troca só as dela; nunca as do cliente.
+  const tipografia = useTipografiaDaMarca(clientId, marca);
+  const outraMarca = marca && !marca.principal ? marca : null;
+  const idDaOutraMarca = outraMarca ? outraMarca.id : null;
+  // Mesmo array enquanto a leitura não muda (o efeito de abrir depende dele).
+  const dadosAtuais = useMemo(
+    () => (tipografia.data ? (idDaOutraMarca ? tipografia.data.todas.filter((f) => f.marca_id === idDaOutraMarca) : tipografia.data.daMarca) : undefined),
+    [tipografia.data, idDaOutraMarca],
+  );
+  const atuais = { data: dadosAtuais };
   const [papel, setPapel] = useState<PapelDaEscolha>(papelInicial || "titulo");
   const [escolha, setEscolha] = useState<Partial<Record<PapelDaEscolha, FonteDaBiblioteca>>>({});
   const [busca, setBusca] = useState("");
@@ -240,7 +259,7 @@ export default function BibliotecaDeFontes({
   const visiveis = filtradas.slice(0, limite);
   const amostras = useUrlsAssinadas("mesa", visiveis.map((f) => f.amostra_path || "").filter(Boolean));
 
-  const plano = planejarTrocaDeFontes(clientId, atuais.data || [], escolha);
+  const plano = planejarTrocaDeFontes(clientId, atuais.data || [], escolha, outraMarca ? outraMarca.id : null);
   const substituiEnviada = (atuais.data || []).filter(
     (a) => a.origem === "upload" && plano.apagar.indexOf(a.id) >= 0,
   );
@@ -259,7 +278,10 @@ export default function BibliotecaDeFontes({
     setSalvando(true);
     try {
       // Primeiro entra a nova; só depois sai a antiga (sem ficar sem fonte se falhar).
-      const { error } = await (supabase as any).from("cliente_fontes").insert(plano.inserir);
+      const { data: novas, error } = await (supabase as any)
+        .from("cliente_fontes")
+        .insert(plano.inserir)
+        .select("id, nome, papel, storage_path, amostra_path, marca_id");
       if (error) throw error;
       if (plano.apagar.length) {
         const { error: erroApagar } = await (supabase as any).from("cliente_fontes").delete().in("id", plano.apagar);
@@ -274,6 +296,15 @@ export default function BibliotecaDeFontes({
       void queryClient.invalidateQueries({ queryKey: chaveDasFontes(clientId) });
       invalidar(clientId);
       onOpenChange(false);
+      // Frente T2: a amostra da tipografia de cada fonte nova, desenhada em seguida (sem segurar a janela).
+      const linhas = Array.isArray(novas) ? novas : [];
+      if (linhas.length) {
+        void gerarAmostrasDaTipografia(clientId, linhas, depsDaAmostraNoSupabase(clientId)).then((r) => {
+          if (r.falhas.length) toast.warning("Amostra da tipografia não gerada", { description: r.falhas.map((x) => `${x.nome}: ${x.erro}`).join(" ") });
+          void queryClient.invalidateQueries({ queryKey: chaveDasFontes(clientId) });
+          invalidar(clientId);
+        });
+      }
     } catch (e) {
       toast.error("Fontes não gravadas", { description: textoDoErro(e) });
       void queryClient.invalidateQueries({ queryKey: chaveDasFontes(clientId) });

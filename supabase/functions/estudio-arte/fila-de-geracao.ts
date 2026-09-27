@@ -23,7 +23,8 @@
  * - tentativas: queda do worker ou falha de leitura do banco; 3 no máximo;
  * - passos: 24 por lâmina (fundo contínuo esperando outro trecho, conferir,
  *   corrigir); passou disso, erro registrado;
- * - espera entre tentativas: 20 s no fundo ocupado, 30 s x tentativa nas
+ * - espera entre tentativas: 20 s no fundo ocupado, 15 s esperando a capa
+ *   (frente T2: a lâmina 2+ espera a âncora tipográfica), 30 s x tentativa nas
  *   falhas de leitura; a vigia do painel chama no máximo a cada 30 s;
  * - correção automática: 1 rodada, e só com "Corrigir sozinho" ligado.
  */
@@ -64,6 +65,8 @@ export const LIMITES_DA_FILA = {
   /** Trava de um passo: acima do relógio de 400 s da função. */
   TRAVA_SEGUNDOS: 420,
   ESPERA_DO_FUNDO_S: 20,
+  /** Frente T2: lâmina 2+ esperando a capa (âncora tipográfica da série); o teto de passos limita a espera. */
+  ESPERA_DA_CAPA_S: 15,
   ESPERA_DA_REPETICAO_S: 30,
   RODADAS_AUTOMATICAS: 1,
   MAX_ORDENS: 20,
@@ -183,6 +186,10 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
   }
   if (etapa === "fundo" && erro.codigo === "fundo_em_andamento") {
     return { mudanca: seguir("fundo", LIMITES_DA_FILA.ESPERA_DO_FUNDO_S), pararLote: null };
+  }
+  // Frente T2: a capa do mesmo trabalho ainda está gerando; esta lâmina espera por ela (mesma tipografia).
+  if (etapa === "gerar" && erro.codigo === "capa_pendente") {
+    return { mudanca: seguir("gerar", LIMITES_DA_FILA.ESPERA_DA_CAPA_S), pararLote: null };
   }
   if (CODIGOS_QUE_REPETEM.indexOf(erro.codigo) >= 0 && item.tentativas + 1 < item.max_tentativas) {
     const tentativas = item.tentativas + 1;

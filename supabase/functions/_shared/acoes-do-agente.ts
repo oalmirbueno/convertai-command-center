@@ -113,6 +113,11 @@ export type AcaoDoAgente = {
   itens: ItemDaAcaoDoAgente[];
   ignorados: string[];
   recusados: RecusaDoItem[];
+  /**
+   * Pedidos válidos que passaram do teto de MAX_ITENS_POR_ACAO (AB2): não
+   * entram nesta lista e a tela avisa quantos ficaram para um próximo pedido.
+   */
+  acima_do_teto?: number;
   /** Contexto que o executor precisa (ex.: trabalho_id do carrossel). */
   contexto?: Record<string, unknown>;
   /** Operações sem reverso (ex.: gerar de novo com IA): a tela avisa antes. */
@@ -132,17 +137,38 @@ export type AcaoDoAgente = {
 const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const umaLinha = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
-/** Apelidos p1..pN na ordem recebida (quem chama ordena antes). */
+/**
+ * Apelidos p1..pN na ordem recebida (quem chama ordena antes).
+ * AB2: passou do teto, a lista guarda quantos ficaram de fora (propriedade
+ * `foraDaLista`, que não vai para o JSON) e o blocoDosAlvos avisa o agente.
+ * Antes parava em 150 calado e "arquive todos" fazia só uma parte.
+ */
 export function comApelido<A extends Alvo>(alvos: A[], prefixo: string, max = MAX_ALVOS_PARA_O_AGENTE): Array<AlvoComApelido<A>> {
   const p = String(prefixo || "x").toLowerCase().replace(/[^a-z]/g, "") || "x";
-  return alvos.slice(0, max).map((a, i) => ({ ...a, ref: `${p}${i + 1}` }));
+  const lista = alvos.slice(0, max).map((a, i) => ({ ...a, ref: `${p}${i + 1}` }));
+  const fora = Math.max(0, alvos.length - lista.length);
+  if (fora) Object.defineProperty(lista, "foraDaLista", { value: fora, enumerable: false });
+  return lista;
+}
+
+/** Quantos alvos o comApelido deixou de fora pelo teto (0 quando coube tudo). */
+export function foraDaLista(alvos: unknown): number {
+  const n = alvos && typeof alvos === "object" ? (alvos as { foraDaLista?: unknown }).foraDaLista : 0;
+  return typeof n === "number" && n > 0 ? n : 0;
+}
+
+/** Aviso do teto para o prompt: o agente sabe que a lista não é tudo e diz isso à equipe. */
+export function avisoDoTetoDosAlvos(mostrados: number, fora: number): string {
+  if (fora <= 0) return "";
+  return `ATENÇÃO: esta lista mostra ${mostrados} de ${mostrados + fora}. Os outros ${fora} não estão aqui e não podem entrar em acoes agora. Pedido para "todos": faça com os listados e diga na resposta que ${fora} ficaram para um próximo pedido.`;
 }
 
 /** Bloco do prompt com os alvos, um por linha: apelido | título | detalhe. Nunca leva o id. */
 export function blocoDosAlvos(titulo: string, alvos: AlvoComApelido[], vazio = "nenhum."): string {
   if (!alvos.length) return `\n${titulo}: ${vazio}\n`;
   const linhas = alvos.map((a) => [a.ref, umaLinha(a.titulo || "sem título", 140), umaLinha(a.detalhe, 160)].filter(Boolean).join(" | "));
-  return `\n${titulo} (apelido | título | detalhe). Use só estes apelidos em acoes:\n${linhas.join("\n")}\n`;
+  const aviso = avisoDoTetoDosAlvos(alvos.length, foraDaLista(alvos));
+  return `\n${titulo} (apelido | título | detalhe). Use só estes apelidos em acoes:\n${linhas.join("\n")}\n${aviso ? `${aviso}\n` : ""}`;
 }
 
 /** Esquema JSON do campo `acoes` na resposta do agente (null quando não há pedido de ação). */
@@ -203,9 +229,14 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
   const ignorados: string[] = [];
   const recusados: RecusaDoItem[] = [];
   const itens: ItemDaAcaoDoAgente[] = [];
+  // AB2: o que passa do teto não some calado. Pedido válido acima dos 120
+  // conta em acima_do_teto (a tela avisa); o que nem cabe na leitura (mais de
+  // 4x o teto) também conta, sem ler um por um.
+  const brutos = Array.isArray(o.itens) ? o.itens : [];
+  const LEITURA_MAXIMA = MAX_ITENS_POR_ACAO * 4;
+  let acimaDoTeto = Math.max(0, brutos.length - LEITURA_MAXIMA);
 
-  for (const b of (Array.isArray(o.itens) ? o.itens : []).slice(0, MAX_ITENS_POR_ACAO * 2)) {
-    if (itens.length >= MAX_ITENS_POR_ACAO) break;
+  for (const b of brutos.slice(0, LEITURA_MAXIMA)) {
     const m = (b ?? {}) as Record<string, unknown>;
     const operacao = texto(m.operacao, 40).toLowerCase();
     const ref = texto(m.ref, 12).toLowerCase();
@@ -248,6 +279,10 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
       recusados.push({ ref: refDoItem, titulo: umaLinha(alvo.titulo || "sem título", 200), operacao, motivo });
       continue;
     }
+    if (itens.length >= MAX_ITENS_POR_ACAO) {
+      acimaDoTeto++;
+      continue;
+    }
     const item: ItemDaAcaoDoAgente = {
       ref: refDoItem,
       alvo_id: alvo.id,
@@ -272,6 +307,7 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
     ignorados,
     recusados,
   };
+  if (acimaDoTeto) acao.acima_do_teto = acimaDoTeto;
   if (opcoes.contexto) acao.contexto = opcoes.contexto;
   if (opcoes.semDesfazer && opcoes.semDesfazer(itens)) acao.sem_desfazer = true;
   return acao;
@@ -356,7 +392,7 @@ export const MAX_ITENS_DIRETOS = 5;
  * que não (vai para o log e para o teste).
  */
 export function podeExecutarDireto(
-  acao: Pick<AcaoDoAgente, "itens" | "recusados" | "ignorados" | "custo_estimado_usd" | "sem_desfazer" | "executada_em" | "descartada_em">,
+  acao: Pick<AcaoDoAgente, "itens" | "recusados" | "ignorados" | "custo_estimado_usd" | "sem_desfazer" | "executada_em" | "descartada_em"> & Partial<Pick<AcaoDoAgente, "acima_do_teto">>,
   regras: Record<string, Pick<RegraDaOperacao, "direta">>,
   opcoes: { pedidoClaro: boolean; maxItens?: number },
 ): { direto: boolean; motivo: string } {
@@ -365,6 +401,7 @@ export function podeExecutarDireto(
   if (!opcoes.pedidoClaro) return { direto: false, motivo: "o pedido não é uma ordem clara" };
   if (!acao.itens.length) return { direto: false, motivo: "nada para fazer" };
   if (acao.itens.length > max) return { direto: false, motivo: `mais de ${max} itens` };
+  if (acao.acima_do_teto) return { direto: false, motivo: "parte do pedido passou do teto" };
   if ((acao.recusados || []).length || (acao.ignorados || []).length) return { direto: false, motivo: "há item recusado ou fora da lista" };
   if (acao.sem_desfazer) return { direto: false, motivo: "sem Desfazer" };
   if (typeof acao.custo_estimado_usd === "number" && acao.custo_estimado_usd > 0) return { direto: false, motivo: "tem custo" };
@@ -499,6 +536,7 @@ export function acaoDoAnexo(a: unknown): AcaoDoAgente | null {
     itens: Array.isArray(o.itens) ? (o.itens as ItemDaAcaoDoAgente[]) : [],
     ignorados: Array.isArray(o.ignorados) ? (o.ignorados as unknown[]).map(String) : [],
     recusados: Array.isArray(o.recusados) ? (o.recusados as RecusaDoItem[]) : [],
+    acima_do_teto: typeof o.acima_do_teto === "number" && o.acima_do_teto > 0 ? o.acima_do_teto : undefined,
   };
 }
 

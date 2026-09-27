@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
+import { comOrigemDoPainel } from "../_shared/origem-do-painel.ts";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -138,9 +139,9 @@ async function resendFirstAccess(rawEmail: unknown): Promise<Response> {
   return ok;
 }
 
-Deno.serve(async (req) => {
-  const origin = req.headers.get("Origin");
-  if (origin && origin !== APP_ORIGIN) return json({ error: "Forbidden" }, 403);
+// Origem conferida (e o CORS acertado) pelo embrulho: painel, www, prévia do
+// Lovable e localhost passam; o resto leva 403 antes de qualquer trabalho.
+Deno.serve(comOrigemDoPainel(APP_ORIGIN, async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -304,4 +305,4 @@ Deno.serve(async (req) => {
       invalidJson ? 400 : 500,
     );
   }
-});
+}));

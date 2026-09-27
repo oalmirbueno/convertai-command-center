@@ -56,6 +56,7 @@ import {
   type ParteDaEstimativa,
   type Qualidade,
 } from "@/lib/mesa/api";
+import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
 import DiretorDoEstudio from "./DiretorDoEstudio";
@@ -79,8 +80,11 @@ import {
   situacaoDoItem,
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+// Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
+import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
+import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
 import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
@@ -380,6 +384,8 @@ function DetalheDoItem({
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
+  const { marca: marcaDaMesa } = useMarcaDaMesa();
+  const semTipografia = useSemTipografia(clientId, marcaDaMesa);
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
   const avisarErro = useAvisarErro();
@@ -617,6 +623,7 @@ function DetalheDoItem({
   /** Uma lâmina só (ferramenta Lâmina ou barrinha da prancheta): gera e confere em seguida. */
   const gerarEConferir = async (ordem: number) => {
     if (!trabalho) return { custo_usd: 0 };
+    if (semTipografia) throw new ErroDaMesa("sem_tipografia", `${TEXTO_SEM_TIPOGRAFIA} antes de gerar.`);
     // Fila do servidor: segue mesmo trocando de tela ou de cliente. Sem ela, o caminho antigo.
     const naFila = await fila.enfileirar([ordem], corrigirSozinho);
     if (naFila) return { na_fila: naFila.itens.length };
@@ -706,6 +713,7 @@ function DetalheDoItem({
    */
   const gerarVarias = async (ordens: number[]) => {
     if (!trabalho) return { custo_usd: 0 };
+    if (semTipografia) throw new ErroDaMesa("sem_tipografia", `${TEXTO_SEM_TIPOGRAFIA} antes de gerar.`);
     // Fila do servidor (frente G): o pedido vira trabalho no banco e a função
     // gera em segundo plano (até 2 por trabalho, 1 no contínuo; custo e
     // carteira por lâmina, como antes). Sem a fila no ar, o laço antigo abaixo.
@@ -720,12 +728,18 @@ function DetalheDoItem({
       return n;
     });
     const limite = infinito ? 1 : EM_PARALELO;
+    // Frente T2: sem capa ainda, ela vai sozinha primeiro (a âncora tipográfica da série); depois as outras.
+    const capaPrimeiro = ordens.length > 1 && ordens.indexOf(1) >= 0 && !ultimas.has(1);
+    if (capaPrimeiro) ordens = [1].concat(ordens.filter((o) => o !== 1));
+    // Com a capa primeiro, o primeiro trabalhador para depois dela; depois o teto é a lista inteira.
+    let teto = capaPrimeiro ? 1 : ordens.length;
     let proximo = 0;
     let total = 0;
     const falhas: unknown[] = [];
     const conferencias: Promise<number>[] = [];
     const trabalhador = async () => {
       while (proximo < ordens.length && !parar.current) {
+        if (proximo >= teto) break;
         const ordem = ordens[proximo++];
         try {
           // Soma só depois do await: somar com o await na mesma linha lia o valor de
@@ -740,6 +754,10 @@ function DetalheDoItem({
       }
     };
     try {
+      if (capaPrimeiro) {
+        await trabalhador();
+        teto = ordens.length;
+      }
       await Promise.all(Array.from({ length: Math.min(limite, ordens.length) }, trabalhador));
       const custosConferencia = await Promise.all(conferencias);
       total += custosConferencia.reduce((s, v) => s + v, 0);
@@ -976,7 +994,8 @@ function DetalheDoItem({
     try {
       // Legenda que não gravou: não entrega com a legenda antiga do banco.
       if (legendaMudou && !(await salvarLegenda(true))) return;
-      await chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: trabalho.id });
+      // AB2: carrossel grande entrega em partes (limite de CPU); a tela continua sozinha.
+      await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: trabalho.id }));
       if (tambemEnviar) {
         try {
           await enviarUmParaAprovacao(trabalho.id);
@@ -1183,7 +1202,7 @@ function DetalheDoItem({
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "outline"}
           className="h-10 gap-1 px-3 text-[12.5px]"
-          disabled={ocupado || entregue}
+          disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
           aoConcluir={(data) => {
@@ -1299,7 +1318,7 @@ function DetalheDoItem({
       descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
       variant={v ? "outline" : "default"}
       className="h-8 w-full gap-1 px-2 text-[11px]"
-      disabled={laminaOcupada(c.ordem) || entregue}
+      disabled={laminaOcupada(c.ordem) || entregue || semTipografia}
       partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
       executar={() => gerarEConferir(c.ordem)}
     />
@@ -1368,7 +1387,7 @@ function DetalheDoItem({
                 descricao={comNotaDoFundo("A lâmina é refeita sobre o fundo contínuo atual e passa pela conferência.", [cardSelecionado.ordem])}
                 variant="outline"
                 className="h-7 shrink-0 px-2.5 text-[12px]"
-                disabled={laminaOcupada(cardSelecionado.ordem) || entregue}
+                disabled={laminaOcupada(cardSelecionado.ordem) || entregue || semTipografia}
                 partes={() => partesGerarDas([cardSelecionado.ordem]).concat(partesDoFundo([cardSelecionado.ordem]))}
                 executar={() => gerarEConferir(cardSelecionado.ordem)}
               />
@@ -1449,12 +1468,14 @@ function DetalheDoItem({
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
         {avisoDeAjuste}
+        <EstudioSemTipografia clientId={clientId} />
         {laminaGrande}
       </div>
     </>
   ) : (
     <div className="flex min-w-0 flex-col p-3">
       {avisoDeAjuste}
+      <EstudioSemTipografia clientId={clientId} />
       <p className="mb-2 flex min-w-0 items-center text-[11px] text-muted-foreground">
         <span className="mr-2 shrink-0 font-medium uppercase tracking-wider">Prancheta</span>
         {resumoDaPrancheta}

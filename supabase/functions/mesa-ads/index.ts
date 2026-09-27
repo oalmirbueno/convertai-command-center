@@ -121,6 +121,7 @@ import {
 import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { contextoComMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
@@ -1066,7 +1067,8 @@ async function montarContextoAds(
       cliente: marca.nomeCliente,
       contexto_consolidado: consolidado,
       kit_de_marca: { estilo: marca.estilo, regras: marca.regras, tom_de_voz: marca.tomDeVoz },
-      dossie_atual: d ? `Versão ${d.version} (${String(d.effective_at).slice(0, 10)}):\n${(d.summary ? `${d.summary}\n` : "") + String(d.content ?? "").slice(0, 12000)}` : null,
+      // AB2: dossiê grande fica com o começo curto e o FIM (seções mais recentes), nunca só o começo.
+      dossie_atual: d ? `Versão ${d.version} (${String(d.effective_at).slice(0, 10)}):\n${(d.summary ? `${d.summary}\n` : "") + recortarDossie(String(d.content ?? ""), 12000)}` : null,
       anuncios_ultimos_90_dias: { total_lidos: anuncios.length, com_entrega: resumoAnuncios },
       aprendizados_registrados: aprendizados.data ?? [],
       // O resumo do cérebro substitui a lista crua da memória; ela só volta se o cérebro não responder.
@@ -3665,7 +3667,7 @@ async function nichoDoCliente(
   const state = {
     cliente: ctx.cliente,
     contexto: (typeof consolidado === "string" ? consolidado : JSON.stringify(consolidado ?? null)).slice(0, 6000),
-    dossie: String(ctx.dados.dossie_atual ?? "").slice(0, 3000),
+    dossie: recortarDossie(String(ctx.dados.dossie_atual ?? ""), 3000),
     oferta: briefing?.oferta ?? null,
     publico: briefing?.publico ?? null,
   };

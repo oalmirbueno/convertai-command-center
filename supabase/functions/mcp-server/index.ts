@@ -40,6 +40,8 @@ import {
   type JsonRpcResponse,
 } from "../_shared/mcp-response.ts";
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
+import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
+import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
 
 // ─── OAuth / Protected Resource metadata ──────────────────────
 const {
@@ -169,7 +171,8 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
       // `listChanged: false` e a verdade, nao uma escolha: o transporte e
-      // POST puro (GET responde 405), entao nao existe stream para empurrar
+      // POST puro (GET pedindo stream responde 405; o GET sem stream e so a
+      // descoberta para o painel), entao nao existe stream para empurrar
       // notifications/tools/list_changed. Declarar `true` seria prometer um
       // aviso que nunca chega.
       //
@@ -369,19 +372,39 @@ Deno.serve(async (req) => {
     return jsonResponse(rpcError(null, RpcErrors.invalidRequest, "Unsupported MCP-Protocol-Version"), 400);
   }
 
-  // GET → OAuth challenge (RFC 9728). Um GET sem Authorization precisa
-  // responder 401 com WWW-Authenticate para que clientes como ChatGPT Work
-  // descubram o Protected Resource Metadata. Um 200 com o mesmo header é
-  // ignorado pelo cliente e leva ao erro "MCP server does not implement OAuth".
+  // GET, três respostas (ver _shared/mcp-descoberta.ts):
+  // - sem Authorization → OAuth challenge (RFC 9728). Precisa ser 401 com
+  //   WWW-Authenticate para que clientes como ChatGPT Work descubram o
+  //   Protected Resource Metadata. Um 200 com o mesmo header é ignorado pelo
+  //   cliente e leva ao erro "MCP server does not implement OAuth".
+  // - pedindo stream SSE (Accept com text/event-stream) → 405: não há stream.
+  // - o resto (o cartão "Servidor MCP" do painel) → descoberta pública, só o
+  //   que o initialize já conta. O POST não muda.
   if (req.method === "GET") {
-    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
-    if (!authHeader) {
+    const decisao = decidirGet({
+      authorization: req.headers.get("authorization"),
+      accept: req.headers.get("accept"),
+    });
+    if (decisao === "desafio_oauth") {
       return oauthChallengeResponse(oauthChallengeBody());
     }
-    return new Response(null, {
-      status: 405,
-      headers: { ...corsHeaders, Allow: "POST, OPTIONS" },
-    });
+    if (decisao === "sem_stream") {
+      return new Response(null, {
+        status: 405,
+        headers: { ...corsHeaders, Allow: "POST, OPTIONS" },
+      });
+    }
+    return jsonResponse(
+      descobertaDoMcp({
+        servidor: SERVER_INFO,
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        toolCount: TOOLS.length,
+        endpoint: RESOURCE_URL,
+        segundoCerebroConfigurado: bridgeStatusPublic().configured,
+      }),
+      200,
+      { "Cache-Control": "no-store" },
+    );
   }
 
   if (req.method !== "POST") {

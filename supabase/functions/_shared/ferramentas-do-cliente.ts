@@ -15,6 +15,7 @@
  * Sem import de Deno: os testes (vitest) leem este arquivo com um banco falso.
  */
 import { limparSegredos, linhasDoBriefing } from "./pacote-externo.ts";
+import { recortarDossie } from "./dossie-recortado.ts";
 
 export type NomeDaFerramenta =
   | "buscar_arquivo"
@@ -194,7 +195,9 @@ export async function executarLeituras(db: BancoDasFerramentas, clientId: string
     } catch {
       r = "Leitura indisponível agora.";
     }
-    const limpo = limparSegredos(r).slice(0, TETO_DO_RESULTADO);
+    // AB2: o dossiê grava o mais recente no FIM; no teto fica o começo curto e o fim, nunca só o começo.
+    const semSegredo = limparSegredos(r);
+    const limpo = p.ferramenta === "ler_dossie" ? recortarDossie(semSegredo, TETO_DO_RESULTADO) : semSegredo.slice(0, TETO_DO_RESULTADO);
     return `### ${p.ferramenta}${p.argumento ? ` (${p.argumento})` : ""}\n${limpo}`;
   }));
   return partes.join("\n\n");

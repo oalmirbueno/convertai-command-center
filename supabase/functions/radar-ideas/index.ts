@@ -19,6 +19,7 @@ import {
 } from "../_shared/ai-provider.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import type { BancoDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+import { recortarDossie } from "../_shared/dossie-recortado.ts";
 
 // Modelos com busca na web embutida primeiro; sem busca como reserva.
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini-search-preview", "gpt-4o-mini"];
@@ -219,7 +220,8 @@ Deno.serve(async (req) => {
     // O GERAL manda (nunca o de projeto por ser mais novo); projeto complementa.
     const dossiesAtuais = ((dossieRes.data || []) as any[]).sort((a, b) => Number(Boolean(a.project_id)) - Number(Boolean(b.project_id)));
     const dossieLines = dossiesAtuais.map((d: any) => {
-      const texto = String(d.content || d.summary || "").replace(/\s+/g, " ").trim().slice(0, d.project_id ? 500 : 1400);
+      // AB2: o começo curto e o FIM (seções mais recentes), nunca só o começo.
+      const texto = recortarDossie(String(d.content || d.summary || "").replace(/\s+/g, " ").trim(), d.project_id ? 500 : 1400).replace(/\s+/g, " ");
       return texto
         ? `DOSSIÊ ${d.project_id ? "do projeto (complemento)" : "GERAL (fonte da verdade)"} (v${d.version ?? "?"}, ${String(d.updated_at || "").slice(0, 10)}): ${texto}`
         : "";

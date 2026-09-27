@@ -69,23 +69,41 @@ Deno.serve(async (req) => {
     const monthIso = monthStart.toISOString();
 
     // Linha do tempo real do mês, lida com o JWT do chamador (RLS decide).
-    const [projectsRes, filesRes, pubsRes, reportsRes] = await Promise.all([
+    // AB2 (26/09): os números vão ao cliente, então são contagens exatas do
+    // banco. Antes contava a lista de 20 arquivos (nunca passava de 20) e as
+    // 200 primeiras publicações sem ordem (o mês podia sumir).
+    const agoraIso = new Date().toISOString();
+    const arquivosDoMes = () => db.from("files")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .is("archived_at", null)
+      .is("parent_file_id", null)
+      .gte("created_at", monthIso);
+    const [projectsRes, filesCountRes, approvedCountRes, filesSampleRes, publishedCountRes, scheduledCountRes, reportsRes] = await Promise.all([
       db.from("projects")
         .select("id, name, project_type, status")
         .eq("client_id", clientId)
         .is("deleted_at", null),
+      arquivosDoMes(),
+      arquivosDoMes().eq("approval_status", "approved"),
       db.from("files")
-        .select("file_name, created_at, approval_status")
+        .select("file_name, created_at")
         .eq("client_id", clientId)
         .is("archived_at", null)
         .is("parent_file_id", null)
         .gte("created_at", monthIso)
         .order("created_at", { ascending: false })
-        .limit(20),
+        .limit(4),
       db.from("editorial_publications")
-        .select("status, published_at, scheduled_at")
+        .select("id", { count: "exact", head: true })
         .eq("client_id", clientId)
-        .limit(200),
+        .eq("status", "published")
+        .gte("published_at", monthIso),
+      db.from("editorial_publications")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", clientId)
+        .eq("status", "scheduled")
+        .gt("scheduled_at", agoraIso),
       db.from("reports")
         .select("title, highlights, created_at")
         .eq("client_id", clientId)
@@ -106,14 +124,11 @@ Deno.serve(async (req) => {
           .limit(10)
       : { data: [] as any[] };
 
-    const publishedMonth = (pubsRes.data || []).filter(
-      (p: any) => p.status === "published" && p.published_at && p.published_at >= monthIso,
-    );
-    const scheduledAhead = (pubsRes.data || []).filter(
-      (p: any) => p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) > new Date(),
-    );
-    const files = filesRes.data || [];
-    const approvedMonth = files.filter((f: any) => f.approval_status === "approved").length;
+    const filesCount = filesCountRes.count ?? 0;
+    const approvedMonth = approvedCountRes.count ?? 0;
+    const filesSample = filesSampleRes.data || [];
+    const publishedCount = publishedCountRes.count ?? 0;
+    const scheduledCount = scheduledCountRes.count ?? 0;
 
     const monthName = monthStart.toLocaleDateString("pt-BR", { month: "long" });
     // Metricas reais do Instagram: o narrador cita numeros verdadeiros.
@@ -135,18 +150,18 @@ Deno.serve(async (req) => {
       `Mês: ${monthName}`,
       ...(igFact ? [igFact] : []),
       `Frentes ativas: ${projects.filter((p: any) => p.status !== "done").map((p: any) => p.name).join("; ") || "nenhuma"}`,
-      `Materiais produzidos no mês: ${files.length}${files.length > 0 ? ` (exemplos: ${files.slice(0, 4).map((f: any) => f.file_name).join(", ")})` : ""}`,
+      `Materiais produzidos no mês: ${filesCount}${filesSample.length > 0 ? ` (exemplos: ${filesSample.map((f: any) => f.file_name).join(", ")})` : ""}`,
       `Materiais aprovados pelo cliente no mês: ${approvedMonth}`,
-      `Publicações no ar no mês: ${publishedMonth.length}`,
-      `Publicações já agendadas para os próximos dias: ${scheduledAhead.length}`,
+      `Publicações no ar no mês: ${publishedCount}`,
+      `Publicações já agendadas para os próximos dias: ${scheduledCount}`,
       `Etapas de projeto concluídas no mês: ${(milestonesData || []).map((m: any) => m.title).join("; ") || "nenhuma"}`,
       `Relatórios publicados no mês: ${(reportsRes.data || []).map((r: any) => r.title).join("; ") || "nenhum"}`,
     ].join("\n");
 
     // Sem movimento no mês, não chama IA nem inventa: devolve vazio.
     const hasMovement =
-      files.length > 0 ||
-      publishedMonth.length > 0 ||
+      filesCount > 0 ||
+      publishedCount > 0 ||
       (milestonesData || []).length > 0 ||
       (reportsRes.data || []).length > 0;
     if (!hasMovement) return jsonResponse({ narrative: null });
@@ -156,23 +171,23 @@ Deno.serve(async (req) => {
     // nunca fica sem o resumo por causa de provider.
     const fallbackNarrative = (() => {
       const parts: string[] = [];
-      if (files.length > 0) {
+      if (filesCount > 0) {
         parts.push(
-          `Em ${monthName}, a gente produziu ${files.length} ${files.length === 1 ? "material" : "materiais"} para vocês` +
+          `Em ${monthName}, a gente produziu ${filesCount} ${filesCount === 1 ? "material" : "materiais"} para vocês` +
             (approvedMonth > 0 ? `, e ${approvedMonth} já ${approvedMonth === 1 ? "foi aprovado" : "foram aprovados"} por vocês` : "") +
             ".",
         );
-      } else if (publishedMonth.length > 0) {
+      } else if (publishedCount > 0) {
         parts.push(`Em ${monthName}, a sua presença seguiu em movimento.`);
       }
-      if (publishedMonth.length > 0) {
+      if (publishedCount > 0) {
         parts.push(
-          `${publishedMonth.length} ${publishedMonth.length === 1 ? "publicação foi ao ar" : "publicações foram ao ar"} no calendário combinado.`,
+          `${publishedCount} ${publishedCount === 1 ? "publicação foi ao ar" : "publicações foram ao ar"} no calendário combinado.`,
         );
       }
-      if (scheduledAhead.length > 0) {
+      if (scheduledCount > 0) {
         parts.push(
-          `Os próximos dias já estão garantidos, com ${scheduledAhead.length} ${scheduledAhead.length === 1 ? "publicação agendada" : "publicações agendadas"}.`,
+          `Os próximos dias já estão garantidos, com ${scheduledCount} ${scheduledCount === 1 ? "publicação agendada" : "publicações agendadas"}.`,
         );
       }
       if ((milestonesData || []).length > 0) {

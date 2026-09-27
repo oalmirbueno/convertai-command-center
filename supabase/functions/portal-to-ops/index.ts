@@ -1,9 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   resolveOpsReceivePortalSyncUrl,
-  opsBridgeRetiredResponse,
   resolveOpsUrlOrNull,
 } from "../_shared/ops-config.ts";
+import { respostaDePonteAposentada } from "../_shared/ponte-ops-aposentada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,8 +55,9 @@ Deno.serve(async (req) => {
 
   // Ponte desligada: responde e explica, em vez de tentar enviar
   // para lugar nenhum. O OPTIONS acima continua respondendo, entao
-  // a auditoria enxerga a funcao viva.
-  if (!OPS_RECEIVE_PORTAL_SYNC_URL) return opsBridgeRetiredResponse(corsHeaders);
+  // a auditoria enxerga a funcao viva. 200 sem `ok: false`: quem chamava
+  // era o painel, e o erro so virava ruido no console e no banco.
+  if (!OPS_RECEIVE_PORTAL_SYNC_URL) return respostaDePonteAposentada(corsHeaders);
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,

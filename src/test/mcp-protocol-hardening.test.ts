@@ -102,7 +102,7 @@ describe('canonical MCP transport hardening', () => {
     expect(validateJsonRpcRequest(body)).toEqual(expect.objectContaining({ ok: false, code }));
   });
 
-  it('wires every guard before dispatch and does not expose GET health', () => {
+  it('wires every guard before dispatch and GET only shows public discovery', () => {
     expect(server).toMatch(/Deno\.env\.get\(["']MCP_ALLOWED_ORIGINS["']\)/);
     expect(server).toContain('isMcpOriginAllowed(req, MCP_ALLOWED_ORIGINS)');
     expect(server).toContain('isMcpProtocolVersionSupported(req)');
@@ -110,7 +110,12 @@ describe('canonical MCP transport hardening', () => {
     expect(server).toContain('validateJsonRpcRequest(body)');
     expect(server).toContain("status: 405");
     expect(server).toContain("capabilities: { tools: { listChanged: false } }");
-    expect(server).not.toContain("status: 'ok'");
-    expect(server).not.toContain('bridgeStatusPublic()');
+    // O GET do painel (AB2) le a descoberta publica: so "configurado ou nao"
+    // do Segundo Cerebro, nunca dono/repositorio/branch (bridgeStatus()).
+    expect(server).toContain('decidirGet({');
+    expect(server).toContain('segundoCerebroConfigurado: bridgeStatusPublic().configured');
+    expect(server).not.toContain('bridgeStatus()');
+    // Sem Bearer continua o desafio OAuth, antes de qualquer descoberta.
+    expect(server.indexOf('if (decisao === "desafio_oauth")')).toBeLessThan(server.indexOf('descobertaDoMcp({'));
   });
 });

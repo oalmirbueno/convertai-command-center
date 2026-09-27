@@ -26,6 +26,12 @@ import { describe, expect, it } from "vitest";
 const raiz = resolve(__dirname, "../..");
 const ler = (p: string) => readFileSync(resolve(raiz, p), "utf8");
 
+// As duas que o NAVEGADOR chamava respondem 200 `aposentada: true` (AB2):
+// o 503 virava sync_error gravado no registro pelo painel antigo em cache.
+const CHAMADAS_PELO_PAINEL = new Set(["notify-ops", "portal-to-ops"]);
+const guardaDa = (funcao: string) =>
+  CHAMADAS_PELO_PAINEL.has(funcao) ? "respostaDePonteAposentada(" : "opsBridgeRetiredResponse(";
+
 const PONTE = [
   "sync-to-ops",
   "notify-ops",
@@ -50,13 +56,13 @@ describe("as funcoes da ponte sobem mesmo com ela desligada", () => {
   it("todas respondem explicando, em vez de tentar enviar para lugar nenhum", () => {
     for (const funcao of PONTE) {
       const codigo = ler(`supabase/functions/${funcao}/index.ts`);
-      expect(codigo, `${funcao} sem guarda`).toContain("opsBridgeRetiredResponse(");
+      expect(codigo, `${funcao} sem guarda`).toContain(guardaDa(funcao));
       // A guarda mora DENTRO do handler, antes do trabalho. Comparar a
       // posicao do fetch nao serve: helpers sao declarados antes do
       // handler e chamados depois dele — a primeira versao deste teste
       // acusou pull-ops-nodes por isso, sem haver defeito ali.
       const handler = codigo.indexOf("serve(");
-      expect(codigo.indexOf("opsBridgeRetiredResponse("), `${funcao}: guarda fora do handler`)
+      expect(codigo.indexOf(guardaDa(funcao)), `${funcao}: guarda fora do handler`)
         .toBeGreaterThan(handler);
     }
   });
@@ -76,7 +82,7 @@ describe("as funcoes da ponte sobem mesmo com ela desligada", () => {
     for (const funcao of PONTE) {
       const codigo = ler(`supabase/functions/${funcao}/index.ts`);
       const options = codigo.indexOf('req.method === "OPTIONS"');
-      const guarda = codigo.indexOf("opsBridgeRetiredResponse(");
+      const guarda = codigo.indexOf(guardaDa(funcao));
       expect(options, `${funcao} sem OPTIONS`).toBeGreaterThan(0);
       expect(options, `${funcao}: guarda antes do OPTIONS`).toBeLessThan(guarda);
     }

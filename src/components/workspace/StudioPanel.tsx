@@ -22,6 +22,8 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import aceleriqLogo from "@/assets/logo-aceleriq-640.png";
 import { APP_PUBLIC_URL } from "@/lib/publicUrl";
+import { imagemParaOcr, pareceImagem } from "@/lib/imagemParaOcr";
+import { mensagemDaFuncao } from "@/lib/fileUrls";
 import {
   AjudaRecolhida, SeletorCompacto, Secao, RegiaoRolavel, CampoDeFormulario, GrupoDeCampos, EstadoVazio, Carregando, EstadoDeErro,
   botao, campo, campoTexto, superficie, texto, etiqueta, foco, useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela,
@@ -681,19 +683,18 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }
 
   async function ocrFile(file: File): Promise<string> {
-    const dataUrl: string = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result as string);
-      r.onerror = rej;
-      r.readAsDataURL(file);
-    });
+    // HEIC (foto de iPhone) vira JPG no navegador quando ele consegue abrir;
+    // senão o erro já diz o que fazer, sem ida ao servidor.
+    const dataUrl = await imagemParaOcr(file);
     const { data, error } = await supabase.functions.invoke("workspace-ocr", { body: { image: dataUrl } });
-    if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || "OCR falhou");
+    // O motivo real vem no corpo da resposta (o SDK só diz "non-2xx").
+    if (error) throw new Error(await mensagemDaFuncao(error, "OCR falhou"));
+    if ((data as any)?.error) throw new Error(String((data as any).error));
     return (data as any)?.text || "";
   }
 
   async function handleImageFile(file: File) {
-    if (!file.type.startsWith("image/")) return;
+    if (!pareceImagem(file)) return;
     setOcrBusy(true);
     toast({ title: "Analisando imagem…", description: "Extraindo texto com o provedor de IA configurado." });
     try {
