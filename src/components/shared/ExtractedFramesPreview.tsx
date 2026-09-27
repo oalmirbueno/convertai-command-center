@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, FileSpreadsheet, Presentation, FileText, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -51,11 +51,20 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  const [erroDoPedido, setErroDoPedido] = useState<string | null>(null);
+  // Pedido automático no máximo uma vez por arquivo: antes, a resposta com erro
+  // (o worker só aceita a chave de serviço) disparava o pedido de novo sem parar.
+  const pedidoAutomatico = useRef<string | null>(null);
+
   const reprocess = useCallback(async () => {
     setReprocessing(true);
+    setErroDoPedido(null);
     try {
-      await supabase.functions.invoke("mcp-files-worker", { body: { file_id: fileId, force: true } });
-      setTimeout(load, 2000);
+      const { error } = await supabase.functions.invoke("mcp-files-worker", { body: { file_id: fileId, force: true } });
+      if (error) setErroDoPedido("Não deu para pedir agora. A fila de extração roda sozinha; volte em alguns minutos.");
+      else window.setTimeout(load, 2000);
+    } catch {
+      setErroDoPedido("Não deu para pedir agora. A fila de extração roda sozinha; volte em alguns minutos.");
     } finally {
       setReprocessing(false);
     }
@@ -67,8 +76,10 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
       const timer = window.setTimeout(load, 2500);
       return () => window.clearTimeout(timer);
     }
-    reprocess();
-  }, [chunks.length, load, loading, reprocess, reprocessing, status]);
+    if (pedidoAutomatico.current === fileId) return;
+    pedidoAutomatico.current = fileId;
+    void reprocess();
+  }, [chunks.length, fileId, load, loading, reprocess, reprocessing, status]);
 
   const meta = KIND_META[kind];
   const Icon = meta.icon;
@@ -98,6 +109,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
           <p className="text-xs text-muted-foreground">
             Status: <span className="font-mono">{status || "pending"}</span>
           </p>
+          {erroDoPedido && <p className="text-xs text-muted-foreground">{erroDoPedido}</p>}
         </div>
         <Button size="sm" variant="outline" onClick={reprocess} disabled={reprocessing} className="gap-1.5">
           {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}

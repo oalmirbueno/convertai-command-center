@@ -6,6 +6,11 @@ import {
 import { fetchPublicText } from "../_shared/public-http.ts";
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory, memoryToPromptBlock } from "../_shared/project-memory-services.ts";
 import { getContextBundle as _sbGetContext, searchCode as _sbSearch, proposeUpdate as _sbPropose } from "../_shared/second-brain-github.ts";
+// Frente AG (26/09): o agente do workspace conhece o painel e lê o cérebro e o dossiê do cliente (cache curto).
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+
+const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -306,8 +311,10 @@ Regras absolutas:
     const safeProjectId = context?.project_id ?? null;
 
     // carrega histórico (últimas 30 msgs)
-    const { data: history } = await admin.from("workspace_agent_messages")
-      .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: true }).limit(30);
+    // Ordem decrescente + inverter: com ascending o limite pegava as 30 PRIMEIRAS e o agente perdia a conversa recente.
+    const { data: historicoRecente } = await admin.from("workspace_agent_messages")
+      .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(30);
+    const history = historicoRecente ? historicoRecente.slice().reverse() : historicoRecente;
 
     // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
     let fc = context?.folder_contents;
@@ -593,10 +600,13 @@ Regras:
       ? `\n---PLANO DO ORQUESTRADOR---\nIntenção: ${orq.intent}\nPassos a executar:\n${orq.plan.map((s, i) => `${i + 1}. ${s}`).join("\n")}\nExecutor selecionado: ${persona?.gpt_name || "Prepro Director (padrão)"}${orq.needs_extra_agent ? ` · motivo: ${orq.reason}` : ""}`
       : "";
 
+    const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch(() => "") : "";
     const systemMsg = [
       baseIdentity,
       thread.system_prompt || "",
       preparoBlock,
+      blocoDoMapaDoPainel("workspace"),
+      contextoDoCliente ? blocoDoContextoDoCliente(contextoDoCliente) : "",
       deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
       ctxLines.length ? `\n---CONTEXTO DA SESSÃO---\n${ctxLines.join("\n")}` : "",
       webBlocks.length ? `\n---PESQUISA WEB EM TEMPO REAL (${new Date().toISOString().slice(0,10)}) ---\nUse APENAS para dados atuais/externos. Cite as fontes entre parênteses (domínio) quando usar.\n${webBlocks.join("\n")}` : "",

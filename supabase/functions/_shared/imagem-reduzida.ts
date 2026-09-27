@@ -166,8 +166,17 @@ export async function reduzidaSemTransformacao(
     const r = await reduzirParaCaber(original, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels });
     if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "original" };
   }
-  // Caro de abrir aqui: a cópia média vem de outra chamada (copias-leves) e é usada como está.
+  // Caro de abrir aqui: a cópia vem de outra chamada (copias-leves) e é usada como está.
   if (opcoes.pedirCopia && (await pedirCopiaLeve(bucket, caminho))) {
+    // Caixa pequena (leitura, classificação): a miniatura que a copias-leves também gravou já cabe.
+    if (copiasParaACaixa(maxL, maxA)[0] === "miniatura") {
+      const mini = await baixarBytes(db, bucket, caminhoDaMiniatura(caminho), maxBytes);
+      const mm = mini ? mimeDaImagem(mini) : null;
+      const dm = mini ? dimensoesDoCabecalho(mini) : null;
+      if (mini && mm && !(opcoes.copiaSoEmPng && mm !== "image/png") && cabeNaCaixa(dm, maxL, maxA, folga)) {
+        return { cabe: true, bytes: mini, mime: mm, largura: dm!.largura, altura: dm!.altura, origem: "miniatura" };
+      }
+    }
     const copia = await baixarBytes(db, bucket, caminhoDaMedia(caminho), maxBytes);
     const mc = copia ? mimeDaImagem(copia) : null;
     const dc = copia ? dimensoesDoCabecalho(copia) : null;

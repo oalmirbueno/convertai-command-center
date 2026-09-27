@@ -527,6 +527,27 @@ export function datasDasPautas(mes: string, hoje: string, n: number): string[] {
   return saida;
 }
 
+const mesSeguinte = (mes: string) => {
+  const [a, m] = mes.split("-").map(Number);
+  return `${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
+};
+
+/**
+ * Datas para n pautas a partir do mês; o que não cabe nos dias úteis que
+ * sobram passa para o mês seguinte (até 3 meses à frente). Anti-bug 26/09:
+ * no fim do mês as pautas extras caíam todas no último dia útil, ou a
+ * proposta sumia calada quando o mês já não tinha dia útil.
+ */
+export function datasComMesSeguinte(mes: string, hoje: string, n: number): string[] {
+  let datas = datasDasPautas(mes, hoje, n);
+  let atual = mes;
+  for (let volta = 0; datas.length < n && volta < 3; volta++) {
+    atual = mesSeguinte(atual);
+    datas = datas.concat(datasDasPautas(atual, hoje, n - datas.length));
+  }
+  return datas;
+}
+
 // ------------------------------------------------------------------ ações do agente do perfil
 
 /** Post do perfil como alvo do agente (apelido p1..pN). */

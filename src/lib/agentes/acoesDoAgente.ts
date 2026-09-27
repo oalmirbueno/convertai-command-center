@@ -50,6 +50,8 @@ export interface AcaoDoAgente {
   sem_desfazer?: boolean;
   custo_estimado_usd?: number | null;
   executada_em?: string | null;
+  /** Feita na hora, sem clique (pedido claro, sem custo e com Desfazer). */
+  executada_direto?: boolean;
   resultados?: ResultadoDoItem[];
   descartada_em?: string | null;
   desfeita_em?: string | null;

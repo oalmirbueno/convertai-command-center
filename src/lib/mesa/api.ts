@@ -102,6 +102,8 @@ export function mensagemDoCodigo(codigo: string, detalhes: Record<string, unknow
       return "Faltou algum dado ou algum valor está fora do esperado. Confira o formulário.";
     case "servico_indisponivel":
       return `O ${funcao ? NOMES_DAS_FUNCOES[funcao] : "serviço"} ainda não respondeu. Pode estar sendo publicado agora; tente de novo em instantes.`;
+    case "funcao_interrompida":
+      return "A função parou no meio (limite do servidor). Nada foi cobrado se não houve resultado; tente de novo ou avise.";
     case "acao_desconhecida":
       return `O ${funcao ? NOMES_DAS_FUNCOES[funcao] : "serviço"} ainda não conhece esta ação. Ela entra no ar em breve.`;
     case "falha_interna":
@@ -129,9 +131,20 @@ async function erroDaFuncao(error: any, funcao: FuncaoDaMesa): Promise<ErroDaMes
     const codigo = String(corpo.error);
     return new ErroDaMesa(codigo, mensagemDoCodigo(codigo, corpo, funcao), corpo);
   }
-  // Sem corpo: função não publicada (404), relé fora do ar ou rede.
-  if (status === 404 || error?.name === "FunctionsFetchError" || error?.name === "FunctionsRelayError" || !ctx) {
+  const nome = String(error?.name || "");
+  // Sem corpo: função não publicada (404), relé fora do ar ou rede antes de responder.
+  if (status === 404 || nome === "FunctionsFetchError" || nome === "FunctionsRelayError") {
     return new ErroDaMesa("servico_indisponivel", mensagemDoCodigo("servico_indisponivel", {}, funcao));
+  }
+  // A função começou a responder e parou no meio: resposta com fôlego cortada
+  // (o 200 já tinha saído e a leitura do corpo falhou) ou limite do servidor
+  // antes de responder (546 WORKER_LIMIT por CPU/memória, 504 por tempo).
+  const cortada = !ctx;
+  const limite = status === 546 || status === 504 || (corpo !== null && corpo.code === "WORKER_LIMIT");
+  if (cortada || limite) {
+    const detalhes = { funcao, causa: nome || "desconhecida", status_http: status || null, codigo_do_servidor: corpo && typeof corpo.code === "string" ? corpo.code : null };
+    console.warn("[mesa] funcao_interrompida", detalhes);
+    return new ErroDaMesa("funcao_interrompida", mensagemDoCodigo("funcao_interrompida", {}, funcao), detalhes);
   }
   return new ErroDaMesa("falha_interna", mensagemDoCodigo("falha_interna", {}, funcao));
 }

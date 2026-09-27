@@ -12,6 +12,8 @@
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
+// Frente AG (26/09): o coach sabe onde cada coisa fica no painel (bloco mínimo, sem inflar o custo).
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
@@ -281,7 +283,7 @@ Deno.serve(async (req) => {
         });
         const { response, provider } = await requestAiChatCompletion(providers, {
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: `${SYSTEM_PROMPT}${String.fromCharCode(10, 10)}${blocoDoMapaDoPainel("ciclo", { nivel: "minimo" })}` },
             { role: "user", content: `FATOS DA SEMANA (checklist real):\n${facts}` },
           ],
           temperature: 0.4,

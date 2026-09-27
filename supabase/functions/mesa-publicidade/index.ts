@@ -49,10 +49,16 @@ import {
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
+  executarDireto,
   type ItemDaAcaoDoAgente,
+  podeExecutarDireto,
   type ResultadoDoItem,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
+// Frente AG (26/09): mapa do painel, contexto do cliente com cache e "ele já vai fazendo".
+import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import {
   conhecimentoPublicidade,
   RECEITAS_DE_PUBLICIDADE,
@@ -93,9 +99,14 @@ import {
 import {
   blocoDasAcoesDaPublicidade,
   ESQUEMA_DAS_ACOES_DA_PUBLICIDADE,
+  lerEdicaoDoBriefing,
   normalizarAcoesDaPublicidade,
   pedeAcaoNaPublicidade,
+  REGRAS_DA_PUBLICIDADE,
 } from "./acoes-da-publicidade.ts";
+
+/** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
+const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -909,6 +920,7 @@ function sistemaDoAgente(c: CampanhaDePublicidade | null, comAcoes: boolean): st
   const NL = String.fromCharCode(10);
   return [
     SISTEMA_DO_AGENTE,
+    `${NL}${blocoDoMapaDoPainel("publicidade")}`,
     c ? `${NL}CAMPANHA ABERTA (dados reais):${NL}${resumoDaCampanhaParaOAgente(c)}` : `${NL}Nenhuma campanha aberta: oriente a escolher o produto e abrir uma.`,
     comAcoes && c ? blocoDasAcoesDaPublicidade(c) : `${NL}- acoes: sempre null nesta conversa (não há campanha salva ou o pedido não é de ação).`,
     `${NL}Responda só com o JSON pedido (resposta e acoes).`,
@@ -933,13 +945,17 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const historico = ((hist || []) as Linha[]).reverse().filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 4000) }));
   const comAcoes = !!(c && c.id) && pedeAcaoNaPublicidade(mensagem);
-  const modelo = await modeloDeTexto(corpo.modelo_id);
+  const [modelo, contextoDoCliente] = await Promise.all([
+    modeloDeTexto(corpo.modelo_id),
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"]).catch(() => ""),
+  ]);
   const saida = await chamarTexto({
     clientId,
     tarefa: "conversa",
     agente: AGENTE_DIRETOR,
     modeloId: modelo.id,
-    sistema: sistemaDoAgente(c, comAcoes),
+    // Frente AG: cérebro e dossiê do cliente (cache curto) no fim do sistema.
+    sistema: sistemaDoAgente(c, comAcoes) + (contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente)}` : ""),
     mensagens: [...historico, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_DO_AGENTE,
     maxTokensSaida: 4_000,
@@ -949,7 +965,21 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
-  const acao: AcaoDoAgente | null = comAcoes && c ? normalizarAcoesDaPublicidade(r.acoes, c) : null;
+  let acao: AcaoDoAgente | null = comAcoes && c ? normalizarAcoesDaPublicidade(r.acoes, c) : null;
+  // "Ele já vai fazendo" (regra 6): briefing e nome, sem custo e com Desfazer, vão direto quando o pedido é ordem clara.
+  if (acao && c && c.id && podeExecutarDireto(acao, REGRAS_DA_PUBLICIDADE, { pedidoClaro: true }).direto) {
+    const ordem = await ehOrdemClara(mensagem, { agente: "diretor de campanha da Mesa Publicidade", resumo: acao.resumo });
+    if (ordem.clara) {
+      const campanhaId = c.id;
+      acao = await executarDireto(acao, (item) => executarItem(ch, campanhaId, item), { userId: ch.userId });
+      await auditLog({
+        correlationId: crypto.randomUUID(), toolName: "publicidade_acao_direta", origin: "mesa:mesa-publicidade",
+        keyId: `mesa:mesa-publicidade:${ch.userId}`, scopes: ["files:write"],
+        input: { client_id: clientId, campanha_id: campanhaId, operacoes: acao.itens.map((i) => i.operacao), fonte: ordem.fonte },
+        success: !(acao.resultados || []).some((x) => !x.ok), statusCode: 200, durationMs: 0, resultRef: acao.id,
+      });
+    }
+  }
   const base = Date.now();
   const { data: gravadas } = await servico().from("agente_mensagens").insert([
     { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base).toISOString(), papel: "usuario", conteudo: mensagem, anexos: [] },
@@ -961,6 +991,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     mensagem_id: mensagemId ? String(mensagemId.id) : null,
     resposta,
     acao: mensagemId ? acao : null,
+    ir_para: destinoNaResposta(resposta, clientId),
+    campanha: acao && acao.executada_em && c && c.id ? await lerCampanha(ch, c.id).catch(() => null) : undefined,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
   });
@@ -994,6 +1026,28 @@ async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDo
     if (e.c.territorio_id !== item.alvo_id) throw new ErroDaAcao(409, "territorio_nao_aprovado", "Este território não é o aprovado.");
     const r = await pedirTomadas(ch, e, {});
     return { aviso: r.ja_pedido ? "O ensaio já existia na Mesa Foto." : `Custo: US$ ${Number(r.custo_usd || 0).toFixed(4)}.` };
+  }
+  // Frente AG: briefing, nome e território (sem custo). O briefing volta pelo Desfazer (versão nova com o de antes).
+  if (item.operacao === "editar_briefing" || item.operacao === "renomear_campanha") {
+    const antes = { briefing: e.c.briefing, nome: e.c.nome };
+    let briefing = e.c.briefing;
+    let nome = e.c.nome;
+    if (item.operacao === "editar_briefing") {
+      const ed = lerEdicaoDoBriefing(item.para);
+      if (!ed) throw new ErroDaAcao(400, "campo_invalido", "Campo do briefing desconhecido.");
+      const bruto = JSON.parse(JSON.stringify(e.c.briefing)) as Record<string, unknown>;
+      if (ed.campo === "oferta") bruto.oferta = { texto: ed.valor, fonte: "", status: "hipotese" };
+      else bruto[ed.campo] = ed.valor;
+      briefing = normalizarBriefing(bruto);
+    } else {
+      nome = limpo(item.para, 120) || e.c.nome;
+    }
+    await briefingSalvar(ch, { campanha_id: campanhaId, briefing, nome });
+    return { desfazer: { briefing_antes: antes.briefing, nome_antes: antes.nome } };
+  }
+  if (item.operacao === "aprovar_territorio") {
+    await territorioAprovar(ch, { campanha_id: campanhaId, territorio_id: item.alvo_id });
+    return;
   }
   const revisao = e.c.revisoes.find((r) => r.id === item.alvo_id);
   if (!revisao) throw new ErroDaAcao(404, "foto_inexistente", "Foto não encontrada na revisão desta campanha.");
@@ -1037,6 +1091,11 @@ async function desfazerAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>
   if (!ehUuid(campanhaId)) throw new ErroHttp(409, "sem_campanha", "Esta ação não está ligada a uma campanha salva.");
   const c = await lerCampanha(ch, campanhaId);
   const r = await desfazerAcaoGuardada(guardada, async (x: ResultadoDoItem) => {
+    // Frente AG: briefing e nome voltam como estavam (versão nova do briefing, o histórico fica).
+    if (x.desfazer && x.desfazer.briefing_antes) {
+      await briefingSalvar(ch, { campanha_id: campanhaId, briefing: x.desfazer.briefing_antes, nome: String(x.desfazer.nome_antes || "") });
+      return;
+    }
     const ids = x.desfazer && Array.isArray(x.desfazer.encaminhamento_ids) ? (x.desfazer.encaminhamento_ids as unknown[]).map(String) : [];
     if (!ids.length) throw new Error("Sem registro para desfazer.");
     await apagarEncaminhamentos(c, ids);

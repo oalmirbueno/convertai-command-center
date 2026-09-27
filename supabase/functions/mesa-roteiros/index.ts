@@ -100,10 +100,22 @@ import { gerarPdfDeRoteiros, type ItemDoPdf, nomeDoArquivoPdf } from "../_shared
 import {
   blocoDasAcoesDosRoteiros,
   ESQUEMA_DAS_ACOES_DOS_ROTEIROS,
+  janelaDasPecas,
+  MAX_PECAS_NA_JANELA,
+  MAX_PECAS_NA_JANELA_ESTENDIDA,
   normalizarAcoesDosRoteiros,
   type PecaParaAcao,
   type RoteiroParaAcao,
 } from "./acoes-dos-roteiros.ts";
+// Frente AG (26/09): editar sem IA, aprovar e marcar gravado; mapa do painel; contexto do cliente; "ele já vai fazendo".
+import { conteudoEditado, lerEdicaoDeTexto, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
+import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { ehOrdemClara } from "../_shared/ordem-clara.ts";
+import { executarDireto, podeExecutarDireto } from "../_shared/acoes-do-agente.ts";
+
+/** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
+const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -972,15 +984,17 @@ async function modeloRevogar(ch: Chamador, corpo: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ agente da mesa
 
-async function listasParaOAgente(clientId: string): Promise<{ roteiros: RoteiroParaAcao[]; pecas: PecaParaAcao[] }> {
-  const hoje = new Date();
-  const de = new Date(hoje.getTime() - 7 * 86400000).toISOString().slice(0, 10);
-  const ate = new Date(hoje.getTime() + 40 * 86400000).toISOString().slice(0, 10);
+async function listasParaOAgente(
+  clientId: string,
+  janela: { de: string; ate: string; estendida: boolean },
+): Promise<{ roteiros: RoteiroParaAcao[]; pecas: PecaParaAcao[]; totalDePecas: number }> {
+  // Janela do pedido (acoes-dos-roteiros.ts, janelaDasPecas): meses e datas citados esticam a de 7 dias atrás a 40 à frente.
+  const { de, ate } = janela;
   const [rot, tar] = await Promise.all([
     servico().from(TABELA).select("id, task_id, titulo, tipo, status, versao_atual, arquivado_em, atualizado_em").eq("client_id", clientId).order("atualizado_em", { ascending: false }).limit(60),
     servico()
       .from("tasks")
-      .select("id, title, due_date, delivery_type, projects!inner(client_id, deleted_at)")
+      .select("id, title, due_date, delivery_type, projects!inner(client_id, deleted_at)", { count: "exact" })
       .eq("projects.client_id", clientId)
       .is("projects.deleted_at", null)
       .is("deleted_at", null)
@@ -988,7 +1002,7 @@ async function listasParaOAgente(clientId: string): Promise<{ roteiros: RoteiroP
       .gte("due_date", de)
       .lt("due_date", ate)
       .order("due_date", { ascending: true })
-      .limit(40),
+      .limit(janela.estendida ? MAX_PECAS_NA_JANELA_ESTENDIDA : MAX_PECAS_NA_JANELA),
   ]);
   const linhas = ((rot.error ? [] : rot.data) as { id: string; task_id: string | null; titulo: string; tipo: string; status: string; versao_atual: number; arquivado_em: string | null }[] | null) ?? [];
   const tarefas = ((tar.data as { id: string; title: string; due_date: string | null; delivery_type: string }[] | null) ?? []);
@@ -1010,7 +1024,7 @@ async function listasParaOAgente(clientId: string): Promise<{ roteiros: RoteiroP
     if (l.task_id && !l.arquivado_em) vivoPorTarefa[l.task_id] = l.status as StatusDoRoteiro;
   });
   const pecas: PecaParaAcao[] = tarefas.map((t) => ({ id: t.id, titulo: t.title, formato: t.delivery_type, data: t.due_date, roteiro_status: vivoPorTarefa[t.id] || null }));
-  return { roteiros, pecas };
+  return { roteiros, pecas, totalDePecas: typeof tar.count === "number" ? tar.count : pecas.length };
 }
 
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
@@ -1038,12 +1052,16 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
   const aberto = corpo.roteiro_id ? await lerLinha(ch, corpo.roteiro_id).catch(() => null) : null;
+  const hojeDoPedido = new Date().toISOString().slice(0, 10);
+  const janela = janelaDasPecas(mensagem, hojeDoPedido);
   const [modelo, historico, listas, cliente] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
-    listasParaOAgente(clientId),
+    listasParaOAgente(clientId, janela),
     nomeDoCliente(clientId),
   ]);
+  // Frente AG: cérebro e dossiê do cliente (cache curto; sem leitura, segue vazio).
+  const contextoDoCliente = await CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"]).catch(() => "");
   const hoje = new Date().toISOString().slice(0, 10);
   const atual = aberto ? versaoPorNumero(aberto.versoes, aberto.versao_atual) : null;
   const dados = {
@@ -1064,7 +1082,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_AGENTE}\n\n${CONHECIMENTO_DO_ROTEIRO}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; "semana" = próximos 7 dias):\n${JSON.stringify(dados)}\n${blocoDasAcoesDosRoteiros(roteirosOrdenados, listas.pecas)}`,
+    sistema: `${SISTEMA_AGENTE}\n\n${CONHECIMENTO_DO_ROTEIRO}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; "semana" = próximos 7 dias):\n${JSON.stringify(dados)}\n${blocoDasAcoesDosRoteiros(roteirosOrdenados, listas.pecas, janela, listas.totalDePecas)}\n\n${blocoDoMapaDoPainel("roteiros")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, cliente)}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_AGENTE,
     maxTokensSaida: 3_000,
@@ -1074,7 +1092,21 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const j = (saida.json || {}) as Record<string, unknown>;
   const resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
-  const acao = normalizarAcoesDosRoteiros(j.acoes, roteirosOrdenados, listas.pecas, clientId, custoDaGeracao(modelo));
+  let acao = normalizarAcoesDosRoteiros(j.acoes, roteirosOrdenados, listas.pecas, clientId, custoDaGeracao(modelo));
+  // "Ele já vai fazendo" (regra 6): editar texto, aprovar e marcar gravado não custam e têm Desfazer; pedido claro vai direto.
+  if (acao && podeExecutarDireto(acao, regrasDeEdicao(), { pedidoClaro: true }).direto) {
+    const ordem = await ehOrdemClara(mensagem, { agente: "roteirista da Mesa Roteiros", resumo: acao.resumo });
+    if (ordem.clara) {
+      acao = await executarDireto(acao, async (item) => {
+        const feito = await executarItem(ch, clientId, item);
+        return { desfazer: feito.desfazer, aviso: feito.aviso };
+      }, { userId: ch.userId });
+      await auditLog({
+        correlationId: crypto.randomUUID(), toolName: "roteiros_acao_direta", origin: "mesa:mesa-roteiros", keyId: `mesa:mesa-roteiros:${ch.userId}`, scopes: ["mesa:write"],
+        input: { client_id: clientId, operacoes: acao.itens.map((i) => i.operacao), fonte: ordem.fonte }, success: !(acao.resultados || []).some((x) => !x.ok), statusCode: 200, durationMs: 0, resultRef: acao.id,
+      });
+    }
+  }
   const anexos = acao ? [acao] : [];
   const base = Date.now();
   const { data: gravadas } = await servico()
@@ -1085,7 +1117,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     ])
     .select("id, papel");
   const mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta, sugestoes, anexos, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada });
+  return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta, sugestoes, anexos, ir_para: destinoNaResposta(resposta, clientId), custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada });
 }
 
 /** agente_historico { client_id } -> { conversa_id, mensagens }: a última conversa, sem IA. */
@@ -1106,7 +1138,29 @@ async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 /** Executa um item confirmado. Devolve o que o Desfazer precisa. */
+/** Frente AG: editar texto, aprovar e marcar gravado (sem IA, sem custo). Devolve o Desfazer. */
+async function executarEdicao(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer: Record<string, unknown>; aviso?: string; custo: number }> {
+  const linha = await lerLinha(ch, item.alvo_id);
+  if (linha.client_id !== clientId) throw new Error("Roteiro não encontrado neste cliente.");
+  if (item.operacao === "editar_texto") {
+    const bloqueio = motivoParaNaoEditar(linha.status, !!linha.arquivado_em);
+    if (bloqueio) throw new Error(bloqueio);
+    const e = lerEdicaoDeTexto(item.para);
+    const atual = versaoPorNumero(linha.versoes, linha.versao_atual);
+    if (!e || !atual) throw new Error("Não deu para ler o que mudar.");
+    const conteudo = conteudoEditado(atual.conteudo, e.campo, e.texto);
+    if (!mudouDe(atual, conteudo)) return { desfazer: { tipo: "nada", roteiro_id: linha.id }, aviso: "já estava assim", custo: 0 };
+    const r = novaVersao(linha.versoes, conteudo, { origem: "agente", nota: `Agente: ${e.campo} trocado a pedido da equipe`, criado_por: ch.userId, aprovada: linha.versao_aprovada, aviso: atual.aviso });
+    await atualizarLinha(linha.id, { versoes: r.versoes, versao_atual: r.versao.numero, status: statusDepoisDeEditar(linha.status), titulo: r.versao.conteudo.titulo }, { coluna: "versao_atual", valor: linha.versao_atual });
+    return { desfazer: { tipo: "voltar_versao", roteiro_id: linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, custo: 0 };
+  }
+  const novo = item.operacao === "aprovar_roteiro" ? "aprovado" : "gravado";
+  await statusMudar(ch, { roteiro_id: linha.id, status: novo });
+  return { desfazer: { tipo: "status", roteiro_id: linha.id, status_anterior: linha.status, status_novo: novo }, custo: 0 };
+}
+
 async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer: Record<string, unknown>; aviso?: string; custo: number }> {
+  if (OPERACOES_DE_EDICAO.indexOf(item.operacao) >= 0) return await executarEdicao(ch, clientId, item);
   if (item.operacao === "gerar_roteiro") {
     const tipo = ehTipoDeRoteiro(item.para) ? item.para : "fala_camera";
     const { data: vivo } = await servico().from(TABELA).select(CAMPOS).eq("task_id", item.alvo_id).is("arquivado_em", null).maybeSingle();
@@ -1171,6 +1225,15 @@ async function reverterItem(clientId: string, r: ResultadoDoItem) {
     if (linha.versao_atual !== Number(d.versao_nova)) throw new Error("O roteiro mudou depois desta ação. Restaure a versão pela Revisão.");
     const status = STATUS_DO_ROTEIRO.indexOf(d.status_anterior as StatusDoRoteiro) >= 0 ? d.status_anterior : linha.status;
     await atualizarLinha(id, { versao_atual: Number(d.versao_anterior), status }, { coluna: "versao_atual", valor: linha.versao_atual });
+    return;
+  }
+  if (d.tipo === "nada") return;
+  // Frente AG: aprovar e marcar gravado voltam ao status de antes (aprovado volta para rascunho; gravado para aprovado).
+  if (d.tipo === "status") {
+    const anterior = String(d.status_anterior || "") as StatusDoRoteiro;
+    if (linha.status !== d.status_novo) throw new Error("O roteiro mudou depois desta ação. Ajuste pela Revisão.");
+    if (STATUS_DO_ROTEIRO.indexOf(anterior) < 0 || motivoParaNaoMudar(linha.status, anterior, !!linha.arquivado_em)) throw new Error("Não dá para voltar este status.");
+    await atualizarLinha(id, { status: anterior }, { coluna: "versao_atual", valor: linha.versao_atual });
     return;
   }
   throw new Error("Sem o que desfazer.");

@@ -3,7 +3,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Sparkles, X, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, Brain, MessageSquare } from "lucide-react";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
-import type { AcaoDoAgente, PedidoDaAcao, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
+import TextoDoAgente, { BotaoDaArea } from "@/components/agentes/TextoDoAgente";
+import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
+import { chamarAcaoDoLancador, destinoDoAgente, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
 import { botao, campoTexto, juntar } from "@/components/sistema/estilos";
 import { AtalhosDoAgente, SeletorDeCliente, SeletorDeServico, nomeDoCliente } from "@/components/admin/agente/SeletoresDoAgente";
 import {
@@ -141,6 +143,16 @@ interface RespostaDaConversa {
   passos: string[];
   carregando: boolean;
   aviso?: string | null;
+  /** Área do painel que a resposta cita (botão Abrir). */
+  destino?: DestinoDoAgente | null;
+}
+
+/** Ação que o Aceleriq fez (ou propôs) pelo servidor, guardada na conversa do cliente. */
+interface AcaoDoServidor {
+  mensagemId: string;
+  acao: AcaoDoAgente;
+  pedido: string;
+  resposta: string;
 }
 
 /** Classes do painel: gaveta em tela cheia no celular, coluna fixa à direita no computador (abaixo da barra do topo). */
@@ -173,6 +185,9 @@ export default function VoiceAssistant({
   const [respostas, setRespostas] = useState<RespostaDaConversa[]>([]);
   // Proposta aberta no cartão de confirmação (padrão CartaoDeAcao).
   const [acaoAberta, setAcaoAberta] = useState<AcaoDoAgente | null>(null);
+  // Frente AG: o que o Aceleriq já fez ou propôs pelo servidor ("eu peço, ele já vai fazendo") e a área que ele indicou.
+  const [acoesDoServidor, setAcoesDoServidor] = useState<AcaoDoServidor[]>([]);
+  const [destino, setDestino] = useState<DestinoDoAgente | null>(null);
   // Cliente vindo da tela (?client=): escolhe sozinho, mas sem disparar a IA.
   const semAnaliseAutomaticaRef = useRef(false);
   const ultimoClienteDaTelaRef = useRef<string | null>(null);
@@ -442,6 +457,8 @@ export default function VoiceAssistant({
           // Pré-contexto escolhido no topo (cliente + serviço + tela): o
           // servidor junta o dossiê e a memória resumidos do cliente.
           ...preContextoAtual(),
+          // Só o pedido explícito da pessoa faz ações; a análise automática nunca faz.
+          agir: !opts?.silent,
           // Se o componente já carregou docs do sistema, sinaliza pro edge skip recarregar.
           skipSystemContractAutoLoad: systemDocs.length > 0,
           clients: clientList.map((c) => ({
@@ -454,7 +471,26 @@ export default function VoiceAssistant({
       const intent = (data as any).intent || { kind: "unknown", raw: text };
       const currentParsed = parsedRef.current;
       const protectedDraft = phaseRef.current !== "input" && currentParsed?.kind === "create_project";
-      setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
+      // Frente AG: ação feita (ou proposta) no servidor e área indicada. A intenção "acao" não abre o fluxo antigo.
+      const anexo = (data as any).acao ? acaoDoAnexo((data as any).acao) : null;
+      const mensagemDaAcao = (data as any).mensagem_id ? String((data as any).mensagem_id) : "";
+      const destinoNovo = destinoDoAgente((data as any).ir_para);
+      if (anexo && mensagemDaAcao) {
+        setAcoesDoServidor((l) => [...l.slice(-5), { mensagemId: mensagemDaAcao, acao: anexo, pedido: text, resposta: String((data as any).resposta || "") }]);
+      }
+      setDestino(destinoNovo && !destinoNovo.direto ? destinoNovo : null);
+      if (destinoNovo && destinoNovo.direto) {
+        navigate(destinoNovo.link);
+        appendLog({ kind: "ok", text: `Abri ${destinoNovo.nome}.` });
+      }
+      if ((anexo && mensagemDaAcao) || (destinoNovo && destinoNovo.direto)) {
+        // O pedido virou ação: o campo limpa para não repetir na próxima análise.
+        setFinalText("");
+        setInterim("");
+        lastSttRef.current = "";
+      }
+      if (intent.kind === "acao") setParsed(protectedDraft ? currentParsed : null);
+      else setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
       setAiNarrative((prev) => (data as any).narrative || (protectedDraft ? prev : null));
       setAiPlan((prev) => (data as any).plan || (protectedDraft ? prev : null));
       setAiClientSummary((prev) => (data as any).clientSummary || (protectedDraft ? prev : null));
@@ -1148,13 +1184,14 @@ export default function VoiceAssistant({
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      const d = (data || {}) as { resposta?: string; passos?: unknown[]; _degraded?: boolean };
+      const d = (data || {}) as { resposta?: string; passos?: unknown[]; _degraded?: boolean; ir_para?: unknown };
       setRespostas((r) => r.map((x) => (x.id === id ? {
         ...x,
         carregando: false,
         resposta: String(d.resposta || ""),
         passos: Array.isArray(d.passos) ? d.passos.map(String) : [],
         aviso: d._degraded ? "Sem IA agora: mostrei o que o painel tem." : null,
+        destino: destinoDoAgente(d.ir_para),
       } : x)));
     } catch (err: any) {
       setRespostas((r) => r.map((x) => (x.id === id ? { ...x, carregando: false, aviso: `Não consegui responder: ${err?.message || "tente de novo"}` } : x)));
@@ -1294,7 +1331,7 @@ export default function VoiceAssistant({
             : phase === "confirm"
               ? "Confirmação final."
               : "Voz e IA com o contexto do cliente.";
-  const conversaVazia = phase === "input" && !lastAction && !respostas.length && !aiNarrative && !parsed && !log.length
+  const conversaVazia = phase === "input" && !lastAction && !respostas.length && !acoesDoServidor.length && !destino && !aiNarrative && !parsed && !log.length
     && !files.length && !systemDocs.length && !systemDocsLoading && !fileReading;
 
   return (
@@ -1356,7 +1393,7 @@ export default function VoiceAssistant({
                       <div className="rounded-lg bg-muted/50 p-3 text-[12.5px] leading-5 text-muted-foreground">
                         <p className="font-medium text-foreground">Diga o que precisa.</p>
                         <p className="mt-1">
-                          Escolha o cliente e o serviço acima e fale ou escreva. Ex.: "Criar projeto de tráfego para Mirante com prazo de 30 dias". Arraste contratos para cá e eu leio.
+                          Escolha o cliente e o serviço acima e fale ou escreva. Ex.: "Criar projeto de tráfego para Mirante com prazo de 30 dias", "Cria a tarefa revisar as artes para sexta" ou "Abre a Mesa Ads". Tarefa, lembrete e nota eu faço na hora, e dá para desfazer. Arraste contratos para cá e eu leio.
                         </p>
                       </div>
                     )}
@@ -1392,18 +1429,43 @@ export default function VoiceAssistant({
                             <span className="inline-flex items-center text-muted-foreground"><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo o que o painel sabe…</span>
                           ) : (
                             <>
-                              {r.resposta && <p className="whitespace-pre-line [overflow-wrap:anywhere]">{r.resposta}</p>}
+                              {r.resposta && <TextoDoAgente texto={r.resposta} clientId={answers.client_id || null} />}
                               {r.passos.length > 0 && (
                                 <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
                                   {r.passos.map((p, i) => <li key={i} className="[overflow-wrap:anywhere]">{p}</li>)}
                                 </ol>
                               )}
                               {r.aviso && <p className="mt-1 text-[11.5px] text-muted-foreground">{r.aviso}</p>}
+                              {r.destino && <BotaoDaArea destino={r.destino} onAbrir={(link) => navigate(link)} className="mt-1.5" />}
                             </>
                           )}
                         </div>
                       </div>
                     ))}
+
+                    {acoesDoServidor.map((a) => (
+                      <div key={a.acao.id} className="space-y-1.5" data-acao-do-aceleriq="">
+                        {a.pedido && (
+                          <div className="flex justify-end">
+                            <p className="max-w-[85%] rounded-lg bg-muted px-3 py-1.5 text-[12.5px] text-foreground [overflow-wrap:anywhere]">{a.pedido}</p>
+                          </div>
+                        )}
+                        {a.resposta && <TextoDoAgente texto={a.resposta} clientId={answers.client_id || null} className="text-[12.5px] leading-5 text-foreground" />}
+                        <CartaoDeAcao
+                          acao={a.acao}
+                          titulo="O Aceleriq faz"
+                          observacao="Sem custo. Dá para desfazer."
+                          onPedido={(p) => chamarAcaoDoLancador(a.mensagemId, a.acao.id, p)}
+                        />
+                      </div>
+                    ))}
+
+                    {destino && (
+                      <div className="flex min-w-0 flex-wrap items-center" data-destino-do-aceleriq="">
+                        <p className="mr-2 min-w-0 text-[12.5px] text-muted-foreground">Isso é na {destino.nome}.</p>
+                        <BotaoDaArea destino={destino} onAbrir={(link) => { setDestino(null); navigate(link); }} />
+                      </div>
+                    )}
 
                     {aiNarrative && (
                       <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">

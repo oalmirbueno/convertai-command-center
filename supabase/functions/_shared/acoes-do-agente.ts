@@ -16,6 +16,18 @@
  *    arquivo original) recusam o item já na proposta, com o motivo.
  * 5. Quando há reverso, cada item guarda o que precisa para Desfazer.
  *    Apagar é sempre arquivar (lixeira), nunca exclusão definitiva.
+ * 6. "Ele já vai fazendo" (dono, 26/09: "eu peço, ele já vai fazendo"):
+ *    EXECUÇÃO DIRETA. Quando o pedido é uma ordem clara, SEM custo e com
+ *    reverso, o agente executa na hora e o cartão já chega "Feito" com o
+ *    Desfazer (sem clique extra). O que custa (IA, geração, verba) ou não tem
+ *    volta (publicar, enviar ao cliente, reprovar, mexer em conta de anúncio)
+ *    continua com Confirmar e o custo antes. A regra é uma só, em
+ *    podeExecutarDireto: toda operação da proposta marcada `direta` na regra
+ *    (o executor garante o Desfazer), custo zero, sem_desfazer falso, nada
+ *    recusado nem ignorado, até MAX_ITENS_DIRETOS itens e pedido claro (quem
+ *    chama decide: Jev ou a regra da área; na dúvida, Confirmar). Quem executa
+ *    direto usa executarDireto e guarda a proposta já feita na mensagem: o
+ *    Desfazer é o de sempre (desfazer_acao_agente).
  *
  * Sem import de Deno nem de npm: a tela e os testes (vitest) leem o mesmo arquivo.
  */
@@ -47,6 +59,17 @@ export type RegraDaOperacao<A extends Alvo = Alvo> = {
   combina?: boolean;
   /** Prefixos de apelido que a operação aceita (ex.: ["l"] só lâminas). Sem ele, qualquer alvo. */
   alvos?: string[];
+  /**
+   * Pode ir direto (regra 6 do topo): a operação não custa nada e o executor
+   * sempre devolve o Desfazer. Ausente: precisa de Confirmar.
+   */
+  direta?: boolean;
+  /**
+   * A mesma operação pode vir mais de uma vez no mesmo alvo (ex.: criar três
+   * tarefas no mesmo projeto). A repetição ganha apelido próprio (p1.2, p1.3)
+   * para o resultado e o Desfazer de cada uma não se misturarem.
+   */
+  repete?: boolean;
 };
 
 /** O apelido é de um destes prefixos (p1, p2... com p na lista)? */
@@ -98,6 +121,8 @@ export type AcaoDoAgente = {
   custo_estimado_usd?: number | null;
   executada_em?: string | null;
   executada_por?: string | null;
+  /** Feita na hora, sem clique (regra 6: pedido claro, sem custo e com reverso). */
+  executada_direto?: boolean;
   resultados?: ResultadoDoItem[];
   descartada_em?: string | null;
   desfeita_em?: string | null;
@@ -173,6 +198,8 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
   const exclusivos = new Set<string>();
   const usados = new Set<string>();
   const vistos = new Set<string>();
+  const repeticoes = new Map<string, number>();
+  const comValor = new Set<string>();
   const ignorados: string[] = [];
   const recusados: RecusaDoItem[] = [];
   const itens: ItemDaAcaoDoAgente[] = [];
@@ -185,7 +212,8 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
     const regra = Object.prototype.hasOwnProperty.call(regras, operacao) ? regras[operacao] : undefined;
     const alvo = porRef.get(ref);
     const chave = `${operacao}:${ref}`;
-    if (!regra || !alvo || vistos.has(chave) || (regra.combina ? exclusivos.has(ref) : usados.has(ref)) || (regra.alvos && !apelidoDoTipo(alvo.ref, regra.alvos))) {
+    const repetido = vistos.has(chave);
+    if (!regra || !alvo || (repetido && !regra.repete) || (!repetido && (regra.combina ? exclusivos.has(ref) : usados.has(ref))) || (regra.alvos && !apelidoDoTipo(alvo.ref, regra.alvos))) {
       if (ref) ignorados.push(ref);
       continue;
     }
@@ -198,16 +226,30 @@ export function normalizarAcaoDoAgente<A extends Alvo>(
       }
       para = v;
     }
+    // Repetição idêntica (mesma operação, alvo e valor) é engano do modelo: fica de fora.
+    const assinatura = `${chave}|${String(para)}`;
+    if (repetido && comValor.has(assinatura)) {
+      ignorados.push(ref);
+      continue;
+    }
+    comValor.add(assinatura);
     vistos.add(chave);
     usados.add(ref);
     if (!regra.combina) exclusivos.add(ref);
+    // Repetição permitida (regra.repete): apelido próprio (p1.2) para resultado e Desfazer.
+    let refDoItem = alvo.ref;
+    if (repetido) {
+      const n = (repeticoes.get(chave) || 1) + 1;
+      repeticoes.set(chave, n);
+      refDoItem = `${alvo.ref}.${n}`;
+    }
     const motivo = regra.trava ? regra.trava(alvo, para) : null;
     if (motivo) {
-      recusados.push({ ref: alvo.ref, titulo: umaLinha(alvo.titulo || "sem título", 200), operacao, motivo });
+      recusados.push({ ref: refDoItem, titulo: umaLinha(alvo.titulo || "sem título", 200), operacao, motivo });
       continue;
     }
     const item: ItemDaAcaoDoAgente = {
-      ref: alvo.ref,
+      ref: refDoItem,
       alvo_id: alvo.id,
       titulo: umaLinha(alvo.titulo || "sem título", 200),
       detalhe: alvo.detalhe ? umaLinha(alvo.detalhe, 160) : null,
@@ -300,6 +342,61 @@ export async function desfazerItemAItem(
     }
   }
   return { voltaram, falharam };
+}
+
+// ------------------------------------------------------------------ execução direta (regra 6)
+
+/** Acima disto, mesmo sem custo, a lista pede o olho da equipe (Confirmar). */
+export const MAX_ITENS_DIRETOS = 5;
+
+/**
+ * A proposta pode ser feita na hora, sem clique? Só quando TUDO vale:
+ * pedido claro, toda operação `direta` na regra, custo zero, com reverso,
+ * nada recusado nem ignorado e até MAX_ITENS_DIRETOS itens. O motivo diz por
+ * que não (vai para o log e para o teste).
+ */
+export function podeExecutarDireto(
+  acao: Pick<AcaoDoAgente, "itens" | "recusados" | "ignorados" | "custo_estimado_usd" | "sem_desfazer" | "executada_em" | "descartada_em">,
+  regras: Record<string, Pick<RegraDaOperacao, "direta">>,
+  opcoes: { pedidoClaro: boolean; maxItens?: number },
+): { direto: boolean; motivo: string } {
+  const max = opcoes.maxItens ?? MAX_ITENS_DIRETOS;
+  if (acao.executada_em || acao.descartada_em) return { direto: false, motivo: "a proposta já foi resolvida" };
+  if (!opcoes.pedidoClaro) return { direto: false, motivo: "o pedido não é uma ordem clara" };
+  if (!acao.itens.length) return { direto: false, motivo: "nada para fazer" };
+  if (acao.itens.length > max) return { direto: false, motivo: `mais de ${max} itens` };
+  if ((acao.recusados || []).length || (acao.ignorados || []).length) return { direto: false, motivo: "há item recusado ou fora da lista" };
+  if (acao.sem_desfazer) return { direto: false, motivo: "sem Desfazer" };
+  if (typeof acao.custo_estimado_usd === "number" && acao.custo_estimado_usd > 0) return { direto: false, motivo: "tem custo" };
+  for (const i of acao.itens) {
+    const r = Object.prototype.hasOwnProperty.call(regras, i.operacao) ? regras[i.operacao] : undefined;
+    if (!r || r.direta !== true) return { direto: false, motivo: `a operação ${i.operacao} pede Confirmar` };
+  }
+  return { direto: true, motivo: "pedido claro, sem custo e com Desfazer" };
+}
+
+/**
+ * Faz a proposta na hora (regra 6) e devolve o anexo já "feito", para quem
+ * chama guardar na mensagem. Item que falhou volta com o motivo, como no
+ * Confirmar; o que deu certo fica com o Desfazer.
+ */
+export async function executarDireto(
+  acao: AcaoDoAgente,
+  executor: (item: ItemDaAcaoDoAgente, acao: AcaoDoAgente) => Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string } | void>,
+  opcoes: { userId: string; lote?: number },
+): Promise<AcaoDoAgente> {
+  const resultados = await executarItemAItem(acao.itens, (it) => executor(it, acao), opcoes.lote ?? 1);
+  return { ...acao, executada_em: new Date().toISOString(), executada_por: opcoes.userId, executada_direto: true, resultados };
+}
+
+/**
+ * Pedido claro sem o Jev (reserva de _shared/ordem-clara.ts): começa com verbo
+ * de ordem ("crie", "marque", "agende", "troque", "renomeie"...). Na dúvida,
+ * não: o cartão pede Confirmar.
+ */
+export function pareceOrdem(texto: unknown): boolean {
+  const t = String(texto == null ? "" : texto).trim().toLowerCase();
+  return /^(por favor,?\s+)?(cri[ae]|crie|marqu?e|marca|agend[ae]|registr[ae]|anot[ae]|conclu[ai]|finaliz[ae]|mud[ae]|troqu?e|troca|renomei[ae]|coloqu?e|coloca|lembr[ae]|me lembr[ae]|abr[ae]|lev[ae]|v[aá] para|edit[ae]|ajust[ae]|arquiv[ae]|aprov[ae]|mand[ae]|envi[ae]|reprov[ae]|pass[ae] o prazo)\b/.test(t);
 }
 
 export function motivoDoErro(e: unknown): string {

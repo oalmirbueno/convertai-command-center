@@ -18,6 +18,48 @@ import {
   type AiProvider,
 } from "../_shared/ai-provider.ts";
 import { contextoParaAgente, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+// Frente AG (26/09): o Aceleriq conhece o painel inteiro e já vai fazendo (contrato comum das ações).
+import {
+  acaoGuardadaNaMensagem,
+  type AcaoDoAgente,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  executarDireto,
+  podeExecutarDireto,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import {
+  areaPorChave,
+  areaPorPalavras,
+  blocoDoMapaDoPainel,
+  destinoDoPedido,
+  destinoNaResposta,
+  type DestinoNoPainel,
+  lerRoteamento,
+  OPCAO_AQUI,
+  OPCAO_NENHUMA,
+  pedeParaAbrir,
+  perguntasDoRoteador,
+  type Roteamento,
+} from "../_shared/mapa-do-painel.ts";
+import { jevPerguntar } from "../_shared/jev.ts";
+import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { auditLog } from "../_shared/mcp-audit.ts";
+import {
+  AGENTE_DA_CONVERSA_DO_LANCADOR,
+  AGENTE_DO_LANCADOR,
+  alvosDoLancador,
+  type AlvosDoLancador,
+  blocoDasAcoesDoLancador,
+  type DadosDoLancador,
+  executarItemDoLancador,
+  normalizarAcoesDoLancador,
+  pareceOrdem,
+  REF_CONVERSA_DO_LANCADOR,
+  regrasDoLancador,
+  reverterItemDoLancador,
+} from "./acoes-do-lancador.ts";
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -113,6 +155,25 @@ Gere SEMPRE que houver projeto/plan. Regras absolutas:
 - Não cita ferramentas internas, modelos de IA, nem datas técnicas (offsetDays).
 - Não usa markdown nem asteriscos nem cabeçalhos.`;
 
+// Frente AG (26/09): ações no painel e caminho para as outras áreas. Entra no
+// sistema junto do mapa do painel (bloco curto) quando a equipe pede algo.
+const REGRA_DO_LANCADOR = `## Fazer no painel (acoes) e levar a outra área (ir_para)
+- Você conhece o painel inteiro (MAPA DO PAINEL abaixo). Pedido claro e simples do cliente escolhido (criar tarefa num projeto listado, lembrete, nota sobre o cliente, concluir tarefa, mudar prazo): preencha "acoes" com os apelidos das listas e use intent.kind "acao". O painel faz na hora quando é ordem clara e sem custo; a equipe pode desfazer.
+- Projeto novo pelo contrato e etapa continuam em create_project e create_milestone. Tarefa sem projeto listado: create_task (a tela pergunta o projeto).
+- Pedido que é de outra área (anúncio, foto, arte, roteiro, vídeo, agenda de posts, CRM, métricas): preencha "ir_para" com a chave da área do mapa (ex.: "mesa_ads" ou "mesa_ads:conta" com a etapa) e diga em "resposta": "Isso é na <área>. Abro para você?" e o que o agente de lá faz. Pedido para abrir uma tela também vai em ir_para.
+- Financeiro, cofre e equipe: ir_para pode levar até a tela, mas você não mexe.
+- "resposta": uma ou duas frases curtas para a equipe (sem travessão). Sem cliente escolhido e pedido de ação: acoes null e peça para escolher o cliente no topo.
+- Campos novos no JSON: "acoes": { "resumo": string, "itens": [ { "operacao": string, "ref": string, "para": string } ] } | null, "ir_para": string | null, "resposta": string.`;
+
+/** Datas em São Paulo (o prazo "hoje" da equipe). */
+function hojeEmSaoPaulo(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 // Se todos os providers/modelos falharem, devolve unknown sem quebrar a UI.
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 const LOVABLE_COMPAT_MODEL_CHAIN = [
@@ -140,6 +201,14 @@ interface RequestBody {
   // sem intent e sem criar nada. Padrão: interpretar o comando.
   modo?: "interpretar" | "conversa";
   pergunta?: string | null;
+  // Frente AG: pedido explícito da equipe (botão Analisar). Só com ele o
+  // agente propõe e faz ações; a análise automática (silenciosa) nunca faz.
+  agir?: boolean;
+  // Contrato comum: confirmar, cancelar ou desfazer a proposta guardada.
+  acao?: "executar_acao_agente" | "desfazer_acao_agente";
+  mensagem_id?: string;
+  acao_id?: string;
+  descartar?: boolean;
 }
 
 // ─── Pré-contexto (cliente + serviço) ──────────────────────────────────
@@ -334,7 +403,8 @@ async function readableBodyAsText(
 }
 
 async function fetchOneAsText(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any, // tipagem do cliente muda entre versões do supabase-js; a função só lê
   source: DocumentSource,
   name: string,
 ): Promise<string> {
@@ -357,7 +427,8 @@ async function fetchOneAsText(
 // e arquivos da pasta "contratos". A IA precisa ler tudo pra montar projeto
 // completo, sem faltar uma vírgula.
 async function loadAllClientDocs(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any, // tipagem do cliente muda entre versões do supabase-js; a função só lê
   clientId: string,
 ): Promise<LoadedDoc[]> {
   const docs: LoadedDoc[] = [];
@@ -436,6 +507,222 @@ async function loadAllClientDocs(
   return docs;
 }
 
+// ─── Frente AG: ações do lançador, roteamento e conversa guardada ────────
+
+const jsonResposta = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+/** Projetos e tarefas abertos do cliente, com id (os apelidos saem daqui; o modelo nunca vê id). */
+async function lerDadosDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string,
+): Promise<DadosDoLancador> {
+  const [perfil, projetos] = await Promise.all([
+    Promise.resolve(supabase.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle()).catch(() => ({ data: null })),
+    Promise.resolve(
+      supabase.from("projects").select("id, name, status, deadline")
+        .eq("client_id", clientId).is("deleted_at", null).not("status", "in", "(done,completed,cancelled)")
+        .order("created_at", { ascending: false }).limit(12),
+    ).catch(() => ({ data: [] })),
+  ]);
+  const p = (perfil as { data: Record<string, unknown> | null }).data;
+  const lista = (((projetos as { data: unknown }).data || []) as Array<{ id: string; name: string; status: string | null; deadline: string | null }>);
+  let tarefas: DadosDoLancador["tarefas"] = [];
+  if (lista.length) {
+    try {
+      const { data } = await supabase.from("tasks").select("id, title, status, due_date, project_id")
+        .in("project_id", lista.map((x) => x.id)).neq("status", "done").is("deleted_at", null)
+        .order("due_date", { ascending: true, nullsFirst: false }).limit(30);
+      const nomeDoProjeto: Record<string, string> = {};
+      for (const x of lista) nomeDoProjeto[x.id] = x.name;
+      tarefas = ((data || []) as Array<{ id: string; title: string; status: string | null; due_date: string | null; project_id: string }>)
+        .map((t) => ({ ...t, projeto: nomeDoProjeto[t.project_id] || null }));
+    } catch { /* sem tarefas: só projetos */ }
+  }
+  return {
+    cliente: { id: clientId, nome: String((p && (p.company_name || p.full_name)) || "Cliente") },
+    projetos: lista,
+    tarefas,
+  };
+}
+
+const AQUI_DO_LANCADOR = "o próprio Aceleriq faz: criar, concluir ou mudar prazo de tarefa, lembrete, nota sobre o cliente, projeto a partir do contrato, resumo e próximos passos do cliente";
+
+/** Onde o pedido se resolve e se é ordem clara (Jev). Falha do Jev: null, e quem chama usa a reserva sem IA. */
+async function rotearComJev(pedido: string, cliente: string | null, tela: string): Promise<Roteamento | null> {
+  try {
+    const r = await jevPerguntar(
+      { state: { pedido: pedido.slice(0, 1500), agente: "Aceleriq, agente de operações do lançador", cliente: cliente || "nenhum escolhido", tela: tela || "/" }, questions: perguntasDoRoteador(AQUI_DO_LANCADOR) },
+      { timeoutMs: 8_000 },
+    );
+    return lerRoteamento(r.answers);
+  } catch (e) {
+    console.warn(`[assistente] roteamento sem Jev: ${e instanceof Error ? e.message : "falha"}`);
+    return null;
+  }
+}
+
+/** Conversa do lançador com o cliente (uma por cliente, referência própria: não se mistura com as mesas). */
+async function conversaDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase.from("agente_conversas").select("id")
+    .eq("client_id", clientId).eq("agente", AGENTE_DA_CONVERSA_DO_LANCADOR).eq("referencia_tipo", REF_CONVERSA_DO_LANCADOR)
+    .order("criado_em", { ascending: false }).limit(1);
+  const achada = ((data as { id: string }[] | null) ?? [])[0];
+  if (achada) return achada.id;
+  const { data: nova, error } = await supabase.from("agente_conversas")
+    .insert({ client_id: clientId, agente: AGENTE_DA_CONVERSA_DO_LANCADOR, referencia_tipo: REF_CONVERSA_DO_LANCADOR, referencia_id: null, criado_por: userId })
+    .select("id").single();
+  if (error || !nova) return null;
+  return (nova as { id: string }).id;
+}
+
+/** Dependências do executor: a nota vai pelo cérebro do cliente (sem duplicar). */
+function dependenciasDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string,
+  userId: string,
+) {
+  return {
+    userId,
+    gravarNota: async (texto: string) => {
+      const g = await gravarNoCerebro(supabase, { client_id: clientId, area: "geral", categoria: "aprendizado", texto, motivo: "anotado pelo Aceleriq do lançador", fonte: "lancador", criado_por: userId });
+      return { id: g.id, situacao: g.situacao, reforcos: g.reforcos, substituidos: g.substituidos, erro: g.erro };
+    },
+  };
+}
+
+type ResultadoDasAcoes = {
+  acao: AcaoDoAgente | null;
+  mensagemId: string | null;
+  destino: (DestinoNoPainel & { direto: boolean }) | null;
+  direto: { direto: boolean; motivo: string } | null;
+};
+
+/**
+ * Depois da resposta do modelo: lê as ações (apelidos), decide se vão direto
+ * (regra 6 do contrato), acha o destino no mapa e guarda tudo na conversa do
+ * cliente (a proposta mora na mensagem, como nas mesas).
+ */
+async function tratarAcoesDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  o: {
+    parsed: Record<string, unknown>;
+    texto: string;
+    clientId: string | null;
+    userId: string;
+    alvos: AlvosDoLancador | null;
+    rota: Roteamento | null;
+  },
+): Promise<ResultadoDasAcoes> {
+  const hoje = hojeEmSaoPaulo();
+  const { parsed, texto, clientId, userId, alvos, rota } = o;
+  let acao = clientId && alvos ? normalizarAcoesDoLancador(parsed.acoes, alvos, { clientId, hoje }) : null;
+  // Destino: o que o modelo pediu; senão, o Jev (área do mapa com certeza); sem Jev, as palavras do pedido.
+  let destino: DestinoNoPainel | null = destinoDoPedido(parsed.ir_para, clientId);
+  const kind = String((parsed.intent as { kind?: unknown } | undefined)?.kind || "unknown");
+  const semOutraSaida = !acao && (kind === "unknown" || kind === "acao");
+  if (!destino && semOutraSaida && rota && rota.area && rota.area !== OPCAO_AQUI && rota.area !== OPCAO_NENHUMA) destino = destinoDoPedido(rota.area, clientId);
+  if (!destino && semOutraSaida && !rota) {
+    const porPalavras = areaPorPalavras(texto);
+    if (porPalavras && areaPorChave(porPalavras.area)) destino = destinoDoPedido(porPalavras.area, clientId);
+  }
+  const abrir = rota && rota.abrir !== null ? rota.abrir >= 0.7 : pedeParaAbrir(texto);
+  const destinoFinal = destino ? { ...destino, direto: abrir && !acao } : null;
+
+  if (!acao || !clientId) return { acao: null, mensagemId: null, destino: destinoFinal, direto: null };
+
+  // "Ele já vai fazendo": ordem clara (Jev; sem Jev, verbo de ordem no começo), sem custo e com Desfazer.
+  const pedidoClaro = rota && rota.ordem !== null ? rota.ordem >= 0.75 : pareceOrdem(texto);
+  const direto = podeExecutarDireto(acao, regrasDoLancador(hoje), { pedidoClaro });
+  if (direto.direto) {
+    const deps = dependenciasDoLancador(supabase, clientId, userId);
+    const inicio = Date.now();
+    acao = await executarDireto(acao, (item, a) => executarItemDoLancador(supabase, clientId, item, a, deps), { userId });
+    const falhas = (acao.resultados || []).filter((r) => !r.ok).length;
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: "aceleriq_acao_direta", origin: "painel:voice-assistant-agent",
+      keyId: `painel:voice-assistant-agent:${userId}`, scopes: ["tasks:write"],
+      input: { client_id: clientId, operacoes: acao.itens.map((i) => i.operacao) },
+      success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: acao.id,
+    });
+  }
+  // A proposta (ou a ação já feita) mora na conversa do cliente: o Desfazer e o Confirmar leem de lá.
+  let mensagemId: string | null = null;
+  try {
+    const conversaId = await conversaDoLancador(supabase, clientId, userId);
+    if (conversaId) {
+      const agora = Date.now();
+      const resposta = String(parsed.resposta || parsed.narrative || acao.resumo || "Pronto.").slice(0, 2000);
+      const { data: gravadas } = await supabase.from("agente_mensagens").insert([
+        { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto.slice(0, 4000) || "(pedido por voz)", criado_em: new Date(agora).toISOString() },
+        { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, anexos: [acao], criado_em: new Date(agora + 1).toISOString() },
+      ]).select("id, papel");
+      mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
+    }
+  } catch (e) {
+    console.warn(`[assistente] conversa não gravada: ${e instanceof Error ? e.message : "falha"}`);
+  }
+  if (!mensagemId && !acao.executada_em) acao = null; // sem onde guardar, nada para confirmar
+  return { acao, mensagemId, destino: destinoFinal, direto };
+}
+
+/** executar_acao_agente / desfazer_acao_agente { mensagem_id, acao_id?, descartar? } */
+async function acaoGuardadaDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  // deno-lint-ignore no-explicit-any
+  caller: any,
+  body: RequestBody,
+  userId: string,
+): Promise<Response> {
+  const inicio = Date.now();
+  try {
+    const guardada = await acaoGuardadaNaMensagem(supabase, body.mensagem_id, async (clientId) => {
+      const { data, error } = await caller.rpc("can_access_client", { _client_id: clientId });
+      if (error || data !== true) throw new ErroDaAcao(403, "sem_acesso", "Você não tem acesso a este cliente.");
+    }, { acaoId: body.acao_id, agente: AGENTE_DO_LANCADOR });
+    const clientId = guardada.mensagem.client_id;
+    if (body.acao === "desfazer_acao_agente") {
+      const r = await desfazerAcaoGuardada(guardada, (x) => reverterItemDoLancador(supabase, clientId, x, {}), { userId });
+      if (guardada.mensagem.conversa_id) {
+        await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: desfeito (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }).then(() => undefined, () => undefined);
+      }
+      await auditLog({
+        correlationId: crypto.randomUUID(), toolName: "aceleriq_desfazer_acao_do_agente", origin: "painel:voice-assistant-agent",
+        keyId: `painel:voice-assistant-agent:${userId}`, scopes: ["tasks:write"],
+        input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: r.falharam.length === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
+      });
+      return jsonResposta({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
+    }
+    const deps = dependenciasDoLancador(supabase, clientId, userId);
+    const r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItemDoLancador(supabase, clientId, item, acao, deps), { descartar: body.descartar === true, userId, lote: 1 });
+    if (body.descartar === true) return jsonResposta({ anexo: r.anexo, custo_usd: 0 });
+    const feitos = r.resultados.filter((x) => x.ok).length;
+    const falhas = r.resultados.length - feitos;
+    if (guardada.mensagem.conversa_id) {
+      await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+    }
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: "aceleriq_executar_acao_do_agente", origin: "painel:voice-assistant-agent",
+      keyId: `painel:voice-assistant-agent:${userId}`, scopes: ["tasks:write"],
+      input: { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
+      success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
+    });
+    return jsonResposta({ anexo: r.anexo, feitos, falhas, custo_usd: 0 });
+  } catch (e) {
+    if (e instanceof ErroDaAcao) return jsonResposta({ error: e.codigo, mensagem: e.message }, e.status);
+    return jsonResposta({ error: "acao_falhou", mensagem: e instanceof Error ? e.message : "Não foi possível." }, 500);
+  }
+}
+
 async function callModel(
   provider: AiProvider,
   system: string,
@@ -512,6 +799,10 @@ Deno.serve(async (req) => {
         });
       }
     }
+    // Frente AG: Confirmar, Cancelar ou Desfazer do cartão (proposta guardada na conversa do cliente).
+    if (body.acao === "executar_acao_agente" || body.acao === "desfazer_acao_agente") {
+      return await acaoGuardadaDoLancador(supabase, caller, body, userData.user.id);
+    }
     const incomingAttachments = [
       ...(body.attachment?.text ? [body.attachment] : []),
       ...((body.attachments || []).filter((a) => a?.text)),
@@ -551,8 +842,10 @@ Deno.serve(async (req) => {
       }
       const pedidoDaConversa = `Pergunta da equipe:\n"""${pergunta}"""${pre.texto}\n\nRetorne APENAS o JSON.`;
       const erros: string[] = [];
+      // O mapa do painel entra na conversa: "onde faço isso?" sai com a área certa e o link.
+      const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}`;
       for (const provider of providers) {
-        const r = await callModel(provider, PROMPT_DA_CONVERSA, pedidoDaConversa);
+        const r = await callModel(provider, sistemaDaConversa, pedidoDaConversa);
         if (!r.ok) { erros.push(`${provider.label}: ${r.status}`); continue; }
         let j: any = null;
         try { j = JSON.parse(r.content); } catch {
@@ -561,7 +854,8 @@ Deno.serve(async (req) => {
         }
         if (j && typeof j.resposta === "string" && j.resposta.trim()) {
           const passos = Array.isArray(j.passos) ? j.passos.map((p: unknown) => String(p)).filter(Boolean).slice(0, 5) : [];
-          return new Response(JSON.stringify({ resposta: j.resposta.trim(), passos, _model: provider.model }), {
+          const irPara = destinoNaResposta(`${j.resposta} ${passos.join(" ")}`, body.clientId || null);
+          return new Response(JSON.stringify({ resposta: j.resposta.trim(), passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
@@ -614,16 +908,28 @@ Deno.serve(async (req) => {
 
     // Pré-contexto: cliente e serviço escolhidos no topo do agente, com o
     // dossiê e a memória resumidos (sem despejar tudo).
-    const preContexto = body.clientId || body.servico || tela
-      ? (await lerPreContexto(supabase, body.clientId || null, servico, tela)).texto
-      : "";
+    // Frente AG: pedido explícito com texto (botão Analisar) liga as ações e o
+    // caminho para as outras áreas. A análise automática (silenciosa) nunca faz nada.
+    const agir = body.agir === true && body.text.trim().length > 0;
+    const [preContexto, dadosDoLancador] = await Promise.all([
+      body.clientId || body.servico || tela
+        ? lerPreContexto(supabase, body.clientId || null, servico, tela).then((p) => p.texto)
+        : Promise.resolve(""),
+      agir && body.clientId ? lerDadosDoLancador(supabase, body.clientId).catch(() => null) : Promise.resolve(null),
+    ]);
+    const alvosDoPedido = dadosDoLancador ? alvosDoLancador(dadosDoLancador) : null;
+    // Roteamento (Jev) corre junto do modelo: onde o pedido se resolve e se é ordem clara.
+    const roteamento = agir ? rotearComJev(body.text, dadosDoLancador ? dadosDoLancador.cliente.nome : null, tela) : Promise.resolve(null);
 
     const userPrompt =
       `Comando do administrador:\n"""${body.text.slice(0, 4000)}"""\n\n` +
       `Clientes disponíveis (JSON):\n${JSON.stringify(clientsCondensed)}\n` +
       preContexto +
+      (agir ? `\n\nHoje: ${hojeEmSaoPaulo()}.${alvosDoPedido ? blocoDasAcoesDoLancador(alvosDoPedido) : "\nSem cliente escolhido: acoes sempre null."}` : "") +
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
+    // O mapa do painel e a regra das ações só entram no pedido explícito (custo por mensagem).
+    const sistema = agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT;
 
     // Fallback degradado se não há provider configurado.
     if (!providers.length) {
@@ -639,7 +945,7 @@ Deno.serve(async (req) => {
     let usedModel: string | null = null;
     const errors: string[] = [];
     for (const provider of providers) {
-      const r = await callModel(provider, SYSTEM_PROMPT, userPrompt);
+      const r = await callModel(provider, sistema, userPrompt);
       if (r.ok) {
         try { parsed = JSON.parse(r.content); }
         catch {
@@ -659,11 +965,16 @@ Deno.serve(async (req) => {
     // causa real registrada no log da função para diagnóstico.
     if (!parsed) {
       console.warn(`[assistente] todos os modelos falharam: ${errors.join(" | ")}`);
+      // Sem modelo, o caminho no painel ainda sai (Jev ou palavras do pedido): "abre a Mesa Ads" funciona.
+      const semModelo = agir
+        ? await tratarAcoesDoLancador(supabase, { parsed: { intent: { kind: "unknown" } }, texto: body.text, clientId: body.clientId || null, userId: userData.user.id, alvos: null, rota: await roteamento })
+        : null;
       return new Response(JSON.stringify({
-        intent: { kind: "unknown", raw: body.text },
+        intent: { kind: semModelo && semModelo.destino ? "acao" : "unknown", raw: body.text },
         suggestedClientIds: [],
         narrative: "Modelos de IA temporariamente indisponíveis. Interpretação local ativa — você pode confirmar manualmente.",
         confidence: 0, plan: null,
+        ir_para: semModelo ? semModelo.destino : null,
         _degraded: true, _reason: "all_models_failed", _errors: errors,
         _contractAutoLoaded: contractAutoLoaded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -679,6 +990,30 @@ Deno.serve(async (req) => {
     parsed._contractName = allDocs[0]?.fileName || null;
     parsed._documentsCount = allDocs.length;
     parsed._servico = servico;
+
+    // Frente AG: ações (direto quando pode), destino no mapa e a frase para a conversa.
+    if (agir) {
+      const rota = await roteamento;
+      const r = await tratarAcoesDoLancador(supabase, { parsed, texto: body.text, clientId: body.clientId || null, userId: userData.user.id, alvos: alvosDoPedido, rota });
+      parsed.acao = r.acao;
+      parsed.mensagem_id = r.mensagemId;
+      parsed.ir_para = r.destino;
+      parsed._direto = r.direto;
+      parsed._roteamento = rota ? { area: rota.area, ordem: rota.ordem, abrir: rota.abrir } : null;
+      if (typeof parsed.resposta !== "string" || !parsed.resposta.trim()) {
+        parsed.resposta = r.acao
+          ? r.acao.executada_em ? `Feito: ${r.acao.resumo}` : r.acao.resumo
+          : r.destino ? `Isso é na ${r.destino.nome}. Abro para você?` : "";
+      }
+      // A ação do cartão substitui as intenções que a tela faria sozinha (nada roda duas vezes).
+      const k = String(parsed.intent?.kind || "unknown");
+      if ((r.acao && ["unknown", "acao", "create_task", "update_task_status"].indexOf(k) >= 0) || (!r.acao && r.destino && (k === "unknown" || k === "acao"))) {
+        parsed.intent = { kind: "acao", raw: body.text };
+      }
+    } else {
+      delete parsed.acoes;
+      delete parsed.ir_para;
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

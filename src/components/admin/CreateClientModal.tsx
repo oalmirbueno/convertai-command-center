@@ -26,11 +26,26 @@ import type { Database } from "@/integrations/supabase/types";
 type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 type BillingInsert = Database["public"]["Tables"]["billing"]["Insert"];
 
-function generatePassword(len = 16) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
-  return Array.from(crypto.getRandomValues(new Uint8Array(len)))
-    .map((b) => chars[b % chars.length])
-    .join("");
+/**
+ * Senha provisória que SEMPRE passa na régua do manage-team (12+ com minúscula,
+ * maiúscula, número e símbolo). Antes o sorteio livre deixava de fora símbolo
+ * ou número em quase metade das vezes e o "Novo Cliente" falhava com 400.
+ */
+export function generatePassword(len = 16) {
+  const grupos = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnpqrstuvwxyz", "23456789", "!@#$%*-_"];
+  const todos = grupos.join("");
+  const tamanho = Math.max(12, len);
+  const sorteio = Array.from(crypto.getRandomValues(new Uint32Array(tamanho * 2)));
+  const letras = grupos.map((g, i) => g[sorteio[i] % g.length]);
+  for (let i = grupos.length; i < tamanho; i++) letras.push(todos[sorteio[i] % todos.length]);
+  // Embaralha (Fisher-Yates) para a posição de cada classe não ser fixa.
+  for (let i = letras.length - 1; i > 0; i--) {
+    const j = sorteio[tamanho + i] % (i + 1);
+    const t = letras[i];
+    letras[i] = letras[j];
+    letras[j] = t;
+  }
+  return letras.join("");
 }
 
 function rpcRecord(value: unknown): Record<string, unknown> | null {

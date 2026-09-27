@@ -72,8 +72,10 @@ import {
   type ResultadoDoItem,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
+import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
 import {
   alvosDasPautas,
+  datasComMesSeguinte,
   datasDasPautas,
   decidirPautas,
   DESCRICOES_DAS_OPERACOES,
@@ -1038,7 +1040,15 @@ async function enviar(ch: Chamador, corpo: Record<string, unknown>) {
 async function imagemDoPost(p: Post, nome: string): Promise<ImagemEntrada | null> {
   if (!p.midia_caminho) return null;
   const print = p.formato === "print";
-  const r = await reduzidaSemTransformacao(servico(), BUCKET, p.midia_caminho, print ? 1080 : 1080, print ? 2400 : 1350, { folga: 1.05, maxBytes: 12 * 1024 * 1024 }).catch(() => null);
+  // Até 12 posts por chamada (limite de 2 s de CPU): print grande sem cópia vai
+  // para a copias-leves (outra chamada) e a cópia média entra como está.
+  const r = await reduzidaSemTransformacao(servico(), BUCKET, p.midia_caminho, print ? 1080 : 1080, print ? 2400 : 1350, {
+    folga: 1.05,
+    maxBytes: 12 * 1024 * 1024,
+    pedirCopia: true,
+    maxPixels: 1_500_000,
+    aceitarCopiaMaiorAte: MAX_BYTES_ANEXO_DO_ESTILO,
+  }).catch(() => null);
   if (!r || !r.cabe || r.bytes.byteLength > MAX_BYTES_ANEXO_DO_ESTILO) return null;
   const mime = mimeDe(r.bytes);
   return mime ? { bytes: r.bytes, mime, nome: `${nome}.${extensao(mime)}` } : null;
@@ -1355,12 +1365,7 @@ async function ideiasResposta(ch: Chamador, corpo: Record<string, unknown>) {
   if (!g.ideias.length && !g.bloqueadas.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes das ideias.");
   const conversaId = await conversaDoPerfil(ch, perfil);
   const mes = hojeEmSaoPaulo().slice(0, 7);
-  let datas = datasDasPautas(mes, hojeEmSaoPaulo(), g.ideias.length);
-  if (datas.length < g.ideias.length) {
-    const [a, m] = mes.split("-").map(Number);
-    const proximo = `${m === 12 ? a + 1 : a}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
-    datas = datas.concat(datasDasPautas(proximo, hojeEmSaoPaulo(), g.ideias.length - datas.length));
-  }
+  const datas = datasComMesSeguinte(mes, hojeEmSaoPaulo(), g.ideias.length);
   const acao = propostaDeAgenda(perfil, g.ideias, datas, `Ideias de resposta ao @${perfil.handle} para ${ctx.nome}. Ao confirmar, entram na agenda e ficam prontas para o Estúdio.`, null);
   const texto = g.ideias.length
     ? `${g.ideias.length === 1 ? "Uma ideia" : `${g.ideias.length} ideias`} de resposta ao @${perfil.handle}, adaptadas a ${ctx.nome}:\n${g.ideias.map((p, i) => `${i + 1}. ${p.tema}: ${p.por_que || p.gancho}`).join("\n")}\nPara virar arte, confirme a lista: a pauta entra na agenda e o Estúdio já recebe o roteiro.${textoDasBloqueadas(g.bloqueadas)}`
@@ -1487,7 +1492,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "estrategista",
     modeloId: modelo.id,
     raciocinio: raciocinioBaixo(modelo),
-    sistema: `${SISTEMA_DA_CONVERSA}\n\nREGRAS DA SAÍDA (só o JSON):\n- resposta: o que você diz à equipe.\n${regraDasAcoes({ levar_ao_estilo: DESCRICOES_DAS_OPERACOES.levar_ao_estilo })}`,
+    // Frente AG: o agente conhece o painel (pedido de outra área vira "abro para você?" com a rota).
+    sistema: `${SISTEMA_DA_CONVERSA}\n\n${blocoDoMapaDoPainel("perfis")}\n\nREGRAS DA SAÍDA (só o JSON):\n- resposta: o que você diz à equipe.\n${regraDasAcoes({ levar_ao_estilo: DESCRICOES_DAS_OPERACOES.levar_ao_estilo })}`,
     mensagens: [
       { papel: "usuario", conteudo: `DADOS DO CLIENTE:\n${ctx.texto}\n\nDADOS DO PERFIL:\n${blocoDoPerfil(perfil, posts)}\n${blocoDosAlvos("POSTS QUE PODEM IR AO ESTILO", alvos)}` },
       { papel: "agente", conteudo: "Entendi o cliente e o perfil." },
@@ -1508,7 +1514,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     { papel: "agente", conteudo: texto, anexos: acao ? [acao] : [], uso_id: r.usoId },
   ]);
   await registrarRodada({ clientId, perfilId: perfil.id, tipo: "conversa", status: "ok", custo: r.custoUsd, criadoPor: ch.userId, inicio });
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos: acao ? [acao] : [], custo_usd: arred(r.custoUsd), reserva_usada: r.reservaUsada ?? null });
+  return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos: acao ? [acao] : [], ir_para: destinoNaResposta(texto, clientId), custo_usd: arred(r.custoUsd), reserva_usada: r.reservaUsada ?? null });
 }
 
 // ------------------------------------------------------------------ executar e desfazer
@@ -1775,7 +1781,8 @@ async function rodadaDeUmPerfil(perfil: Perfil): Promise<{ ok: boolean; fora: nu
         if (ideias.length) {
           const conversaId = await conversaDoPerfil(null, perfil);
           const mes = hojeEmSaoPaulo().slice(0, 7);
-          const acao = propostaDeAgenda(perfil, ideias, datasDasPautas(mes, hojeEmSaoPaulo(), ideias.length), `Ideias de resposta ao @${perfil.handle} (rodada da semana).`, null);
+          // Fim do mês: o que não cabe passa para o mês seguinte (antes caía tudo no último dia útil, ou a proposta sumia).
+          const acao = propostaDeAgenda(perfil, ideias, datasComMesSeguinte(mes, hojeEmSaoPaulo(), ideias.length), `Ideias de resposta ao @${perfil.handle} (rodada da semana).`, null);
           const texto = `Rodada da semana: ${novos.length} ${novos.length === 1 ? "post novo" : "posts novos"}${foraNovos ? `, ${foraNovos} fora da curva` : ""}. Ideias de resposta:\n${ideias.map((p, i) => `${i + 1}. ${p.tema}: ${p.por_que || p.gancho}`).join("\n")}`;
           await gravarMensagens(conversaId, perfil.client_id, [{ papel: "agente", conteudo: texto, anexos: acao ? [acao, { tipo: "pautas_do_perfil", pautas: ideias, bloqueadas: [] }] : [] }]);
         }

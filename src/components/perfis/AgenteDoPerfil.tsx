@@ -5,6 +5,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { avisarCustoReal, useAvisarErro } from "@/components/mesa/Custo";
@@ -207,7 +208,7 @@ export default function AgenteDoPerfil({
         return (
           <div key={m.id || i} className={juntar("min-w-0", m.papel === "usuario" ? "flex justify-end" : "")}>
             <div className={juntar("min-w-0 max-w-full rounded-lg px-3 py-2 text-[13px] leading-5 [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-primary/10" : "bg-muted/50")}>
-              <p className="whitespace-pre-line">{m.conteudo}</p>
+              <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {pautas && <PautasDoAnexo anexo={pautas} />}
             </div>
             {m.id &&

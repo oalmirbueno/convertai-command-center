@@ -73,6 +73,8 @@ import {
   type SaidaImagem,
 } from "../_shared/ia-motor.ts";
 import { resolucaoParaModelo } from "../_shared/capacidades-imagem.ts";
+// Frente AG (26/09): mapa mínimo do painel (o canvas é focado no quadro; bloco curto).
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { lerMarcaParaDirecaoDaMarca, marcaDoPedido } from "../_shared/marca.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, mimeDe, normalizarConferencia, sha256Hex, UUID } from "./calculos.ts";
@@ -1127,7 +1129,7 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
       tarefa: "estudio",
       agente: "diretor_arte",
       modeloId: modelo.id,
-      sistema: `${SISTEMA_AGENTE_CANVAS}\n\nDADOS REAIS:\n${JSON.stringify(dados)}`,
+      sistema: `${SISTEMA_AGENTE_CANVAS}\n\n${blocoDoMapaDoPainel("foto", { nivel: "minimo" })}\n\nDADOS REAIS:\n${JSON.stringify(dados)}`,
       mensagens: [...historicoDoAgente(corpo.historico), { papel: "usuario", conteudo: mensagem || pedidoPadrao, imagens: foto ? [foto] : undefined }],
       esquemaJson: esquema,
       maxTokensSaida: 4_000,

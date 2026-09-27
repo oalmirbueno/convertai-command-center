@@ -25,8 +25,10 @@ import {
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
 import { ehTipoDeRoteiro, modoDoTipo, ROTULO_DO_FORMATO, ROTULO_DO_STATUS, type StatusDoRoteiro, type TipoDeRoteiro } from "../_shared/roteiro-modelo.ts";
+import { DESCRICOES_DE_EDICAO, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
 
-export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "gerar_roteiro", "arquivar_roteiro"];
+// Frente AG (26/09): as de edição sem IA (editar_texto, aprovar_roteiro, marcar_gravado) moram em acoes-de-edicao.ts.
+export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "gerar_roteiro", "arquivar_roteiro", ...OPERACOES_DE_EDICAO];
 /** Operações que chamam o roteirista (custam IA). */
 export const OPERACOES_COM_IA = ["refazer_gancho", "mudar_tom", "gerar_roteiro"];
 
@@ -74,9 +76,63 @@ export function alvosDosRoteiros(roteiros: RoteiroParaAcao[]): Array<AlvoComApel
   );
 }
 
-export function alvosDasPecas(pecas: PecaParaAcao[]): Array<AlvoComApelido<AlvoDosRoteiros>> {
+/** Peças que o agente enxerga: 40 na janela padrão; até 120 quando o pedido cita meses ou datas à frente. */
+export const MAX_PECAS_NA_JANELA = 40;
+export const MAX_PECAS_NA_JANELA_ESTENDIDA = 120;
+
+const somarDiasIso = (data: string, n: number) => {
+  const d = new Date(`${data}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const MESES_DO_ANO = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const primeiroDoMes = (a: number, m: number) => `${a}-${String(m).padStart(2, "0")}-01`;
+const primeiroDoMesSeguinte = (a: number, m: number) => (m === 12 ? primeiroDoMes(a + 1, 1) : primeiroDoMes(a, m + 1));
+
+/**
+ * Janela das peças de vídeo que o agente vê (anti-bug 26/09, o mesmo do Mês):
+ * de 7 dias atrás a 40 à frente; o pedido que cita um mês ("roteiros de
+ * dezembro", "mês que vem") ou uma data AAAA-MM-DD estica a janela até lá (no
+ * máximo um ano). `ate` é exclusivo. Mês citado que já passou neste ano é o do
+ * ano seguinte, a não ser que o ano venha junto ("agosto de 2026").
+ */
+export function janelaDasPecas(mensagem: string, hoje: string): { de: string; ate: string; estendida: boolean } {
+  const baseDe = somarDiasIso(hoje, -7);
+  const baseAte = somarDiasIso(hoje, 40);
+  const teto = somarDiasIso(hoje, 366);
+  let de = baseDe;
+  let ate = baseAte;
+  const t = String(mensagem || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const anoHoje = Number(hoje.slice(0, 4));
+  const mesHoje = Number(hoje.slice(5, 7));
+  const incluirMes = (a: number, m: number) => {
+    const ini = primeiroDoMes(a, m);
+    const fim = primeiroDoMesSeguinte(a, m);
+    if (ini < de) de = ini;
+    if (fim > ate) ate = fim;
+  };
+  MESES_DO_ANO.forEach((nome, i) => {
+    const re = new RegExp(`\\b${nome}\\b(?:\\s+de\\s+(\\d{4}))?`, "g");
+    let achado: RegExpExecArray | null;
+    while ((achado = re.exec(t))) {
+      const m = i + 1;
+      const a = achado[1] ? Number(achado[1]) : m < mesHoje ? anoHoje + 1 : anoHoje;
+      incluirMes(a, m);
+    }
+  });
+  if (/\b(mes que vem|proximo mes)\b/.test(t)) incluirMes(mesHoje === 12 ? anoHoje + 1 : anoHoje, mesHoje === 12 ? 1 : mesHoje + 1);
+  for (const d of t.match(/\b\d{4}-\d{2}-\d{2}\b/g) || []) {
+    if (d > hoje && somarDiasIso(d, 1) > ate) ate = somarDiasIso(d, 1);
+  }
+  if (ate > teto) ate = teto;
+  // Janela para trás só dentro do mês citado deste ano (roteiro de peça que já passou continua visível).
+  if (de < somarDiasIso(hoje, -62)) de = somarDiasIso(hoje, -62);
+  return { de, ate, estendida: de !== baseDe || ate !== baseAte };
+}
+
+export function alvosDasPecas(pecas: PecaParaAcao[], max = MAX_PECAS_NA_JANELA): Array<AlvoComApelido<AlvoDosRoteiros>> {
   return comApelido(
-    pecas.slice(0, 40).map((p) => ({
+    pecas.slice(0, max).map((p) => ({
       id: p.id,
       titulo: p.titulo,
       detalhe: [ROTULO_DO_FORMATO[p.formato] || p.formato, dataCurta(p.data), p.roteiro_status ? `roteiro ${ROTULO_DO_STATUS[p.roteiro_status].toLowerCase()}` : "sem roteiro"].filter(Boolean).join(" · "),
@@ -139,6 +195,7 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
       alvos: ["r"],
       trava: (alvo) => (alvo.dados && alvo.dados.arquivado === true ? "Já está arquivado." : null),
     },
+    ...regrasDeEdicao(),
   };
 }
 
@@ -147,11 +204,24 @@ export const DESCRICOES_DOS_ROTEIROS: Record<string, string> = {
   mudar_tom: "reescreve as falas do roteiro (ref r..) no tom pedido, mantendo fatos, estrutura e tempos. para: o tom (ex.: 'mais leve e próximo').",
   gerar_roteiro: "gera o roteiro de uma peça de vídeo da agenda (ref p..). para: fala_camera, tutorial, ugc ou cinema (vazio: fala_camera). Pedido de 'peças da semana' vale para as peças com data nos próximos 7 dias.",
   arquivar_roteiro: "arquiva o roteiro (ref r..). Dá para desarquivar. para vazio.",
+  ...DESCRICOES_DE_EDICAO,
 };
 
 /** Bloco do prompt com as listas (apelidos, nunca id) e a regra das ações. */
-export function blocoDasAcoesDosRoteiros(roteiros: RoteiroParaAcao[], pecas: PecaParaAcao[]): string {
-  return `${blocoDosAlvos("ROTEIROS DO CLIENTE", alvosDosRoteiros(roteiros), "nenhum ainda.")}${blocoDosAlvos("PEÇAS DE VÍDEO DA AGENDA", alvosDasPecas(pecas), "nenhuma no período.")}\n${regraDasAcoes(DESCRICOES_DOS_ROTEIROS)}`;
+export function blocoDasAcoesDosRoteiros(
+  roteiros: RoteiroParaAcao[],
+  pecas: PecaParaAcao[],
+  janela?: { de: string; ate: string; estendida: boolean },
+  totalDePecas?: number,
+): string {
+  const max = janela && janela.estendida ? MAX_PECAS_NA_JANELA_ESTENDIDA : MAX_PECAS_NA_JANELA;
+  // O período vai escrito: "nenhuma" sem dizer onde fazia o agente afirmar que não havia peça em dezembro.
+  const periodo = janela ? `de ${dataCurta(janela.de)} a ${dataCurta(somarDiasIso(janela.ate, -1))}` : null;
+  const vazio = periodo ? `nenhuma ${periodo}.` : "nenhuma no período.";
+  const total = Math.max(pecas.length, totalDePecas ?? 0);
+  const corte = total > max ? `\n(Mostrando ${max} de ${total} peças${periodo ? ` ${periodo}` : ""}. Para as outras, a equipe pode pedir por mês.)` : "";
+  const periodoNoBloco = periodo ? `\n(Peças com data ${periodo}.)` : "";
+  return `${blocoDosAlvos("ROTEIROS DO CLIENTE", alvosDosRoteiros(roteiros), "nenhum ainda.")}${blocoDosAlvos("PEÇAS DE VÍDEO DA AGENDA", alvosDasPecas(pecas, max), vazio)}${periodoNoBloco}${corte}\n${regraDasAcoes(DESCRICOES_DOS_ROTEIROS)}`;
 }
 
 /**
@@ -166,7 +236,8 @@ export function normalizarAcoesDosRoteiros(
   custoPorGeracaoUsd: number,
   id?: string,
 ): AcaoDoAgente | null {
-  const alvos = [...alvosDosRoteiros(roteiros), ...alvosDasPecas(pecas)];
+  // Mesmo conjunto do bloco: na janela estendida o agente vê até 120 peças (p1..p120).
+  const alvos = [...alvosDosRoteiros(roteiros), ...alvosDasPecas(pecas, MAX_PECAS_NA_JANELA_ESTENDIDA)];
   const acao = normalizarAcaoDoAgente(bruto, alvos, regrasDosRoteiros(), {
     agente: "roteiros",
     id: id || `roteiros-${Date.now().toString(36)}`,

@@ -37,6 +37,8 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { AREAS_DO_CEREBRO, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
 import { METODO_ACELERA } from "../_shared/metodo-acelera.ts";
+// Frente AG (26/09): mapa mínimo do painel, só com os nomes (roda em lote; a leitura pode chegar ao cliente, então sem rota).
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
 import { conferirRepeticao, escreverRitual, extractJson, PRIMARY_MODEL_CHAIN, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
 import { extrairMemoriaDoRitual } from "../ritual-writer/memoria.ts";
@@ -77,6 +79,9 @@ Devolva:
 - "aprendizados": de 0 a 3 fatos DURÁVEIS ditos pelo dono que valem para as próximas semanas (preferência do cliente, o que evitar, o que funcionou). Cada um {"texto":"...","area":"geral|calendario|campanha|arte|foto|ads|copy|conta","categoria":"preferencia|evitar|aprendizado"}. Fato só desta semana não é aprendizado.
 
 Português do Brasil, sem travessão. Só JSON: {"leitura":{...},"confirmacoes":["..."],"aprendizados":[{"texto":"...","area":"geral","categoria":"aprendizado"}]}`;
+
+/** Mapa mínimo do painel no fim do sistema de preparar (nome e rota de cada área). */
+const MAPA_DA_CENTRAL = String.fromCharCode(10, 10) + blocoDoMapaDoPainel("central", { nivel: "minimo", semRota: true });
 
 async function perguntarIA(sistema: string, usuario: string): Promise<{ dados: Record<string, unknown>; modelo: string } | null> {
   const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN });
@@ -174,7 +179,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
-  const r = await perguntarIA(SISTEMA_PREPARAR, [
+  const r = await perguntarIA(`${SISTEMA_PREPARAR}${MAPA_DA_CENTRAL}`, [
     `CLIENTE: ${n.nome}`,
     `SERVIÇOS CONTRATADOS: ${n.servicos.join(", ") || "não marcados no cadastro"}`,
     `FASE CALCULADA PELO PAINEL: ${fase.nome} (${contexto.motivoDaFase})`,

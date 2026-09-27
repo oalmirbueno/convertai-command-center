@@ -57,6 +57,8 @@ import {
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import { conhecimentoEstilo } from "../_shared/conhecimento-estilo.ts";
+// Frente AG (26/09): o agente de estilo conhece o painel inteiro.
+import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
 import {
   type BancoDoEstilo,
   BUCKET_DO_ESTILO,
@@ -558,7 +560,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     pesquisaWeb: PEDE_PESQUISA.test(textoDoPedido),
-    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}`,
+    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: textoDoPedido }],
     esquemaJson: tpl ? esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO) : ESQUEMA_DO_AGENTE_DE_ESTILO,
     maxTokensSaida: 4_000,
@@ -593,7 +595,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     .select("id, papel");
   const mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
   const custo = Math.round((saida.custoUsd + leitura.custo + (tpl ? tpl.custo : 0) + (doTemplate ? doTemplate.custo : 0)) * 1e6) / 1e6;
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta, sugestoes, anexos: anexosDoAgente, custo_usd: custo, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null, ...(doTemplate && doTemplate.aviso ? { aviso_dos_templates: doTemplate.aviso } : {}) });
+  return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta, sugestoes, anexos: anexosDoAgente, ir_para: destinoNaResposta(resposta, p.clientId), custo_usd: custo, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null, ...(doTemplate && doTemplate.aviso ? { aviso_dos_templates: doTemplate.aviso } : {}) });
 }
 
 // ------------------------------------------------------------------ testes (mesmo gerador do Estúdio)

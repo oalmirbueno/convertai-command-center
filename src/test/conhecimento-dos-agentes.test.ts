@@ -275,7 +275,8 @@ describe("Gravação pelo cérebro (dedup, reforço, validade) no lugar dos inse
     expect(aprendizado).toContain("await gravarNoCerebro(servico, {");
     expect(aprendizado).toContain('categoria: "performou",');
     expect(aprendizado).not.toContain('from("agente_memoria").insert(');
-    expect(contexto).toContain("await gravarNoCerebro(db, {");
+    // Frente AG: a conversa do contexto grava pelo executor (gravar_decisao, com Desfazer), que usa o cérebro.
+    expect(contexto).toMatch(/await gravarNoCerebro\((db|servico\(\)), \{/);
     expect(contexto).not.toContain('from("agente_memoria").insert(');
   });
 

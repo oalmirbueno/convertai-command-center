@@ -65,7 +65,9 @@ import {
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
+  executarDireto,
   type ItemDaAcaoDoAgente,
+  podeExecutarDireto,
   type ResultadoDoItem,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
@@ -110,6 +112,9 @@ import {
 } from "./plano-do-cliente.ts";
 import { type DependenciasDoExecutor, ehOperacaoDoKit, executarItemDoPlano, type MemoriaDoPlano, reverterItemDoPlano } from "./executor-do-plano.ts";
 import { organizarPorTipo } from "./organizar-por-tipo.ts";
+// Frente AG (26/09): o agente conhece o painel e o que a equipe ensina na conversa já vem feito, com Desfazer.
+import { blocoDoMapaDoPainel, destinoNaResposta } from "../_shared/mapa-do-painel.ts";
+import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from "./kit-na-conversa.ts";
 
 /**
  * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
@@ -898,7 +903,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "contexto",
     modeloId: estrategista.id,
     raciocinio: raciocinioPara(estrategista, ["low", "medium"]),
-    sistema: `${SISTEMA_CONVERSA}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}${dadosDasAcoes ? `\n${blocoDasAcoesDoContexto(dadosDasAcoes)}` : "\n- acoes: sempre null nesta mensagem."}`,
+    sistema: `${SISTEMA_CONVERSA}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}${dadosDasAcoes ? `\n${blocoDasAcoesDoContexto(dadosDasAcoes)}` : "\n- acoes: sempre null nesta mensagem."}\n\n${blocoDoMapaDoPainel("contexto")}`,
     mensagens: [
       ...anteriores.map((m) => ({ papel: (m.papel === "agente" ? "agente" : "usuario") as "agente" | "usuario", conteudo: texto(m.conteudo, 3000) })),
       { papel: "usuario", conteudo: mensagem },
@@ -909,54 +914,28 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     criadoPor: ch.userId,
   });
   const o = (r.json ?? {}) as Record<string, any>;
-  const patch: Record<string, unknown> = { client_id: clientId, atualizado_em: new Date().toISOString(), atualizado_por: ch.userId };
-  const mudou: string[] = [];
-  if (typeof o.estilo === "string" && o.estilo.trim()) { patch.estilo = texto(o.estilo, 3000); mudou.push("estilo"); }
-  if (typeof o.regras === "string" && o.regras.trim()) { patch.regras = texto(o.regras, 3000); mudou.push("regras"); }
-  if (Array.isArray(o.paleta) && o.paleta.length) {
-    const paleta = o.paleta.map((p: any) => ({ nome: texto(p?.nome, 40), hex: texto(p?.hex, 7).toUpperCase(), papel: texto(p?.papel, 20) })).filter((p: any) => HEX.test(p.hex));
-    if (paleta.length) { patch.paleta = paleta.slice(0, 8); mudou.push("paleta"); }
+  // Frente AG: kit, contexto e memória que a equipe ensinou viram uma ação JÁ FEITA, com Desfazer
+  // (antes gravava calado, sem volta). Sem custo e com reverso: vai direto (regra 6 do contrato).
+  const doKit = acaoDoKitNaConversa(o, { estilo: kit?.estilo ?? null, regras: kit?.regras ?? null, contexto: (kit?.contexto ?? null) as Record<string, unknown> | null }, clientId);
+  const mudou: string[] = doKit ? doKit.mudou : [];
+  let kitFeito: AcaoDoAgente | null = null;
+  if (doKit && podeExecutarDireto(doKit.acao, REGRAS_DO_KIT_NA_CONVERSA, { pedidoClaro: true, maxItens: MAX_ITENS_DO_KIT }).direto) {
+    const memoriaDoKit: MemoriaDoPlano = new Map();
+    const depsDoKit = dependenciasDoExecutor(ch, clientId);
+    kitFeito = await executarDireto(doKit.acao, (item, acao) => executarItemDoPlano(db, clientId, item, acao, memoriaDoKit, depsDoKit), { userId: ch.userId });
+    const falhas = (kitFeito.resultados || []).filter((x) => !x.ok);
+    if (falhas.length) console.error("agente-contexto: parte do kit nao gravou na conversa", { client_id: clientId, falhas: falhas.map((x) => x.operacao) });
   }
-  if (o.contexto && typeof o.contexto === "object") {
-    const atual = await lerContextoConsolidado(db, clientId);
-    const novo: Record<string, unknown> = { ...atual };
-    for (const k of ["negocio", "publico", "oferta", "tom_de_voz"]) {
-      if (typeof o.contexto[k] === "string" && o.contexto[k].trim()) { novo[k] = texto(o.contexto[k], 1200); mudou.push(k); }
-    }
-    patch.contexto = novo;
-  }
-  if (Object.keys(patch).length > 3) {
-    const { error: erroKit } = await db.from("cliente_kit_marca").upsert(patch, { onConflict: "client_id" });
-    if (erroKit) console.error("agente-contexto: kit nao gravado na conversa", { client_id: clientId, erro: erroKit.message });
-  }
-
-  const memorias = (Array.isArray(o.memoria) ? o.memoria : [])
-    .filter((m: any) => ["estrategista", "diretor_arte"].includes(m?.agente) && ["aprendizado", "preferencia", "evitar"].includes(m?.tipo) && texto(m?.texto))
-    .slice(0, 5)
-    .map((m: any) => ({ client_id: clientId, agente: m.agente, tipo: m.tipo, texto: texto(m.texto, 600), origem: "manual" }));
-  // Frente H: grava pelo cérebro do cliente, uma de cada vez (a segunda já enxerga a primeira):
-  // o mesmo aprendizado vira reforço e o que contradiz um antigo o aposenta.
-  for (const m of memorias) {
-    const area: AreaDoCerebro = m.agente === "diretor_arte" ? "arte" : "calendario";
-    const g = await gravarNoCerebro(db, {
-      client_id: clientId,
-      area,
-      categoria: m.tipo as CategoriaDoCerebro,
-      texto: m.texto,
-      motivo: "ensinado na conversa do agente de contexto",
-      fonte: "agente_contexto",
-      criado_por: ch.userId,
-    });
-    if (!g.gravada) console.error("agente-contexto: memoria nao gravada", { client_id: clientId, erro: g.erro });
-  }
+  const memoriasEnsinadas = doKit ? doKit.memorias : 0;
 
   const acaoProposta = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
   const resposta = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : "Pronto.");
+  const anexosDaResposta = [kitFeito, acaoProposta].filter((x): x is AcaoDoAgente => !!x);
   // client_id é obrigatório em agente_mensagens: sem ele o insert falhava calado e a conversa nunca ficava salva.
   const agora = Date.now();
   const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
     { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString() },
-    { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString(), anexos: acaoProposta ? [acaoProposta] : [] },
+    { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString(), anexos: anexosDaResposta },
   ]).select("id, papel");
   if (erroMensagens) console.error("agente-contexto: conversa nao gravada", { client_id: clientId, erro: erroMensagens.message });
   const mensagemId = ((gravadas ?? []) as Array<{ id: string; papel: string }>).find((m) => m.papel === "agente")?.id ?? null;
@@ -965,8 +944,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     resposta,
     mudou,
     acao: acaoProposta && mensagemId ? acaoProposta : null,
+    // A tela mostra todos os cartões da mensagem: o do kit (feito na hora, com Desfazer) e o da proposta.
+    acoes: mensagemId ? anexosDaResposta : [],
+    ir_para: destinoNaResposta(resposta, clientId),
     mensagem_id: mensagemId,
-    memorias: memorias.length,
+    memorias: memoriasEnsinadas,
     kit: await lerKit(clientId),
     custo_usd: r.custoUsd,
     saldo_usd: r.saldoUsd,
@@ -990,9 +972,10 @@ async function historico(ch: Chamador, corpo: Record<string, unknown>) {
     .from("agente_mensagens")
     .select("id, papel, conteudo, criado_em, anexos")
     .eq("conversa_id", conversa.id)
-    .order("criado_em", { ascending: true })
+    .order("criado_em", { ascending: false })
     .limit(60);
-  return json({ mensagens: msgs ?? [] });
+  // As 60 mais recentes, na ordem da conversa (antes vinham as 60 primeiras e a conversa nova sumia).
+  return json({ mensagens: ((msgs as unknown[] | null) ?? []).slice().reverse() });
 }
 
 // ------------------------------------------------------------------ roteamento
@@ -1049,7 +1032,9 @@ Não invente o que não aparece. Sem travessão.`;
  * (_shared/imagem-reduzida.ts); sem isso, a original, como antes.
  */
 async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada | null> {
-  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, 640, 640, { maxBytes: 30 * 1024 * 1024 });
+  // 12 fotos por chamada (limite de 2 s de CPU): acima de 0,7 MP sem cópia, a
+  // miniatura vem da copias-leves (outra chamada) em vez de abrir aqui.
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, 640, 640, { maxBytes: 30 * 1024 * 1024, pedirCopia: true, maxPixels: 700_000 });
   if (r && r.cabe && r.bytes.byteLength <= MAX_BYTES && mimeDe(r.bytes)) return { bytes: r.bytes, mime: mimeDe(r.bytes)!, nome };
   return await baixarImagem(bucket, caminho, nome);
 }
@@ -1501,6 +1486,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     `CLIENTE (JSON):\n${JSON.stringify(estado)}`,
     blocoDoPlanoParaPrompt(plano),
     blocoDasFerramentas(),
+    blocoDoMapaDoPainel("contexto"),
     dadosDasAcoes ? blocoDasAcoesDoContexto(dadosDasAcoes) : "- acoes: sempre null nesta mensagem.",
   ].join("\n\n");
   const pesquisaWeb = pedeCaminho(mensagem);

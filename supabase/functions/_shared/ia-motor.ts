@@ -73,6 +73,8 @@ import {
   precosDoEndpoint,
   proporcaoEntre,
   qualidadeParaModelo,
+  imagensNoTetoDeBytes,
+  mensagensNoTetoDeBytes,
   referenciasNoLimite,
   type Resolucao,
   resolucaoParaModelo,
@@ -1103,6 +1105,16 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   if (!e.clientId || !e.modeloId || !Array.isArray(e.mensagens) || e.mensagens.length === 0) {
     throw new IaMotorErro("entrada_invalida", "clientId, modeloId e mensagens sao obrigatorios.");
   }
+  // Teto de bytes das imagens (413 do provedor acima de 30 MB): as mais antigas
+  // saem primeiro e o modelo fica sabendo, para não responder como se tivesse visto.
+  const noTeto = mensagensNoTetoDeBytes(e.mensagens);
+  if (noTeto.cortadas) {
+    console.warn("[ia-motor] imagens acima do teto do pedido", { cortadas: noTeto.cortadas, agente: e.agente, tarefa: e.tarefa });
+    const ultima = noTeto.mensagens.length - 1;
+    const mensagens = noTeto.mensagens.slice();
+    mensagens[ultima] = { ...mensagens[ultima], conteudo: `${mensagens[ultima].conteudo}\n\n(Aviso do sistema: ${noTeto.aviso})` };
+    e = { ...e, mensagens };
+  }
   const pedido = await carregarModelo(e.modeloId, "texto");
   validarRaciocinio(pedido, e.raciocinio);
   const rota = await resolverRota(e.clientId, pedido);
@@ -1282,8 +1294,9 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
   const caps = capacidadesDoModelo(m);
   const gpt = /^openai\/gpt-image/.test(m.modelo_api);
   const noLimite = referenciasNoLimite(e.editar ? { bytes: e.editar.bytes, mime: "image/png" } : null, e.referencias, caps.refs_max ?? 16);
-  const imagens = noLimite.imagens;
-  const avisos: string[] = noLimite.aviso ? [noLimite.aviso] : [];
+  const noTeto = imagensNoTetoDeBytes(noLimite.imagens);
+  const imagens = noTeto.imagens;
+  const avisos: string[] = [noLimite.aviso, noTeto.aviso].filter((a): a is string => !!a);
   const tamanho = e.tamanho || TAMANHO_2X3;
   const corpo: Record<string, unknown> = { model: m.modelo_api, prompt: e.prompt, n: 1 };
   let resolucao: Resolucao | null = null;
@@ -1379,8 +1392,9 @@ async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): P
   // Chat do OpenRouter (Gemini): corpo igual ao de antes; resolução (image_size) só quando pedida e aceita.
   const caps = capacidadesDoModelo(m);
   const noLimite = referenciasNoLimite(e.editar ? { bytes: e.editar.bytes, mime: "image/png" } : null, e.referencias, caps.refs_max ?? 14);
-  const imagens = noLimite.imagens;
-  const avisos: string[] = noLimite.aviso ? [noLimite.aviso] : [];
+  const noTeto = imagensNoTetoDeBytes(noLimite.imagens);
+  const imagens = noTeto.imagens;
+  const avisos: string[] = [noLimite.aviso, noTeto.aviso].filter((a): a is string => !!a);
   const r = resolucaoParaModelo(caps, e.resolucao ?? null);
   if (r.aviso) avisos.push(r.aviso);
   const imageConfig: Record<string, unknown> = { aspect_ratio: proporcao(e.tamanho || TAMANHO_2X3) };

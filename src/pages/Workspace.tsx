@@ -1440,9 +1440,10 @@ export default function Workspace() {
         const parentIds = ((clientFiles as any[]) || [])
           .filter((f) => !f.parent_file_id && (f.folder || "").trim() === folderName)
           .map((f) => f.id);
-        if (parentIds.length) {
+        // A função aceita até 200 arquivos por chamada: pasta maior vai em lotes.
+        for (let i = 0; i < parentIds.length; i += 200) {
           const { data, error } = await supabase.functions.invoke("delete-file-assets", {
-            body: { target: "files", fileIds: parentIds },
+            body: { target: "files", fileIds: parentIds.slice(i, i + 200) },
           });
           if (error) throw new Error(await mensagemDaFuncao(error, "Não foi possível excluir agora."));
           if ((data as any)?.error) throw new Error((data as any).error);

@@ -6,6 +6,7 @@ import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { usd } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -35,7 +36,7 @@ export const ATALHOS_DO_AGENTE = [
   { rotulo: "Mande as aprovadas para a Mesa Ads", texto: "Mande as aprovadas para a Mesa Ads." },
 ];
 
-const CAPACIDADES = ["propor territórios", "pedir as tomadas", "reprovar fotos que mudaram o produto", "mandar aprovadas para a Mesa e a Mesa Ads"];
+const CAPACIDADES = ["mudar o briefing e o nome (na hora, com Desfazer)", "propor e aprovar territórios", "pedir as tomadas", "reprovar fotos que mudaram o produto", "mandar aprovadas para a Mesa e a Mesa Ads"];
 
 interface Conversa {
   /** De qual campanha é a conversa na tela. */
@@ -93,6 +94,10 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
       setNova(false);
       // Trocou de campanha no meio: a resposta fica na conversa dela (lida de novo ao voltar).
       setConversa((c) => (c.chave === alvo ? { ...c, conversaId: r.conversaId, mensagens: c.mensagens.concat([r.mensagem]) } : c));
+      // Pedido claro sem custo (briefing, nome) já vem feito: a campanha na tela relê.
+      if (campanhaId && acoesDaMensagem(r.mensagem.anexos).some((a) => !!a.executada_em)) {
+        void queryClient.invalidateQueries({ queryKey: chaveDaCampanha(campanhaId) });
+      }
       atualizarCusto();
     } catch (e) {
       avisarErro(e, "O agente não respondeu");
@@ -182,7 +187,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
                   m.papel === "usuario" ? "ml-6 bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "mr-6 bg-secondary/60",
                 )}
               >
-                <p className="whitespace-pre-wrap">{m.conteudo}</p>
+                <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd !== null && <p className="mt-1 text-[11px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
               {m.id &&

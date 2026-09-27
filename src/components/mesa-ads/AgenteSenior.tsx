@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { Briefcase, ChevronDown, ExternalLink, FlaskConical } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
@@ -444,7 +445,7 @@ export default function AgenteSenior({
         {m.estrategia ? (
           <EstrategiaNaTela e={m.estrategia} nomeDe={nomeDe} onCriarPlano={onCriarPlano} mensagemId={m.id} numeros={m.numeros} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />
         ) : (
-          <p className="whitespace-pre-wrap">{m.conteudo}</p>
+          <TextoDoAgente texto={m.conteudo} />
         )}
       </FalaDoAgente>
     );

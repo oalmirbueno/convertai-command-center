@@ -148,7 +148,7 @@ export default function CartaoDeAcao({
           <>
             <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
-              Feito{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
+              {atual.executada_direto ? "Feito na hora" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
             {temReverso && (
               <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>

@@ -190,7 +190,7 @@ import {
   textosDoCriativo,
   type VinculoDecidido,
 } from "./vinculo.ts";
-import { impressaoDaImagem } from "./vinculo-imagem.ts";
+import { impressaoNoOrcamento, novoOrcamentoDasImpressoes, type OrcamentoDasImpressoes, PENDENTE } from "./vinculo-imagem.ts";
 import { anunciosDaBiblioteca, type AnuncioDaBiblioteca, ESQUEMA_AGENTE_SENIOR, estrategiaEmMarkdown, normalizarEstrategia, tarefaDoAgenteSenior } from "./agente-senior.ts";
 import { validarRetorno } from "./pacote-retorno.ts";
 import {
@@ -219,6 +219,8 @@ import {
 import { ESQUEMA_KIT_RECEPCAO, itemDaAgendaDoKit, type KitDeRecepcao, normalizarKit, pedidoDoKit } from "./kit-recepcao.ts";
 import { createEditorialItem, createEditorialItemSchema, WriteError, type WriteCtx } from "../_shared/mcp-write-services.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+// Frente AG (26/09): os agentes de conversa da Mesa Ads conhecem o painel inteiro.
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import {
   alertaDePolitica,
@@ -2440,7 +2442,7 @@ Aplique o pedido. Devolva:
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo),
+    sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa(),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA_PLANO,
@@ -3863,7 +3865,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("oferta"),
+      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa(),
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_OFERTA_CONVERSA,
@@ -5180,17 +5182,17 @@ async function impressoesEmCache(servico: SupabaseClient, clientId: string, chav
   return mapa;
 }
 
-async function impressaoDeUrl(url: string | null): Promise<string | null> {
+async function impressaoDeUrl(url: string | null, orcamento: OrcamentoDasImpressoes): Promise<string | null | typeof PENDENTE> {
   if (!url) return null;
   const b = await buscarSeguro(url, { maxBytes: 6 * 1024 * 1024, aceitar: "image/png,image/jpeg;q=0.9,image/*;q=0.5", timeoutMs: 10_000 });
-  return b ? await impressaoDaImagem(b.bytes) : null;
+  return b ? await impressaoNoOrcamento(b.bytes, orcamento) : null;
 }
 
-async function impressaoDoStorage(servico: SupabaseClient, bucket: string, caminho: string): Promise<string | null> {
+async function impressaoDoStorage(servico: SupabaseClient, bucket: string, caminho: string, orcamento: OrcamentoDasImpressoes): Promise<string | null | typeof PENDENTE> {
   const { data, error } = await servico.storage.from(bucket).download(caminho);
   if (error || !data) return null;
   const bytes = new Uint8Array(await data.arrayBuffer());
-  return bytes.byteLength > MAX_BYTES_IMAGEM ? null : await impressaoDaImagem(bytes);
+  return bytes.byteLength > MAX_BYTES_IMAGEM ? null : await impressaoNoOrcamento(bytes, orcamento);
 }
 
 type ItemDoVinculo = {
@@ -5304,7 +5306,9 @@ async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, 
     cacheDisponivel = false;
     return new Map<string, string>();
   });
-  const tarefas: { chave: string; rodar: () => Promise<string | null>; aplicar: (h: string) => void }[] = [];
+  // CPU: abrir imagem é o que pesa (limite de 2 s por chamada); o que passar do orçamento fica pendente.
+  const orcamento = novoOrcamentoDasImpressoes();
+  const tarefas: { chave: string; rodar: () => Promise<string | null | typeof PENDENTE>; aplicar: (h: string) => void }[] = [];
   const pedidas = new Set<string>();
   for (const c of criativosLivres) {
     const k = chaveDaArte(c);
@@ -5315,7 +5319,7 @@ async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, 
       pedidas.add(k);
       const [bucket, ...resto] = k.slice(5).split("/");
       const alvos = criativosLivres.filter((x) => chaveDaArte(x) === k);
-      tarefas.push({ chave: k, rodar: () => impressaoDoStorage(servico, bucket, resto.join("/")), aplicar: (h) => alvos.forEach((x) => (x.impressao = h)) });
+      tarefas.push({ chave: k, rodar: () => impressaoDoStorage(servico, bucket, resto.join("/"), orcamento), aplicar: (h) => alvos.forEach((x) => (x.impressao = h)) });
     }
   }
   for (const a of adsSoltos) {
@@ -5328,7 +5332,7 @@ async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, 
       const guardada = refPorAd.get(a.ad_id);
       tarefas.push({
         chave: k,
-        rodar: () => (guardada && guardada.startsWith(`${clientId}/`) ? impressaoDoStorage(servico, "mesa", guardada) : impressaoDeUrl(a.imagem_url)),
+        rodar: () => (guardada && guardada.startsWith(`${clientId}/`) ? impressaoDoStorage(servico, "mesa", guardada, orcamento) : impressaoDeUrl(a.imagem_url, orcamento)),
         aplicar: (h) => alvos.forEach((x) => (x.impressao = h)),
       });
     }
@@ -5337,11 +5341,15 @@ async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, 
   const novas: { client_id: string; chave: string; impressao: string }[] = [];
   let impressoesPendentes = Math.max(0, tarefas.length - MAX_IMPRESSOES_POR_CHAMADA);
   await emParalelo(tarefas.slice(0, MAX_IMPRESSOES_POR_CHAMADA), 6, async (t) => {
-    if (Date.now() - inicioDasImpressoes > TEMPO_DAS_IMPRESSOES_MS || restanteMs(chamador) < 120_000) {
+    if (Date.now() - inicioDasImpressoes > TEMPO_DAS_IMPRESSOES_MS || restanteMs(chamador) < 120_000 || orcamento.gastoMs >= orcamento.limiteMs) {
       impressoesPendentes++;
       return;
     }
     const h = await t.rodar().catch(() => null);
+    if (h === PENDENTE) {
+      impressoesPendentes++;
+      return;
+    }
     if (h) {
       t.aplicar(h);
       novas.push({ client_id: clientId, chave: t.chave, impressao: h });
@@ -5540,7 +5548,13 @@ function sistemaDoAgenteSenior(objetivo?: unknown): string {
   // objetivo e agora a Meta na prática e o portfólio de estáticos) mora em
   // _shared/conhecimento-dos-agentes.ts, onde o índice motores.ts e o teste a veem.
   const extra = conhecimentoAgenteSenior(objetivo).texto;
-  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}`;
+  // Frente AG: o sênior conhece o painel inteiro (mapa do painel no fim).
+  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}${mapaDoPainelNaConversa()}`;
+}
+
+/** Frente AG (26/09): mapa do painel só nos agentes de conversa (plano, oferta e sênior), nunca nas gerações. */
+function mapaDoPainelNaConversa(): string {
+  return `\n\n${blocoDoMapaDoPainel("ads")}`;
 }
 
 /** Conversa do agente sênior do cliente: a pedida (se for dele) ou a mais recente; cria se não houver. */

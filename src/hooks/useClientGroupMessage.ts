@@ -66,9 +66,13 @@ export function useClientGroupMessage(client: any | null) {
             .select("file_name")
             .eq("client_id", clientId!).is("archived_at", null)
             .eq("approval_status", "pending").limit(10),
+          // Só a janela que a mensagem usa (publicadas desde segunda, agendadas até a próxima
+          // segunda): antes vinham 60 linhas quaisquer do histórico e os números saíam errados.
           supabase.from("editorial_publications")
             .select("status, scheduled_at, published_at")
-            .eq("client_id", clientId!).in("status", ["scheduled", "published"]).limit(60),
+            .eq("client_id", clientId!).in("status", ["scheduled", "published"])
+            .or(`published_at.gte.${desdeSemana.toISOString()},and(scheduled_at.gte.${new Date().toISOString()},scheduled_at.lt.${proximaSegunda.toISOString()})`)
+            .order("scheduled_at", { ascending: true }).limit(200),
           supabase.from("projects")
             .select("name, status")
             .eq("client_id", clientId!).is("deleted_at", null).neq("status", "done").limit(20),

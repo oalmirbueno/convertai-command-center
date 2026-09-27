@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { Check, ImagePlus, Loader2, Palette, Send, ThumbsDown, ThumbsUp, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -379,7 +380,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                   m.papel === "usuario" ? "bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
                 )}
               >
-                <p className="whitespace-pre-wrap">{m.conteudo}</p>
+                <TextoDoAgente texto={m.conteudo} />
                 {m.custo_usd != null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
             </div>

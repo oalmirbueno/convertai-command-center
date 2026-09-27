@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
@@ -283,7 +284,7 @@ export default function AgenteDaOferta({
           <div key={m.id} className="min-w-0 space-y-1.5">
             {m.conteudo && (
               <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
-                <p className="whitespace-pre-wrap">{m.conteudo}</p>
+                <TextoDoAgente texto={m.conteudo} />
               </Bolha>
             )}
             {imagens.length > 0 && (

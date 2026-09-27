@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 /**
  * O que e aquele arquivo? Julgamento tipado com TypeSafe (modelo Jev).
@@ -69,7 +69,8 @@ type Arquivo = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-async function autorizado(req: Request, admin: ReturnType<typeof createClient>): Promise<boolean> {
+// deno-lint-ignore no-explicit-any
+async function autorizado(req: Request, admin: SupabaseClient<any, any, any>): Promise<boolean> {
   const cronSecret = Deno.env.get("CRON_SECRET")?.trim();
   if (cronSecret && req.headers.get("x-cron-secret")?.trim() === cronSecret) return true;
   const auth = req.headers.get("Authorization") || "";
@@ -139,10 +140,18 @@ Deno.serve(async (req) => {
   const clientId = typeof corpo.client_id === "string" ? corpo.client_id : null;
 
   // Candidatos: capa (sem parent), sem tipo confiavel, poucas tentativas.
+  // So o que o banco deixa gravar (files_secure_guard): interno, sem revisao
+  // pedida, sem aprovacao e sem trava. Antes os liberados entravam, o Jev
+  // julgava e o update caia em "under review or released are immutable" a
+  // cada rodada do cron (1.500 erros em 24 h em 26/09), sem contar tentativa.
   let q = admin.from("files")
     .select("id, file_name, file_type, folder, mime_type, extension, caption, description, carousel_text, slide_count, page_count, extracted_metadata")
     .is("archived_at", null)
     .is("parent_file_id", null)
+    .eq("visibility", "internal")
+    .eq("agency_approval_status", "not_requested")
+    .eq("approval_status", "none")
+    .is("locked_at", null)
     .order("created_at", { ascending: false })
     .limit(limite * 3);
   if (clientId) q = q.eq("client_id", clientId);
@@ -167,6 +176,7 @@ Deno.serve(async (req) => {
       console.error("materiais-classificar: typesafe falhou", { error: err instanceof Error ? err.message : "unknown" });
       return json({ ok: false, error: "typesafe_indisponivel", classificados, incertos }, 502);
     }
+    let falhasDoLote = 0;
     for (const j of julgamentos) {
       const f = lote.find((x) => x.id === j.id)!;
       const jevAnterior = (f.extracted_metadata?.jev ?? {}) as Record<string, unknown>;
@@ -176,9 +186,18 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = { extracted_metadata: { ...(f.extracted_metadata ?? {}), jev } };
       if (gravar) patch.file_type = j.tipo;
       const { error: upErr } = await admin.from("files").update(patch).eq("id", f.id);
-      if (upErr) console.error("materiais-classificar: update falhou", { id: f.id, error: upErr.message });
+      if (upErr) {
+        falhasDoLote += 1;
+        console.error("materiais-classificar: update falhou", { id: f.id, error: upErr.message });
+        resultado.push({ id: f.id, tipo: j.tipo, confianca: j.confianca, gravado: false });
+        continue;
+      }
       if (gravar) classificados += 1; else incertos += 1;
       resultado.push({ id: f.id, tipo: j.tipo, confianca: j.confianca, gravado: gravar });
+    }
+    // Banco recusou o lote inteiro: não paga o Jev de novo nesta rodada.
+    if (julgamentos.length && falhasDoLote === julgamentos.length) {
+      return json({ ok: false, error: "gravacao_recusada", candidatos: candidatos.length, classificados, incertos, resultado }, 503);
     }
   }
   return json({ ok: true, candidatos: candidatos.length, classificados, incertos, resultado });

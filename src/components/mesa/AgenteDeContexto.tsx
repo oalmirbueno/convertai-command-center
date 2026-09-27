@@ -8,6 +8,7 @@ import { AvisoDeErro, EstimativaInline, avisarCustoReal } from "./Custo";
 import { Ditado } from "./Ditado";
 import { useMesa } from "./MesaContexto";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import {
   chaveDoHistorico,
@@ -225,14 +226,14 @@ export default function AgenteDeContexto({
             <div
               className={`rounded-lg px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}
             >
-              <p className="whitespace-pre-wrap">{m.conteudo}</p>
+              <TextoDoAgente texto={m.conteudo} clientId={clientId} />
             </div>
             {m.papel === "agente" && m.id &&
               acoesDaMensagem(m.anexos).map((a) => (
                 <CartaoDeAcao
                   key={a.id}
                   acao={a}
-                  titulo="O agente vai fazer"
+                  titulo={a.executada_direto ? "O agente fez" : "O agente vai fazer"}
                   observacao="Sem custo. Nada é apagado, e dá para desfazer."
                   onPedido={(p) => chamarAcaoDoAgente("agente-contexto", String(m.id), a.id, p)}
                   onFeito={(p) => {

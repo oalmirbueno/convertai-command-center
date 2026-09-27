@@ -11,6 +11,11 @@
  *   produto mudado (logo, formato, cor, detalhe). Sem reverso: a versão fica reprovada.
  * - mandar_para_ads / mandar_para_mesa (f1..fN): registra o encaminhamento com a
  *   linhagem. Desfazer apaga o registro. Não aprova anúncio nem verba.
+ * - editar_briefing (k1, frente AG 26/09): troca um campo do briefing (versão nova;
+ *   Desfazer volta o briefing de antes). Sem custo: pedido claro vai direto.
+ * - renomear_campanha (k1): nome novo (Desfazer volta o nome). Sem custo: direto.
+ * - aprovar_territorio (t1..t4): aprova e monta o plano das seis tomadas. Confirmar,
+ *   sem Desfazer (para mudar, aprove outro antes de pedir as tomadas).
  *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
@@ -27,11 +32,33 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { type CampanhaDePublicidade, ROTULO_DA_MUDANCA, type RevisaoDePublicidade } from "./regras.ts";
 
-export const OPERACOES_DA_PUBLICIDADE = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa"];
+export const OPERACOES_DA_PUBLICIDADE = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio"];
 export const ESQUEMA_DAS_ACOES_DA_PUBLICIDADE = esquemaDasAcoes(OPERACOES_DA_PUBLICIDADE);
 
 /** Operações sem reverso (gastam IA ou reprovam na Mesa Foto). */
-export const OPERACOES_SEM_REVERSO = ["propor_territorios", "pedir_tomadas", "reprovar_foto"];
+export const OPERACOES_SEM_REVERSO = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "aprovar_territorio"];
+
+/** Campos do briefing que o agente troca por pedido (texto simples; a oferta entra como hipótese). */
+export const CAMPOS_EDITAVEIS_DO_BRIEFING: Record<string, string> = {
+  objetivo_texto: "objetivo",
+  publico: "público",
+  ocasiao: "ocasião",
+  tom: "tom",
+  destino: "destino",
+  proibido: "o que é proibido",
+  oferta: "oferta",
+};
+
+/** "publico: mulheres de 30 a 45" -> { campo, valor }. Campo fora da lista ou valor vazio: null. */
+export function lerEdicaoDoBriefing(bruto: unknown): { campo: string; valor: string } | null {
+  const s = String(bruto == null ? "" : bruto);
+  const i = s.indexOf(":");
+  if (i <= 0) return null;
+  const campo = s.slice(0, i).trim().toLowerCase().replace(/\s+/g, "_");
+  const valor = s.slice(i + 1).replace(/\s+/g, " ").trim().slice(0, 600);
+  if (!Object.prototype.hasOwnProperty.call(CAMPOS_EDITAVEIS_DO_BRIEFING, campo) || valor.length < 2) return null;
+  return { campo, valor };
+}
 
 type DadosDoAlvo = {
   tipo: "campanha" | "territorio" | "foto";
@@ -139,6 +166,39 @@ export const REGRAS_DA_PUBLICIDADE: Record<string, RegraDaOperacao<AlvoDaPublici
   },
   mandar_para_ads: { rotulo: "Mandar para a Mesa Ads", alvos: ["f"], trava: travaDoEnvio("ads") },
   mandar_para_mesa: { rotulo: "Mandar para a Mesa", alvos: ["f"], trava: travaDoEnvio("mesa") },
+  editar_briefing: {
+    rotulo: "Mudar no briefing",
+    alvos: ["k"],
+    combina: true,
+    repete: true,
+    direta: true,
+    para: (v) => {
+      const e = lerEdicaoDoBriefing(v);
+      return e ? `${e.campo}: ${e.valor}` : null;
+    },
+  },
+  renomear_campanha: {
+    rotulo: "Renomear para",
+    alvos: ["k"],
+    combina: true,
+    direta: true,
+    para: (v) => {
+      const n = String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 120);
+      return n.length >= 2 ? n : null;
+    },
+  },
+  aprovar_territorio: {
+    rotulo: "Aprovar o território",
+    alvos: ["t"],
+    trava: (a) =>
+      a.dados.status === "aprovado"
+        ? "Este território já está aprovado."
+        : a.dados.status === "descartado"
+        ? "Este território foi descartado."
+        : a.dados.tem_ensaio
+        ? "As tomadas já foram pedidas com outro território. Abra uma campanha nova para mudar a direção."
+        : null,
+  },
 };
 
 export const DESCRICOES_DA_PUBLICIDADE: Record<string, string> = {
@@ -147,11 +207,14 @@ export const DESCRICOES_DA_PUBLICIDADE: Record<string, string> = {
   reprovar_foto: "ref = foto (f1..fN) cujo detalhe diz \"produto mudou\". Reprova na Mesa Foto com o motivo. Pedido \"reprove as fotos que mudaram o produto\" vale para todas com \"produto mudou\" e sem decisão.",
   mandar_para_ads: "ref = foto APROVADA (f1..fN). Registra o envio para a Mesa Ads com a linhagem. Não aprova anúncio nem verba. Pedido \"mande as aprovadas para a Mesa Ads\" vale para todas aprovadas que ainda não estão lá.",
   mandar_para_mesa: "ref = foto APROVADA. Registra o envio para a Mesa (orgânico) com a linhagem.",
+  editar_briefing: "ref = k1. para = \"campo: valor novo\", campo um de objetivo_texto, publico, ocasiao, tom, destino, proibido, oferta (um item por campo). Grava versão nova do briefing. Oferta sem fonte fica como hipótese.",
+  renomear_campanha: "ref = k1. para = o nome novo da campanha.",
+  aprovar_territorio: "ref = território proposto (t1..t4). Aprova e monta o plano das seis tomadas (sem custo). Pedido \"aprove o território X\".",
 };
 
 /** O pedido fala de alguma das ações? Só então as listas entram no prompt. */
 export function pedeAcaoNaPublicidade(mensagem: string): boolean {
-  return /(propo|territ|pe[cç]a|pedi|tomada|reprov|mud(ou|aram)|mand[ae]|envi[ae]|mesa ads|ads|aprovad)/i.test(String(mensagem || ""));
+  return /(propo|territ|pe[cç]a|pedi|tomada|reprov|mud(ou|aram)|mand[ae]|envi[ae]|mesa ads|ads|aprov|briefing|renome|nome da campanha|p[uú]blico|ocasi|oferta|proibid|tom d[aoe]|troqu?e|mude|ajust)/i.test(String(mensagem || ""));
 }
 
 export function blocoDasAcoesDaPublicidade(c: CampanhaDePublicidade): string {

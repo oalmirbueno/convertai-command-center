@@ -181,7 +181,8 @@ export default function ClientJourneyDashboard({
       if (error) throw error;
       void notifyAdmin(
         `Pulso respondido: ${clientName} avaliou a experiência com nota ${pulseScore}/5${pulseComment.trim() ? ` · "${pulseComment.trim().slice(0, 120)}"` : ""}`,
-        "pulse",
+        // O tipo pulse não existe no notify-admin (400 calado): o pulso vai como atualização.
+        "update",
         "/central"
       );
       toast.success("Obrigado pela avaliação. Ela nos ajuda a melhorar sempre.");

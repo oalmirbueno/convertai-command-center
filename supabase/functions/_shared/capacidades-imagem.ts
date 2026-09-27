@@ -234,6 +234,83 @@ export function referenciasNoLimite<T>(editar: T | null, referencias: T[], limit
   };
 }
 
+/**
+ * Teto de bytes das imagens num pedido ao provedor (anti-bug 26/09): o
+ * OpenRouter recusa com 413 o corpo acima de 30 MB, e as imagens vão em base64
+ * (4/3 do arquivo). 24 MB de base64 deixam folga para o prompt e o JSON.
+ */
+export const TETO_BASE64_DAS_IMAGENS = 24 * 1024 * 1024;
+export const tamanhoEmBase64 = (bytes: number) => Math.ceil(Math.max(0, bytes) / 3) * 4;
+
+const mb = (bytes: number) => (Math.round((bytes / (1024 * 1024)) * 10) / 10).toLocaleString("pt-BR");
+
+/**
+ * Imagens de entrada dentro do teto de bytes, EM ORDEM: a primeira (a editada
+ * ou a identidade) sempre vai; a partir da primeira que não cabe, as demais
+ * ficam de fora (cortar do fim mantém o número de cada imagem que o prompt cita).
+ */
+export function imagensNoTetoDeBytes<T extends { bytes: Uint8Array }>(
+  imagens: T[],
+  teto = TETO_BASE64_DAS_IMAGENS,
+): { imagens: T[]; cortadas: number; aviso: string | null } {
+  let total = 0;
+  let ficam = imagens.length;
+  for (let i = 0; i < imagens.length; i++) {
+    const t = tamanhoEmBase64(imagens[i].bytes.byteLength);
+    if (i > 0 && total + t > teto) {
+      ficam = i;
+      break;
+    }
+    total += t;
+  }
+  const cortadas = imagens.length - ficam;
+  if (!cortadas) return { imagens, cortadas: 0, aviso: null };
+  return {
+    imagens: imagens.slice(0, ficam),
+    cortadas,
+    aviso: `${cortadas} ${cortadas === 1 ? "imagem ficou" : "imagens ficaram"} de fora: juntas passavam de ${mb(teto)} MB, o limite do provedor por pedido.`,
+  };
+}
+
+/**
+ * O mesmo teto numa conversa: as imagens da mensagem mais nova têm prioridade
+ * (em ordem); as mais antigas saem primeiro. Devolve as mensagens sem as
+ * imagens cortadas e quantas saíram.
+ */
+export function mensagensNoTetoDeBytes<M extends { imagens?: { bytes: Uint8Array }[] }>(
+  mensagens: M[],
+  teto = TETO_BASE64_DAS_IMAGENS,
+): { mensagens: M[]; cortadas: number; aviso: string | null } {
+  let total = 0;
+  let cheio = false;
+  let cortadas = 0;
+  const saida = mensagens.slice();
+  for (let i = saida.length - 1; i >= 0; i--) {
+    const m = saida[i];
+    if (!m.imagens || !m.imagens.length) continue;
+    const ficam: { bytes: Uint8Array }[] = [];
+    for (const img of m.imagens) {
+      const t = tamanhoEmBase64(img.bytes.byteLength);
+      // A primeira imagem da mensagem mais nova sempre vai.
+      const primeira = total === 0 && ficam.length === 0;
+      if (!cheio && (primeira || total + t <= teto)) {
+        total += t;
+        ficam.push(img);
+      } else {
+        cheio = true;
+        cortadas++;
+      }
+    }
+    if (ficam.length !== m.imagens.length) saida[i] = { ...m, imagens: ficam };
+  }
+  if (!cortadas) return { mensagens, cortadas: 0, aviso: null };
+  return {
+    mensagens: saida,
+    cortadas,
+    aviso: `${cortadas} ${cortadas === 1 ? "imagem ficou" : "imagens ficaram"} de fora: juntas passavam de ${mb(teto)} MB, o limite do provedor por pedido.`,
+  };
+}
+
 // ------------------------------------------------------------------ preço
 
 /** Megapixels aproximados de cada resolução (lado maior 512, 1024, 2048, 4096). */

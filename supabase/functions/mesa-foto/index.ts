@@ -95,6 +95,8 @@ import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } fro
 import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, resolverMarca } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+// Frente AG (26/09): o diretor de fotografia conhece o painel inteiro.
+import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import {
   type AcaoDoAgente,
   type AcaoGuardada,
@@ -485,6 +487,10 @@ const MAX_BYTES_SEM_REDUZIR = 3 * 1024 * 1024;
 const MAX_PIXELS_REDUZIR_AQUI = 1_500_000;
 /** Cópia média (2048 px, JPEG) usada como está: o provedor reduz; evita abrir aqui. */
 const COPIA_MAIOR_ACEITA = 2 * 1024 * 1024;
+/** Na queda sem cópia: acima disto não abre aqui (anti-bug 26/09). */
+const MAX_PIXELS_ABRIR_NA_QUEDA = 6_000_000;
+/** Original enviado como está na queda sem cópia (base64 fica perto de 16 MB). */
+const MAX_BYTES_SEM_ABRIR = 12 * 1024 * 1024;
 
 async function baixarReduzida(bucket: string, caminho: string, lado: number, nome: string): Promise<ImagemEntrada> {
   const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, {
@@ -501,6 +507,16 @@ async function baixarReduzida(bucket: string, caminho: string, lado: number, nom
   if (!mime) throw new ErroHttp(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
   if (original.byteLength <= MAX_BYTES_SEM_REDUZIR && /^image\/(jpeg|png|webp)$/.test(mime)) {
     return { bytes: original, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
+  }
+  // Sem cópia (copias-leves recusou ou não respondeu) e cara de abrir aqui
+  // (acima de 6 MP passa de 0,5 s de CPU cada, várias por chamada): vai como
+  // está quando o provedor aceita o formato; o teto de 24 MB do motor corta o excesso.
+  const dim = dimensoesDaImagem(original);
+  if (!dim || dim.largura * dim.altura > MAX_PIXELS_ABRIR_NA_QUEDA) {
+    if (original.byteLength <= MAX_BYTES_SEM_ABRIR && /^image\/(jpeg|png|webp)$/.test(mime)) {
+      return { bytes: original, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
+    }
+    throw new ErroHttp(413, "imagem_grande_demais", `A foto ${nome} é grande demais para usar agora. Envie uma versão menor (até 12 MB, JPEG ou PNG).`);
   }
   const png = await reduzir(original, lado);
   return { bytes: png, mime: "image/png", nome: `${nomeSeguro(nome)}.png` };
@@ -3574,7 +3590,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}`,
+    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE,
     maxTokensSaida: 12_000,

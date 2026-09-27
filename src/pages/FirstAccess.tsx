@@ -186,7 +186,19 @@ export default function FirstAccess() {
         }),
         SUBMIT_TIMEOUT_MS,
       );
-      if (error) throw error;
+      if (error) {
+        // Resposta 4xx/5xx: a frase em português vem no corpo (message); o SDK só diz "non-2xx".
+        let frase: string | null = null;
+        try {
+          const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+          const corpo = ctx && typeof ctx.json === "function" ? ((await ctx.json()) as { message?: unknown } | null) : null;
+          if (corpo && typeof corpo.message === "string" && corpo.message.trim()) frase = corpo.message;
+        } catch { /* corpo ilegível: segue o erro */ }
+        if (!frase) throw error;
+        setError(frase);
+        setSubmitting(false);
+        return;
+      }
       if (data?.error) {
         setError(data.message || data.error);
         setSubmitting(false);
@@ -211,7 +223,9 @@ export default function FirstAccess() {
       setError(
         message === "timeout"
           ? "A conexão demorou demais. Confira a internet e toque em Criar senha de novo."
-          : message || "Não foi possível criar a senha. Tente novamente.",
+          : message && !/non-2xx|Failed to send|fetch/i.test(message)
+          ? message
+          : "Não foi possível criar a senha. Tente novamente.",
       );
       setSubmitting(false);
     }

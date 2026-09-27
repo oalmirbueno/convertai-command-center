@@ -7,6 +7,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { chamarFuncao, padraoPara, usd } from "@/lib/mesa/api";
 import { TAMANHO_DA_CONVERSA } from "../../../supabase/functions/_shared/roteiro-modelo";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -33,7 +34,7 @@ export const ATALHOS_DO_AGENTE = [
   { rotulo: "Arquive este roteiro", texto: "Arquive este roteiro." },
 ];
 
-const CAPACIDADES = ["gerar roteiros das peças da agenda", "refazer gancho", "mudar o tom", "arquivar roteiro"];
+const CAPACIDADES = ["gerar roteiros das peças da agenda", "refazer gancho", "mudar o tom", "trocar título, gancho, CTA ou legenda (na hora)", "aprovar e marcar gravado", "arquivar roteiro"];
 
 export interface MensagemDoAgente {
   id: string | null;
@@ -116,6 +117,11 @@ export default function AgenteRoteirista({
       });
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
+      // Pedido claro sem custo (editar texto, aprovar, marcar gravado) já vem feito: a lista relê.
+      if (d && acoesDaMensagem(Array.isArray(d.anexos) ? d.anexos : []).some((a) => !!a.executada_em)) {
+        void queryClient.invalidateQueries({ queryKey: CHAVES.roteiros(clientId) });
+        void queryClient.invalidateQueries({ queryKey: CHAVES.pecas(clientId) });
+      }
       setMensagens((l) =>
         l.concat([
           {
@@ -213,7 +219,7 @@ export default function AgenteRoteirista({
                   m.papel === "usuario" ? "ml-6 bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "mr-6 bg-secondary/60",
                 )}
               >
-                <p className="whitespace-pre-wrap">{m.conteudo}</p>
+                <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd !== null && <p className="mt-1 text-[11px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
               {m.id &&
