@@ -23,6 +23,8 @@ import {
   escoposConcedidos,
   gestaoDosEscopos,
   marcarEnsaio,
+  bloqueioDaGestaoNaConta,
+  lerDebugDoToken,
 } from "../../supabase/functions/mesa-ads/acoes-conta";
 import { buildFacebookLoginUrl, META_ESCOPOS_DE_GESTAO } from "../../supabase/functions/social-meta-oauth/meta";
 import { canalDoDestino, itemDaAgendaDoKit, normalizarKit, objecoesDoBriefing, pedidoDoKit } from "../../supabase/functions/mesa-ads/kit-recepcao";
@@ -431,5 +433,36 @@ describe("gestão preparada (rodada 2)", () => {
     expect(fonte).toContain("esquecerContextoDoCliente(clientId);");
     const oauth = ler("supabase/functions/social-meta-oauth/index.ts");
     expect(oauth).toContain("handleAdsStart(config, caller, admin, body.gestao === true)");
+  });
+});
+
+describe("gestão por conta (escopo no token não basta)", () => {
+  const debug = (alvos: string[] | null) => ({ data: { type: "USER", granular_scopes: [{ scope: "ads_read" }, alvos ? { scope: "ads_management", target_ids: alvos } : { scope: "ads_management" }] } });
+
+  it("conta fora das marcadas no login bloqueia com o nome e o caminho", () => {
+    const m = bloqueioDaGestaoNaConta(debug(["111"]), { name: "AcelerIQ", user_tasks: ["MANAGE", "ADVERTISE", "ANALYZE"] }, "act_1871637719955892");
+    expect(m).toMatch(/AcelerIQ não foi marcada para gestão/);
+    expect(m).toMatch(/Conectar pedindo gestão/);
+  });
+
+  it("perfil só de análise bloqueia pedindo papel de anunciante", () => {
+    const m = bloqueioDaGestaoNaConta(debug(["1871637719955892"]), { name: "AcelerIQ", user_tasks: ["ANALYZE"] }, "1871637719955892");
+    expect(m).toMatch(/só analisa a conta AcelerIQ \(ANALYZE\)/);
+  });
+
+  it("conta marcada e perfil anunciante libera; sem target_ids vale para todas", () => {
+    expect(bloqueioDaGestaoNaConta(debug(["act_1871637719955892"]), { user_tasks: ["ADVERTISE", "ANALYZE"] }, "1871637719955892")).toBeNull();
+    expect(bloqueioDaGestaoNaConta(debug(null), { user_tasks: ["MANAGE"] }, "1871637719955892")).toBeNull();
+    expect(bloqueioDaGestaoNaConta(null, null, "1871637719955892")).toBeNull();
+  });
+
+  it("debug_token manda o token só para a Meta e devolve null no erro", async () => {
+    const urls: string[] = [];
+    const ok = (async (u: string | URL) => { urls.push(String(u)); return new Response(JSON.stringify(debug(["1"])), { status: 200 }); }) as typeof fetch;
+    const lido = await lerDebugDoToken("SEGREDO", "v21.0", ok);
+    expect(urls[0].indexOf("https://graph.facebook.com/v21.0/debug_token?")).toBe(0);
+    expect(JSON.stringify(lido)).not.toContain("SEGREDO");
+    const falha = (async () => new Response(JSON.stringify({ error: { code: 190 } }), { status: 400 })) as typeof fetch;
+    expect(await lerDebugDoToken("SEGREDO", "v21.0", falha)).toBeNull();
   });
 });

@@ -418,6 +418,45 @@ export function permissaoDeGestao(bruto: unknown): { disponivel: boolean; motivo
   return { disponivel: g.disponivel, motivo: g.motivo };
 }
 
+/**
+ * Onde a gestão vale de fato numa conta de anúncios. O escopo ads_management
+ * no token não basta: no Login for Business ele vale só para as contas
+ * marcadas na tela da Meta (granular_scopes.target_ids do debug_token), e o
+ * perfil precisa poder anunciar nela (user_tasks com MANAGE ou ADVERTISE).
+ * Devolve o motivo do bloqueio, ou null quando nada indica bloqueio.
+ */
+export function bloqueioDaGestaoNaConta(debug: unknown, conta: unknown, contaId: string): string | null {
+  const id = String(contaId).replace(/^act_/, "");
+  const c = conta && typeof conta === "object" ? (conta as Record<string, unknown>) : {};
+  const nome = limpo(c.name, 80) || id;
+  const dados = debug && typeof debug === "object" ? ((debug as Record<string, unknown>).data as Record<string, unknown> | undefined) : undefined;
+  const granular = dados && Array.isArray(dados.granular_scopes) ? (dados.granular_scopes as Record<string, unknown>[]) : [];
+  const gestao = granular.find((s) => s && s.scope === "ads_management");
+  const alvos = gestao && Array.isArray(gestao.target_ids) ? (gestao.target_ids as unknown[]).map((x) => String(x).replace(/^act_/, "")) : null;
+  if (alvos && alvos.length && alvos.indexOf(id) < 0) {
+    return `A conta de anúncios ${nome} não foi marcada para gestão ao conectar. Clique em Conectar pedindo gestão e, na tela da Meta, marque essa conta de anúncios.`;
+  }
+  const tarefas = Array.isArray(c.user_tasks) ? (c.user_tasks as unknown[]).map(String) : null;
+  if (tarefas && tarefas.length && tarefas.indexOf("MANAGE") < 0 && tarefas.indexOf("ADVERTISE") < 0) {
+    return `O perfil que conectou só analisa a conta ${nome} (${tarefas.join(", ")}). No Gerenciador de Negócios, dê a ele o papel de anunciante ou administrador dessa conta.`;
+  }
+  return null;
+}
+
+/** debug_token do próprio token (tipo e granular_scopes). O token fica no servidor; nunca volta na resposta. */
+export async function lerDebugDoToken(token: string, versao = "v21.0", buscar: typeof fetch = fetch): Promise<Record<string, unknown> | null> {
+  try {
+    const u = new URL(`https://graph.facebook.com/${versao}/debug_token`);
+    u.searchParams.set("input_token", token);
+    u.searchParams.set("access_token", token);
+    const res = await buscar(u, { signal: prazo(12_000) });
+    const corpo = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    return res.ok && corpo && !corpo.error ? corpo : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A conferência guardada ainda vale? (a tela não pergunta à Meta a cada abertura) */
 export function conferenciaValida(conferidoEm: string | null | undefined, agoraMs: number, validadeMs: number): boolean {
   const t = conferidoEm ? Date.parse(conferidoEm) : NaN;

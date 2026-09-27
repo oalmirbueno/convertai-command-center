@@ -203,6 +203,8 @@ import {
   conferenciaValida,
   criativosComApelido,
   escoposConcedidos,
+  bloqueioDaGestaoNaConta,
+  lerDebugDoToken,
   gestaoDosEscopos,
   marcarEnsaio,
   desfazerNaMeta,
@@ -5921,6 +5923,21 @@ type AcessoDeGestao = { grafo: GrafoMeta | null; gestao: Gestao };
 /** A conferência guardada no banco vale 6 h; a da memória da função, 10 min (sem o SQL X2). */
 const VALIDADE_DA_CONFERENCIA_MS = 6 * 3600_000;
 const conferenciasEmMemoria = new CacheCurto<{ escopos: string[] | null; em: string }>(10 * 60_000);
+/** Bloqueio por conta (conta não marcada no login ou perfil só de análise), lido junto da conferência. */
+const bloqueiosEmMemoria = new CacheCurto<string | null>(10 * 60_000);
+
+/** Confere as contas de anúncio do cliente (até 3): a primeira que bloqueia a gestão dá o motivo. */
+async function bloqueioNasContas(servico: SupabaseClient, token: string, grafo: GrafoMeta, clientId: string): Promise<string | null> {
+  const contas = [...(await contasMetaDoCliente(servico, clientId))].slice(0, 3);
+  if (!contas.length) return null;
+  const debug = await lerDebugDoToken(token);
+  for (const id of contas) {
+    const conta = await grafo.ler(`act_${id}`, "name,user_tasks").catch(() => null);
+    const motivo = bloqueioDaGestaoNaConta(debug, conta, id);
+    if (motivo) return motivo;
+  }
+  return null;
+}
 
 /** Token do cliente para a gestão: com o id e a última conferência (SQL X2); sem ele, o da Biblioteca. */
 async function tokenDeGestao(servico: SupabaseClient, clientId: string | null): Promise<{ token: string | null; tokenId: string | null; escopos: string[] | null; conferidoEm: string | null; guardada: boolean }> {
@@ -5965,6 +5982,13 @@ async function acessoDeGestao(servico: SupabaseClient, clientId: string | null, 
     em = lida.em;
   }
   const g = gestaoDosEscopos(escopos);
+  if (g.disponivel && clientId) {
+    // O escopo no token não basta: a conta precisa ter sido marcada no login e o perfil precisa poder anunciar.
+    const chaveDaConta = `${t.tokenId ?? "cliente"}:${clientId}`;
+    if (opcoes.conferir) bloqueiosEmMemoria.esquecer(chaveDaConta);
+    const bloqueio = opcoes.conferir ? await bloqueiosEmMemoria.obter(chaveDaConta, () => bloqueioNasContas(servico, t.token!, grafo, clientId)) : await bloqueiosEmMemoria.obter(chaveDaConta, async () => null);
+    if (bloqueio) return { grafo, gestao: { disponivel: false, motivo: bloqueio, faltam: [], escopos, conferido_em: em, tem_token: true, guardada: t.guardada } };
+  }
   return { grafo, gestao: { ...g, escopos, conferido_em: em, tem_token: true, guardada: t.guardada } };
 }
 
