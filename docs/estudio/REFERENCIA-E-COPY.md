@@ -376,6 +376,107 @@ prompt é a mesma, e o bloco novo entra fora do `promptDaLamina` e do
 mais ao gerador (a geração é recusada antes). Testes em
 `src/test/tipografia-do-cliente.test.tsx`.
 
+## Texto da lâmina (frente R5, 26/09)
+
+Pedido do dono: "quando gerar a arte, ele já refinar e encurtar o conteúdo,
+senão fica textão; ou divide em partes e não deixa só em um lugar; ajuda na
+continuação e dinâmica do carrossel, pra não ficar sempre fixo de um lado, na
+mesma coisa."
+
+**1. Enxugar na geração** (`estudio-arte/texto-da-lamina.ts`, gancho no
+`gerarCard` logo depois da conferência da tipografia). A preparação (R3) só
+enxuga as lâminas 2+ de uma vez. Agora cada `gerar_card` (Gerar, Refazer, a
+lâmina avulsa e a fila) confere o texto contra o limite do papel, com os
+números de sempre (`_shared/menos-texto-nas-laminas.ts`): capa até 14
+palavras, miolo pela regra da R3 (total 37, headline 10, cada apoio 25),
+fechamento 28, estático 40.
+
+- Acima do limite: UMA chamada curta ao redator (modelo do diretor de arte),
+  com os limites do papel, a lâmina anterior e a seguinte (para a sequência) e
+  os intocáveis (número, preço, nome próprio, sigla, endereço). O CTA e o selo
+  nunca vão para o redator: voltam como eram.
+- Em código, sem nova chamada: a resposta sem headline, maior que o original
+  ou sem algum intocável cai no corte do original no fim de frase, com aviso;
+  a resposta boa que ainda passa é cortada no fim de frase, com aviso. Redator
+  fora do ar: corte com aviso (não guardado). Erro do motor (saldo, cota,
+  chave): a geração para com o aviso de sempre, sem cortar o texto.
+- Guardado em `<cliente>/estudio/leituras/texto-<hash>.json` (papel, limite e
+  texto): refazer ou preparar de novo com o mesmo texto não paga de novo.
+- O texto enxuto vai para a direção (a equipe vê na tela) com
+  `texto_na_geracao` (original, blocos de antes, origem, aviso, palavras antes
+  e depois); o custo entra no trabalho e na versão (`custoExtraUsd`); a versão
+  guarda o resumo em `texto_na_geracao`.
+- Não muda: texto dentro do limite (nada é chamado), capa que já tem versão,
+  anúncio (Mesa Ads) e o texto que a equipe mandou manter ("Voltar ao
+  original" grava `manter`; editar o texto depois volta a valer a regra).
+- Tela: o botão Gerar (e Gerar todas, Refazer, Gerar de novo) soma a chamada
+  curta quando a lâmina vai precisar enxugar (mesma regra,
+  `precisaEnxugarNaGeracao`). Na ferramenta Lâmina, junto do Refinar texto
+  (`EstudioTextoDaLamina.tsx`): "Texto longo para a arte: ao gerar, ele é
+  enxugado"; depois, "Enxugado ao gerar: de N para M palavras" com "Voltar ao
+  original".
+
+**2. Dividir em partes dentro da lâmina.** No miolo (lâmina 2 à penúltima),
+fora do replicar e do anúncio, o texto com mais de uma ideia vira 2 a 4
+partes curtas, em código (`dividirEmPartes`), nesta ordem: linhas com
+marcador ou várias linhas curtas; comparação (antes e depois, errado e certo,
+mito e verdade, vs); passos (primeiro, depois, em seguida, por fim);
+enumeração ("A, B e C", com abertura "Três sinais:"); várias frases; ponto e
+vírgula; frase longa com dois argumentos (corta na conjunção mais perto do
+meio). Cada parte é um trecho contínuo do texto exato: a conferência continua
+batendo. Texto que cabe num bloco não divide. O bloco `TEXTO EM PARTES` entra
+logo depois do bloco do miolo desenhado (R4): título no lugar do título, cada
+parte no item do componente (checklist, cartão, coluna, passo da linha do
+tempo, caixa, etiqueta, linha com ícone), distribuídas pela forma e pela zona
+(lado a lado na comparação, ligadas por um fio nos passos, empilhadas na
+coluna, em fileira ou grade no topo e na base), apoio pequeno fechando; nunca
+um parágrafo único num canto. Cena fixa: uma linha por parte, sem caixa. A
+versão guarda `texto_em_partes` (forma e quantidade).
+
+**3. Posição que varia na série** (`estudio-arte/posicao-na-serie.ts`,
+gancho antes da zona do texto no `gerarCard`). No modo normal (sem
+referência, foto, recorte, elemento nem contínuo; fora do anúncio), a zona do
+texto roda na série: o plano é feito sobre a direção inteira, em código;
+nenhuma lâmina repete a zona nem o eixo da anterior (esquerda, direita, topo,
+base, centro, dividido) nem os da seguinte quando ela está fixa; o mesmo lado
+não aparece 3 vezes seguidas; o eixo e o lado menos usados vêm primeiro; a
+zona da direção fica quando já serve. O lado do assunto sai da descrição da
+imagem e do ponto focal ("metade direita", "dois terços de cima"; o que fala
+do texto não conta): o texto fica do outro lado, e para trocar de lado a
+descrição é espelhada junto (direita vira esquerda, cima vira baixo).
+Descrição ambígua: a zona fica. "Dividido" (só sem lado do assunto): título no
+alto e o apoio ou as partes na faixa de baixo (bloco `ARRANJO DIVIDIDO`; a
+faixa de baixo entra na área da correção automática). A decisão é gravada na
+direção (`posicao_na_serie`, com a zona de antes), então a correção, a tela e
+as lâminas geradas em paralelo usam a mesma; a lâmina decidida fica. Ficam
+como estão: a capa, o fechamento, a lâmina com foto, elemento ou referência
+própria, o contínuo, o anúncio e o carrossel de 2. Com referência vale a
+regra da R3 por nível (Idêntica segue a referência). A continuidade vem da
+identidade da série (R4) e da tipografia (T2). O diretor também ouve isso: a
+linha da zona do texto nas instruções da direção deixou de pedir "o mesmo
+eixo de alinhamento no carrossel".
+
+**4. Dividir em 2 lâminas (com confirmação).** A lâmina 2+ (não a capa nem
+o estático) que passa do limite e tem mais de uma ideia recebe a sugestão
+(`sugestaoDeDividirEmDuas`): a primeira fica com o título e a primeira
+metade (por frases ou partes, equilibrada), a nova com o resto; no fechamento
+o CTA vai para a nova (que vira a última). A preparação devolve
+`dividir_em_duas` e o aviso diz "Lâmina N: dá para dividir em 2 (ferramenta
+Lâmina)". Na ferramenta Lâmina, "Dividir em 2 lâminas" mostra a prévia das
+duas e só divide ao confirmar (ação `texto_da_lamina` com `operacao:
+dividir` e `confirmado: true`, sem custo, com auditLog): a lâmina seguinte
+nasce com a segunda parte e o layout padrão, e as lâminas depois andam uma
+posição com as versões e as arquivadas. O aviso traz "Desfazer" (`juntar`),
+que vale enquanto a lâmina nova não tem arte e os textos são os da divisão.
+Travas: trabalho entregue, anúncio, contínuo, 20 lâminas e geração em
+andamento na fila.
+
+**O que não mudou.** `promptDaLamina` e `promptDoReplicar` são os mesmos: os
+fixtures `lamina-normal-hoje.json`, `replicar-identica-hoje.json` e
+`replicar-adaptado.json` ficaram iguais (os blocos novos entram fora deles, no
+`gerarCard`, antes da variação). Nenhuma camada: tudo é pedido ao gerador.
+Testes em `src/test/texto-da-lamina.test.ts`.
+
 ## Onde está
 
 | Peça | Arquivo |
@@ -398,3 +499,8 @@ mais ao gerador (a geração é recusada antes). Testes em
 | Amostra no navegador e regra da marca na tela | `src/lib/mesa/amostraDaFonte.ts`, `src/lib/mesa/tipografiaDoCliente.ts` |
 | Bloqueio e Sugerir da biblioteca | `src/components/mesa/EstudioSemTipografia.tsx`; `agente-contexto` (`fontes_da_biblioteca` com `previa` e `gravar`) |
 | Testes da tipografia | `src/test/tipografia-do-cliente.test.tsx` |
+| Enxugar na geração, texto em partes, dividir em 2 (puro) | `supabase/functions/estudio-arte/texto-da-lamina.ts` |
+| Posição que varia na série (plano, espelho, dividido) | `supabase/functions/estudio-arte/posicao-na-serie.ts` |
+| Ganchos e ação `texto_da_lamina` | `supabase/functions/estudio-arte/index.ts` (`textoDaLaminaNaGeracao`, `posicaoDaLaminaNaSerie`, `textoDaLamina`, `areasDeDesenho`) |
+| Tela do texto da lâmina e custo no Gerar | `src/components/mesa/EstudioTextoDaLamina.tsx`; `partesGerarDas` em `AbaEstudio.tsx` |
+| Testes do texto da lâmina | `src/test/texto-da-lamina.test.ts` (registro `texto_da_lamina` em `_shared/motores.ts`) |

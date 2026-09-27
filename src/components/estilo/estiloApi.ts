@@ -58,6 +58,15 @@ export interface MensagemDoEstilo {
   custo_usd?: number | null;
 }
 
+/** Frente AP: arte entregue que pode virar referência do estilo (só entra com o clique da equipe). */
+export interface SugestaoDaEntregaNaTela {
+  trabalho_id: string;
+  titulo: string;
+  motivo: string;
+  entregue_em: string;
+  url: string;
+}
+
 export interface EstadoDoEstilo {
   client_id: string;
   marca_id: string | null;
@@ -71,6 +80,8 @@ export interface EstadoDoEstilo {
   versoes: VersaoNaTela[];
   aprendizados: AprendizadoNaTela[];
   testes: TesteNaTela[];
+  /** Frente AP: as melhores artes entregues ("sugeridas pelas entregas"); vazio sem entrega. */
+  sugeridas_pelas_entregas: SugestaoDaEntregaNaTela[];
   conversa_id?: string | null;
   mensagens?: MensagemDoEstilo[];
 }
@@ -101,6 +112,7 @@ export function normalizarEstado(d: any): EstadoDoEstilo | null {
     versoes: lista(d.versoes),
     aprendizados: lista(d.aprendizados),
     testes: lista(d.testes),
+    sugeridas_pelas_entregas: lista(d.sugeridas_pelas_entregas).filter((x: any) => x && typeof x.trabalho_id === "string"),
     conversa_id: typeof d.conversa_id === "string" ? d.conversa_id : d.conversa_id === null ? null : undefined,
     mensagens: Array.isArray(d.mensagens)
       ? d.mensagens

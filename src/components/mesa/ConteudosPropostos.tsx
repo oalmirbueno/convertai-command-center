@@ -20,6 +20,8 @@ import {
   type ItemProposto,
   type PropostaV4,
 } from "./mesaV4Api";
+// Frente AP (27/09): selo da memória editorial e "Trocar ângulo" na pauta repetida.
+import { avisoDaPauta, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
 
 /**
  * Conteúdos que o agente do mês ou a campanha propõem, em cartões enxutos
@@ -31,11 +33,14 @@ export function CartaoDoConteudo({
   item,
   onAbrir,
   apagar,
+  onTrocarAngulo,
 }: {
   item: ItemProposto;
   onAbrir?: (taskId: string, mes: string) => void;
   /** Com esta função, o cartão ganha a lixeira com confirmação curta. */
   apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar>;
+  /** Frente AP: refaz só esta pauta com outro ângulo (aparece na pauta repetida). */
+  onTrocarAngulo?: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
   const laminas = laminasDoItem(item);
@@ -54,10 +59,12 @@ export function CartaoDoConteudo({
             </span>
           )}
           {item.carrossel_infinito && <span className="mr-2">contínuo</span>}
+          <SeloDaPauta evolucao={item.evolucao} onTrocarAngulo={onTrocarAngulo} className="mr-2" />
           {apagar && <BotaoDeApagar onApagar={apagar} className="ml-auto" />}
         </div>
         {item.tema && <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema}</p>}
         {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
+        {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
         <div className="mt-1.5 flex flex-wrap items-center">
           {(cards.length > 0 || texto) && (
             <button
@@ -157,6 +164,9 @@ export function BlocoDaProposta({
   const [gravando, setGravando] = useState(false);
   const [escolhido, setEscolhido] = useState("");
   const gravada = proposta.status === "gravada";
+  const trocarAngulo = useTrocarAngulo([chaves.proposta(proposta.id), chaveDaLinhaDeEvolucao(clientId)], (r) => {
+    if (r && r.proposta) queryClient.setQueryData(chaves.proposta(proposta.id), r.proposta);
+  });
   const projetoDaProposta = projetoSugerido || proposta.project_id || "";
   const projetos = useProjetosDeSocial(clientId, !gravada && !projetoDaProposta);
   const projeto = projetoDaProposta || escolhido || (projetos.candidatos.length === 1 ? projetos.candidatos[0].id : "");
@@ -196,7 +206,15 @@ export function BlocoDaProposta({
     <div className="min-w-0 space-y-2">
       {!compacto && (
         <div className={grade ? "grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3" : "space-y-1.5"}>
-          {itens.map((it, i) => <CartaoDoConteudo key={it.tema_id || i} item={it} onAbrir={onAbrirNoEstudio} apagar={apagarDoCartao(it)} />)}
+          {itens.map((it, i) => (
+            <CartaoDoConteudo
+              key={it.tema_id || i}
+              item={it}
+              onAbrir={onAbrirNoEstudio}
+              apagar={apagarDoCartao(it)}
+              onTrocarAngulo={!gravada && proposta.status !== "descartada" && !it.task_id && it.tema_id ? () => trocarAngulo(proposta.id, it.tema_id as string) : undefined}
+            />
+          ))}
         </div>
       )}
       {gravada ? (

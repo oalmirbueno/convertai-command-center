@@ -53,6 +53,9 @@ export interface ItemProposto {
   instrucao_arte?: string;
   /** Etapa da campanha (aquecimento, lançamento...). */
   etapa?: string;
+  /** Frente AP: o ângulo da pauta e a checagem da memória editorial (tema novo, ângulo novo ou repetição). */
+  angulo?: string;
+  evolucao?: unknown;
 }
 
 export interface PropostaV4 {

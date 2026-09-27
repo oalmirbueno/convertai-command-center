@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoMioloEnxuto } from "../../../supabase/functions/_shared/limite-do-miolo";
+import { precisaEnxugarNaGeracao, TAMANHO_DO_ENXUGAR, textoDaSugestaoDeDividir, type LaminaDoTexto } from "../../../supabase/functions/estudio-arte/texto-da-lamina";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
+import EstudioTextoDaLamina from "./EstudioTextoDaLamina";
 import { useModoFoco } from "@/lib/modoFoco";
 import { temJanelaAberta } from "./TelaCheiaDaMesa";
 import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
@@ -680,7 +682,10 @@ function DetalheDoItem({
     ordens.reduce((todas: ParteDaEstimativa[], o) => {
       const c = cardsDaDirecao.find((x) => x.ordem === o);
       const q = qualidadeNaGeracao(c, trabalho?.direcao?.referencias_ids, comFundoContinuo && !!c && usaFundoContinuo(c), qualidade);
-      return todas.concat(partesGerar(1, q));
+      // Frente R5: lâmina acima do limite do papel ganha a chamada curta do redator ao gerar (mesma regra do servidor).
+      const enxuga = !!c && precisaEnxugarNaGeracao({ card: c as unknown as LaminaDoTexto, total: cardsDaDirecao.length, capaComVersao: ultimas.has(1) });
+      const redator: ParteDaEstimativa[] = enxuga ? [{ modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHO_DO_ENXUGAR.entrada, tokensSaida: TAMANHO_DO_ENXUGAR.saida }] : [];
+      return todas.concat(partesGerar(1, q)).concat(redator);
     }, []);
   const ordensDaFila = filaDeGeracao.map((c) => c.ordem);
   const filaComFundo = partesDoFundo(ordensDaFila).length > 0;
@@ -785,10 +790,12 @@ function DetalheDoItem({
     );
     // Frente R3: lâminas longas chegam enxutas (uma chamada curta); a tela diz quantas.
     const enxuto = textoDoMioloEnxuto(r);
+    // Frente R5: a lâmina que ainda passa do limite e tem mais de uma ideia pode ser dividida em 2 (ferramenta Lâmina).
+    const aviso = [enxuto, textoDaSugestaoDeDividir(r && r.dividir_em_duas)].filter(Boolean).join(" ") || null;
     if (escolhas.modo === "roteiro") {
-      toast.success("Direção montada do roteiro", { description: enxuto ? `${enxuto} Confira na prancheta e gere.` : "Sem custo de IA. Confira as lâminas na prancheta e gere." });
-    } else if (enxuto) {
-      toast.info(enxuto);
+      toast.success("Direção montada do roteiro", { description: aviso ? `${aviso} Confira na prancheta e gere.` : "Sem custo de IA. Confira as lâminas na prancheta e gere." });
+    } else if (aviso) {
+      toast.info(aviso);
     }
     return r;
   };
@@ -1546,20 +1553,33 @@ function DetalheDoItem({
       onConcluido={atualizar}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
       refinarTexto={
-        <EstudioRefinarTexto
-          key={`refino-${cardSelecionado.ordem}`}
-          trabalhoId={trabalho.id}
-          alvo="lamina"
-          ordem={cardSelecionado.ordem}
-          texto={cardSelecionado.texto_exato || ""}
-          partes={partesRefinar}
-          bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
-          onAplicar={async (novo) => {
-            await configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } });
-            toast.success("Texto aplicado na lâmina", { description: ultimaDaEscolhida ? "Gere de novo para a arte mostrar o texto novo." : undefined });
-          }}
-          onConcluido={() => mesa.atualizarCusto()}
-        />
+        <div className="space-y-2">
+          {/* Frente R5: texto enxugado ao gerar (voltar ao original), aviso de que vai enxugar e dividir em 2 lâminas. */}
+          <EstudioTextoDaLamina
+            key={`texto-${cardSelecionado.ordem}`}
+            trabalhoId={trabalho.id}
+            card={cardSelecionado as any}
+            total={cardsDaDirecao.length}
+            capaComVersao={ultimas.has(1)}
+            continuo={continuoLigado}
+            bloqueado={entregue || algoGerando}
+            onMudou={atualizar}
+          />
+          <EstudioRefinarTexto
+            key={`refino-${cardSelecionado.ordem}`}
+            trabalhoId={trabalho.id}
+            alvo="lamina"
+            ordem={cardSelecionado.ordem}
+            texto={cardSelecionado.texto_exato || ""}
+            partes={partesRefinar}
+            bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+            onAplicar={async (novo) => {
+              await configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } });
+              toast.success("Texto aplicado na lâmina", { description: ultimaDaEscolhida ? "Gere de novo para a arte mostrar o texto novo." : undefined });
+            }}
+            onConcluido={() => mesa.atualizarCusto()}
+          />
+        </div>
       }
     />
   ) : (

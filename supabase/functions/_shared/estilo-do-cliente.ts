@@ -36,7 +36,8 @@ export const ROTULOS_DAS_REGRAS: Record<CampoDaRegra, string> = {
   evitar: "Evitar",
 };
 
-export type OrigemDaReferenciaDoEstilo = "referencia" | "acervo" | "teste";
+/** "entrega" (frente AP, 27/09): arte entregue pelo Estúdio, sugerida pelas entregas e confirmada pela equipe. */
+export type OrigemDaReferenciaDoEstilo = "referencia" | "acervo" | "teste" | "entrega";
 
 /** Imagem que o estilo usa como guia de acabamento (nunca conteúdo a copiar). */
 export type ReferenciaDoEstilo = {
@@ -150,7 +151,7 @@ export function normalizarRegras(v: unknown): RegrasDoEstilo {
 export function normalizarReferencia(v: unknown): ReferenciaDoEstilo | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  const origem = o.origem === "acervo" || o.origem === "teste" ? o.origem : o.origem === "referencia" ? "referencia" : null;
+  const origem = o.origem === "acervo" || o.origem === "teste" || o.origem === "entrega" ? o.origem : o.origem === "referencia" ? "referencia" : null;
   const bucket = umaLinha(o.bucket, 40);
   const caminho = String(o.caminho ?? "").trim().slice(0, 500);
   if (!ehUuid(o.id) || !origem || !bucket || !caminho || caminho.indexOf("..") >= 0) return null;

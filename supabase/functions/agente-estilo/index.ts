@@ -22,6 +22,10 @@
  * - estilo_ativar { client_id, ativo }
  * - aprendizado_apagar { client_id, id }
  * - referencia_tirar { client_id, referencia_id }
+ * - referencia_da_entrega { client_id, trabalho_id } (frente AP, 27/09): a arte
+ *   entregue sugerida pelas entregas entra no estilo (versão nova; a equipe
+ *   confirma pelo botão e desfaz voltando a versão). O estado traz
+ *   sugeridas_pelas_entregas (as melhores artes entregues, só sugestão).
  * - teste_gerar { client_id, quantos, tema?, modelo_imagem_id? }
  * - teste_aprovar { client_id, teste_id } / teste_descartar { client_id, teste_id }
  * - interruptor_ler { client_id, trabalho_ids } / interruptor { client_id, trabalho_ids, ligado }
@@ -45,6 +49,9 @@ import {
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+// Frente AP (27/09): as melhores artes entregues como sugestão de referência do estilo.
+import { lerIndiceDasEntregas, sugestoesDasEntregas } from "../_shared/aprendizado-das-entregas.ts";
+import { descricaoEmTexto } from "../_shared/aprendizado-continuo.ts";
 import { filtrarReferenciasDaMarca, lerContextoDaMarca, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import {
   type AcaoDoAgente,
@@ -336,7 +343,13 @@ async function estadoParaATela(p: Pedido, e: EstiloDoCliente) {
   const g = guiaAtual(e);
   const refs = g ? g.referencias : [];
   const testes = e.testes.slice().reverse();
-  const links = await linksAssinados([...refs.map((r) => ({ bucket: r.bucket, caminho: r.caminho })), ...testes.map((t) => ({ bucket: BUCKET_DO_ESTILO, caminho: t.caminho }))]);
+  // Frente AP: só sugestão (entra com o botão da equipe); a que já está no estilo não volta.
+  const sugeridas = await sugestoesDasEntregas(banco(), p.clientId, refs.map((r) => r.id)).catch(() => []);
+  const links = await linksAssinados([
+    ...refs.map((r) => ({ bucket: r.bucket, caminho: r.caminho })),
+    ...testes.map((t) => ({ bucket: BUCKET_DO_ESTILO, caminho: t.caminho })),
+    ...sugeridas.map((x) => ({ bucket: x.bucket, caminho: x.caminho })),
+  ]);
   return {
     client_id: p.clientId,
     marca_id: p.marcaId,
@@ -350,6 +363,7 @@ async function estadoParaATela(p: Pedido, e: EstiloDoCliente) {
     versoes: e.versoes.slice().reverse().map((v) => ({ numero: v.numero, origem: v.origem, nota: v.nota, criado_em: v.criado_em, guia: v.guia })),
     aprendizados: e.aprendizados.slice().reverse(),
     testes: testes.map((t, i) => ({ ...t, url: links[refs.length + i] })),
+    sugeridas_pelas_entregas: sugeridas.map((x, i) => ({ trabalho_id: x.trabalho_id, titulo: x.titulo, motivo: x.motivo, entregue_em: x.entregue_em, url: links[refs.length + testes.length + i] })),
   };
 }
 
@@ -821,6 +835,34 @@ async function referenciaTirar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ ...(await estadoParaATela(p, e)), custo_usd: 0 });
 }
 
+/**
+ * Frente AP: a arte entregue (capa) sugerida pelas entregas entra no estilo
+ * como referência de acabamento, numa versão nova (Desfazer = voltar a
+ * versão anterior). Só com o clique da equipe; nada entra sozinho.
+ */
+async function referenciaDaEntrega(ch: Chamador, corpo: Record<string, unknown>) {
+  const p = await pedidoDoCliente(ch, corpo);
+  const trabalhoId = idDe(corpo.trabalho_id, "trabalho_id");
+  const indice = await lerIndiceDasEntregas(banco(), p.clientId);
+  const entrega = indice.entregas.find((x) => x.trabalho_id === trabalhoId && !x.substituida && !!x.capa);
+  if (!entrega || !entrega.capa) throw new ErroHttp(404, "entrega_inexistente", "Esta arte entregue não está na memória do cliente.");
+  const ref = normalizarReferencia({
+    id: trabalhoId,
+    origem: "entrega",
+    bucket: entrega.capa.bucket,
+    caminho: entrega.capa.caminho,
+    nome: `Entregue: ${entrega.titulo}`,
+    leitura: descricaoEmTexto(entrega.descricao_visual) || null,
+  });
+  if (!ref) throw new ErroHttp(404, "entrega_inexistente", "A imagem desta arte entregue não foi encontrada.");
+  const e = await mudar(p, ch, (x) => {
+    const g = guiaAtual(x);
+    if (g && g.referencias.some((r) => r.id === ref.id)) throw new ErroHttp(409, "ja_no_estilo", "Esta arte já está no estilo.");
+    return comNovaVersao(x, guiaComReferencias(g, [ref], []), "referencias", `Referência nova, sugerida pelas entregas: ${entrega.titulo}.`, ch.userId, new Date().toISOString());
+  });
+  return json({ ...(await estadoParaATela(p, e)), custo_usd: 0 });
+}
+
 // ------------------------------------------------------------------ interruptor do trabalho (Estúdio e Estúdio Ads)
 
 function idsDeTrabalho(v: unknown): string[] {
@@ -1043,6 +1085,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   estilo_ativar: estiloAtivar,
   aprendizado_apagar: aprendizadoApagar,
   referencia_tirar: referenciaTirar,
+  referencia_da_entrega: referenciaDaEntrega,
   teste_gerar: testeGerar,
   teste_aprovar: testeAprovar,
   teste_descartar: testeDescartar,

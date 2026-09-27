@@ -838,6 +838,23 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     ligacao: { arquivo: ESTUDIO, trechos: ["const tipografia = tipografiaDoKit(fontes);", "candidatos.push(...anexosDaTipografia(tipografia, t.client_id)", "const blocoDaTipografiaAqui = blocoDaTipografia({"] },
     intocado: "Com título e texto no kit, a lista de fontes do prompt é a mesma e o promptDaLamina e o promptDoReplicar não mudam (fixtures iguais); o bloco novo entra fora deles. Ajuste, correção e fundo contínuo seguem sem a recusa.",
   },
+  {
+    id: "texto_da_lamina",
+    em: "2026-09-26",
+    pedido: "Dono: \"quando gerar a arte, ele já refinar e encurtar o conteúdo, senão fica textão; ou divide em partes e não deixa só em um lugar; ajuda na continuação e dinâmica do carrossel, pra não ficar sempre fixo de um lado, na mesma coisa\".",
+    o_que: "Na geração de cada lâmina, o texto acima do limite do papel (capa, miolo, fechamento, estático) vai numa chamada curta ao redator, guardada por texto, mantendo número, nome, preço e CTA; o texto enxuto vai para a direção; resposta que não cabe é cortada no fim de frase, com aviso. O miolo com mais de uma ideia leva o texto dividido em 2 a 4 partes curtas (em código, trechos do texto exato) distribuídas pelo componente do miolo. No modo normal a zona do texto roda na série sem repetir a zona nem o eixo da vizinha, respeitando o lado do assunto (a descrição é espelhada quando troca de lado). A lâmina que não cabe recebe a sugestão de dividir em 2 lâminas, só com a confirmação da equipe.",
+    modulo: "estudio-arte/texto-da-lamina.ts e estudio-arte/posicao-na-serie.ts",
+    ligacao: {
+      arquivo: ESTUDIO,
+      trechos: [
+        "const textoNaGeracao = ads ? null : await textoDaLaminaNaGeracao(t, card,",
+        "if (posicaoDaSerie) cardDoPrompt = posicaoDaSerie.card;",
+        "partesDaLamina ? blocoDoTextoEmPartes({",
+        "texto_da_lamina: textoDaLamina,",
+      ],
+    },
+    intocado: "Texto dentro do limite: nada é chamado e o prompt é o de hoje; capa que já tem versão não muda; anúncio (Mesa Ads) igual; lâmina com referência (qualquer nível), foto, recorte, contínuo, a capa e o fechamento ficam na zona da direção; promptDaLamina e promptDoReplicar não mudam (fixtures iguais).",
+  },
 ];
 
 // ------------------------------------------------------------------ consultas

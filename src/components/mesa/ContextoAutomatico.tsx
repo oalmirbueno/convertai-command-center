@@ -10,6 +10,9 @@ import CartaoMarca, { ChipsDaPaleta } from "./ContextoCartaoMarca";
 import FotosDoCliente from "./ContextoFotos";
 import GaleriaDeReferencias from "./ContextoGaleriaDeReferencias";
 import { BarraDoScore, Hub, useHubsAbertos } from "./ContextoHub";
+// Frente AP (27/09): o que o painel aprendeu com as entregas, os ajustes, as reprovações e os números reais.
+import ContextoAprendizados, { useAprendizadosDoCliente } from "./ContextoAprendizados";
+import { aprendizadosDoPainel, resumoDosAprendizados } from "./aprendizadosDoPainel";
 import { useMesa } from "./MesaContexto";
 import type { ParteDoContexto } from "./AbaContexto";
 import {
@@ -514,6 +517,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const [sugestoesPorCliente, setSugestoesPorCliente] = useState<Record<string, SugestoesDoContexto>>({});
   const [aplicando, setAplicando] = useState<string | null>(null);
   const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO);
+  const aprendizados = useAprendizadosDoCliente(clientId);
 
   const dados = leitura.data;
   // O kit da tabela responde antes do "ler"; o do "ler" cobre enquanto isso.
@@ -821,6 +825,17 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         rolagem
       >
         <FotosDoCliente onOrganizar={onIrPara ? () => onIrPara("imagens") : undefined} />
+      </Hub>
+
+      <Hub
+        id="ctx-aprendizados"
+        titulo="O que o painel aprendeu"
+        resumo={aprendizados.data ? resumoDosAprendizados(aprendizadosDoPainel(aprendizados.data)) : aprendizados.isError ? "Não foi possível ler agora" : "Lendo..."}
+        aberto={hubs.aberto("ctx-aprendizados")}
+        onAlternar={() => hubs.alternar("ctx-aprendizados")}
+        rolagem
+      >
+        <ContextoAprendizados clientId={clientId} />
       </Hub>
 
       <Hub

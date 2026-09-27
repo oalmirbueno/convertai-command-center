@@ -550,6 +550,41 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
         </section>
       )}
 
+      {estado.sugeridas_pelas_entregas.length > 0 && (
+        <section>
+          <h3 className={juntar(texto.rotulo, "mb-2 flex items-center")}>
+            Sugeridas pelas entregas
+            <AjudaRecolhida titulo="Sugeridas pelas entregas">As artes entregues que renderam melhor ou foram aprovadas sem ajuste. Entram no estilo só quando você usar.</AjudaRecolhida>
+          </h3>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {estado.sugeridas_pelas_entregas.map((s) => (
+              <div key={s.trabalho_id} className="min-w-0">
+                <Miniatura url={s.url} alt={s.titulo} />
+                <p className="mt-1 truncate text-[11px] text-muted-foreground" title={s.motivo}>{s.motivo}</p>
+                <button
+                  type="button"
+                  className={juntar(botao.barra, "mt-0.5 px-1.5 text-primary")}
+                  disabled={!!ocupado}
+                  onClick={async () => {
+                    const antes = estado.versao_atual;
+                    const ok = await direto("referencia_da_entrega", { trabalho_id: s.trabalho_id }, "Não foi possível usar esta arte");
+                    if (ok) {
+                      toast.success("Arte no estilo", {
+                        description: "Virou uma versão nova do estilo.",
+                        action: antes > 0 ? { label: "Desfazer", onClick: () => void direto("versao_voltar", { numero: antes }, "Não foi possível desfazer") } : undefined,
+                      });
+                    }
+                  }}
+                  aria-label={`Usar ${s.titulo} no estilo`}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {estado.aprendizados.length > 0 && (
         <section>
           <h3 className={juntar(texto.rotulo, "mb-2")}>O que o cliente ensinou</h3>

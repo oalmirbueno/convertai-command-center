@@ -41,6 +41,8 @@
  * - conteudo_rapido { client_id, pedido, campanha_id?, data?, formato?, tipo?,
  *   framework? } (25/09): uma chamada rápida escreve UM conteúdo e ele já entra
  *   no dia do calendário (gravar), com direção pronta no Estúdio.
+ * - trocar_angulo { proposta_id, tema_id } (27/09, frente AP): refaz só esta
+ *   pauta com um ângulo novo, sem repetir o post parecido da memória editorial.
  * - editar_item { proposta_id, tema_id, campos }: a equipe muda um conteúdo da
  *   proposta à mão (sem IA); o que já está na agenda não muda.
  * - campanha_conteudos { campanha_id, quantidade?, tipos?, frameworks?,
@@ -188,6 +190,20 @@ import { conhecimentoCalendarioPara, type MomentoDoCalendario } from "../_shared
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { datasDoPeriodo, pautasDePesquisa, type DataSazonal } from "../_shared/conhecimento-social.ts";
 import { hojeEmSaoPaulo, lerDesempenhoDoCliente, lerEvolucao, somarDiasIso } from "../_shared/evolucao.ts";
+// Frente AP (27/09): memória editorial (nunca repetir, ângulo novo em sequência, números reais) e a checagem com o Jev.
+import {
+  blocoDaMemoriaEditorial,
+  candidatosParecidos,
+  chavesDaPauta,
+  decidirEvolucao,
+  type EvolucaoDaPauta,
+  type MemoriaEditorial,
+  montarMemoriaEditorial,
+  normalizarEvolucao,
+  type PautaParaChecar,
+  perguntasDeRepeticao,
+  type RespostaDeChoice,
+} from "../_shared/memoria-editorial.ts";
 import {
   diagnosticoDasFrentes,
   type DiagnosticoEstruturado,
@@ -334,6 +350,12 @@ type Item = {
   etapa?: string;
   /** Lâminas que passaram do limite de palavras e foram encurtadas no código (menos-texto-nas-laminas.ts). */
   avisos_de_texto?: string[];
+  /** Frente AP: o ângulo desta pauta (passo seguinte, erro comum, caso real...). */
+  angulo?: string;
+  /** Frente AP: apelido da memória editorial que esta pauta continua (E7), como o modelo marcou. */
+  continua_de?: string | null;
+  /** Frente AP: tema novo, ângulo novo de um post anterior ou repetição (código + Jev). */
+  evolucao?: EvolucaoDaPauta;
 };
 
 type Proposta = {
@@ -501,6 +523,10 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(texto(o.instrucao_arte, 600) ? { instrucao_arte: texto(o.instrucao_arte, 600) } : {}),
     ...(texto(o.etapa, 60) ? { etapa: texto(o.etapa, 60) } : {}),
     ...(avisosDeTexto.length ? { avisos_de_texto: avisosDeTexto } : {}),
+    // Frente AP: ângulo e relação com a memória editorial (vazios: o item fica como antes).
+    ...(texto(o.angulo, 120) ? { angulo: texto(o.angulo, 120) } : {}),
+    ...(/^E\d{1,3}$/i.test(texto(o.continua_de, 8)) ? { continua_de: texto(o.continua_de, 8).toUpperCase() } : {}),
+    ...(normalizarEvolucao(o.evolucao) ? { evolucao: normalizarEvolucao(o.evolucao)! } : {}),
   };
 }
 
@@ -521,6 +547,9 @@ export function manterDoAnterior(itens: Item[], anteriores: Item[]): Item[] {
     if (!out.etapa && a.etapa) out.etapa = a.etapa;
     if (!out.tipo_editorial && a.tipo_editorial) out.tipo_editorial = a.tipo_editorial;
     if (!out.framework && a.framework) out.framework = a.framework;
+    // Frente AP: a checagem da memória editorial fica enquanto o tema e o gancho não mudam.
+    if (!out.evolucao && a.evolucao && out.tema === a.tema && out.gancho === a.gancho) out.evolucao = a.evolucao;
+    if (!out.angulo && a.angulo) out.angulo = a.angulo;
     return out;
   });
 }
@@ -600,6 +629,9 @@ const ESQUEMA_ITEM = obj({
   cards: { type: "array", items: ESQUEMA_CARD },
   tipo_editorial: S("string", { enum: [...IDS_DOS_TIPOS] }),
   framework: S("string", { enum: [...IDS_DOS_FRAMEWORKS] }),
+  // Frente AP: o ângulo do conteúdo e a relação com a memória editorial (sequência de evolução).
+  angulo: S("string", { description: "O ângulo deste conteúdo em poucas palavras (ex.: passo a passo, erro comum, caso real, objeção, prova, aprofundamento)." }),
+  continua_de: S(["string", "null"], { description: "Apelido do item da MEMÓRIA EDITORIAL que este conteúdo continua com ângulo novo (ex.: E7); null quando é tema novo." }),
 });
 
 export const ESQUEMA_TEMAS = {
@@ -763,7 +795,122 @@ type Contexto = {
   marca?: string | null;
   /** Itens do MCP que a equipe deixou valendo (orientações, dossiê, memórias, arquivos), já em texto (_shared/contexto-mcp.ts). */
   mcp?: string;
+  /** Frente AP: todos os temas do cliente (planejados, gravados e publicados, com números); null quando a leitura falhou. */
+  memoriaEditorial?: MemoriaEditorial | null;
 };
+
+/**
+ * Frente AP (27/09): a memória editorial do cliente, de todos os meses, lida
+ * do painel (propostas, agenda, publicações e métricas dos posts). Falha vira
+ * null: o agente segue sem a memória, como antes.
+ */
+async function lerMemoriaEditorial(servico: SupabaseClient, clientId: string, projectIds: string[], soDosProjetos = false): Promise<MemoriaEditorial | null> {
+  try {
+    const ha365 = new Date(Date.now() - 365 * 86_400_000).toISOString();
+    const vazio = Promise.resolve({ data: [] as unknown[], error: null });
+    const [propostas, tarefas, internos, posts, arquivadas] = await Promise.all([
+      servico.from("calendario_propostas").select("id, project_id, status, criado_em, itens").eq("client_id", clientId).neq("status", "descartada")
+        .order("criado_em", { ascending: false }).limit(40),
+      projectIds.length
+        ? servico.from("tasks").select("id, title, due_date, delivery_type, status").in("project_id", projectIds)
+          .in("delivery_type", ["carousel", "static", "design", "reel", "video", "short"]).is("deleted_at", null)
+          .order("due_date", { ascending: false }).limit(300)
+        : vazio,
+      servico.from("editorial_post_internal").select("post_id, task_id").eq("client_id", clientId).not("task_id", "is", null).limit(500),
+      servico.from("social_post_metrics").select("media_id, media_type, caption, permalink, posted_at, reach, saved, shares, comments_count, like_count")
+        .eq("client_id", clientId).gte("posted_at", ha365).order("posted_at", { ascending: false }).limit(300),
+      // Peças apagadas (e as que o refazer tirou antes de gerar de novo) não contam como tema já feito.
+      projectIds.length
+        ? servico.from("tasks").select("id").in("project_id", projectIds).not("deleted_at", "is", null).gte("deleted_at", ha365).limit(1000)
+        : vazio,
+    ]);
+    const tarefaDoPost = new Map(((internos.data ?? []) as Array<{ post_id: string; task_id: string | null }>).filter((x) => x.task_id).map((x) => [x.post_id, x.task_id as string]));
+    const postIds = Array.from(tarefaDoPost.keys()).slice(0, 300);
+    const { data: pubs } = postIds.length
+      ? await servico.from("editorial_publications").select("post_id, external_post_id, permalink, published_at").eq("client_id", clientId).eq("status", "published").in("post_id", postIds)
+      : { data: [] as unknown[] };
+    return montarMemoriaEditorial({
+      // Marca por projeto (Acerbi e CME): só as propostas dos projetos da marca.
+      propostas: ((propostas.data ?? []) as Array<{ id: string; project_id: string | null; status: string; criado_em: string; itens: unknown }>)
+        .filter((p) => !soDosProjetos || (!!p.project_id && projectIds.indexOf(p.project_id) >= 0)),
+      tarefas: (tarefas.data ?? []) as Array<{ id: string; title: string; due_date: string | null; delivery_type: string | null; status: string | null }>,
+      publicacoes: ((pubs ?? []) as Array<{ post_id: string; external_post_id: string | null; permalink: string | null; published_at: string | null }>)
+        .map((p) => ({ task_id: tarefaDoPost.get(p.post_id) ?? null, external_post_id: p.external_post_id, permalink: p.permalink, published_at: p.published_at })),
+      posts: (posts.data ?? []) as Array<{ media_id: string }>,
+      tarefasArquivadas: ((arquivadas.data ?? []) as Array<{ id: string }>).map((t) => t.id),
+    });
+  } catch (e) {
+    console.error("[agente-calendario] memoria editorial", { erro: e instanceof Error ? e.message : "desconhecido" });
+    return null;
+  }
+}
+
+/** Custo e avisos da checagem da memória editorial. */
+type ResultadoDaChecagem = { custo: number; checadas: number; repetidas: number; erro: string | null };
+
+/** Uma frase para a resposta quando alguma pauta parece repetir post já feito (sem repetição: null). */
+export function avisoDaChecagem(c: Pick<ResultadoDaChecagem, "repetidas">): string | null {
+  if (!c.repetidas) return null;
+  return c.repetidas === 1
+    ? "1 pauta parece repetir um post já feito: está marcada no cartão, com Trocar ângulo."
+    : `${c.repetidas} pautas parecem repetir posts já feitos: estão marcadas nos cartões, com Trocar ângulo.`;
+}
+
+/**
+ * Frente AP: marca cada pauta como tema novo, ângulo novo de um post anterior
+ * ou repetição. Parecidos em código; com parecido, UM pedido ao Jev para todas
+ * as pautas (Choice: repetição / ângulo novo / tema diferente, e de qual post).
+ * Sem laço: a pauta repetida volta marcada, com o aviso, e a equipe troca o
+ * ângulo só dela (trocar_angulo). Custo do Jev na carteira do cliente.
+ * Muda os itens no lugar; `alvo` escolhe quais (o resto fica como está).
+ */
+async function checarEvolucao(
+  itens: Item[],
+  memoria: MemoriaEditorial | null | undefined,
+  c: { clientId: string; propostaId?: string | null; referencia: { tipo: string; id: string }; criadoPor: string; alvo?: (i: Item) => boolean },
+): Promise<ResultadoDaChecagem> {
+  const alvos = itens.filter((i) => i.tema && (!c.alvo || c.alvo(i)));
+  if (!alvos.length || !memoria || !memoria.temas.length) {
+    // Sem memória (cliente sem histórico): nada muda no item.
+    return { custo: 0, checadas: 0, repetidas: 0, erro: null };
+  }
+  const pautas = alvos.map((i) => {
+    const pauta: PautaParaChecar = {
+      tema: i.tema,
+      gancho: i.gancho,
+      angulo: i.angulo ?? null,
+      pilar: i.pilar,
+      formato: i.formato,
+      continua_de: i.continua_de ?? null,
+      chaves: c.propostaId ? chavesDaPauta(c.propostaId, i) : i.task_id ? [`task:${i.task_id}`] : [],
+    };
+    return { item: i, pauta, parecidos: candidatosParecidos(pauta, memoria) };
+  });
+  const perguntas = perguntasDeRepeticao(pautas.map((p) => ({ pauta: p.pauta, parecidos: p.parecidos })));
+  let respostas: Record<string, RespostaDeChoice> | null = null;
+  let custo = 0;
+  let erro: string | null = null;
+  if (perguntas.indices.length) {
+    try {
+      const r = await jevPerguntar({ state: perguntas.state, questions: perguntas.questions as Record<string, PerguntaJev> });
+      respostas = r.answers as Record<string, RespostaDeChoice>;
+      const cobrado = await cobrarJev(r, { clientId: c.clientId, tarefa: "calendario", referencia: c.referencia, criadoPor: c.criadoPor }).catch(() => null);
+      custo = cobrado ? cobrado.custoUsd : 0;
+    } catch (e) {
+      erro = e instanceof JevErro ? e.codigo : "jev_indisponivel";
+    }
+  }
+  let repetidas = 0;
+  pautas.forEach((p, i) => {
+    const k = perguntas.indices.indexOf(i);
+    const r = k >= 0 && respostas ? { relacao: respostas[`relacao_${k}`], base: respostas[`base_${k}`] } : null;
+    const ev = decidirEvolucao(p.pauta, p.parecidos, r, k >= 0 ? perguntas.mapas[k] : null);
+    if (ev.tipo === "repeticao") repetidas++;
+    p.item.evolucao = ev;
+    if (!p.item.angulo && ev.angulo) p.item.angulo = ev.angulo;
+  });
+  return { custo, checadas: pautas.length, repetidas, erro };
+}
 
 const corta = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : v ?? null);
 
@@ -831,6 +978,8 @@ async function montarContexto(
     .limit(200);
   // Com marca por projeto (Acerbi e CME), a agenda e os títulos são só os projetos da marca.
   const projectIds = await projetosDoClienteNaMarca(servico, clientId, marca, (projetos ?? []).map((p: { id: string }) => p.id));
+  // Frente AP: memória editorial (todos os meses), lida junto.
+  const memoriaEditorialP = lerMemoriaEditorial(servico, clientId, projectIds, !!marca);
 
   // Frente H: cérebro do cliente (calendário, campanha e copy), lido junto; o "Plano do mês" segue pelo caminho próprio.
   const cerebroP = resumoDoCerebro(servico, clientId, ["calendario", "campanha", "copy"], { limite: 2000, manter: (f) => !mesDoPlano(f.texto) });
@@ -959,6 +1108,7 @@ async function montarContexto(
     datasOcupadas,
     prompt,
     mcp: (await mcpP).texto,
+    memoriaEditorial: await memoriaEditorialP,
   };
 }
 
@@ -992,7 +1142,9 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     ...(ctx.cerebro === null ? { memoria_do_estrategista: ctx.memoria } : { cerebro_do_cliente: ctx.cerebro || null }),
     planos_combinados_com_a_equipe: ctx.planos,
   };
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}`;
+  // Frente AP: memória editorial (sem histórico, vazia: o pedido fica como antes).
+  const memoria = blocoDaMemoriaEditorial(ctx.memoriaEditorial, { enxuto });
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
@@ -1833,6 +1985,17 @@ Regras dos itens:
   const itens = [...prontos.values()]
     .map((i) => ({ ...i, data: normalizarDataUtil(i.data, uteis) }))
     .sort((a, b) => a.data.localeCompare(b.data));
+  // Frente AP: as publicações novas passam pela memória editorial (um pedido ao Jev para todas, sem laço).
+  const temasNovos = new Set(novos.map((i) => i.tema_id));
+  const checagem = await checarEvolucao(itens, ctx.memoriaEditorial, {
+    clientId: p.client_id,
+    propostaId: p.id,
+    referencia: { tipo: REF_TIPO, id: p.id },
+    criadoPor: chamador.userId,
+    alvo: (i) => temasNovos.has(i.tema_id) && !i.evolucao,
+  });
+  custo += checagem.custo;
+  tempo.marcar("memoria");
   const faltam = ordenados.filter((t) => !itens.some((i) => i.tema_id === t.id)).map((t) => t.id);
   const status = faltam.length === 0 ? "pronta" : "detalhando";
   const atualizada = await salvarProposta(servico, p, { itens, status });
@@ -1957,6 +2120,15 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
       return item;
     }).filter((i) => i.tema);
     campos.itens = manterDoAnterior(itens, p.itens).sort((a, b) => a.data.localeCompare(b.data));
+    // Frente AP: só a pauta nova ou mudada passa pela memória editorial (a que não mudou mantém o selo).
+    const checagem = await checarEvolucao(campos.itens as Item[], ctx.memoriaEditorial, {
+      clientId: p.client_id,
+      propostaId: p.id,
+      referencia: { tipo: REF_TIPO, id: p.id },
+      criadoPor: chamador.userId,
+      alvo: (i) => !i.evolucao,
+    });
+    custoJev += checagem.custo;
     // Pedido livre: o período acompanha as datas dos itens (a data pode ter mudado).
     if (String(p.parametros.origem ?? "") === "pedido_livre" && itens.length) {
       campos.periodo_inicio = (campos.itens as Item[])[0].data;
@@ -3260,6 +3432,8 @@ ${REGRAS_DOS_ITENS}`;
   }).filter((i) => i.tema);
   if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
   itens.sort((a, b) => a.data.localeCompare(b.data));
+  // Frente AP: cada conteúdo passa pela memória editorial (tema novo, ângulo novo ou repetição), antes de guardar.
+  const checagem = await checarEvolucao(itens, ctx.memoriaEditorial, { clientId, referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
 
   const { data: proposta, error } = await servico
     .from("calendario_propostas")
@@ -3282,7 +3456,7 @@ ${REGRAS_DOS_ITENS}`;
   if (error || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "O agente preparou os conteúdos, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
 
   // Imagem anexada que ficou de fora: a equipe lê o aviso na resposta.
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso]);
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem)]);
   await registrarMensagens(servico, conversaId, clientId, [
     {
       papel: "usuario",
@@ -3294,7 +3468,7 @@ ${REGRAS_DOS_ITENS}`;
     },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
   ]);
-  return json({ proposta, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ proposta, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------------ conteúdo rápido (25/09)
@@ -3398,6 +3572,9 @@ ${REGRAS_DOS_ITENS}`;
   if (campanha) item.campanha_id = campanha.id;
   if (!item.tema) item.tema = pedidoTexto.slice(0, 120);
   if (!item.cards.length) throw new ErroHttp(502, "rapido_sem_roteiro", "O agente não devolveu o roteiro. Tente de novo.", { uso_id: s.usoId });
+  // Frente AP: o conteúdo rápido também passa pela memória editorial (selo e aviso; sem laço).
+  const checagem = await checarEvolucao([item], ctx.memoriaEditorial, { clientId, referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
+  tempo.marcar("memoria");
 
   const { data: criada, error } = await servico
     .from("calendario_propostas")
@@ -3418,7 +3595,7 @@ ${REGRAS_DOS_ITENS}`;
     .select("*")
     .single();
   if (error || !criada) throw new ErroHttp(503, "proposta_nao_gravada", "O conteúdo foi escrito, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
-  const resposta = texto(r.resposta, 1000) || `Conteúdo pronto para ${data}.`;
+  const resposta = respostaComAvisos(texto(r.resposta, 1000) || `Conteúdo pronto para ${data}.`, [avisoDaChecagem(checagem)]);
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: `Conteúdo rápido: ${pedidoTexto}` },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: (criada as Proposta).id }] },
@@ -3430,7 +3607,7 @@ ${REGRAS_DOS_ITENS}`;
     mes: `${data.slice(0, 7)}-01`,
     project_id: projectId,
     resposta,
-    custo_usd: s.custoUsd,
+    custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6,
     saldo_usd: s.saldoUsd,
     reserva_usada: s.reservaUsada ?? null,
   };
@@ -3531,6 +3708,84 @@ async function editarItem(servico: SupabaseClient, chamador: Chamador, corpo: Re
   }
   const atualizada = await salvarProposta(servico, p, mudancas);
   return json({ proposta: atualizada, item, avisos, custo_usd: 0 });
+}
+
+// ------------------------------------------------ trocar o ângulo de uma pauta (frente AP, 27/09)
+
+/**
+ * trocar_angulo { proposta_id, tema_id, modelo_id?, raciocinio? }: refaz SÓ
+ * esta pauta, com o mesmo tema, a mesma data e o mesmo formato e um ângulo
+ * novo que não repete o post parecido da memória editorial (a sequência de
+ * evolução fica marcada). Uma chamada de texto e a checagem do Jev da pauta
+ * nova, sem laço: se ainda parecer repetição, volta marcada de novo e a
+ * equipe decide. Pauta já na agenda não muda (409).
+ */
+async function trocarAngulo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const p = await carregarProposta(servico, corpo.proposta_id);
+  await exigirAcessoAoCliente(chamador, p.client_id);
+  exigirEditavel(p);
+  const temaId = texto(corpo.tema_id, 40);
+  const indice = p.itens.findIndex((i) => i.tema_id === temaId);
+  if (!temaId || indice < 0) throw new ErroHttp(404, "item_inexistente", "Este conteúdo não está mais na proposta. Atualize a tela.");
+  const antigo = p.itens[indice];
+  if (antigo.task_id) throw new ErroHttp(409, "item_na_agenda", "Este conteúdo já está na agenda: peça ao agente do mês para refazer com outro ângulo.");
+  const uteis = diasUteisDaProposta(p);
+  const [ctx, escolhido] = await Promise.all([
+    montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, marcaDaChamada(servico, p.client_id, corpo, p.project_id)),
+    resolverModelo(corpo.modelo_id ?? p.parametros.modelo, corpo.raciocinio ?? p.parametros.raciocinio),
+  ]);
+  const base = antigo.evolucao && antigo.evolucao.de ? antigo.evolucao.de : null;
+  const apelido = base && ctx.memoriaEditorial ? (ctx.memoriaEditorial.temas.find((t) => t.chaves.indexOf(base.chave) >= 0) || { apelido: null }).apelido : null;
+  const alvo = base
+    ? `o post ${apelido ? `${apelido} ` : ""}de ${base.data ?? "data anterior"} ("${base.tema}"${base.angulo ? `, ângulo ${base.angulo}` : ""})`
+    : "os posts parecidos da MEMÓRIA EDITORIAL";
+  const pedido = `${contextoEmTexto(ctx, { inicio: p.periodo_inicio, fim: p.periodo_fim, parametros: p.parametros }, { enxuto: true })}${blocoDoPlano(ctx, p.periodo_inicio)}
+
+CONTEÚDO ATUAL (troque só o ângulo):
+${JSON.stringify({ tema_id: antigo.tema_id, data: antigo.data, formato: antigo.formato, pilar: antigo.pilar, fase: antigo.fase, objetivo: antigo.objetivo, tema: antigo.tema, gancho: antigo.gancho, angulo: antigo.angulo ?? null, resumo: antigo.resumo, tipo_editorial: antigo.tipo_editorial ?? "", framework: antigo.framework ?? "" })}
+
+TAREFA: reescreva ESTE conteúdo com o MESMO tema, a MESMA data (${antigo.data}) e o MESMO formato (${antigo.formato}), mas com um ÂNGULO NOVO que não repita ${alvo}. Continue a sequência de evolução: continua_de ${apelido ? apelido : "com o apelido do post que ele continua"} e angulo com o passo novo (o passo seguinte, o erro comum, o caso real, a objeção, a prova ou o aprofundamento). Gancho, lâminas e legenda novos, coerentes com o ângulo. Devolva 1 item em itens, com tema_id ${antigo.tema_id}.
+${REGRAS_DOS_ITENS}`;
+  const s = await chamarTexto({
+    clientId: p.client_id,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: escolhido.modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: sistemaDoCalendario(ctx, "mes"),
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio: escolhido.raciocinio,
+    esquemaJson: ESQUEMA_ITENS,
+    referencia: { tipo: REF_TIPO, id: p.id },
+    criadoPor: chamador.userId,
+  });
+  const brutos = Array.isArray((s.json as Record<string, unknown>)?.itens) ? (s.json as { itens: unknown[] }).itens : [];
+  const bruto = brutos.find((b) => String((b as Record<string, unknown>)?.tema_id ?? "") === antigo.tema_id) ?? brutos[0];
+  if (!bruto) throw new ErroHttp(502, "angulo_sem_item", "O agente não devolveu o conteúdo. Tente de novo.", { uso_id: s.usoId });
+  const novo = normalizarItem(bruto, uteis, antigo.data);
+  novo.tema_id = antigo.tema_id;
+  if (!novo.tema) novo.tema = antigo.tema;
+  if (novo.formato !== antigo.formato) {
+    novo.formato = antigo.formato;
+    if (novo.formato === "estatico") {
+      novo.cards = novo.cards.slice(0, 1);
+      novo.carrossel_infinito = false;
+    }
+  }
+  // O que a equipe pôs no item segue; a checagem antiga (a repetição) não.
+  const item = manterDoAnterior([novo], [{ ...antigo, evolucao: undefined }])[0];
+  delete item.evolucao;
+  const checagem = await checarEvolucao([item], ctx.memoriaEditorial, { clientId: p.client_id, propostaId: p.id, referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId });
+  const itens = p.itens.map((i, k) => (k === indice ? item : i));
+  const atualizada = await salvarProposta(servico, p, { itens });
+  const ev = (item as Item).evolucao as EvolucaoDaPauta | undefined;
+  const resposta = ev && ev.tipo === "repeticao"
+    ? "Troquei o ângulo, mas ainda parece perto do post anterior. Confira o cartão."
+    : `Ângulo novo: ${ev ? ev.frase : item.angulo || "pronto"}.`;
+  if (p.conversa_id) {
+    await registrarMensagens(servico, p.conversa_id, p.client_id, [{ papel: "agente", conteudo: resposta, uso_id: s.usoId }]).catch(() => undefined);
+  }
+  return json({ proposta: atualizada, item, resposta, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd });
 }
 
 // ------------------------------------------------ conteúdos da campanha na hora
@@ -3689,6 +3944,17 @@ ${REGRAS_DOS_ITENS}`;
   const falha = resultados.find((r) => r && r.status === "rejected") as PromiseRejectedResult | undefined;
 
   const itens = existentes.concat([...novos.values()]).sort((a, b) => a.data.localeCompare(b.data));
+  // Frente AP: os conteúdos novos da campanha passam pela memória editorial (um pedido ao Jev, sem laço).
+  const checagem = await checarEvolucao(itens, ctx.memoriaEditorial, {
+    clientId: c.client_id,
+    propostaId: proposta.id,
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+    alvo: (i) => novos.has(i.tema_id) && !i.evolucao,
+  });
+  custo += checagem.custo;
+  const avisoDaMemoria = avisoDaChecagem(checagem);
+  if (avisoDaMemoria) avisos.push(avisoDaMemoria);
   const faltam = vagas.filter((v) => !novos.has(v.tema_id)).map((v) => v.tema_id);
   const atualizada = await salvarProposta(servico, proposta, {
     itens,
@@ -6116,11 +6382,12 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   completar_itens: completarItens,
   conteudo_rapido: conteudoRapido,
   editar_item: editarItem,
+  trocar_angulo: trocarAngulo,
   campanha_conteudos: campanhaConteudos,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos"]);
+const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

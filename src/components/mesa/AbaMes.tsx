@@ -52,6 +52,8 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
+// Frente AP (27/09): selo da memória editorial, "Trocar ângulo" e a linha de evolução por pilar.
+import LinhaDeEvolucaoDoMes, { avisoDaPauta, BotaoDeTrocarAngulo, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
 
 /**
  * Aba Mês. No alto, o plano combinado do mês e os Hypes da semana
@@ -107,6 +109,9 @@ interface Item {
   cards?: CardDoRoteiro[];
   tipo_editorial?: string;
   framework?: string;
+  /** Frente AP: ângulo e checagem da memória editorial. */
+  angulo?: string;
+  evolucao?: unknown;
 }
 
 interface Proposta {
@@ -183,7 +188,16 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
   );
 }
 
-function LinhaDoItem({ item, apagar }: { item: Item; apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar> }) {
+function LinhaDoItem({
+  item,
+  apagar,
+  onTrocarAngulo,
+}: {
+  item: Item;
+  apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar>;
+  /** Frente AP: refaz só esta pauta com outro ângulo (na pauta repetida). */
+  onTrocarAngulo?: () => Promise<void>;
+}) {
   const texto = item.copy || item.legenda || item.resumo;
   return (
     <Collapsible className="rounded-xl border border-border bg-card">
@@ -196,9 +210,12 @@ function LinhaDoItem({ item, apagar }: { item: Item; apagar?: (confirmarExtra: b
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
             {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
+            {item.evolucao ? <SeloDaPauta evolucao={item.evolucao} className="mt-1" /> : null}
+            {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
           </div>
           <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         </CollapsibleTrigger>
+        {onTrocarAngulo ? <BotaoDeTrocarAngulo evolucao={item.evolucao} onTrocarAngulo={onTrocarAngulo} className="mr-1 mt-2.5 shrink-0" /> : null}
         {apagar && <BotaoDeApagar onApagar={apagar} className="mr-2 mt-2.5 shrink-0" />}
       </div>
       <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
@@ -404,6 +421,7 @@ function PlanejarComEstrategista() {
   }, [projetos.data, projetoId]);
 
   const atualizar = () => void queryClient.invalidateQueries({ queryKey: ["mesa", "propostas", clientId] });
+  const trocarAngulo = useTrocarAngulo([["mesa", "propostas", clientId], chaveDaLinhaDeEvolucao(clientId)]);
 
   const trocarModelo = (id: string) => {
     setModeloId(id);
@@ -644,6 +662,7 @@ function PlanejarComEstrategista() {
                   <LinhaDoItem
                     key={it.tema_id || it.id || i}
                     item={it}
+                    onTrocarAngulo={proposta.status !== "gravada" && proposta.status !== "descartada" && !it.task_id && it.tema_id ? () => trocarAngulo(proposta.id, it.tema_id as string) : undefined}
                     apagar={
                       proposta.status !== "gravada" && !it.task_id && it.tema_id
                         ? () => apagarConteudo.daProposta(proposta.id, it as ItemProposto, (proposta.itens || []).indexOf(it))
@@ -896,6 +915,8 @@ export default function AbaMes({
       />
 
       <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
+
+      <LinhaDeEvolucaoDoMes clientId={clientId} />
 
       <section className="space-y-3 border-t border-border pt-6">
         <TituloDeSecao ajuda="O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês.">

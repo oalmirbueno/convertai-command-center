@@ -55,7 +55,9 @@ import { JevErro, jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
-import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+// Frente AP (27/09): na rodada da semana, as entregas do Estúdio aprendem com os números reais (sem IA, sem cron novo).
+import { aprenderComOsNumerosDaSemana, type BancoDoAprendizado } from "../_shared/aprendizado-das-entregas.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
 import { conhecimentoCalendarioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import {
@@ -1855,8 +1857,13 @@ async function rodadaSemanal() {
     const pr = prof as { company_name?: string | null; full_name?: string | null } | null;
     await notificarEquipe(clientId, (pr && (pr.company_name || pr.full_name)) || "cliente", x.fora, x.handles);
   }
-  await auditar(null, "perfis_rodada_semanal", { perfis: saida.length }, true, inicio);
-  return json({ rodados: saida.length, perfis: saida });
+  // Frente AP: as entregas do Estúdio ligadas aos posts e aos números reais (um cliente no máximo a cada 6 dias).
+  const aprendizado = await aprenderComOsNumerosDaSemana(servico() as unknown as BancoDoAprendizado, {
+    gravarNoCerebro: (novo) => gravarNoCerebro(servico(), novo, { julgar: null }),
+    tempoMs: Math.max(5_000, TEMPO_DO_CRON_MS - (Date.now() - inicio)),
+  }).catch(() => null);
+  await auditar(null, "perfis_rodada_semanal", { perfis: saida.length, entregas_lidas: aprendizado ? aprendizado.lidos : 0 }, true, inicio);
+  return json({ rodados: saida.length, perfis: saida, aprendizado_das_entregas: aprendizado });
 }
 
 // ------------------------------------------------------------------ rotas

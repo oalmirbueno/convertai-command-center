@@ -47,7 +47,15 @@ export type AreaDoCerebro = (typeof AREAS_DO_CEREBRO)[number];
  * - aprendizado: fato útil que não cabe nas outras.
  */
 export const CATEGORIAS_DO_CEREBRO = ['preferencia', 'evitar', 'ajuste', 'reprovado', 'performou', 'aprendizado'] as const;
-export type CategoriaDoCerebro = (typeof CATEGORIAS_DO_CEREBRO)[number];
+/**
+ * Frente AP (27/09): categorias internas do painel, fora do vocabulário do MCP.
+ * - entrega: a memória de uma entrega do Estúdio (o padrão entregue). Não entra
+ *   no resumo geral: o Estúdio lê pelo bloco próprio (aprendizado-continuo.ts).
+ * Sem o SQL AP-01 o banco recusa a categoria nova: grava como "aprendizado"
+ * com fonte "entrega" e a leitura devolve "entrega" pela fonte.
+ */
+export const CATEGORIAS_INTERNAS_DO_CEREBRO = ['entrega'] as const;
+export type CategoriaDoCerebro = (typeof CATEGORIAS_DO_CEREBRO)[number] | (typeof CATEGORIAS_INTERNAS_DO_CEREBRO)[number];
 
 /** Valores aceitos hoje em agente_memoria.agente (antes do SQL novo, sem 'geral'). */
 export const AGENTES_DA_MEMORIA = ['estrategista', 'diretor_arte', 'estrategista_ads', 'geral'] as const;
@@ -85,6 +93,7 @@ export const TIPO_DA_CATEGORIA: Record<CategoriaDoCerebro, 'aprendizado' | 'pref
   reprovado: 'evitar',
   performou: 'aprendizado',
   aprendizado: 'aprendizado',
+  entrega: 'aprendizado',
 };
 
 /** E a origem antiga (aprovacao | ajuste | metrica | manual). */
@@ -95,6 +104,7 @@ export const ORIGEM_DA_CATEGORIA: Record<CategoriaDoCerebro, 'aprovacao' | 'ajus
   reprovado: 'aprovacao',
   performou: 'metrica',
   aprendizado: 'manual',
+  entrega: 'aprovacao',
 };
 
 /**
@@ -110,6 +120,7 @@ export const VALIDADE_PADRAO_DIAS: Record<CategoriaDoCerebro, number | null> = {
   reprovado: 365,
   performou: 180,
   aprendizado: 365,
+  entrega: 365,
 };
 
 /** Teto padrão do resumo que entra no prompt (caracteres). */
@@ -157,7 +168,8 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 const ehArea = (v: unknown): v is AreaDoCerebro => typeof v === 'string' && (AREAS_DO_CEREBRO as readonly string[]).includes(v);
-const ehCategoria = (v: unknown): v is CategoriaDoCerebro => typeof v === 'string' && (CATEGORIAS_DO_CEREBRO as readonly string[]).includes(v);
+const ehCategoria = (v: unknown): v is CategoriaDoCerebro =>
+  typeof v === 'string' && ((CATEGORIAS_DO_CEREBRO as readonly string[]).includes(v) || (CATEGORIAS_INTERNAS_DO_CEREBRO as readonly string[]).includes(v));
 
 /** Acentos soltos depois do NFD (U+0300 a U+036F), montados por código para o arquivo ficar em ASCII. */
 const MARCAS_DE_ACENTO = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, 'g');
@@ -207,6 +219,8 @@ export function areaDaLinhaDeMemoria(l: Linha): AreaDoCerebro {
 
 /** Categoria de uma linha antiga: tipo + origem dizem o bastante. */
 export function categoriaDaLinhaDeMemoria(l: Linha): CategoriaDoCerebro {
+  // Frente AP: a memória da entrega gravada antes do SQL AP-01 (categoria "aprendizado", fonte "entrega").
+  if (l.fonte === 'entrega') return 'entrega';
   if (ehCategoria(l.categoria)) return l.categoria;
   if (l.origem === 'aprovacao' && l.tipo === 'evitar') return 'reprovado';
   if (l.origem === 'ajuste') return 'ajuste';
@@ -406,7 +420,9 @@ export function resumoParaPrompt(
 ): { texto: string; usados: number; fora: number } {
   const limite = Math.min(Math.max(opcoes.limite ?? LIMITE_PADRAO_DO_RESUMO, 200), LIMITE_MAXIMO_DO_RESUMO);
   const areas = opcoes.areas?.length ? new Set<AreaDoCerebro>([...opcoes.areas, 'geral']) : null;
-  const escolhidos = fatos.filter((f) => !areas || areas.has(f.area));
+  // Categoria sem seção (a memória da entrega) não entra nem conta como "fora por espaço".
+  const comSecao = new Set<CategoriaDoCerebro>(SECOES.flatMap((s) => s.categorias));
+  const escolhidos = fatos.filter((f) => (!areas || areas.has(f.area)) && comSecao.has(f.categoria));
   if (!escolhidos.length) return { texto: '', usados: 0, fora: 0 };
 
   const titulo = opcoes.titulo ?? 'CÉREBRO DO CLIENTE (aprendizados que valem para este trabalho; regra do dono vale sobre sugestão sua)';
@@ -585,6 +601,12 @@ export type NovoAprendizado = {
   referencia_id?: string | null;
   /** Dias até vencer; null = não vence; ausente = padrão da categoria. */
   valido_dias?: number | null;
+  /**
+   * Frente AP: agente que guarda a linha, no lugar do da área. A memória das
+   * entregas vai em "geral" (área arte) para não lotar a lista crua do
+   * diretor que a Mesa Foto lê (as 20 mais novas).
+   */
+  agente?: AgenteDaMemoria;
 };
 
 export type ResultadoDaEscrita = {
@@ -681,7 +703,7 @@ export async function registrarAprendizado(
   if (!ehCategoria(novo.categoria)) throw new CerebroErro('validacao', `categoria inválida: use ${CATEGORIAS_DO_CEREBRO.join(', ')}`);
   const texto = txt(novo.texto);
   if (texto.length < 3) throw new CerebroErro('validacao', 'texto do aprendizado vazio ou curto demais');
-  const agente = AGENTE_DA_AREA[novo.area];
+  const agente = novo.agente && (AGENTES_DA_MEMORIA as readonly string[]).includes(novo.agente) ? novo.agente : AGENTE_DA_AREA[novo.area];
   const chave = chaveDoAprendizado(texto);
   const avisos: string[] = [];
   const julgamento: ResultadoDaEscrita['julgamento'] = { usado: false };
@@ -757,6 +779,11 @@ export async function registrarAprendizado(
     }
     avisos.push('Gravado no formato antigo de agente_memoria (sem área, validade e reforço): falta aplicar docs/cerebro/01_cerebro_memoria.sql.');
     r = (await db.from('agente_memoria').insert(base).select('id').single()) as Resposta;
+  }
+  if (r.error && r.error.code === '23514' && novo.categoria === 'entrega') {
+    // Frente AP: sem o SQL AP-01 o banco ainda não aceita "entrega"; a fonte "entrega" devolve a categoria na leitura.
+    avisos.push('Memória da entrega gravada como "aprendizado" com fonte "entrega": falta o SQL AP-01 (categoria entrega).');
+    r = (await db.from('agente_memoria').insert({ ...completa, categoria: 'aprendizado', fonte: 'entrega' }).select('id').single()) as Resposta;
   }
   if (r.error) {
     if (r.error.code === '23514' && agente === 'geral') {

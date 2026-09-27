@@ -100,14 +100,15 @@ describe("custo do Jev na carteira", () => {
     // Temas (aderência e potencial), hypes da semana (relevância para o cliente) e
     // plano de imagens da campanha (qual foto em cada lâmina, 25/09).
     // + o público do pedido no agente do Mês (26/09).
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(4);
+    // + a memória editorial (frente AP, 27/09): uma pergunta por geração, com a sua cobrança.
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(5);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
     // direcaoPedePessoa (Noul "a direção pede pessoa?", uma por geração da lâmina normal com
     // rosto escolhido, fora de laço). Cada pergunta, uma cobrança; nenhuma se repete.
     expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(5);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(4);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(5);
     expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(5);
     // Cada jevPerguntar do Estúdio tem o seu cobrarJev logo depois (uma cobrança por pergunta).
     const perguntas = estudio.split("await jevPerguntar(").slice(1);

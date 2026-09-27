@@ -67,6 +67,12 @@
  *   sem custo. rostos_marcar { trabalho_id, itens }: leitura por visão barata
  *   "tem pessoa", uma vez por foto, guardada. conferir_rosto { trabalho_id,
  *   ordem, versao? }: só aviso, a pessoa da arte é a das fotos? (uma vez).
+ * - texto_da_lamina { trabalho_id, ordem, operacao, confirmado? } (26/09, frente
+ *   R5), sem custo: voltar_original (a lâmina enxuta na geração volta ao texto
+ *   de antes), dividir (prévia; com confirmado, a lâmina vira duas) e juntar
+ *   (o Desfazer da divisão). Na geração, o texto acima do limite do papel é
+ *   enxugado (uma chamada, guardada), o miolo leva o texto em partes e a zona
+ *   do texto roda na série no modo normal.
  *
  * Pedidos do dono de 25/09 (frente A): formato do post (direcao.formato: 4:5,
  * 3:4, 1:1 ou 9:16, pelo configurar ou pelo preparar), logo sem caixa, série guiada pela capa sem
@@ -233,6 +239,8 @@ import {
 } from "./acoes-do-diretor.ts";
 import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+// Frente AP (27/09): aprendizado contínuo com as entregas (memória da entrega, números reais, o que funcionou).
+import { aprenderComAEntrega, blocoParaODiretor, blocosParaALamina } from "./aprendizado-no-estudio.ts";
 import { conhecimentoEstudioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
 import {
@@ -389,6 +397,19 @@ import {
   tipografiaDoKit,
   tipografiaQueCede,
 } from "./tipografia-do-cliente.ts";
+// Frente R5 (26/09): texto da lâmina na geração (enxugar, dividir em partes, dividir em 2) e posição que varia na série.
+import {
+  blocoDoTextoEmPartes,
+  dividirLaminaEmDuas,
+  enxugarNaGeracao,
+  ESQUEMA_TEXTO_NA_GERACAO,
+  juntarLaminas,
+  precisaEnxugarNaGeracao,
+  registroDasPartes,
+  registroDoTexto,
+  sugestaoDeDividirEmDuas,
+} from "./texto-da-lamina.ts";
+import { aplicarPosicao, blocoDoArranjoDividido, planoDePosicoes, posicaoGravada, zonaExtraDoTexto } from "./posicao-na-serie.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -2368,7 +2389,11 @@ const TITULO_DAS_REGRAS_APRENDIDAS = "REGRAS DA MARCA APRENDIDAS COM ESTE CLIENT
 async function cerebroEDossieDoDiretor(
   clientId: string,
   memoria?: { tipo: string; texto: string; origem: string }[],
+  tipo?: string | null,
 ): Promise<{ texto: string; usouCerebro: boolean }> {
+  // Frente AP (27/09): o que funcionou nas entregas deste cliente, no fim (vazio sem entrega).
+  const entregasP = blocoParaODiretor(clientId, tipo).catch(() => "");
+  const comEntregas = async (texto: string) => [texto, await entregasP].filter(Boolean).join("\n\n");
   try {
     const r = await contextoParaAgente(servico(), clientId, "arte", {
       areas: AREAS_DO_AGENTE.diretor_arte,
@@ -2376,12 +2401,12 @@ async function cerebroEDossieDoDiretor(
       limiteDossie: 3000,
       tituloCerebro: TITULO_DAS_REGRAS_APRENDIDAS,
     });
-    if (r.cerebro) return { texto: r.texto, usouCerebro: true };
+    if (r.cerebro) return { texto: await comEntregas(r.texto), usouCerebro: true };
     const regras = blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));
     const dossie = r.dossie ? `DOSSIÊ ATUAL DO CLIENTE (fatos do painel; vazio não quer dizer que não existe)\n${r.dossie}` : "";
-    return { texto: [regras, dossie].filter(Boolean).join("\n\n"), usouCerebro: false };
+    return { texto: await comEntregas([regras, dossie].filter(Boolean).join("\n\n")), usouCerebro: false };
   } catch {
-    return { texto: await preferenciasDaArte(clientId, memoria).catch(() => ""), usouCerebro: false };
+    return { texto: await comEntregas(await preferenciasDaArte(clientId, memoria).catch(() => "")), usouCerebro: false };
   }
 }
 
@@ -2694,7 +2719,7 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
 - cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos. Se \`item.quantidade_de_laminas_pedida\` vier, use exatamente essa quantidade.
   - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
   - blocos: o texto da lâmina dividido por papel, na ordem de leitura: headline (a frase dominante, curta, quebrada por sentido com \\n), subtitulo, apoio, numero (quando um número é o protagonista), cta, selo. No máximo 3 níveis de hierarquia. Texto exatamente como vai aparecer, com acentos, sem travessão.
-  - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo; mantenha o mesmo eixo de alinhamento no carrossel.
+  - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo: lâminas seguidas não repetem a zona nem o lado (esquerda, direita, topo, base, centro); a continuidade vem da tipografia e da identidade da série, não da posição.
   - layout.alinhamento: esquerda na maioria dos casos; centro só em peça curta e simétrica de propósito.
   - layout.imagem: a imagem concreta (foto real do nicho, objeto, cenário, recorte), com enquadramento e luz.
   - layout.ponto_focal: o que domina a lâmina e onde fica.
@@ -3059,6 +3084,12 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   } else if (!postUnico) {
     mioloLongo = direcao.cards.filter((c) => passaDoLimite(c, direcao.cards.length)).map((c) => c.ordem);
   }
+  // Frente R5: a lâmina que ainda passa do limite e tem mais de uma ideia recebe a sugestão "dividir em 2 lâminas"
+  // (a tela mostra; só a confirmação da equipe divide, pela ação texto_da_lamina).
+  const dividirEmDuas = mioloLongo.filter((o) => mioloEnxuto.indexOf(o) < 0).filter((o) => {
+    const c = direcao.cards.find((x) => x.ordem === o);
+    return !!c && !!sugestaoDeDividirEmDuas(c, direcao.cards.length);
+  });
 
   // Formato escolhido na tela (o 4:5 fica sem o campo, como sempre foi).
   if (formato !== "feed_4x5") direcao.formato = formato;
@@ -3096,7 +3127,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
-    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo });
+    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas });
   }
 
   const { data: criado, error } = await db
@@ -3117,7 +3148,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas });
 }
 
 // ------------------------------------------------------ referencias (Jev)
@@ -3681,6 +3712,9 @@ function areasDeDesenho(card: CardDirecao, total: number, comLogo: boolean, quad
   const zona = card.layout?.zona_texto ?? "base-esquerda";
   const pct = (c: { x0: number; x1: number; y0: number; y1: number }): Area => ({ x0: c.x0 / 100, y0: c.y0 / 100, x1: c.x1 / 100, y1: c.y1 / 100 });
   const areas = [ampliar(pct(caixaDaZona(zona, capa, total > 1, formato, post)), 0.04)];
+  // Frente R5: no arranjo dividido o apoio desce para a faixa de baixo, que também é área do texto.
+  const extra = zonaExtraDoTexto(card as CardDirecao & { posicao_na_serie?: unknown });
+  if (extra) areas.push(ampliar(pct(caixaDaZona(extra, capa, total > 1, formato, post)), 0.04));
   if (comLogo) areas.push(ampliar(pct(caixaDaLogo(zona, capa, formato, post, aspecto)), 0.02));
   return areas;
 }
@@ -3947,6 +3981,188 @@ async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.pendente ? null : r.caminho, pendente: !!r.pendente });
 }
 
+// ------------------------------------------------------------ texto da lâmina e posição na série (frente R5)
+
+type CardDaR5 = CardDirecao & { texto_na_geracao?: unknown; posicao_na_serie?: unknown };
+
+/**
+ * Frente R5: enxuga o texto da lâmina na geração quando ele passa do limite do
+ * papel (texto-da-lamina.ts): o guardado por texto ou UMA chamada curta ao
+ * redator (modelo do diretor de arte). O texto enxuto vai para a direção (a
+ * equipe vê na tela), com o registro texto_na_geracao, e o custo entra no
+ * trabalho. Capa que já tem versão, anúncio e texto que a equipe mandou
+ * manter: nada muda. Sem laço.
+ */
+async function textoDaLaminaNaGeracao(t: Trabalho, card: CardDirecao, e: { total: number; userId: string; desligado?: boolean }) {
+  if (e.desligado) return null;
+  const capaComVersao = card.ordem === 1 && !!versaoAtual(t, 1);
+  if (!precisaEnxugarNaGeracao({ card: card as CardDaR5, total: e.total, capaComVersao, ads: ehAds(t) })) return null;
+  const vizinha = (o: number) => {
+    const c = t.direcao.cards.find((x) => x.ordem === o);
+    return c ? texto(c.texto_exato, 400) || null : null;
+  };
+  // Saldo, cota ou chave (erro do motor): a geração para com o aviso de sempre, sem cortar o texto da equipe.
+  let erroDoMotor: unknown = null;
+  const r = await enxugarNaGeracao(
+    { card, total: e.total, conceito: t.direcao.conceito, anterior: vizinha(card.ordem - 1), proxima: vizinha(card.ordem + 1) },
+    {
+      pasta: pastaDasLeituras(t.client_id),
+      lerGuardado: leituraGuardada,
+      guardar: guardarLeitura,
+      escrever: async (sistema, pedido) => {
+        const redator = await modeloDoPapel("diretor_arte");
+        try {
+          const resposta = await chamarTexto({
+            clientId: t.client_id,
+            tarefa: "estudio",
+            agente: "diretor_arte",
+            modeloId: redator.id,
+            raciocinio: raciocinioPara(redator, ["low", "medium"]),
+            sistema,
+            mensagens: [{ papel: "usuario", conteudo: pedido }],
+            esquemaJson: ESQUEMA_TEXTO_NA_GERACAO,
+            maxTokensSaida: 1_500,
+            timeoutMs: 90_000,
+            referencia: { tipo: "estudio_trabalho", id: t.id },
+            criadoPor: e.userId,
+          });
+          return { json: resposta.json, custoUsd: resposta.custoUsd };
+        } catch (falha) {
+          if (falha instanceof IaMotorErro) erroDoMotor = falha;
+          throw falha;
+        }
+      },
+    },
+  );
+  if (erroDoMotor) throw erroDoMotor;
+  const original = String(card.texto_exato || "");
+  if (!r || r.texto.trim() === original.trim()) return null;
+  const custo = arred(r.custoUsd);
+  const trocar = (c: CardDirecao) => ({ ...c, texto_exato: r.texto, blocos: r.blocos, texto_na_geracao: r.registro }) as CardDirecao;
+  // Grava só se o texto ainda é o que foi enxugado (a equipe pode ter mudado no meio).
+  await mutarTrabalho(t.id, (x) => ({
+    direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === card.ordem && String(c.texto_exato || "") === original ? trocar(c) : c)) },
+    ...(custo ? { custo_usd: arred(num(x.custo_usd) + custo) } : {}),
+  }));
+  t.direcao.cards = t.direcao.cards.map((c) => (c.ordem === card.ordem ? trocar(c) : c));
+  return {
+    card: trocar(card),
+    custoUsd: custo,
+    resumo: { origem: r.guardado ? "guardado" : r.origem, aviso: r.aviso, palavras_antes: r.registro.palavras_antes, palavras_depois: r.registro.palavras_depois },
+  };
+}
+
+/**
+ * Frente R5: a posição do texto desta lâmina no plano da série
+ * (posicao-na-serie.ts). Mudou: grava a zona, o alinhamento, a descrição
+ * espelhada e o registro na direção (a correção e a tela usam a mesma área).
+ */
+async function posicaoDaLaminaNaSerie(t: Trabalho, card: CardDirecao) {
+  const total = totalCards(t);
+  const p = planoDePosicoes(t.direcao.cards, { continuo: !!t.direcao.carrossel_infinito, ads: ehAds(t) }).find((x) => x.ordem === card.ordem);
+  if (!p) return null;
+  const gravada = posicaoGravada(card as CardDaR5);
+  if (!p.mudou) return gravada && gravada.dividido && p.dividido ? { card, dividido: true, registro: gravada } : null;
+  const novo = aplicarPosicao(card as CardDaR5, p, total);
+  const zonaAntes = card.layout ? card.layout.zona_texto : null;
+  const trocar = (c: CardDirecao) => ({ ...c, layout: novo.layout, composicao: novo.composicao, ilustracao: novo.ilustracao ?? c.ilustracao, posicao_na_serie: novo.posicao_na_serie }) as CardDirecao;
+  await mutarTrabalho(t.id, (x) => ({
+    direcao: {
+      ...x.direcao,
+      cards: x.direcao.cards.map((c) => (c.ordem === card.ordem && !posicaoGravada(c as CardDaR5) && (c.layout ? c.layout.zona_texto : zonaAntes) === zonaAntes ? trocar(c) : c)),
+    },
+  }));
+  t.direcao.cards = t.direcao.cards.map((c) => (c.ordem === card.ordem ? trocar(c) : c));
+  return { card: novo as CardDirecao, dividido: p.dividido, registro: posicaoGravada(novo) };
+}
+
+/** Frente R5: alguma lâmina deste trabalho está na fila de geração (dividir e juntar esperam). Sem a fila: false. */
+async function filaDoTrabalhoAndando(t: Trabalho): Promise<boolean> {
+  try {
+    const { data, error } = await servico()
+      .from("estudio_fila")
+      .select("id")
+      .eq("trabalho_id", t.id)
+      .eq("client_id", t.client_id)
+      .in("status", ["fila", "rodando"])
+      .limit(1);
+    return !error && Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * texto_da_lamina { trabalho_id, ordem, operacao, confirmado? } (frente R5), sem custo:
+ * - voltar_original: a lâmina enxuta na geração volta ao texto de antes, e a
+ *   próxima geração não enxuga esse texto de novo;
+ * - dividir: a lâmina que não cabe vira duas (a seguinte nasce com a segunda
+ *   parte). Sem `confirmado: true` só devolve a prévia; confirmado, divide (as
+ *   lâminas depois dela andam uma posição, com as versões);
+ * - juntar: o Desfazer da divisão, enquanto a lâmina nova não tem arte.
+ */
+async function textoDaLamina(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  const operacao = texto(corpo.operacao, 40);
+  if (estaEntregue(t)) throw erroTrabalhoEntregue();
+  if (operacao === "voltar_original") {
+    let voltou = false;
+    const gravado = await mutarTrabalho(t.id, (x) => ({
+      direcao: {
+        ...x.direcao,
+        cards: x.direcao.cards.map((c) => {
+          const r = registroDoTexto((c as CardDaR5).texto_na_geracao);
+          if (c.ordem !== ordem || !r || r.manter || String(c.texto_exato || "").trim() !== r.texto.trim()) return c;
+          voltou = true;
+          const blocos = r.blocos_original && r.blocos_original.length ? r.blocos_original : blocosDoTexto(r.original, c.funcao);
+          return { ...c, texto_exato: r.original, blocos, texto_na_geracao: { ...r, manter: true } } as CardDirecao;
+        }),
+      },
+    }));
+    if (!voltou) throw new ErroEstudio(409, "texto_mudou", "O texto desta lâmina mudou depois de enxugar. Edite pela tela.");
+    return json({ trabalho: gravado });
+  }
+  if (operacao !== "dividir" && operacao !== "juntar") throw new ErroEstudio(400, "operacao_invalida", "Use voltar_original, dividir ou juntar.");
+  if (ehAds(t)) throw new ErroEstudio(409, "anuncio_nao_divide", "O criativo de anúncio não divide lâminas por aqui.");
+  if (operacao === "dividir" && corpo.confirmado !== true) {
+    const s = sugestaoDeDividirEmDuas(cardDaDirecao(t, ordem), totalCards(t));
+    if (!s) throw new ErroEstudio(409, "nao_divide", "Esta lâmina não tem como dividir: o texto cabe ou é uma ideia só.");
+    return json({ sugestao: s });
+  }
+  if (await filaDoTrabalhoAndando(t)) throw new ErroEstudio(409, "geracao_em_andamento", "Espere as lâminas terminarem de gerar para dividir ou juntar.");
+  const deps = {
+    blocosDe: (tx: string, funcao: string) => blocosDoTexto(tx, funcao),
+    layoutDe: (funcao: string, ordemNova: number, totalNovo: number, origem: { layout?: unknown }) => {
+      const padrao = layoutPadrao(funcao, ordemNova, totalNovo);
+      const o = (origem.layout || {}) as Partial<NonNullable<CardDirecao["layout"]>>;
+      // A lâmina nova segue o tratamento, o fundo e as cores da lâmina de onde veio; a zona é a do padrão (a série varia).
+      const layout = { ...padrao, tratamento: o.tratamento || padrao.tratamento, fundo: o.fundo || padrao.fundo, cor_fundo: o.cor_fundo ?? null, cor_texto: o.cor_texto ?? null, cor_destaque: o.cor_destaque ?? null };
+      return { layout, composicao: resumoDaComposicao(layout), ilustracao: layout.imagem };
+    },
+  };
+  const inicio = Date.now();
+  let gravado: Trabalho;
+  try {
+    gravado = await mutarTrabalho(t.id, (x) => {
+      if (estaEntregue(x)) throw new Error("O trabalho já foi entregue ou agendado. Reabra antes de mudar.");
+      const alvo = x as unknown as Parameters<typeof dividirLaminaEmDuas>[0];
+      const r = operacao === "dividir" ? dividirLaminaEmDuas(alvo, ordem, deps) : juntarLaminas(alvo, ordem, deps);
+      return r.patch as unknown as Record<string, unknown>;
+    });
+  } catch (e) {
+    if (e instanceof ErroEstudio) throw e;
+    throw new ErroEstudio(409, operacao === "dividir" ? "nao_divide" : "nao_junta", e instanceof Error ? e.message : "Não deu para mudar as lâminas.");
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "estudio_texto_da_lamina", origin: "mesa:estudio-arte",
+    keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:write"],
+    input: { client_id: t.client_id, trabalho_id: t.id, ordem, operacao },
+    success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
+  });
+  return json({ trabalho: gravado, ordem, nova: operacao === "dividir" ? ordem + 1 : null });
+}
+
 /**
  * gerar_card { trabalho_id, ordem }: uma lâmina por chamada, em um destes modos:
  * - replicar referência (pedido do dono em 25/09: "escolhi a referência e a
@@ -4006,7 +4222,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   const ordem = lerOrdem(corpo);
   garantirEditavel(t);
-  const card = cardDaDirecao(t, ordem);
+  // Frente R5: `let` porque o texto enxuto na geração troca a lâmina logo depois da conferência da tipografia.
+  let card = cardDaDirecao(t, ordem);
   const total = totalCards(t);
   // Frente T2: lâmina 2+ pedida junto com a capa espera a capa (a âncora tipográfica da série) na fila.
   if (esperaACapa({ ordem, total, capaTemVersao: !!versaoAtual(t, 1), capaNaFila: ordem > 1 && total > 1 && !versaoAtual(t, 1) ? await capaNaFila(t) : false })) {
@@ -4017,12 +4234,15 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const ads = ehAds(t);
   // Carrossel contínuo não existe no anúncio.
   const infinito = !ads && !!t.direcao.carrossel_infinito;
+  // Frente AP (27/09): o que funcionou nas entregas deste cliente e, na capa, a variedade das capas entregues (vazios sem entrega).
+  const dasEntregasP = blocosParaALamina(t, card.funcao === "capa" || ordem === 1).catch(() => ({ bloco: "", variedade: "" }));
   const [kit, fontes, modeloImagem, preferencias] = await Promise.all([
     lerKit(t.client_id, t),
     lerFontes(t.client_id, t),
     carregarModelo(t.modelo_imagem_id!, "imagem"),
     preferenciasDaArte(t.client_id).catch(() => ""),
   ]);
+  const dasEntregas = await dasEntregasP;
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
   // Marca do trabalho (kit, fontes, nome): o nome vai na leitura e na descrição da logo.
   const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
@@ -4033,6 +4253,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   marca.fontes = tipografia.fontes;
   const marcaDaTipografia = await marcaDe(t.client_id, t).catch(() => null);
   const chaveDaSerie = chaveDaTipografia(t.client_id, marcaDaTipografia ? marcaDaTipografia.id : null, tipografia);
+  // Frente R5 (dono: "quando gerar a arte, ele já refinar e encurtar o conteúdo, senão fica textão"): acima do
+  // limite do papel, uma chamada curta ao redator (guardada por texto); o texto enxuto vai para a direção e segue.
+  const textoNaGeracao = ads ? null : await textoDaLaminaNaGeracao(t, card, { total, userId: ch.userId, desligado: corpo.enxugar === false });
+  if (textoNaGeracao) card = textoNaGeracao.card;
 
   // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
   // ou trazida pela equipe (colada ou solta) como fundo.
@@ -4143,6 +4367,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       },
     };
   }
+  // Frente R5 (dono: "pra não ficar sempre fixo de um lado"): no modo normal a zona do texto roda na série, sem
+  // repetir a zona nem o eixo da vizinha e respeitando o lado do assunto. Referência, foto, recorte, contínuo e anúncio: como estão.
+  const posicaoDaSerie = !replicar && !ads && !baseFoto && !recorteNaLamina && !elementos.length && !panorama ? await posicaoDaLaminaNaSerie(t, cardDoPrompt) : null;
+  if (posicaoDaSerie) cardDoPrompt = posicaoDaSerie.card;
 
   // Logo: SEMPRE desenhada pelo gerador junto com a arte (dono, 26/09), a
   // escolhida no kit ou a que contrasta com o fundo. O código não cola logo.
@@ -4527,6 +4755,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const headlineDaLamina = Array.isArray(card.blocos) ? card.blocos.find((b) => b.papel === "headline")?.texto ?? null : null;
   const destaqueDeCaixa = ads ? null : palavraEmCaixaAlta({ headline: headlineDaLamina, ordem, total, caixaTitulo: registroDaTipografia.caixa_titulo });
   const blocoDaTipografiaAqui = blocoDaTipografia({ registro: registroDaTipografia, indices: indicesDaTipografia, indiceDaCapa, ordem, total, destaqueDeCaixa });
+  // Frente R5: os blocos desta lâmina (já enxutos) para a divisão em partes; o que a versão guarda dela.
+  const blocosDaLaminaR5 = cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : blocosDoTexto(cardDoPrompt.texto_exato, cardDoPrompt.funcao);
+  const partesDaLamina = replicar || ads || !(total >= 3 && ordem >= 2 && ordem < total) ? null : registroDasPartes(blocosDaLaminaR5);
   const baseComCampanha = [
     base,
     // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).
@@ -4536,6 +4767,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
+    // Frente AP: o que funcionou nas entregas deste cliente e, na capa, não repetir a composição das últimas capas entregues.
+    dasEntregas.bloco,
+    dasEntregas.variedade,
     // Frente R4: no post, a série herda da capa só a identidade (o anúncio segue com o bloco de sempre).
     replicar ? "" : ads ? blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }) : blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
     replicar || ads || !separacaoDaSerie ? "" : blocoDaSerieDaReferencia({
@@ -4552,6 +4786,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
     // Frente R3 e R4: lâmina de conteúdo desenhada pelo gerador (componente de lâmina). Capa, fechamento, replicar e anúncio: vazio.
     replicar || ads ? "" : blocoDoMioloDesenhado({ ordem, total, blocos: cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : [{ papel: "apoio", texto: cardDoPrompt.texto_exato }], cenaFixa, componente: componenteDoMiolo, zona: zonaDoTexto }),
+    // Frente R5: arranjo dividido da série (título no alto, apoio na base) e o texto em partes curtas em lugares diferentes.
+    posicaoDaSerie && posicaoDaSerie.dividido ? blocoDoArranjoDividido({ ordem, total, formato: quadro.formato, post: quadro.post }) : "",
+    partesDaLamina ? blocoDoTextoEmPartes({ ordem, total, blocos: blocosDaLaminaR5, componente: componenteDoMiolo ? componenteDoMiolo.componente : null, zona: zonaDoTexto, dividido: !!(posicaoDaSerie && posicaoDaSerie.dividido), cenaFixa }) : "",
     blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1),
     blocoDoEstilo,
     blocoDoTemplate,
@@ -4583,6 +4820,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente R4: o componente do miolo (memória da série para refazer) e o que a série herdou da capa.
     ...(componenteDoMiolo ? { miolo_desenhado: { tipo: componenteDoMiolo.tipo, componente: componenteDoMiolo.componente } } : {}),
     ...(separacaoDaSerie && !replicar ? { serie_da_capa: registroDaSerie(separacaoDaSerie.separacao, separacaoDaSerie.origem, separacaoDaSerie.refId) } : {}),
+    // Frente R5: o texto enxuto na geração, a posição na série e a divisão em partes.
+    ...(textoNaGeracao ? { texto_na_geracao: textoNaGeracao.resumo } : {}),
+    ...(posicaoDaSerie ? { posicao_na_serie: posicaoDaSerie.registro } : {}),
+    ...(partesDaLamina ? { texto_em_partes: partesDaLamina } : {}),
   };
 
   // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
@@ -4656,6 +4897,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       adaptacao ? adaptacao.bloco : "",
       blocoDoRostoAqui,
       preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
+      // Frente AP: padrões das entregas, sem mexer no layout da referência (sem a linha da variedade: aqui manda a referência).
+      dasEntregas.bloco ? `Os padrões abaixo, das entregas deste cliente, valem desde que não mudem o layout da referência.\n${dasEntregas.bloco}` : "",
       variedade ? variedade.bloco : "",
       continuidade,
       // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).
@@ -4678,6 +4921,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
+      // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
+      custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
       extra: {
         referencias_jev: escolhida.jev,
         tamanho: img.tamanho,
@@ -4727,6 +4972,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
+      // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
+      custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
       extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "foto_composta", imagem_id: foto?.id ?? null, fotos_livres: livres.length, ...marcaDaLogo, ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }) },
     });
   }
@@ -4777,6 +5024,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
+      // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
+      custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
       extra: {
         referencias_jev: escolhida.jev,
         tamanho: img.tamanho,
@@ -4825,6 +5074,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: fim.png, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
+      // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
+      custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
       extra: {
         referencias_jev: escolhida.jev,
         tamanho: img.tamanho,
@@ -4853,6 +5104,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
     origem: "gerar",
     referencias: idsReferencias,
+    // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
+    custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
     extra: {
       referencias_jev: escolhida.jev,
       tamanho: img.tamanho,
@@ -5620,6 +5873,8 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   }
 
   const gravado = await mutarTrabalho(t.id, () => ({ file_ids: fileIds, status: "entregue", legenda: legendaTexto }));
+  // Frente AP: cada entrega ensina (memória da entrega uma vez e os números das antigas), em segundo plano.
+  aprenderComAEntrega(gravado, ch.userId, nomeBase);
   return json({
     trabalho_id: t.id,
     status: gravado.status,
@@ -5753,6 +6008,8 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
 
   const entrega: EntregaAnuncio = { file_ids: fileIds, arquivos, project_id: projetoId, entregue_em: new Date().toISOString() };
   const gravado = await mutarTrabalho(t.id, (x) => ({ status: "entregue", direcao: { ...x.direcao, entrega_ads: entrega } }));
+  // Frente AP: o criativo de anúncio entregue também ensina (memória da entrega, tipo ads), em segundo plano.
+  aprenderComAEntrega({ ...gravado, file_ids: fileIds }, ch.userId, nomeBase);
   return json({
     trabalho_id: t.id,
     status: gravado.status,
@@ -6544,7 +6801,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
 
   // Frente H: o diretor conversa sabendo o que o cliente já ensinou (cérebro) e o dossiê atual.
-  const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria).catch(() => ({ texto: "", usouCerebro: false }));
+  const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria, t.tipo).catch(() => ({ texto: "", usouCerebro: false }));
   const contexto = {
     tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
     texto_pode_mudar: textoPodeMudar,
@@ -7330,6 +7587,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   rostos_marcar: marcarPessoasNasFotos,
   conferir_rosto: conferirRosto,
   refinar_texto: refinarTexto,
+  // Frente R5: voltar ao texto original, dividir em 2 lâminas (com confirmação) e juntar de novo (sem custo).
+  texto_da_lamina: textoDaLamina,
   executar_acao_agente: executarAcaoDoDiretor,
   desfazer_acao_agente: desfazerAcaoDoDiretor,
   enfileirar,
