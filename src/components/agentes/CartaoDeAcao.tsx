@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, Check, Loader2, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import CaminhoPronto from "./CaminhoPronto";
 import { textoDoErro } from "@/lib/mesa/api";
 import {
   acaoDoAnexo,
@@ -41,6 +42,8 @@ export default function CartaoDeAcao({
 }) {
   const [atual, setAtual] = useState<AcaoDoAgente>(acao);
   const [fazendo, setFazendo] = useState<PedidoDaAcao | null>(null);
+  // Só vai sozinho quando a confirmação acontece nesta tela (reabrir a conversa não navega).
+  const [acabouAgora, setAcabouAgora] = useState(false);
   useEffect(() => setAtual(acao), [acao]);
   const estado = estadoDaAcao(atual);
   const resultados = atual.resultados || [];
@@ -58,6 +61,7 @@ export default function CartaoDeAcao({
       const novo = r && acaoDoAnexo(r.anexo);
       if (novo) setAtual(novo);
       if (pedido === "confirmar") {
+        setAcabouAgora(true);
         const f = frasesDoResultado(novo ? novo.resultados : undefined);
         toast.success(f.titulo, { description: novo && novo.sem_desfazer && !novo.resultados?.some((x) => !x.ok) ? "Pronto." : f.descricao });
       } else if (pedido === "desfazer") {
@@ -156,6 +160,7 @@ export default function CartaoDeAcao({
               <Check className="mr-1 h-3 w-3" />
               {atual.executada_direto ? "Feito na hora" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
+            <CaminhoPronto caminho={atual.caminho} abrirSozinho={acabouAgora && !falhas && !!atual.caminho && atual.caminho.abrir_sozinho === true} />
             {temReverso && (
               <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
                 {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}

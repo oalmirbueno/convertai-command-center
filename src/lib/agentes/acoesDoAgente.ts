@@ -59,6 +59,28 @@ export interface AcaoDoAgente {
   resultados?: ResultadoDoItem[];
   descartada_em?: string | null;
   desfeita_em?: string | null;
+  /** Botão "Ir para" depois de feito (espelho do servidor). */
+  caminho?: CaminhoDoAgente | null;
+}
+
+/**
+ * Para onde ir quando a ação termina (pedido do dono, 27/09: "quando termina
+ * ele dá o caminho pra mim apertar e ir e já fica tudo certinho"): rota
+ * interna do painel já com o estado (cliente, etapa, item) e o rótulo do
+ * botão. `abrir_sozinho`: a tela vai sozinha ao terminar (pedido "faz e me
+ * leva"). Só rota interna: começa com "/" e nunca com "//".
+ */
+export type CaminhoDoAgente = { rotulo: string; destino: string; abrir_sozinho?: boolean };
+
+/** Caminho válido ou null (endereço externo, javascript: ou rótulo vazio não passam). */
+export function caminhoSeguro(c: unknown): CaminhoDoAgente | null {
+  if (!c || typeof c !== "object") return null;
+  const o = c as Record<string, unknown>;
+  const destino = typeof o.destino === "string" ? o.destino.trim() : "";
+  const rotulo = typeof o.rotulo === "string" ? o.rotulo.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+  if (!rotulo || !destino || destino.length > 600) return null;
+  if (destino.charAt(0) !== "/" || destino.charAt(1) === "/" || destino.charAt(1) === "\\") return null;
+  return o.abrir_sozinho === true ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
 }
 
 export type EstadoDaAcao = "aberta" | "feita" | "descartada" | "desfeita";
@@ -82,6 +104,7 @@ export function acaoDoAnexo(a: unknown): AcaoDoAgente | null {
     itens: Array.isArray(o.itens) ? (o.itens as ItemDaAcaoDoAgente[]) : [],
     ignorados: Array.isArray(o.ignorados) ? (o.ignorados as unknown[]).map(String) : [],
     recusados: Array.isArray(o.recusados) ? (o.recusados as RecusaDoItem[]) : [],
+    caminho: caminhoSeguro(o.caminho),
   };
 }
 
