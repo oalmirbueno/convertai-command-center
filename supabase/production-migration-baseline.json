@@ -1401,6 +1401,14 @@
       "remote_name": "entrega_na_agenda_congela_laminas",
       "remote_statements_sha256": "01670beae1ca66608cbf6f8a8ca0aa28c8ac316ae284396a709679f17bea2821",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260927040000",
+      "path": "supabase/migrations/20260927040000_rotina_trafego.sql",
+      "local_sha256": "51b5dab45fba1d8ce27203b7d6e6146bfafc4a5aa329fbafb42260746b2197db",
+      "remote_name": "rotina_trafego",
+      "remote_statements_sha256": "6f0e200951f739ca358e5541132e092c1c0436a467c5c45be275b08960e42408",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
