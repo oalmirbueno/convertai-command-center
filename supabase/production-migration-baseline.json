@@ -1409,6 +1409,14 @@
       "remote_name": "rotina_trafego",
       "remote_statements_sha256": "6f0e200951f739ca358e5541132e092c1c0436a467c5c45be275b08960e42408",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260927050000",
+      "path": "supabase/migrations/20260927050000_formato_do_perfil.sql",
+      "local_sha256": "78706a3d65110d4de5393cd6ee06825855f1430eadcdf66214000bde6bb8bfbf",
+      "remote_name": "formato_do_perfil",
+      "remote_statements_sha256": "b9186ba6a193b2ef93c1e1cc28ada2dc35b3ea6ff1077f92d468c54b6ead4fb0",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
