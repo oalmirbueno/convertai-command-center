@@ -337,6 +337,27 @@ export default function EtapaKits() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kitSalvo ? kitSalvo.id : null, kitSalvo ? kitSalvo.atualizado_em : null]);
 
+  // "Montar kit" em Fotos: as marcadas chegam pela sessão (uma vez) e montam o kit novo, sem IA.
+  // Kit novo já em edição sem salvar recebe as fotos (nada se perde); sem ele, abre um vazio.
+  useEffect(() => {
+    const ids = lerDaSessao<string[]>(clientId, "kit-com-fotos");
+    if (!Array.isArray(ids) || !ids.length) return;
+    gravarNaSessao(clientId, "kit-com-fotos", null);
+    const emEdicao = editando && !editando.id ? editando : null;
+    const base = emEdicao || kitVazio(clientId);
+    const refs = base.refs.slice();
+    ids.forEach((id) => {
+      if (typeof id === "string" && !refs.some((r) => r.imagem_id === id)) refs.push({ imagem_id: id, papel: refs.length ? "detalhe" : "identidade", vista: "", prioridade: refs.length });
+    });
+    setEditando({ ...base, id: null, client_id: clientId, refs });
+    if (!emEdicao) setTextos(textosDoKit(base));
+    escolherKit(null);
+    toast.success(emEdicao ? "Fotos no kit que você estava montando" : `Kit novo com ${ids.length} ${ids.length === 1 ? "foto" : "fotos"}`, {
+      description: "Dê o nome do produto e salve. A primeira foto é a identidade; mude o papel de cada uma se quiser.",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
   const abrirNovo = (base?: KitDeFoto) => {
     const k = base ? { ...base, id: null, client_id: clientId } : kitVazio(clientId);
     setEditando(k);

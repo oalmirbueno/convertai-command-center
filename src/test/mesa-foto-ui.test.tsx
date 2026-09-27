@@ -2273,3 +2273,43 @@ describe("26/09: Book", () => {
     expect(ler("src/pages/MesaFoto.tsx")).toContain('{etapa === "book" && <EtapaBook />}');
   });
 });
+
+describe("27/09: usar e montar kit direto da seleção em Fotos", () => {
+  const G = "aaaaaaaa-0000-4000-8000-000000000010";
+
+  it("Montar kit leva as marcadas para um kit novo em Produto, sem IA", async () => {
+    const irPara = vi.fn();
+    montar(h(EtapaAcervo), { selecionadas: [F1, F2], irPara });
+    await screen.findByText("mouse-frente.jpg");
+    const barra = document.querySelector("[data-barra-de-selecao]") as HTMLElement;
+    fireEvent.click(within(barra).getByRole("button", { name: /Montar kit/ }));
+    expect(JSON.parse(window.sessionStorage.getItem(`mesa-foto:kit-com-fotos:${CLIENTE}`) || "[]")).toEqual([F1, F2]);
+    expect(irPara).toHaveBeenCalledWith("kits", { kit: null });
+    expect(mock.invoke.mock.calls.filter((c: any[]) => c[0] === "mesa-foto")).toHaveLength(0);
+    window.sessionStorage.clear();
+  });
+
+  it("Produto abre o kit novo com as fotos que vieram de Fotos e consome o pedido", async () => {
+    window.sessionStorage.clear();
+    window.sessionStorage.setItem(`mesa-foto:kit-com-fotos:${CLIENTE}`, JSON.stringify([F1, F2]));
+    const escolherKit = vi.fn();
+    montar(h(EtapaKits), { escolherKit });
+    await waitFor(() => expect(document.querySelector(`[data-ref="${F1}"]`)).toBeTruthy());
+    expect(document.querySelector(`[data-ref="${F2}"]`)).toBeTruthy();
+    expect(window.sessionStorage.getItem(`mesa-foto:kit-com-fotos:${CLIENTE}`)).toBeNull();
+    expect(escolherKit).toHaveBeenCalledWith(null);
+    window.sessionStorage.clear();
+  });
+
+  it("Usar na Mesa abre o Estúdio com as marcadas; gerada sem aprovação fica de fora", async () => {
+    mock.tabelas.cliente_imagens = FOTOS.concat([fotoBruta(G, { nome: "gerada-sem-ok.png", gerada: true, modo: "angulo", derivada_de: F1, aprovada: false })]);
+    montar(h(EtapaAcervo), { selecionadas: [F1, G] });
+    await screen.findByText("gerada-sem-ok.png");
+    const barra = document.querySelector("[data-barra-de-selecao]") as HTMLElement;
+    fireEvent.click(within(barra).getByRole("button", { name: /Usar na Mesa/ }));
+    await waitFor(() => expect(screen.getByTestId("onde").textContent).toContain("aba=estudio"));
+    const onde = screen.getByTestId("onde").textContent || "";
+    expect(onde).toContain(F1);
+    expect(onde).not.toContain(G);
+  });
+});

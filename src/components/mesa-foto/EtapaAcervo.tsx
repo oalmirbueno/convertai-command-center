@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type UIEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, ClipboardPaste, Eye, Filter, Loader2, Maximize2, MoreHorizontal, MousePointerClick, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
+import { CheckSquare, ClipboardPaste, Eye, Filter, Loader2, Maximize2, Megaphone, MoreHorizontal, MousePointerClick, PackagePlus, PackageSearch, PenTool, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,7 +19,8 @@ import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import ProdutoDasFotos from "./ProdutoDasFotos";
-import { MenuDeUso } from "./UsoDaFoto";
+import { MenuDeUso, precisaAprovar, useLevarParaAsMesas } from "./UsoDaFoto";
+import { gravarNaSessao } from "./sessao";
 import {
   acrescentarFotos,
   classeDaFoto,
@@ -467,7 +468,8 @@ export default function EtapaAcervo() {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { selecionadas, setSelecionadas, imagemId } = useMesaFoto();
+  const { selecionadas, setSelecionadas, imagemId, irPara } = useMesaFoto();
+  const levar = useLevarParaAsMesas();
   const fotos = useFotos(clientId);
   const kits = useKits(clientId);
   // Filtros, busca e a foto aberta ficam guardados por cliente (sair e voltar mantém).
@@ -558,6 +560,25 @@ export default function EtapaAcervo() {
     window.addEventListener("paste", aoColar);
     return () => window.removeEventListener("paste", aoColar);
   }, []);
+
+  // Usar as marcadas na Mesa ou na Mesa Ads direto daqui (pedido do dono, 27/09). Foto gerada
+  // só depois da aprovação da equipe, a mesma regra do passo Usar; original e tratada vão.
+  const usarNasMesas = (destino: "mesa" | "ads") => {
+    const semAprovacao = escolhidas.filter((f) => precisaAprovar(f));
+    const prontas = escolhidas.filter((f) => semAprovacao.indexOf(f) < 0);
+    if (semAprovacao.length) {
+      toast.warning(`${semAprovacao.length} ${semAprovacao.length === 1 ? "foto gerada ficou" : "fotos geradas ficaram"} de fora`, {
+        description: "Foto gerada vai para as mesas depois da aprovação da equipe. Abra a foto e aprove.",
+        duration: 9000,
+      });
+    }
+    if (prontas.length) levar(destino, prontas);
+  };
+  // Montar kit: as marcadas abrem um kit novo em Produto, sem IA (o nome e os papéis ficam lá).
+  const montarKit = () => {
+    gravarNaSessao(clientId, "kit-com-fotos", escolhidas.map((f) => f.id));
+    irPara("kits", { kit: null });
+  };
 
   const marcar = (id: string) => setSelecionadas(selecionadas.indexOf(id) >= 0 ? selecionadas.filter((x) => x !== id) : selecionadas.concat([id]));
   const todasVisiveisMarcadas = visiveis.length > 0 && visiveis.every((f) => selecionadas.indexOf(f.id) >= 0);
@@ -699,9 +720,19 @@ export default function EtapaAcervo() {
                   <span className="mb-1.5 mr-2 text-[12.5px] font-semibold tabular-nums">
                     {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
                   </span>
+                  <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("mesa")} title="Abre o Estúdio da Mesa com estas fotos, sem subir de novo">
+                    <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("ads")} title="Abre o Estúdio da Mesa Ads com estas fotos">
+                    <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Mesa Ads
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={montarKit} title="Abre um kit novo em Produto com estas fotos, sem gastar IA">
+                    <PackagePlus className="mr-1.5 h-3.5 w-3.5" /> Montar kit
+                  </Button>
                   <Button
                     type="button"
                     size="sm"
+                    variant="ghost"
                     className="mb-1.5 mr-1.5 h-8 text-[12px]"
                     onClick={() => {
                       const alvo = document.querySelector("[data-produto-das-fotos]");
