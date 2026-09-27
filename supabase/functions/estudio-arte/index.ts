@@ -383,6 +383,7 @@ import {
   CAPA_PENDENTE,
   chaveDaTipografia,
   esperaACapa,
+  palavraEmCaixaAlta,
   registroDaLamina,
   SEM_TIPOGRAFIA,
   tipografiaDoKit,
@@ -4522,7 +4523,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     tituloDoMolde: tituloDoMoldeDaLamina,
     amostras: (indicesDaTipografia.titulo ? 1 : 0) + (indicesDaTipografia.texto ? 1 : 0),
   });
-  const blocoDaTipografiaAqui = blocoDaTipografia({ registro: registroDaTipografia, indices: indicesDaTipografia, indiceDaCapa, ordem, total });
+  // Destaque de caixa (dono, 26/09): de vez em quando uma palavra do título em caixa alta nas lâminas do meio.
+  const headlineDaLamina = Array.isArray(card.blocos) ? card.blocos.find((b) => b.papel === "headline")?.texto ?? null : null;
+  const destaqueDeCaixa = ads ? null : palavraEmCaixaAlta({ headline: headlineDaLamina, ordem, total, caixaTitulo: registroDaTipografia.caixa_titulo });
+  const blocoDaTipografiaAqui = blocoDaTipografia({ registro: registroDaTipografia, indices: indicesDaTipografia, indiceDaCapa, ordem, total, destaqueDeCaixa });
   const baseComCampanha = [
     base,
     // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).

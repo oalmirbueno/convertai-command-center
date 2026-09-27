@@ -535,3 +535,37 @@ describe("6. Amostra da tipografia no navegador", () => {
     }
   });
 });
+
+import { blocoDaTipografia as blocoDaTipografiaCaixa, palavraEmCaixaAlta } from "../../supabase/functions/estudio-arte/tipografia-do-cliente";
+
+/**
+ * Dono, 26/09: "era legal quando nos cards seguintes ele gerava uma palavra às
+ * vezes em caixa alta; não tire, mas não sempre, só quando fica bacana".
+ */
+describe("destaque de caixa nas lâminas do meio", () => {
+  const headline = "Seu site precisa explicar\no que você vende";
+  it("só nas lâminas do meio, alternadas, e na palavra mais forte do título", () => {
+    expect(palavraEmCaixaAlta({ headline, ordem: 1, total: 6, caixaTitulo: "como_escrito" })).toBeNull();
+    expect(palavraEmCaixaAlta({ headline, ordem: 2, total: 6, caixaTitulo: "como_escrito" })).toBe("explicar");
+    expect(palavraEmCaixaAlta({ headline, ordem: 3, total: 6, caixaTitulo: "como_escrito" })).toBeNull();
+    expect(palavraEmCaixaAlta({ headline, ordem: 6, total: 6, caixaTitulo: "como_escrito" })).toBeNull();
+  });
+  it("não repete o recurso quando o título já é todo em caixa alta, nem em título curto ou post único", () => {
+    expect(palavraEmCaixaAlta({ headline, ordem: 2, total: 6, caixaTitulo: "alta" })).toBeNull();
+    expect(palavraEmCaixaAlta({ headline: "Site novo", ordem: 2, total: 6, caixaTitulo: "como_escrito" })).toBeNull();
+    expect(palavraEmCaixaAlta({ headline, ordem: 2, total: 2, caixaTitulo: "como_escrito" })).toBeNull();
+    expect(palavraEmCaixaAlta({ headline: "Você sabe quando anunciar?", ordem: 2, total: 5, caixaTitulo: "como_escrito" })).toBe("anunciar");
+  });
+  it("o bloco da tipografia pede a palavra em caixa alta na mesma fonte e peso, e sem ela fica igual", () => {
+    const registro = { titulo: "Abril Fatface", texto: "Lato", peso_titulo: "700", caixa_titulo: "como_escrito", ancora: 1 } as any;
+    const sem = blocoDaTipografiaCaixa({ registro, indices: {}, ordem: 2, total: 5 });
+    const com = blocoDaTipografiaCaixa({ registro, indices: {}, ordem: 2, total: 5, destaqueDeCaixa: "explicar" });
+    expect(sem).not.toContain("CAIXA ALTA");
+    expect(com).toContain('a palavra "explicar" do título vem em CAIXA ALTA, na mesma fonte e no mesmo peso');
+    expect(com).toContain("fora a palavra em destaque acima");
+  });
+  it("o Estúdio liga o destaque só fora da Mesa Ads", () => {
+    const fonte = readFileSync(resolve(__dirname, "../../supabase/functions/estudio-arte/index.ts"), "utf8");
+    expect(fonte).toContain("const destaqueDeCaixa = ads ? null : palavraEmCaixaAlta(");
+  });
+});

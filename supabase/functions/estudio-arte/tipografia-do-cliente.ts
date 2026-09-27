@@ -224,6 +224,38 @@ export function registroDaLamina(e: {
   };
 }
 
+const PALAVRAS_FRACAS = new Set([
+  "sobre", "entre", "quando", "porque", "depois", "antes", "ainda", "mesmo", "mesma", "muito", "muita", "pouco", "pouca",
+  "todos", "todas", "outro", "outra", "outros", "outras", "nosso", "nossa", "vocês", "voces", "você", "voce", "seu", "sua",
+  "seus", "suas", "isso", "esse", "essa", "este", "esta", "aquilo", "aqui", "onde", "como", "para", "pelo", "pela", "pelos",
+  "pelas", "numa", "num", "com", "sem", "mais", "menos", "cada", "qual", "quais", "também", "tambem", "então", "entao",
+  "agora", "sempre", "nunca", "fazer", "ficar", "estar", "tenha", "sendo", "pode", "podem", "precisa",
+]);
+
+/**
+ * Destaque de caixa (dono, 26/09): "era legal quando nos cards seguintes ele
+ * gerava uma palavra às vezes em caixa alta; não sempre, só quando fica
+ * bacana". Decidido em código, sem custo e sempre igual para o mesmo texto:
+ * só lâminas do meio (2 até a penúltima), alternadas (as pares), com título de
+ * 3 palavras ou mais e caixa normal; a palavra é a mais forte do título (a mais
+ * longa com 5 letras ou mais, fora das palavras de ligação). Sem isso, null.
+ */
+export function palavraEmCaixaAlta(e: { headline: string | null | undefined; ordem: number; total: number; caixaTitulo: CaixaDoTitulo }): string | null {
+  if (e.total < 3 || e.ordem < 2 || e.ordem >= e.total || e.ordem % 2 !== 0) return null;
+  if (e.caixaTitulo === "alta") return null;
+  const palavras = String(e.headline || "")
+    .split(/[\s\n]+/)
+    .map((p) => p.replace(/^[^0-9A-Za-zÀ-ÿ]+|[^0-9A-Za-zÀ-ÿ]+$/g, ""))
+    .filter(Boolean);
+  if (palavras.length < 3) return null;
+  let melhor: string | null = null;
+  for (const p of palavras) {
+    if (p.length < 5 || /^\d/.test(p) || PALAVRAS_FRACAS.has(p.toLowerCase())) continue;
+    if (!melhor || p.length > melhor.length) melhor = p;
+  }
+  return melhor;
+}
+
 const textoDoPeso = (p: string) => (p === "amostra" ? "no peso da amostra" : `peso ${p} (se a fonte não tiver, o mais perto)`);
 const textoDaCaixa = (c: CaixaDoTitulo) => (c === "alta" ? "caixa alta (todas as letras maiúsculas)" : "caixa como está no texto exato");
 
@@ -239,11 +271,16 @@ export function blocoDaTipografia(e: {
   indiceDaCapa?: number | null;
   ordem: number;
   total: number;
+  /** Palavra do título que vem em caixa alta nesta lâmina (palavraEmCaixaAlta); null: nenhuma. */
+  destaqueDeCaixa?: string | null;
 }): string {
   const r = e.registro;
   const linhas = [
     "TIPOGRAFIA DO CLIENTE (a mesma em todas as lâminas deste trabalho; vale sobre o desenho de letra de qualquer referência):",
     `- Título (headline e número): fonte ${r.titulo}, ${textoDoPeso(r.peso_titulo)}, ${textoDaCaixa(r.caixa_titulo)}.`,
+    ...(e.destaqueDeCaixa
+      ? [`- Destaque de caixa nesta lâmina: a palavra "${e.destaqueDeCaixa}" do título vem em CAIXA ALTA, na mesma fonte e no mesmo peso, para dar ritmo à série; só essa palavra, o resto do título como está no texto exato (as letras e a ortografia não mudam).`]
+      : []),
     `- Apoio (subtítulo e texto): fonte ${r.texto}, peso regular, caixa como está no texto exato.`,
     `- CTA: fonte ${r.texto}, negrito, caixa como está no texto exato.`,
   ];
@@ -254,9 +291,9 @@ export function blocoDaTipografia(e: {
   if (e.total > 1) {
     if (e.ordem > 1 && e.indiceDaCapa) {
       // A capa anexada é a âncora visual (vale também para a capa gerada antes deste registro existir).
-      linhas.push(`- Âncora da série: o título desta lâmina tem a mesma fonte, o mesmo peso e a mesma caixa do título da capa (imagem ${e.indiceDaCapa}).`);
+      linhas.push(`- Âncora da série: o título desta lâmina tem a mesma fonte, o mesmo peso e a mesma caixa do título da capa (imagem ${e.indiceDaCapa})${e.destaqueDeCaixa ? ", fora a palavra em destaque acima" : ""}.`);
     } else if (r.ancora !== null) {
-      linhas.push(`- Âncora da série: o título desta lâmina tem a mesma fonte, o mesmo peso e a mesma caixa do título da lâmina ${r.ancora}, já gerada.`);
+      linhas.push(`- Âncora da série: o título desta lâmina tem a mesma fonte, o mesmo peso e a mesma caixa do título da lâmina ${r.ancora}, já gerada${e.destaqueDeCaixa ? ", fora a palavra em destaque acima" : ""}.`);
     } else {
       linhas.push("- Esta lâmina é a âncora tipográfica da série: as outras repetem esta fonte, este peso e esta caixa.");
     }
