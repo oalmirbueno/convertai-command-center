@@ -1361,6 +1361,14 @@
       "remote_name": "mesa_mcp_itens",
       "remote_statements_sha256": "3c175895462ad4e40b33f5f5f23139b01c2d166f874aebb1ba62bdaf5e752e16",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926070000",
+      "path": "supabase/migrations/20260926070000_guarda_de_arquivos_service_role.sql",
+      "local_sha256": "e3951607fd12462c0fafc5c30bbb0a6976f58435318ba73d6e4c1c6d05f6a93e",
+      "remote_name": "guarda_de_arquivos_service_role",
+      "remote_statements_sha256": "9928d9140907ffa2bf80e1c5bb09952ab8e32156c32f9f8ef5c8e6e611345b2f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
