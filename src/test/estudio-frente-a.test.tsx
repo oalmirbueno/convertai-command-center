@@ -396,7 +396,8 @@ describe("4. série do carrossel guiada pela capa, sem o contínuo", () => {
     const g = corpoDe("gerarCard");
     expect(g).toContain("const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;");
     expect(g).toContain('tipo: "capa",');
-    expect(g).toContain('replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),');
+    // Frente R4: o post herda da capa só a identidade (blocoDaIdentidadeDaSerie); o anúncio segue com blocoDaSerie.
+    expect(g).toContain('replicar ? "" : ads ? blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }) : blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),');
     expect(g).toContain("CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual");
     // O contínuo continua igual: fatia do panorama e só as letras e a logo coladas por cima.
     expect(g).toContain("const colado = await colarMudancasNaBase(baseFoto, img.png, areasComLogo.map((a) => ampliar(a, 0.03)));");

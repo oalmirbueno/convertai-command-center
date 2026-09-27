@@ -21,7 +21,8 @@
  *    (um recurso visual que carrega a ideia), não um parágrafo solto.
  */
 
-import type { BlocoTexto, CardDirecao, PapelBloco } from "../_shared/direcao-arte.ts";
+import type { BlocoTexto, CardDirecao, PapelBloco, ZonaTexto } from "../_shared/direcao-arte.ts";
+import { blocoDoMiolo, type EscolhaDoMiolo, ehMioloDesenhado, escolhaSolta } from "./miolo-rico.ts";
 import type { PerguntaJev, ResultadoJev } from "../_shared/jev.ts";
 import {
   blocosDecorativos,
@@ -231,32 +232,18 @@ export async function enxugarMiolo<C extends Pick<CardDirecao, "ordem" | "funcao
 
 // ------------------------------------------------------------------ 3. miolo desenhado
 
-type Recurso = { quando: (t: string, blocos: BlocoTexto[]) => boolean; texto: string };
-
-const RECURSOS: Recurso[] = [
-  { quando: (t, b) => b.some((x) => x.papel === "numero") || /[0-9]/.test(t), texto: "o número como protagonista, grande, com o apoio curto ao lado dele" },
-  { quando: (t) => /\?/.test(t), texto: "a pergunta grande e a resposta em destaque numa faixa ou cartão da paleta" },
-  { quando: (t) => /\b(antes|depois|versus|vs)\b/i.test(t), texto: "uma comparação lado a lado (antes e depois, com e sem), com um divisor no traço da capa" },
-  { quando: (t) => /[,;]/.test(t) || t.split("\n").length > 2, texto: "uma lista curta de 2 ou 3 itens com marcadores desenhados no traço da capa" },
-  { quando: () => true, texto: "um elemento gráfico grande que carrega a ideia (seta, marcador, divisor, número de passo ou um objeto recortado da cena), com o texto encaixado nele" },
-];
-
 /**
  * Bloco da lâmina de conteúdo desenhada (lâmina 2 até a penúltima, fora do
- * replicar): um recurso visual escolhido pelo texto (número, pergunta,
- * comparação, lista ou elemento gráfico), coerente com a capa. Capa, post
- * único e fechamento: vazio.
+ * replicar e do anúncio). Frente R4 (26/09): o recurso virou um COMPONENTE DE
+ * LÂMINA desenhado pelo gerador (cartão, caixas conectadas, linha do tempo,
+ * colunas, checklist, número em cartão, balão, citação, chips, mini-gráfico,
+ * caixa de dica, ícones de linha), escolhido em código pelo tipo do conteúdo
+ * e com rotação na série (miolo-rico.ts). `componente`: a escolha do plano da
+ * série (componenteDaLamina); sem ela, o primeiro do tipo. `zona`: a zona do
+ * texto da direção (o arranjo acompanha). Capa, post único e fechamento: vazio.
  */
-export function blocoDoMioloDesenhado(e: { ordem: number; total: number; blocos: BlocoTexto[]; cenaFixa?: boolean }): string {
-  if (e.total < 3 || e.ordem < 2 || e.ordem >= e.total) return "";
-  const texto = e.blocos.map((b) => b.texto).join("\n");
-  const recurso = RECURSOS.filter((r) => r.quando(texto, e.blocos))[0];
-  return [
-    `LÂMINA DE CONTEÚDO DESENHADA (lâmina ${e.ordem} de ${e.total}): não é um parágrafo solto.`,
-    `- O texto vira desenho: ${recurso.texto}.`,
-    e.cenaFixa
-      ? "- A cena já está decidida: o recurso é só gráfico (formas, fios, marcadores, número), por cima da área calma, no traço da capa."
-      : "- O recurso usa as formas, o traço, as cores e o tratamento da capa: é a mesma série, com outra composição.",
-    "- Uma ideia só; o apoio curto fica dentro ou ao lado do recurso, nunca como bloco corrido.",
-  ].join("\n");
+export function blocoDoMioloDesenhado(e: { ordem: number; total: number; blocos: BlocoTexto[]; cenaFixa?: boolean; componente?: EscolhaDoMiolo | null; zona?: ZonaTexto | null }): string {
+  if (!ehMioloDesenhado(e.ordem, e.total)) return "";
+  const escolha = e.componente && e.componente.ordem === e.ordem ? e.componente : escolhaSolta(e.ordem, e.blocos);
+  return blocoDoMiolo({ ordem: e.ordem, total: e.total, escolha, cenaFixa: e.cenaFixa, zona: e.zona });
 }

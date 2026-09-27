@@ -203,6 +203,89 @@ CONTEÚDO DESENHADA (número, pergunta, comparação, lista ou elemento gráfico
   Inspirada e Criativa trocam a linha do "mesmo eixo" pela jogada e ganham a
   cor em cada bloco e a linha da hierarquia. Idêntica é igual.
 
+## Série e miolo (frente R4, 26/09)
+
+Pedidos do dono: "na referência da capa, ele fica puxando praticamente tudo
+para a segunda lâmina; tem elementos que são só da capa"; "os outros cards são
+muito simples; legal ter uma caixa dentro às vezes, ou algo ligado a algo;
+não com camada, sempre no gerador, sem repetir e sem ficar genérico".
+
+**Identidade da série x só da capa** (`estudio-arte/serie-da-capa.ts`). O
+molde da referência da capa (já lido e guardado) é separado em:
+
+- identidade da série (todas as lâminas seguem): fundo e textura, paleta na
+  função, tipografia e hierarquia, grafismos pequenos que se repetem,
+  alinhamento e margens, lugar da logo, tratamento de foto;
+- só da capa (não vai para as lâminas 2+): título gigante (letra de 6% da
+  altura ou mais), número gigante, palavra decorativa de fundo, chamada da
+  capa, pessoa ou produto como foto herói, e elementos com nome de gancho
+  (selo, etiqueta, sticker, seta, arraste, oferta, preço, balão) ou que
+  emolduram o assunto.
+
+Pelo papel do bloco e por regras claras, em código. O que fica ambíguo (texto
+pequeno de canto, forma média sem nome claro, cena de fundo) vai a um Choice
+do Jev por item ("identidade da série" ou "só da capa"), todos numa chamada,
+guardada em `<cliente>/estudio/leituras/serie-<ref>.json` (assinatura do
+molde: molde relido separa de novo). Sem Jev: a regra de tamanho (12% do
+quadro ou mais fica só na capa) e nada é guardado. Uma vez por referência;
+com duas lâminas em paralelo na primeira geração, até duas chamadas curtas.
+
+Quando vale (em `gerarCard`):
+
+- **Caso A**: lâmina 2+ que herdaria a referência do CONJUNTO, sem referência
+  própria, sem foto nem elemento, sem quadro de sequência de prancha, fora do
+  contínuo e do anúncio. Se a referência tem algo só da capa, ela sai do
+  replicar desta lâmina e vai anexada como guia da identidade
+  (`ROTULO_DA_REFERENCIA_NA_SERIE`); a lâmina é gerada como lâmina de
+  conteúdo (prompt da direção), na qualidade alta (o mesmo custo de quando
+  replicava; a tela já mostrava esse preço). Sem nada só da capa: replica como
+  hoje. A versão guarda `serie_da_capa` (origem, referência, o que ficou em
+  cada lado, e se o Jev respondeu).
+- **Caso B**: lâmina 2+ que segue a capa gerada. Se a capa veio de uma
+  referência (modo replicar) com o molde guardado, a lista é a dessa
+  referência (sem leitura nova).
+
+No prompt do post (o anúncio segue com `blocoDaSerie`, como está):
+`blocoDaIdentidadeDaSerie` (o que herdar e o que não repetir, no lugar do
+"repita tudo, não crie elementos que a capa não tem") e, quando há molde,
+`blocoDaSerieDaReferencia` com as listas específicas ("Herde: ..." e "Não
+repita da capa: ..."), cores sempre as da marca na mesma função e o texto pela
+trava da marca. A legenda da capa anexada perdeu "a mesma protagonista,
+cenário e luz": a pessoa ou o produto da capa só entra se a direção da lâmina
+pedir, menor e a serviço do conteúdo.
+
+**Miolo rico** (`estudio-arte/miolo-rico.ts`, ligado por
+`blocoDoMioloDesenhado`). Nada é colado por código: o prompt descreve um
+componente de lâmina que o gerador desenha junto com a arte. Tipo do conteúdo
+em código (comparação, passos, lista, número, pergunta, citação, dica,
+afirmação) e o componente:
+
+| Tipo | Componentes (na ordem) |
+| --- | --- |
+| lista | checklist, cartões empilhados, chips, ícones de linha |
+| comparação | colunas de comparação, cartões lado a lado |
+| passos | linha do tempo, caixas conectadas |
+| número | número em cartão, mini-gráfico |
+| pergunta | balão de pergunta, cartão em destaque |
+| citação | citação em destaque, cartão em destaque |
+| dica | caixa de dica, cartão em destaque |
+| afirmação | cartão em destaque, caixas conectadas, ícones de linha, chips |
+
+O plano é feito sobre a direção inteira, na ordem (determinístico: lâminas em
+paralelo concordam): nenhuma lâmina repete o componente da anterior e, na
+série, um componente só volta quando os do tipo e os gerais acabaram. Refazer
+troca o componente (a versão guarda `miolo_desenhado`) sem cair no das
+vizinhas. O arranjo acompanha a zona do texto da direção. Cena fixa (foto
+real ou contínuo): a versão leve, só gráfica, sem caixa atrás do texto. Regras
+em toda lâmina: só as cores da paleta na função, mesma tipografia e margens,
+sombra curta sem 3D, e só o texto exato (onde faltar rótulo, ícone de linha).
+
+**O que não muda**: a capa; a lâmina com referência própria (qualquer nível);
+referência de prancha com quadro de sequência; referência sem nada só da
+capa; o anúncio (Mesa Ads). Fixtures `replicar-identica-hoje.json` e
+`lamina-normal-hoje.json` iguais; só mudaram duas linhas de teste que fixavam a
+chamada antiga do bloco da série no servidor.
+
 ## Onde está
 
 | Peça | Arquivo |
@@ -217,4 +300,7 @@ CONTEÚDO DESENHADA (número, pergunta, comparação, lista ou elemento gráfico
 | Jogada, decorativo e cor (puro) | `supabase/functions/_shared/jogada-do-texto.ts` (ligado em `promptDoReplicar` e `promptDaLamina`) |
 | Termo do Jev, miolo enxuto e desenhado | `supabase/functions/estudio-arte/composicao-dinamica.ts` |
 | Testes da composição dinâmica | `src/test/estudio-composicao-dinamica.test.ts` |
-| Registro | `_shared/motores.ts` (`referencia_adapta_copy`, `rosto_na_referencia`, `rosto_v2`, `composicao_dinamica`) |
+| Identidade da série x só da capa (Jev guardado) | `supabase/functions/estudio-arte/serie-da-capa.ts` |
+| Miolo rico (componentes, tipo, rotação) | `supabase/functions/estudio-arte/miolo-rico.ts` (via `blocoDoMioloDesenhado`) |
+| Testes da série e do miolo | `src/test/estudio-serie-e-miolo.test.ts` |
+| Registro | `_shared/motores.ts` (`referencia_adapta_copy`, `rosto_na_referencia`, `rosto_v2`, `composicao_dinamica`, `serie_e_miolo`) |

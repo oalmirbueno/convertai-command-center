@@ -185,8 +185,10 @@ export function SeloDaSerie({ card, total, refsDoConjunto }: { card: CardDaDirec
       className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10.5px] text-muted-foreground"
       data-selo="serie"
       title={selo.tipo === "capa"
-        ? "Da lâmina 2 em diante, a capa gerada vai junto e esta lâmina repete o sistema visual dela (grid, fontes, cores, elementos)."
-        : "Esta lâmina replica a referência escolhida. As lâminas sem referência seguem a capa."}
+        ? "Da lâmina 2 em diante, a capa gerada vai junto. Esta lâmina herda a identidade dela (fundo, fontes, cores, grafismos), sem repetir o que é só da capa."
+        : selo.daLamina
+        ? "Esta lâmina replica a referência escolhida para ela."
+        : "Segue a referência do conjunto. O que é só da capa (título gigante, selo, foto de destaque) fica de fora desta lâmina."}
     >
       <Link2 className="mr-1 h-3 w-3 shrink-0" />
       <span className="min-w-0 truncate">

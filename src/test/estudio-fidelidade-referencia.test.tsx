@@ -371,7 +371,8 @@ describe("4. Referência prancha", () => {
     expect(c).toContain("feche com o CTA");
     expect(serieComQuadroDaPrancha({ ordem: 2, total: 4, sequencia: null })).toBe("");
     expect(serieComQuadroDaPrancha({ ordem: 2, total: 4, sequencia: 4 })).toContain("(imagem 4)");
-    expect(gerar).toContain('replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),');
+    // Frente R4: o post herda da capa só a identidade (blocoDaIdentidadeDaSerie); o anúncio segue com blocoDaSerie.
+    expect(gerar).toContain('replicar ? "" : ads ? blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }) : blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),');
     expect(gerar).toContain('replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),');
   });
 

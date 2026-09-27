@@ -820,6 +820,15 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     ligacao: { arquivo: ESTUDIO, trechos: ["const termoDaLamina = await termoDecorativoDaLamina(", "const enxuto = await enxugarMiolo(direcao.cards, direcao.conceito,"] },
     intocado: "Idêntica sem título quebrado, sem decorativo e sem cores repetidas: o prompt é o de hoje; criativo de anúncio (Mesa Ads) sem a cor por papel nem o miolo desenhado; montar do roteiro continua grátis quando nenhuma lâmina passa do limite (com lâmina longa, a tela mostra o custo da chamada curta antes).",
   },
+  {
+    id: "serie_e_miolo",
+    em: "2026-09-26",
+    pedido: "Dono: \"na referência da capa ele fica puxando praticamente tudo para a segunda lâmina; tem elementos que são só da capa\"; \"os outros cards são muito simples; legal ter uma caixa dentro às vezes, ou algo ligado a algo; não com camada, sempre no gerador, sem repetir e sem ficar genérico\".",
+    o_que: "A capa de referência (molde) é separada em identidade da série e só da capa, pelo papel dos blocos e por regras; o ambíguo vai a um Choice do Jev por elemento, numa chamada guardada por referência. Lâmina 2 em diante com a referência do conjunto e algo só da capa deixa de replicar a capa e vira lâmina de conteúdo da série (a referência vai como guia da identidade). O bloco da série do post diz o que herdar e o que não repetir. O miolo ganha um componente de lâmina desenhado pelo gerador (cartão, caixas conectadas, linha do tempo, colunas, checklist, número em cartão, balão, citação, chips, mini-gráfico, caixa de dica, ícones de linha), escolhido em código pelo tipo do conteúdo, com rotação na série.",
+    modulo: "estudio-arte/serie-da-capa.ts e estudio-arte/miolo-rico.ts",
+    ligacao: { arquivo: ESTUDIO, trechos: ["const serieDaCapa = herdaReferenciaDaCapa({", "blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa })", "componente: componenteDoMiolo, zona: zonaDoTexto })"] },
+    intocado: "Capa sem mudança; lâmina com referência própria (Idêntica e os outros níveis) igual; referência sem nada só da capa replica como hoje; anúncio (Mesa Ads) com o bloco da série de sempre; fixtures replicar-identica-hoje.json e lamina-normal-hoje.json iguais.",
+  },
 ];
 
 // ------------------------------------------------------------------ consultas

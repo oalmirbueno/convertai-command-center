@@ -339,6 +339,20 @@ import { ESQUEMA_REFINO, INSTRUCOES_REFINO, limparOpcoesDoRefino, OBJETIVOS_DO_R
 // Frente R3 (26/09): jogada do texto, palavra decorativa, cor por papel e miolo enxuto e desenhado.
 import { blocoDoMioloDesenhado, enxugarMiolo, ESQUEMA_MIOLO_ENXUTO, passaDoLimite, termoDecorativoDaLamina, textoEsperadoNaConferencia } from "./composicao-dinamica.ts";
 import { blocosDeLeitura } from "../_shared/jogada-do-texto.ts";
+// Frente R4 (26/09): o que a série herda da capa (identidade x só da capa) e o miolo rico feito pelo gerador.
+import {
+  blocoDaIdentidadeDaSerie,
+  blocoDaSerieDaReferencia,
+  herdaReferenciaDaCapa,
+  referenciaDaCapaGerada,
+  registroDaSerie,
+  ROTULO_DA_REFERENCIA_NA_SERIE,
+  rotuloDaCapaNaSerie,
+  type SeparacaoDaSerie,
+  separarIdentidadeDaCapa,
+  temAlgoSoDaCapa,
+} from "./serie-da-capa.ts";
+import { componenteDaLamina, componenteGravado } from "./miolo-rico.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1303,6 +1317,51 @@ async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEnt
     const molde = normalizarMolde(r.json);
     if (molde) await guardarLeitura(caminho, { versao: VERSAO_DO_MOLDE, referencia_id: ref.id, lido_em: new Date().toISOString(), molde });
     return molde;
+  } catch {
+    return null;
+  }
+}
+
+// ------------------------------------ o que a série herda da capa (frente R4)
+//
+// serie-da-capa.ts: o molde (já guardado pela capa) separado em identidade da
+// série e só da capa; o ambíguo vai a um Choice do Jev por elemento, numa
+// chamada guardada por referência (serie-<ref>.json). Sem laço, sem custo por lâmina.
+
+type SerieDaReferencia = { ref: Referencia; imagem: ImagemEntrada; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie };
+
+/**
+ * Caso A: a referência do conjunto (a da capa) numa lâmina 2 em diante. Com
+ * algo só da capa, devolve a referência (imagem, molde e separação) para ela
+ * virar o guia da identidade desta lâmina; sem nada só da capa ou com falha,
+ * null (a lâmina replica como hoje).
+ */
+async function serieDaReferenciaDaCapa(t: Trabalho, ref: Referencia, criadoPor: string): Promise<SerieDaReferencia | null> {
+  try {
+    const imagem = await imagemDaReferencia(ref);
+    const molde = await moldeDaReferencia(t, ref, imagem, criadoPor);
+    if (!molde) return null;
+    const separacao = await separarIdentidadeDaCapa({ refId: ref.id, molde }, depsDaAdaptacao(t, null, criadoPor));
+    return separacao && temAlgoSoDaCapa(separacao) ? { ref, imagem, molde, separacao } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Caso B: a capa gerada veio de uma referência (modo replicar) e o molde dela
+ * está guardado: a separação dessa referência (guardada ou uma chamada do Jev).
+ * Sem molde guardado, a capa sem referência ou falha: null (vale o bloco geral).
+ */
+async function separacaoDaCapaGerada(t: Trabalho, capa: VersaoCard, criadoPor: string): Promise<{ refId: string; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie } | null> {
+  try {
+    const daCapa = referenciaDaCapaGerada(capa);
+    if (!daCapa) return null;
+    const guardado = await leituraGuardada(`${pastaDasLeituras(t.client_id)}/molde-${daCapa.moldeId.replace(/[^0-9a-z-]/gi, "-")}.json`);
+    const molde = guardado && guardado.versao === VERSAO_DO_MOLDE ? normalizarMolde(guardado.molde) : null;
+    if (!molde) return null;
+    const separacao = await separarIdentidadeDaCapa({ refId: daCapa.moldeId, molde }, depsDaAdaptacao(t, null, criadoPor));
+    return separacao ? { refId: daCapa.moldeId, molde, separacao } : null;
   } catch {
     return null;
   }
@@ -3821,6 +3880,27 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     resumoDoFundo = "fundo panorâmico contínuo do carrossel, já pronto: o texto entra por cima, sem mudar a cena";
   }
 
+  // Frente R4 (26/09, dono: "na referência da capa ele puxa tudo para a segunda lâmina"): lâmina 2
+  // em diante que herdaria a referência do CONJUNTO (a da capa), sem referência própria, foto,
+  // elemento nem quadro de prancha, fora do contínuo e do anúncio. Com algo só da capa (título
+  // gigante, selo, foto herói...), a referência sai do replicar desta lâmina e vira o guia da
+  // identidade da série; sem nada só da capa, replica como hoje. A lâmina com referência própria não muda.
+  const q0 = refsDaEquipe.length ? quadrosDaPrancha.get(refsDaEquipe[0].id) : undefined;
+  const serieDaCapa = herdaReferenciaDaCapa({
+    ordem,
+    total,
+    ads,
+    refsDaLamina: (card.referencias_ids || []).length,
+    refs: refsDaEquipe.length,
+    quadroDaPrancha: !!(q0 && q0.quadro),
+    panorama,
+    foto: !!baseFoto,
+    elementos: elementos.length,
+  })
+    ? await serieDaReferenciaDaCapa(t, refsDaEquipe[0], ch.userId)
+    : null;
+  if (serieDaCapa) refsDaEquipe.splice(0, refsDaEquipe.length);
+
   // Replicar a referência escolhida: só fora do contínuo (o panorama manda na cena).
   const replicar = refsDaEquipe.length > 0 && !panorama;
   // Foto real fixa (sem panorama, sem elementos soltos e sem referência a
@@ -3978,10 +4058,19 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       tipo: "capa",
       rotulo: cenaFixa
         ? "CAPA desta série (lâmina 1), guia do sistema do texto: siga só a tipografia, as cores do texto e os elementos gráficos do texto dela; NÃO copie a cena nem a foto dela, a cena desta lâmina é a imagem 1"
+        : !ads
+        // Frente R4: no post, a capa guia só a identidade da série; o que é só dela (título gigante, selo, foto herói) não repete.
+        ? rotuloDaCapaNaSerie(ordem === total)
         : `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; repita o grid, as margens, as linhas, formas e elementos gráficos (mesmo traço, espessura e cor), a tipografia, a paleta, o tratamento e a mesma protagonista, cenário e luz; não copie o texto nem a composição exata dela${ordem === total ? "; o final fecha voltando a ela" : ""}`,
       carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
     });
   }
+  // Frente R4 (caso B): a capa gerada veio de uma referência com o molde guardado; a lista da série é a dela.
+  const separacaoDaSerie: { refId: string; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie; origem: "referencia_do_conjunto" | "capa_gerada" } | null = serieDaCapa
+    ? { refId: serieDaCapa.ref.id, molde: serieDaCapa.molde, separacao: serieDaCapa.separacao, origem: "referencia_do_conjunto" }
+    : capa && !replicar && !ads
+    ? await separacaoDaCapaGerada(t, capa, ch.userId).then((s) => (s ? { ...s, origem: "capa_gerada" as const } : null))
+    : null;
   // Frente E: replicando um quadro de sequência da prancha, ou em Inspirada e
   // Criativa (composição nova), a capa gerada vai junto para a série parecer uma
   // só. Em Idêntica e Próxima com referência simples nada muda (sem capa).
@@ -4009,19 +4098,25 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Sem escolha da equipe e sem foto: só a capa busca UMA arte de referência da marca (Jev); o miolo segue a capa.
   const escolhida = replicar
     ? { refs: refsDaEquipe, jev: "escolha_da_equipe" }
+    : serieDaCapa
+    ? { refs: [serieDaCapa.ref], jev: "serie_da_referencia_da_capa" }
     : baseFoto
     ? { refs: [] as Referencia[], jev: "foto_real" }
     : ordem > 1 && capa
     ? { refs: [] as Referencia[], jev: "serie_pela_capa" }
     : await escolherReferencias(t, card, kit, ch.userId);
+  // Frente R4 (caso A): a referência da capa, já aberta, vai como guia da identidade (não é o layout desta lâmina).
+  const imagemDaSerie = serieDaCapa ? serieDaCapa.imagem : null;
   if (!replicar) {
     for (const ref of escolhida.refs.slice(0, 1)) {
       candidatos.push({
         tipo: "identidade",
-        rotulo: ref.papel === "identidade"
+        rotulo: imagemDaSerie
+          ? ROTULO_DA_REFERENCIA_NA_SERIE
+          : ref.papel === "identidade"
           ? "arte já publicada da própria marca: siga a mesma identidade (cores, tipografia, tratamento de foto); não copie o layout, o texto nem as pessoas dela"
           : "referência de composição: absorva só a hierarquia e o equilíbrio; não copie o texto, as pessoas, os objetos nem a marca dela",
-        carregar: () => imagemDaReferencia(ref),
+        carregar: imagemDaSerie ? async () => imagemDaSerie : () => imagemDaReferencia(ref),
         ref,
       });
     }
@@ -4064,6 +4159,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   let indiceDaLogo: number | null = null;
   let indiceDaCapa: number | null = null;
   let indiceDaSequencia: number | null = null;
+  // Frente R4 (caso A): índice da referência da capa anexada como guia da identidade.
+  let indiceDaReferenciaDaSerie: number | null = null;
   const escolhidosDaLamina = anexosDaLamina(candidatos, { base: temBase });
   // Replicar (26/09, "tem que ser quase idêntico à referência"): a referência 1
   // vira a IMAGEM 1, a que o gerador EDITA; assim o layout dela fica e só trocam
@@ -4084,6 +4181,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (c.tipo === "logo") indiceDaLogo = indice;
     if (c.tipo === "capa") indiceDaCapa = indice;
     if (c.tipo === "sequencia") indiceDaSequencia = indice;
+    if (c.tipo === "identidade" && imagemDaSerie) indiceDaReferenciaDaSerie = indice;
     if (c.ref) idsReferencias.push(c.ref.id);
     if (c.fotoReplicar) fotosReplicar.push({ indice, ...c.fotoReplicar });
     if (c.tipo === "referencia_equipe" && c.ref) {
@@ -4183,6 +4281,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Estilo pedido na conversa com o diretor: entra em todas as lâminas, depois da campanha.
   // Refazer: a lâmina já tem versão, então a nova precisa ser outra composição.
   const versoesAntes = t.cards.filter((c) => c.ordem === ordem).length;
+  // Frente R4: o componente do miolo desta lâmina, pelo plano da série inteira (tipo do conteúdo e
+  // rotação, em código e sem custo); refazendo, outro componente, sem cair no das vizinhas.
+  const componenteDoMiolo = replicar || ads
+    ? null
+    : componenteDaLamina({ cards: t.direcao.cards, ordem, anterioresDestaLamina: t.cards.filter((c) => c.ordem === ordem).map((c) => componenteGravado(c)) });
   const baseComCampanha = [
     base,
     // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).
@@ -4190,10 +4293,22 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     campanha ? blocoDaCampanha(campanha) : "",
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
-    replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
+    // Frente R4: no post, a série herda da capa só a identidade (o anúncio segue com o bloco de sempre).
+    replicar ? "" : ads ? blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }) : blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
+    replicar || ads || !separacaoDaSerie ? "" : blocoDaSerieDaReferencia({
+      ordem,
+      total,
+      molde: separacaoDaSerie.molde,
+      separacao: separacaoDaSerie.separacao,
+      paleta: marca.paleta,
+      kit: { fontes: marca.fontes, paleta: marca.paleta },
+      indiceDaReferencia: indiceDaReferenciaDaSerie,
+      levaLogo: leva,
+      cenaFixa,
+    }),
     replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
-    // Frente R3: lâmina de conteúdo desenhada (recurso visual, não parágrafo). Capa, fechamento, replicar e anúncio: vazio.
-    replicar || ads ? "" : blocoDoMioloDesenhado({ ordem, total, blocos: cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : [{ papel: "apoio", texto: cardDoPrompt.texto_exato }], cenaFixa }),
+    // Frente R3 e R4: lâmina de conteúdo desenhada pelo gerador (componente de lâmina). Capa, fechamento, replicar e anúncio: vazio.
+    replicar || ads ? "" : blocoDoMioloDesenhado({ ordem, total, blocos: cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : [{ papel: "apoio", texto: cardDoPrompt.texto_exato }], cenaFixa, componente: componenteDoMiolo, zona: zonaDoTexto }),
     blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1),
     blocoDoEstilo,
     blocoDoTemplate,
@@ -4202,7 +4317,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     clientId: t.client_id,
     modeloId: t.modelo_imagem_id!,
     referencias: imagens,
-    qualidade,
+    // Frente R4 (caso A): a lâmina que antes replicava a referência da capa segue na qualidade alta (mesmo custo de antes).
+    qualidade: serieDaCapa ? "alta" as Qualidade : qualidade,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
     tarefa: "estudio" as const,
@@ -4219,6 +4335,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     formato_post: quadro.post,
     anexos: imagens.length + deslocamento,
     ...(estiloDoCliente ? { estilo_do_cliente: { versao: estiloDoCliente.versao, referencias: indicesDoEstilo.length } } : {}),
+    // Frente R4: o componente do miolo (memória da série para refazer) e o que a série herdou da capa.
+    ...(componenteDoMiolo ? { miolo_desenhado: { tipo: componenteDoMiolo.tipo, componente: componenteDoMiolo.componente } } : {}),
+    ...(separacaoDaSerie && !replicar ? { serie_da_capa: registroDaSerie(separacaoDaSerie.separacao, separacaoDaSerie.origem, separacaoDaSerie.refId) } : {}),
   };
 
   // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
