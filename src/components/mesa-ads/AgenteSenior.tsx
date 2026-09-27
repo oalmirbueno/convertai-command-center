@@ -1,19 +1,32 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
-import { Briefcase, ChevronDown, ExternalLink, FlaskConical } from "lucide-react";
+import { Briefcase, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
+import { SeletorDeModelo, SeletorDeRaciocinio } from "@/components/mesa/Seletores";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cronometro, useSegundos } from "@/components/mesa/Cronometro";
+import { nomeDoModelo, precoDoModelo } from "@/lib/mesa/api";
 import { brl, chamarAds, humanizar, partesDoPlanoV2, rotuloDoObjetivo, type PedidoDePlano } from "./adsApi";
-import { chavesAgente, lerConversaDoAgente, partesDoAgenteSenior, ROTULO_DA_GRAVIDADE, type EstrategiaSenior, type MensagemDoAgenteSenior } from "./agenteSeniorApi";
+import {
+  chavesAgente,
+  lerConversaDoAgente,
+  modeloEfetivo,
+  partesDoAgenteSenior,
+  rotuloDoRaciocinio,
+  ROTULO_DA_GRAVIDADE,
+  type EscolhaDoModelo,
+  type EstrategiaSenior,
+  type MensagemDoAgenteSenior,
+} from "./agenteSeniorApi";
 import { BotaoDoPlanoDoAgente, CartaoDasAcoes, NumerosQueEleViu } from "./AcoesDoAgente";
 import { chaveDosNumeros, lerNumerosDoAgente, type AcoesDaConta, type NumerosVistos } from "./acoesDoAgenteApi";
+import { chavesRotina } from "./rotinaApi";
 
 /**
  * Agente sênior de tráfego (pedido do dono em 26/09/2026): conversa com o
@@ -39,10 +52,20 @@ import { chaveDosNumeros, lerNumerosDoAgente, type AcoesDaConta, type NumerosVis
  * (no celular, a gaveta do botão de baixo); no Plano de teste abre no lugar,
  * com altura própria. A coluna é estreita: os blocos da resposta ficam um
  * embaixo do outro. O rascunho do campo fica lembrado por cliente.
+ *
+ * 27/09 (frente TR: "não consigo selecionar os modelos; de padrão GPT-6 Luna
+ * Max; faz tudo sozinho quando eu pedir; menos burocracia"): o modelo e o
+ * raciocínio ficam numa linha que abre os seletores das outras mesas
+ * (Seletores.tsx), lembrados por cliente, com o custo no Enviar; padrão GPT-6
+ * Luna no máximo. "Otimizar agora" é o botão principal: um clique e ele analisa
+ * e já faz o que é seguro (o resto fica para confirmar). O plano mandado pelo
+ * Plano de teste chega aqui e ele assume sozinho (monta a campanha pausada).
  */
 
+/** O clique único: analisa e já faz o seguro; o que aumenta gasto ou cria coisa fica para confirmar. */
+export const TEXTO_DE_OTIMIZAR = "Otimize a conta agora: faça o que for seguro (pausar o que gasta sem resultado, baixar verba do que está caro) e deixe pronto para eu confirmar o que aumenta gasto ou cria coisa nova. Diga o que fez e por quê, com os números.";
+
 const ATALHOS = [
-  { rotulo: "Otimizar a conta", texto: "Otimize a conta: o que pausar, onde subir a verba e o que testar. Traga as ações prontas para eu confirmar." },
   { rotulo: "Foco em mensagem", texto: "Analise a conta inteira com foco em mensagem e vendas. O que está só gerando engajamento e como transformar isso em conversa e venda?" },
   { rotulo: "Engajamento para mensagem", texto: "A maioria das campanhas é de engajamento. Monte a migração para campanha de mensagens sem perder o que funciona, com conjuntos, verba e anúncios." },
   { rotulo: "Cortar e escalar", texto: "Quais anúncios cortar, manter e escalar agora, com os números?" },
@@ -60,7 +83,8 @@ function lerModoAgir(): boolean {
 }
 
 /** Em que parte a resposta está (pelo tempo; o servidor responde tudo no fim, com fôlego). */
-export function etapaDaResposta(segundos: number, pesquisar: boolean): string {
+export function etapaDaResposta(segundos: number, pesquisar: boolean, assumindo = false): string {
+  if (assumindo && segundos >= 6) return segundos < 70 ? "Lendo o plano e montando a campanha" : "Subindo os criativos na Meta, tudo pausado";
   if (segundos < 6) return "Lendo a conta e os criativos";
   if (pesquisar && segundos < 45) return "Pesquisando o nicho e a Biblioteca de Anúncios";
   if (segundos < (pesquisar ? 110 : 70)) return "Escrevendo a análise e as ações";
@@ -346,10 +370,62 @@ function Esqueleto() {
   );
 }
 
-function Andamento({ desde, pesquisar }: { desde: number; pesquisar: boolean }) {
+function Andamento({ desde, pesquisar, assumindo = false }: { desde: number; pesquisar: boolean; assumindo?: boolean }) {
   const s = useSegundos(desde);
-  return <Cronometro desde={desde} rotulo={etapaDaResposta(s, pesquisar)} previsao={pesquisar ? "1 a 4 minutos" : "1 a 2 minutos"} />;
+  return <Cronometro desde={desde} rotulo={etapaDaResposta(s, pesquisar, assumindo)} previsao={pesquisar ? "1 a 4 minutos" : "1 a 2 minutos"} />;
 }
+
+/**
+ * O modelo do agente numa linha (nome, raciocínio e preço por 1M); abre os
+ * seletores das outras mesas (Seletores.tsx). A escolha fica lembrada por
+ * cliente; vazio = o padrão (GPT-6 Luna no máximo).
+ */
+function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEscolher: (e: EscolhaDoModelo) => void }) {
+  const { catalogo } = useMesa();
+  const [aberta, setAberta] = useState(false);
+  const efetivo = modeloEfetivo(catalogo, escolha);
+  const m = efetivo.modelo;
+  return (
+    <div className="mb-1.5 min-w-0" data-modelo-do-agente={m ? m.id : ""}>
+      <button
+        type="button"
+        className={juntar("flex w-full min-w-0 items-center rounded text-left text-[11.5px] text-muted-foreground hover:text-foreground", foco)}
+        onClick={() => setAberta(!aberta)}
+        aria-expanded={aberta}
+        aria-label="Modelo do agente sênior"
+        title="Trocar o modelo e o raciocínio (lembrado para este cliente)"
+      >
+        <Cpu className="mr-1 h-3.5 w-3.5 shrink-0" />
+        <span className="min-w-0 truncate">
+          {m ? nomeDoModelo(m) : "Sem modelo de texto ativo"}
+          {efetivo.raciocinio ? ` · ${rotuloDoRaciocinio(efetivo.raciocinio)}` : ""}
+          {m ? ` · ${precoDoModelo(m)}` : ""}
+          {!escolha.modelo ? " · padrão" : ""}
+        </span>
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 transition-transform ${aberta ? "rotate-180" : ""}`} />
+      </button>
+      {aberta && (
+        <div className="mt-1.5 grid min-w-0 grid-cols-1 gap-2 rounded-md bg-muted/50 p-2 sm:grid-cols-2">
+          <SeletorDeModelo
+            catalogo={catalogo}
+            tipo="texto"
+            valor={m ? m.id : ""}
+            onChange={(id) => onEscolher({ modelo: id, raciocinio: "" })}
+            rotulo="Modelo do agente"
+          />
+          <SeletorDeRaciocinio modelo={m} valor={efetivo.raciocinio} onChange={(r) => onEscolher({ modelo: m ? m.id : escolha.modelo, raciocinio: r })} />
+          {escolha.modelo && (
+            <button type="button" className={juntar("justify-self-start rounded text-[11.5px] text-primary hover:underline sm:col-span-2", foco)} onClick={() => onEscolher({ modelo: "", raciocinio: "" })}>
+              Voltar ao padrão (GPT-6 Luna, raciocínio máximo)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const validarEscolha = (v: unknown) => !!v && typeof v === "object" && typeof (v as EscolhaDoModelo).modelo === "string" && typeof (v as EscolhaDoModelo).raciocinio === "string";
 
 export default function AgenteSenior({
   nomeDe = (x) => `Anúncio ${x}`,
@@ -357,6 +433,9 @@ export default function AgenteSenior({
   dias = 30,
   onCriarPlano,
   onPlanoPronto,
+  assumir = null,
+  onAssumido,
+  pedidoPronto = null,
   className = "",
 }: {
   nomeDe?: (adId: string) => string;
@@ -365,6 +444,11 @@ export default function AgenteSenior({
   onCriarPlano?: (p: PedidoDePlano) => void;
   /** Plano de teste criado já preenchido (abre no Plano de teste). */
   onPlanoPronto?: (planoId: string) => void;
+  /** Plano mandado pelo "Enviar ao agente sênior": ele assume sozinho (monta a campanha pausada). */
+  assumir?: { plano_id: string; nome: string } | null;
+  onAssumido?: () => void;
+  /** Texto pronto para o campo (proposta da rotina levada ao agente). */
+  pedidoPronto?: { texto: string; em: number } | null;
   /** Na lateral da área de trabalho ocupa a coluna; solto na página, quem usa dá a altura. */
   className?: string;
 }) {
@@ -372,14 +456,18 @@ export default function AgenteSenior({
   const queryClient = useQueryClient();
   // Rascunho lembrado por cliente (sair e voltar mantém o que foi escrito).
   const [texto, setTexto] = useEstadoDaTela(`mesa-ads:agente-senior:rascunho:${clientId}`, "");
+  // Modelo e raciocínio lembrados por cliente; vazio = padrão (GPT-6 Luna no máximo).
+  const [escolha, setEscolha] = useEstadoDaTela<EscolhaDoModelo>(`mesa-ads:agente-senior:modelo:${clientId}`, { modelo: "", raciocinio: "" }, { validar: validarEscolha, esperaMs: 0 });
+  const efetivo = modeloEfetivo(catalogo, escolha);
   const [pesquisar, setPesquisar] = useState(true);
   const [agir, setAgir] = useState(lerModoAgir);
-  const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
+  const [envio, setEnvio] = useState<{ mensagem: string; desde: number; assumindo: boolean } | null>(null);
   const [numerosDoEnvio, setNumerosDoEnvio] = useState<NumerosVistos | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const listaRef = useRef<HTMLDivElement>(null);
   const botaoRef = useRef<HTMLSpanElement>(null);
+  const assumidos = useRef<Set<string>>(new Set());
   // Persistida no navegador (cache da Mesa): abre na hora com a última conversa e relê por trás.
   const conversa = useQuery({ queryKey: chavesAgente.conversa(clientId), queryFn: () => lerConversaDoAgente(clientId), staleTime: 60_000, retry: false });
   const mensagens: MensagemDoAgenteSenior[] = conversa.data ? conversa.data.mensagens : [];
@@ -392,6 +480,12 @@ export default function AgenteSenior({
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length, !!envio, !!numerosDoEnvio]);
 
+  // Proposta da rotina levada ao agente: entra no campo (nada roda sem o clique).
+  useEffect(() => {
+    if (pedidoPronto && pedidoPronto.texto) setTexto(pedidoPronto.texto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoPronto ? pedidoPronto.em : 0]);
+
   const mudarAgir = (v: boolean) => {
     setAgir(v);
     try {
@@ -401,11 +495,12 @@ export default function AgenteSenior({
     }
   };
 
-  const enviar = async () => {
-    const mensagem = texto.trim();
-    setEnvio({ mensagem, desde: Date.now() });
+  /** Uma mensagem ao agente (com o modelo escolhido). `agirAgora`: ele já faz o seguro. */
+  const enviarMensagem = async (mensagem: string, opcoes: { agirAgora?: boolean; assumirPlano?: { plano_id: string; nome: string } | null; limparCampo?: boolean } = {}) => {
+    const assumindo = !!opcoes.assumirPlano;
+    setEnvio({ mensagem: assumindo ? `Assuma o plano ${opcoes.assumirPlano!.nome} e monte a campanha.` : mensagem, desde: Date.now(), assumindo });
     setNumerosDoEnvio(null);
-    setTexto("");
+    if (opcoes.limparCampo) setTexto("");
     setAviso(null);
     // Primeira parte da resposta: os números que o agente vai ler (grátis, do cache de 5 min).
     void queryClient
@@ -417,25 +512,51 @@ export default function AgenteSenior({
         client_id: clientId,
         mensagem,
         conversa_id: conversa.data && conversa.data.conversa_id ? conversa.data.conversa_id : undefined,
-        plano_id: planoId || undefined,
+        plano_id: (opcoes.assumirPlano ? opcoes.assumirPlano.plano_id : planoId) || undefined,
         dias,
-        pesquisar,
+        // Assumir o plano não pesquisa na web (o custo mostrado no botão do plano é sem pesquisa).
+        pesquisar: assumindo ? false : pesquisar,
       };
-      if (agir) corpo.modo = "agir";
+      if (efetivo.modelo) corpo.modelo_id = efetivo.modelo.id;
+      if (efetivo.raciocinio) corpo.raciocinio = efetivo.raciocinio;
+      if (assumindo) corpo.modo = "assumir_plano";
+      else if (opcoes.agirAgora) corpo.modo = "agir";
       const data = await chamarAds<any>("conta_conversar", corpo);
       const b = data && data.pesquisa && data.pesquisa.biblioteca;
       if (pesquisar && b && b.motivo) setAviso(`Biblioteca de Anúncios: ${b.motivo}`);
       await queryClient.invalidateQueries({ queryKey: chavesAgente.conversa(clientId) });
+      if (data && Number(data.feitas_sozinho) > 0) {
+        void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-conta", clientId] });
+        void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-resultados", clientId] });
+        void queryClient.invalidateQueries({ queryKey: chavesRotina.rotina(clientId) });
+      }
       return data;
     } catch (e) {
-      setTexto((t) => t || mensagem);
+      if (opcoes.limparCampo) setTexto((t) => t || mensagem);
       throw e;
     } finally {
       setEnvio(null);
       setNumerosDoEnvio(null);
     }
   };
+
+  const enviar = () => enviarMensagem(texto.trim(), { agirAgora: agir, limparCampo: true });
+  const otimizar = () => enviarMensagem(TEXTO_DE_OTIMIZAR, { agirAgora: true });
   const podeEnviar = !!texto.trim() && !envio;
+
+  // O plano mandado pelo "Enviar ao agente sênior": ele assume sozinho, uma vez (o custo apareceu no botão do plano).
+  const conversaPronta = !!conversa.data;
+  useEffect(() => {
+    if (!assumir || !conversaPronta || envio || assumidos.current.has(assumir.plano_id)) return;
+    assumidos.current.add(assumir.plano_id);
+    const plano = assumir;
+    void enviarMensagem("", { assumirPlano: plano })
+      .catch((e) => setAviso(`O agente não assumiu o plano ${plano.nome}: ${e instanceof Error ? e.message : "tente de novo pelo Plano de teste."}`))
+      .finally(() => {
+        if (onAssumido) onAssumido();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assumir ? assumir.plano_id : "", conversaPronta]);
 
   const mostrar = (m: MensagemDoAgenteSenior) => {
     if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
@@ -458,11 +579,11 @@ export default function AgenteSenior({
     <PainelDoAgente
       className={className}
       titulo="Agente sênior de tráfego"
-      descricao="Nada muda sem você confirmar"
+      descricao="Faz o seguro sozinho; o resto você confirma"
       icone={<Briefcase className="h-4 w-4" />}
       acoes={
         <AjudaRecolhida rotulo="Como o agente sênior funciona">
-          Lê a conta, a evolução, os criativos e o contexto do cliente, pesquisa o nicho quando você deixa e devolve o que viu, o que recomenda, as ações prontas para confirmar e o plano de teste. Uma chamada por mensagem, com o custo à vista.
+          Antes de responder, monta o retrato da campanha (cada nível com gasto, resultados, custo, CTR, CPM, frequência e fase de aprendizado), compara com o custo-alvo e a referência do nicho e lê o que já foi feito. Quando você pede para fazer, ele já faz o que é seguro (pausar o que queima, baixar verba, renomear), relendo a Meta antes e com Desfazer; ativar, subir verba e criar coisa nova esperam o seu Confirmar. Uma chamada por mensagem, com o custo à vista.
         </AjudaRecolhida>
       }
       refDasMensagens={listaRef}
@@ -470,18 +591,32 @@ export default function AgenteSenior({
       avisos={aviso ? <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{aviso}</p> : null}
       compositor={
         <>
-          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
-            {ATALHOS.map((a) => (
-              <button
-                key={a.rotulo}
-                type="button"
-                onClick={() => setTexto(a.texto)}
-                title={a.texto}
-                className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", foco)}
-              >
-                {a.rotulo}
-              </button>
-            ))}
+          <LinhaDoModelo escolha={escolha} onEscolher={setEscolha} />
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-center">
+            <span className="mb-1 mr-1.5">
+              <BotaoComCusto
+                rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Otimizar agora</>}
+                titulo="Otimizar a conta agora"
+                descricao="Um clique: o agente lê a conta inteira, já faz o que é seguro (pausar o que gasta sem resultado, baixar verba do que está caro) com Desfazer, e deixa para você confirmar o que aumenta gasto ou cria coisa nova."
+                partes={() => partesDoAgenteSenior(catalogo, pesquisar, efetivo)}
+                executar={otimizar}
+                disabled={!!envio}
+                className="h-8"
+              />
+            </span>
+            <div className="mb-1 flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
+              {ATALHOS.map((a) => (
+                <button
+                  key={a.rotulo}
+                  type="button"
+                  onClick={() => setTexto(a.texto)}
+                  title={a.texto}
+                  className={juntar("mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground", foco)}
+                >
+                  {a.rotulo}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
             <Textarea
@@ -500,7 +635,7 @@ export default function AgenteSenior({
               className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             <div className="mt-1 flex min-w-0 flex-wrap items-center">
-              <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta em até 2 frases, com as ações prontas para confirmar">
+              <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta curta e ele já faz o que é seguro; o resto fica pronto para confirmar">
                 <input type="checkbox" className="mr-1.5" checked={agir} onChange={(e) => mudarAgir(e.target.checked)} />
                 Direto às ações
               </label>
@@ -512,10 +647,11 @@ export default function AgenteSenior({
                 <BotaoComCusto
                   rotulo="Enviar"
                   titulo="Mensagem ao agente sênior"
-                  descricao={`Uma chamada do agente sênior com a conta, a evolução, os criativos e o contexto do cliente${pesquisar ? ", com pesquisa web" : ""}. O Jev identifica o nicho (centavos). As ações que ele propuser só acontecem quando você confirmar.`}
-                  partes={() => partesDoAgenteSenior(catalogo, pesquisar)}
+                  descricao={`Uma chamada do agente sênior (${efetivo.modelo ? nomeDoModelo(efetivo.modelo) : "modelo padrão"}${efetivo.raciocinio ? `, ${rotuloDoRaciocinio(efetivo.raciocinio)}` : ""}) com a conta, a evolução, os criativos e o contexto do cliente${pesquisar ? ", com pesquisa web" : ""}. O Jev identifica o nicho e se você pediu para fazer (centavos). Se pediu, ele já faz o seguro, com Desfazer.`}
+                  partes={() => partesDoAgenteSenior(catalogo, pesquisar, efetivo)}
                   executar={enviar}
                   disabled={!podeEnviar}
+                  variant="outline"
                   className="h-8"
                 />
               </span>
@@ -528,7 +664,7 @@ export default function AgenteSenior({
       {conversa.isError && <AvisoDeErro erro={conversa.error} />}
       {conversa.data && mensagens.length === 0 && !envio && (
         <p className="py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
-          Peça o que fazer com a conta. Ele mostra o que leu, o que recomenda e as ações prontas para confirmar.
+          Peça o que fazer com a conta. Ele mostra o que leu, faz o que é seguro quando você pede e deixa o resto pronto para confirmar.
         </p>
       )}
       {antigas.length > 0 && (
@@ -547,7 +683,7 @@ export default function AgenteSenior({
           <FalaDoAgente>
             <div className="space-y-2">
               {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
-              <Andamento desde={envio.desde} pesquisar={pesquisar} />
+              <Andamento desde={envio.desde} pesquisar={pesquisar} assumindo={envio.assumindo} />
             </div>
           </FalaDoAgente>
         </div>

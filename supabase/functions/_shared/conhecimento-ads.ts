@@ -18,6 +18,12 @@
  * (sóbrio, direto, agressivo) com regras concretas para ângulos, copy e arte,
  * a pergunta do Jev "genérico" e o foco em resultado (ordem de teste e corte).
  *
+ * Versão 4 (27/09/2026, frente CR): a base "criativo que converte" mora em
+ * conhecimento-criativo.ts (formatos, layout por formato, ganchos, estruturas
+ * de copy, fadiga, com as fontes). Ela vai no pedido de cada ação (plano,
+ * copy, pacote) e na direção do anúncio, para o sistema do estrategista não
+ * passar do teto e o prompt do Estúdio (travado por fixtures) não mudar.
+ *
  * Sem travessão nos textos (regra do dono).
  */
 
@@ -963,7 +969,12 @@ export const CONHECIMENTO_ESTRATEGISTA_ADS = [
   FOCO_EM_RESULTADO,
 ].join("\n\n");
 
-/** Bloco que o diretor de arte e o gerador recebem numa peça de anúncio. */
+/**
+ * Bloco que o diretor de arte e o gerador recebem numa peça de anúncio.
+ * O prompt do Estúdio é travado byte a byte por fixtures (estilo, templates,
+ * fidelidade): o layout que converte (frente CR, 27/09) entra pela direção
+ * do anúncio montada na Mesa Ads (layoutDoAnuncio), não aqui.
+ */
 export function regrasDoCriativo(formato: FormatoAds): string {
   const f = formato === "carrossel" ? "feed_4x5" : formato;
   const t = TAMANHO_DO_FORMATO[f];

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Briefcase, Check, ChevronDown, FlaskConical, ShieldCheck, Sparkles, Target, Wand2 } from "lucide-react";
+import { AlertTriangle, Briefcase, ChevronDown, FlaskConical, ShieldCheck, Sparkles, Target, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -29,7 +29,6 @@ import {
   normalizarPlano,
   notasDe10,
   OBJETIVOS,
-  partesDaProducao,
   partesDoPlanoV2,
   pontuacaoDe10,
   qualidadeDoPlano,
@@ -37,12 +36,10 @@ import {
   rotuloDoTom,
   STATUS_DO_PLANO,
   testarPrimeiroDoPlano,
-  tomDe,
   tomDoPedido,
   TONS_DO_CRIATIVO,
   brl,
   type Angulo,
-  type FormatoAds,
   type PedidoDePlano,
   type PlanoAds,
   type StatusDoPlano,
@@ -51,9 +48,10 @@ import {
 import { Andamento, BarraDeNota, BarraDePolitica, CabecalhoDaParte, SeloDeEvidencia, useAndamento } from "./Comuns";
 import ConversaDoPlano from "./ConversaDoPlano";
 import AgenteSenior from "./AgenteSenior";
+import EnviarAoAgenteSenior from "./EnviarAoAgenteSenior";
 import KitDeRecepcao from "./KitDeRecepcao";
 import TesteDoAgente from "./TesteDoAgente";
-import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
+import ProducaoDoPlano, { corpoDaProducao, SeletorDeTom } from "./ProducaoDoPlano";
 
 /**
  * Etapa 3, Plano de teste: ângulos realmente diferentes (situação × mecanismo
@@ -61,10 +59,11 @@ import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
  * laço de qualidade: o Jev pontua clareza, relevância, prova, risco de
  * política, parada e diferenciação; o que não passa na régua é reescrito
  * (até 2 rodadas) e o que continua fraco vai para "Descartados pela
- * conferência", com os motivos. A equipe escolhe ângulos e formatos e manda
- * produzir: cada combinação vira um criativo com copy e um trabalho no
- * Estúdio Ads. Pedidos vindos da Oferta ou da Conta chegam prontos
- * (pedidoPendente) e o plano é gerado sozinho, uma vez.
+ * conferência", com os motivos. Os aprovados já vêm marcados e "Criar
+ * criativos" (ProducaoDoPlano, frente CR 27/09) faz o resto em um clique:
+ * formatos automáticos, copy no modelo escolhido, a melhor pelo Jev, a arte
+ * no Estúdio Ads, com andamento e Parar. Pedidos vindos da Oferta ou da
+ * Conta chegam prontos (pedidoPendente) e o plano é gerado sozinho, uma vez.
  *
  * 26/09 (sistema de design): área de trabalho com a conversa do estrategista
  * como lateral fixa (PainelDoAgente); o plano rola por conta própria.
@@ -76,41 +75,8 @@ const seletorCurto = `h-9 min-w-0 max-w-full rounded-md border border-input bg-b
 
 export const QUANTIDADES_DE_ANGULOS = [3, 4, 5, 6];
 
-/** Corpo de criativos_produzir: ângulos na ordem do plano e formatos na ordem da lista (v3: com o tom, quando escolhido). */
-export function corpoDaProducao(plano: PlanoAds, angulos: string[], formatos: FormatoAds[], tom?: TomDoCriativo | null) {
-  const corpo: { plano_id: string; angulo_ids: string[]; formatos: FormatoAds[]; tom?: TomDoCriativo } = {
-    plano_id: plano.id,
-    angulo_ids: plano.angulos.filter((a) => angulos.indexOf(a.id) >= 0).map((a) => a.id),
-    formatos: FORMATOS.map((f) => f.valor).filter((f) => formatos.indexOf(f) >= 0),
-  };
-  if (tom) corpo.tom = tom;
-  return corpo;
-}
-
-/** Seletor dos três tons (sóbrio, direto, agressivo), com a regra de cada um no título. */
-export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoCriativo; onMudar: (t: TomDoCriativo) => void; rotulo?: string }) {
-  return (
-    <div className="inline-flex h-9 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label={rotulo}>
-      {TONS_DO_CRIATIVO.map((t) => (
-        <button
-          key={t.valor}
-          type="button"
-          role="radio"
-          aria-checked={valor === t.valor}
-          title={t.dica}
-          onClick={() => onMudar(t.valor)}
-          className={juntar(
-            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[12.5px] font-medium transition-colors",
-            valor === t.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-            foco,
-          )}
-        >
-          {t.rotulo}
-        </button>
-      ))}
-    </div>
-  );
-}
+// Frente CR (27/09): a produção em um clique mora em ProducaoDoPlano (corpo, tom e o seletor saem de lá).
+export { corpoDaProducao, SeletorDeTom };
 
 /** Testar primeiro: a ordem de teste, o porquê e a regra de corte (números do código). */
 function TestarPrimeiro({ plano }: { plano: PlanoAds }) {
@@ -248,6 +214,14 @@ function CartaoDoAngulo({
         <SeloDaPontuacao nota={pontuacaoDe10(angulo.pontuacao)} />
       </div>
 
+      {/* Frente CR: por que este estilo, em uma linha (dado real ou padrão do nicho; nunca número inventado). */}
+      {angulo.porque_do_estilo && (
+        <p className="mt-1.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-porque-do-estilo="">
+          <span className="font-medium text-foreground">Por que este estilo: </span>
+          {angulo.porque_do_estilo}
+        </p>
+      )}
+
       {angulo.gancho_verbal && (
         <p className="mt-3 font-serif text-[18px] font-semibold leading-snug [overflow-wrap:anywhere]">
           {"“"}
@@ -384,21 +358,15 @@ export default function AbaPlano({
   const [objetivo, setObjetivo] = useState("");
   const [agenteAberto, setAgenteAberto] = useState(false);
   const [marcados, setMarcados] = useState<string[]>([]);
-  const [formatos, setFormatos] = useState<FormatoAds[]>(["feed_4x5", "stories_9x16"]);
   const [desdeGerar, rodarGerar] = useAndamento();
-  const [desdeProduzir, rodarProduzir] = useAndamento();
   const [rotuloDoPedido, setRotuloDoPedido] = useState<string | null>(null);
-  // v3: tom do plano novo e da produção (o da produção começa no tom do plano aberto).
-  // Sem escolha explícita, o tom sai do pedido escrito ("mais agressivo") e, sem nada, direto.
+  // v3: tom do plano novo. Sem escolha explícita, o tom sai do pedido escrito ("mais agressivo") e, sem nada, direto.
+  // Frente CR: formatos, tom da produção, kit e modelo da copy moram em ProducaoDoPlano (criar em um clique).
   const [tomEscolhido, setTomEscolhido] = useState<TomDoCriativo | null>(null);
-  const [tomDaProducao, setTomDaProducao] = useState<TomDoCriativo>("direto");
-  // 25/09: o kit de recepção (post que recebe quem veio do anúncio e roteiro de vendas) sai junto com os criativos.
-  const [comKit, setComKit] = useState(true);
   const tom: TomDoCriativo = tomEscolhido || tomDoPedido(pedido) || "direto";
 
   const lista = planos.data || [];
   const plano = lista.find((p) => p.id === planoId) || lista[0] || null;
-  const tomDoPlanoAberto: TomDoCriativo = (plano && tomDe(plano.estrutura.tom)) || "direto";
   const destaques = (referencias.data || []).filter((r) => r.destaque).length;
   const ofertasAtivas = (ofertas.data || []).filter((o) => o.status !== "arquivada").sort((a, b) => Number(b.status === "escolhida") - Number(a.status === "escolhida"));
   const qualidade = plano ? qualidadeDoPlano(plano) : null;
@@ -416,23 +384,13 @@ export default function AbaPlano({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escolhida ? escolhida.id : ""]);
 
-  // Outro plano: os ângulos aprovados marcados e os formatos que o estrategista sugeriu.
+  // Outro plano: os ângulos aprovados marcados (a conferência do Jev já escolheu; formatos saem sozinhos na produção).
   useEffect(() => {
     if (!plano) return;
     const aprovados = plano.angulos.filter(anguloAprovado);
     setMarcados((aprovados.length ? aprovados : plano.angulos).map((a) => a.id));
-    const sugeridos: FormatoAds[] = [];
-    plano.angulos.forEach((a) =>
-      (a.formatos || []).forEach((f) => {
-        if (sugeridos.indexOf(f) < 0 && FORMATOS.some((x) => x.valor === f)) sugeridos.push(f);
-      }),
-    );
-    if (sugeridos.length) setFormatos(sugeridos);
-    setTomDaProducao(tomDe(plano.estrutura.tom) || "direto");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plano ? plano.id : null, plano ? plano.angulos.length : 0, plano ? String(plano.estrutura.tom || "") : ""]);
-
-  const pecas = useMemo(() => marcados.length * formatos.length, [marcados.length, formatos.length]);
+  }, [plano ? plano.id : null, plano ? plano.angulos.length : 0]);
 
   const chamarPlano = (extra: Partial<PedidoDePlano> = {}) =>
     chamarAds<any>(
@@ -501,8 +459,6 @@ export default function AbaPlano({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoPendente, briefing.isLoading]);
 
-  const produzir = () => (plano ? rodarProduzir(() => chamarAds<any>("criativos_produzir", corpoDaProducao(plano, marcados, formatos, tomDaProducao !== tomDoPlanoAberto ? tomDaProducao : null))) : Promise.resolve(null));
-
   const mudarStatus = async (status: StatusDoPlano) => {
     if (!plano) return;
     try {
@@ -514,17 +470,6 @@ export default function AbaPlano({
   };
 
   const alternar = <T,>(l: T[], v: T) => (l.indexOf(v) >= 0 ? l.filter((x) => x !== v) : l.concat([v]));
-  // Ângulos marcados ainda sem kit de recepção (o kit sai junto com a produção, em paralelo).
-  const semKit = plano ? plano.angulos.filter((a) => marcados.indexOf(a.id) >= 0 && !kitDoAngulo(a)).map((a) => a.id) : [];
-  const gerarKitsDosAngulos = (planoId: string, ids: string[]) => {
-    void Promise.all(ids.map((id) => gerarKit(planoId, id).then(() => true, () => false))).then((r) => {
-      mesa.atualizarCusto();
-      void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
-      const ok = r.filter(Boolean).length;
-      if (ok) toast.success(ok === 1 ? "Kit de recepção pronto" : `${ok} kits de recepção prontos`, { description: "No Estúdio Ads, embaixo do criativo, e no Plano de teste." });
-      if (ok < r.length) toast.warning(`${r.length - ok} kit(s) não saíram`, { description: "Gere de novo pelo botão do ângulo." });
-    });
-  };
   const angulosOrdenados = plano ? plano.angulos : [];
 
   return (
@@ -661,6 +606,8 @@ export default function AbaPlano({
                       </option>
                     ))}
                   </select>
+                  {/* Frente TR: o agente sênior assume o plano e monta a campanha na Meta, pausada. */}
+                  <EnviarAoAgenteSenior plano={plano} />
                 </>
               }
             />
@@ -711,61 +658,8 @@ export default function AbaPlano({
 
             <Descartados angulos={qualidade.descartados} />
 
-            {/* No computador a barra gruda no pé da coluna que rola; no celular fica no fim (nada flutua sobre os campos). */}
-            <div className="border-t border-border bg-background/95 py-3 lg:sticky lg:bottom-0 lg:z-10" role="group" aria-label="Produzir criativos">
-              <div className="flex min-w-0 flex-wrap items-center">
-                <div className="mb-1 mr-3 flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">
-                  {FORMATOS.map((f) => {
-                    const ativo = formatos.indexOf(f.valor) >= 0;
-                    return (
-                      <button
-                        key={f.valor}
-                        type="button"
-                        aria-pressed={ativo}
-                        onClick={() => setFormatos((l) => alternar(l, f.valor))}
-                        className={juntar(
-                          "mb-1 mr-1.5 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] transition-colors",
-                          ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground",
-                          foco,
-                        )}
-                      >
-                        {ativo && <Check className="mr-1 h-3 w-3" />}
-                        {f.rotulo}
-                      </button>
-                    );
-                  })}
-                </div>
-                <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="O post que recebe quem veio do anúncio e o roteiro de atendimento e vendas de cada ângulo">
-                  <input type="checkbox" className="mr-1.5" checked={comKit} onChange={(e) => setComKit(e.target.checked)} />
-                  Com o kit de recepção
-                </label>
-                <div className="mb-1 mr-3 flex min-w-0 items-center">
-                  <span className="mr-1.5 text-[11.5px] text-muted-foreground">Tom</span>
-                  <SeletorDeTom valor={tomDaProducao} onMudar={setTomDaProducao} rotulo="Tom dos criativos" />
-                </div>
-                <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
-                  <span className="mr-2 text-[12px] tabular-nums text-muted-foreground">
-                    {marcados.length} ângulo{marcados.length === 1 ? "" : "s"} × {formatos.length} formato{formatos.length === 1 ? "" : "s"} = {pecas} criativo{pecas === 1 ? "" : "s"}
-                  </span>
-                  <Andamento desde={desdeProduzir} rotulo="Dirigindo" />
-                  <BotaoComCusto
-                    rotulo="Produzir criativos"
-                    titulo="Produzir criativos"
-                    descricao={`Para cada ângulo e formato: a copy do anúncio no tom ${rotuloDoTom(tomDaProducao).toLowerCase()} (conferida pelo Jev, com aviso de genérico) e a direção de arte no Estúdio Ads, pronta para gerar.`}
-                    className="ml-2 h-9"
-                    disabled={pecas === 0}
-                    partes={() => partesDaProducao(catalogo, pecas).concat(comKit && semKit.length ? partesDoKit(catalogo, semKit.length) : [])}
-                    executar={produzir}
-                    aoConcluir={() => {
-                      void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
-                      void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
-                      if (comKit && semKit.length) gerarKitsDosAngulos(plano.id, semKit);
-                      onProduzido(plano.id);
-                    }}
-                  />
-                </span>
-              </div>
-            </div>
+            {/* Frente CR (27/09): criar em um clique; formatos, tom, kit e modelo da copy no "Trocar", andamento com Parar. */}
+            <ProducaoDoPlano plano={plano} marcados={marcados} onProduzido={onProduzido} />
           </section>
         )}
       </div>

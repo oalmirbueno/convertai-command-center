@@ -1,17 +1,21 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, ChevronDown, ExternalLink, FlaskConical, KeyRound, Loader2, ShieldAlert, Undo2, X, Zap } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ExternalLink, FlaskConical, KeyRound, Loader2, Play, ShieldAlert, Undo2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import CaminhoPronto from "@/components/agentes/CaminhoPronto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta } from "@/lib/mesa/api";
 import { brl, chavesAds, inteiro, porcento, tempoDesde } from "./adsApi";
 import {
+  ativarCampanhaMontada,
   criarPlanoDoAgente,
   desfazerAcoesDaConta,
+  desfazerItemDaConta,
   estadoDasAcoes,
   executarAcoesDaConta,
+  itemTemDesfazer,
   itensDisponiveis,
   nomeDoNivel,
   normalizarAcoesDaConta,
@@ -21,6 +25,7 @@ import {
   type ItemDaAcao,
   type NumerosVistos,
 } from "./acoesDoAgenteApi";
+import { chavesRotina } from "./rotinaApi";
 
 /**
  * Agente sênior que age (pedido do dono em 25/09 à noite): o que ele viu
@@ -142,6 +147,11 @@ export function AvisoDeGestao({ motivo }: { motivo: string | null }) {
 /**
  * As ações que o agente propôs, uma por linha, com antes e depois. Os itens
  * disponíveis vêm marcados; o Confirmar faz só os marcados.
+ *
+ * Frente TR (27/09, "menos burocracia"): o que o agente já fez sozinho (seguro:
+ * reversível e sem aumento de gasto) aparece como "Já fiz", com o Desfazer de
+ * cada um; a campanha montada do plano mostra o resumo e o Confirmar para
+ * ativar; depois de feito, o caminho "Ir para ..." (contrato comum).
  */
 export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemId: string; acoes: AcoesDaConta; onPlanoPronto?: (planoId: string) => void }) {
   const avisarErro = useAvisarErro();
@@ -149,11 +159,19 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const queryClient = useQueryClient();
   const [atual, setAtual] = useState<AcoesDaConta>(acoes);
   const [marcados, setMarcados] = useState<string[]>(() => itensDisponiveis(acoes).map((i) => i.id));
-  const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
+  const [fazendo, setFazendo] = useState<string | null>(null);
+  const [irSozinho, setIrSozinho] = useState(false);
   const estado = estadoDasAcoes(atual);
   const ensaio = atual.modo === "ensaio";
   const semGestao = !ensaio && atual.gestao && !atual.gestao.disponivel && atual.itens.some((i) => i.na_meta && !i.ensaio);
   const confirmaveis = itensDisponiveis(atual).length;
+  const feitosSozinho = atual.itens.filter((i) => i.auto && i.resultado && i.resultado.ok);
+
+  const releituras = () => {
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-conta", clientId] });
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-resultados", clientId] });
+    void queryClient.invalidateQueries({ queryKey: chavesRotina.rotina(clientId) });
+  };
 
   const agir = async (tipo: "confirmar" | "descartar" | "desfazer") => {
     setFazendo(tipo);
@@ -166,16 +184,51 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         toast.success(`${Number(data && data.feitos) || 0} ${Number(data && data.feitos) === 1 ? "ação feita" : "ações feitas"}`, {
           description: falhas ? `${falhas} não ${falhas === 1 ? "pôde" : "puderam"}. O motivo está no cartão.` : "Dá para desfazer no cartão quando houver volta.",
         });
-        void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-conta", clientId] });
+        releituras();
         void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
         void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
         const plano = novo ? novo.itens.find((i) => i.tipo === "plano_de_teste" && i.resultado && i.resultado.ok) : null;
         if (plano && plano.resultado && plano.resultado.criado.plano_id && onPlanoPronto) onPlanoPronto(plano.resultado.criado.plano_id);
+        // Confirmado nesta tela: o caminho abre sozinho quando o servidor pediu.
+        setIrSozinho(true);
       } else if (tipo === "desfazer") {
         toast.success("Conta como estava", { description: `${Number(data && data.voltaram) || 0} item(ns) voltaram.` });
+        releituras();
       }
     } catch (e) {
       avisarErro(e, tipo === "desfazer" ? "Não foi possível desfazer" : tipo === "descartar" ? "Não foi possível cancelar" : "Não foi possível fazer as ações");
+    } finally {
+      setFazendo(null);
+    }
+  };
+
+  /** Desfazer só um item (o que o agente fez sozinho). */
+  const desfazerItem = async (i: ItemDaAcao) => {
+    setFazendo(`desfazer:${i.id}`);
+    try {
+      const data = await desfazerItemDaConta(mensagemId, i.id);
+      const novo = data && data.anexo ? normalizarAcoesDaConta(data.anexo) : null;
+      if (novo) setAtual(novo);
+      toast.success("Desfeito", { description: "Este item voltou como estava." });
+      releituras();
+    } catch (e) {
+      avisarErro(e, "Não foi possível desfazer");
+    } finally {
+      setFazendo(null);
+    }
+  };
+
+  /** O Confirmar da campanha montada: começa a gastar. */
+  const ativar = async (i: ItemDaAcao) => {
+    setFazendo(`ativar:${i.id}`);
+    try {
+      const data = await ativarCampanhaMontada(mensagemId, i.id);
+      const novo = data && data.anexo ? normalizarAcoesDaConta(data.anexo) : null;
+      if (novo) setAtual(novo);
+      toast.success("Campanha ativada", { description: "Ela entra em análise na Meta e começa a rodar. O Desfazer arquiva a campanha." });
+      releituras();
+    } catch (e) {
+      avisarErro(e, "A campanha não foi ativada");
     } finally {
       setFazendo(null);
     }
@@ -187,7 +240,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
     <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[12.5px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        Ações propostas · {atual.itens.length}
+        {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}
         {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">Modo ensaio</span>}
       </p>
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
@@ -200,12 +253,15 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       <ul className="mt-2 divide-y divide-border border-y border-border">
         {atual.itens.map((i) => {
           const r = i.resultado;
-          const pode = estado === "aberta" && !i.indisponivel && !i.ensaio;
+          const sozinho = i.auto && !!r;
+          const pode = estado === "aberta" && !i.indisponivel && !i.ensaio && !sozinho;
           return (
-            <li key={i.id} className="flex min-w-0 items-start py-2" data-ensaio={i.ensaio ? "" : undefined}>
-              {estado === "aberta" && i.ensaio ? (
+            <li key={i.id} className="flex min-w-0 items-start py-2" data-ensaio={i.ensaio ? "" : undefined} data-feito-sozinho={sozinho ? "" : undefined}>
+              {sozinho && r && r.ok ? (
+                <Check className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+              ) : estado === "aberta" && i.ensaio ? (
                 <span className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-dashed border-warning" aria-hidden="true" />
-              ) : estado === "aberta" ? (
+              ) : estado === "aberta" && !sozinho ? (
                 <input
                   type="checkbox"
                   className="mr-2 mt-0.5 shrink-0"
@@ -225,12 +281,14 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {i.alvo ? <span className="font-normal text-muted-foreground">{` · ${nomeDoNivel(i.alvo.nivel)} `}</span> : null}
                   {i.alvo ? i.alvo.nome : i.tipo === "tarefa_equipe" && i.texto ? `: ${i.texto}` : ""}
                   {i.criativo ? <span className="font-normal text-muted-foreground">{` com ${i.criativo.nome}`}</span> : null}
+                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[10.5px] font-medium text-success">Já fiz</span>}
                 </span>
                 <AntesDepois i={i} />
+                {i.montagem && <ResumoDaMontagem i={i} />}
                 {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">Seria feito assim</span>}
                 {i.motivo && <span className="mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]">{i.motivo}</span>}
-                {i.indisponivel && estado === "aberta" && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
-                {r && !r.ok && estado !== "aberta" && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
+                {i.indisponivel && estado === "aberta" && !sozinho && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
+                {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && (i.tipo === "duplicar_anuncio" || i.tipo === "trocar_criativo") && (
                   <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Criado pausado na Meta. Nada entra no ar sem alguém ativar.</span>
@@ -242,6 +300,24 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                     Abrir o plano de teste
                   </button>
                 )}
+                {r && r.ok && !r.desfeito && i.tipo === "montar_campanha_do_plano" && (
+                  <span className="mt-1 flex min-w-0 flex-wrap items-center">
+                    {r.ativada_em ? (
+                      <span className="mb-1 mr-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[10.5px] font-medium text-success">Ativada</span>
+                    ) : (
+                      <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[11.5px]" disabled={!!fazendo} onClick={() => void ativar(i)} title="Começa a gastar a verba do plano. O Desfazer arquiva a campanha.">
+                        {fazendo === `ativar:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
+                        Ativar campanha{i.montagem && i.montagem.verba_diaria_brl !== null ? ` (${brl(i.montagem.verba_diaria_brl)} por dia)` : ""}
+                      </Button>
+                    )}
+                  </span>
+                )}
+                {sozinho && itemTemDesfazer(i) && (
+                  <Button type="button" size="sm" variant="outline" className="mt-1 h-7 text-[11.5px]" disabled={!!fazendo} onClick={() => void desfazerItem(i)} aria-label={`Desfazer este item: ${ROTULO_DA_ACAO[i.tipo]}${i.alvo ? ` ${i.alvo.nome}` : ""}`}>
+                    {fazendo === `desfazer:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1 h-3.5 w-3.5" />}
+                    Voltar este
+                  </Button>
+                )}
               </span>
             </li>
           );
@@ -251,7 +327,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         <p className="mt-1.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">Fora da lista (o agente citou algo que não existe ou não faz sentido): {atual.ignorados.join("; ")}.</p>
       )}
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
-        {estado === "aberta" && (
+        {estado === "aberta" && confirmaveis === 0 && feitosSozinho.length > 0 && !ensaio ? (
+          <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Feito o que era seguro. Nada espera confirmação.</span>
+        ) : estado === "aberta" ? (
           <>
             {confirmaveis > 0 || !ensaio ? (
               <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" disabled={!marcados.length || !!fazendo} onClick={() => void agir("confirmar")}>
@@ -267,7 +345,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
             </Button>
             <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Sem custo de IA. Antes de mexer, o painel relê cada item na Meta: se mudou, não faz.</span>
           </>
-        )}
+        ) : null}
         {estado === "feita" && (
           <>
             <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px]">
@@ -275,7 +353,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
               Feito
             </span>
             {temDesfazer(atual) && (
-              <Button type="button" size="sm" variant="outline" className="mb-1 h-8" disabled={!!fazendo} onClick={() => void agir("desfazer")}>
+              <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" disabled={!!fazendo} onClick={() => void agir("desfazer")}>
                 {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
                 Desfazer
               </Button>
@@ -285,11 +363,31 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         {(estado === "descartada" || estado === "desfeita") && (
           <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
-            {estado === "desfeita" ? "Desfeito: a conta voltou como estava onde deu" : "Cancelado: nada mudou"}
+            {estado === "desfeita" ? "Desfeito: a conta voltou como estava onde deu" : feitosSozinho.length ? "Cancelado o resto: o que já fiz continua, com o Voltar de cada um" : "Cancelado: nada mudou"}
           </span>
         )}
+        {atual.caminho && (estado === "feita" || feitosSozinho.length > 0) && <CaminhoPronto caminho={atual.caminho} abrirSozinho={irSozinho && !!atual.caminho.abrir_sozinho} className="ml-auto" />}
       </div>
     </section>
+  );
+}
+
+/** A campanha que o agente monta (ou montou) a partir do plano: nome, verba, criativos e o anúncio modelo. */
+function ResumoDaMontagem({ i }: { i: ItemDaAcao }) {
+  const m = i.montagem;
+  if (!m) return null;
+  const r = i.resultado;
+  const anuncios = r && r.ok && r.criado.anuncio_ids ? r.criado.anuncio_ids.split(",").filter(Boolean).length : 0;
+  return (
+    <span className="mt-0.5 block text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-montagem="">
+      <span className="block">
+        {m.campanha_nome || m.plano_nome}
+        {m.verba_diaria_brl !== null ? ` · ${brl(m.verba_diaria_brl)} por dia` : ""}
+        {m.criativos.length ? ` · ${m.criativos.length} ${m.criativos.length === 1 ? "criativo" : "criativos"}` : ""}
+      </span>
+      {m.modelo && <span className="block text-muted-foreground">Página, público, destino e botão do anúncio {m.modelo.nome}.</span>}
+      {r && r.ok && <span className="block text-muted-foreground">Montada na Meta e pausada: {anuncios} {anuncios === 1 ? "anúncio" : "anúncios"} em análise. Nada gasta até você ativar.</span>}
+    </span>
   );
 }
 

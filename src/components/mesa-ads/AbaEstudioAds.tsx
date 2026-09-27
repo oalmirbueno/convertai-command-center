@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Filter, Link2, Loader2, PackageCheck, Sparkles } from "lucide-react";
+import { ChevronDown, Clapperboard, Filter, Link2, Loader2, PackageCheck, Sparkles, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -11,17 +11,22 @@ import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import {
   chamarAds,
   chavesAds,
+  ehOMelhor,
   formatoDe,
   irmaosDoCriativo,
   lerAnunciosDoCliente,
   lerCriativos,
   lerPlanos,
   lerTrabalhos,
+  melhoresDoAngulo,
   mudarCriativo,
   nomeDoAnuncio,
+  notaCurta,
   partesDaArte,
-  partesDoPacote,
+  parteDeTexto,
+  porqueDoCriativo,
   STATUS_DO_CRIATIVO,
+  TAMANHOS_ADS,
   type CriativoAds,
   type PlanoAds,
   type StatusDoCriativo,
@@ -34,7 +39,20 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { laminasSemArte, produzirLamina, situacaoDe, situacaoDoTrabalho, SITUACOES, type EtapaDoLote, type SituacaoDoCriativo } from "./loteDoEstudio";
+import {
+  arteDoPlanoPedida,
+  laminasSemArte,
+  pegarArteDoPlano,
+  produzirLamina,
+  situacaoDe,
+  situacaoDoTrabalho,
+  SITUACOES,
+  type AndamentoDoLote,
+  type EtapaDoLote,
+  type SituacaoDoCriativo,
+} from "./loteDoEstudio";
+import { useModeloDaCopy } from "./ModeloDaCopy";
+import ProgressoComParada from "./ProgressoComParada";
 import PainelDaCopy from "./PainelDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import type { CopyDoAnuncio } from "./adsApi";
@@ -50,6 +68,14 @@ import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
  * Criativos de anúncio, sem aprovação). Ao abrir um criativo: a arte no
  * motor do Estúdio (ArteDoCriativo) em largura cheia e a copy com o pacote
  * completo ao lado (telas largas) ou embaixo.
+ *
+ * Frente CR (27/09, pedido do dono): lista por ângulo na ordem de teste, a
+ * melhor variação primeiro (marcada) e o resto recolhido; cada criativo diz
+ * em uma linha por que foi escolhido (estilo com o dado real ou padrão do
+ * nicho, e a nota do Jev). O lote mostra o andamento (lâmina X de Y, custo
+ * até agora) e tem Parar: o que já saiu fica, o resto não gera nem cobra.
+ * "Criar criativos" do Plano de teste deixa o pedido de arte e o lote começa
+ * sozinho ao abrir esta etapa.
  */
 
 export const AVISO_DA_ENTREGA = "O cliente vê em Documentos > Criativos de anúncio.";
@@ -83,22 +109,35 @@ interface Grupo {
   plano: string;
   angulo: string;
   criativos: CriativoAds[];
+  /** Frente CR: posição do plano na lista e do ângulo no plano (ordem de teste). */
+  ordemDoPlano: number;
+  ordemDoAngulo: number;
 }
 
-function agrupar(criativos: CriativoAds[], planos: PlanoAds[]): Grupo[] {
+/** Criativos por plano e ângulo, na ordem de teste do plano (o primeiro a testar em cima). */
+export function agrupar(criativos: CriativoAds[], planos: PlanoAds[]): Grupo[] {
   const grupos: Grupo[] = [];
   for (const c of criativos) {
-    const plano = planos.find((p) => p.id === c.plano_id);
-    const angulo = plano ? plano.angulos.find((a) => a.id === c.angulo_id) : null;
+    const iPlano = planos.findIndex((p) => p.id === c.plano_id);
+    const plano = iPlano >= 0 ? planos[iPlano] : null;
+    const iAngulo = plano ? plano.angulos.findIndex((a) => a.id === c.angulo_id) : -1;
+    const angulo = plano && iAngulo >= 0 ? plano.angulos[iAngulo] : null;
     const chave = `${c.plano_id || "-"}:${c.angulo_id || "-"}`;
     let g = grupos.find((x) => x.chave === chave);
     if (!g) {
-      g = { chave, plano: plano ? plano.nome : "Sem plano", angulo: angulo ? angulo.nome : "Sem ângulo", criativos: [] };
+      g = {
+        chave,
+        plano: plano ? plano.nome : "Sem plano",
+        angulo: angulo ? angulo.nome : "Sem ângulo",
+        criativos: [],
+        ordemDoPlano: iPlano >= 0 ? iPlano : 999,
+        ordemDoAngulo: angulo && typeof angulo.ordem_teste === "number" ? angulo.ordem_teste : iAngulo >= 0 ? 100 + iAngulo : 999,
+      };
       grupos.push(g);
     }
     g.criativos.push(c);
   }
-  return grupos;
+  return grupos.sort((a, b) => a.ordemDoPlano - b.ordemDoPlano || a.ordemDoAngulo - b.ordemDoAngulo);
 }
 
 export default function AbaEstudioAds({
@@ -132,6 +171,12 @@ export default function AbaEstudioAds({
   const [armado, setArmado] = useState<string | null>(null);
   const [desdeLote, rodarLote] = useAndamento();
   const [desdePacote, rodarPacote] = useAndamento();
+  // Frente CR: andamento do lote à vista e o Parar (vale antes da próxima lâmina).
+  const [lote, setLote] = useState<AndamentoDoLote | null>(null);
+  const pararLote = useRef(false);
+  // Grupos de ângulo com as outras variações abertas (a melhor fica sempre à vista).
+  const [abertosOutros, setAbertosOutros] = useState<string[]>([]);
+  const modeloDaCopy = useModeloDaCopy();
   const listaDePlanos = planos.data || [];
   const todos = criativos.data || [];
   const doPlano = planoId ? todos.filter((c) => c.plano_id === planoId) : todos;
@@ -183,28 +228,61 @@ export default function AbaEstudioAds({
       return n;
     });
 
-  const gerarTodos = async () => {
-    const fila = semArte.map((c) => ({ c, t: trabalhoDe(c) as Trabalho }));
+  /**
+   * Gera, confere e (uma vez, só texto e logo) corrige cada lâmina sem arte dos
+   * criativos da fila. Frente CR: andamento à vista e Parar; parado, o que já
+   * saiu fica e o resto não é gerado nem cobrado.
+   */
+  const gerarLote = async (alvo: CriativoAds[]) => {
+    const fila = alvo.map((c) => ({ c, t: trabalhoDe(c) })).filter((x): x is { c: CriativoAds; t: Trabalho } => !!x.t && laminasSemArte(x.t).length > 0);
+    const totalDeLaminas = fila.reduce((n, x) => n + laminasSemArte(x.t).length, 0);
     fila.forEach(({ t }) => marcar(t.id, "fila"));
+    pararLote.current = false;
+    setLote({ feitas: 0, total: totalDeLaminas, custo_usd: 0, atual: fila.length ? nomeDoCriativo(fila[0].c, listaDePlanos) : "", parando: false });
     let total = 0;
+    let feitas = 0;
     let pendentes = 0;
     try {
-      for (const { t } of fila) {
+      for (const { c, t } of fila) {
+        if (pararLote.current) break;
+        setLote((l) => (l ? { ...l, atual: nomeDoCriativo(c, listaDePlanos) } : l));
         for (const ordem of laminasSemArte(t)) {
-          const r = await produzirLamina((corpo) => chamarFuncao<any>("estudio-arte", corpo), t.id, ordem, (e) => marcar(t.id, e));
+          if (pararLote.current) break;
+          const r = await produzirLamina((corpo) => chamarFuncao<any>("estudio-arte", corpo), t.id, ordem, (e) => marcar(t.id, e), 1, () => pararLote.current);
           total += r.custo_usd;
+          feitas += 1;
           if (r.pendencias && r.pendencias.length) pendentes += 1;
+          setLote((l) => (l ? { ...l, feitas, custo_usd: total } : l));
           atualizarTrabalhos();
         }
         marcar(t.id, null);
       }
     } finally {
       fila.forEach(({ t }) => marcar(t.id, null));
+      const parado = pararLote.current;
+      pararLote.current = false;
+      setLote(null);
       atualizarTrabalhos();
+      mesa.atualizarCusto();
+      if (parado) toast.info("Lote parado", { description: `${feitas} de ${totalDeLaminas} lâmina(s) prontas. O resto não foi gerado nem cobrado.` });
     }
     if (pendentes) toast.warning("Arte com ponto a revisar", { description: `${pendentes} lâmina(s) seguem com aviso da conferência. Abra o criativo e use Corrigir de novo.` });
     return { custo_usd: total };
   };
+  const gerarTodos = () => gerarLote(semArte);
+
+  // "Criar criativos" do Plano de teste: as artes começam sozinhas quando os trabalhos chegam (custo já confirmado lá).
+  const pedidoDeArte = arteDoPlanoPedida(planoId);
+  const trabalhosProntos = !!trabalhos.data && !trabalhos.isFetching;
+  useEffect(() => {
+    if (!planoId || !pedidoDeArte || !trabalhosProntos || desdeLote !== null) return;
+    const alvo = todos.filter((c) => pedidoDeArte.indexOf(c.id) >= 0);
+    // Espera os criativos novos chegarem na lista e os trabalhos deles carregarem.
+    if (alvo.length < pedidoDeArte.length || alvo.some((c) => !trabalhoDe(c))) return;
+    pegarArteDoPlano(planoId);
+    void rodarLote(() => gerarLote(alvo)).catch((e) => avisarErro(e, "As artes não foram geradas"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planoId, pedidoDeArte ? pedidoDeArte.join(",") : "", trabalhosProntos, todos.length, (trabalhos.data || []).length]);
 
   const entregar = async (lista: CriativoAds[]) => {
     const ids = lista.map((c) => c.id);
@@ -278,7 +356,7 @@ export default function AbaEstudioAds({
             <div className="flex min-w-0 items-center">
               <h2 className="truncate text-[15px] font-semibold">Estúdio Ads</h2>
               <AjudaRecolhida className="ml-1.5" rotulo="Como o Estúdio Ads funciona">
-                A arte só aparece depois de conferida; se o texto, a logo ou a política estiverem errados, ela é corrigida antes. Gerar todos gera, confere e corrige cada lâmina sem arte. Entregar ao cliente pede um segundo clique: {AVISO_DA_ENTREGA}
+                A arte só aparece depois de conferida; texto ou logo errados são corrigidos uma vez, só na área deles. Gerar todos gera e confere cada lâmina sem arte, com o andamento e o Parar. Em cada ângulo a melhor variação vem primeiro, com o porquê. Entregar ao cliente pede um segundo clique: {AVISO_DA_ENTREGA}
               </AjudaRecolhida>
             </div>
             <p className="text-[12px] text-muted-foreground">
@@ -299,7 +377,7 @@ export default function AbaEstudioAds({
             <BotaoComCusto
               rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Gerar todos{laminasPendentes ? ` (${laminasPendentes})` : ""}</>}
               titulo="Gerar todas as artes"
-              descricao="Gera cada lâmina sem arte, confere e corrige sozinho (até 2 vezes) antes de dar como pronta."
+              descricao="Gera cada lâmina sem arte e confere antes de dar como pronta (texto ou logo errados: uma correção só na área deles). Com andamento e Parar."
               className="h-9"
               disabled={!laminasPendentes || desdeLote !== null}
               partes={() => partesDaArte(catalogo, laminasPendentes, qualidadeDoLote, modeloDoLote)}
@@ -320,7 +398,24 @@ export default function AbaEstudioAds({
           </Button>
           <ImportarPacote onImportado={onImportado} className="mb-1 ml-2 mt-1" />
         </div>
-        {desdeLote !== null && <Andamento desde={desdeLote} rotulo="Gerando, conferindo e corrigindo as artes" />}
+        {lote ? (
+          <ProgressoComParada
+            className="mt-2"
+            rotulo="Gerando e conferindo as artes"
+            unidade={lote.total === 1 ? "lâmina" : "lâminas"}
+            feitas={lote.feitas}
+            total={lote.total}
+            atual={lote.atual}
+            custo={lote.custo_usd}
+            parando={lote.parando}
+            onParar={() => {
+              pararLote.current = true;
+              setLote((l) => (l ? { ...l, parando: true } : l));
+            }}
+          />
+        ) : pedidoDeArte && desdeLote === null ? (
+          <p className="mt-2 text-[12px] text-muted-foreground" role="status">Preparando as artes dos criativos novos…</p>
+        ) : null}
         <div className="mt-2 min-w-0">
           {/* Filtro por situação (sistema de design): até 4 opções, segmentado; mais, lista. */}
           <SeletorCompacto
@@ -344,8 +439,8 @@ export default function AbaEstudioAds({
                 variant="outline"
                 className="h-8"
                 disabled={desdePacote !== null}
-                partes={() => partesDoPacote(catalogo, doPlano.length || visiveis.length)}
-                executar={() => rodarPacote(() => chamarAds<any>("copy_pacote", { plano_id: planoEmFoco }))}
+                partes={() => [parteDeTexto(modeloDaCopy, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida, Math.max(1, doPlano.length || visiveis.length))]}
+                executar={() => rodarPacote(() => chamarAds<any>("copy_pacote", { plano_id: planoEmFoco, ...modeloDaCopy.corpo }))}
                 aoConcluir={(data) => {
                   void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
                   const pend = data && Array.isArray(data.pendentes) ? data.pendentes.length : 0;
@@ -373,41 +468,68 @@ export default function AbaEstudioAds({
           aria-label="Criativos"
         >
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
-          {grupos.map((g) => (
-            <div key={g.chave} className="mb-3">
-              <p className="truncate px-1 text-[10px] uppercase tracking-wider text-muted-foreground" title={g.plano}>
-                {g.plano}
-              </p>
-              <p className="mb-1.5 truncate px-1 text-[12px] font-semibold" title={g.angulo}>
-                {g.angulo}
-              </p>
-              <ul className="space-y-1">
-                {g.criativos.map((c) => {
-                  const ativo = aberto && aberto.id === c.id;
-                  const capa = capaDoTrabalho(trabalhoDe(c));
-                  return (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        onClick={() => onCriativo(c.id)}
-                        aria-current={ativo ? "true" : undefined}
-                        className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
-                      >
-                        <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-secondary">{capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[12px] font-medium">{formatoDe(c.formato).rotulo}</span>
-                          <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
-                            <SeloDaSituacao situacao={situacao(c)} />
-                            {c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
+          {grupos.map((g) => {
+            // Frente CR: a melhor variação do ângulo à vista (marcada); as outras recolhidas.
+            const { melhores, outros } = melhoresDoAngulo(g.criativos);
+            const outrosAbertos = abertosOutros.indexOf(g.chave) >= 0 || (!!aberto && outros.some((c) => c.id === aberto.id));
+            const item = (c: CriativoAds) => {
+              const ativo = aberto && aberto.id === c.id;
+              const capa = capaDoTrabalho(trabalhoDe(c));
+              const nota = notaCurta(c.copy.escolha ? c.copy.escolha.nota : null);
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => onCriativo(c.id)}
+                    aria-current={ativo ? "true" : undefined}
+                    className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
+                  >
+                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-secondary">{capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center text-[12px] font-medium">
+                        <span className="min-w-0 truncate">{formatoDe(c.formato).rotulo}</span>
+                        {ehOMelhor(c) && (
+                          <span className="ml-1 inline-flex shrink-0 items-center text-[10.5px] font-medium text-primary" title="Melhor variação do ângulo pela conferência do Jev">
+                            <Star className="mr-0.5 h-3 w-3" /> melhor
                           </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                        )}
+                        {nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
+                      </span>
+                      <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
+                        <SeloDaSituacao situacao={situacao(c)} />
+                        {c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            };
+            return (
+              <div key={g.chave} className="mb-3" data-grupo-do-angulo={g.chave}>
+                <p className="truncate px-1 text-[10px] uppercase tracking-wider text-muted-foreground" title={g.plano}>
+                  {g.plano}
+                </p>
+                <p className="mb-1.5 truncate px-1 text-[12px] font-semibold" title={g.angulo}>
+                  {g.angulo}
+                </p>
+                <ul className="space-y-1">{melhores.map(item)}</ul>
+                {outros.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-expanded={outrosAbertos}
+                      onClick={() => setAbertosOutros((l) => (l.indexOf(g.chave) >= 0 ? l.filter((x) => x !== g.chave) : l.concat([g.chave])))}
+                      className="mt-1 flex w-full min-w-0 items-center rounded px-1 py-0.5 text-left text-[11.5px] text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronDown className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${outrosAbertos ? "rotate-180" : ""}`} />
+                      <span className="min-w-0 truncate">Outras variações ({outros.length})</span>
+                    </button>
+                    {outrosAbertos && <ul className="mt-1 space-y-1">{outros.map(item)}</ul>}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </aside>
 
         {aberto && (
@@ -424,6 +546,13 @@ export default function AbaEstudioAds({
                   {formatoDe(aberto.formato).rotulo}
                   {anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}
                 </p>
+                {/* Frente CR: por que este criativo, em uma linha (estilo com o dado real ou padrão do nicho, e o Jev). */}
+                {porqueDoCriativo(aberto, anguloAberto) && (
+                  <p className="mt-0.5 text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-porque-do-criativo="">
+                    <span className="font-medium">Por que este: </span>
+                    <span className="text-muted-foreground">{porqueDoCriativo(aberto, anguloAberto)}</span>
+                  </p>
+                )}
               </div>
               <label className="mb-1 mr-2 mt-1 flex items-center text-[11.5px] text-muted-foreground">
                 <span className="mr-1.5">Status</span>

@@ -212,7 +212,10 @@ describe("agente sênior de tráfego (tela)", () => {
     fireEvent.change(screen.getByLabelText("Mensagem ao agente sênior"), { target: { value: "Monte a campanha de vendas" } });
     fireEvent.click(screen.getByRole("button", { name: /^Enviar/ }));
     await waitFor(() => expect(chamadasDe("conta_conversar")).toHaveLength(1));
-    expect(chamadasDe("conta_conversar")[0]).toEqual({ acao: "conta_conversar", client_id: CLIENTE, mensagem: "Monte a campanha de vendas", conversa_id: "conv-1", plano_id: "p-1", dias: 30, pesquisar: true });
+    // Frente TR (27/09): a tela manda o modelo e o raciocínio que valem (o dono não conseguia escolher o
+    // modelo: a tela não mandava nada). Sem o GPT-6 Luna no catálogo do teste, fica o estrategista padrão
+    // no nível mais alto que ele aceita.
+    expect(chamadasDe("conta_conversar")[0]).toEqual({ acao: "conta_conversar", client_id: CLIENTE, mensagem: "Monte a campanha de vendas", conversa_id: "conv-1", plano_id: "p-1", dias: 30, pesquisar: true, modelo_id: "openai:gpt-texto", raciocinio: "medium" });
     expect(await screen.findByText(/Biblioteca de Anúncios: Não há token/)).toBeTruthy();
     // 25/09 à noite: "Levar ao Plano de teste" cria o plano já preenchido (sem IA) e abre no Plano de teste.
     fireEvent.click(screen.getByRole("button", { name: /Levar ao Plano de teste/ }));

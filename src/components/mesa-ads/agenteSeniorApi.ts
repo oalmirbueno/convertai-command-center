@@ -4,7 +4,7 @@
  * vem estruturada do servidor (diagnóstico, manter, cortar, escalar,
  * reestruturação, próximos criativos, pesquisa e perguntas).
  */
-import { padraoPara, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { padraoPara, saidaPorRaciocinio, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { chamarAds } from "./adsApi";
 import { normalizarAcoesDaConta, normalizarNumerosVistos, type AcoesDaConta, type NumerosVistos } from "./acoesDoAgenteApi";
 
@@ -138,13 +138,52 @@ export async function lerConversaDoAgente(clientId: string) {
 /** Contexto grande (conta, evolução, criativos, contexto do cliente) + pesquisa web quando ligada. */
 export const TAMANHO_DO_AGENTE_SENIOR = { entrada: 45000, saida: 7000, buscas: 5 };
 
-export function partesDoAgenteSenior(catalogo: ModeloIa[], pesquisar: boolean): ParteDaEstimativa[] {
-  const m = padraoPara(catalogo, "estrategista");
+/**
+ * Padrão do agente de tráfego (dono, 27/09: "de padrão ele já vem com o GPT-6
+ * Luna Max"): o GPT-6 Luna no raciocínio máximo, o mesmo do diretor da Mesa
+ * Vídeos (supabase/functions/_shared/diretor-de-video.ts). O servidor usa o
+ * mesmo padrão quando a tela não manda modelo.
+ */
+export const MODELO_PADRAO_DO_TRAFEGO = "openrouter:openai/gpt-6-luna";
+export const RACIOCINIO_PADRAO_DO_TRAFEGO = "max";
+
+/** A escolha guardada na tela (por cliente). Vazio = o padrão. */
+export interface EscolhaDoModelo {
+  modelo: string;
+  raciocinio: string;
+}
+
+/**
+ * O modelo e o raciocínio que valem: o escolhido (se ainda ativo no
+ * catálogo), senão o GPT-6 Luna (se ativo), senão o estrategista padrão.
+ * O raciocínio escolhido vale se o modelo aceita; senão o máximo do padrão
+ * ou o nível mais alto do modelo.
+ */
+export function modeloEfetivo(catalogo: ModeloIa[], escolha: EscolhaDoModelo | null | undefined): { modelo: ModeloIa | null; raciocinio: string } {
+  const ativos = (catalogo || []).filter((m) => m.ativo && m.tipo === "texto");
+  const escolhido = escolha && escolha.modelo ? ativos.find((m) => m.id === escolha.modelo) || null : null;
+  const modelo = escolhido || ativos.find((m) => m.id === MODELO_PADRAO_DO_TRAFEGO) || padraoPara(catalogo || [], "estrategista");
+  const niveis = modelo && modelo.raciocinio ? modelo.raciocinio : [];
+  if (!niveis.length) return { modelo, raciocinio: "" };
+  const pedido = escolhido && escolha && escolha.raciocinio ? escolha.raciocinio : RACIOCINIO_PADRAO_DO_TRAFEGO;
+  return { modelo, raciocinio: niveis.indexOf(pedido) >= 0 ? pedido : niveis[niveis.length - 1] };
+}
+
+const ROTULO_RACIOCINIO: Record<string, string> = { none: "sem raciocínio", minimal: "raciocínio mínimo", low: "raciocínio baixo", medium: "raciocínio médio", high: "raciocínio alto", xhigh: "raciocínio muito alto", max: "raciocínio máximo" };
+export const rotuloDoRaciocinio = (r: string) => ROTULO_RACIOCINIO[r] || (r ? `raciocínio ${r}` : "");
+
+/**
+ * Estimativa de cada mensagem. Sem escolha: como antes (estrategista padrão).
+ * Com a escolha: o modelo dela e a saída do raciocínio (mesma tabela do motor).
+ */
+export function partesDoAgenteSenior(catalogo: ModeloIa[], pesquisar: boolean, efetivo?: { modelo: ModeloIa | null; raciocinio: string } | null): ParteDaEstimativa[] {
+  const m = efetivo ? efetivo.modelo : padraoPara(catalogo, "estrategista");
+  const pensar = efetivo && efetivo.raciocinio ? saidaPorRaciocinio(efetivo.raciocinio) : 0;
   return [{
     modeloId: m ? m.id : null,
     tipo: "texto",
     tokensEntrada: TAMANHO_DO_AGENTE_SENIOR.entrada,
-    tokensSaida: TAMANHO_DO_AGENTE_SENIOR.saida,
+    tokensSaida: TAMANHO_DO_AGENTE_SENIOR.saida + pensar,
     buscasWeb: pesquisar ? TAMANHO_DO_AGENTE_SENIOR.buscas : 0,
   }];
 }

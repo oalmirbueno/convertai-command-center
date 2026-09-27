@@ -18,14 +18,16 @@ import {
   nomeDeArquivo,
   normalizarPacote,
   pacoteEmMarkdown,
-  partesDoPacote,
+  parteDeTexto,
   rotuloDoCta,
   rotuloDoEstilo,
+  TAMANHOS_ADS,
   type CopyDoAnuncio,
   type CriativoAds,
   type PacoteDeCopy,
 } from "./adsApi";
 import { Andamento, BotaoCopiar, useAndamento } from "./Comuns";
+import { useModeloDaCopy, type EstadoDoModeloDaCopy } from "./ModeloDaCopy";
 import { carregarDadosDoZip, gerarZipDoGestor, salvarBlob, type ProgressoDoZip } from "./zipDoGestor";
 
 /**
@@ -198,12 +200,17 @@ export default function PacoteDaCopy({
   criativo,
   nome,
   onUsar,
+  modelo: modeloDeFora,
 }: {
   criativo: CriativoAds;
   nome: string;
   onUsar: (campos: CopyDoAnuncio) => void;
+  /** Frente CR: o modelo da copy escolhido no painel ao lado (o mesmo do refino); sem ele, o guardado do cliente. */
+  modelo?: EstadoDoModeloDaCopy;
 }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId } = useMesa();
+  const modeloProprio = useModeloDaCopy();
+  const modelo = modeloDeFora || modeloProprio;
   const queryClient = useQueryClient();
   const [desde, rodar] = useAndamento();
   const gravado = normalizarPacote(criativo.copy.pacote);
@@ -236,8 +243,8 @@ export default function PacoteDaCopy({
           descricao="Textos principais em vários estilos, títulos, descrições, CTAs, ganchos e a orientação ao gestor. O Jev confere a política de todos os textos."
           variant={pacote ? "outline" : "default"}
           className="mb-1 h-8"
-          partes={() => partesDoPacote(catalogo, 1)}
-          executar={() => rodar(() => chamarAds<any>("copy_pacote", { criativo_id: criativo.id }))}
+          partes={() => [parteDeTexto(modelo, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida)]}
+          executar={() => rodar(() => chamarAds<any>("copy_pacote", { criativo_id: criativo.id, ...modelo.corpo }))}
           aoConcluir={(data) => {
             const p = pacoteDaResposta(data, criativo.id);
             if (p) setPacote(p);

@@ -297,14 +297,17 @@ export function estrategiaEmMarkdown(e: EstrategiaSenior, nomeDe: (adId: string)
 }
 
 /** Pedido de cada mensagem ao agente sênior (o contexto vai antes, em JSON). */
-export function tarefaDoAgenteSenior(opcoes: { pesquisaWeb: boolean; bibliotecaConsultada: boolean; temPlano: boolean; modoAgir?: boolean }): string {
+export function tarefaDoAgenteSenior(opcoes: { pesquisaWeb: boolean; bibliotecaConsultada: boolean; temPlano: boolean; modoAgir?: boolean; assumirPlano?: boolean }): string {
   const agir = opcoes.modoAgir
-    ? "MODO AGIR: a equipe quer ação, não conversa. resposta em no máximo 2 frases; diagnostico com até 3 achados; entregue acoes concretas (com os apelidos) e o plano_de_teste preenchido.\n"
+    ? "MODO AGIR: a equipe quer ação, não conversa. resposta em no máximo 2 frases; diagnostico com até 3 achados; entregue acoes concretas (com os apelidos) e o plano_de_teste preenchido. O que é seguro o painel já faz sozinho; diga o que foi feito e o que espera a confirmação.\n"
     : "";
-  return `${agir}TAREFA: você é o gestor de tráfego sênior da agência, especialista no nicho deste cliente. Responda à MENSAGEM DA EQUIPE e devolva a estratégia estruturada.
+  const assumir = opcoes.assumirPlano
+    ? "ASSUMIR O PLANO: a equipe mandou o PLANO_ABERTO para você assumir. Monte a campanha dele (acoes com montar_campanha_do_plano: o painel monta na Meta, tudo pausado), diga em até 3 frases como vai rodar (objetivo, verba, público, o que decide o vencedor e quando você corta) e o que a equipe precisa confirmar para ativar.\n"
+    : "";
+  return `${agir}${assumir}TAREFA: você é o gestor de tráfego sênior da agência, especialista no nicho deste cliente. Responda à MENSAGEM DA EQUIPE e devolva a estratégia estruturada.
 Como pensar, nesta ordem:
 1. Entenda o negócio pelo contexto (o que vende, para quem, onde a venda acontece: WhatsApp, Direct, site, loja) e o nicho.
-2. Leia a conta: onde o dinheiro está por objetivo (MIX_DE_OBJETIVOS, calculado pelo painel), o que traz resultado de verdade e o que só gera curtida. Engajamento barato não paga conta: se o negócio vende por conversa, o objetivo que decide é mensagem; se vende no site com pixel, é compra.
+2. Leia a conta pelo RETRATO_DA_CAMPANHA (cada nível com gasto, resultados, custo por resultado, CTR, CPM, frequência, fase e o sinal da regra da agência; custo-alvo com a fonte; referência do nicho; o que já foi feito) e pelo MIX_DE_OBJETIVOS: onde está o dinheiro, o que traz resultado de verdade e o que só gera curtida. Engajamento barato não paga conta: se o negócio vende por conversa, o objetivo que decide é mensagem; se vende no site com pixel, é compra. Respeite as REGRAS_DO_DONO (o que ele mandou não mexer ou segurar).
 3. Use os anúncios que já performaram como base dos próximos criativos (gancho, formato, oferta), mudando uma variável por vez.
 4. ${opcoes.pesquisaWeb ? "Pesquise na web o que funciona no Brasil neste nicho (anúncios, ofertas, ganchos, concorrentes, a Biblioteca de Anúncios da Meta pelas páginas públicas) e registre em pesquisa cada achado com a fonte (endereço). Longevidade de anúncio é pista, não prova de retorno." : "Sem pesquisa web nesta mensagem: use só o contexto e o conhecimento da agência; pesquisa fica vazia."}${opcoes.bibliotecaConsultada ? " BIBLIOTECA_DE_ANUNCIOS traz anúncios ativos lidos pela API da Meta: use como exemplo do mercado, com o link." : ""}
 5. ${opcoes.temPlano ? "PLANO_ABERTO é o plano de teste que a equipe está olhando: ajuste a recomendação a ele." : "Se houver planos de teste, considere os ângulos já planejados."}

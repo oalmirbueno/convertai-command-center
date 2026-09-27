@@ -58,6 +58,8 @@ const CODIGOS_QUE_ENCERRAM = ["limite_de_autocorrecao", "acao_desconhecida", "se
 /**
  * Gera uma lâmina e só a dá como pronta depois da conferência. Devolve o
  * custo somado e os motivos que sobraram (null quando saiu certa).
+ * Frente CR: `deveParar` (lote parado pela equipe) não deixa começar
+ * correção nova; a arte que já estava gerando termina e fica.
  */
 export async function produzirLamina(
   chamar: Chamar,
@@ -65,6 +67,7 @@ export async function produzirLamina(
   ordem: number,
   aoMudar: (e: EtapaDoLote) => void,
   maxCorrecoes = 2,
+  deveParar: () => boolean = () => false,
 ): Promise<{ custo_usd: number; correcoes: number; pendencias: string[] | null }> {
   let custo = 0;
   aoMudar("gerando");
@@ -87,7 +90,7 @@ export async function produzirLamina(
       break;
     }
     pendencias = Array.isArray(auto.motivos) ? auto.motivos.map((m: unknown) => String(m)) : [];
-    if (correcoes >= maxCorrecoes) break;
+    if (correcoes >= maxCorrecoes || deveParar()) break;
     aoMudar("corrigindo");
     try {
       custo += custoDaResposta(await chamar({ acao: "corrigir_card", trabalho_id: trabalhoId, ordem })) || 0;
@@ -98,4 +101,49 @@ export async function produzirLamina(
     }
   }
   return { custo_usd: custo, correcoes, pendencias };
+}
+
+// ------------------------------------------------------------------ frente CR: lote que a pessoa acompanha e para
+
+/** Andamento do lote na tela: quantas lâminas de quantas, o custo até agora e o criativo da vez. */
+export interface AndamentoDoLote {
+  feitas: number;
+  total: number;
+  custo_usd: number;
+  atual: string;
+  parando: boolean;
+}
+
+/**
+ * Arte pedida pelo "Criar criativos" do Plano de teste (um clique): a etapa
+ * Estúdio Ads abre, acha o pedido do plano e começa o lote sozinha, com o
+ * andamento e o botão de parar. O custo já foi mostrado e confirmado no botão
+ * do Plano. Fica só na memória da aba (sair da Mesa Ads esquece) e vence em
+ * 10 minutos.
+ */
+const pedidosDeArte = new Map<string, { criativoIds: string[]; em: number }>();
+const VALIDADE_DO_PEDIDO_MS = 10 * 60 * 1000;
+
+export function pedirArteDoPlano(planoId: string, criativoIds: string[], agora = Date.now()) {
+  if (!planoId || !criativoIds.length) return;
+  pedidosDeArte.set(planoId, { criativoIds: criativoIds.slice(), em: agora });
+}
+
+/** Espia sem consumir (a tela mostra "vai gerar" enquanto os trabalhos carregam). */
+export function arteDoPlanoPedida(planoId: string | null | undefined, agora = Date.now()): string[] | null {
+  if (!planoId) return null;
+  const p = pedidosDeArte.get(planoId);
+  if (!p) return null;
+  if (agora - p.em > VALIDADE_DO_PEDIDO_MS) {
+    pedidosDeArte.delete(planoId);
+    return null;
+  }
+  return p.criativoIds.slice();
+}
+
+/** Consome o pedido (uma vez só: voltar à etapa não gera de novo). */
+export function pegarArteDoPlano(planoId: string | null | undefined, agora = Date.now()): string[] | null {
+  const ids = arteDoPlanoPedida(planoId, agora);
+  if (planoId) pedidosDeArte.delete(planoId);
+  return ids;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useInRouterContext, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Briefcase, CalendarDays, FileSearch, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +41,8 @@ import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, T
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
 import AgenteSenior from "./AgenteSenior";
 import AtivarGestao from "./AtivarGestao";
+import RotinaDoAgente from "./RotinaDoAgente";
+import { esquecerPlanoParaOAgente, verPlanoParaOAgente } from "./ponteDoAgente";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
@@ -67,7 +70,26 @@ import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from 
  * lateral fixa (PainelDoAgente); os painéis da conta rolam por conta
  * própria. Explicações no "?", período num seletor, período e objetivo
  * lembrados por cliente.
+ *
+ * 27/09 (frente TR): no topo, a rotina do agente ("O agente está cuidando
+ * desta conta", Pausar a rotina, Interferir, O que foi feito com a prova e o
+ * Desfazer). O plano mandado pelo "Enviar ao agente sênior" (Plano de teste)
+ * abre o agente e ele assume sozinho. O endereço aceita &campanha=<id>
+ * (filtra a campanha: o caminho "Ir para a campanha montada") e &ver=feito
+ * (abre "O que foi feito": o link dos avisos).
  */
+
+/** Lê campanha e ver do endereço quando há roteador (os testes montam a aba sem ele). */
+function OuvirEndereco({ onMudar }: { onMudar: (campanha: string | null, ver: string | null) => void }) {
+  const [params] = useSearchParams();
+  const campanha = params.get("campanha");
+  const ver = params.get("ver");
+  useEffect(() => {
+    onMudar(campanha, ver);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campanha, ver]);
+  return null;
+}
 
 export const PERIODOS_DA_CONTA: PeriodoDaConta[] = PERIODOS_DA_CONTA_V4.slice();
 /** Anúncios por página: a lista cresce no "Mostrar mais", sem montar 200 cartões de uma vez. */
@@ -339,6 +361,24 @@ export default function AbaConta({
   const [, setRelogio] = useState(0);
   const [desdeAnalise, rodarAnalise] = useAndamento();
   const espera = useRef<number | null>(null);
+  const noRoteador = useInRouterContext();
+  // Frente TR: o plano mandado pelo Plano de teste (uma vez só) e o pedido pronto da rotina para o agente.
+  // Olha no estado inicial (puro) e tira do navegador no efeito: o plano vale uma vez só.
+  const [assumir, setAssumir] = useState<{ plano_id: string; nome: string } | null>(() => {
+    const p = verPlanoParaOAgente(clientId);
+    return p ? { plano_id: p.plano_id, nome: p.nome } : null;
+  });
+  useEffect(() => {
+    if (assumir) esquecerPlanoParaOAgente(clientId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [abrirAgente, setAbrirAgente] = useState<number | null>(() => (assumir ? Date.now() : null));
+  const [pedidoPronto, setPedidoPronto] = useState<{ texto: string; em: number } | null>(null);
+  const [verFeito, setVerFeito] = useState(false);
+  const levarAoAgente = (textoDoPedido: string) => {
+    setPedidoPronto({ texto: textoDoPedido, em: Date.now() });
+    setAbrirAgente(Date.now());
+  };
 
   const conta = useQuery({
     queryKey: chaveDosResultados(clientId, dias),
@@ -444,9 +484,29 @@ export default function AbaConta({
       iconeDaLateral={<Briefcase className="h-4 w-4" />}
       rotuloDoPrincipal="Conta de anúncios"
       memoriaDaRolagem={`mesa-ads:conta:${clientId}`}
-      lateral={<AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} onPlanoPronto={onAbrirPlano} />}
+      pedidoDeAbrir={abrirAgente}
+      lateral={
+        <AgenteSenior
+          nomeDe={nomeDe}
+          dias={diasDoAgente}
+          onCriarPlano={onCriarPlano}
+          onPlanoPronto={onAbrirPlano}
+          assumir={assumir}
+          onAssumido={() => setAssumir(null)}
+          pedidoPronto={pedidoPronto}
+        />
+      }
     >
+      {noRoteador && (
+        <OuvirEndereco
+          onMudar={(c, ver) => {
+            if (c && /^[0-9]{3,30}$/.test(c)) setCampanha(c);
+            if (ver === "feito") setVerFeito(true);
+          }}
+        />
+      )}
       <div className="min-w-0 space-y-5 pb-6">
+        <RotinaDoAgente onPedirAoAgente={levarAoAgente} abrirFeito={verFeito} />
         <div>
           <CabecalhoDaParte
             titulo="Conta ao vivo"

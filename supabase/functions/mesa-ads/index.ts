@@ -220,6 +220,26 @@ import {
   temReverso,
 } from "./acoes-conta.ts";
 import { ESQUEMA_KIT_RECEPCAO, itemDaAgendaDoKit, type KitDeRecepcao, normalizarKit, pedidoDoKit } from "./kit-recepcao.ts";
+// Frente TR (27/09): agente sênior que faz o seguro sozinho, monta a campanha do plano e a rotina de monitoramento.
+import { acaoSemRisco, arquivarMontagem, ativarMontagem, completarMontagem, itemDeMontagem, montarCampanhaNaMeta, type Montagem } from "./acoes-conta.ts";
+import {
+  avaliarItem,
+  limitesDoDono,
+  limitesEfetivos,
+  normalizarRegras,
+  PADROES_DA_ROTINA,
+  perguntasDaRegra,
+  regraDasRespostas,
+  regraEmTexto,
+  regraQueBarra,
+  regrasQueValem,
+  retratoParaOAgente,
+  type AlvoDaRegra,
+} from "./rotina-trafego.ts";
+import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
+import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
+import { caminhoSeguro } from "../_shared/acoes-do-agente.ts";
+import { TIPOS_DE_RESULTADO } from "../_shared/evolucao.ts";
 import { createEditorialItem, createEditorialItemSchema, WriteError, type WriteCtx } from "../_shared/mcp-write-services.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 // Frente AG (26/09): os agentes de conversa da Mesa Ads conhecem o painel inteiro.
@@ -272,6 +292,24 @@ import {
   tipoDoLink,
   urlPublicaSegura,
 } from "./calculos.ts";
+// Frente CR (27/09): criativo que converte (formatos, layout, estruturas de copy) e a ordem dos estilos pelo resultado real.
+import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "../_shared/conhecimento-criativo.ts";
+import {
+  anuncioDaReferencia,
+  anuncioDasDiarias,
+  type AnuncioComEstilo,
+  custoMedio,
+  desempenhoPorEstilo,
+  type EstiloRankeado,
+  escolherMelhores,
+  estiloConhecido,
+  notaDaCopy,
+  porqueDaCopy,
+  porqueDoEstilo,
+  rankearEstilos,
+  rankingParaOPrompt,
+  sinaisDaOferta,
+} from "./melhores-criativos.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -323,6 +361,11 @@ const MAX_RODADAS_QUALIDADE = 0;
 const TIMEOUT_TEXTO_ADS_MS = 300_000;
 /** Ângulos escritos além do pedido, para a conferência escolher os melhores. */
 const ANGULOS_EXTRAS = 2;
+/**
+ * Frente CR: copies escritas além das variações de cada ângulo, na mesma
+ * chamada, para o Jev escolher as melhores (corpo.extras de 0 a 2; padrão 2).
+ */
+const MAX_COPIES_A_MAIS = 2;
 const MAX_IMAGENS_REFERENCIA = 12;
 const DOWNLOADS_EM_PARALELO = 4;
 const MAX_BYTES_PAGINA = 3 * 1024 * 1024;
@@ -399,6 +442,9 @@ type Angulo = {
   porque_testar_primeiro?: string;
   ordem_teste?: number | null;
   corte?: CorteDoAngulo | null;
+  /** Frente CR: por que este estilo, em uma linha (dado real do cliente, da carteira ou padrão do nicho; código). */
+  porque_do_estilo?: string;
+  fonte_do_estilo?: string;
 };
 
 type Plano = {
@@ -551,6 +597,8 @@ const ESQUEMA_FICHA = {
     limites: S("string"),
     metricas_visiveis: S(["string", "null"]),
     tags: lista(S("string")),
+    // Frente CR: o estilo visual lido liga o anúncio próprio (com métrica real) à ordem dos estilos.
+    estilo_visual: Snulo(ESTILOS_VISUAIS_IDS),
   }),
 };
 
@@ -616,6 +664,8 @@ const ESQUEMA_COPIES = {
   schema: obj({
     variacoes: lista(obj({
       variacao: S("integer"),
+      // Frente CR: a estrutura de copy da variação (cada variação usa uma diferente).
+      framework: S("string", { enum: [...FRAMEWORKS_IDS] }),
       ...ESQUEMA_COPY_CAMPOS,
       headline_arte: S("string"),
       apoio_arte: S(["string", "null"]),
@@ -632,7 +682,7 @@ const ESQUEMA_COPIES = {
 
 const ESQUEMA_VARIAR = {
   nome: "variacoes_de_copy",
-  schema: obj({ variacoes: lista(obj({ ...ESQUEMA_COPY_CAMPOS, o_que_mudou: S("string") })) }),
+  schema: obj({ variacoes: lista(obj({ ...ESQUEMA_COPY_CAMPOS, framework: S("string", { enum: [...FRAMEWORKS_IDS] }), o_que_mudou: S("string") })) }),
 };
 
 const ESQUEMA_APRENDIZADO = { nome: "aprendizado", schema: obj({ texto: S("string") }) };
@@ -853,12 +903,14 @@ async function registrarMensagens(
   servico: SupabaseClient,
   conversaId: string,
   clientId: string,
-  msgs: Array<{ papel: "usuario" | "agente" | "sistema"; conteudo: string; uso_id?: string | null; anexos?: unknown[] }>,
+  msgs: Array<{ papel: "usuario" | "agente" | "sistema"; conteudo: string; uso_id?: string | null; anexos?: unknown[]; id?: string }>,
 ) {
   const base = Date.now();
   const linhas = msgs
     .filter((m) => m.conteudo.trim())
     .map((m, i) => ({
+      // Frente TR: id escolhido antes (as ações feitas sozinhas apontam para a mensagem).
+      ...(m.id ? { id: m.id } : {}),
       conversa_id: conversaId,
       client_id: clientId,
       // criado_em crescente: a ordem da conversa não depende do relógio do banco.
@@ -1138,7 +1190,10 @@ const SISTEMA_DO_LEITOR = [
 - mecanismo descrito sem citar a marca ("objeto comum em condição impossível para representar urgência").
 - Campo que a imagem não permite preencher fica null.
 - tags curtas pela taxonomia: motivação (clareza, confiança, conveniência, controle, economia, qualidade, pertencimento, desejo), mecanismo (demonstração, comparação, metáfora, personificação, objeção, curiosidade, narrativa, prova, contraste) e formato (estático, carrossel, vídeo com pessoa, tela, produto, entrevista, animação).
+- estilo_visual: o id do estilo visual da lista abaixo que a peça mais usa, pelo que se vê; null se nenhum servir.
 - Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
+  // Frente CR: o estilo lido liga a métrica real do anúncio próprio à ordem dos estilos (melhores-criativos.ts).
+  `ESTILOS VISUAIS (id e nome): ${ESTILOS_VISUAIS.map((e) => `${e.id} (${e.nome})`).join(", ")}.`,
 ].join("\n\n");
 
 // ------------------------------------------------------------ modelo e erros
@@ -1308,17 +1363,24 @@ type NotasCopy = {
   generico?: boolean | null;
   prob_generico?: number | null;
   tom?: number | null;
+  /** Frente CR: poder de parar a rolagem (0 a 10), só quando pedido (produção e refino escolhem a melhor). */
+  parada?: number | null;
 };
 
 /** Probabilidade do Noul "genérico" a partir da qual a peça leva o aviso. */
 const LIMIAR_GENERICO = 0.6;
 
-/** O Jev confere cada copy: risco de política (10 = sem risco) e clareza da oferta. */
+/**
+ * O Jev confere cada copy: risco de política (10 = sem risco) e clareza da oferta.
+ * Frente CR: com `parada`, também o poder de parar a rolagem (a nota composta
+ * escolhe a melhor entre as escritas a mais; o Jev julga, não reescreve).
+ */
 async function conferirCopiesComJev(
   copies: Array<{ texto_principal: string; titulo: string; descricao: string | null; cta_meta: string; texto_na_arte?: string }>,
   briefing: Briefing | null,
   cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string },
   tom: TomDoCriativo | null = null,
+  opcoes: { parada?: boolean } = {},
 ): Promise<{ notas: (NotasCopy | null)[]; jev_erro: string | null; custo: number }> {
   if (!copies.length) return { notas: [], jev_erro: null, custo: 0 };
   const regrasTom = tom ? TONS[tom] : null;
@@ -1354,6 +1416,13 @@ async function conferirCopiesComJev(
         criteria: regrasTom.niveis_jev,
       };
     }
+    if (opcoes.parada) {
+      questions[`parada_${i}`] = {
+        type: "score",
+        instructions: `Rolando o feed no celular, quanto a frase da arte e a primeira linha do anúncio \`copies[${i}]\` fazem o público da \`oferta\` parar para ler? Situação reconhecível, número real, contraste de ideia e tensão contam; frase de marca e adjetivo vazio não contam.`,
+        criteria: NIVEIS_PARADA,
+      };
+    }
   });
   try {
     const r = await jevPerguntar({ state, questions });
@@ -1369,6 +1438,7 @@ async function conferirCopiesComJev(
           generico: prob == null ? null : prob >= LIMIAR_GENERICO,
           prob_generico: prob == null ? null : Math.round(prob * 100) / 100,
           tom: regrasTom ? notaDe0a10(notaScore(r.answers[`tom_${i}`]), regrasTom.niveis_jev.length) : null,
+          ...(opcoes.parada ? { parada: notaDe0a10(notaScore(r.answers[`parada_${i}`]), NIVEIS_PARADA.length) } : {}),
         };
       }),
       jev_erro: null,
@@ -1521,10 +1591,12 @@ function layoutDoAnuncio(layout: LayoutLamina, formato: FormatoAds, funcao: stri
   if (ganchoVisual) ajustado.imagem = ganchoVisual;
   if (formato === "stories_9x16") {
     // Interface cobre os 14% de cima e os 20% de baixo: texto no miolo.
+    // Frente CR: zona segura unificada de março de 2026 (Reels cobre até 35% de baixo; conhecimento-criativo.ts).
     ajustado.zona_texto = funcao === "cta" ? "centro" : "centro-esquerda";
-    ajustado.ponto_focal = `${ajustado.ponto_focal}; nada importante nos 14% de cima nem nos 20% de baixo`;
+    ajustado.ponto_focal = `${ajustado.ponto_focal}; nada importante nos 14% de cima nem nos 20% de baixo (no Reels a interface cobre até 35% de baixo: manchete e CTA no miolo)`;
   }
-  ajustado.tratamento = `${ajustado.tratamento}; anúncio: contraste que para a rolagem, leitura em 1 segundo no celular, marca presente sem dominar, pouco texto na arte`;
+  // Frente CR: densidade de texto que converte (uma manchete curta e no máximo uma linha de apoio).
+  ajustado.tratamento = `${ajustado.tratamento}; anúncio: contraste que para a rolagem, leitura em 1 segundo no celular, marca presente sem dominar, uma manchete curta e no máximo uma linha de apoio na arte`;
   return ajustado;
 }
 
@@ -1796,6 +1868,8 @@ async function referenciaLer(servico: SupabaseClient, chamador: Chamador, corpo:
   }
   ficha.observado = texto(r.observado, 3000);
   ficha.inferido = texto(r.inferido, 3000);
+  // Frente CR: estilo lido (só id válido); o anúncio próprio com métrica passa a contar na ordem dos estilos.
+  ficha.estilo_visual = estiloConhecido(r.estilo_visual) ?? (typeof ficha.estilo_visual === "string" ? ficha.estilo_visual : null);
   ficha.mecanismo = texto(r.mecanismo, 600);
   ficha.limites = texto(r.limites, 1200);
   ficha.lido_em = new Date().toISOString();
@@ -2125,6 +2199,99 @@ function jaRodouDoContexto(ctx: ContextoAds): unknown[] {
   return (bloco.com_entrega ?? []).slice(0, 10).map((a) => ({ titulo: a.titulo, texto: a.texto ? a.texto.slice(0, 160) : null }));
 }
 
+// ------------------------------------------------------------ frente CR: estilos pelo resultado real
+
+/** Janela do resultado por estilo: a mesma dos 90 dias do contexto (a média da conta é a do mesmo período). */
+const DIAS_DO_RESULTADO_POR_ESTILO = 90;
+
+type EstiloSalvo = Pick<EstiloRankeado, "estilo" | "nome" | "porque" | "fonte">;
+
+/**
+ * O que cada estilo visual deu de resultado de verdade, sem IA.
+ * Cliente: criativos da Mesa ligados a anúncio (estilo gravado na copy) com as
+ * diárias dos últimos 90 dias, mais os anúncios próprios lidos com o estilo
+ * (métrica guardada na referência). Carteira: criativos ligados de outros
+ * clientes cujo plano é do mesmo nicho; sai só a soma por estilo, nenhum nome
+ * de cliente. Qualquer falha de leitura vira lista vazia: a ordem cai no
+ * padrão do nicho e o plano não para.
+ */
+async function desempenhoDosEstilos(servico: SupabaseClient, clientId: string, nichoId: string | null) {
+  const vazio = { cliente: [] as ReturnType<typeof desempenhoPorEstilo>, carteira: [] as ReturnType<typeof desempenhoPorEstilo>, mediaCarteira: null as number | null };
+  try {
+    const desde = somarDias(hojeSaoPaulo(), -DIAS_DO_RESULTADO_POR_ESTILO);
+    const [criativosQ, refsQ] = await Promise.all([
+      servico.from("ads_criativos").select("ad_id, copy").eq("client_id", clientId).not("ad_id", "is", null).limit(300),
+      servico.from("ads_referencias").select("ad_id, ficha, metricas").eq("client_id", clientId).not("ad_id", "is", null).limit(300),
+    ]);
+    const doCliente: AnuncioComEstilo[] = [];
+    const ligados = ((criativosQ.data ?? []) as { ad_id: string; copy: Record<string, unknown> | null }[])
+      .map((c) => ({ ad_id: String(c.ad_id), estilo: estiloConhecido(c.copy?.estilo_visual) }))
+      .filter((c): c is { ad_id: string; estilo: string } => !!c.estilo);
+    if (ligados.length) {
+      const mapa = porAnuncio(await lerDiarias(servico, clientId, { adIds: [...new Set(ligados.map((c) => c.ad_id))], desde }));
+      for (const c of ligados) if (mapa.has(c.ad_id)) doCliente.push(anuncioDasDiarias(c.ad_id, c.estilo, mapa.get(c.ad_id) ?? []));
+    }
+    for (const r of (refsQ.data ?? []) as { ad_id: string; ficha: Record<string, unknown> | null; metricas: Record<string, unknown> | null }[]) {
+      const estilo = estiloConhecido(r.ficha?.estilo_visual);
+      const a = estilo ? anuncioDaReferencia(String(r.ad_id), estilo, r.metricas) : null;
+      if (a) doCliente.push(a);
+    }
+    const daCarteira: AnuncioComEstilo[] = [];
+    if (nichoId) {
+      const { data: planos } = await servico.from("ads_planos").select("id").eq("estrutura->>nicho", nichoId).neq("client_id", clientId).limit(200);
+      const planoIds = ((planos ?? []) as { id: string }[]).map((p) => p.id);
+      const { data: outros } = planoIds.length
+        ? await servico.from("ads_criativos").select("ad_id, client_id, copy").in("plano_id", planoIds).not("ad_id", "is", null).limit(300)
+        : { data: [] };
+      const alvo = ((outros ?? []) as { ad_id: string; client_id: string; copy: Record<string, unknown> | null }[])
+        .map((c) => ({ ad_id: String(c.ad_id), client_id: String(c.client_id), estilo: estiloConhecido(c.copy?.estilo_visual) }))
+        .filter((c): c is { ad_id: string; client_id: string; estilo: string } => !!c.estilo && c.client_id !== clientId);
+      if (alvo.length) {
+        const linhas: (Diaria & { client_id: string })[] = [];
+        for (let pagina = 0; pagina < 3; pagina++) {
+          const { data, error } = await servico.from("ads_creative_daily").select(`client_id, ${COLUNAS_DIARIA}`)
+            .in("ad_id", [...new Set(alvo.map((c) => c.ad_id))]).gte("day", desde).order("day").range(pagina * 1000, pagina * 1000 + 999);
+          if (error) break;
+          const lote = (data ?? []) as (Diaria & { client_id: string })[];
+          linhas.push(...lote);
+          if (lote.length < 1000) break;
+        }
+        for (const c of alvo) {
+          const doAnuncio = linhas.filter((l) => l.ad_id === c.ad_id && l.client_id === c.client_id);
+          if (doAnuncio.length) daCarteira.push(anuncioDasDiarias(`${c.client_id}:${c.ad_id}`, c.estilo, doAnuncio));
+        }
+      }
+    }
+    const carteira = desempenhoPorEstilo(daCarteira, "carteira");
+    return { cliente: desempenhoPorEstilo(doCliente, "cliente"), carteira, mediaCarteira: custoMedio(carteira) };
+  } catch (err) {
+    console.error("[mesa-ads] resultado por estilo indisponivel", { nome: err instanceof Error ? err.name : "desconhecido" });
+    return vazio;
+  }
+}
+
+/** Padrões da biblioteca da agência do nicho do cliente (vão primeiro nas referências do plano). */
+async function referenciasDoNicho(servico: SupabaseClient, nichoId: string | null): Promise<ReferenciaResumo[]> {
+  if (!nichoId) return [];
+  const { data } = await servico.from("ads_referencias").select("id, client_id, titulo, mecanismo, evidencia, destaque, origem, tags, ficha, metricas")
+    .is("client_id", null).eq("ativa", true).eq("ficha->>nicho", nichoId).order("destaque", { ascending: false }).limit(20);
+  return (data as ReferenciaResumo[] | null) ?? [];
+}
+
+/** O porquê do estilo do ângulo (uma linha, da ordem calculada). */
+function comPorqueDoEstilo(a: Angulo, ranking: EstiloSalvo[]): Angulo {
+  const p = porqueDoEstilo(a.estilo_visual, ranking);
+  return p ? { ...a, porque_do_estilo: p.porque, fonte_do_estilo: p.fonte } : a;
+}
+
+/** A ordem guardada no plano (estrutura.estilos_que_convertem), para a conversa e a produção. */
+function estilosSalvos(estrutura: Record<string, unknown> | null | undefined): EstiloSalvo[] {
+  const lista = Array.isArray(estrutura?.estilos_que_convertem) ? (estrutura?.estilos_que_convertem as Record<string, unknown>[]) : [];
+  return lista
+    .map((x) => ({ estilo: String(x?.estilo ?? ""), nome: String(x?.nome ?? ""), porque: String(x?.porque ?? ""), fonte: String(x?.fonte ?? "base") as EstiloSalvo["fonte"] }))
+    .filter((x) => !!estiloConhecido(x.estilo) && !!x.porque);
+}
+
 /**
  * plano_gerar { client_id, briefing_id?, pedido?, quantidade_angulos? (3 a 6), oferta_id?, objetivo?,
  *   referencia_ids?, modo? ("novo" | "variar_vencedor"), modelo_id?, raciocinio? }
@@ -2166,7 +2333,26 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
 
   const planoId = crypto.randomUUID();
   const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_PLANO, id: planoId }, criadoPor: chamador.userId }, corpo.nicho);
-  const conversaId = await abrirConversa(servico, clientId, planoId, chamador.userId);
+  // Frente CR: resultado real por estilo e os padrões do nicho, lidos junto com a conversa (sem IA).
+  const [conversaId, desempenho, refsDoNicho] = await Promise.all([
+    abrirConversa(servico, clientId, planoId, chamador.userId),
+    desempenhoDosEstilos(servico, clientId, achado.nicho?.id ?? null),
+    referenciasDoNicho(servico, achado.nicho?.id ?? null).catch(() => [] as ReferenciaResumo[]),
+  ]);
+  // Referências: as do cliente, depois os padrões do nicho dele e só então o resto da biblioteca (menos, para o pedido não crescer).
+  const idsDoNicho = new Set(refsDoNicho.map((r) => r.id));
+  const outrasDaAgencia = refs.filter((r) => !r.client_id && !idsDoNicho.has(r.id));
+  refs.splice(0, refs.length, ...refs.filter((r) => !!r.client_id), ...refsDoNicho, ...outrasDaAgencia.slice(0, refsDoNicho.length ? 15 : 40));
+  refsDoNicho.forEach((r) => refsValidas.add(r.id));
+  const ranking = rankearEstilos({
+    nicho: achado.nicho,
+    objetivo: objetivo?.id ?? null,
+    sinais: sinaisDaOferta(briefing, oferta, achado.nicho),
+    cliente: desempenho.cliente,
+    carteira: desempenho.carteira,
+    mediaConta: ctx.conta.custo_por_resultado,
+    mediaCarteira: desempenho.mediaCarteira,
+  });
   const pedido = `Gere um plano de teste com ${qtd} ângulos para os anúncios deste cliente${modo === "variar_vencedor" ? ", variando o vencedor escolhido" : ""}.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}`;
   const ofertaParaPrompt = oferta ? (({ status: _s, jev: _j, briefing_id: _b, conversa_id: _c, criado_em: _ce, atualizado_em: _ae, ...o }) => o)(oferta) : null;
   const instrucao = `DADOS REAIS DO CLIENTE (JSON; null ou vazio = não existe):
@@ -2176,6 +2362,10 @@ BRIEFING DE PERFORMANCE (versão ${briefing.versao}):
 ${JSON.stringify(resumoDoBriefing(briefing), null, 1)}
 
 ${achado.nicho ? textoDoNicho(achado.nicho) : "NICHO: não identificado com segurança; use o negócio descrito nos dados."}
+
+${formatosParaOPlano()}
+
+${rankingParaOPrompt(ranking)}
 
 OFERTA ESCOLHIDA PARA ESTE PLANO: ${JSON.stringify(ofertaParaPrompt)}
 
@@ -2198,7 +2388,7 @@ Regras dos ângulos:
 - prova: só prova do briefing, com a fonte; se não houver, diga "sem prova no briefing" e use demonstração ou mecanismo.
 - gancho_visual: o que aparece na imagem e faz parar a rolagem (sem escurecer a foto: contraste, composição, tipografia, escala e cor); gancho_verbal: a headline curta (até ${TONS[tom].headline_max_palavras} palavras), no tom pedido.
 ${REGRA_PORQUE_TESTAR}
-- estilo_visual: um id da lista de estilos; ângulos diferentes usam estilos diferentes sempre que fizer sentido. Evite estilo de risco de política alto.
+- estilo_visual: um id da lista de estilos, seguindo a ORDEM DE RESULTADO acima (os primeiros ângulos com os primeiros estilos); ângulos diferentes usam estilos diferentes. Evite estilo de risco de política alto e estilo que pede prova que o briefing não tem.
 - objetivo: ${objetivo ? `"${objetivo.id}"` : "o id do objetivo que o briefing sustenta, ou null"}.
 - hipotese no formato: "Acreditamos que [situação + mecanismo] aumentará [resultado], porque [evidência do público]. Vamos comparar com [base] durante [janela], mantendo [condições] e registrando [dados]."
 - metrica: a métrica do negócio que decide (pelo objetivo), não só clique. janela_dias: de 3 a 60.
@@ -2231,7 +2421,8 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
   const r = (s.json ?? {}) as Record<string, unknown>;
   let custo = s.custoUsd + achado.custo;
   let saldo = s.saldoUsd;
-  const comObjetivo = (a: Angulo): Angulo => ({ ...a, objetivo: a.objetivo ?? objetivo?.id ?? null, tom });
+  // Frente CR: cada ângulo sai com o porquê do estilo (dado real ou padrão do nicho, da ordem calculada).
+  const comObjetivo = (a: Angulo): Angulo => comPorqueDoEstilo({ ...a, objetivo: a.objetivo ?? objetivo?.id ?? null, tom }, ranking);
   let angulos = (Array.isArray(r.angulos) ? r.angulos : []).slice(0, 8).map((a, i) => comObjetivo(normalizarAngulo(a, `a${i + 1}`, refsValidas))).filter((a) => a.nome && a.situacao);
   const cobranca = { clientId, planoId, criadoPor: chamador.userId };
   const extraJev = { oferta: ofertaParaPrompt as Record<string, unknown> | null, jaRodou, tom };
@@ -2371,6 +2562,8 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
         tom,
         base_da_conta: baseDaConta(ctx.conta, briefing),
         testar_primeiro: testarPrimeiro(principais),
+        // Frente CR: a ordem dos estilos com o porquê (a tela mostra; a conversa e a produção reaproveitam).
+        estilos_que_convertem: ranking.map((x) => ({ estilo: x.estilo, nome: x.nome, formato: x.formato, fonte: x.fonte, porque: x.porque })),
       },
       pedido: pedidoEquipe || null,
       conversa_id: conversaId,
@@ -2389,7 +2582,11 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
       uso_id: s.usoId,
     },
   ]);
-  return json({ plano, lacunas, aviso, qualidade, custo_usd: custo, saldo_usd: saldo, jev_erro: jevErro, reserva_usada: s.reservaUsada ?? null });
+  return json({
+    plano, lacunas, aviso, qualidade, custo_usd: custo, saldo_usd: saldo, jev_erro: jevErro, reserva_usada: s.reservaUsada ?? null,
+    // Contrato comum dos agentes (caminho): o próximo passo é criar os criativos deste plano.
+    caminho: caminhoDaMesaAds("Criar os criativos deste plano", clientId, { etapa: "plano", plano: planoId }),
+  });
 }
 
 /** plano_conversar { plano_id, mensagem, anexos?, modelo_id?, raciocinio? } -> { plano, resposta, conversa_id, custo_usd, saldo_usd, jev_erro } */
@@ -2470,7 +2667,8 @@ Aplique o pedido. Devolva:
       usados.add(id);
       // Tom novo invalida as notas antigas (o Jev mede o tom de novo).
       const anterior = porId.get(id);
-      return { ...normalizarAngulo(bruto, id, new Set(refs.map((x) => x.id)), tom === tomAnterior ? anterior : undefined), tom };
+      // Frente CR: o porquê do estilo sai da ordem guardada no plano (sem recalcular).
+      return comPorqueDoEstilo({ ...normalizarAngulo(bruto, id, new Set(refs.map((x) => x.id)), tom === tomAnterior ? anterior : undefined), tom }, estilosSalvos(p.estrutura));
     }).filter((a) => a.nome && a.situacao);
     if (angulos.length) {
       const jev = await pontuarAngulosComJev(angulos, briefing, { clientId: p.client_id, planoId: p.id, criadoPor: chamador.userId }, { tom });
@@ -2502,10 +2700,15 @@ Aplique o pedido. Devolva:
 }
 
 /**
- * criativos_produzir { plano_id, angulo_ids[], formatos[], modelo_id?, raciocinio? }
+ * criativos_produzir { plano_id, angulo_ids[], formatos[], modelo_id?, raciocinio?, tom?, extras? }
  * -> { criativos, trabalho_ids, avisos, falhas, custo_usd, saldo_usd, jev_erro }
  * Uma chamada de copy por ângulo; cada variação x formato vira um ads_criativo
  * e um estudio_trabalhos tipo 'ads' já dirigido (direção em código).
+ * Frente CR (27/09): a chamada escreve `extras` copies a mais (padrão 2), o Jev
+ * dá as notas (com o poder de parar) e ficam as melhores; as outras vão para
+ * copy.alternativas da V1. Cada criativo leva copy.escolha (posição, nota e o
+ * porquê) e copy.porque_do_estilo. A tela chama um ângulo por vez (progresso e
+ * parar entre um e outro).
  */
 async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const p = await carregarPlano(servico, corpo.plano_id);
@@ -2541,24 +2744,32 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
   const regrasTom = TONS[tom];
   const bo = (briefing?.oferta ?? {}) as Record<string, unknown>;
   const numerosDaOferta = numerosReais([bo.preco_confirmado as string, bo.condicao as string, bo.garantia as string, bo.promessa as string]);
+  // Frente CR: escreve copies a mais numa chamada só e o Jev escolhe as melhores (sem laço de correção).
+  const extras = Number.isFinite(Number(corpo.extras)) ? Math.min(MAX_COPIES_A_MAIS, Math.max(0, Math.round(Number(corpo.extras)))) : MAX_COPIES_A_MAIS;
+  const ordemDosEstilos = estilosSalvos(p.estrutura);
 
   const produzirAngulo = async (a: Angulo) => {
     const formatos = formatosDo(a);
     const estilo = estiloPorId(a.estilo_visual);
     const objetivo = objetivoPorId(a.objetivo) ?? objetivoDoPlano;
+    const escrever = a.variacoes + extras;
     const pedido = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
 MARCA: ${JSON.stringify({ nome: marca.nomeCliente, tom_de_voz: marca.tomDeVoz, regras: marca.regras })}
 ÂNGULO: ${JSON.stringify({ nome: a.nome, situacao: a.situacao, mecanismo: a.mecanismo, tecnica: a.tecnica, prova: a.prova, gancho_visual: a.gancho_visual, gancho_verbal: a.gancho_verbal, hipotese: a.hipotese, estagio: a.estagio_consciencia })}
-ESTILO VISUAL DO ÂNGULO: ${JSON.stringify(estilo ? { id: estilo.id, nome: estilo.nome, como_fazer: estilo.como_fazer } : null)}
+ESTILO VISUAL DO ÂNGULO: ${JSON.stringify(estilo ? { id: estilo.id, nome: estilo.nome, como_fazer: estilo.como_fazer, por_que: a.porque_do_estilo ?? null } : null)}
+${formatoDoEstiloParaOPrompt(a.estilo_visual)}
 OBJETIVO DA CAMPANHA: ${JSON.stringify(objetivo ? { id: objetivo.id, nome: objetivo.nome, ctas: objetivo.ctas, como_o_criativo_muda: objetivo.como_o_criativo_muda } : null)}
 FORMATOS: ${formatos.join(", ")}
 NÚMEROS REAIS DA OFERTA (os únicos que podem aparecer): ${JSON.stringify(numerosDaOferta)}
 
+${copyQueConverteParaOPrompt({ comLayout: true })}
+
 ${regrasDoTomParaCopy(tom)}
 
-TAREFA: escreva ${a.variacoes} variação(ões) de anúncio para este ângulo, no tom ${regrasTom.nome.toLowerCase()} e vendedoras dentro da política da Meta, feitas para parar a rolagem e converter no objetivo acima. Nada genérico: cada peça tem a situação concreta do público e a promessa concreta da oferta. Mantenha o mecanismo do ângulo; entre uma variação e outra mude o gancho E a execução visual (composição, escala, estilo), para que as peças NÃO fiquem parecidas entre si nem com o "mais do mesmo" da categoria.
-Para cada variação (variacao = 1, 2, 3):
-- estilo_visual: a variação 1 usa o estilo do ângulo (se houver); as outras podem usar outro estilo da lista que sirva ao mesmo mecanismo. Evite estilo de risco de política alto.
+TAREFA: escreva ${escrever} variação(ões) de anúncio para este ângulo${extras ? ` (a conferência escolhe as ${a.variacoes} melhores; capriche em todas)` : ""}, no tom ${regrasTom.nome.toLowerCase()} e vendedoras dentro da política da Meta, feitas para parar a rolagem e converter no objetivo acima. Nada genérico: cada peça tem a situação concreta do público e a promessa concreta da oferta. Mantenha o mecanismo do ângulo; entre uma variação e outra mude o gancho, a estrutura de copy E a execução visual (composição, escala, estilo), para que as peças NÃO fiquem parecidas entre si nem com o "mais do mesmo" da categoria.
+Para cada variação (variacao = 1, 2, ...):
+- framework: o id da estrutura de copy usada; cada variação usa uma estrutura diferente, a que melhor serve ao estágio do público e à prova disponível.
+- estilo_visual: a variação 1 usa o estilo do ângulo (se houver); as outras podem usar outro estilo da ORDEM DE RESULTADO que sirva ao mesmo mecanismo. Evite estilo de risco de política alto.
 - texto_principal: a ideia inteira em até 125 caracteres (o que aparece antes do "ver mais").
 - texto_principal_longo: a versão completa do texto do anúncio (pode repetir o início do texto_principal).
 - titulo: até 40 caracteres, com o benefício ou a oferta. descricao: curta ou null.
@@ -2583,7 +2794,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     custo += s.custoUsd;
     saldo = s.saldoUsd;
     const brutas = (s.json as Record<string, unknown> | undefined)?.variacoes;
-    const variacoes = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, a.variacoes);
+    const variacoes = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, escrever);
     const copies = variacoes.map((v) => normalizarCopy(v));
     const conferencia = await conferirCopiesComJev(
       copies.map((c, i) => ({
@@ -2596,10 +2807,13 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       briefing,
       { clientId: p.client_id, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId },
       tom === "direto" ? null : tom,
+      { parada: true },
     );
     custo += conferencia.custo;
     if (conferencia.jev_erro) jevErro = conferencia.jev_erro;
-    return { angulo: a, formatos, variacoes, copies, notas: conferencia.notas, usoId: s.usoId, estilo, objetivo };
+    // As melhores pela nota composta do Jev (política como trava); as outras ficam guardadas como alternativas.
+    const escolha = escolherMelhores(conferencia.notas, a.variacoes);
+    return { angulo: a, formatos, variacoes, copies, notas: conferencia.notas, escolha, usoId: s.usoId, estilo, objetivo };
   };
 
   // Pool simples: até ANGULOS_EM_PARALELO chamadas ao mesmo tempo.
@@ -2627,9 +2841,22 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
   const criativos: Record<string, unknown>[] = [];
   for (const f of feitos) {
     const a = f.angulo;
-    f.variacoes.forEach((v, i) => {
-      const copy = f.copies[i];
-      const nota = f.notas[i];
+    const escritas = f.variacoes.length;
+    // As que não entraram ficam guardadas na melhor (a equipe vê em Refinar e pode usar).
+    const alternativas = f.escolha.descartados.map((k) => ({
+      ...f.copies[k],
+      framework: doEnum(f.variacoes[k].framework, FRAMEWORKS_IDS),
+      headline_arte: texto(f.variacoes[k].headline_arte, 120),
+      jev: f.notas[k] ?? null,
+      o_que_mudou: `Escrita junto e deixada de fora pela conferência (${f.escolha.ordem.indexOf(k) + 1}ª de ${escritas}).`,
+      tom,
+      gerado_em: new Date().toISOString(),
+    }));
+    // A variação i é a de índice escolhido; V1 é a melhor pela conferência.
+    f.escolha.escolhidos.map((k) => f.variacoes[k]).forEach((v, i) => {
+      const k = f.escolha.escolhidos[i];
+      const copy = f.copies[k];
+      const nota = f.notas[k];
       if (nota?.alerta_politica) avisos.push(`${a.nome}, variação ${i + 1}: o Jev viu risco de política. Revise antes de subir.`);
       // Conferência como aviso (sem laço): genérico pelo Jev, tom abaixo do pedido e as regras em código.
       const avisosTom = avisosDeTom({ headline: texto(v.headline_arte, 120), texto_principal: copy.texto_principal }, regrasTom, numerosDaOferta);
@@ -2686,6 +2913,11 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
             tom,
             variacao: i + 1,
             avisos_tom: avisosTom,
+            // Frente CR: prova do porquê, em uma linha cada (estilo com o dado real ou padrão do nicho; copy com a nota do Jev).
+            framework: doEnum(v.framework, FRAMEWORKS_IDS),
+            porque_do_estilo: (porqueDoEstilo(estiloDaVariacao?.id, ordemDosEstilos) ?? { porque: a.porque_do_estilo ?? null }).porque,
+            escolha: { posicao: i + 1, de: escritas, nota: notaDaCopy(nota), porque: porqueDaCopy(nota, doEnum(v.framework, FRAMEWORKS_IDS), i + 1, escritas) },
+            ...(i === 0 && alternativas.length ? { alternativas } : {}),
           },
           roteiro_video: null,
           status: "rascunho",
@@ -2707,7 +2939,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     throw new ErroHttp(503, "criativos_nao_salvos", "A copy foi escrita, mas os criativos não foram salvos.", { custo_usd: custoFinal });
   }
   for (const f of falhas) avisos.push(`Ângulo ${f.id} não foi produzido: ${(f.r as PromiseRejectedResult).reason instanceof Error ? ((f.r as PromiseRejectedResult).reason as Error).message : "falha"}.`);
-  for (const f of feitos) for (const c of f.copies) avisos.push(...c.avisos.map((x) => `${f.angulo.nome}: ${x}`));
+  for (const f of feitos) for (const k of f.escolha.escolhidos) avisos.push(...f.copies[k].avisos.map((x) => `${f.angulo.nome}: ${x}`));
 
   return json({
     criativos: gravados,
@@ -2718,7 +2950,17 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     custo_plano_usd: totalPlano,
     saldo_usd: saldo,
     jev_erro: jevErro,
+    // Contrato comum dos agentes (caminho): o Estúdio Ads no lote deste plano, com o melhor criativo aberto.
+    caminho: caminhoDaMesaAds("Abrir no Estúdio Ads", p.client_id, { etapa: "estudio", plano: p.id, criativo: String((gravados[0] as { id?: unknown } | undefined)?.id ?? "") }, true),
   });
+}
+
+/** Caminho interno da Mesa Ads (rota do painel com cliente, etapa e o que abrir), no formato do contrato dos agentes. */
+function caminhoDaMesaAds(rotulo: string, clientId: string, alvo: { etapa: string; plano?: string | null; criativo?: string | null }, abrirSozinho = false) {
+  const q = new URLSearchParams({ client: clientId, etapa: alvo.etapa });
+  if (alvo.plano && UUID.test(alvo.plano)) q.set("plano", alvo.plano);
+  if (alvo.criativo && UUID.test(alvo.criativo)) q.set("criativo", alvo.criativo);
+  return { rotulo, destino: `/mesa-ads?${q.toString()}`, ...(abrirSozinho ? { abrir_sozinho: true } : {}) };
 }
 
 /** copy_variar { criativo_id, pedido?, quantidade? (1 a 5), modelo_id? } -> { criativo, variacoes, custo_usd, saldo_usd, jev_erro } */
@@ -2743,11 +2985,13 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
 ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
-COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta })}
+COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
+
+${copyQueConverteParaOPrompt()}
 
 ${regrasDoTomParaCopy(tom)}
 
-TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
+TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Cada variação usa uma estrutura de copy diferente (framework, id da lista), de preferência diferente da atual. Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
 o_que_mudou: uma frase dizendo a variável que mudou.`,
     }],
     raciocinio,
@@ -2756,9 +3000,18 @@ o_que_mudou: uma frase dizendo a variável que mudou.`,
     criadoPor: chamador.userId,
   });
   const brutas = (((s.json as Record<string, unknown>)?.variacoes as Record<string, unknown>[] | undefined) ?? []).slice(0, qtd);
-  const copies = brutas.map((v) => ({ ...normalizarCopy(v), o_que_mudou: texto(v.o_que_mudou, 300) }));
-  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom);
-  const variacoes = copies.map((v, i) => ({ ...v, tom, jev: conferencia.notas[i] ?? null, gerado_em: new Date().toISOString() }));
+  const copies = brutas.map((v) => ({ ...normalizarCopy(v), framework: doEnum(v.framework, FRAMEWORKS_IDS), o_que_mudou: texto(v.o_que_mudou, 300) }));
+  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom, { parada: true });
+  // Frente CR: a melhor primeiro pela nota composta do Jev (política como trava), com o porquê em uma linha.
+  const ordem = escolherMelhores(conferencia.notas, copies.length).ordem;
+  const variacoes = ordem.map((k, i) => ({
+    ...copies[k],
+    tom,
+    jev: conferencia.notas[k] ?? null,
+    melhor: i === 0 && copies.length > 1,
+    porque: porqueDaCopy(conferencia.notas[k], copies[k].framework, i + 1, copies.length),
+    gerado_em: new Date().toISOString(),
+  }));
   // Guarda as alternativas no criativo (as 10 mais recentes); a equipe escolhe e salva a copy na tela.
   const alternativas = [...variacoes, ...(Array.isArray(c.copy.alternativas) ? c.copy.alternativas : [])].slice(0, 10);
   const { data: criativo, error } = await servico.from("ads_criativos").update({ copy: { ...c.copy, alternativas } }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
@@ -4246,6 +4499,8 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
       campaign_id: a.campaign_id,
       campanha: a.campaign_id ? nomeCampanha.get(a.campaign_id) ?? null : null,
       conjunto,
+      // Frente TR: o id do conjunto (regras do dono por conjunto e a rotina de monitoramento).
+      conjunto_id: linhas.length ? (linhas[linhas.length - 1] as unknown as LinhaDiariaAds).adset_id ?? null : null,
       formato: copy.video_id || a.video_id ? "video" : "imagem",
       imagem_url: (ref?.storage_path && assinadas.get(ref.storage_path)) || copy.imagem_url || copy.miniatura_url,
       titulo: copy.titulo,
@@ -4348,7 +4603,8 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
       diagnostico: a.diagnostico.sinais.map((x) => x.sinal),
     })),
   };
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
+  // Frente TR: a leitura da conta também é do agente de tráfego (padrão GPT-6 Luna no máximo; a escolha da tela vale).
+  const { modelo, raciocinio } = await modeloDoTrafego(corpo);
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
@@ -4765,6 +5021,8 @@ MARCA: ${JSON.stringify({ nome: ctx.marca.nomeCliente, tom_de_voz: ctx.marca.tom
 CRIATIVO: ${JSON.stringify({ nome: c.nome, formato: c.formato, texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, headline_arte: c.copy.headline_arte })}
 VERBA DIÁRIA DO BRIEFING: ${verba != null ? `R$ ${verba}` : "não informada"}
 
+${copyQueConverteParaOPrompt()}
+
 TAREFA: escreva o pacote completo de copy deste criativo para o gestor de tráfego, agressivo e vendedor dentro da política da Meta.
 - textos_principais: pelo menos 6, um de cada estilo (curto, medio, longo, pas, historia, prova_objecao); o começo de cada um carrega a ideia inteira (cerca de 125 caracteres aparecem antes do "ver mais").
 - titulos: pelo menos 8, até 40 caracteres cada. descricoes: pelo menos 5, até 30 caracteres cada.
@@ -4939,7 +5197,11 @@ async function copyPacote(servico: SupabaseClient, chamador: Chamador, corpo: Re
   custo = arred6(custo);
   await somarCustoDoPlano(servico, plano?.id ?? null, clientId, custo);
   if (!pacotes.length && primeiroErro) throw primeiroErro;
-  return json({ pacotes, criativo: atualizado, pendentes, falhas, custo_usd: custo, saldo_usd: saldo, jev_erro: jevErro });
+  return json({
+    pacotes, criativo: atualizado, pendentes, falhas, custo_usd: custo, saldo_usd: saldo, jev_erro: jevErro,
+    // Contrato comum dos agentes (caminho): o criativo com o pacote de copy aberto no Estúdio Ads.
+    caminho: pacotes.length ? caminhoDaMesaAds("Abrir o pacote da copy", clientId, { etapa: "estudio", plano: plano?.id ?? null, criativo: pacotes[0].criativo_id }) : null,
+  });
 }
 
 // ------------------------------------------------------------ pacote para o gestor
@@ -5553,7 +5815,8 @@ function sistemaDoAgenteSenior(objetivo?: unknown): string {
   // _shared/conhecimento-dos-agentes.ts, onde o índice motores.ts e o teste a veem.
   const extra = conhecimentoAgenteSenior(objetivo).texto;
   // Frente AG: o sênior conhece o painel inteiro (mapa do painel no fim).
-  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}${mapaDoPainelNaConversa()}`;
+  // Frente TR (27/09): gestão de tráfego atual (Andromeda, aprendizado, corte, escala, fadiga, mensagens) com fonte.
+  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${CONHECIMENTO_TRAFEGO}\n\n${REGRAS_DA_EXECUCAO}${mapaDoPainelNaConversa()}`;
 }
 
 /** Frente AG (26/09): mapa do painel só nos agentes de conversa (plano, oferta e sênior), nunca nas gerações. */
@@ -5770,7 +6033,9 @@ function contextoEmJson(c: Awaited<ReturnType<typeof contextoDoAgenteSenior>>, p
 async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const mensagem = texto(corpo.mensagem, 4000);
+  // Frente TR: "Enviar ao agente sênior" (Plano de teste) = assumir o plano e montar a campanha, pausada.
+  const modoAssumir = corpo.modo === "assumir_plano";
+  const mensagem = texto(corpo.mensagem, 4000) || (modoAssumir ? MENSAGEM_DE_ASSUMIR_O_PLANO : "");
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente sênior.");
   const pesquisar = corpo.pesquisar !== false;
   let plano: Plano | null = null;
@@ -5778,13 +6043,17 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     plano = await carregarPlano(servico, corpo.plano_id);
     if (plano.client_id !== clientId) throw new ErroHttp(403, "plano_de_outro_cliente", "Este plano é de outro cliente.");
   }
+  if (modoAssumir && !plano) throw new ErroHttp(400, "plano_obrigatorio", "Mande um plano de teste para o agente sênior assumir.");
   const conversaId = (await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, chamador.userId)) as string;
-  const modoAgir = corpo.modo === "agir";
-  const [c, historico, modeloEscolhido, criativosDaMesa] = await Promise.all([
+  const modoAgir = corpo.modo === "agir" || modoAssumir;
+  const [c, historico, modeloEscolhido, criativosDaMesa, rotina, feito] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
-    resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+    // Padrão GPT-6 Luna no raciocínio máximo; o modelo escolhido na tela vale.
+    modeloDoTrafego(corpo),
     criativosParaAcoes(servico, clientId),
+    lerLinhaDaRotina(servico, clientId),
+    oQueFoiFeitoParaOAgente(servico, clientId),
   ]);
   // Apelidos (c1, g1, n1, k1): o agente nunca vê nem devolve id da Meta nem UUID (acoes-conta.ts).
   const alvos = alvosComApelido({
@@ -5795,10 +6064,19 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const criativosComRef = criativosComApelido(criativosDaMesa);
   const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
   const achado = await nichoDoCliente(c.ctx, c.briefing, cobranca, corpo.nicho);
+  // "Ele já vai fazendo": o Jev confere, junto com o agente, se a mensagem pede para fazer (não só analisar).
+  const pedidoP = modoAgir ? Promise.resolve({ faz: true, custo: 0, prob: null as number | null }) : pedeParaFazer(mensagem, cobranca);
   const termos = [achado.nicho?.nome, String((c.briefing?.oferta ?? {}).produto ?? "")].filter(Boolean).join(" ");
   const biblioteca = pesquisar ? await pesquisarBibliotecaMeta(servico, clientId, termos) : null;
   const objetivo = plano?.estrutura?.objetivo ?? (c.briefing?.objetivo ?? {}).acao;
-  const contexto = contextoEmJson(c, plano, biblioteca);
+  const regrasDoDono = regrasQueValem(configDaLinha(rotina).regras, hojeSaoPaulo());
+  // Retrato da campanha antes de responder: cada nível com os números, a fase, o sinal da regra, o
+  // custo-alvo com a fonte, a referência do nicho e o que já foi feito (rotina-trafego.ts).
+  const contexto = {
+    ...contextoEmJson(c, plano, biblioteca),
+    RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano),
+    REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
+  };
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
@@ -5810,7 +6088,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       ...historico.filter((m) => m.papel === "usuario" || m.papel === "agente").map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
       {
         papel: "usuario",
-        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir })}`,
+        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
       },
     ],
     raciocinio: modeloEscolhido.raciocinio,
@@ -5823,14 +6101,27 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const estrategia = normalizarEstrategia(s.json, ads);
   const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
   const markdown = estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id);
-  const custo = arred6(s.custoUsd + achado.custo);
-  // Ações propostas: só a lista, com o estado lido na Meta; a equipe confirma (conta_acao_executar).
+  const pedido = await pedidoP;
+  const custo = arred6(s.custoUsd + achado.custo + pedido.custo);
+  // Ações: a lista com o estado lido na Meta. Com o pedido de fazer, o seguro (reversível e sem aumento
+  // de gasto) já é feito aqui, com Desfazer; o resto a equipe confirma (conta_acao_executar).
   const bruto = (s.json && typeof s.json === "object" ? s.json : {}) as Record<string, unknown>;
-  const acoes = await prepararAcoesDaConta(servico, clientId, normalizarAcoesDaConta(bruto.acoes, alvos, criativosComRef, bruto.resumo_das_acoes));
+  const mensagemId = crypto.randomUUID();
+  const doPlano = plano ? { id: plano.id, nome: plano.nome } : null;
+  let lista = normalizarAcoesDaConta(bruto.acoes, alvos, criativosComRef, bruto.resumo_das_acoes, doPlano);
+  if (modoAssumir && doPlano && !(lista && lista.itens.some((i) => i.tipo === "montar_campanha_do_plano"))) {
+    const montar = itemDeMontagem(doPlano, "Você mandou o plano ao agente sênior: ele monta a campanha na Meta com os criativos aprovados, tudo pausado.", `i${(lista ? lista.itens.length : 0) + 1}`);
+    lista = lista ? { ...lista, itens: [...lista.itens, montar] } : { tipo: "acoes_conta", resumo: "Montar a campanha do plano na Meta, pausada, para você ativar.", itens: [montar], ignorados: [], gestao: null };
+  }
+  const preparadas = await prepararAcoesDaConta(servico, clientId, lista, { plano, conta: c.conta, teto: configDaLinha(rotina).teto_diario_brl });
+  const acoes = preparadas
+    ? await fazerOQueESeguro(servico, chamador, { clientId, mensagemId, acoes: preparadas, executar: pedido.faz, montar: modoAssumir, conta: c.conta, regras: regrasDoDono })
+    : null;
   const numeros = numerosVistos(c.conta);
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem },
     {
+      id: mensagemId,
       papel: "agente",
       conteudo: markdown || estrategia.resposta || "Sem resposta.",
       uso_id: s.usoId,
@@ -5840,15 +6131,20 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       ],
     },
   ]);
+  if (acoes) await registrarFeitosDoAgente(servico, chamador, clientId, mensagemId, acoes.itens.filter((i) => i.auto && i.resultado && i.resultado.ok));
   return json({
     conversa_id: conversaId,
+    mensagem_id: mensagemId,
     resposta: estrategia.resposta,
     estrategia,
     markdown,
     acoes,
+    feitas_sozinho: acoes ? acoes.itens.filter((i) => i.auto && i.resultado && i.resultado.ok).length : 0,
+    pediu_para_fazer: pedido.faz,
     numeros,
     mix_objetivos: c.conta.mix_objetivos,
     nicho: achado.nicho ? { id: achado.nicho.id, nome: achado.nicho.nome } : null,
+    modelo: { id: modeloEscolhido.modelo.id, raciocinio: modeloEscolhido.raciocinio ?? null },
     pesquisa: { web: pesquisar, biblioteca },
     custo_usd: custo,
     saldo_usd: s.saldoUsd,
@@ -6025,9 +6321,12 @@ async function contasMetaDoCliente(servico: SupabaseClient, clientId: string): P
 }
 
 /** Criativos da Mesa Ads para as ações, com "arte aprovada" (entregue ou status pronto, no ar ou pausado com arte). */
-async function criativosParaAcoes(servico: SupabaseClient, clientId: string) {
-  const { data } = await servico.from("ads_criativos").select("id, nome, formato, ad_id, trabalho_id, status").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(60);
-  const lista = (data as { id: string; nome: string | null; formato: string; ad_id: string | null; trabalho_id: string | null; status: string | null }[] | null) ?? [];
+async function criativosParaAcoes(servico: SupabaseClient, clientId: string, planoId?: string | null) {
+  let q = servico.from("ads_criativos").select("id, nome, formato, ad_id, trabalho_id, status, plano_id").eq("client_id", clientId);
+  // Frente TR: só os do plano (a montagem da campanha do plano de teste).
+  if (planoId) q = q.eq("plano_id", planoId);
+  const { data } = await q.order("criado_em", { ascending: false }).limit(60);
+  const lista = (data as { id: string; nome: string | null; formato: string; ad_id: string | null; trabalho_id: string | null; status: string | null; plano_id: string | null }[] | null) ?? [];
   const ids = [...new Set(lista.map((c) => c.trabalho_id).filter((x): x is string => !!x))];
   const { data: ts } = ids.length
     ? await servico.from("estudio_trabalhos").select("id, cards, direcao").eq("client_id", clientId).in("id", ids)
@@ -6035,7 +6334,7 @@ async function criativosParaAcoes(servico: SupabaseClient, clientId: string) {
   const arte = new Map(((ts as { id: string; cards: unknown; direcao: unknown }[] | null) ?? []).map((t) => [t.id, arteDoTrabalho(t)]));
   return lista.map((c) => {
     const a = c.trabalho_id ? arte.get(c.trabalho_id) ?? null : null;
-    return { id: c.id, nome: c.nome, formato: c.formato, ad_id: c.ad_id, tem_arte: !!a && (a.bucket === "files" || STATUS_APROVADOS.indexOf(String(c.status ?? "")) >= 0) };
+    return { id: c.id, nome: c.nome, formato: c.formato, ad_id: c.ad_id, plano_id: c.plano_id ?? null, tem_arte: !!a && (a.bucket === "files" || STATUS_APROVADOS.indexOf(String(c.status ?? "")) >= 0) };
   });
 }
 
@@ -6045,8 +6344,15 @@ async function criativosParaAcoes(servico: SupabaseClient, clientId: string) {
  * ads_management, modo ensaio (marcarEnsaio): a lista fica igual, com antes e
  * depois quando o token lê, e a tela mostra "Seria feito assim".
  */
-async function prepararAcoesDaConta(servico: SupabaseClient, clientId: string, acoes: AcoesDaConta | null): Promise<AcoesDaConta | null> {
-  if (!acoes) return null;
+async function prepararAcoesDaConta(
+  servico: SupabaseClient,
+  clientId: string,
+  acoesBrutas: AcoesDaConta | null,
+  extra: { plano?: Plano | null; conta?: Awaited<ReturnType<typeof lerContaAoVivo>>; teto?: number | null } = {},
+): Promise<AcoesDaConta | null> {
+  if (!acoesBrutas) return null;
+  // Frente TR: a montagem ganha os criativos aprovados do plano, o anúncio modelo e a verba (ou o que falta).
+  const acoes = await completarMontagensDoPlano(servico, clientId, acoesBrutas, extra);
   if (!acoes.itens.some((i) => i.na_meta)) return acoes;
   const acesso = await acessoDeGestao(servico, clientId);
   const gestao = { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo };
@@ -6247,11 +6553,18 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
 
   const escolhidos = Array.isArray(corpo.itens) ? new Set(corpo.itens.map(String)) : null;
   const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
-  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && (!escolhidos || escolhidos.has(i.id)));
+  // Frente TR: o que o agente já fez sozinho fica como está (tem o próprio Desfazer).
+  const jaFeito = (i: ItemDaAcaoNaConta) => !!(i.auto && i.resultado);
+  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && !jaFeito(i) && (!escolhidos || escolhidos.has(i.id)));
   const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
   const itens: ItemDaAcaoNaConta[] = [];
+  const agoraFeitos: ItemDaAcaoNaConta[] = [];
   // Um de cada vez: a Meta limita chamadas por conta, e a ordem da lista é a ordem da confirmação.
   for (const i of itensDaMensagem) {
+    if (jaFeito(i)) {
+      itens.push(i);
+      continue;
+    }
     if (escolhidos && !escolhidos.has(i.id)) {
       itens.push({ ...i, resultado: { ok: false, motivo: "Não marcado nesta confirmação." } });
       continue;
@@ -6263,6 +6576,8 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
     } else if (i.na_meta) {
       if (!acesso || !acesso.grafo || !acesso.gestao.disponivel) {
         resultado = { ok: false, motivo: (acesso && acesso.gestao.motivo) || "Sem permissão de gestão na Meta." };
+      } else if (i.tipo === "montar_campanha_do_plano") {
+        resultado = await montarComApoios(servico, m.client_id, i, acesso.grafo, contas);
       } else {
         const apoio = i.tipo === "trocar_criativo" && i.criativo ? await apoioDoCriativo(servico, m.client_id, i.criativo.id) : null;
         resultado = await executarNaMeta(i, acesso.grafo, apoio, contas);
@@ -6274,6 +6589,7 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
       resultado = await executarItemInterno(servico, chamador, m, i);
     }
     itens.push({ ...i, resultado });
+    if (resultado.ok) agoraFeitos.push({ ...i, resultado });
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: `mesa_ads_acao_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
       keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: [i.na_meta ? "ads:write" : "ads:mesa"],
@@ -6283,10 +6599,19 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
       resultRef: (resultado.criado && (resultado.criado.anuncio_id || resultado.criado.plano_id || resultado.criado.tarefa_id)) || (i.alvo ? i.alvo.meta_id : m.id),
     });
   }
-  const feitos = itens.filter((i) => i.resultado && i.resultado.ok).length;
-  const tentados = itens.filter((i) => !escolhidos || escolhidos.has(i.id)).length;
+  const feitos = agoraFeitos.length;
+  const tentados = itens.filter((i) => !jaFeito(i) && (!escolhidos || escolhidos.has(i.id))).length;
   esquecerContextoDoCliente(m.client_id);
-  const novo = await gravar({ ...anexo, itens, gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : acoes.gestao, executada_em: new Date().toISOString(), executada_por: chamador.userId });
+  const novo = await gravar({
+    ...anexo,
+    itens,
+    gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : acoes.gestao,
+    caminho: caminhoDasAcoes(m.client_id, itens) ?? acoes.caminho ?? null,
+    executada_em: new Date().toISOString(),
+    executada_por: chamador.userId,
+  });
+  // Frente TR: o que foi feito entra em "O que foi feito" (com a prova) e no dossiê.
+  await registrarFeitosDoAgente(servico, chamador, m.client_id, m.id, agoraFeitos);
   if (m.conversa_id) {
     await registrarMensagens(servico, m.conversa_id, m.client_id, [{
       papel: "sistema",
@@ -6296,19 +6621,26 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
   return json({ anexo: novo, feitos, falhas: tentados - feitos, custo_usd: 0 });
 }
 
-/** conta_acao_desfazer { mensagem_id }: volta pausar, ativar, orçamento, nome e vínculo, só onde ninguém mexeu depois. */
+/**
+ * conta_acao_desfazer { mensagem_id, itens? }: volta pausar, ativar, orçamento, nome, vínculo e a
+ * montagem (arquiva o que criou), só onde ninguém mexeu depois. Com `itens`, só esses (o Desfazer
+ * de cada ação que o agente fez sozinho e o de "O que foi feito").
+ */
 async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, corpo.mensagem_id, "acoes_conta");
   const acoes = anexo as unknown as AcoesDaConta;
-  if (!acoes.executada_em) throw new ErroHttp(409, "acao_nao_feita", "Estas ações ainda não foram confirmadas.");
-  if (acoes.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Estas ações já foram desfeitas.");
   const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
-  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && temReverso(i));
+  // Frente TR: o que o agente fez sozinho já pode voltar antes de a equipe confirmar o resto.
+  if (!acoes.executada_em && !itensDaMensagem.some((i) => i.auto && i.resultado && i.resultado.ok)) throw new ErroHttp(409, "acao_nao_feita", "Estas ações ainda não foram confirmadas.");
+  if (acoes.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Estas ações já foram desfeitas.");
+  const soEstes = Array.isArray(corpo.itens) ? new Set(corpo.itens.map(String)) : null;
+  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && temReverso(i) && (!soEstes || soEstes.has(i.id)));
   const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
   let voltaram = 0;
+  const voltaramIds: string[] = [];
   const itens: ItemDaAcaoNaConta[] = [];
   for (const i of itensDaMensagem) {
-    if (!temReverso(i)) {
+    if (!temReverso(i) || (soEstes && !soEstes.has(i.id))) {
       itens.push(i);
       continue;
     }
@@ -6323,7 +6655,10 @@ async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, co
         r = { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível desfazer." };
       }
     }
-    if (r.ok) voltaram++;
+    if (r.ok) {
+      voltaram++;
+      voltaramIds.push(i.id);
+    }
     itens.push({ ...i, resultado: { ...(i.resultado as NonNullable<ItemDaAcaoNaConta["resultado"]>), desfeito: r.ok, motivo_desfazer: r.ok ? undefined : r.motivo } });
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: `mesa_ads_desfazer_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
@@ -6333,7 +6668,10 @@ async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, co
       resultRef: i.alvo ? i.alvo.meta_id : m.id,
     });
   }
-  const novo = await gravar({ ...anexo, itens, desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId });
+  // Desfeito por inteiro só quando não sobra nada com volta (o Desfazer de um item deixa o resto como está).
+  const inteiro = !soEstes || !itens.some(temReverso);
+  const novo = await gravar({ ...anexo, itens, ...(inteiro && acoes.executada_em ? { desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId } : {}) });
+  await marcarDesfeitosNoRegistro(servico, chamador, m.client_id, m.id, itens.filter((i) => voltaramIds.indexOf(i.id) >= 0));
   return json({ anexo: novo, voltaram, custo_usd: 0 });
 }
 
@@ -6688,6 +7026,743 @@ async function pacoteImportar(servico: SupabaseClient, chamador: Chamador, corpo
   return json({ plano, criativos: gravados, entendido, avisos, custo_usd: custo, saldo_usd: null, jev_erro: conferencia.jev_erro });
 }
 
+// ============================================================ frente TR (27/09/2026): tráfego que age sozinho com juízo
+//
+// Pedido do dono: "hiper inteligente com base na campanha, faz tudo sozinho quando eu pedir,
+// o Plano de teste manda ao agente sênior e ele assume, e uma rotina que monitora, pausa o que
+// gasta sem resultado, monta estratégia e só avisa quando fez; tudo no dossiê". Regras dele logo
+// depois: menos burocracia, autonomia com trava dura em código, acompanhamento humano claro
+// (Pausar a rotina, Desfazer por ação, Interferir) e prova em toda ação.
+// Tabelas novas: public.ads_rotina e public.ads_rotina_acoes (SQL TR-01, sem aplicar). Sem elas,
+// o agente funciona igual e a rotina responde "em preparação".
+
+/** Mensagem do agente quando o dono manda o plano pelo botão (sem texto). */
+const MENSAGEM_DE_ASSUMIR_O_PLANO = "Assuma este plano de teste: monte a campanha na Meta com os criativos aprovados, tudo pausado, e me diga como vai rodar e o que eu preciso confirmar para ativar.";
+
+/** Padrão do agente de tráfego: GPT-6 Luna no raciocínio máximo (o mesmo do diretor da Mesa Vídeos). */
+const MODELO_DO_TRAFEGO = "openrouter:openai/gpt-6-luna";
+const RACIOCINIO_DO_TRAFEGO = "max";
+
+/** Modelo do agente de tráfego: o escolhido na tela; sem escolha, o Luna no máximo; sem Luna ativo, o estrategista padrão. */
+async function modeloDoTrafego(corpo: Record<string, unknown>): Promise<{ modelo: ModeloIa; raciocinio: string | undefined }> {
+  const nivelValido = (m: ModeloIa, r: string | undefined) => {
+    const aceitos = m.raciocinio ?? [];
+    if (!aceitos.length) return undefined;
+    return r && aceitos.includes(r) ? r : aceitos[aceitos.length - 1];
+  };
+  const pedido = typeof corpo.raciocinio === "string" && corpo.raciocinio.trim() ? corpo.raciocinio.trim() : undefined;
+  if (typeof corpo.modelo_id === "string" && corpo.modelo_id.trim()) {
+    const r = await resolverModelo(corpo.modelo_id, pedido, "estrategista");
+    return { modelo: r.modelo, raciocinio: pedido ? nivelValido(r.modelo, pedido) : r.raciocinio };
+  }
+  try {
+    const m = await carregarModelo(MODELO_DO_TRAFEGO, "texto");
+    return { modelo: m, raciocinio: nivelValido(m, pedido ?? RACIOCINIO_DO_TRAFEGO) };
+  } catch {
+    return await resolverModelo(undefined, pedido, "estrategista", "high");
+  }
+}
+
+/** Probabilidade mínima de "a equipe pediu para fazer" para o agente já fazer o que é seguro. */
+const LIMIAR_PEDE_PARA_FAZER = 0.7;
+
+/**
+ * A mensagem pede para o agente FAZER mudanças na conta agora (e não só analisar)? Julgamento de
+ * linguagem: um Noul do Jev (centavos), em paralelo com a resposta do agente. Falha do Jev = não faz
+ * sozinho (fica tudo para confirmar, como antes).
+ */
+async function pedeParaFazer(mensagem: string, cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string }): Promise<{ faz: boolean; custo: number; prob: number | null }> {
+  try {
+    const r = await jevPerguntar({
+      state: { mensagem_da_equipe: mensagem.slice(0, 1500) },
+      questions: {
+        pede_para_fazer: {
+          type: "noul",
+          instructions: "A `mensagem_da_equipe` para o gestor de tráfego pede para ele FAZER mudanças na conta de anúncios agora (pausar, ajustar, otimizar, resolver, corrigir), e não só analisar, explicar ou sugerir?",
+          criteria: { true: "Pede para fazer: \"otimiza\", \"resolve\", \"pausa o que queima\", \"faz o que precisar\", \"corrige isso\".", false: "Pede análise, opinião, explicação, plano ou só pergunta: \"o que você acha\", \"analisa\", \"quais anúncios cortar?\"." },
+        },
+      },
+    });
+    const cobrado = await cobrarJev(r, { clientId: cobranca.clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: cobranca.criadoPor });
+    const prob = probabilidadeNoul(r.answers.pede_para_fazer);
+    return { faz: prob !== null && prob >= LIMIAR_PEDE_PARA_FAZER, custo: cobrado?.custoUsd ?? 0, prob };
+  } catch (err) {
+    console.error("[mesa-ads] jev do pedido de fazer falhou", { codigo: err instanceof JevErro ? err.codigo : "jev_falhou" });
+    return { faz: false, custo: 0, prob: null };
+  }
+}
+
+const erroDeTabelaAusente = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST204" || /ads_rotina/.test(String(e.message ?? "")));
+
+/** Linha da rotina do cliente (null sem a tabela ou sem linha). */
+async function lerLinhaDaRotina(servico: SupabaseClient, clientId: string): Promise<LinhaDaRotina | null> {
+  const { data, error } = await servico.from("ads_rotina").select("*").eq("client_id", clientId).maybeSingle();
+  if (error) return null;
+  return (data as LinhaDaRotina | null) ?? null;
+}
+
+/** O que já foi feito na conta (rotina e agente), curto, para o agente não repetir nem desfazer sem querer. */
+async function oQueFoiFeitoParaOAgente(servico: SupabaseClient, clientId: string): Promise<{ quando: string; resumo: string; porque: string }[]> {
+  const { data, error } = await servico.from("ads_rotina_acoes").select("criado_em, resumo, porque, estado").eq("client_id", clientId).in("estado", ["feita", "desfeita"]).order("criado_em", { ascending: false }).limit(12);
+  if (error) return [];
+  return ((data as { criado_em: string; resumo: string; porque: string; estado: string }[] | null) ?? []).map((x) => ({ quando: x.criado_em, resumo: `${x.resumo}${x.estado === "desfeita" ? " (desfeito depois)" : ""}`, porque: String(x.porque ?? "").slice(0, 300) }));
+}
+
+/** Custo por resultado que o plano de teste aceita (o corte do ângulo), ou null. */
+function custoDoPlanoDeTeste(plano: Plano | null | undefined): number | null {
+  if (!plano) return null;
+  for (const a of plano.angulos ?? []) {
+    const limite = a && a.corte && typeof a.corte.limite_brl === "number" ? a.corte.limite_brl : null;
+    if (limite && limite > 0) return limite;
+  }
+  return null;
+}
+
+/** Retrato da campanha para o agente sênior (rotina-trafego.ts), com a referência do nicho e o custo-alvo com a fonte. */
+function retratoDoAgenteSenior(c: Awaited<ReturnType<typeof contextoDoAgenteSenior>>, nicho: Nicho | null, rotina: LinhaDaRotina | null, feito: { quando: string; resumo: string; porque: string }[], plano: Plano | null) {
+  const r = retratoDaContaAoVivo(c.conta);
+  const ref = referenciaDoNicho(nicho ? nicho.id : null, r.objetivo_tipo);
+  const { limites, fontes } = limitesEfetivos({
+    dono: configDaLinha(rotina).limites,
+    custoDoPlano: custoDoPlanoDeTeste(plano),
+    custoDoBriefing: numeroOuNulo((c.briefing?.objetivo ?? {}).custo_toleravel_brl),
+    custoMedioDaConta: r.totais.custo_por_resultado,
+    resultadosDaConta: r.totais.resultados,
+    referencia: ref,
+  });
+  return retratoParaOAgente(r, r.itens.map((i) => avaliarItem(i, limites)), limites, fontes, feito, ref);
+}
+
+/**
+ * Montagem do plano: criativos do plano com arte pronta, o anúncio modelo (o ativo de imagem com
+ * mais resultado no grupo do objetivo do plano; sem ele, o ativo com mais gasto) e a verba do plano.
+ * O que falta deixa o item indisponível com o motivo.
+ */
+async function completarMontagensDoPlano(servico: SupabaseClient, clientId: string, acoes: AcoesDaConta, extra: { plano?: Plano | null; conta?: Awaited<ReturnType<typeof lerContaAoVivo>>; teto?: number | null }): Promise<AcoesDaConta> {
+  if (!acoes.itens.some((i) => i.tipo === "montar_campanha_do_plano" && i.montagem)) return acoes;
+  const plano = extra.plano ?? null;
+  const [criativos, conta] = await Promise.all([
+    plano ? criativosParaAcoes(servico, clientId, plano.id) : Promise.resolve([] as Awaited<ReturnType<typeof criativosParaAcoes>>),
+    extra.conta ? Promise.resolve(extra.conta) : lerContaAoVivo(servico, clientId, 30),
+  ]);
+  const itens = acoes.itens.map((i) => {
+    if (i.tipo !== "montar_campanha_do_plano" || !i.montagem) return i;
+    const doPlano = criativos.filter((c) => plano && c.plano_id === plano.id);
+    const objetivo = plano && typeof plano.estrutura.objetivo === "string" ? plano.estrutura.objetivo : null;
+    const grupo = grupoDoTipo(tipoDoBriefing(objetivo));
+    const ativos = conta.anuncios.filter((a) => a.status === "ACTIVE" && a.formato === "imagem");
+    const modelo = ativos.filter((a) => grupo && a.grupo === grupo).sort((a, b) => b.metricas.resultados - a.metricas.resultados || b.metricas.gasto - a.metricas.gasto)[0]
+      ?? ativos.sort((a, b) => b.metricas.gasto - a.metricas.gasto)[0] ?? null;
+    const teste = plano && plano.estrutura.teste && typeof plano.estrutura.teste === "object" ? plano.estrutura.teste as Record<string, unknown> : {};
+    const verba = numeroOuNulo(plano ? (plano.estrutura.verba_diaria_total_brl ?? teste.orcamento_diario_brl) : null);
+    const montagem: Montagem = completarMontagem(i.montagem, {
+      criativos: doPlano.map((c) => ({ id: c.id, nome: c.nome, tem_arte: c.tem_arte })),
+      modelo: modelo ? { ad_id: modelo.ad_id, nome: modelo.nome } : null,
+      verba_diaria_brl: verba,
+      objetivo,
+      hoje: hojeSaoPaulo(),
+      teto_diario_brl: extra.teto ?? null,
+    });
+    return { ...i, montagem, indisponivel: montagem.faltas.length ? montagem.faltas.join(" ") : i.indisponivel };
+  });
+  return { ...acoes, itens };
+}
+
+/** Monta na Meta com a arte e a copy de cada criativo aprovado do plano. */
+async function montarComApoios(servico: SupabaseClient, clientId: string, i: ItemDaAcaoNaConta, grafo: GrafoMeta, contas: Set<string>): Promise<NonNullable<ItemDaAcaoNaConta["resultado"]>> {
+  const m = i.montagem;
+  if (!m) return { ok: false, motivo: "Montagem sem os dados do plano." };
+  const apoios = (await Promise.all(m.criativos.map((c) => apoioDoCriativo(servico, clientId, c.id)))).filter((a): a is NonNullable<typeof a> => !!a);
+  return await montarCampanhaNaMeta(i, grafo, apoios, contas);
+}
+
+/** Para onde ir depois de feito (contrato comum dos agentes): a campanha montada, ou "O que foi feito" na aba Conta. */
+function caminhoDasAcoes(clientId: string, itens: ItemDaAcaoNaConta[]) {
+  const montada = itens.find((i) => i.tipo === "montar_campanha_do_plano" && i.resultado && i.resultado.ok && i.resultado.criado && i.resultado.criado.campanha_id);
+  if (montada && montada.resultado && montada.resultado.criado) {
+    return caminhoSeguro({ rotulo: "Ir para a campanha montada", destino: `/mesa-ads?client=${clientId}&etapa=conta&campanha=${montada.resultado.criado.campanha_id}` });
+  }
+  if (itens.some((i) => i.resultado && i.resultado.ok && i.na_meta)) return caminhoSeguro({ rotulo: "Ver o que foi feito", destino: `/mesa-ads?client=${clientId}&etapa=conta&ver=feito` });
+  return null;
+}
+
+/**
+ * "Ele já vai fazendo": com o pedido de fazer (ou o plano mandado ao agente), executa agora o que é
+ * seguro (acaoSemRisco: reversível e sem aumento de gasto; a montagem do plano quando o dono mandou o
+ * plano), relendo a Meta antes. Travas: gestão ativa, nada em ensaio, nunca o último anúncio ativo,
+ * regras do dono, no máximo 5 por mensagem. O resto fica para Confirmar.
+ */
+async function fazerOQueESeguro(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  e: { clientId: string; mensagemId: string; acoes: AcoesDaConta; executar: boolean; montar: boolean; conta: Awaited<ReturnType<typeof lerContaAoVivo>>; regras: RegraDoDonoTR[] },
+): Promise<AcoesDaConta> {
+  const candidato = (i: ItemDaAcaoNaConta) => !i.resultado && !i.ensaio && !i.indisponivel && (acaoSemRisco(i) || (e.montar && i.tipo === "montar_campanha_do_plano"));
+  if (!e.executar || !e.acoes.itens.some(candidato)) return e.acoes;
+  const precisaMeta = e.acoes.itens.some((i) => candidato(i) && i.na_meta);
+  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, e.clientId, { conferir: true }), contasMetaDoCliente(servico, e.clientId)]) : [null, new Set<string>()];
+  const doAnuncio = new Map(e.conta.anuncios.map((a) => [a.ad_id, a]));
+  const doConjunto = new Map(e.conta.conjuntos.map((g) => [g.adset_id, g]));
+  const idsDoAlvo = (i: ItemDaAcaoNaConta) => {
+    const id = i.alvo ? i.alvo.meta_id : "";
+    const a = doAnuncio.get(id);
+    if (a) return { meta_id: id, campanha_id: a.campaign_id ?? null, conjunto_id: a.conjunto_id ?? null };
+    const g = doConjunto.get(id);
+    if (g) return { meta_id: id, campanha_id: g.campaign_id ?? null, conjunto_id: id };
+    return { meta_id: id, campanha_id: id, conjunto_id: null };
+  };
+  let ativos = e.conta.anuncios.filter((a) => a.status === "ACTIVE").length;
+  let feitas = 0;
+  const itens: ItemDaAcaoNaConta[] = [];
+  for (const i of e.acoes.itens) {
+    if (!candidato(i) || feitas >= 5) {
+      itens.push(i);
+      continue;
+    }
+    if (i.tipo === "pausar" && i.alvo && i.alvo.nivel === "anuncio" && ativos <= 1) {
+      itens.push({ ...i, motivo: `${i.motivo} Último anúncio ativo da conta: fica para você confirmar.`.trim() });
+      continue;
+    }
+    const regra = i.alvo ? regraQueBarra(i.tipo === "pausar" ? "pausar" : "ajustar", idsDoAlvo(i), e.regras) : null;
+    if (regra) {
+      itens.push({ ...i, motivo: `${i.motivo} Regra sua ("${regra.texto}"): fica para você confirmar.`.trim() });
+      continue;
+    }
+    const inicio = Date.now();
+    let resultado: NonNullable<ItemDaAcaoNaConta["resultado"]>;
+    if (i.na_meta) {
+      if (!acesso || !acesso.grafo || !acesso.gestao.disponivel) {
+        itens.push(i);
+        continue;
+      }
+      resultado = i.tipo === "montar_campanha_do_plano" ? await montarComApoios(servico, e.clientId, i, acesso.grafo, contas) : await executarNaMeta(i, acesso.grafo, null, contas);
+    } else {
+      resultado = await executarItemInterno(servico, chamador, { id: e.mensagemId, client_id: e.clientId }, i);
+    }
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: `mesa_ads_acao_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
+      keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: [i.na_meta ? "ads:write" : "ads:mesa"],
+      input: { client_id: e.clientId, mensagem_id: e.mensagemId, item: i.id, tipo: i.tipo, alvo: i.alvo, de: i.de, para: i.para, sozinho: true },
+      success: !!resultado.ok, statusCode: resultado.ok ? 200 : 409, durationMs: Date.now() - inicio,
+      errorCode: resultado.ok ? null : "nao_feito", errorMessage: resultado.ok ? null : resultado.motivo ?? null,
+      resultRef: (resultado.criado && resultado.criado.campanha_id) || (i.alvo ? i.alvo.meta_id : e.mensagemId),
+    });
+    if (resultado.ok && i.tipo === "pausar" && i.alvo && i.alvo.nivel === "anuncio") ativos--;
+    if (resultado.ok) feitas++;
+    itens.push({ ...i, auto: true, resultado });
+  }
+  if (feitas) esquecerContextoDoCliente(e.clientId);
+  const tudoFeito = itens.every((i) => !!i.resultado);
+  return {
+    ...e.acoes,
+    itens,
+    gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : e.acoes.gestao,
+    caminho: caminhoDasAcoes(e.clientId, itens),
+    ...(tudoFeito ? { executada_em: new Date().toISOString(), executada_por: chamador.userId } : {}),
+  };
+}
+
+type RegraDoDonoTR = ReturnType<typeof normalizarRegras>[number];
+
+/** Tipo de "O que foi feito" para cada ação do agente. */
+const TIPO_NO_REGISTRO: Partial<Record<ItemDaAcaoNaConta["tipo"], string>> = {
+  pausar: "pausar", ativar: "ativar", orcamento: "orcamento", renomear: "renomear", duplicar_anuncio: "duplicar_anuncio",
+  trocar_criativo: "trocar_criativo", vincular_criativo: "vincular_criativo", montar_campanha_do_plano: "montar_campanha",
+};
+
+/** Uma linha de "O que foi feito" (sem a tabela aplicada, não grava e segue). */
+async function registrarNoQueFoiFeito(servico: SupabaseClient, clientId: string, criadoPor: string | null, linha: Omit<RegistroDaRotina, "tipo" | "estado"> & { tipo: string; estado: string; item_id?: string | null }): Promise<string | null> {
+  const { data, error } = await servico.from("ads_rotina_acoes").insert({
+    client_id: clientId,
+    rodada_id: linha.rodada_id,
+    origem: linha.origem,
+    tipo: linha.tipo,
+    estado: linha.estado,
+    alvo: linha.alvo,
+    resumo: semTravessao(linha.resumo).slice(0, 600),
+    porque: semTravessao(linha.porque).slice(0, 2000),
+    prova: linha.prova,
+    desfazer: linha.desfazer,
+    mensagem_id: linha.mensagem_id ?? null,
+    item_id: linha.item_id ?? null,
+    criado_por: criadoPor,
+  }).select("id").maybeSingle();
+  if (error) {
+    if (!erroDeTabelaAusente(error)) console.error("[mesa-ads] o que foi feito nao gravado", { code: error.code });
+    return null;
+  }
+  return data ? (data as { id: string }).id : null;
+}
+
+/**
+ * Dossiê: cada ação feita vira movimento do cliente pelo caminho que já existe (project_memory do
+ * tipo 'acao' entra em movimentos_do_cliente como "Ação feita", interno) e o cliente vai para a fila
+ * do dossiê (dossie_enfileirar; o cron de 1 min reescreve). Nunca reescreve o dossiê aqui.
+ */
+async function mandarAoDossie(servico: SupabaseClient, clientId: string, criadoPor: string | null, titulo: string, conteudo: string, metadata: Record<string, unknown>) {
+  const projeto = await projetoAtivo(servico, clientId).catch(() => null);
+  const { error } = await servico.from("project_memory").insert({
+    client_id: clientId,
+    project_id: projeto,
+    kind: "acao",
+    source: "mesa_ads",
+    title: semTravessao(`Feito · ${titulo}`).slice(0, 200),
+    content: semTravessao(conteudo).slice(0, 8000),
+    tags: ["acao", "trafego", "mesa_ads"],
+    metadata: { ...metadata, client_visible: false, auto: true },
+    created_by: criadoPor,
+  });
+  if (error) console.error("[mesa-ads] dossie: movimento nao gravado", { code: error.code });
+  await servico.rpc("dossie_enfileirar", { _client_id: clientId, _motivo: "mesa_ads_trafego" }).then(() => undefined, () => undefined);
+}
+
+/** Aviso para quem cuida do cliente (um fato, um aviso; avisar_equipe_do_cliente, SQL N-01). */
+async function avisarEquipeDoCliente(servico: SupabaseClient, clientId: string, mensagem: string) {
+  const { error } = await servico.rpc("avisar_equipe_do_cliente", { _client_id: clientId, _message: semTravessao(mensagem).slice(0, 500), _type: "update", _link: `/mesa-ads?client=${clientId}&etapa=conta&ver=feito` });
+  if (error) console.error("[mesa-ads] aviso da rotina nao enviado", { code: error.code });
+}
+
+/** Frase curta do que o agente fez num item (para "O que foi feito" e o dossiê). */
+function resumoDoItemFeito(i: ItemDaAcaoNaConta): string {
+  const alvo = i.alvo ? `${i.alvo.nivel === "campanha" ? "a campanha" : i.alvo.nivel === "conjunto" ? "o conjunto" : "o anúncio"} ${i.alvo.nome}` : "";
+  const de = i.de && typeof i.de.orcamento_diario_brl === "number" ? i.de.orcamento_diario_brl : null;
+  const para = i.para && typeof i.para.orcamento_diario_brl === "number" ? i.para.orcamento_diario_brl : null;
+  const brlCurto = (v: number | null) => (v === null ? "?" : `R$ ${v.toFixed(2).replace(".", ",")}`);
+  switch (i.tipo) {
+    case "pausar": return `Pausei ${alvo}.`;
+    case "ativar": return `Ativei ${alvo}.`;
+    case "orcamento": return `Mudei a verba diária de ${alvo} de ${brlCurto(de)} para ${brlCurto(para)}.`;
+    case "renomear": return `Renomeei ${alvo} para ${i.texto ?? ""}.`;
+    case "duplicar_anuncio": return `Dupliquei ${alvo} num conjunto novo pausado.`;
+    case "trocar_criativo": return `Subi o criativo ${i.criativo ? i.criativo.nome : ""} como anúncio novo pausado.`;
+    case "vincular_criativo": return `Liguei ${alvo} ao criativo ${i.criativo ? i.criativo.nome : ""}.`;
+    case "montar_campanha_do_plano": return `Montei a campanha do plano ${i.montagem ? i.montagem.plano_nome : ""} na Meta, pausada.`;
+    default: return `${i.tipo}: feito.`;
+  }
+}
+
+/** Ações do agente sênior feitas agora: "O que foi feito" (com a prova) e o dossiê. */
+async function registrarFeitosDoAgente(servico: SupabaseClient, chamador: Chamador, clientId: string, mensagemId: string, itens: ItemDaAcaoNaConta[]) {
+  const daConta = itens.filter((i) => i.resultado && i.resultado.ok && TIPO_NO_REGISTRO[i.tipo]);
+  if (!daConta.length) return;
+  const { data: msg } = await servico.from("agente_mensagens").select("anexos").eq("id", mensagemId).maybeSingle();
+  const anexos = Array.isArray((msg as { anexos?: unknown } | null)?.anexos) ? (msg as { anexos: Record<string, unknown>[] }).anexos : [];
+  const estrategia = anexos.find((a) => a && a.tipo === "estrategia") ?? null;
+  const numeros = estrategia && estrategia.numeros && typeof estrategia.numeros === "object" ? estrategia.numeros : null;
+  for (const i of daConta) {
+    const resumo = resumoDoItemFeito(i);
+    const prova = {
+      numeros,
+      fonte: numeros ? "Meta Ads, coletado pelo painel (o que o agente viu)" : "Conversa com o agente sênior",
+      sincronizado_em: numeros && typeof (numeros as Record<string, unknown>).atualizado_em === "string" ? (numeros as Record<string, unknown>).atualizado_em : null,
+      regra: i.motivo,
+      antes: i.de,
+      depois: i.resultado ? i.resultado.depois ?? null : null,
+      decisao: i.auto ? "Feito sozinho: a equipe pediu para fazer e a ação é reversível e sem aumento de gasto." : "Confirmado pela equipe no cartão do agente sênior.",
+      criado: i.resultado ? i.resultado.criado ?? null : null,
+      // Contrato comum dos agentes: a campanha montada abre filtrada na aba Conta.
+      caminho: i.resultado && i.resultado.criado && i.resultado.criado.campanha_id ? caminhoSeguro({ rotulo: "Ir para a campanha montada", destino: `/mesa-ads?client=${clientId}&etapa=conta&campanha=${i.resultado.criado.campanha_id}` }) : null,
+    };
+    await registrarNoQueFoiFeito(servico, clientId, chamador.userId, {
+      rodada_id: null,
+      origem: "agente",
+      tipo: TIPO_NO_REGISTRO[i.tipo] as string,
+      estado: "feita",
+      alvo: i.alvo ? { nivel: i.alvo.nivel, meta_id: i.alvo.meta_id, nome: i.alvo.nome } : i.resultado && i.resultado.criado && i.resultado.criado.campanha_id ? { nivel: "campanha", meta_id: i.resultado.criado.campanha_id, nome: i.montagem ? i.montagem.campanha_nome : "Campanha montada" } : null,
+      resumo,
+      porque: i.motivo || "Pedido da equipe ao agente sênior.",
+      prova,
+      desfazer: temReverso(i) ? { mensagem_id: mensagemId, item_id: i.id } : null,
+      mensagem_id: mensagemId,
+      item_id: i.id,
+    });
+    await mandarAoDossie(servico, clientId, chamador.userId, `Agente sênior de tráfego: ${resumo}`, `${i.motivo || ""} ${prova.decisao}`.trim(), { origem: "mesa_ads_agente", mensagem_id: mensagemId, item: i.id, tipo: i.tipo });
+  }
+}
+
+/** Marca em "O que foi feito" o que voltou pelo Desfazer (e manda ao dossiê). */
+async function marcarDesfeitosNoRegistro(servico: SupabaseClient, chamador: Chamador, clientId: string, mensagemId: string, itens: ItemDaAcaoNaConta[]) {
+  for (const i of itens) {
+    const { error } = await servico.from("ads_rotina_acoes").update({ estado: "desfeita", desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId })
+      .eq("client_id", clientId).eq("mensagem_id", mensagemId).eq("item_id", i.id).eq("estado", "feita");
+    if (error && !erroDeTabelaAusente(error)) console.error("[mesa-ads] desfeito nao marcado", { code: error.code });
+    await mandarAoDossie(servico, clientId, chamador.userId, `Desfeito pela equipe: ${resumoDoItemFeito(i)}`, "A equipe desfez a ação do agente de tráfego; a conta voltou como estava.", { origem: "mesa_ads_desfazer", mensagem_id: mensagemId, item: i.id });
+  }
+}
+
+/**
+ * conta_montagem_ativar { mensagem_id, item } -> { anexo, custo_usd: 0 }
+ * O Confirmar para ativar a campanha montada (começa a gastar): relê cada parte e só ativa o que
+ * ainda está pausado como o painel deixou. Desfazer depois arquiva a campanha.
+ */
+async function contaMontagemAtivar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, corpo.mensagem_id, "acoes_conta");
+  const acoes = anexo as unknown as AcoesDaConta;
+  const i = (Array.isArray(acoes.itens) ? acoes.itens : []).find((x) => x.id === String(corpo.item ?? "") && x.tipo === "montar_campanha_do_plano");
+  if (!i) throw new ErroHttp(404, "montagem_inexistente", "Esta mensagem não tem campanha montada com este item.");
+  const [acesso, contas] = await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]);
+  if (!acesso.grafo || !acesso.gestao.disponivel) throw new ErroHttp(409, "sem_gestao", acesso.gestao.motivo || "Sem permissão de gestão na Meta.");
+  const inicio = Date.now();
+  const r = await ativarMontagem(i, acesso.grafo, contas);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_ads_ativar_campanha_montada", origin: PRINCIPAL_MESA_ADS,
+    keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:write"],
+    input: { client_id: m.client_id, mensagem_id: m.id, item: i.id, criado: i.resultado ? i.resultado.criado : null },
+    success: r.ok, statusCode: r.ok ? 200 : 409, durationMs: Date.now() - inicio, errorCode: r.ok ? null : "nao_ativada", errorMessage: r.ok ? null : r.motivo ?? null,
+    resultRef: i.resultado && i.resultado.criado ? i.resultado.criado.campanha_id : m.id,
+  });
+  if (!r.ok) throw new ErroHttp(409, "campanha_nao_ativada", r.motivo || "A campanha não foi ativada.");
+  const agora = new Date().toISOString();
+  const itens = acoes.itens.map((x) => (x.id === i.id && x.resultado ? { ...x, resultado: { ...x.resultado, ativada_em: agora } } : x));
+  esquecerContextoDoCliente(m.client_id);
+  const novo = await gravar({ ...anexo, itens });
+  const campanhaId = i.resultado && i.resultado.criado ? i.resultado.criado.campanha_id : "";
+  const resumo = `Ativei a campanha montada ${i.montagem ? i.montagem.campanha_nome : ""}.`;
+  await registrarNoQueFoiFeito(servico, m.client_id, chamador.userId, {
+    rodada_id: null, origem: "agente", tipo: "ativar_campanha", estado: "feita",
+    alvo: { nivel: "campanha", meta_id: campanhaId, nome: i.montagem ? i.montagem.campanha_nome : "Campanha montada" },
+    resumo, porque: "Confirmado pela equipe: a campanha do plano de teste começa a rodar.",
+    prova: { antes: { status: "PAUSED" }, depois: r.depois ?? null, verba_diaria_brl: i.montagem ? i.montagem.verba_diaria_brl : null, decisao: "Confirmado pela equipe." },
+    desfazer: null, mensagem_id: m.id, item_id: i.id,
+  });
+  await mandarAoDossie(servico, m.client_id, chamador.userId, `Agente sênior de tráfego: ${resumo}`, `Verba diária de R$ ${(i.montagem?.verba_diaria_brl ?? 0).toFixed(2).replace(".", ",")}, confirmada pela equipe.`, { origem: "mesa_ads_agente", mensagem_id: m.id, item: i.id, tipo: "ativar_campanha" });
+  return json({ anexo: novo, caminho: caminhoSeguro({ rotulo: "Ir para a campanha", destino: `/mesa-ads?client=${m.client_id}&etapa=conta&campanha=${campanhaId}` }), custo_usd: 0 });
+}
+
+// ---- rotina de monitoramento (rotina-trafego.ts e rotina-rodada.ts)
+
+const COLUNAS_DA_ROTINA = "client_id, ligada, teto_diario_brl, subida_max_pct, max_acoes_rodada, max_acoes_dia, limites, regras, estado, ultima_rodada_em, proxima_rodada_em, ligada_em, ligada_por, pausada_em, pausada_por, atualizado_em";
+
+/** A rotina do cliente para a tela (config, regras, estado) e o "O que foi feito" recente. */
+async function rotinaParaATela(servico: SupabaseClient, clientId: string) {
+  const [linhaQ, acoesQ] = await Promise.all([
+    servico.from("ads_rotina").select(COLUNAS_DA_ROTINA).eq("client_id", clientId).maybeSingle(),
+    servico.from("ads_rotina_acoes").select("id, rodada_id, origem, tipo, estado, alvo, resumo, porque, prova, resultado_depois, mensagem_id, item_id, desfazer, criado_em, desfeita_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(40),
+  ]);
+  if (linhaQ.error && erroDeTabelaAusente(linhaQ.error)) return { disponivel: false, motivo: "A rotina está em preparação: falta aplicar o SQL TR-01 no banco." };
+  if (linhaQ.error) throw new ErroHttp(503, "rotina_indisponivel", "Não foi possível ler a rotina agora.");
+  const linha = linhaQ.data as (LinhaDaRotina & Record<string, unknown>) | null;
+  const config = configDaLinha(linha);
+  const estado = linha && linha.estado && typeof linha.estado === "object" ? { ...(linha.estado as Record<string, unknown>) } : null;
+  if (estado) delete estado.avisos;
+  return {
+    disponivel: true,
+    motivo: null,
+    rotina: {
+      ligada: config.ligada,
+      teto_diario_brl: config.teto_diario_brl,
+      subida_max_pct: config.subida_max_pct,
+      max_acoes_rodada: config.max_acoes_rodada,
+      max_acoes_dia: config.max_acoes_dia,
+      limites: config.limites,
+      regras: config.regras.map((r) => ({ ...r, texto_da_regra: regraEmTexto(r), vale: regrasQueValem([r], hojeSaoPaulo()).length > 0 })),
+      estado,
+      ultima_rodada_em: linha ? linha.ultima_rodada_em : null,
+      proxima_rodada_em: linha ? (linha.proxima_rodada_em as string | null) ?? null : null,
+      ligada_em: linha ? (linha.ligada_em as string | null) ?? null : null,
+      pausada_em: linha ? (linha.pausada_em as string | null) ?? null : null,
+    },
+    acoes: ((acoesQ.data as Record<string, unknown>[] | null) ?? []).map((a) => ({ ...a, pode_desfazer: a.estado === "feita" && !!a.desfazer })),
+  };
+}
+
+/** rotina_ler { client_id } -> { disponivel, rotina, acoes, custo_usd: 0 }. Grátis. */
+async function rotinaLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  return json({ ...(await rotinaParaATela(servico, clientId)), custo_usd: 0 });
+}
+
+/**
+ * rotina_salvar { client_id, ligada?, teto_diario_brl?, subida_max_pct?, max_acoes_rodada?, max_acoes_dia?, limites? }
+ * Ligar, pausar (vale na hora, também para a rodada em curso: ela relê a flag antes de cada ação) e ajustes.
+ */
+async function rotinaSalvar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const atual = await lerLinhaDaRotina(servico, clientId);
+  const agora = new Date().toISOString();
+  const campos: Record<string, unknown> = { client_id: clientId, atualizado_em: agora, atualizado_por: chamador.userId };
+  if (typeof corpo.ligada === "boolean") {
+    campos.ligada = corpo.ligada;
+    if (corpo.ligada) Object.assign(campos, { ligada_em: agora, ligada_por: chamador.userId, pausada_em: null, pausada_por: null, proxima_rodada_em: agora });
+    else Object.assign(campos, { pausada_em: agora, pausada_por: chamador.userId });
+  }
+  if ("teto_diario_brl" in corpo) {
+    const teto = numeroOuNulo(corpo.teto_diario_brl);
+    campos.teto_diario_brl = teto !== null && teto >= 5 && teto <= 100000 ? Math.round(teto * 100) / 100 : null;
+  }
+  if ("subida_max_pct" in corpo) campos.subida_max_pct = configDaLinha({ subida_max_pct: numeroOuNulo(corpo.subida_max_pct) }).subida_max_pct;
+  if ("max_acoes_rodada" in corpo) campos.max_acoes_rodada = configDaLinha({ max_acoes_rodada: numeroOuNulo(corpo.max_acoes_rodada) }).max_acoes_rodada;
+  if ("max_acoes_dia" in corpo) campos.max_acoes_dia = configDaLinha({ max_acoes_dia: numeroOuNulo(corpo.max_acoes_dia) }).max_acoes_dia;
+  if ("limites" in corpo) campos.limites = limitesDoDono(corpo.limites);
+  const { error } = await servico.from("ads_rotina").upsert(campos, { onConflict: "client_id" });
+  if (error) {
+    if (erroDeTabelaAusente(error)) throw new ErroHttp(409, "rotina_em_preparacao", "A rotina está em preparação: falta aplicar o SQL TR-01 no banco.");
+    throw new ErroHttp(503, "rotina_nao_salva", "Não foi possível salvar a rotina.");
+  }
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_ads_rotina_salvar", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:mesa"],
+    input: { client_id: clientId, antes: atual ? { ligada: atual.ligada, teto: atual.teto_diario_brl } : null, campos: { ...campos, client_id: undefined } }, success: true, statusCode: 200, durationMs: 0, resultRef: clientId,
+  });
+  if (typeof corpo.ligada === "boolean" && (!atual || atual.ligada !== corpo.ligada)) {
+    await mandarAoDossie(servico, clientId, chamador.userId, corpo.ligada ? "Rotina de monitoramento de tráfego ligada" : "Rotina de monitoramento de tráfego pausada", corpo.ligada ? `A equipe ligou a rotina que monitora os anúncios${campos.teto_diario_brl ? ` com teto diário de R$ ${Number(campos.teto_diario_brl).toFixed(2).replace(".", ",")}` : ""}.` : "A equipe pausou a rotina; nada muda na conta até ligar de novo.", { origem: "mesa_ads_rotina", ligada: corpo.ligada });
+  }
+  return json({ ...(await rotinaParaATela(servico, clientId)), custo_usd: 0 });
+}
+
+/**
+ * rotina_regra { client_id, texto } | { client_id, remover }
+ * "Interferir": a instrução do dono vira regra da rotina (e do agente). O Jev escolhe o tipo, o alvo
+ * (entre os itens reais da conta) e o prazo (entre datas calculadas aqui). Sem o Jev, a regra entra
+ * como "só avisar" na conta toda, por segurança, até o dono revisar.
+ */
+async function rotinaRegra(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const atual = await lerLinhaDaRotina(servico, clientId);
+  const regras = configDaLinha(atual).regras;
+  let custo = 0;
+  let aviso: string | null = null;
+  let novas = regras;
+  if (typeof corpo.remover === "string" && corpo.remover) {
+    novas = regras.map((r) => (r.id === corpo.remover ? { ...r, ativa: false } : r));
+  } else {
+    const textoDaRegra = texto(corpo.texto, 400);
+    if (!textoDaRegra) throw new ErroHttp(400, "regra_vazia", "Escreva a instrução para a rotina.");
+    const conta = await lerContaAoVivo(servico, clientId, 30);
+    const alvos: AlvoDaRegra[] = [
+      ...conta.campanhas.map((x) => ({ nivel: "campanha" as const, meta_id: x.campaign_id, nome: x.nome || `Campanha ${x.campaign_id}` })),
+      ...conta.conjuntos.map((x) => ({ nivel: "conjunto" as const, meta_id: x.adset_id, nome: x.nome || `Conjunto ${x.adset_id}` })),
+      ...conta.anuncios.filter((a) => a.status === "ACTIVE" || a.metricas.gasto > 0).map((x) => ({ nivel: "anuncio" as const, meta_id: x.ad_id, nome: x.nome || `Anúncio ${x.ad_id}` })),
+    ].filter((a) => /^[0-9]{3,30}$/.test(a.meta_id)).slice(0, 60);
+    const hoje = hojeSaoPaulo();
+    const meta = { id: crypto.randomUUID().slice(0, 8), criada_em: new Date().toISOString(), criada_por: chamador.userId };
+    let regra;
+    try {
+      const q = perguntasDaRegra(textoDaRegra, alvos, hoje);
+      const r = await jevPerguntar({ state: q.state, questions: q.questions as unknown as Record<string, PerguntaJev> });
+      const cobrado = await cobrarJev(r, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId });
+      custo = cobrado?.custoUsd ?? 0;
+      regra = regraDasRespostas(textoDaRegra, alvos, hoje, r.answers, meta);
+    } catch {
+      regra = { ...regraDasRespostas(textoDaRegra, alvos, hoje, null, meta), tipo: "so_avisar" as const };
+      aviso = "Não consegui entender a instrução agora. Por segurança, a rotina fica só avisando (sem agir) até você revisar ou tirar esta regra.";
+    }
+    novas = [...regras.filter((r) => r.ativa || regras.indexOf(r) >= regras.length - 20), regra].slice(-30);
+  }
+  const { error } = await servico.from("ads_rotina").upsert({ client_id: clientId, regras: novas, atualizado_em: new Date().toISOString(), atualizado_por: chamador.userId }, { onConflict: "client_id" });
+  if (error) {
+    if (erroDeTabelaAusente(error)) throw new ErroHttp(409, "rotina_em_preparacao", "A rotina está em preparação: falta aplicar o SQL TR-01 no banco.");
+    throw new ErroHttp(503, "regra_nao_salva", "Não foi possível salvar a regra.");
+  }
+  return json({ ...(await rotinaParaATela(servico, clientId)), aviso, custo_usd: arred6(custo) });
+}
+
+/** Trava da rodada (duas rodadas do mesmo cliente nunca ao mesmo tempo); solta sozinha em 10 min. */
+async function travarRodada(servico: SupabaseClient, clientId: string): Promise<boolean> {
+  const agora = new Date().toISOString();
+  const limite = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data, error } = await servico.from("ads_rotina").update({ rodando_desde: agora }).eq("client_id", clientId).or(`rodando_desde.is.null,rodando_desde.lt."${limite}"`).select("client_id");
+  return !error && ((data as unknown[] | null) ?? []).length > 0;
+}
+
+async function soltarRodada(servico: SupabaseClient, clientId: string) {
+  await servico.from("ads_rotina").update({ rodando_desde: null }).eq("client_id", clientId).then(() => undefined, () => undefined);
+}
+
+/** As dependências reais da rodada (banco, Meta, Jev, avisos, dossiê). `ator` = quem ligou a rotina. */
+function depsDaRotina(servico: SupabaseClient, clientId: string, ator: string | null, nomeDoCliente: string): DepsDaRodada {
+  let nichoGuardado: { id: string; nome: string; em: string } | null = null;
+  return {
+    agoraMs: () => Date.now(),
+    hoje: hojeSaoPaulo(),
+    novoId: () => crypto.randomUUID(),
+    nomeDoCliente,
+    lerRotina: async () => {
+      const { data } = await servico.from("ads_rotina").select(COLUNAS_DA_ROTINA).eq("client_id", clientId).maybeSingle();
+      return (data as LinhaDaRotina | null) ?? null;
+    },
+    lerRetrato: async () => {
+      const [conta, briefing, planosQ, linha] = await Promise.all([
+        lerContaAoVivo(servico, clientId, 7),
+        carregarBriefing(servico, clientId).catch(() => null),
+        servico.from("ads_planos").select("*").eq("client_id", clientId).in("status", ["em_teste", "aprovado"]).order("atualizado_em", { ascending: false }).limit(1),
+        lerLinhaDaRotina(servico, clientId),
+      ]);
+      const estado = linha && linha.estado && typeof linha.estado === "object" ? linha.estado as Record<string, unknown> : {};
+      const guardado = estado.nicho && typeof estado.nicho === "object" ? estado.nicho as { id?: string; nome?: string; em?: string } : null;
+      let nicho: Nicho | null = guardado && guardado.id && guardado.em && Date.now() - Date.parse(guardado.em) < 7 * 86400_000 ? NICHOS.find((n) => n.id === guardado.id) ?? null : null;
+      if (!nicho) {
+        // A rotina roda sem pedido de marca: o contexto do cliente (null explícito).
+        const ctx = await montarContextoAds(servico, clientId, null);
+        const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: (ator ?? null) as unknown as string });
+        nicho = achado.nicho;
+        if (nicho) nichoGuardado = { id: nicho.id, nome: nicho.nome, em: new Date().toISOString() };
+      }
+      const plano = (((planosQ.data as Plano[] | null) ?? [])[0]) ?? null;
+      const retrato = retratoDaContaAoVivo(conta);
+      const teste = plano && plano.estrutura && typeof plano.estrutura.teste === "object" && plano.estrutura.teste ? plano.estrutura.teste as Record<string, unknown> : null;
+      return {
+        retrato,
+        nicho: nicho ? { id: nicho.id, nome: nicho.nome } : null,
+        objetivo: typeof (briefing?.objetivo ?? {}).acao === "string" ? String((briefing?.objetivo ?? {}).acao) : null,
+        estrategia: plano ? `${plano.nome}${teste && typeof teste.hipotese === "string" ? `: ${teste.hipotese}` : ""}${teste && typeof teste.criterio_vitoria === "string" ? ` Critério: ${teste.criterio_vitoria}` : ""}`.slice(0, 600) : null,
+        custoDoPlano: plano ? custoDoPlanoDeTeste({ ...plano, angulos: Array.isArray(plano.angulos) ? plano.angulos : [] }) : null,
+        custoDoBriefing: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+        referencia: referenciaDoNicho(nicho ? nicho.id : null, retrato.objetivo_tipo),
+        tiposDeAcao: (tipo) => (TIPOS_DE_RESULTADO.find((t) => t.tipo === tipo)?.acoes ?? []),
+      };
+    },
+    acesso: async () => {
+      const a = await acessoDeGestao(servico, clientId);
+      return { grafo: a.grafo, disponivel: a.gestao.disponivel, motivo: a.gestao.motivo };
+    },
+    contas: () => contasMetaDoCliente(servico, clientId),
+    recentes: async () => {
+      const desde = new Date(Date.now() - 72 * 3600_000).toISOString();
+      const { data } = await servico.from("ads_rotina_acoes").select("alvo, tipo, criado_em, origem").eq("client_id", clientId).eq("estado", "feita").gte("criado_em", desde).limit(200);
+      return ((data as { alvo: { meta_id?: string } | null; tipo: string; criado_em: string; origem: string }[] | null) ?? [])
+        .filter((x) => x.alvo && x.alvo.meta_id).map((x) => ({ meta_id: String(x.alvo!.meta_id), tipo: x.tipo, criado_em: x.criado_em, origem: x.origem }));
+    },
+    propostasAbertas: async () => {
+      const desde = new Date(Date.now() - 72 * 3600_000).toISOString();
+      const { data } = await servico.from("ads_rotina_acoes").select("alvo").eq("client_id", clientId).eq("tipo", "proposta").gte("criado_em", desde).limit(100);
+      return new Set(((data as { alvo: { meta_id?: string } | null }[] | null) ?? []).map((x) => String(x.alvo?.meta_id ?? "")).filter(Boolean));
+    },
+    jev: async (state, questions) => {
+      const r = await jevPerguntar({ state, questions: questions as unknown as Record<string, PerguntaJev> });
+      await cobrarJev(r, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: ator });
+      return { answers: r.answers };
+    },
+    registrar: (r) => registrarNoQueFoiFeito(servico, clientId, ator, r),
+    avisar: (mensagem) => avisarEquipeDoCliente(servico, clientId, mensagem),
+    dossie: (titulo, conteudo, metadata) => mandarAoDossie(servico, clientId, ator, titulo, conteudo, metadata),
+    salvarEstado: async (e) => {
+      const estado = { ...e, ...(nichoGuardado ? { nicho: nichoGuardado } : {}) };
+      if (!nichoGuardado) {
+        const atual = await lerLinhaDaRotina(servico, clientId);
+        const antes = atual && atual.estado && typeof atual.estado === "object" ? (atual.estado as Record<string, unknown>).nicho : null;
+        if (antes) (estado as Record<string, unknown>).nicho = antes;
+      }
+      await servico.from("ads_rotina").update({ estado, ultima_rodada_em: e.rodada_em, proxima_rodada_em: e.proxima_rodada_em }).eq("client_id", clientId);
+    },
+    auditar: async (ferramenta, entrada, ok, motivo, ref) => {
+      await auditLog({
+        correlationId: crypto.randomUUID(), toolName: ferramenta, origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:rotina${ator ? `:${ator}` : ""}`, scopes: ["ads:write"],
+        input: { client_id: clientId, ...entrada }, success: ok, statusCode: ok ? 200 : 409, durationMs: 0, errorCode: ok ? null : "nao_feito", errorMessage: motivo, resultRef: ref,
+      });
+    },
+    resultadoDepois: async (totais, periodo) => {
+      const antes = new Date(Date.now() - 24 * 3600_000).toISOString();
+      await servico.from("ads_rotina_acoes").update({ resultado_depois: { em: new Date().toISOString(), periodo, conta: totais } })
+        .eq("client_id", clientId).eq("estado", "feita").is("resultado_depois", null).lt("criado_em", antes);
+    },
+  };
+}
+
+async function nomeDoClienteParaAviso(servico: SupabaseClient, clientId: string): Promise<string> {
+  const { data } = await servico.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle();
+  const p = (data ?? {}) as { company_name?: string | null; full_name?: string | null };
+  return String(p.company_name || p.full_name || "cliente");
+}
+
+/** Uma rodada de um cliente com a trava (cron e botão "Rodar agora"). */
+async function rodadaDoCliente(servico: SupabaseClient, clientId: string, ator: string | null, manual: boolean) {
+  if (!(await travarRodada(servico, clientId))) return { rodou: false, motivo: "Já tem uma rodada em andamento para este cliente.", feitas: 0, propostas: 0, barradas: 0, estado: null };
+  try {
+    const deps = depsDaRotina(servico, clientId, ator, await nomeDoClienteParaAviso(servico, clientId));
+    const r = await rodarRotina(deps, { manual });
+    esquecerContextoDoCliente(clientId);
+    return r;
+  } finally {
+    await soltarRodada(servico, clientId);
+  }
+}
+
+/** rotina_rodar { client_id } -> { resumo, rotina, acoes, custo_usd }: a rodada agora (mesmas travas do cron). */
+async function rotinaRodar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const linha = await lerLinhaDaRotina(servico, clientId);
+  if (!linha) throw new ErroHttp(409, "rotina_desligada", "Ligue a rotina antes de rodar.");
+  if (!linha.ligada) throw new ErroHttp(409, "rotina_pausada", "A rotina está pausada. Ligue para ela rodar.");
+  const resumo = await rodadaDoCliente(servico, clientId, chamador.userId, true);
+  return json({ resumo: { ...resumo, estado: undefined }, ...(await rotinaParaATela(servico, clientId)), custo_usd: 0 });
+}
+
+/**
+ * rotina_desfazer { acao_id } -> { rotina, acoes, custo_usd: 0 }
+ * Desfazer de "O que foi feito": a ação da rotina volta na Meta (só se ninguém mexeu depois); a do
+ * agente sênior volta pelo cartão da conversa (mesmo item).
+ */
+async function rotinaDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const id = String(corpo.acao_id ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "acao_invalida", "acao_id precisa ser um UUID.");
+  const { data, error } = await servico.from("ads_rotina_acoes").select("id, client_id, origem, estado, desfazer, mensagem_id, item_id, resumo").eq("id", id).maybeSingle();
+  if (error || !data) throw new ErroHttp(404, "acao_inexistente", "Ação não encontrada.");
+  const a = data as { id: string; client_id: string; origem: string; estado: string; desfazer: Record<string, unknown> | null; mensagem_id: string | null; item_id: string | null; resumo: string };
+  await exigirAcessoAoCliente(chamador, a.client_id);
+  if (a.estado !== "feita" || !a.desfazer) throw new ErroHttp(409, "sem_desfazer", "Esta ação não tem como desfazer.");
+  if (a.origem === "agente" && a.mensagem_id && a.item_id) {
+    await contaAcaoDesfazer(servico, chamador, { mensagem_id: a.mensagem_id, itens: [a.item_id] });
+  } else {
+    const item = a.desfazer.item as ItemDaAcaoNaConta | undefined;
+    if (!item) throw new ErroHttp(409, "sem_desfazer", "Esta ação não tem como desfazer.");
+    const [acesso, contas] = await Promise.all([acessoDeGestao(servico, a.client_id, { conferir: true }), contasMetaDoCliente(servico, a.client_id)]);
+    const r = acesso.grafo && acesso.gestao.disponivel ? await desfazerNaMeta(item, acesso.grafo, contas) : { ok: false, motivo: acesso.gestao.motivo || "Sem permissão de gestão na Meta." };
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: `mesa_ads_rotina_desfazer_${item.tipo}`, origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:write"],
+      input: { client_id: a.client_id, acao_id: a.id, alvo: item.alvo, volta_para: item.de }, success: r.ok, statusCode: r.ok ? 200 : 409, durationMs: 0,
+      errorCode: r.ok ? null : "nao_desfeito", errorMessage: r.ok ? null : r.motivo ?? null, resultRef: item.alvo ? item.alvo.meta_id : a.id,
+    });
+    if (!r.ok) throw new ErroHttp(409, "nao_desfeito", r.motivo || "Não foi possível desfazer.");
+    await servico.from("ads_rotina_acoes").update({ estado: "desfeita", desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId }).eq("id", a.id).eq("estado", "feita");
+    await mandarAoDossie(servico, a.client_id, chamador.userId, `Desfeito pela equipe: ${a.resumo}`, "A equipe desfez a ação da rotina de tráfego; a conta voltou como estava.", { origem: "mesa_ads_rotina_desfazer", acao_id: a.id });
+    esquecerContextoDoCliente(a.client_id);
+  }
+  return json({ ...(await rotinaParaATela(servico, a.client_id)), custo_usd: 0 });
+}
+
+/** rotina_proposta_descartar { acao_id }: a proposta de estratégia sai da lista (a ação fica registrada como descartada). */
+async function rotinaPropostaDescartar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const id = String(corpo.acao_id ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "acao_invalida", "acao_id precisa ser um UUID.");
+  const { data } = await servico.from("ads_rotina_acoes").select("id, client_id, estado").eq("id", id).maybeSingle();
+  const a = data as { id: string; client_id: string; estado: string } | null;
+  if (!a) throw new ErroHttp(404, "acao_inexistente", "Proposta não encontrada.");
+  await exigirAcessoAoCliente(chamador, a.client_id);
+  await servico.from("ads_rotina_acoes").update({ estado: "descartada", desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId }).eq("id", a.id).eq("estado", "proposta");
+  return json({ ...(await rotinaParaATela(servico, a.client_id)), custo_usd: 0 });
+}
+
+/** Clientes por chamada do cron (a função tem 2 s de CPU por chamada e o relógio de 400 s). */
+const CLIENTES_POR_RODADA_DO_CRON = 2;
+
+/**
+ * rotina_cron (só com x-cron-secret): até 2 clientes com a rotina ligada e a última rodada há mais
+ * de 55 min, o mais atrasado primeiro. Uma rodada por cliente; nada de nova tentativa imediata.
+ */
+async function rotinaCron(servico: SupabaseClient, inicioMs: number) {
+  const limite = new Date(Date.now() - PADROES_DA_ROTINA.intervalo_entre_rodadas_min * 60_000).toISOString();
+  const { data, error } = await servico.from("ads_rotina").select("client_id, ligada_por, ultima_rodada_em").eq("ligada", true)
+    .or(`ultima_rodada_em.is.null,ultima_rodada_em.lt."${limite}"`).order("ultima_rodada_em", { ascending: true, nullsFirst: true }).limit(CLIENTES_POR_RODADA_DO_CRON);
+  if (error) return json({ rodadas: [], motivo: erroDeTabelaAusente(error) ? "rotina_em_preparacao" : "rotina_indisponivel", custo_usd: 0 });
+  const rodadas: Record<string, unknown>[] = [];
+  for (const l of (data as { client_id: string; ligada_por: string | null }[] | null) ?? []) {
+    if (Date.now() - inicioMs > 250_000) break;
+    try {
+      const r = await rodadaDoCliente(servico, l.client_id, l.ligada_por, false);
+      rodadas.push({ client_id: l.client_id, rodou: r.rodou, feitas: r.feitas, propostas: r.propostas, barradas: r.barradas, motivo: r.motivo });
+    } catch (e) {
+      console.error("[mesa-ads] rodada da rotina falhou", { client_id: l.client_id, erro: e instanceof Error ? e.name : "desconhecido" });
+      rodadas.push({ client_id: l.client_id, rodou: false, motivo: "falha" });
+    }
+  }
+  return json({ rodadas, custo_usd: 0 });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   briefing_sugerir: briefingSugerir,
   briefing_salvar: briefingSalvar,
@@ -6734,6 +7809,14 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   conta_numeros: contaNumeros,
   kit_recepcao_gerar: kitRecepcaoGerar,
   kit_agenda: kitAgenda,
+  // Frente TR (27/09): campanha do plano montada pelo agente (ativar é Confirmar) e a rotina de monitoramento.
+  conta_montagem_ativar: contaMontagemAtivar,
+  rotina_ler: rotinaLer,
+  rotina_salvar: rotinaSalvar,
+  rotina_regra: rotinaRegra,
+  rotina_rodar: rotinaRodar,
+  rotina_desfazer: rotinaDesfazer,
+  rotina_proposta_descartar: rotinaPropostaDescartar,
 };
 
 /**
@@ -6747,6 +7830,7 @@ const ACOES_LONGAS = new Set([
   "evolucao", "desempenho_cliente",
   "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
   "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar", "conta_numeros",
+  "conta_montagem_ativar", "rotina_regra", "rotina_rodar", "rotina_desfazer",
   "referencia_para_estudio",
 ]);
 
@@ -6756,6 +7840,20 @@ Deno.serve(async (req) => {
   const inicioMs = Date.now();
   try {
     const servico = clienteServico();
+    // Frente TR: a rotina de monitoramento pelo pg_cron (x-cron-secret), sem usuário; só a ação rotina_cron.
+    const segredoDoCron = (Deno.env.get("CRON_SECRET") || "").trim();
+    if (segredoDoCron && (req.headers.get("x-cron-secret") || "").trim() === segredoDoCron) {
+      let doCron: Record<string, unknown> = {};
+      try { doCron = await req.json(); } catch { /* corpo vazio */ }
+      if (String(doCron.acao ?? "") !== "rotina_cron") return json({ error: "acao_desconhecida", mensagem: "O cron só roda a rotina de tráfego." }, 400);
+      return respostaComFolego(async () => {
+        try {
+          return await rotinaCron(servico, inicioMs);
+        } catch (err) {
+          return respostaDeErro(err);
+        }
+      }, corsHeaders);
+    }
     const chamador = await identificar(req, servico, inicioMs);
     let corpo: Record<string, unknown> = {};
     try { corpo = await req.json(); } catch { /* corpo vazio */ }

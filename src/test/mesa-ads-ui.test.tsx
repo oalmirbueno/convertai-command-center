@@ -345,17 +345,20 @@ describe("etapa 3, plano de teste", () => {
     // Notas em 0 a 1 viram 0 a 10; em 0 a 10 ficam.
     expect(screen.getAllByRole("meter", { name: "Clareza" }).map((m) => m.getAttribute("aria-valuenow"))).toEqual(["8", "9"]);
 
-    // Formatos sugeridos pelos ângulos vêm marcados; tira o 1:1 e o ângulo 2.
+    // 27/09 (frente CR): criar em um clique. Aprovados já marcados, formatos automáticos (4:5 e 9:16),
+    // copy no modelo da copy (padrão do estrategista no raciocínio máximo que ele aceita), um ângulo por chamada.
     fireEvent.click(screen.getByRole("checkbox", { name: "Produzir o ângulo Prova do resultado" }));
-    fireEvent.click(screen.getByRole("button", { name: /Quadrado 1:1/ }));
-    expect(screen.getByText(/1 ângulo × 2 formatos = 2 criativos/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Produzir criativos/ }));
+    expect(screen.getByText(/Feed 4:5 e Stories e Reels 9:16 \(automático\)/)).toBeTruthy();
+    expect(screen.getByText("2 criativos")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Criar criativos/ }));
     await waitFor(() => expect(chamadasDe("criativos_produzir")).toHaveLength(1));
     expect(chamadasDe("criativos_produzir")[0]).toEqual({
       acao: "criativos_produzir",
       plano_id: PLANO.id,
       angulo_ids: ["a1"],
       formatos: ["feed_4x5", "stories_9x16"],
+      modelo_id: "openai:gpt-texto",
+      raciocinio: "medium",
     });
     await waitFor(() => expect(onProduzido).toHaveBeenCalledWith(PLANO.id));
     // A conversa com o estrategista fica ao lado, com microfone e anexos.
@@ -405,16 +408,17 @@ describe("etapa 4, estúdio ads: copy", () => {
     expect(screen.getByLabelText("Título: 45 de 40").textContent).toContain("corta");
   });
 
-  it("variar copy chama copy_variar com o criativo e a variação escolhida entra no formulário", async () => {
+  it("refinar copy chama copy_variar com o criativo e o modelo da copy, e a variação escolhida entra no formulário", async () => {
     mock.invoke.mockImplementation(async (_f: string, { body }: any) =>
       body.acao === "copy_variar"
         ? { data: { variacoes: [{ texto_principal: "Nova versão curta", titulo: "Título novo", cta_meta: "LEARN_MORE" }], custo_usd: 0.01 }, error: null }
         : { data: { ok: true }, error: null },
     );
     montar(h(PainelDaCopy, { criativo: criativo({ texto_principal: "Base" }), caminhoDaArte: null }));
-    fireEvent.change(screen.getByLabelText("Pedido para variar a copy"), { target: { value: "mais direto" } });
-    fireEvent.click(screen.getByRole("button", { name: /Variar copy/ }));
-    await waitFor(() => expect(chamadasDe("copy_variar")).toEqual([{ acao: "copy_variar", criativo_id: "c-1", pedido: "mais direto" }]));
+    fireEvent.change(screen.getByLabelText("Pedido para refinar a copy"), { target: { value: "mais direto" } });
+    // 27/09 (frente CR): "Variar copy" virou "Refinar copy" e leva o modelo escolhido (padrão: o do estrategista no raciocínio máximo).
+    fireEvent.click(screen.getByRole("button", { name: /Refinar copy/ }));
+    await waitFor(() => expect(chamadasDe("copy_variar")).toEqual([{ acao: "copy_variar", criativo_id: "c-1", pedido: "mais direto", modelo_id: "openai:gpt-texto", raciocinio: "medium" }]));
     fireEvent.click(await screen.findByRole("button", { name: "Usar esta" }));
     expect((screen.getByLabelText("Texto principal") as HTMLTextAreaElement).value).toBe("Nova versão curta");
     expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Título novo");

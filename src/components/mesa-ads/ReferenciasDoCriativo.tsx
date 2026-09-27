@@ -19,11 +19,20 @@ import {
   levarReferenciaAoEstudio,
   linkValido,
   nomeDoNicho,
+  ordenarParaOCriativo,
   ordenarReferencias,
   rotuloDaOrigem,
   type ReferenciaAds,
 } from "./adsApi";
 import { Foto, pilula } from "./Comuns";
+
+/** Id do estilo visual gravado na direção do criativo (mesa-ads grava { id, nome }). */
+export function estiloDoTrabalho(t: Trabalho | null | undefined): string | null {
+  const e = t && t.direcao ? (t.direcao as Record<string, unknown>).estilo_visual : null;
+  if (typeof e === "string") return e || null;
+  const id = e && typeof e === "object" ? (e as Record<string, unknown>).id : null;
+  return typeof id === "string" && id ? id : null;
+}
 
 /**
  * Referências do criativo no Estúdio Ads (pedido do dono, 25/09): mandar uma
@@ -35,6 +44,9 @@ import { Foto, pilula } from "./Comuns";
  * segue de perto ("referência ESCOLHIDA PELA EQUIPE"). Sem IA, sem custo.
  * Com "Também nos formatos irmãos" ligado, vale para o 4:5, o 1:1 e o
  * Stories do mesmo ângulo.
+ *
+ * Frente CR (27/09): o banco vem na ordem das melhores para este criativo
+ * (destaque, depois as do mesmo estilo visual, depois evidência forte).
  */
 
 /** configurar guarda no máximo 4 referências por alvo. */
@@ -73,10 +85,12 @@ export default function ReferenciasDoCriativo({
   const referencias = useQuery({ queryKey: chavesAds.referencias(clientId), queryFn: () => lerReferencias(clientId) });
   const doConjunto = (trabalho.direcao && trabalho.direcao.referencias_ids) || [];
 
+  // Frente CR: as do mesmo estilo visual do criativo vêm logo depois das em destaque (sempre trazer as melhores primeiro).
+  const estiloDoCriativo = estiloDoTrabalho(trabalho);
   const banco = useMemo(() => {
-    const todas = ordenarReferencias(referencias.data || []);
+    const todas = estiloDoCriativo ? ordenarParaOCriativo(referencias.data || [], estiloDoCriativo) : ordenarReferencias(referencias.data || []);
     return todas.filter((r) => (filtro === "cliente" ? r.client_id !== null : filtro === "agencia" ? r.client_id === null : true)).slice(0, 60);
-  }, [referencias.data, filtro]);
+  }, [referencias.data, filtro, estiloDoCriativo]);
 
   /** Grava a referência no criativo (e nos irmãos, se ligado). */
   const usarNoCriativo = async (estudioId: string, titulo: string) => {
@@ -232,6 +246,7 @@ export default function ReferenciasDoCriativo({
                       <p className="truncate text-[10.5px] text-muted-foreground">
                         {r.client_id ? rotuloDaOrigem(r.origem) : nomeDoNicho(r) || "Agência"}
                         {estilo ? ` · ${estilo}` : ""}
+                        {estiloDoCriativo && estilo === estiloDoCriativo ? " · mesmo estilo" : ""}
                       </p>
                       <Button type="button" size="sm" variant="outline" className="mt-1 h-7 w-full px-1 text-[11px]" disabled={ocupado !== null} onClick={() => void usarDoBanco(r)}>
                         {ocupado === r.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}

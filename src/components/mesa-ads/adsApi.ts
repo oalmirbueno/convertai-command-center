@@ -271,6 +271,9 @@ export interface Angulo {
   porque_testar_primeiro?: string;
   ordem_teste?: number | null;
   corte?: CorteDoAngulo | null;
+  /** Frente CR: por que este estilo, em uma linha (dado real do cliente, da carteira ou padrão do nicho). */
+  porque_do_estilo?: string;
+  fonte_do_estilo?: string;
   /** v2: laço de qualidade do servidor. */
   estilo_visual?: string;
   objetivo?: string;
@@ -318,6 +321,22 @@ export interface CopyDoAnuncio {
   cta_meta?: string;
   /** Pacote completo (copy_pacote) gravado junto; a tela normaliza com normalizarPacote. */
   pacote?: unknown;
+  /** Frente CR: estrutura de copy, porquê do estilo e da escolha (gravados pelo servidor na produção). */
+  framework?: string | null;
+  porque_do_estilo?: string | null;
+  escolha?: EscolhaDaCopy | null;
+  estilo_visual?: string | null;
+  variacao?: number | null;
+  jev?: NotasDoJev | null;
+  alternativas?: unknown[];
+}
+
+/** Por que esta copy virou criativo (servidor, melhores-criativos.ts). */
+export interface EscolhaDaCopy {
+  posicao?: number | null;
+  de?: number | null;
+  nota?: number | null;
+  porque?: string | null;
 }
 
 export interface CriativoAds {
@@ -2075,4 +2094,166 @@ export async function levarReferenciaAoEstudio(clientId: string, alvo: { referen
   const id = txt(r.estudio_referencia_id);
   if (!id) throw new Error("A referência não voltou ligada ao Estúdio. Tente de novo.");
   return { id, titulo: txt(r.titulo), aviso: r.aviso ? String(r.aviso) : null };
+}
+
+// ------------------------------------------------------------------ frente CR (27/09): modelo da copy, criar em um clique, porquê
+
+/** Níveis de raciocínio do menor ao maior (mesma ordem das outras mesas). */
+export const ORDEM_DO_RACIOCINIO = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/** O maior nível que o modelo aceita: o "Max" do GPT-6 Luna Max; sem níveis, null. */
+export function raciocinioMaximo(niveis: string[] | null | undefined): string | null {
+  const lista = (niveis || []).filter((n) => ORDEM_DO_RACIOCINIO.indexOf(n) >= 0);
+  if (!lista.length) return null;
+  return lista.slice().sort((a, b) => ORDEM_DO_RACIOCINIO.indexOf(b) - ORDEM_DO_RACIOCINIO.indexOf(a))[0];
+}
+
+export interface EscolhaGuardadaDoModelo {
+  modelo: string;
+  raciocinio: string;
+}
+
+export interface ModeloDaCopy {
+  modelo: ModeloIa | null;
+  raciocinio: string | null;
+}
+
+/**
+ * Modelo da copy (produção no Plano de teste, refino e pacote): o que a equipe
+ * escolheu para o cliente; sem escolha, o padrão do estrategista no catálogo
+ * (GPT-6 Luna) no raciocínio máximo que ele aceita (o "GPT-6 Luna Max" que o
+ * dono pediu). Modelo que saiu do catálogo cai no padrão.
+ */
+export function resolverModeloDaCopy(catalogo: ModeloIa[], guardada: EscolhaGuardadaDoModelo | null | undefined): ModeloDaCopy {
+  const ativos = catalogo.filter((m) => m.ativo && m.tipo === "texto");
+  const escolhido = guardada && guardada.modelo ? ativos.find((m) => m.id === guardada.modelo) || null : null;
+  const modelo = escolhido || padraoPara(catalogo, "estrategista");
+  if (!modelo) return { modelo: null, raciocinio: null };
+  const niveis = modelo.raciocinio || [];
+  const pedido = escolhido && guardada && guardada.raciocinio && niveis.indexOf(guardada.raciocinio) >= 0 ? guardada.raciocinio : null;
+  return { modelo, raciocinio: pedido || raciocinioMaximo(niveis) };
+}
+
+/** Campos do modelo no corpo da ação (o servidor respeita: resolverModelo). */
+export function corpoDoModelo(m: ModeloDaCopy): Record<string, unknown> {
+  if (!m.modelo) return {};
+  return m.raciocinio ? { modelo_id: m.modelo.id, raciocinio: m.raciocinio } : { modelo_id: m.modelo.id };
+}
+
+/** Uma chamada de texto no modelo escolhido: a saída soma o raciocínio (mesma conta do motor). */
+export function parteDeTexto(m: ModeloDaCopy, entrada: number, saida: number, vezes = 1): ParteDaEstimativa {
+  return { modeloId: m.modelo ? m.modelo.id : null, tipo: "texto", tokensEntrada: entrada, tokensSaida: saida + (m.raciocinio ? saidaPorRaciocinio(m.raciocinio) : 0), vezes };
+}
+
+/** Copy escrita a mais por ângulo para o Jev escolher as melhores (servidor: MAX_COPIES_A_MAIS). */
+export const COPIES_A_MAIS = 2;
+
+/** Formatos que a Mesa escolhe sozinha: 4:5 e 9:16 (carrossel no lugar do 4:5 quando o ângulo pediu). */
+export function formatosAutomaticos(a: Pick<Angulo, "formatos">): FormatoAds[] {
+  return (a.formatos || []).indexOf("carrossel") >= 0 ? ["carrossel", "stories_9x16"] : ["feed_4x5", "stories_9x16"];
+}
+
+/** Lâminas de arte de um formato (carrossel conta 4, a média de 3 a 5). */
+export const laminasDoFormato = (f: FormatoAds) => (f === "carrossel" ? 4 : 1);
+
+/**
+ * Estimativa de "Criar criativos": uma chamada de copy por ângulo (variações +
+ * as escritas a mais, no modelo escolhido) e, com a arte junto, cada lâmina
+ * gerada e conferida.
+ */
+export function partesDaCriacao(
+  catalogo: ModeloIa[],
+  m: ModeloDaCopy,
+  angulos: Pick<Angulo, "variacoes" | "formatos">[],
+  formatosDo: (a: Pick<Angulo, "variacoes" | "formatos">) => FormatoAds[],
+  comArte: boolean,
+): ParteDaEstimativa[] {
+  const partes: ParteDaEstimativa[] = angulos.map((a) =>
+    parteDeTexto(m, TAMANHOS_ADS.produzirPorPeca.entrada + 4000, ((a.variacoes || 1) + COPIES_A_MAIS) * 1200),
+  );
+  if (!comArte) return partes;
+  const laminas = angulos.reduce((s, a) => s + (a.variacoes || 1) * formatosDo(a).reduce((n, f) => n + laminasDoFormato(f), 0), 0);
+  return laminas ? partes.concat(partesDaArte(catalogo, laminas)) : partes;
+}
+
+/** Rótulos das estruturas de copy (espelho de FRAMEWORKS_DE_COPY do servidor; teste confere). */
+export const ESTRUTURAS_DE_COPY: Record<string, string> = {
+  pas: "Problema, agitação e solução",
+  aida: "Atenção, interesse, desejo e ação",
+  bab: "Antes, depois e ponte",
+  gancho_historia_oferta: "Gancho, história e oferta",
+  objecao_e_quebra: "Objeção e quebra",
+  prova_primeiro: "Prova primeiro",
+  oferta_direta: "Oferta direta",
+};
+
+/** Nota do Jev da escolha da copy (0 a 10) em texto curto, ou vazio. */
+export function notaCurta(v: unknown): string {
+  const n = numeroOuNada(v);
+  return n === null ? "" : n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+
+/**
+ * Por que este criativo, em uma linha: o estilo com o dado que o apoia (ou
+ * "padrão do nicho") e a nota do Jev da copy. Criativo antigo, sem o porquê
+ * gravado: vazio (a tela não inventa).
+ */
+export function porqueDoCriativo(c: Pick<CriativoAds, "copy">, angulo?: Pick<Angulo, "porque_do_estilo"> | null): string {
+  const copy = obj(c.copy);
+  const estilo = txt(copy.porque_do_estilo) || (angulo && angulo.porque_do_estilo) || "";
+  const escolha = obj(copy.escolha);
+  const nota = notaCurta(escolha.nota);
+  const posicao = numeroOuNada(escolha.posicao);
+  const de = numeroOuNada(escolha.de);
+  const jev = nota ? (de && de > 1 && posicao === 1 ? `melhor de ${de} copies, Jev ${nota}` : `Jev ${nota}`) : "";
+  return [estilo, jev].filter(Boolean).join(" · ");
+}
+
+/** O criativo é a melhor variação do ângulo (V1 escolhida pelo Jev entre várias)? */
+export function ehOMelhor(c: CriativoAds): boolean {
+  const escolha = obj(c.copy.escolha);
+  return numeroOuNada(escolha.posicao) === 1 && (numeroOuNada(escolha.de) || 0) > 1;
+}
+
+/**
+ * Criativos de um ângulo organizados: a melhor variação primeiro (V1, com os
+ * formatos dela) e o resto recolhido. Sem variação conhecida, tudo fica à vista.
+ */
+export function melhoresDoAngulo(criativos: CriativoAds[]): { melhores: CriativoAds[]; outros: CriativoAds[] } {
+  const comVariacao = criativos.map((c) => ({ c, v: variacaoDoCriativo(c) }));
+  const conhecidas = comVariacao.filter((x) => x.v !== null).map((x) => x.v as number);
+  if (!conhecidas.length) return { melhores: criativos.slice(), outros: [] };
+  const primeira = Math.min.apply(null, conhecidas);
+  const ordemDoFormato = (f: string) => {
+    const i = FORMATOS.map((x) => x.valor as string).indexOf(f);
+    return i < 0 ? 9 : i;
+  };
+  const ordenados = comVariacao.slice().sort((a, b) => (a.v === null ? 99 : a.v) - (b.v === null ? 99 : b.v) || ordemDoFormato(a.c.formato) - ordemDoFormato(b.c.formato));
+  return {
+    melhores: ordenados.filter((x) => x.v === primeira || x.v === null).map((x) => x.c),
+    outros: ordenados.filter((x) => x.v !== primeira && x.v !== null).map((x) => x.c),
+  };
+}
+
+/** Caminho interno da Mesa Ads no formato do contrato dos agentes (só rota do painel). */
+export function caminhoDoEstudio(clientId: string, planoId: string, criativoId?: string | null, rotulo = "Abrir no Estúdio Ads") {
+  const partes = [`client=${encodeURIComponent(clientId)}`, "etapa=estudio", `plano=${encodeURIComponent(planoId)}`];
+  if (criativoId) partes.push(`criativo=${encodeURIComponent(criativoId)}`);
+  return { rotulo, destino: `/mesa-ads?${partes.join("&")}` };
+}
+
+/**
+ * Referências do banco na ordem para este criativo: destaque, as do mesmo
+ * estilo visual do criativo, depois evidência forte (E3, E4), depois as mais
+ * novas (sempre trazer as melhores primeiro).
+ */
+export function ordenarParaOCriativo(refs: ReferenciaAds[], estiloDoCriativo: string | null | undefined): ReferenciaAds[] {
+  const forte = (r: ReferenciaAds) => (r.evidencia === "E3" || r.evidencia === "E4" ? 1 : 0);
+  const mesmoEstilo = (r: ReferenciaAds) => (estiloDoCriativo && estiloDaReferencia(r) === estiloDoCriativo ? 1 : 0);
+  return refs.slice().sort((a, b) => {
+    if (a.destaque !== b.destaque) return a.destaque ? -1 : 1;
+    if (mesmoEstilo(a) !== mesmoEstilo(b)) return mesmoEstilo(b) - mesmoEstilo(a);
+    if (forte(a) !== forte(b)) return forte(b) - forte(a);
+    return (b.criado_em || "").localeCompare(a.criado_em || "");
+  });
 }

@@ -12,17 +12,21 @@ import {
   chamarAds,
   chavesAds,
   CTAS_DO_META,
+  ESTRUTURAS_DE_COPY,
   formatoDe,
   LIMITE_DESCRICAO,
   LIMITE_TEXTO_VISIVEL,
   LIMITE_TITULO,
   mudarCriativo,
-  partesDaCopy,
+  notaCurta,
+  parteDeTexto,
   rotuloDoCta,
+  TAMANHOS_ADS,
   type CopyDoAnuncio,
   type CriativoAds,
 } from "./adsApi";
 import { Andamento, useAndamento } from "./Comuns";
+import { SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import PacoteDaCopy from "./PacoteDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 
@@ -30,10 +34,15 @@ import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
  * A copy do anúncio ao lado da arte: texto principal (o Meta mostra cerca de
  * 125 caracteres antes do "mais"), título até 40, descrição até 30 e o CTA
  * do Meta. Grava sozinha ao sair do campo (sem apagar o pacote gravado junto).
- * "Variar copy" pede variações rápidas; o pacote completo (PacoteDaCopy) traz
- * todos os estilos, títulos, descrições, CTAs, ganchos e a orientação ao
- * gestor, com "Usar" para trazer ao formulário. A prévia mostra o feed.
+ * "Refinar copy" (frente CR, 27/09) pede variações no modelo escolhido, cada
+ * uma numa estrutura de copy diferente; a melhor pela conferência do Jev vem
+ * primeiro, com o porquê. O pacote completo (PacoteDaCopy) traz todos os
+ * estilos, títulos, descrições, CTAs, ganchos e a orientação ao gestor, com
+ * "Usar" para trazer ao formulário. A prévia mostra o feed.
  */
+
+/** Variação que o refino devolve: a copy, a estrutura, se é a melhor e o porquê. */
+type VariacaoDoRefino = CopyDoAnuncio & { melhor?: boolean; porque?: string; o_que_mudou?: string };
 
 const limpa = (c: CopyDoAnuncio): CopyDoAnuncio => ({
   texto_principal: c.texto_principal || "",
@@ -112,12 +121,15 @@ export default function PainelDaCopy({
   /** Quem desenha as prévias fora do painel recebe a copy ao vivo (e o painel não as desenha). */
   aoMudarCopy?: (c: CopyDoAnuncio) => void;
 }) {
-  const { clientId, clientName, catalogo } = useMesa();
+  const { clientId, clientName } = useMesa();
   const queryClient = useQueryClient();
+  const modelo = useModeloDaCopy();
   const [copy, setCopy] = useState<CopyDoAnuncio>(limpa(criativo.copy));
   const [salvando, setSalvando] = useState(false);
   const [pedido, setPedido] = useState("");
-  const [variacoes, setVariacoes] = useState<CopyDoAnuncio[]>([]);
+  const [variacoes, setVariacoes] = useState<VariacaoDoRefino[]>([]);
+  // Por que esta copy virou criativo (gravado na produção): uma linha, com a nota do Jev.
+  const porqueDaCopy = criativo.copy.escolha && typeof criativo.copy.escolha.porque === "string" ? criativo.copy.escolha.porque : "";
   const [desde, rodar] = useAndamento();
   const salvo = JSON.stringify(limpa(criativo.copy));
 
@@ -166,6 +178,12 @@ export default function PainelDaCopy({
             <span className="inline-flex items-center text-[11px] text-muted-foreground"><Check className="mr-1 h-3 w-3 text-success" /> salva</span>
           )}
         </div>
+        {porqueDaCopy && (
+          <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-porque-da-copy="">
+            <span className="font-medium text-foreground">Por que esta copy: </span>
+            {porqueDaCopy}
+          </p>
+        )}
         <label className="block">
           <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
             <span className="flex-1">Texto principal</span>
@@ -209,15 +227,15 @@ export default function PainelDaCopy({
 
         <div className="border-t border-border pt-3">
           <div className="flex min-w-0 items-center">
-            <Input aria-label="Pedido para variar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[12.5px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido opcional (tom, objeção, prova)" />
+            <Input aria-label="Pedido para refinar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[12.5px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido opcional (tom, objeção, prova)" />
             <BotaoComCusto
-              rotulo={<><Shuffle className="mr-1 h-3.5 w-3.5" /> Variar copy</>}
-              titulo="Variar a copy"
-              descricao="Variações de texto principal, título e CTA, conferidas pelo Jev (política e clareza)."
+              rotulo={<><Shuffle className="mr-1 h-3.5 w-3.5" /> Refinar copy</>}
+              titulo="Refinar a copy"
+              descricao="Variações de texto principal, título e CTA no modelo escolhido, cada uma numa estrutura de copy; o Jev confere (política, clareza, parada) e a melhor vem primeiro."
               variant="outline"
               className="h-9 shrink-0"
-              partes={() => partesDaCopy(catalogo)}
-              executar={() => rodar(() => chamarAds<any>("copy_variar", { criativo_id: criativo.id, pedido: pedido.trim() || undefined }))}
+              partes={() => [parteDeTexto(modelo, TAMANHOS_ADS.variarCopy.entrada + 3000, TAMANHOS_ADS.variarCopy.saida)]}
+              executar={() => rodar(() => chamarAds<any>("copy_variar", { criativo_id: criativo.id, pedido: pedido.trim() || undefined, ...modelo.corpo }))}
               aoConcluir={(data) => {
                 const lista = Array.isArray(data?.variacoes) ? data.variacoes : Array.isArray(data) ? data : [];
                 setVariacoes(lista.filter((v: unknown) => v && typeof v === "object"));
@@ -225,13 +243,22 @@ export default function PainelDaCopy({
               }}
             />
           </div>
+          <SeletorDoModeloDaCopy estado={modelo} className="mt-1.5" />
           <div className="mt-1"><Andamento desde={desde} rotulo="Escrevendo variações" /></div>
           {variacoes.length > 0 && (
             <ul className="mt-2 space-y-2" aria-label="Variações de copy">
               {variacoes.map((v, i) => (
-                <li key={i} className="rounded-lg border border-border bg-background p-2.5">
+                <li key={i} className={`rounded-lg border bg-background p-2.5 ${v.melhor ? "border-primary/50" : "border-border"}`}>
+                  {(v.melhor || v.framework) && (
+                    <p className="mb-1 flex min-w-0 flex-wrap items-center text-[10.5px]">
+                      {v.melhor && <span className="mr-1.5 rounded-full bg-primary px-1.5 py-px font-medium text-primary-foreground">Melhor</span>}
+                      {v.framework && <span className="text-muted-foreground">{ESTRUTURAS_DE_COPY[v.framework] || v.framework}</span>}
+                      {v.jev && notaCurta(v.jev.clareza) ? <span className="ml-1.5 text-muted-foreground">{`· clareza ${notaCurta(v.jev.clareza)}`}</span> : null}
+                    </p>
+                  )}
                   <p className="whitespace-pre-wrap text-[12.5px] leading-snug [overflow-wrap:anywhere]">{v.texto_principal}</p>
                   {v.titulo && <p className="mt-1 text-[12px] font-semibold">{v.titulo}</p>}
+                  {v.porque && <p className="mt-1 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{v.porque}</p>}
                   <div className="mt-1.5 flex items-center">
                     <span className="flex-1 text-[11px] text-muted-foreground">{rotuloDoCta(v.cta_meta)}</span>
                     <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => setCopy((c) => ({ ...c, ...limpaParcial(v) }))}>
@@ -248,6 +275,7 @@ export default function PainelDaCopy({
       <PacoteDaCopy
         criativo={criativo}
         nome={nome || criativo.nome || "Criativo"}
+        modelo={modelo}
         onUsar={(campos) => {
           setCopy((c) => ({ ...c, ...campos }));
           toast.info("Texto no formulário", { description: "Confira e salve a copy." });
@@ -261,9 +289,11 @@ export default function PainelDaCopy({
 
 /** Só os campos que a variação trouxe (não apaga o resto do formulário). */
 function limpaParcial(v: CopyDoAnuncio): CopyDoAnuncio {
-  const saida: CopyDoAnuncio = {};
-  (["texto_principal", "texto_principal_longo", "titulo", "descricao", "cta_meta"] as (keyof CopyDoAnuncio)[]).forEach((k) => {
-    if (typeof v[k] === "string" && (v[k] as string).trim()) saida[k] = v[k];
+  const saida: Record<string, string> = {};
+  const origem = v as Record<string, unknown>;
+  ["texto_principal", "texto_principal_longo", "titulo", "descricao", "cta_meta"].forEach((k) => {
+    const valor = origem[k];
+    if (typeof valor === "string" && valor.trim()) saida[k] = valor;
   });
-  return saida;
+  return saida as CopyDoAnuncio;
 }

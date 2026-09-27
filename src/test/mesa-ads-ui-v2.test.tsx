@@ -665,7 +665,8 @@ describe("copy: pacote completo", () => {
     });
     montar(h(PainelDaCopy, { criativo: criativo({ texto_principal: "Base" }), caminhoDaArte: null, nome: "Contagem · 4:5" }));
     fireEvent.click(screen.getByRole("button", { name: /Gerar pacote completo/ }));
-    await waitFor(() => expect(chamadasDe("copy_pacote")).toEqual([{ acao: "copy_pacote", criativo_id: "c-1" }]));
+    // 27/09 (frente CR): o pacote vai no modelo da copy escolhido; sem escolha, o estrategista no raciocínio máximo que ele aceita.
+    await waitFor(() => expect(chamadasDe("copy_pacote")).toEqual([{ acao: "copy_pacote", criativo_id: "c-1", modelo_id: "openai:gpt-texto", raciocinio: "medium" }]));
     const pacote = await screen.findByRole("region", { name: "Pacote de copy" });
     // 26/09: só os textos principais nascem abertos; o resto começa recolhido.
     expect(within(pacote).getByText("Problema, agitação e solução")).toBeTruthy();

@@ -18,7 +18,8 @@ export type TipoDeAcao =
   | "trocar_criativo"
   | "plano_de_teste"
   | "tarefa_equipe"
-  | "vincular_criativo";
+  | "vincular_criativo"
+  | "montar_campanha_do_plano";
 
 export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   pausar: "Pausar",
@@ -30,7 +31,26 @@ export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   plano_de_teste: "Levar ao Plano de teste já preenchido",
   tarefa_equipe: "Criar tarefa para a equipe",
   vincular_criativo: "Ligar anúncio ao criativo da Mesa",
+  montar_campanha_do_plano: "Montar a campanha do plano na Meta (pausada)",
 };
+
+/** A campanha do plano de teste que o agente monta (tudo pausado). */
+export interface MontagemNaTela {
+  plano_id: string;
+  plano_nome: string;
+  campanha_nome: string;
+  verba_diaria_brl: number | null;
+  criativos: { id: string; nome: string }[];
+  modelo: { ad_id: string; nome: string } | null;
+  faltas: string[];
+}
+
+/** Botão "Ir para ..." depois de feito (contrato comum dos agentes; só rota interna). */
+export interface CaminhoNaTela {
+  rotulo: string;
+  destino: string;
+  abrir_sozinho?: boolean;
+}
 
 const NIVEL: Record<string, string> = { campanha: "Campanha", conjunto: "Conjunto", anuncio: "Anúncio" };
 export const nomeDoNivel = (n: string) => NIVEL[n] || "Item";
@@ -56,7 +76,19 @@ export interface ItemDaAcao {
   indisponivel: string | null;
   /** Modo ensaio: proposto sem permissão de gestão; a tela mostra "Seria feito assim", sem executar. */
   ensaio: boolean;
-  resultado: { ok: boolean; motivo: string; criado: Record<string, string>; desfeito: boolean; motivo_desfazer: string } | null;
+  /** Feito sozinho ("ele já vai fazendo"): reversível e sem aumento de gasto, com Desfazer próprio. */
+  auto: boolean;
+  montagem: MontagemNaTela | null;
+  resultado: {
+    ok: boolean;
+    motivo: string;
+    criado: Record<string, string>;
+    desfeito: boolean;
+    motivo_desfazer: string;
+    /** Estado relido na Meta logo depois (prova). */
+    depois: EstadoNaMeta | null;
+    ativada_em: string | null;
+  } | null;
 }
 
 export interface AcoesDaConta {
@@ -68,6 +100,7 @@ export interface AcoesDaConta {
   executada_em: string | null;
   descartada_em: string | null;
   desfeita_em: string | null;
+  caminho: CaminhoNaTela | null;
 }
 
 export interface NumerosVistos {
@@ -91,12 +124,36 @@ const obj = (v: unknown): Record<string, any> => (v && typeof v === "object" && 
 const lista = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 const txt = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" || !isFinite(Number(v)) ? null : Number(v));
-const TIPOS: TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "plano_de_teste", "tarefa_equipe", "vincular_criativo"];
+const TIPOS: TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "plano_de_teste", "tarefa_equipe", "vincular_criativo", "montar_campanha_do_plano"];
 
 function estado(v: unknown): EstadoNaMeta | null {
   const o = obj(v);
   if (!Object.keys(o).length) return null;
   return { status: txt(o.status) || null, orcamento_diario_brl: num(o.orcamento_diario_brl), nome: txt(o.nome) || null };
+}
+
+function montagem(v: unknown): MontagemNaTela | null {
+  const o = obj(v);
+  if (!txt(o.plano_id)) return null;
+  const modelo = obj(o.modelo);
+  return {
+    plano_id: txt(o.plano_id),
+    plano_nome: txt(o.plano_nome),
+    campanha_nome: txt(o.campanha_nome),
+    verba_diaria_brl: num(o.verba_diaria_brl),
+    criativos: lista(o.criativos).map((c) => ({ id: txt(obj(c).id), nome: txt(obj(c).nome) })).filter((c) => !!c.id),
+    modelo: txt(modelo.ad_id) ? { ad_id: txt(modelo.ad_id), nome: txt(modelo.nome) } : null,
+    faltas: lista(o.faltas).map(txt).filter(Boolean),
+  };
+}
+
+/** Só rota interna do painel (mesma regra do contrato comum: começa com "/" e nunca com "//"). */
+export function caminhoDaTela(v: unknown): CaminhoNaTela | null {
+  const o = obj(v);
+  const destino = txt(o.destino).trim();
+  const rotulo = txt(o.rotulo).replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!rotulo || !destino || destino.length > 600 || destino.charAt(0) !== "/" || destino.charAt(1) === "/" || destino.charAt(1) === "\\") return null;
+  return o.abrir_sozinho === true ? { rotulo, destino, abrir_sozinho: true } : { rotulo, destino };
 }
 
 /** Anexo acoes_conta tolerante (mensagem antiga, campo faltando). Null sem itens. */
@@ -124,8 +181,18 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
         limitado: !!i.limitado,
         indisponivel: txt(i.indisponivel) || null,
         ensaio: !!i.ensaio,
+        auto: !!i.auto,
+        montagem: montagem(i.montagem),
         resultado: r
-          ? { ok: !!r.ok, motivo: txt(r.motivo), criado: obj(r.criado) as Record<string, string>, desfeito: !!r.desfeito, motivo_desfazer: txt(r.motivo_desfazer) }
+          ? {
+              ok: !!r.ok,
+              motivo: txt(r.motivo),
+              criado: obj(r.criado) as Record<string, string>,
+              desfeito: !!r.desfeito,
+              motivo_desfazer: txt(r.motivo_desfazer),
+              depois: estado(r.depois),
+              ativada_em: txt(r.ativada_em) || null,
+            }
           : null,
       } as ItemDaAcao;
     })
@@ -141,6 +208,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
     executada_em: txt(o.executada_em) || null,
     descartada_em: txt(o.descartada_em) || null,
     desfeita_em: txt(o.desfeita_em) || null,
+    caminho: caminhoDaTela(o.caminho),
   };
 }
 
@@ -172,8 +240,25 @@ export function estadoDasAcoes(a: AcoesDaConta): "aberta" | "feita" | "descartad
   return a.desfeita_em ? "desfeita" : a.executada_em ? "feita" : a.descartada_em ? "descartada" : "aberta";
 }
 
-/** Itens que dá para marcar agora (indisponíveis e de ensaio ficam de fora, com o motivo à vista). */
-export const itensDisponiveis = (a: AcoesDaConta) => a.itens.filter((i) => !i.indisponivel && !i.ensaio);
+/** Itens que dá para marcar agora (indisponíveis, de ensaio e os já feitos sozinho ficam de fora, com o motivo à vista). */
+export const itensDisponiveis = (a: AcoesDaConta) => a.itens.filter((i) => !i.indisponivel && !i.ensaio && !(i.auto && i.resultado));
+
+/** Tipos que voltam pelo Desfazer (a montagem volta arquivando o que criou). */
+const COM_VOLTA = ["pausar", "ativar", "orcamento", "renomear", "vincular_criativo", "montar_campanha_do_plano"];
+
+/** O item feito tem Desfazer? (feito, não desfeito, de um tipo com volta) */
+export const itemTemDesfazer = (i: ItemDaAcao) =>
+  !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) && COM_VOLTA.indexOf(i.tipo) >= 0 && (i.tipo !== "montar_campanha_do_plano" || !!i.resultado.criado.campanha_id);
+
+/** Desfazer só este item (o que o agente fez sozinho). */
+export async function desfazerItemDaConta(mensagemId: string, itemId: string) {
+  return chamarAds<any>("conta_acao_desfazer", { mensagem_id: mensagemId, itens: [itemId] });
+}
+
+/** O Confirmar para ativar a campanha montada (começa a gastar). */
+export async function ativarCampanhaMontada(mensagemId: string, itemId: string) {
+  return chamarAds<any>("conta_montagem_ativar", { mensagem_id: mensagemId, item: itemId });
+}
 
 // ------------------------------------------------------------------ gestão de campanhas
 
@@ -220,8 +305,7 @@ export async function lerNumerosDoAgente(clientId: string, dias: number): Promis
   return normalizarNumerosVistos(data && data.numeros);
 }
 
-export const temDesfazer = (a: AcoesDaConta) =>
-  a.itens.some((i) => i.resultado && i.resultado.ok && !i.resultado.desfeito && ["pausar", "ativar", "orcamento", "renomear", "vincular_criativo"].indexOf(i.tipo) >= 0);
+export const temDesfazer = (a: AcoesDaConta) => a.itens.some(itemTemDesfazer);
 
 export async function executarAcoesDaConta(mensagemId: string, itens: string[] | null, descartar = false) {
   const corpo: Record<string, unknown> = { mensagem_id: mensagemId };

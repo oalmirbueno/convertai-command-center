@@ -20,6 +20,7 @@
  */
 import { regraDeCorte } from "./calculos.ts";
 import { OBJETIVOS_DE_CAMPANHA } from "../_shared/conhecimento-ads.ts";
+import type { CaminhoDoAgente } from "../_shared/acoes-do-agente.ts";
 
 export const TIPOS_DE_ACAO = [
   "pausar",
@@ -31,12 +32,33 @@ export const TIPOS_DE_ACAO = [
   "plano_de_teste",
   "tarefa_equipe",
   "vincular_criativo",
+  // 27/09 (frente TR): o plano de teste vira campanha na Meta, tudo PAUSADO; ativar é outro Confirmar.
+  "montar_campanha_do_plano",
 ] as const;
 export type TipoDeAcao = (typeof TIPOS_DE_ACAO)[number];
 
 /** Tipos que escrevem na Meta (precisam de ads_management). */
-export const TIPOS_NA_META: readonly TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo"];
+export const TIPOS_NA_META: readonly TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "montar_campanha_do_plano"];
 export const naMeta = (t: TipoDeAcao) => TIPOS_NA_META.indexOf(t) >= 0;
+
+/**
+ * "Ele já vai fazendo" (dono, 27/09: "um clique: o agente analisa e já faz o
+ * que é seguro, mostrando o que fez; confirmação só para o que aumenta gasto,
+ * cria campanha ou ativa algo novo"). Seguro = reversível e sem aumento de
+ * gasto: pausar, baixar verba, renomear e ligar anúncio ao criativo da Mesa.
+ * Ativar, subir verba, duplicar, subir criativo, montar campanha, plano e
+ * tarefa continuam com Confirmar.
+ */
+export function acaoSemRisco(i: Pick<ItemDaAcaoNaConta, "tipo" | "variacao_pct" | "para" | "de">): boolean {
+  if (i.tipo === "pausar" || i.tipo === "renomear" || i.tipo === "vincular_criativo") return true;
+  if (i.tipo === "orcamento") {
+    const para = i.para && typeof i.para.orcamento_diario_brl === "number" ? i.para.orcamento_diario_brl : null;
+    const de = i.de ? i.de.orcamento_diario_brl : null;
+    if (para !== null && de !== null) return para < de;
+    return typeof i.variacao_pct === "number" && i.variacao_pct < 0;
+  }
+  return false;
+}
 
 /** Teto de variação do orçamento diário por confirmação (30% para cima ou para baixo). */
 export const TETO_DE_ORCAMENTO = 0.3;
@@ -55,6 +77,7 @@ export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   plano_de_teste: "Levar ao Plano de teste já preenchido",
   tarefa_equipe: "Criar tarefa para a equipe",
   vincular_criativo: "Ligar anúncio ao criativo da Mesa",
+  montar_campanha_do_plano: "Montar a campanha do plano na Meta (pausada)",
 };
 
 export type Nivel = "campanha" | "conjunto" | "anuncio";
@@ -116,7 +139,7 @@ export function blocoDosAlvos(alvos: Alvo[], criativos: CriativoDaMesa[]): strin
 }
 
 /** Texto da regra no pedido do agente sênior. */
-export const REGRA_DAS_ACOES_DA_CONTA = `- acoes: o que você FARIA na conta, para a equipe confirmar num clique (nada acontece sem a confirmação). Proponha quando a análise pedir ou quando a equipe pedir ("pausa esse", "sobe a verba", "leva pro plano de teste"). Cada item: tipo, ref (apelido de ALVOS_DAS_ACOES), criativo_ref (apelido de CRIATIVOS_DA_MESA_PARA_ACOES, só em trocar_criativo e vincular_criativo), texto (novo nome em renomear; título em tarefa_equipe), variacao_pct (só em orcamento: de -30 a 30; o painel limita a 30% por vez) e motivo com o número que justifica. Tipos: pausar e ativar (campanha, conjunto ou anúncio); orcamento (campanha ou conjunto); renomear; duplicar_anuncio (anúncio vencedor vai para um conjunto novo pausado); trocar_criativo (sobe o criativo da Mesa como anúncio novo pausado no conjunto do anúncio ref); vincular_criativo (liga o anúncio ao criativo da Mesa); tarefa_equipe (o que só uma pessoa faz, sem ref); plano_de_teste (leva o plano_de_teste preenchido, sem ref). Use SÓ apelidos das listas; nunca escreva número de id; na dúvida sobre qual, pergunte e não proponha. No máximo ${MAX_ACOES_POR_PEDIDO} itens. Sem ação a propor, lista vazia.`;
+export const REGRA_DAS_ACOES_DA_CONTA = `- acoes: o que você FAZ na conta. Quando a equipe pede para fazer ("faz", "resolve", "otimiza", "pausa esse"), o painel já executa sozinho o que é seguro (pausar, baixar verba, renomear, ligar criativo), relendo a Meta antes, com Desfazer; o que aumenta gasto, cria campanha ou ativa algo novo fica para a equipe confirmar num clique. Proponha quando a análise pedir ou quando a equipe pedir. Cada item: tipo, ref (apelido de ALVOS_DAS_ACOES), criativo_ref (apelido de CRIATIVOS_DA_MESA_PARA_ACOES, só em trocar_criativo e vincular_criativo), texto (novo nome em renomear; título em tarefa_equipe), variacao_pct (só em orcamento: de -30 a 30; o painel limita a 30% por vez) e motivo com o número que justifica. Tipos: pausar e ativar (campanha, conjunto ou anúncio); orcamento (campanha ou conjunto); renomear; duplicar_anuncio (anúncio vencedor vai para um conjunto novo pausado); trocar_criativo (sobe o criativo da Mesa como anúncio novo pausado no conjunto do anúncio ref); vincular_criativo (liga o anúncio ao criativo da Mesa); tarefa_equipe (o que só uma pessoa faz, sem ref); plano_de_teste (leva o plano_de_teste preenchido, sem ref); montar_campanha_do_plano (sem ref, só com PLANO_ABERTO: monta na Meta a campanha do plano com os criativos aprovados, tudo pausado). Nunca pause o último anúncio ativo sem motivo forte. Use SÓ apelidos das listas; nunca escreva número de id; na dúvida sobre qual, pergunte e não proponha. No máximo ${MAX_ACOES_POR_PEDIDO} itens. Sem ação a propor, lista vazia.`;
 
 // ------------------------------------------------------------------ normalização
 
@@ -131,6 +154,28 @@ export type ResultadoDoItem = {
   criado?: Record<string, string>;
   desfeito?: boolean;
   motivo_desfazer?: string;
+  /** Prova da escrita: o estado relido na Meta logo depois (sem token). */
+  depois?: Estado | null;
+  /** Campanha montada e depois ativada pelo Confirmar da equipe. */
+  ativada_em?: string;
+  motivo_ativar?: string;
+};
+
+/**
+ * A campanha do plano de teste montada pelo agente sênior: o anúncio modelo
+ * empresta a página, o público, o destino e o botão; os criativos aprovados
+ * da Mesa entram como anúncios novos. Tudo nasce PAUSADO.
+ */
+export type Montagem = {
+  plano_id: string;
+  plano_nome: string;
+  campanha_nome: string;
+  verba_diaria_brl: number | null;
+  objetivo: string | null;
+  criativos: { id: string; nome: string }[];
+  modelo: { ad_id: string; nome: string } | null;
+  /** O que impede montar agora (sem modelo, sem criativo com arte, sem verba). */
+  faltas: string[];
 };
 
 export type ItemDaAcaoNaConta = {
@@ -153,6 +198,10 @@ export type ItemDaAcaoNaConta = {
    * mostra "Seria feito assim", sem executar (a execução recusa).
    */
   ensaio?: boolean;
+  /** Feito sozinho, sem Confirmar ("ele já vai fazendo"): reversível e sem aumento de gasto. */
+  auto?: boolean;
+  /** Só em montar_campanha_do_plano. */
+  montagem?: Montagem | null;
   resultado?: ResultadoDoItem;
 };
 
@@ -164,6 +213,8 @@ export type AcoesDaConta = {
   gestao: { disponivel: boolean; motivo: string | null } | null;
   /** "ensaio" quando algum item da Meta foi proposto sem permissão de gestão. */
   modo?: "real" | "ensaio";
+  /** Contrato comum dos agentes (27/09): o botão "Ir para ..." depois de feito (só rota interna). */
+  caminho?: CaminhoDoAgente | null;
   executada_em?: string;
   executada_por?: string;
   descartada_em?: string;
@@ -180,7 +231,7 @@ const numero = (v: unknown): number | null => {
  * não sobra nada. Apelido desconhecido, repetido, tipo inválido ou ação sem
  * sentido (pausar o que já está pausado) vai para `ignorados`.
  */
-export function normalizarAcoesDaConta(bruto: unknown, alvos: Alvo[], criativos: CriativoDaMesa[], resumoBruto?: unknown): AcoesDaConta | null {
+export function normalizarAcoesDaConta(bruto: unknown, alvos: Alvo[], criativos: CriativoDaMesa[], resumoBruto?: unknown, plano?: { id: string; nome: string } | null): AcoesDaConta | null {
   const lista = Array.isArray(bruto) ? bruto : [];
   const porRef = new Map(alvos.map((a) => [a.ref.toLowerCase(), a]));
   const criativoPorRef = new Map(criativos.map((c) => [c.ref.toLowerCase(), c]));
@@ -188,6 +239,7 @@ export function normalizarAcoesDaConta(bruto: unknown, alvos: Alvo[], criativos:
   const ignorados: string[] = [];
   const itens: ItemDaAcaoNaConta[] = [];
   let temPlano = false;
+  let temMontagem = false;
 
   for (const b of lista.slice(0, MAX_ACOES_POR_PEDIDO * 2)) {
     if (itens.length >= MAX_ACOES_POR_PEDIDO) break;
@@ -219,6 +271,19 @@ export function normalizarAcoesDaConta(bruto: unknown, alvos: Alvo[], criativos:
         continue;
       }
       itens.push({ ...base, texto });
+      continue;
+    }
+    if (tipo === "montar_campanha_do_plano") {
+      if (!plano || !plano.id) {
+        recusar("sem plano de teste aberto para montar");
+        continue;
+      }
+      if (temMontagem) {
+        recusar("montagem repetida");
+        continue;
+      }
+      temMontagem = true;
+      itens.push({ ...base, montagem: montagemVazia(plano) });
       continue;
     }
 
@@ -607,9 +672,11 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
     const mudou = mudouDesdeAProposta(item, estadoLido(bruto));
     if (mudou) return { ok: false, motivo: mudou };
 
+    // Prova da escrita: o estado relido logo depois (sem token; falha na releitura não desfaz nada).
+    const relerDepois = async () => estadoLido(await grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO(alvo.nivel)).catch(() => null));
     if (item.tipo === "pausar" || item.tipo === "ativar") {
       await grafo.escrever(alvo.meta_id, { status: item.tipo === "pausar" ? "PAUSED" : "ACTIVE" });
-      return { ok: true, feito_em: agoraIso() };
+      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
     }
     if (item.tipo === "orcamento") {
       const para = item.para?.orcamento_diario_brl;
@@ -617,12 +684,12 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
       if (!para || !de) return { ok: false, motivo: "Sem orçamento para mudar." };
       if (Math.abs(para - de) / de > TETO_DE_ORCAMENTO + 0.0001 && para > ORCAMENTO_MINIMO_BRL) return { ok: false, motivo: "A mudança passa do teto de 30% por confirmação." };
       await grafo.escrever(alvo.meta_id, { daily_budget: String(Math.round(para * 100)) });
-      return { ok: true, feito_em: agoraIso() };
+      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
     }
     if (item.tipo === "renomear") {
       if (!item.texto) return { ok: false, motivo: "Nome novo vazio." };
       await grafo.escrever(alvo.meta_id, { name: item.texto });
-      return { ok: true, feito_em: agoraIso() };
+      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
     }
     if (item.tipo === "duplicar_anuncio") {
       const conjunto = bruto && typeof bruto.adset_id === "string" ? bruto.adset_id : null;
@@ -669,13 +736,17 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
 
 /** Itens que têm reverso na Meta (o que foi criado pausado fica, a equipe decide). */
 export const temReverso = (i: ItemDaAcaoNaConta) =>
-  !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) && (i.tipo === "pausar" || i.tipo === "ativar" || i.tipo === "orcamento" || i.tipo === "renomear" || i.tipo === "vincular_criativo");
+  !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) &&
+  (i.tipo === "pausar" || i.tipo === "ativar" || i.tipo === "orcamento" || i.tipo === "renomear" || i.tipo === "vincular_criativo" ||
+    // Montagem: o Desfazer arquiva o que foi criado (deletar = arquivar).
+    (i.tipo === "montar_campanha_do_plano" && !!(i.resultado.criado && i.resultado.criado.campanha_id)));
 
 /**
  * Desfaz um item da Meta: só se o estado atual ainda é o que o painel deixou
  * (ninguém mexeu depois). Nunca lança.
  */
 export async function desfazerNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, contas?: Set<string> | null): Promise<{ ok: boolean; motivo?: string }> {
+  if (item.tipo === "montar_campanha_do_plano" && temReverso(item)) return await arquivarMontagem(item, grafo, contas);
   if (!item.alvo || !item.de || !temReverso(item)) return { ok: false, motivo: "Este item não tem como desfazer." };
   try {
     const bruto = await grafo.ler(item.alvo.meta_id, CAMPOS_DO_ESTADO(item.alvo.nivel));
@@ -726,6 +797,202 @@ export function specComNovaArte(spec: Record<string, unknown>, hash: string, cop
   if (spec.instagram_user_id) novo.instagram_user_id = spec.instagram_user_id;
   else if (spec.instagram_actor_id) novo.instagram_actor_id = spec.instagram_actor_id;
   return novo;
+}
+
+// ------------------------------------------------------------------ montar a campanha do plano
+
+export function montagemVazia(plano: { id: string; nome: string }): Montagem {
+  return { plano_id: plano.id, plano_nome: limpo(plano.nome, 160) || "Plano de teste", campanha_nome: "", verba_diaria_brl: null, objetivo: null, criativos: [], modelo: null, faltas: [] };
+}
+
+/** O item de montagem já pronto (o botão "Enviar ao agente sênior" pede; não depende do agente propor). */
+export function itemDeMontagem(plano: { id: string; nome: string }, motivo: string, id: string): ItemDaAcaoNaConta {
+  return {
+    id, tipo: "montar_campanha_do_plano", na_meta: true, alvo: null, criativo: null, texto: null, variacao_pct: null,
+    motivo: limpo(motivo, 600), de: null, para: null, limitado: false, indisponivel: null, montagem: montagemVazia(plano),
+  };
+}
+
+/**
+ * Completa a montagem com o que o servidor leu: criativos do plano com arte
+ * pronta (até 6), o anúncio modelo da conta e a verba do plano. O que falta
+ * vira `faltas` (e o item fica indisponível com o motivo), nunca inventado.
+ */
+export function completarMontagem(m: Montagem, e: {
+  criativos: { id: string; nome: string | null; tem_arte: boolean }[];
+  modelo: { ad_id: string; nome: string | null } | null;
+  verba_diaria_brl: number | null;
+  objetivo: string | null;
+  hoje: string;
+  teto_diario_brl?: number | null;
+}): Montagem {
+  const criativos = e.criativos.filter((c) => c.tem_arte).slice(0, 6).map((c) => ({ id: c.id, nome: limpo(c.nome, 160) || "Criativo da Mesa" }));
+  const verba = typeof e.verba_diaria_brl === "number" && e.verba_diaria_brl > 0 ? Math.round(e.verba_diaria_brl * 100) / 100 : null;
+  const faltas: string[] = [];
+  if (!criativos.length) faltas.push("Nenhum criativo deste plano está com arte pronta. Gere as artes no Estúdio Ads e mande de novo.");
+  if (!e.modelo) faltas.push("A conta não tem anúncio ativo de imagem para servir de modelo (página, público, destino e botão). Monte a primeira campanha pela Meta; as próximas o agente monta.");
+  if (verba === null) faltas.push("O plano está sem verba diária. Defina a verba no Plano de teste e mande de novo.");
+  else if (verba < ORCAMENTO_MINIMO_BRL) faltas.push(`A verba diária do plano (R$ ${verba.toFixed(2).replace(".", ",")}) está abaixo do mínimo de R$ ${ORCAMENTO_MINIMO_BRL},00.`);
+  else if (typeof e.teto_diario_brl === "number" && e.teto_diario_brl > 0 && verba > e.teto_diario_brl) faltas.push(`A verba diária do plano (R$ ${verba.toFixed(2).replace(".", ",")}) passa do teto diário da rotina (R$ ${e.teto_diario_brl.toFixed(2).replace(".", ",")}).`);
+  const data = e.hoje.split("-").reverse().slice(0, 2).join("/");
+  return {
+    ...m,
+    campanha_nome: limpo(`${m.plano_nome} | Mesa Ads | ${data}`, 200),
+    verba_diaria_brl: verba,
+    objetivo: e.objetivo,
+    criativos,
+    modelo: e.modelo ? { ad_id: e.modelo.ad_id, nome: limpo(e.modelo.nome, 160) || `Anúncio ${e.modelo.ad_id}` } : null,
+    faltas,
+  };
+}
+
+const idMeta = (v: unknown) => {
+  const s = String(v ?? "");
+  return ID_META.test(s) ? s : null;
+};
+
+/**
+ * Monta a campanha do plano na Meta, tudo PAUSADO: campanha nova com o
+ * objetivo do anúncio modelo, cópia do conjunto do modelo (público, local e
+ * destino) e um anúncio novo por criativo aprovado (arte e copy da Mesa,
+ * página e botão do modelo). A verba do plano vai no orçamento da campanha.
+ * Se parar no meio, arquiva o que criou. Nunca lança.
+ */
+export async function montarCampanhaNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, apoios: ApoioDoCriativo[], contas?: Set<string> | null): Promise<ResultadoDoItem> {
+  const m = item.montagem;
+  if (item.tipo !== "montar_campanha_do_plano" || !m) return { ok: false, motivo: "Montagem sem os dados do plano." };
+  if (item.indisponivel) return { ok: false, motivo: item.indisponivel };
+  if (m.faltas.length) return { ok: false, motivo: m.faltas.join(" ") };
+  if (!m.modelo || m.verba_diaria_brl === null) return { ok: false, motivo: "Montagem sem anúncio modelo ou sem verba." };
+  if (!apoios.length) return { ok: false, motivo: "Os criativos do plano não foram encontrados." };
+  try {
+    const modelo = await grafo.ler(m.modelo.ad_id, "id,name,account_id,adset_id,campaign_id,creative{id,object_story_spec}");
+    const fora = foraDasContas(modelo, contas);
+    if (fora) return { ok: false, motivo: fora };
+    const conta = modelo && typeof modelo.account_id === "string" ? modelo.account_id.replace(/^act_/, "") : null;
+    const conjuntoModelo = modelo ? idMeta(modelo.adset_id) : null;
+    const campanhaModelo = modelo ? idMeta(modelo.campaign_id) : null;
+    const criativo = modelo && modelo.creative && typeof modelo.creative === "object" ? modelo.creative as Record<string, unknown> : null;
+    const spec = criativo && criativo.object_story_spec && typeof criativo.object_story_spec === "object" ? criativo.object_story_spec as Record<string, unknown> : null;
+    const link = spec && spec.link_data && typeof spec.link_data === "object" ? spec.link_data as Record<string, unknown> : null;
+    if (!conta || !conjuntoModelo || !campanhaModelo) return { ok: false, motivo: "Não achei a conta, o conjunto ou a campanha do anúncio modelo na Meta." };
+    if (!spec || !link || Array.isArray(link.child_attachments)) return { ok: false, motivo: "O anúncio modelo precisa ser de imagem única com link ou WhatsApp. Vídeo e carrossel: monte pela Meta." };
+    const campModelo = await grafo.ler(campanhaModelo, "id,objective,special_ad_categories,bid_strategy");
+    if (!campModelo || typeof campModelo.objective !== "string") return { ok: false, motivo: "Não consegui ler o objetivo da campanha modelo na Meta." };
+    // Sempre orçamento de campanha (Advantage): 1 campanha, 1 conjunto consolidado (estrutura para
+    // negócio local) e a cópia do conjunto herda o orçamento da campanha de destino. Evita também o
+    // is_adset_budget_sharing_enabled que a v24 passou a exigir em campanha sem orçamento de campanha.
+    const params: Record<string, string> = {
+      name: m.campanha_nome || `${m.plano_nome} | Mesa Ads`,
+      objective: campModelo.objective,
+      status: "PAUSED",
+      buying_type: "AUCTION",
+      daily_budget: String(Math.round(m.verba_diaria_brl * 100)),
+      special_ad_categories: JSON.stringify(Array.isArray(campModelo.special_ad_categories) ? campModelo.special_ad_categories : []),
+    };
+    if (typeof campModelo.bid_strategy === "string") params.bid_strategy = campModelo.bid_strategy;
+    const nova = await grafo.escrever(`act_${conta}/campaigns`, params);
+    const campanhaId = idMeta(nova.id);
+    if (!campanhaId) return { ok: false, motivo: "A Meta não devolveu a campanha nova." };
+    const criado: Record<string, string> = { campanha_id: campanhaId };
+    try {
+      const copia = await grafo.escrever(`${conjuntoModelo}/copies`, { campaign_id: campanhaId, deep_copy: "false", status_option: "PAUSED", rename_options: JSON.stringify({ rename_suffix: " (Mesa Ads)" }) });
+      const conjunto = idMeta(copia.copied_adset_id);
+      if (!conjunto) throw new Error("A Meta não devolveu o conjunto copiado.");
+      criado.conjunto_id = conjunto;
+      const anuncios: string[] = [];
+      const falhas: string[] = [];
+      for (const apoio of apoios) {
+        try {
+          const bytes = await apoio.imagemBase64();
+          if (!bytes) {
+            falhas.push(`${apoio.nome}: a arte não pôde ser lida.`);
+            continue;
+          }
+          const hash = hashDaImagem(await grafo.escrever(`act_${conta}/adimages`, { bytes }));
+          if (!hash) {
+            falhas.push(`${apoio.nome}: a Meta não devolveu a imagem.`);
+            continue;
+          }
+          const cr = await grafo.escrever(`act_${conta}/adcreatives`, { name: `${apoio.nome} (Mesa Ads)`.slice(0, 100), object_story_spec: JSON.stringify(specComNovaArte(spec, hash, apoio.copy)) });
+          const creativeId = idMeta(cr.id);
+          if (!creativeId) {
+            falhas.push(`${apoio.nome}: a Meta não devolveu o criativo.`);
+            continue;
+          }
+          const ad = await grafo.escrever(`act_${conta}/ads`, { name: `${apoio.nome}`.slice(0, 200), adset_id: conjunto, creative: JSON.stringify({ creative_id: creativeId }), status: "PAUSED" });
+          const adId = idMeta(ad.id);
+          if (adId) anuncios.push(adId);
+          else falhas.push(`${apoio.nome}: o anúncio não foi criado.`);
+        } catch (e) {
+          falhas.push(`${apoio.nome}: ${e instanceof Error ? e.message : "erro da Meta"}`);
+        }
+      }
+      if (!anuncios.length) throw new Error(`Nenhum anúncio subiu. ${falhas.join(" ")}`.trim());
+      criado.anuncio_ids = anuncios.join(",");
+      const depois = estadoLido(await grafo.ler(campanhaId, "id,name,status,effective_status,daily_budget,account_id").catch(() => null));
+      return {
+        ok: true,
+        feito_em: agoraIso(),
+        criado,
+        depois,
+        motivo: falhas.length ? `Subiram ${anuncios.length} de ${apoios.length} anúncios. ${falhas.join(" ")}` : undefined,
+      };
+    } catch (e) {
+      // Nada pela metade: a campanha criada é arquivada (deletar = arquivar).
+      await grafo.escrever(campanhaId, { status: "ARCHIVED" }).catch(() => null);
+      return { ok: false, motivo: `A montagem parou no meio e a campanha criada foi arquivada: ${e instanceof Error ? e.message : "erro da Meta"}`, criado };
+    }
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível montar na Meta." };
+  }
+}
+
+/** Desfazer da montagem: arquiva a campanha criada (para a entrega e tira da lista; nada é apagado). */
+export async function arquivarMontagem(item: ItemDaAcaoNaConta, grafo: GrafoMeta, contas?: Set<string> | null): Promise<{ ok: boolean; motivo?: string }> {
+  const id = item.resultado && item.resultado.criado ? idMeta(item.resultado.criado.campanha_id) : null;
+  if (!id) return { ok: false, motivo: "Não há campanha criada para arquivar." };
+  try {
+    const lido = await grafo.ler(id, "id,status,account_id");
+    const fora = foraDasContas(lido, contas);
+    if (fora) return { ok: false, motivo: fora };
+    if (!lido) return { ok: false, motivo: "Não foi possível reler a campanha na Meta." };
+    if (lido.status === "ARCHIVED" || lido.status === "DELETED") return { ok: true };
+    await grafo.escrever(id, { status: "ARCHIVED" });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível arquivar." };
+  }
+}
+
+/**
+ * Ativa a campanha montada (Confirmar da equipe: começa a gastar). Relê cada
+ * parte: só ativa se ainda estiver pausada como o painel deixou. Anúncios,
+ * conjunto e por último a campanha. Nunca lança.
+ */
+export async function ativarMontagem(item: ItemDaAcaoNaConta, grafo: GrafoMeta, contas?: Set<string> | null): Promise<{ ok: boolean; motivo?: string; depois?: Estado | null }> {
+  const r = item.resultado;
+  const criado = r && r.criado ? r.criado : null;
+  const campanha = criado ? idMeta(criado.campanha_id) : null;
+  if (item.tipo !== "montar_campanha_do_plano" || !r || !r.ok || r.desfeito || !campanha) return { ok: false, motivo: "Não há campanha montada para ativar." };
+  if (r.ativada_em) return { ok: false, motivo: "Esta campanha já foi ativada." };
+  try {
+    const lida = await grafo.ler(campanha, "id,status,account_id");
+    const fora = foraDasContas(lida, contas);
+    if (fora) return { ok: false, motivo: fora };
+    if (!lida || lida.status !== "PAUSED") return { ok: false, motivo: "A campanha não está mais pausada como o painel deixou (mudou na Meta). Nada foi ativado." };
+    const anuncios = String(criado?.anuncio_ids ?? "").split(",").map(idMeta).filter((x): x is string => !!x);
+    for (const ad of anuncios) {
+      const a = await grafo.ler(ad, "id,status");
+      if (a && a.status === "PAUSED") await grafo.escrever(ad, { status: "ACTIVE" });
+    }
+    const conjunto = idMeta(criado?.conjunto_id);
+    if (conjunto) await grafo.escrever(conjunto, { status: "ACTIVE" });
+    await grafo.escrever(campanha, { status: "ACTIVE" });
+    return { ok: true, depois: estadoLido(await grafo.ler(campanha, "id,name,status,effective_status,daily_budget,account_id").catch(() => null)) };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível ativar na Meta." };
+  }
 }
 
 // ------------------------------------------------------------------ plano de teste preenchido
