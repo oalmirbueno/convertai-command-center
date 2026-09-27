@@ -54,7 +54,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import { MesaFotoProvider, type MesaFotoValor } from "@/components/mesa-foto/Comuns";
 import EtapaCriar from "@/components/mesa-foto/EtapaCriar";
-import EtapaEstudio, { raizDaLinhagem, recorteDoFormato, versoesDaLinhagem } from "@/components/mesa-foto/EtapaEstudio";
+import EtapaEstudio, { larguraQueCabe, raizDaLinhagem, recorteDoFormato, versoesDaLinhagem } from "@/components/mesa-foto/EtapaEstudio";
 import EtapaAgenda from "@/components/mesa-foto/EtapaAgenda";
 import { MenuDeUso } from "@/components/mesa-foto/UsoDaFoto";
 import { AmpliarEUsarDaPersona } from "@/components/mesa-foto/EtapaModelos";
@@ -765,5 +765,26 @@ describe("textos de tela e compatibilidade (Safari 11)", () => {
       expect(t, a).not.toMatch(/\\p\{/);
       expect(t, a).not.toMatch(/\(\?<[a-zA-Z]/);
     }
+  });
+});
+
+describe("27/09: Estúdio de fotos organizado, com rolagem própria", () => {
+  it("a foto cabe inteira na altura do palco; lado a lado divide a largura; no celular segue a largura", () => {
+    expect(larguraQueCabe(null, 0.8, 1)).toBeNull();
+    // Retrato 4:5 num palco largo e baixo: quem manda é a altura (500 de foto * 0,8).
+    expect(larguraQueCabe({ largura: 800, altura: 524 }, 0.8, 1)).toBe(400);
+    // Duas fotos quadradas: cada uma fica com metade da largura (menos o vão).
+    expect(larguraQueCabe({ largura: 812, altura: 1000 }, 1, 2)).toBe(400);
+    // Nunca some: tem um mínimo.
+    expect(larguraQueCabe({ largura: 100, altura: 60 }, 1, 1)).toBe(140);
+  });
+
+  it("a página não rola no computador: o Estúdio entra em coluna, as ferramentas rolam por dentro e as versões numa tira", () => {
+    expect(ler("src/pages/MesaFoto.tsx")).toContain('const ETAPAS_EM_COLUNA: string[] = ["acervo", "estudio"];');
+    const fonte = ler("src/components/mesa-foto/EtapaEstudio.tsx");
+    expect(fonte).toContain('rotulo="Ferramentas do Estúdio"');
+    expect(fonte).toContain("data-tira-de-versoes");
+    expect(fonte).toContain("flex-nowrap overflow-x-auto");
+    expect(fonte).toContain("data-barra-do-palco");
   });
 });

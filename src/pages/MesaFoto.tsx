@@ -174,7 +174,8 @@ const FERRAMENTAS: Record<string, { icone: ReactNode; descricao: string }> = {
 };
 
 /** Etapas que organizam a própria coluna (a região principal não rola; a lista longa rola por dentro). */
-const ETAPAS_EM_COLUNA: string[] = ["acervo"];
+// 27/09: o Estúdio de fotos também (a foto cabe na altura e as ferramentas rolam ao lado).
+const ETAPAS_EM_COLUNA: string[] = ["acervo", "estudio"];
 
 function EsqueletoDoDiretor() {
   return (

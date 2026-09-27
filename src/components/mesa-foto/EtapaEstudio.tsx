@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -23,6 +23,7 @@ import { BotaoComCusto } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -119,6 +120,52 @@ export function recorteDoFormato(proporcaoDaFoto: number, formato: FormatoDoPost
   return { x: 0, y: (1 - altura) / 2, largura: 1, altura };
 }
 
+/**
+ * Tamanho do palco no computador (27/09, dono: "no estúdio de foto, ter scroll,
+ * mais organização, está rolando completo"): a página não rola, então a foto
+ * precisa caber inteira na altura que sobra. Mede a caixa do palco (resize da
+ * janela e, onde existe, ResizeObserver: a lateral do diretor abre e fecha sem
+ * resize). No celular devolve null e a foto segue a largura, como antes.
+ */
+function useTamanhoDoPalco(ref: RefObject<HTMLDivElement>): { largura: number; altura: number } | null {
+  const [tamanho, setTamanho] = useState<{ largura: number; altura: number } | null>(null);
+  useEffect(() => {
+    const medir = () => {
+      const el = ref.current;
+      if (!el || typeof window === "undefined" || window.innerWidth < 1024) {
+        setTamanho(null);
+        return;
+      }
+      const largura = el.clientWidth;
+      const altura = el.clientHeight;
+      setTamanho((antes) => (largura > 0 && altura > 0 ? (antes && antes.largura === largura && antes.altura === altura ? antes : { largura, altura }) : null));
+    };
+    medir();
+    const primeira = window.setTimeout(medir, 60);
+    window.addEventListener("resize", medir);
+    const RO = (window as unknown as { ResizeObserver?: new (cb: () => void) => { observe: (el: Element) => void; disconnect: () => void } }).ResizeObserver;
+    const obs = RO && ref.current ? new RO(medir) : null;
+    if (obs && ref.current) obs.observe(ref.current);
+    return () => {
+      window.clearTimeout(primeira);
+      window.removeEventListener("resize", medir);
+      if (obs) obs.disconnect();
+    };
+  }, [ref]);
+  return tamanho;
+}
+
+/** Largura da foto que cabe inteira: pela largura da coluna (dividida quando são duas) e pela altura. */
+export function larguraQueCabe(palco: { largura: number; altura: number } | null, proporcao: number, quantas: number): number | null {
+  if (!palco) return null;
+  const p = proporcao > 0 && isFinite(proporcao) ? proporcao : 1;
+  const vao = 12;
+  const rotulo = 24;
+  const porColuna = (palco.largura - vao * (quantas - 1)) / quantas;
+  const pelaAltura = (palco.altura - rotulo) * p;
+  return Math.max(140, Math.floor(Math.min(porColuna, pelaAltura)));
+}
+
 function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: string; icone: ReactNode; ajuda?: ReactNode; destaque?: boolean; id: string; children: ReactNode }) {
   return (
     <section
@@ -137,12 +184,12 @@ function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: strin
 }
 
 /** A foto na proporção real, sem corte, com a moldura do recorte do post por cima (linha tracejada, sem véu). */
-function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada }: { foto: FotoDoAcervo; rotulo: string; formato: FormatoDoPostDeFotos; mostrarRecorte: boolean; velada?: boolean }) {
+function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }: { foto: FotoDoAcervo; rotulo: string; formato: FormatoDoPostDeFotos; mostrarRecorte: boolean; velada?: boolean; largura?: number | null }) {
   const p = proporcaoDaFoto(foto);
   const r = recorteDoFormato(p, formato);
   const cheio = r.largura >= 0.999 && r.altura >= 0.999;
   return (
-    <div className="min-w-0">
+    <div className="mx-auto min-w-0 max-w-full" style={largura ? { width: largura } : undefined}>
       <p className="mb-1 flex min-w-0 items-center text-[11.5px] font-medium text-muted-foreground">
         <span className="mr-1.5 shrink-0">{rotulo}</span>
         <SeloDaFoto foto={foto} compacto />
@@ -192,6 +239,8 @@ export default function EtapaEstudio() {
   const padrao = padraoPara(catalogo, "imagem");
   const modeloId = padrao ? padrao.id : "";
   const ferramentas = useRef<HTMLDivElement>(null);
+  const areaDoPalco = useRef<HTMLDivElement>(null);
+  const palco = useTamanhoDoPalco(areaDoPalco);
 
   useEffect(() => {
     if (imagemId) setAtualId(imagemId);
@@ -221,7 +270,7 @@ export default function EtapaEstudio() {
   if (!atual) {
     if (fotos.isLoading) return <p className="text-[12.5px] text-muted-foreground">Abrindo o acervo...</p>;
     return (
-      <div className="min-w-0 space-y-4" data-estudio-de-fotos="">
+      <RegiaoRolavel modo="lg" memoria={`mesa-foto:estudio:escolher:${clientId}`} classeDeFora="lg:min-h-0 lg:flex-1" className="min-w-0 space-y-4" data-estudio-de-fotos="">
         {fotos.isSuccess && todas.length === 0 ? (
           <Vazio
             titulo="Nenhuma foto no acervo"
@@ -236,7 +285,7 @@ export default function EtapaEstudio() {
         ) : (
           <SeletorDeFotos fotos={todas.filter((f) => !ehReferenciaWeb(f))} titulo="Qual foto abrir no Estúdio?" multiplas={false} filtroInicial="todas" onUsar={(ids) => ids[0] && escolher(ids[0])} onFechar={() => irPara("criar")} />
         )}
-      </div>
+      </RegiaoRolavel>
     );
   }
 
@@ -292,15 +341,31 @@ export default function EtapaEstudio() {
     proporcao: f.largura && f.altura ? f.largura / f.altura : undefined,
   }));
 
+  // Duas fotos lado a lado dividem a largura; cada uma cabe inteira na altura do palco.
+  const ladoALado = temDepois && vista === "lado";
+  const larguraAntes = raiz ? larguraQueCabe(palco, proporcaoDaFoto(raiz), ladoALado ? 2 : 1) : null;
+  const larguraDepois = larguraQueCabe(palco, proporcaoDaFoto(atual), ladoALado ? 2 : 1);
+
   return (
-    <div className="min-w-0 space-y-4" data-estudio-de-fotos={atual.id}>
+    /*
+     * 27/09 (dono: "no estúdio de foto, ter scroll, mais organização... deixe mais organizado e
+     * alinhado"): no computador a página não rola. Um painel só: à esquerda o palco (a barra da
+     * foto em cima, a foto inteira na altura que sobra, as versões numa tira embaixo) e à direita
+     * as ferramentas, que rolam por dentro. No celular tudo segue a página, como antes.
+     */
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-estudio-de-fotos={atual.id}>
       {escolhendo && (
-        <SeletorDeFotos fotos={todas.filter((f) => !ehReferenciaWeb(f))} titulo="Trocar a foto do Estúdio" multiplas={false} filtroInicial="todas" onUsar={(ids) => ids[0] && escolher(ids[0])} onFechar={() => setEscolhendo(false)} />
+        <div className="mb-3 min-w-0 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain">
+          <SeletorDeFotos fotos={todas.filter((f) => !ehReferenciaWeb(f))} titulo="Trocar a foto do Estúdio" multiplas={false} filtroInicial="todas" onUsar={(ids) => ids[0] && escolher(ids[0])} onFechar={() => setEscolhendo(false)} />
+        </div>
       )}
-      <div className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        {/* Palco: a foto grande, a comparação e as versões. */}
-        <div className="min-w-0 space-y-3" data-palco-do-estudio="">
-          <div className="flex min-w-0 flex-wrap items-center">
+      <section
+        className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:grid lg:min-h-[320px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]"
+        aria-label="Estúdio de fotos"
+      >
+        {/* Palco: a barra da foto, a foto inteira e as versões. */}
+        <div className="flex min-w-0 flex-col lg:min-h-0 lg:border-r lg:border-border" data-palco-do-estudio="">
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-3 pb-1 pt-2" data-barra-do-palco="">
             <p className="mb-1 mr-2 min-w-0 flex-1 truncate text-[13px] font-semibold" title={atual.nome}>
               {atual.nome}
             </p>
@@ -327,29 +392,32 @@ export default function EtapaEstudio() {
             </Button>
           </div>
           {daInternet && (
-            <p className="rounded-md border border-warning/40 bg-card px-3 py-2 text-[12px]">Referência da internet: uso interno para o produto sair fiel. Não passa pelas ferramentas e não vai ao ar.</p>
+            <p className="mx-3 mt-2 shrink-0 rounded-md border border-warning/40 bg-card px-3 py-2 text-[12px]">Referência da internet: uso interno para o produto sair fiel. Não passa pelas ferramentas e não vai ao ar.</p>
           )}
-          <div className={juntar("grid min-w-0 gap-3", temDepois && vista === "lado" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
-            {temDepois && raiz && (vista === "lado" || vista === "antes") && (
-              <div className={vista === "antes" ? "mx-auto w-full max-w-[720px]" : "min-w-0"}>
-                <FotoNoPalco foto={raiz} rotulo="Antes (original)" formato={formato} mostrarRecorte={false} />
-              </div>
-            )}
-            {(!temDepois || vista !== "antes") && (
-              <div className={!temDepois || vista === "depois" ? "mx-auto w-full max-w-[720px]" : "min-w-0"}>
-                <FotoNoPalco foto={atual} rotulo={temDepois ? "Depois" : "Foto aberta"} formato={formato} mostrarRecorte={mostrarRecorte} velada={!!trabalhando} />
-                {trabalhando && (
-                  <p role="status" className="mt-1 text-center text-[12px] text-muted-foreground">
-                    Preparando a versão nova. O original fica como está.
-                  </p>
-                )}
-              </div>
-            )}
+          <div ref={areaDoPalco} className="min-w-0 p-3 lg:min-h-0 lg:flex-1 lg:overflow-hidden" data-area-da-foto="">
+            <div className={juntar("grid min-w-0 gap-3", ladoALado ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1", "lg:h-full lg:content-center")}>
+              {temDepois && raiz && (vista === "lado" || vista === "antes") && (
+                <div className={vista === "antes" ? "mx-auto w-full max-w-[720px] lg:max-w-none" : "min-w-0"}>
+                  <FotoNoPalco foto={raiz} rotulo="Antes (original)" formato={formato} mostrarRecorte={false} largura={larguraAntes} />
+                </div>
+              )}
+              {(!temDepois || vista !== "antes") && (
+                <div className={!temDepois || vista === "depois" ? "mx-auto w-full max-w-[720px] lg:max-w-none" : "min-w-0"}>
+                  <FotoNoPalco foto={atual} rotulo={temDepois ? "Depois" : "Foto aberta"} formato={formato} mostrarRecorte={mostrarRecorte} velada={!!trabalhando} largura={larguraDepois} />
+                  {trabalhando && (
+                    <p role="status" className="mt-1 text-center text-[12px] text-muted-foreground">
+                      Preparando a versão nova. O original fica como está.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           {linhagem.length > 1 && (
-            <div className="min-w-0 border-t border-border pt-3" data-versoes-da-foto="">
-              <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Versões desta foto ({linhagem.length})</p>
-              <div className="flex min-w-0 flex-wrap">
+            <div className="min-w-0 shrink-0 border-t border-border px-3 pb-1 pt-2" data-versoes-da-foto="">
+              <p className="mb-1 text-[12px] font-medium text-muted-foreground">Versões desta foto ({linhagem.length})</p>
+              {/* Tira que rola de lado: as versões nunca empurram a foto para baixo. */}
+              <div className="flex min-w-0 flex-nowrap overflow-x-auto overscroll-contain pb-1" data-tira-de-versoes="">
                 {linhagem.slice(0, 16).map((f, i) => (
                   <button
                     key={f.id}
@@ -360,7 +428,7 @@ export default function EtapaEstudio() {
                     }}
                     aria-pressed={f.id === atual.id}
                     title={i === 0 ? `Original: ${f.nome}` : f.nome}
-                    className={juntar("mb-1.5 mr-1.5 w-16 rounded-md border p-0.5", foco, f.id === atual.id ? "border-primary" : "border-transparent hover:border-border")}
+                    className={juntar("mr-1.5 w-14 shrink-0 rounded-md border p-0.5", foco, f.id === atual.id ? "border-primary" : "border-transparent hover:border-border")}
                   >
                     <MiniaturaDaFoto foto={f} />
                     <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{i === 0 ? "original" : `versão ${linhagem.length - i}`}</span>
@@ -371,8 +439,9 @@ export default function EtapaEstudio() {
           )}
         </div>
 
-        {/* Ferramentas organizadas ao lado (no celular, embaixo da foto). */}
-        <div ref={ferramentas} className="min-w-0 space-y-3" data-ferramentas-do-estudio="">
+        {/* Ferramentas ao lado, com rolagem própria no computador (no celular, embaixo da foto). */}
+        <RegiaoRolavel modo="lg" sobre="cartao" rotulo="Ferramentas do Estúdio" memoria={`mesa-foto:estudio:ferramentas:${clientId}`} classeDeFora="border-t border-border lg:border-t-0">
+          <div ref={ferramentas} className="min-w-0 space-y-3 p-3" data-ferramentas-do-estudio="">
           <Grupo id="usar" titulo="Usar esta foto" icone={<CalendarPlus className="h-4 w-4" />} ajuda="Post na Agenda (foto única ou carrossel, com legenda, data e aprovação do cliente), Mesa, Mesa Ads, baixar ou Arquivos.">
             <div className="flex min-w-0 flex-wrap items-center">
               {prepararNaAgenda && (
@@ -481,8 +550,9 @@ export default function EtapaEstudio() {
             </button>
             .
           </p>
-        </div>
-      </div>
+          </div>
+        </RegiaoRolavel>
+      </section>
       <Ampliar imagens={imagensDoAmpliar} indice={ampliada} onFechar={() => setAmpliada(null)} />
     </div>
   );
