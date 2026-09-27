@@ -18,7 +18,10 @@ import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carreg
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
-import { acrescentarFotos, invalidarFotos, subirOriginais, useFotos } from "./fotoApi";
+import { acrescentarFotos, invalidarFotos, normalizarFoto, semearUrl, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
+import AcoesProDaFoto from "./AcoesProDaFoto";
+import { useLevarParaAsMesas } from "./UsoDaFoto";
+import { levarFotoDaPersonaAoAcervo } from "./agendaApi";
 import {
   acharNoCatalogo,
   aplicarSugestaoNaPersona,
@@ -1096,6 +1099,90 @@ function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPers
   );
 }
 
+/**
+ * Ampliar fiel e usar a foto da persona (dono, 27/09: o "Ampliar fiel" saiu
+ * porque era um botão morto; agora é de verdade). A foto da persona vai para
+ * o acervo do cliente (cópia, sem IA e sem custo) e ali valem as ferramentas
+ * pro pela fal (Ampliar 2x ou 4x fiel, Tirar fundo), o Estúdio de fotos, a
+ * Mesa, a Mesa Ads e o post na Agenda. O custo aparece antes de ampliar.
+ */
+export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; imagem: ImagemDaPersona }) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const { abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
+  const levar = useLevarParaAsMesas();
+  const [noAcervo, setNoAcervo] = useState<FotoDoAcervo | null>(null);
+  const [levando, setLevando] = useState(false);
+  useEffect(() => setNoAcervo(null), [imagem.id]);
+
+  const garantir = async (): Promise<FotoDoAcervo | null> => {
+    if (noAcervo) return noAcervo;
+    setLevando(true);
+    try {
+      const r = await levarFotoDaPersonaAoAcervo({ clientId, modeloId: persona.id, imagemId: imagem.id });
+      const foto = normalizarFoto(r.imagem);
+      if (!foto) throw new Error("A foto não voltou do acervo. Tente de novo.");
+      if (r.imagem && r.imagem.url) semearUrl(queryClient, foto.storage_bucket, foto.storage_path, r.imagem.url);
+      acrescentarFotos(queryClient, clientId, [foto]);
+      invalidarFotos(queryClient, clientId);
+      setNoAcervo(foto);
+      return foto;
+    } catch (e) {
+      avisarErro(e, "A foto não foi para o acervo");
+      return null;
+    } finally {
+      setLevando(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0 space-y-2 border-t border-border pt-3" data-ampliar-e-usar-da-persona={imagem.id}>
+      <p className={texto.rotulo}>Ampliar fiel e usar esta imagem</p>
+      {!noAcervo ? (
+        <div className="flex min-w-0 flex-wrap items-center">
+          <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir()}>
+            {levando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ZoomIn className="mr-1.5 h-3.5 w-3.5" />} Ampliar fiel (pro)
+          </Button>
+          {abrirNoEstudio && (
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir().then((f) => f && abrirNoEstudio(f.id))}>
+              Abrir no Estúdio
+            </Button>
+          )}
+          {prepararNaAgenda && (
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir().then((f) => f && prepararNaAgenda([f.id]))}>
+              Agenda
+            </Button>
+          )}
+          <p className={juntar(texto.auxiliar, "mb-1.5 w-full")}>A imagem entra no acervo do cliente como gerada (pessoa sintética), sem custo. O preço do Ampliar aparece antes de gastar.</p>
+        </div>
+      ) : (
+        <div className="min-w-0 space-y-2">
+          <AcoesProDaFoto foto={noAcervo} mostrarCriativo={false} onPronta={(nova) => setNoAcervo(nova)} />
+          <div className="flex min-w-0 flex-wrap items-center">
+            {abrirNoEstudio && (
+              <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(noAcervo.id)}>
+                Abrir no Estúdio
+              </Button>
+            )}
+            {prepararNaAgenda && (
+              <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => prepararNaAgenda([noAcervo.id])}>
+                Agenda
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={!noAcervo.aprovada} title={noAcervo.aprovada ? undefined : "Aprove a imagem na persona antes de usar nas mesas"} onClick={() => levar("mesa", [noAcervo])}>
+              Mesa
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={!noAcervo.aprovada} title={noAcervo.aprovada ? undefined : "Aprove a imagem na persona antes de usar nas mesas"} onClick={() => levar("ads", [noAcervo])}>
+              Mesa Ads
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPersona[] }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
@@ -1172,6 +1259,7 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
               <Ampliar imagens={[ampliavel(fonte, `${persona.nome}, antes do 4K`)]} indice={vendoGrande ? 0 : null} onFechar={() => setVendoGrande(false)} />
             </div>
           )}
+          <AmpliarEUsarDaPersona persona={persona} imagem={detalhe || fonte} />
         </div>
       )}
     </Secao>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Bookmark,
   CalendarCheck,
@@ -58,6 +58,8 @@ import {
   type Qualidade,
 } from "@/lib/mesa/api";
 import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
+// Frente MF (27/09): post de fotos da Mesa Foto no mesmo trabalho do Estúdio (não gera arte aqui).
+import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
 import DiretorDoEstudio from "./DiretorDoEstudio";
@@ -1338,6 +1340,16 @@ function DetalheDoItem({
       </button>
     ) : null;
 
+  // Frente MF: o item é um post de fotos (feito na Mesa Foto): aqui nada é gerado; fotos, legenda e envio moram lá.
+  const avisoDePostDeFotos = trabalho && ehPostDeFotos(trabalho.direcao) ? (
+    <div className="mb-3 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="post-de-fotos">
+      <span className="mr-2 min-w-0 flex-1">Este item é um post de fotos da Mesa Foto: as fotos vão como estão, sem arte. Troque as fotos, a legenda e envie ao cliente por lá.</span>
+      <Link to={linkDoPostNaMesaFoto(clientId, { taskId: item.id, trabalhoId: trabalho.id })} className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground">
+        Abrir na Mesa Foto
+      </Link>
+    </div>
+  ) : null;
+
   const avisoDeEntregue = entregue && trabalho ? (
     <div className="mb-2 flex min-w-0 flex-wrap items-center rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="trabalho-entregue">
       <Lock className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" />
@@ -1511,6 +1523,7 @@ function DetalheDoItem({
         </div>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
+        {avisoDePostDeFotos}
         {avisoDeAjuste}
         <EstudioSemTipografia clientId={clientId} />
         {laminaGrande}
@@ -1518,6 +1531,7 @@ function DetalheDoItem({
     </>
   ) : (
     <div className="flex min-w-0 flex-col p-3">
+      {avisoDePostDeFotos}
       {avisoDeAjuste}
       <EstudioSemTipografia clientId={clientId} />
       <p className="mb-2 flex min-w-0 items-center text-[11px] text-muted-foreground">

@@ -485,6 +485,11 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
       <div className="mx-2.5 flex h-8 shrink-0 items-center" data-acoes-do-resultado="">
         {atual ? (
           <>
+            {uso.temEstudio && (
+              <button type="button" className={`${ICONE} mr-1`} disabled={!atual.imagem_id} onClick={() => uso.abrirNoEstudio(atual)} aria-label="Abrir no Estúdio de fotos" title="Abre esta foto no Estúdio de fotos">
+                Estúdio
+              </button>
+            )}
             <button
               type="button"
               className={`${ICONE} mr-1`}

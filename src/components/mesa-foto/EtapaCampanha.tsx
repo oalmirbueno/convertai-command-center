@@ -14,7 +14,7 @@ import { SeletorDeModelo, SeletorDeQualidade } from "@/components/mesa/Seletores
 import { padraoPara, usd, type Qualidade } from "@/lib/mesa/api";
 import { AndamentoDoLote, BotaoDoLote } from "./AndamentoDoLote";
 import { SeletorDaCampanha, useCampanhaEscolhida } from "./CampanhaDaMesa";
-import { DecisaoRapida, MenuDeUso } from "./UsoDaFoto";
+import { AtalhosDaFoto, DecisaoRapida, MenuDeUso } from "./UsoDaFoto";
 import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
 import { ZonaDeEnvio } from "./EtapaAcervo";
@@ -291,6 +291,7 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
           />
         )}
         {fotoAprovada && <MenuDeUso foto={fotoAprovada} className="mb-1" />}
+        {fotoAprovada && <AtalhosDaFoto foto={fotoAprovada} />}
         {pendente && !gerando && <MenuDeUso pendente={{ ensaio, tomada, versao: pendente }} variante="ghost" className="mb-1" />}
       </div>
     </li>

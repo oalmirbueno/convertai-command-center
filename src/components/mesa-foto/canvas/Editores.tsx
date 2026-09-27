@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, CheckCheck, Clapperboard, Copy, Eye, ImagePlus, Layers, Loader2, ScanSearch, Sparkles, UserRoundPlus, Wand2, X } from "lucide-react";
+import { ArrowUpRight, CalendarPlus, Check, CheckCheck, Clapperboard, Copy, Eye, ImagePlus, Layers, Loader2, ScanSearch, SlidersHorizontal, Sparkles, UserRoundPlus, Wand2, X } from "lucide-react";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { BotaoComCusto, useAvisarErro, useEstimativa } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { QUALIDADES, usd, type Qualidade } from "@/lib/mesa/api";
 import { AprovarFoto, BotoesDeUso } from "../AcoesDeUso";
+import { enderecoParaUsar } from "../UsoDaFoto";
 import { useMesaFoto } from "../Comuns";
 import { acrescentarFotos, FORMATOS, invalidarFotos, partesDaConferencia, partesDaConversa, type FotoDoAcervo } from "../fotoApi";
 import { motoresDaRodada, rotuloDoMotor, useAndamentos, type ConferenciaDaPersona, type Resolucao } from "../modelosApi";
@@ -67,7 +68,7 @@ const RESOLUCOES_DO_CANVAS: { valor: string; rotulo: string }[] = [
  */
 export function useUsoDoResultado(fotos: FotoDoAcervo[]) {
   const { clientId } = useMesa();
-  const { irPara } = useMesaFoto();
+  const { irPara, abrirNoEstudio: abrirNaFoto, prepararNaAgenda } = useMesaFoto();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -81,6 +82,20 @@ export function useUsoDoResultado(fotos: FotoDoAcervo[]) {
     if (nova) acrescentarFotos(queryClient, clientId, [nova]);
     if (nova || !foto) invalidarFotos(queryClient, clientId);
     return id;
+  };
+
+  /** Frente MF: a Mesa Ads também em um clique (aprova se precisar, como o Usar na Mesa). */
+  const usarNaMesaAds = async (r: ResultadoDoCanvas) => {
+    if (ocupado) return;
+    setOcupado("usar");
+    try {
+      const id = await preparar(r);
+      if (id) navigate(enderecoParaUsar("ads", clientId, [id]));
+    } catch (e) {
+      avisarErro(e, "Não deu para mandar à Mesa Ads");
+    } finally {
+      setOcupado("");
+    }
   };
 
   const usarNaMesa = async (r: ResultadoDoCanvas) => {
@@ -112,7 +127,16 @@ export function useUsoDoResultado(fotos: FotoDoAcervo[]) {
     }
   };
 
-  return { usarNaMesa, finalizar, ocupado };
+  /** Frente MF (27/09): o resultado do Canvas abre no Estúdio de fotos (a foto já está no acervo, como gerada). */
+  const abrirNoEstudio = (r: ResultadoDoCanvas) => {
+    if (r.imagem_id && abrirNaFoto) abrirNaFoto(r.imagem_id);
+  };
+  /** E vai para um post na Agenda (a equipe aprova a gerada no envio ao cliente). */
+  const naAgenda = (r: ResultadoDoCanvas) => {
+    if (r.imagem_id && prepararNaAgenda) prepararNaAgenda([r.imagem_id]);
+  };
+
+  return { usarNaMesa, usarNaMesaAds, finalizar, ocupado, abrirNoEstudio, naAgenda, temEstudio: !!abrirNaFoto, temAgenda: !!prepararNaAgenda };
 }
 
 // ------------------------------------------------------------------ cartão
@@ -334,8 +358,21 @@ export function FotoDoResultado({
           </div>
           {r.imagem_id && (
             <div className="flex min-w-0 flex-wrap items-center">
+              {uso.temEstudio && (
+                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} onClick={() => uso.abrirNoEstudio(r)} title="Abre esta foto no Estúdio de fotos: luz, cor, fundo, cenário, ângulo, ampliar">
+                  <SlidersHorizontal className="mr-1 h-3 w-3" /> Estúdio
+                </button>
+              )}
+              {uso.temAgenda && (
+                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} onClick={() => uso.naAgenda(r)} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente">
+                  <CalendarPlus className="mr-1 h-3 w-3" /> Agenda
+                </button>
+              )}
               <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesa(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto">
                 {uso.ocupado === "usar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ArrowUpRight className="mr-1 h-3 w-3" />} Usar na Mesa
+              </button>
+              <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesaAds(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa Ads com esta foto">
+                <ArrowUpRight className="mr-1 h-3 w-3" /> Mesa Ads
               </button>
               <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.finalizar(r)} title="Aprova (se precisar) e abre o Usar">
                 {uso.ocupado === "finalizar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCheck className="mr-1 h-3 w-3" />} Finalizar

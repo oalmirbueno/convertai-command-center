@@ -97,6 +97,8 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import { direcaoDoRoteiro } from "../_shared/direcao-arte.ts";
 import { aplicarFotosDoPlano, pecasDoPlanoGravado } from "../_shared/fotos-do-plano.ts";
 export { aplicarFotosDoPlano, pecasDoPlanoGravado };
+// Frente MF (27/09): formato do perfil (só fotos, só artes ou alternar) e a mesa de cada item.
+import { lerFormatoDoPerfil, marcarMesasDoPlano, reservarPostsDoPlano, textoDoPerfilParaOPlano } from "./mesa-do-item.ts";
 import {
   blocoDaMarca,
   kitComMarca,
@@ -317,6 +319,8 @@ type Tema = {
 type Card = { ordem: number; funcao: string; texto: string; ilustracao: string; estilo: string };
 
 type Item = {
+  /** Frente MF: a mesa que faz o item (foto: Mesa Foto; arte: Estúdio), pelo formato do perfil. */
+  mesa?: "foto" | "arte" | null;
   tema_id: string;
   data: string;
   formato: Formato;
@@ -797,6 +801,8 @@ type Contexto = {
   mcp?: string;
   /** Frente AP: todos os temas do cliente (planejados, gravados e publicados, com números); null quando a leitura falhou. */
   memoriaEditorial?: MemoriaEditorial | null;
+  /** Frente MF: formato do perfil do cliente (fotos, artes ou alternar). */
+  formatoDoPerfil?: string | null;
 };
 
 /**
@@ -983,6 +989,8 @@ async function montarContexto(
 
   // Frente H: cérebro do cliente (calendário, campanha e copy), lido junto; o "Plano do mês" segue pelo caminho próprio.
   const cerebroP = resumoDoCerebro(servico, clientId, ["calendario", "campanha", "copy"], { limite: 2000, manter: (f) => !mesDoPlano(f.texto) });
+  // Frente MF: o formato do perfil (sem a coluna, "artes": o de sempre).
+  const perfilP = lerFormatoDoPerfil(servico, clientId);
   const [
     perfil,
     conta,
@@ -1109,6 +1117,7 @@ async function montarContexto(
     prompt,
     mcp: (await mcpP).texto,
     memoriaEditorial: await memoriaEditorialP,
+    formatoDoPerfil: await perfilP,
   };
 }
 
@@ -1141,6 +1150,8 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     // Frente H: o resumo do cérebro no lugar da lista crua; a lista só volta se o cérebro não respondeu.
     ...(ctx.cerebro === null ? { memoria_do_estrategista: ctx.memoria } : { cerebro_do_cliente: ctx.cerebro || null }),
     planos_combinados_com_a_equipe: ctx.planos,
+    // Frente MF: só fotos ou alternar (só artes fica fora: o pedido segue como sempre).
+    ...(textoDoPerfilParaOPlano((ctx.formatoDoPerfil || "artes") as "fotos" | "artes" | "alternar") ? { formato_do_perfil: textoDoPerfilParaOPlano((ctx.formatoDoPerfil || "artes") as "fotos" | "artes" | "alternar") } : {}),
   };
   // Frente AP: memória editorial (sem histórico, vazia: o pedido fica como antes).
   const memoria = blocoDaMemoriaEditorial(ctx.memoriaEditorial, { enxuto });
@@ -2358,6 +2369,9 @@ async function gravarItens(
   // task_id dentro de cada item: criado, ja gravado ou ja existente; null so
   // quando nada foi criado nem encontrado. O estudio acha o roteiro por aqui.
   const itensComTarefa = itensComTaskId(p.itens, resultado);
+  // Frente MF: cada item ganha a mesa que o faz, pelo formato do perfil (alternar: o Jev escolhe, o código equilibra).
+  const mesasDoPlano = await marcarMesasDoPlano(servico, p.client_id, itensComTarefa, { referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId })
+    .catch(() => ({ perfil: "artes", custo: 0, fonte: "perfil" as const }));
 
   if (erros.length > 0) {
     // Parcial: guarda o que entrou e continua pronta para nova tentativa
@@ -2412,19 +2426,21 @@ async function gravarItens(
   if (completa && typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id)) {
     await servico.from("mesa_campanhas").update({ status: "gravada" }).eq("id", p.parametros.campanha_id).eq("client_id", p.client_id);
   }
-  // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA).
-  const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa, chamador.userId);
+  // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA). Frente MF: item de fotos
+  // não ganha direção de arte; ganha o post de fotos reservado, que abre na Mesa Foto.
+  const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa.filter((i) => i.mesa !== "foto"), chamador.userId);
+  const postsDeFotos = await reservarPostsDoPlano(servico, p.client_id, itensComTarefa, chamador.userId);
   tempo.marcar("direcoes");
 
   const conversaId = await garantirConversa(servico, atualizada, chamador.userId);
   const criados = resultado.filter((r) => r.situacao === "criado").length;
   await registrarMensagens(servico, conversaId, p.client_id, [
-    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m). ${direcoes} com direção de arte pronta no Estúdio.${faltamNaAgenda ? ` ${faltamNaAgenda} ainda na proposta.` : ""}` },
+    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m). ${direcoes} com direção de arte pronta no Estúdio.${postsDeFotos ? ` ${postsDeFotos} ${postsDeFotos === 1 ? "post de fotos espera" : "posts de fotos esperam"} as fotos na Mesa Foto.` : ""}${faltamNaAgenda ? ` ${faltamNaAgenda} ainda na proposta.` : ""}` },
   ]);
   const tempos = tempo.tempos();
   console.log("[agente-calendario] gravar", { proposta_id: p.id, itens: indices.length, criados, tempos_ms: tempos });
 
-  return { status: 200, corpo: { proposta: atualizada, itens: resultado, direcoes_prontas: direcoes, faltam_na_agenda: faltamNaAgenda, tempos_ms: tempos } };
+  return { status: 200, corpo: { proposta: atualizada, itens: resultado, direcoes_prontas: direcoes, posts_de_fotos: postsDeFotos, formato_do_perfil: mesasDoPlano.perfil, faltam_na_agenda: faltamNaAgenda, tempos_ms: tempos } };
 }
 
 /** Memoria do estrategista: o que a equipe escolheu e o que descartou. Uma vez por proposta. */

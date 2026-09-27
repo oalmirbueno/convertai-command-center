@@ -22,7 +22,7 @@ import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carreg
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
-import { MenuDeUso } from "./UsoDaFoto";
+import { AtalhosDaFoto, MenuDeUso } from "./UsoDaFoto";
 import { useSelecaoParaODiretor } from "./diretorApi";
 import { acrescentarFotos, baixarDoStorage, baixarUmaAUma, classeDaFoto, invalidarFotos, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
 import { caminhoDaImagem, chaveDoAndamento, emParalelo, marcarAndamento, proporcaoDaImagem, useAndamentos, usePrecoNoServidor, type ImagemDaPersona } from "./modelosApi";
@@ -1157,6 +1157,7 @@ function VariacaoAberta({
             <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
           </Button>
           <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
+          <AtalhosDaFoto foto={foto} />
           <BotaoConferirClone cloneId={clone.id} imagemId={foto.id} origem="acervo" onConferencia={setConferencia} />
           {onRefazer && (
             <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={onRefazer} title="O mesmo pedido de novo; dá para escolher as fotos de origem">

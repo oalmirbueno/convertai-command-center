@@ -1,4 +1,4 @@
-import { acaoDoAnexo, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { acaoDoAnexo, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
@@ -2053,6 +2053,10 @@ export interface MensagemDoDiretor {
   /** Gerações pagas propostas pelo diretor agêntico (uma foto por item, custo antes do Confirmar). */
   geracao?: AcaoDoAgente | null;
   mensagemId?: string | null;
+  /** Frente MF: para onde ir depois desta resposta (botão "Ir para"; sozinho no "faz e me leva"). */
+  caminho?: CaminhoDoAgente | null;
+  /** A resposta acabou de chegar nesta tela (o que vai sozinho só vai agora, nunca ao reabrir). */
+  nova?: boolean;
 }
 
 export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
@@ -2097,6 +2101,8 @@ export interface RespostaDoDiretor {
   geracao: AcaoDoAgente | null;
   /** O que o diretor já conhecia nesta mensagem (pacote do cliente). */
   contexto_do_diretor: { resumo: string; foco_rotulo: string; leituras_feitas: number } | null;
+  /** Frente MF: o caminho da resposta (rota interna, conferida). */
+  caminho: CaminhoDoAgente | null;
 }
 
 export async function conversarComDiretor(p: {
@@ -2144,6 +2150,7 @@ export async function conversarComDiretor(p: {
     acao: acaoDoAnexo(data && data.acao),
     mensagem_id: textoOuNulo(data && data.mensagem_id),
     geracao: acaoDoAnexo(data && data.acao_de_geracao),
+    caminho: caminhoSeguro(data && data.caminho),
     contexto_do_diretor:
       data && data.contexto_do_diretor && typeof data.contexto_do_diretor === "object"
         ? { resumo: texto(data.contexto_do_diretor.resumo), foco_rotulo: texto(data.contexto_do_diretor.foco_rotulo), leituras_feitas: Number(data.contexto_do_diretor.leituras_feitas) || 0 }

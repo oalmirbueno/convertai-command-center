@@ -23,7 +23,10 @@ import {
   type MesaFotoValor,
 } from "@/components/mesa-foto/Comuns";
 import { proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
-import { useContextoDoDiretor, useFocoDoDiretor } from "@/components/mesa-foto/diretorApi";
+import { CHAVES_DO_ABERTO, useContextoDoDiretor, useFocoDoDiretor } from "@/components/mesa-foto/diretorApi";
+import { gravarNaSessao } from "@/components/mesa-foto/sessao";
+import { CHAVE_DAS_FOTOS_DO_POST } from "@/components/mesa-foto/agendaApi";
+import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
@@ -65,6 +68,14 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
  *
  * Regra da fotografia: nunca escurecer a foto para dar destaque; foto
  * sintética sempre marcada como gerada.
+ *
+ * 27/09 (dono: "ainda está confuso, não está tão facilitado pra criar"): o
+ * caminho ficou Fotos → o que fazer (Estúdio de fotos, Variações, Campanha)
+ * → Usar (Post na Agenda para o cliente aprovar, Mesa, Mesa Ads). O Estúdio
+ * de fotos (?etapa=estudio&imagem=) e o Post na Agenda (?etapa=agenda&task=
+ * &trabalho=) abrem de qualquer foto, em um clique. O caminho que o diretor
+ * deixa pode levar junto canvas=, book=, clone= e modelo=: a página abre o
+ * que foi feito e tira o parâmetro do endereço.
  */
 
 const carregarAcervo = () => import("@/components/mesa-foto/EtapaAcervo");
@@ -79,12 +90,16 @@ const carregarCriar = () => import("@/components/mesa-foto/EtapaCriar");
 const carregarModelos = () => import("@/components/mesa-foto/EtapaModelos");
 const carregarClones = () => import("@/components/mesa-foto/EtapaClones");
 const carregarBook = () => import("@/components/mesa-foto/EtapaBook");
+const carregarEstudio = () => import("@/components/mesa-foto/EtapaEstudio");
+const carregarAgenda = () => import("@/components/mesa-foto/EtapaAgenda");
 // O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts): o que já
 // baixou antes do clique aparece direto, sem esqueleto.
 const EtapaModelos = lazyComPreCarga("mesa-foto/modelos", carregarModelos);
 const EtapaClones = lazyComPreCarga("mesa-foto/clones", carregarClones);
 const EtapaBook = lazyComPreCarga("mesa-foto/book", carregarBook);
+const EtapaEstudio = lazyComPreCarga("mesa-foto/estudio", carregarEstudio);
+const EtapaAgenda = lazyComPreCarga("mesa-foto/agenda", carregarAgenda);
 const EtapaCanvas = lazyComPreCarga("mesa-foto/canvas", () => import("@/components/mesa-foto/EtapaCanvas"));
 const EtapaCampanha = lazyComPreCarga("mesa-foto/campanha", carregarCampanha);
 const EtapaCriar = lazyComPreCarga("mesa-foto/criar", carregarCriar);
@@ -212,6 +227,20 @@ export default function MesaFoto() {
     validar: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
   });
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
+  // O caminho do diretor (e dos avisos) pode trazer o que abrir em cada etapa: grava o "aberto"
+  // da etapa antes dela montar e tira o parâmetro do endereço (voltar não reabre o antigo).
+  const abertosAplicados = useRef<string>("");
+  const abertosNoEndereco = (["canvas", "book", "clone", "modelo"] as const)
+    .map((k) => [k, uuidOuNulo(params.get(k))] as const)
+    .filter((x) => !!x[1]);
+  const chaveDosAbertos = abertosNoEndereco.map((x) => `${x[0]}=${x[1]}`).join("&");
+  if (clientId && chaveDosAbertos && abertosAplicados.current !== `${clientId}|${chaveDosAbertos}`) {
+    abertosAplicados.current = `${clientId}|${chaveDosAbertos}`;
+    abertosNoEndereco.forEach(([k, id]) => {
+      const chave = k === "canvas" ? CHAVES_DO_ABERTO.canvas(clientId) : k === "book" ? CHAVES_DO_ABERTO.book(clientId) : k === "clone" ? CHAVES_DO_ABERTO.clone(clientId) : CHAVES_DO_ABERTO.persona(clientId);
+      gravarEstadoDaTela(chave, id);
+    });
+  }
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   // Marca por projeto (só a Acerbi hoje: Acerbi e CME): cores e contexto do diretor. Uma marca só: nada muda.
   const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
@@ -240,6 +269,12 @@ export default function MesaFoto() {
     const o = lerOnde(id);
     mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null, marca: null });
   };
+
+  useEffect(() => {
+    if (!chaveDosAbertos) return;
+    mudar({ canvas: null, book: null, clone: null, modelo: null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDosAbertos]);
 
   // Endereço só com o cliente: abre onde parou.
   useEffect(() => {
@@ -282,7 +317,7 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const etapa of [EtapaAcervo, EtapaKits, EtapaCriar, EtapaEnsaio, EtapaCampanha, EtapaPreparar, EtapaRevisar, EtapaUsar, EtapaBiblioteca, EtapaModelos, EtapaClones, EtapaBook]) {
+        for (const etapa of [EtapaAcervo, EtapaKits, EtapaCriar, EtapaEstudio, EtapaEnsaio, EtapaCampanha, EtapaPreparar, EtapaRevisar, EtapaUsar, EtapaAgenda, EtapaBiblioteca, EtapaModelos, EtapaClones, EtapaBook]) {
           etapa.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -369,6 +404,12 @@ export default function MesaFoto() {
     pedirAoDiretor: (mensagem: string) => {
       setPedidoAoDiretor({ mensagem, em: Date.now() });
       abrirLateralDaArea();
+    },
+    // Frente MF: de qualquer foto, um clique para o Estúdio de fotos ou para o Post na Agenda.
+    abrirNoEstudio: (imagemId: string, ferramenta?: string | null) => mudar({ etapa: "estudio", imagem: imagemId, ferramenta: ferramenta || null }),
+    prepararNaAgenda: (imagemIds: string[]) => {
+      if (clientId) gravarNaSessao(clientId, CHAVE_DAS_FOTOS_DO_POST, imagemIds.slice(0, 20));
+      mudar({ etapa: "agenda", task: null, trabalho: null });
     },
   };
   const passoAtual = passoDaEtapa(etapa);
@@ -511,11 +552,13 @@ export default function MesaFoto() {
               }
             >
               <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
-                {(etapa === "ensaio" || etapa === "campanha" || etapa === "preparar") && <NavDoCriar atual={etapa} />}
+                {(etapa === "ensaio" || etapa === "campanha" || etapa === "preparar" || etapa === "estudio") && <NavDoCriar atual={etapa} />}
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
                   {etapa === "acervo" && <EtapaAcervo />}
                   {etapa === "kits" && <EtapaKits />}
                   {etapa === "criar" && <EtapaCriar />}
+                  {etapa === "estudio" && <EtapaEstudio />}
+                  {etapa === "agenda" && <EtapaAgenda />}
                   {etapa === "preparar" && <EtapaPreparar />}
                   {etapa === "ensaio" && <EtapaEnsaio />}
                   {etapa === "campanha" && <EtapaCampanha />}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useInRouterContext, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Aperture, Check, ImagePlus, Loader2, Megaphone, MessageSquarePlus, PackageOpen, PackageSearch, Paperclip, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
@@ -47,8 +48,10 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, foco, juntar } from "@/components/sistema/estilos";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
-import { chamarAcaoDoAgente, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import CaminhoPronto from "@/components/agentes/CaminhoPronto";
+import { chamarAcaoDoAgente, caminhoSeguro, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import CartaoDaGeracao from "./CartaoDaGeracao";
+import ProvaDoDiretor from "./ProvaDoDiretor";
 import { atualizarTelasDepoisDoDiretor, CHAVES_DO_ABERTO, focoDaTela, useContextoDoDiretor, useFocoDoDiretor } from "./diretorApi";
 
 /**
@@ -64,6 +67,13 @@ import { atualizarTelasDepoisDoDiretor, CHAVES_DO_ABERTO, focoDaTela, useContext
  * quantidade e tipos e "Gerar todas (N fotos, ~US$ X)", campanha com o guia
  * de estilo, e identificar o produto pela embalagem. Atalhos prontos para os
  * pedidos mais comuns. Nada gasta sem o preço à vista antes.
+ *
+ * Frente MF (27/09, "diretor que faz"): ordem clara, sem custo e com Desfazer
+ * chega feita ("Feito na hora", com o Desfazer); geração barata começa
+ * sozinha com o custo à vista e o botão Parar; o resto espera o Confirmar.
+ * Toda resposta termina com o caminho (botão "Ir para ...", que vai sozinho
+ * no pedido "faz e me leva") e com a prova do que foi feito (as fotos, antes
+ * e depois).
  */
 
 const chaveDaConversa = (clientId: string) => `mesa-foto:conversa:${clientId}`;
@@ -501,10 +511,49 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
   );
 }
 
+/**
+ * Feito na hora com "me leva" (a ação chegou pronta do servidor): a tela vai
+ * sozinha uma vez, só com a resposta nova (reabrir a conversa não navega).
+ */
+function IrSozinho({ destino }: { destino: string }) {
+  const noRoteador = useInRouterContext();
+  return noRoteador ? <IrSozinhoNoRoteador destino={destino} /> : <IrSozinhoSemRoteador destino={destino} />;
+}
+
+function IrSozinhoNoRoteador({ destino }: { destino: string }) {
+  const navigate = useNavigate();
+  const foi = useRef(false);
+  useEffect(() => {
+    if (foi.current) return;
+    foi.current = true;
+    navigate(destino);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+function IrSozinhoSemRoteador({ destino }: { destino: string }) {
+  const foi = useRef(false);
+  useEffect(() => {
+    if (foi.current) return;
+    foi.current = true;
+    window.location.assign(destino);
+  }, [destino]);
+  return null;
+}
+
+/** Caminho da ação feita na hora que pede para ir sozinho (só com a resposta nova). */
+function caminhoParaIrSozinho(m: MensagemDoDiretor): string | null {
+  if (!m.nova || !m.acao || !m.acao.executada_direto) return null;
+  const c = caminhoSeguro(m.acao.caminho);
+  return c && c.abrir_sozinho ? c.destino : null;
+}
+
 function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConversa: string[] }) {
   const { irPara } = useMesaFoto();
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
+  const irSozinhoPara = caminhoParaIrSozinho(m);
   if (m.papel === "usuario") {
     return (
       <div className="ml-6 min-w-0">
@@ -566,7 +615,7 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
         <div className="mt-2">
           <CartaoDeAcao
             acao={m.acao}
-            titulo="O diretor vai fazer nas fotos"
+            titulo={m.acao.executada_direto ? "O diretor já fez nas fotos" : "O diretor vai fazer nas fotos"}
             observacao="Sem custo. Nenhuma foto é apagada, e dá para desfazer."
             onPedido={(p) => chamarAcaoDoAgente("mesa-foto", String(m.mensagemId), m.acao ? m.acao.id : "", p)}
             onFeito={(p, resposta) => {
@@ -581,11 +630,20 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
               }
             }}
           />
+          {/* Prova do que foi feito (feito na hora ou depois do Confirmar): as fotos que ele mexeu. */}
+          {m.acao.executada_em && <ProvaDoDiretor acao={m.acao} />}
+          {irSozinhoPara && <IrSozinho destino={irSozinhoPara} />}
         </div>
       )}
       {m.geracao && m.mensagemId && (
         <div className="mt-2">
-          <CartaoDaGeracao acao={m.geracao} mensagemId={String(m.mensagemId)} />
+          <CartaoDaGeracao acao={m.geracao} mensagemId={String(m.mensagemId)} iniciarSozinha={!!m.nova} />
+        </div>
+      )}
+      {/* O caminho da resposta: a área onde a equipe continua (vai sozinho no "faz e me leva"). */}
+      {m.caminho && !(m.acao && m.acao.executada_direto && m.acao.caminho) && (
+        <div className="mt-2 flex min-w-0 flex-wrap items-center" data-caminho-da-resposta="">
+          <CaminhoPronto caminho={m.caminho} abrirSozinho={!!m.nova && !m.geracao && m.caminho.abrir_sozinho === true} />
         </div>
       )}
       {m.custo_usd !== null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
@@ -655,7 +713,7 @@ function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDireto
     <>
       {mensagens.length === 0 && !pendente && (
         <p className="text-[12.5px] leading-relaxed text-muted-foreground" data-diretor-vazio="">
-          Ele já conhece o cliente e o que está aberto na tela. Peça o que quer: gerar fotos do clone, variações, campanha, book. Ele propõe, mostra o custo e faz quando você confirma.
+          Ele já conhece o cliente e o que está aberto na tela. Peça o que quer: melhorar uma foto, variações, campanha, book, um carrossel na Agenda. O que é claro e sem custo ele já faz (dá para desfazer); o que custa mostra o preço antes. No fim ele deixa o botão para ir à área certa.
         </p>
       )}
       {mensagens.map((m) => (
@@ -751,9 +809,14 @@ export default function AgenteDiretor({
             acao: r.acao,
             geracao: r.geracao,
             mensagemId: r.mensagem_id,
+            caminho: r.caminho,
+            nova: true,
           },
         ]),
       }));
+      // O que vai sozinho (ir para a área, começar a geração barata) só vale agora: depois, só com o clique.
+      window.setTimeout(() => mudarConversa(alvo, (e) => ({ mensagens: e.mensagens.map((x) => (x.nova ? { ...x, nova: false } : x)) })), 2500);
+      if (r.acao && r.acao.executada_direto) atualizarTelasDepoisDoDiretor(queryClient, alvo, r.acao);
       if (estilosQueCabem.length) setEstilos((l) => l.filter((id) => estilosQueCabem.indexOf(id) < 0));
     } catch (e) {
       setErro(e);
@@ -832,7 +895,7 @@ export default function AgenteDiretor({
               </button>
             )}
             <AjudaRecolhida rotulo="Como o diretor funciona">
-              Ele já carrega o cliente sozinho: marca, histórico, campanha da Mesa, fotos, clones, books, produtos e o que está aberto e marcado na etapa. Lê cada foto nova uma vez e guarda. Propõe, mostra o custo e só faz quando você confirma: gera ali mesmo, uma foto por vez, e dá para desfazer.
+              Ele já carrega o cliente sozinho: marca, histórico, campanha da Mesa, fotos, clones, books, produtos, posts de fotos na Agenda e o que está aberto e marcado na etapa. Lê cada foto nova uma vez e guarda. Pedido claro e sem custo ele já faz (até 5 itens, com Desfazer). Geração barata (até US$ 0,40 e 4 fotos) começa sozinha com o custo à vista e o botão Parar; acima disso, espera o seu Confirmar. Nunca apaga (arquiva). Termina com o botão para ir à área certa e mostra as fotos como prova.
             </AjudaRecolhida>
           </>
         }
@@ -841,7 +904,13 @@ export default function AgenteDiretor({
         avisos={erro ? <AvisoDeErro erro={erro} /> : null}
         compositor={
           <>
-            <OQuePossoFazer capacidades={["gerar fotos do clone, variações e fotos do prompt ou do book", "aprovar, arquivar, organizar e mandar para Arquivos", "trocar fotos do clone, montar book e levar ao Canvas"]} />
+            <OQuePossoFazer
+              capacidades={[
+                "melhorar fotos (luz, limpar, fundo, cenário) e gerar variações, fotos do clone e do book",
+                "montar post de fotos na Agenda e abrir a foto no Estúdio",
+                "aprovar, arquivar, organizar, montar book e levar ao Canvas",
+              ]}
+            />
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
               {ATALHOS_DO_DIRETOR.map((a) => {
                 const Icone = a.icone;

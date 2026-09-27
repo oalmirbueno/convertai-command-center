@@ -233,7 +233,9 @@ export async function confirmarGeracaoItemAItem(p: {
   aoAvancar?: (feitos: number, total: number, anexo: AcaoDoAgente | null, resposta: RespostaDoItem) => void;
   aoComecarItem?: (indice: number, total: number) => void;
   executar?: (mensagemId: string, acaoId: string, ref: string) => Promise<RespostaDoItem>;
-}): Promise<{ anexo: AcaoDoAgente | null; custo_usd: number }> {
+  /** Frente MF: o dono apertou Parar (o que já saiu fica; nada mais é gerado). */
+  deveParar?: () => boolean;
+}): Promise<{ anexo: AcaoDoAgente | null; custo_usd: number; parou: boolean }> {
   const executar = p.executar || executarItemDoDiretor;
   const feitosAntes = (p.acao.resultados || []).map((r) => r.ref);
   const pendentes = p.acao.itens.filter((i) => feitosAntes.indexOf(i.ref) < 0);
@@ -241,7 +243,12 @@ export async function confirmarGeracaoItemAItem(p: {
   let anexo: AcaoDoAgente | null = null;
   let custo = 0;
   let feitos = feitosAntes.length;
+  let parou = false;
   for (let k = 0; k < pendentes.length; k++) {
+    if (p.deveParar && p.deveParar()) {
+      parou = true;
+      break;
+    }
     if (p.aoComecarItem) p.aoComecarItem(feitos, total);
     const r = await executar(p.mensagemId, p.acao.id, pendentes[k].ref);
     if (r.anexo) anexo = r.anexo;
@@ -249,7 +256,7 @@ export async function confirmarGeracaoItemAItem(p: {
     feitos += 1;
     if (p.aoAvancar) p.aoAvancar(feitos, total, anexo, r);
   }
-  return { anexo, custo_usd: Math.round(custo * 1e6) / 1e6 };
+  return { anexo, custo_usd: Math.round(custo * 1e6) / 1e6, parou };
 }
 
 // ------------------------------------------------------------------ a tela atualiza sozinha

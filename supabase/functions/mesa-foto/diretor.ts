@@ -17,6 +17,13 @@
  * Toda execução passa pelas ações que a Mesa Foto já tem, com o JWT de quem
  * confirmou (can_access_client e RLS valem como no clique da tela). A carteira
  * cobrada é a do cliente, pelo motor de IA, como em qualquer geração da mesa.
+ *
+ * Frente MF (27/09, "diretor que faz"): com ordem clara, sem custo e com
+ * Desfazer, a proposta é feita na hora (executarDiretoDoDiretor, regra 6 do
+ * contrato); toda proposta feita guarda o `caminho` (a área onde o resultado
+ * está, já aberta no que foi feito). A foto entra num post de fotos na Agenda
+ * (post_na_agenda, _shared/post-de-fotos.ts) e as fotos geradas com
+ * agenda_das_fotos entram no post quando a última termina.
  */
 
 import {
@@ -30,8 +37,11 @@ import {
   exigirEstado,
   type ItemDaAcaoDoAgente,
   type ResultadoDoItem,
+  executarDireto,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
+import { ehPostDeFotos, estadoDoPostDeFotos, podeTrocarAsFotos, prepararPostDeFotos } from "../_shared/post-de-fotos.ts";
+import { criarItemDoPostDeFotos } from "../_shared/post-de-fotos-item.ts";
 import { executarNoAcervo, reverterNoAcervo } from "../_shared/acoes-do-acervo.ts";
 import { ErroDeRegra, UUID } from "./calculos.ts";
 import { autorizacaoValida, ORIGEM_CLONE } from "./clones-regras.ts";
@@ -70,6 +80,9 @@ import {
   pedidoDoItem,
   resultadoDoItem,
   blocoDoPacote,
+  caminhoDaAcaoDoDiretor,
+  lerDestinoDoPost,
+  type PostBruto,
 } from "./diretor-agentico.ts";
 
 type Json = Record<string, unknown>;
@@ -162,7 +175,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     const chave = `${clientId}|${chaveDoFoco(focoBruto)}`;
     const guardada = cacheDoPacote.ler(chave);
     if (guardada) return guardada;
-    const [imagens, clones, personas, prompts, books, kits, campanhas, pasta] = await Promise.all([
+    const [imagens, clones, personas, prompts, books, kits, campanhas, pasta, posts] = await Promise.all([
       lista<ImagemBruta>(db().from("cliente_imagens").select(CAMPOS_DA_IMAGEM).eq("client_id", clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(80)),
       lista<Json>(db().from("foto_modelos").select("id, nome, status, identidade_real, autorizacao").eq("client_id", clientId).eq("origem", ORIGEM_CLONE).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(30)),
       lista<Json>(db().from("foto_modelos").select("id, nome, status").eq("client_id", clientId).neq("origem", ORIGEM_CLONE).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(20)),
@@ -171,6 +184,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       d.kitsDoCliente(clientId).catch(() => [] as KitBruto[]),
       lista<Json>(db().from("mesa_campanhas").select("id, nome, status").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(20)),
       db().storage.from("mesa").list(pastaDasLeituras(clientId), { limit: 1000 }).then((r) => (r.data ?? []).map((o) => String(o.name)), () => [] as string[]),
+      postsDeFotos(clientId),
     ]);
     const clonesLidos = clones.map((c) => {
       const v = autorizacaoValida(c.autorizacao as Record<string, unknown> | null);
@@ -234,12 +248,37 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       kits,
       personas: personas.map((p) => ({ id: String(p.id), nome: String(p.nome || "Modelo"), status: (p.status as string) ?? null })),
       campanhas: campanhas.map((c) => ({ id: String(c.id), nome: String(c.nome || "Campanha"), status: (c.status as string) ?? null })),
+      posts,
       leituras,
       lidasNoStorage,
       contexto: resumoDoContexto(contexto),
     };
     cacheDoPacote.gravar(chave, entrada);
     return entrada;
+  }
+
+  /** Posts de fotos da Agenda que ainda aceitam fotos (os que já foram para a aprovação ficam de fora). */
+  async function postsDeFotos(clientId: string): Promise<PostBruto[]> {
+    const trabalhos = await lista<Json>(db().from("estudio_trabalhos").select("id, task_id, status, entrega_status, cards, file_ids, legenda, direcao")
+      .eq("client_id", clientId).not("task_id", "is", null).eq("direcao->>so_fotos", "true").order("atualizado_em", { ascending: false }).limit(20));
+    const abertos = trabalhos.filter((t) => ehPostDeFotos(t.direcao) && podeTrocarAsFotos(t as { entrega_status?: string | null }));
+    if (!abertos.length) return [];
+    const tarefas = await lista<Json>(db().from("tasks").select("id, title, due_date, deleted_at").in("id", abertos.map((t) => String(t.task_id))));
+    const porId = new Map(tarefas.filter((t) => !t.deleted_at).map((t) => [String(t.id), t]));
+    return abertos
+      .filter((t) => porId.has(String(t.task_id)))
+      .map((t) => {
+        const tarefa = porId.get(String(t.task_id)) as Json;
+        return {
+          trabalho_id: String(t.id),
+          task_id: String(t.task_id),
+          titulo: String(tarefa.title || "Post de fotos"),
+          data: typeof tarefa.due_date === "string" ? tarefa.due_date.slice(0, 10) : null,
+          fotos: Array.isArray(t.cards) ? t.cards.length : 0,
+          estado: estadoDoPostDeFotos(t as Parameters<typeof estadoDoPostDeFotos>[0]).rotulo,
+        };
+      })
+      .sort((a, b) => String(a.data || "9999").localeCompare(String(b.data || "9999")));
   }
 
   async function contextoSemFalhar(clientId: string, campanhaId?: unknown, marcaId?: unknown): Promise<ContextoLido> {
@@ -334,7 +373,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
         if (pd.clone_id) {
           const r = await d.chamar("estimar", ch, { acao_alvo: "clone_variacao", modelo_id: pd.clone_id, quantidade: 1 });
           v = Number(r.estimativa_usd);
-        } else if (pd.operacao === "variar_imagem") {
+        } else if (pd.operacao === "variar_imagem" || pd.operacao === "melhorar_foto") {
           if (preparo === undefined) preparo = await d.custoDoPreparo();
           v = preparo;
         } else {
@@ -361,7 +400,87 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
 
   // ---------------------------------------------------------------- execução sem custo
 
-  type EstadoDaExecucao = { canvas?: { id: string; versao: number; nome: string; nos: Json[]; ligacoes: Json[]; viewport: Json } };
+  type PostEmMontagem = { trabalhoId: string | null; taskId: string; titulo: string; formato: unknown; fotos: string[]; itemCriado: boolean };
+  type EstadoDaExecucao = {
+    canvas?: { id: string; versao: number; nome: string; nos: Json[]; ligacoes: Json[]; viewport: Json };
+    /** Posts de fotos montados nesta proposta (um por destino). */
+    posts?: Record<string, PostEmMontagem>;
+    /** A proposta (para contar as fotos de cada post) e a chave do pedido (idempotência do item novo). */
+    acao?: AcaoDoAgente;
+    chave?: string;
+  };
+
+  /**
+   * post_na_agenda: a foto entra no post (no fim, na ordem da lista). Post novo
+   * nasce no item da Agenda da data pedida (o mesmo pedido não cria dois).
+   * Nada é gerado e nada vai ao cliente: a legenda, a data e o envio ficam no post.
+   */
+  async function porNoPost(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente, estado: EstadoDaExecucao) {
+    const destino = lerDestinoDoPost(item.para);
+    if (!destino) throw new Error("O post da Agenda não foi entendido. Peça de novo dizendo o post ou a data.");
+    const chave = String(item.para);
+    estado.posts = estado.posts || {};
+    let atual = estado.posts[chave];
+    if (!atual) {
+      if (destino.tipo === "post") {
+        const { data } = await db().from("estudio_trabalhos").select("id, client_id, task_id, direcao, entrega_status").eq("id", destino.trabalho_id).maybeSingle();
+        const t = data as { id: string; client_id: string; task_id: string | null; direcao: Json | null; entrega_status: string | null } | null;
+        if (!t || t.client_id !== clientId || !t.task_id || !ehPostDeFotos(t.direcao)) throw new Error("Este post não está mais na Agenda.");
+        if (!podeTrocarAsFotos(t)) throw new Error("O post já foi para a aprovação: as fotos só mudam depois da resposta do cliente.");
+        const { data: tarefa } = await db().from("tasks").select("title").eq("id", t.task_id).maybeSingle();
+        const fotos = ((((t.direcao || {}) as Json).fotos || {}) as Json).imagem_ids;
+        atual = {
+          trabalhoId: t.id,
+          taskId: t.task_id,
+          titulo: String((tarefa as Json | null)?.title || "Post de fotos"),
+          formato: (t.direcao || {}).formato,
+          fotos: Array.isArray(fotos) ? (fotos as string[]).filter((x) => UUID.test(String(x))) : [],
+          itemCriado: false,
+        };
+      } else {
+        const doMesmoPost = estado.acao ? estado.acao.itens.filter((i) => i.operacao === "post_na_agenda" && i.para === item.para).length : 1;
+        const criado = await criarItemDoPostDeFotos(db(), {
+          clientId,
+          userId: ch.userId,
+          titulo: destino.titulo,
+          data: destino.data,
+          carrossel: doMesmoPost > 1,
+          pedidoId: `diretor:${(estado.chave || "x").slice(0, 40)}:${destino.data}`,
+        });
+        atual = { trabalhoId: null, taskId: criado.task_id, titulo: criado.title, formato: null, fotos: [], itemCriado: !criado.replayed };
+      }
+      estado.posts[chave] = atual;
+    }
+    if (atual.fotos.indexOf(item.alvo_id) < 0) atual.fotos.push(item.alvo_id);
+    const r = await prepararPostDeFotos(db(), { clientId, taskId: atual.taskId, titulo: atual.titulo, formato: atual.formato, imagemIds: atual.fotos, userId: ch.userId, trabalhoId: atual.trabalhoId });
+    atual.trabalhoId = r.trabalho.id;
+    const recusada = r.recusadas.find((x) => x.id === item.alvo_id);
+    if (recusada) throw new Error(recusada.motivo);
+    return {
+      desfazer: { trabalho_id: r.trabalho.id, task_id: atual.taskId, imagem_id: item.alvo_id, item_criado: atual.itemCriado },
+      aviso: r.sem_aprovacao_da_equipe ? "Foto gerada: a equipe aprova antes de ir ao cliente." : undefined,
+    };
+  }
+
+  /** Desfazer do post_na_agenda: a foto sai do post (o item da Agenda fica; sem fotos, o post volta a esperar as fotos). */
+  async function tirarDoPost(ch: Chamador, clientId: string, x: Json) {
+    const trabalhoId = String(x.trabalho_id || "");
+    const imagem = String(x.imagem_id || "");
+    if (!UUID.test(trabalhoId)) return;
+    const { data } = await db().from("estudio_trabalhos").select("id, client_id, task_id, status, direcao, entrega_status").eq("id", trabalhoId).maybeSingle();
+    const t = data as { id: string; client_id: string; task_id: string | null; status: string; direcao: Json | null; entrega_status: string | null } | null;
+    if (!t || t.client_id !== clientId || !t.task_id) return;
+    if (!podeTrocarAsFotos(t)) throw new Error("O post já foi para a aprovação: tire a foto na Mesa Foto depois da resposta do cliente.");
+    const direcao = (t.direcao || {}) as Json;
+    const antes = (((direcao.fotos || {}) as Json).imagem_ids as string[] | undefined) || [];
+    const fotos = antes.filter((id) => id !== imagem);
+    if (fotos.length) {
+      const { data: tarefa } = await db().from("tasks").select("title").eq("id", t.task_id).maybeSingle();
+      await prepararPostDeFotos(db(), { clientId, taskId: t.task_id, titulo: String((tarefa as Json | null)?.title || "Post de fotos"), formato: direcao.formato, imagemIds: fotos, userId: ch.userId, trabalhoId: t.id });
+      return;
+    }
+    await db().from("estudio_trabalhos").update({ cards: [], status: "dirigido", direcao: { ...direcao, cards: [], fotos: { imagem_ids: [] } } }).eq("id", t.id);
+  }
 
   const SAIDA_DO_CANVAS = "diretor_saida";
 
@@ -443,6 +562,14 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       }
       case "levar_ao_canvas":
         return await levarAoCanvas(ch, clientId, item, estado);
+      case "post_na_agenda":
+        return await porNoPost(ch, clientId, item, estado);
+      case "abrir_no_estudio": {
+        // Só o caminho: a foto abre no Estúdio de fotos com a ferramenta pedida (nada muda, nada a desfazer).
+        const [img] = await f.lerImagens(clientId, [item.alvo_id]);
+        if (!img || img.ativa === false) throw new Error("A foto não está mais no acervo.");
+        return;
+      }
       default:
         return await executarNoAcervo(db(), clientId, item);
     }
@@ -466,6 +593,11 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
         return;
       case "levar_ao_canvas":
         if (x.canvas_id && x.no_id) await tirarDoCanvas(ch, clientId, String(x.canvas_id), String(x.no_id));
+        return;
+      case "post_na_agenda":
+        await tirarDoPost(ch, clientId, x);
+        return;
+      case "abrir_no_estudio":
         return;
       default:
         await reverterNoAcervo(db(), clientId, r);
@@ -553,8 +685,10 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     const [resultado] = await executarItemAItem([item], (it) => executarGeracao(ch, clientId, g.acao, it, marcaId), 1);
     // Relê antes de gravar: outra aba pode ter cancelado no meio.
     const atual = await guardadaDoDiretor(ch, corpo, AGENTE_DE_GERACAO);
-    const anexo = await atual.gravar(comResultadoDoItem(atual.acao, resultado, ch.userId));
+    let anexo = await atual.gravar(comResultadoDoItem(atual.acao, resultado, ch.userId));
     esquecer(clientId);
+    // Frente MF: terminou a lista. As fotos novas entram no post da Agenda pedido e o caminho fica pronto.
+    if (anexo.executada_em && !anexo.caminho) anexo = await fecharGeracao(ch, clientId, atual, anexo);
     const custo = resultado.ok && resultado.desfazer ? Number(resultado.desfazer.custo_usd) || 0 : 0;
     if (anexo.executada_em) await avisarNaConversa(atual, `Geração: ${textoDoResultado(anexo.resultados || [])}. Custo real US$ ${custoReal(anexo).toFixed(4)}.`);
     await d.auditar({
@@ -566,6 +700,51 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       resultRef: g.mensagem.id,
     });
     return f.json({ anexo, resultado, custo_usd: custo });
+  }
+
+  /** Fim da geração: as fotos novas entram no post pedido (agenda_das_fotos) e a proposta ganha o caminho. */
+  async function fecharGeracao(ch: Chamador, clientId: string, g: AcaoGuardada, anexo: AcaoDoAgente): Promise<AcaoDoAgente> {
+    const contexto = { ...(anexo.contexto || {}) } as Json;
+    const destino = typeof contexto.agenda_das_fotos === "string" ? contexto.agenda_das_fotos : "";
+    const novas = (anexo.resultados || []).filter((r) => r.ok && r.desfazer && UUID.test(String(r.desfazer.imagem_id || ""))).map((r) => String((r.desfazer as Json).imagem_id));
+    if (destino && novas.length && !contexto.post_da_agenda) {
+      try {
+        const estado: EstadoDaExecucao = { chave: g.mensagem.id };
+        let ultimo: Json | null = null;
+        for (const id of novas) {
+          const r = await porNoPost(ch, clientId, { ref: id.slice(0, 8), alvo_id: id, titulo: "foto nova", detalhe: null, operacao: "post_na_agenda", rotulo: "pôr no post", para: destino }, estado);
+          ultimo = (r.desfazer || null) as Json | null;
+        }
+        if (ultimo) contexto.post_da_agenda = { trabalho_id: ultimo.trabalho_id, task_id: ultimo.task_id, fotos: novas.length };
+      } catch (e) {
+        contexto.post_da_agenda_aviso = e instanceof Error ? e.message.slice(0, 300) : "As fotos não entraram no post.";
+      }
+    }
+    const comContexto = { ...anexo, contexto };
+    const caminho = caminhoDaAcaoDoDiretor(comContexto, clientId, contexto.abrir_sozinho === true);
+    return await g.gravar({ ...comContexto, caminho });
+  }
+
+  /**
+   * Frente MF, regra 6 ("ele já vai fazendo"): faz a proposta sem custo na
+   * hora e devolve o anexo já feito, com o Desfazer de sempre e o caminho.
+   * Quem chama já conferiu a ordem clara (Jev) e podeExecutarDireto.
+   */
+  async function executarDiretoDoDiretor(ch: Chamador, clientId: string, acao: AcaoDoAgente, opcoes: { chave: string; abrirSozinho: boolean }): Promise<AcaoDoAgente> {
+    const inicio = Date.now();
+    const estado: EstadoDaExecucao = { acao, chave: opcoes.chave };
+    const feita = await executarDireto(acao, (item) => executarSemCusto(ch, clientId, item, estado), { userId: ch.userId, lote: 1 });
+    esquecer(clientId);
+    const falhas = (feita.resultados || []).filter((r) => !r.ok).length;
+    await d.auditar({
+      ch,
+      toolName: "foto_acao_do_diretor_na_hora",
+      input: { client_id: clientId, operacoes: feita.itens.map((i) => i.operacao) },
+      success: falhas === 0,
+      durationMs: Date.now() - inicio,
+      resultRef: opcoes.chave,
+    });
+    return { ...feita, caminho: caminhoDaAcaoDoDiretor(feita, clientId, opcoes.abrirSozinho) };
   }
 
   /** executar_acao_agente para as propostas do diretor: sem custo executa tudo; geração só cancela (vai item a item). */
@@ -582,16 +761,19 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       const anexo = await g.gravar(pararGeracao(g.acao, ch.userId));
       return f.json({ anexo });
     }
-    const estado: EstadoDaExecucao = {};
+    const estado: EstadoDaExecucao = { acao: g.acao, chave: g.mensagem.id };
     let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
     try {
-      // Lote de 1: fotos da mesma campanha, do mesmo clone ou do mesmo canvas não se atropelam.
+      // Lote de 1: fotos da mesma campanha, do mesmo clone, do mesmo canvas ou do mesmo post não se atropelam.
       r = await confirmarAcaoGuardada(g, (item) => executarSemCusto(ch, clientId, item, estado), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1 });
     } catch (e) {
       throw comoErro(e);
     }
     if (corpo.descartar === true) return f.json({ anexo: r.anexo });
     esquecer(clientId);
+    // Frente MF: a proposta feita guarda o caminho (a área onde o resultado está).
+    const caminho = caminhoDaAcaoDoDiretor(r.anexo, clientId, ((r.anexo.contexto || {}) as Json).abrir_sozinho === true);
+    if (caminho) r = { ...r, anexo: await g.gravar({ ...r.anexo, caminho }) };
     const feitos = r.resultados.filter((x) => x.ok).length;
     const falhas = r.resultados.length - feitos;
     await avisarNaConversa(g, `Diretor: ${textoDoResultado(r.resultados)}.`);
@@ -644,6 +826,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     propostasDaResposta,
     executarProposta,
     desfazerProposta,
+    executarDiretoDoDiretor,
     ehDoDiretor,
     esquecer,
   };

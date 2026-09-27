@@ -397,8 +397,11 @@ describe("rota, casca e troca entre mesas", () => {
     const ferramentas = await screen.findByRole("listbox", { name: "Ferramentas" });
     expect(within(ferramentas).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent)).toEqual(["Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
     fireEvent.keyDown(ferramentas, { key: "Escape" });
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "book", "canvas"]);
-    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "ensaio", "campanha", "preparar"], ["usar", "revisar"]]);
+    // 27/09 (frente MF, dono: "ainda está confuso, não está tão facilitado pra criar"): o Estúdio de fotos
+    // entra no passo 2 (Criar) e o Post na Agenda no passo 3 (Usar). Mudança de propósito: as etapas
+    // antigas continuam todas, na mesma ordem relativa.
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "ensaio", "campanha", "preparar", "revisar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
+    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "estudio", "ensaio", "campanha", "preparar"], ["usar", "revisar", "agenda"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
     // Celular: o caminho principal em 3 colunas e o seletor ao lado, sem rolagem lateral.

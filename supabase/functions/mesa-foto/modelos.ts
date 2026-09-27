@@ -20,6 +20,10 @@
  * - modelo_detalhar { modelo_id?, imagem_id, alvo: 'pessoa'|'produto', modelo_imagem_id?, client_id? }
  *     -> { imagem, url, antes, depois, origem, custo_usd, ... } (geração nova em 4K, derivada; nunca sobrescreve)
  * - modelo_conferir { modelo_id, imagem_id } -> { imagem_id, conferencia, custo_usd, saldo_usd } (visão descreve; Jev só aviso)
+ * - modelo_imagem_para_acervo { modelo_id, imagem_id, client_id? } -> { imagem, url, ja_existia, custo_usd: 0 }
+ *     (frente MF, 27/09) a foto da persona vira foto do acervo do cliente (cópia dos bytes, sem abrir a
+ *     imagem, sem IA): é o que liga a persona ao Estúdio de fotos, ao Ampliar fiel (pro), à Mesa, à Mesa
+ *     Ads e ao post na Agenda. Mesma foto de novo devolve a que já está no acervo (sha256 por cliente).
  *
  * Quem paga: persona do cliente paga na carteira do cliente; persona da
  * agência paga na carteira do client_id da chamada (com acesso) ou, sem ele,
@@ -1000,6 +1004,60 @@ Regras:
 Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
 
   /**
+   * modelo_imagem_para_acervo (frente MF, 27/09): a foto da persona entra no
+   * acervo do cliente como foto gerada de pessoa sintética, sem abrir a imagem
+   * (cópia dos bytes) e sem IA. O acervo é o que as ferramentas pro (Ampliar
+   * fiel, Tirar fundo), o Estúdio de fotos, a Mesa, a Mesa Ads e o post na
+   * Agenda entendem. A foto aprovada na persona entra aprovada.
+   */
+  async function modeloImagemParaAcervo(ch: Chamador, corpo: Record<string, unknown>) {
+    const p = await personaComAcesso(ch, String(corpo.modelo_id ?? ""));
+    const clientId = await clienteQuePaga(ch, p, corpo.client_id);
+    const img = await imagemDaPersona(p.id, String(corpo.imagem_id ?? ""));
+    const bytes = await f.baixar(img.storage_bucket || "mesa", img.storage_path);
+    const sha = await sha256Hex(bytes);
+    const { data: ja } = await db().from("cliente_imagens").select(f.camposImagem).eq("client_id", clientId).eq("sha256", sha).maybeSingle();
+    if (ja) {
+      const linha = ja as unknown as ImagemDoAcervoLida;
+      return f.json({ imagem: { ...linha, url: await f.urlAssinada(linha.storage_bucket, linha.storage_path) }, ja_existia: true, custo_usd: 0 });
+    }
+    const mime = mimeDe(bytes) ?? img.mime ?? "image/png";
+    const dim = dimensoesDaImagem(bytes);
+    const caminho = `${clientId}/foto/modelos-no-acervo/${p.id}/${img.id}.${extensaoDe(mime)}`;
+    await f.salvarNoMesa(caminho, bytes, mime);
+    const rotulo = img.papel === "detalhe" ? "detalhe" : img.vista ? String(img.vista).replace(/_/g, " ") : img.papel;
+    const { data, error } = await db().from("cliente_imagens").insert({
+      client_id: clientId,
+      origem: "mesa_foto",
+      storage_bucket: "mesa",
+      storage_path: caminho,
+      nome: limpo(`${p.nome} (${rotulo})`, 160),
+      pasta: "Mesa Foto / Modelos",
+      tags: ["mesa_foto", "gerada", "pessoa_sintetica", `persona:${p.id}`, `persona_imagem:${img.id}`],
+      descricao: limpo(`Pessoa sintética (${p.nome}), gerada por IA na aba Modelos. Não parece ninguém real.`, 1000),
+      gerada: true,
+      modo: img.papel === "detalhe" ? "detalhe" : null,
+      sha256: sha,
+      largura: dim?.largura ?? img.largura ?? null,
+      altura: dim?.altura ?? img.altura ?? null,
+      aprovada: img.aprovada === true,
+    }).select(f.camposImagem).single();
+    if (error || !data) {
+      await db().storage.from("mesa").remove([caminho]).catch(() => {});
+      if ((error as { code?: string } | null)?.code === "23505") {
+        const { data: igual } = await db().from("cliente_imagens").select(f.camposImagem).eq("client_id", clientId).eq("sha256", sha).maybeSingle();
+        if (igual) {
+          const linha = igual as unknown as ImagemDoAcervoLida;
+          return f.json({ imagem: { ...linha, url: await f.urlAssinada(linha.storage_bucket, linha.storage_path) }, ja_existia: true, custo_usd: 0 });
+        }
+      }
+      throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível levar a foto da persona para o acervo.");
+    }
+    const linha = data as unknown as ImagemDoAcervoLida;
+    return f.json({ imagem: { ...linha, url: await f.urlAssinada(linha.storage_bucket, linha.storage_path) }, ja_existia: false, custo_usd: 0 });
+  }
+
+  /**
    * modelo_sugerir { client_id, pedido?, campanha_id?, modelo_id? }
    * -> { sugestao: { nome, ficha, invariantes, porque }, avisos, campanha_mesa, custo_usd, saldo_usd }
    * Preenche a ficha pelo contexto do cliente que a Mesa usa. Não grava: a
@@ -1043,6 +1101,7 @@ ${JSON.stringify({ cliente: contexto.dados, pedido_da_equipe: pedido || null })}
 
   return {
     acoes: {
+      modelo_imagem_para_acervo: modeloImagemParaAcervo,
       modelo_sugerir: modeloSugerir,
       modelos_listar: modelosListar,
       modelo_ler: modeloLer,

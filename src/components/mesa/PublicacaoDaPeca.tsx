@@ -34,6 +34,7 @@ import {
   type EstadoDaPublicacao,
   type TomDoEstado,
 } from "../../../supabase/functions/_shared/entrega-na-agenda";
+import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 
 /**
  * Publicação da peça (frente EA, 27/09): o mesmo bloco na Entrega da Mesa e
@@ -342,22 +343,25 @@ export function PublicacaoDaMesaNaAgenda({
     queryKey: ["mesa", "peca-do-post", postId],
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    queryFn: async (): Promise<{ peca: PecaParaPublicar; dia: string | null; taskId: string | null } | null> => {
+    queryFn: async (): Promise<{ peca: PecaParaPublicar; dia: string | null; taskId: string | null; soFotos: boolean } | null> => {
       const { data, error } = await (supabase as any)
         .from("estudio_trabalhos")
-        .select("id, task_id, status, file_ids, entrega_status, entrega_aviso, post_id, aprovado_em, publicar_em, publicar_em_confirmado_em, publicar_ao_aprovar, agenda_aviso, ajustes_do_cliente")
+        .select("id, task_id, status, file_ids, entrega_status, entrega_aviso, post_id, aprovado_em, publicar_em, publicar_em_confirmado_em, publicar_ao_aprovar, agenda_aviso, ajustes_do_cliente, direcao")
         .eq("post_id", postId)
         .order("atualizado_em", { ascending: false })
         .limit(1);
       // Sem as colunas da frente EA no banco (ou sem acesso), o bloco não aparece.
       if (error || !data || !data.length) return null;
-      const t = data[0] as PecaParaPublicar & { task_id: string | null };
+      const t = data[0] as PecaParaPublicar & { task_id: string | null; direcao?: unknown };
       let dia: string | null = null;
       if (t.task_id) {
         const { data: tarefa } = await (supabase as any).from("tasks").select("due_date").eq("id", t.task_id).maybeSingle();
         dia = (tarefa && tarefa.due_date) || null;
       }
-      return { peca: { ...t, file_ids: Array.isArray(t.file_ids) ? t.file_ids : [] }, dia, taskId: t.task_id };
+      // Frente MF: post de fotos da Mesa Foto (o ajuste e a edição são lá, não no Estúdio de design).
+      const soFotos = ehPostDeFotos(t.direcao);
+      const { direcao: _direcao, ...semDirecao } = t;
+      return { peca: { ...semDirecao, file_ids: Array.isArray(t.file_ids) ? t.file_ids : [] }, dia, taskId: t.task_id, soFotos };
     },
   });
   const pub = publicacaoDaPeca(publicacoes as unknown as PublicacaoExistente[]) as PublicacaoParaPublicar | null;
@@ -366,7 +370,14 @@ export function PublicacaoDaMesaNaAgenda({
   // Ajuste pedido pelo cliente: o botão abre o Estúdio no MESMO trabalho, na lâmina do pedido.
   const pedido = estado.codigo === "ajuste_pedido" ? pedidoDeAjustePendente(peca.data.peca.ajustes_do_cliente) : null;
   const laminaDoPedido = estado.codigo === "ajuste_pedido" ? pedido?.lamina ?? laminaCitada(peca.data.peca.entrega_aviso) : null;
-  const linkDoEstudio = estado.codigo === "ajuste_pedido" && peca.data.taskId ? linkDoAjusteNoEstudio(clientId, peca.data.taskId, laminaDoPedido) : null;
+  const soFotos = !!peca.data.soFotos;
+  const linkDoEstudio = estado.codigo === "ajuste_pedido" && peca.data.taskId
+    ? soFotos
+      ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id })
+      : linkDoAjusteNoEstudio(clientId, peca.data.taskId, laminaDoPedido)
+    : null;
+  // Post de fotos: o item sempre abre na Mesa Foto (fotos, legenda e envio moram lá).
+  const linkDaMesaFoto = soFotos && !linkDoEstudio && peca.data.taskId ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id }) : null;
   return (
     <section className="flex min-w-0 items-center rounded-xl border border-border bg-card px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -377,9 +388,15 @@ export function PublicacaoDaMesaNaAgenda({
         </p>
       </div>
       {linkDoEstudio && (
-        <Link to={linkDoEstudio} className={juntar(botao.primario, "ml-3 h-8")} aria-label="Abrir no Estúdio">
+        <Link to={linkDoEstudio} className={juntar(botao.primario, "ml-3 h-8")} aria-label={soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"}>
           <Wand2 className="h-4 w-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">Abrir no Estúdio</span>
+          <span className="hidden sm:inline">{soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"}</span>
+        </Link>
+      )}
+      {linkDaMesaFoto && (
+        <Link to={linkDaMesaFoto} className={juntar(botao.discreto, "ml-3 h-8")} aria-label="Abrir na Mesa Foto">
+          <Wand2 className="h-4 w-4 sm:mr-1.5" />
+          <span className="hidden sm:inline">Mesa Foto</span>
         </Link>
       )}
       {estado.codigo !== "publicado" && estado.codigo !== "ajuste_pedido" && (

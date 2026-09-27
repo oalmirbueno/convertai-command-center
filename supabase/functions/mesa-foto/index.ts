@@ -105,12 +105,25 @@ import {
   desfazerAcaoGuardada,
   ErroDaAcao,
   type ResultadoDoItem,
+  podeExecutarDireto,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import { executarNoAcervo, reverterNoAcervo } from "../_shared/acoes-do-acervo.ts";
+// Frente MF (27/09): "diretor que faz" (ordem clara pelo Jev; na falta dele, a regra do verbo).
+import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 // Diretor agêntico (26/09): pacote de contexto com apelidos, ações sem custo e gerações pagas item a item.
 import { ACOES_LONGAS_DO_DIRETOR, acoesDoDiretor } from "./diretor.ts";
-import { ESQUEMA_DAS_ACOES_DO_DIRETOR, ESQUEMA_DAS_GERACOES_DO_DIRETOR, type ImagemBruta } from "./diretor-agentico.ts";
+import {
+  caminhoDaResposta,
+  DESTINOS_DO_DIRETOR,
+  destinoDoPost,
+  ESQUEMA_DAS_ACOES_DO_DIRETOR,
+  ESQUEMA_DAS_GERACOES_DO_DIRETOR,
+  geracaoPodeIrSozinha,
+  type ImagemBruta,
+  pedeParaLevar,
+  regrasDoDiretor,
+} from "./diretor-agentico.ts";
 import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
@@ -887,6 +900,10 @@ const ESQUEMA_AGENTE = {
     // fotos do clone, book, Canvas) e gerações pagas (clone, variação, prompt, book). A equipe confirma.
     acoes: ESQUEMA_DAS_ACOES_DO_DIRETOR,
     geracoes: ESQUEMA_DAS_GERACOES_DO_DIRETOR,
+    // Frente MF (27/09): o post da Agenda das fotos geradas e o caminho da resposta (a tela mostra o botão).
+    agenda_das_fotos: S(["string", "null"]),
+    ir_para: S("string", { enum: [...DESTINOS_DO_DIRETOR] }),
+    ir_para_ref: S(["string", "null"]),
   }),
 };
 
@@ -3725,7 +3742,37 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     if (extra) sugestoes.push(extra);
   }
   // Propostas do diretor agêntico (apelidos trocados por alvos no servidor): sem custo e de geração (custo estimado antes).
-  const { acao: acaoProposta, geracao } = await DIRETOR.propostasDaResposta(ch, r, preparo.pacote);
+  const propostas = await DIRETOR.propostasDaResposta(ch, r, preparo.pacote);
+  let acaoProposta = propostas.acao;
+  let geracao = propostas.geracao;
+  // Frente MF (27/09, "diretor que faz"): pedido "faz e me leva" abre sozinho a área quando termina.
+  const levar = pedeParaLevar(mensagem);
+  if (geracao && geracao.itens.length) {
+    const destino = destinoDoPost(r.agenda_das_fotos, preparo.pacote);
+    geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ...(destino ? { agenda_das_fotos: destino } : {}), ...(levar ? { abrir_sozinho: true } : {}) } };
+  }
+  if (acaoProposta && levar) acaoProposta = { ...acaoProposta, contexto: { ...(acaoProposta.contexto || {}), abrir_sozinho: true } };
+  // Ordem clara, sem custo, com Desfazer e até 5 itens: faz na hora. Post novo na Agenda (cria item) pede Confirmar.
+  const criaItemNovo = !!acaoProposta && acaoProposta.itens.some((i) => i.operacao === "post_na_agenda" && String(i.para || "").indexOf("novo:") === 0);
+  const direto = !!acaoProposta && !criaItemNovo && podeExecutarDireto(acaoProposta, regrasDoDiretor(preparo.pacote), { pedidoClaro: true }).direto;
+  // Geração barata (até o teto), com saldo: começa sozinha na tela, com o custo à vista e o botão de parar.
+  const sozinha = !!geracao && geracaoPodeIrSozinha(geracao, { pedidoClaro: true, saldoUsd: typeof saida.saldoUsd === "number" ? saida.saldoUsd : null }).sozinha;
+  let ordemClara = false;
+  if (direto || sozinha) {
+    const resumos = [acaoProposta ? acaoProposta.resumo : "", geracao ? geracao.resumo : ""].filter(Boolean).join(" ");
+    ordemClara = (await ehOrdemClara(mensagem, { agente: "diretor de fotografia da Mesa Foto", resumo: resumos })).clara;
+  }
+  if (direto && ordemClara && acaoProposta) {
+    try {
+      acaoProposta = await DIRETOR.executarDiretoDoDiretor(ch, clientId, acaoProposta, { chave: `${conversaId}:${Date.now().toString(36)}`, abrirSozinho: levar });
+    } catch (e) {
+      // Falhou fazer na hora: a proposta fica para o Confirmar, como antes.
+      console.warn("[mesa-foto] execução direta do diretor falhou", { erro: e instanceof Error ? e.name : "desconhecido" });
+    }
+  }
+  if (sozinha && ordemClara && geracao) geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ir_sozinho: true } };
+  // Caminho da resposta: a área onde a equipe continua (o apelido vira id aqui; o modelo nunca vê id).
+  const caminhoDaMensagem = caminhoDaResposta(r.ir_para, r.ir_para_ref, preparo.pacote, levar && !(acaoProposta && acaoProposta.executada_em) && !geracao);
   const anexosDoAgente: unknown[] = sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [];
   if (acaoProposta) anexosDoAgente.push(acaoProposta);
   if (geracao) anexosDoAgente.push(geracao);
@@ -3745,6 +3792,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     acao: acaoProposta && mensagemIds[1] ? acaoProposta : null,
     acao_de_geracao: geracao && mensagemIds[1] ? geracao : null,
     mensagem_id: mensagemIds[1] ?? null,
+    // Frente MF: para onde ir depois desta resposta (botão "Ir para"; vai sozinho no "faz e me leva").
+    caminho: caminhoDaMensagem,
     // O que o diretor já conhecia nesta mensagem (a tela mostra no cabeçalho).
     contexto_do_diretor: { resumo: preparo.pacote.resumo, foco_rotulo: preparo.pacote.foco_rotulo, leituras_feitas: preparo.lidas },
     custo_usd: arred6((Number(saida.custoUsd) || 0) + preparo.custoLeituras),

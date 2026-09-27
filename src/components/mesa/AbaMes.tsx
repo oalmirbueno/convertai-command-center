@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck2, CalendarRange, Check, ChevronDown, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +24,9 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import AgendaDoMes from "./AgendaDoMes";
+// Frente MF (27/09): formato do perfil (só fotos, só artes, alternar) e o item de fotos abrindo na Mesa Foto.
+import SeletorDoPerfil from "@/components/mesa-foto/SeletorDoPerfil";
+import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 import DiagnosticoDoMes from "./DiagnosticoDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
@@ -833,6 +836,8 @@ function PlanoDoMesEmDestaque({
  *
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
+ * Frente MF (27/09): item que é post de fotos (formato do perfil "só fotos" ou
+ * "alternar", ou montado na Mesa Foto) abre na Mesa Foto, no post dele.
  * `onCriarCampanha` abre a aba Campanhas com o hype escolhido já preenchido.
  */
 export default function AbaMes({
@@ -847,6 +852,24 @@ export default function AbaMes({
   const mes = MES_VALIDO.test(mesDaUrl) ? mesDaUrl : inicioDoMes();
   const [rapidoAberto, setRapidoAberto] = useState(false);
   const { clientId } = useMesa();
+  const navigate = useNavigate();
+  // Itens que são post de fotos (trabalho do Estúdio "só fotos"): abrem na Mesa Foto.
+  const tarefasDeFotos = useQuery({
+    queryKey: ["mesa", "tarefas-de-fotos", clientId],
+    enabled: !!clientId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await (supabase as any)
+        .from("estudio_trabalhos")
+        .select("task_id, direcao")
+        .eq("client_id", clientId)
+        .eq("direcao->>so_fotos", "true")
+        .not("task_id", "is", null)
+        .limit(500);
+      if (error) return [];
+      return ((data || []) as { task_id: string; direcao: unknown }[]).filter((t) => ehPostDeFotos(t.direcao)).map((t) => String(t.task_id));
+    },
+  });
 
   /** Abrir no Estúdio: pela aba-mãe quando ela manda; senão pela URL, igual à Agenda do mês. */
   const abrirNoEstudio = (taskId: string, mesAlvo: string) => {
@@ -859,6 +882,15 @@ export default function AbaMes({
     next.set("task", taskId);
     if (MES_VALIDO.test(mesAlvo)) next.set("mes", mesAlvo);
     setParams(next, { replace: false });
+  };
+
+  /** O item abre na mesa que o faz: post de fotos na Mesa Foto, arte no Estúdio. */
+  const abrirNaMesaCerta = (taskId: string, mesAlvo: string) => {
+    if ((tarefasDeFotos.data || []).indexOf(taskId) >= 0) {
+      navigate(linkDoPostNaMesaFoto(clientId, { taskId }));
+      return;
+    }
+    abrirNoEstudio(taskId, mesAlvo);
   };
 
   const verNoMes = (mesAlvo: string) => {
@@ -903,7 +935,7 @@ export default function AbaMes({
       <div className="min-w-0 space-y-6 pb-28">
       <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} />
 
-      <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
+      <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNaMesaCerta} onVerNoMes={verNoMes} />
 
       <HypesDaSemana
         onCriarCampanha={(i) => onCriarCampanha?.(i)}
@@ -914,7 +946,9 @@ export default function AbaMes({
         onPedidoFim={() => setPendente(null)}
       />
 
-      <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
+      <SeletorDoPerfil />
+
+      <AgendaDoMes onAbrirNoEstudio={abrirNaMesaCerta} />
 
       <LinhaDeEvolucaoDoMes clientId={clientId} />
 
@@ -980,7 +1014,7 @@ export default function AbaMes({
               onAbrirNoEstudio
                 ? (taskId, m) => {
                     setAgenteAberto(false);
-                    onAbrirNoEstudio(taskId, m);
+                    abrirNaMesaCerta(taskId, m);
                   }
                 : undefined
             }

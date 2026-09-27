@@ -21,19 +21,25 @@ import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type Pr
  * Todas as telas da Mesa Foto (o valor vai no endereço: ?etapa=...). A
  * navegação mostra só o caminho principal em 3 passos (1 Fotos, 2 Criar,
  * 3 Usar) e, discretas ao lado, as ferramentas de apoio (Biblioteca, Modelos
- * e Canvas). O produto (kit) é identificado dentro de Fotos; Variações,
- * Campanha e Preparar ficam dentro de Criar; Revisar fica dentro do resultado
- * e de Usar (a tela de comparação segue em ?etapa=revisar).
+ * e Canvas). O produto (kit) é identificado dentro de Fotos; o Estúdio de
+ * fotos, Variações, Campanha e Preparar ficam dentro de Criar; Revisar e o
+ * Post na Agenda ficam dentro de Usar (a comparação segue em ?etapa=revisar).
+ *
+ * 27/09 (dono: "ainda está confuso, não está tão facilitado pra criar"):
+ * Estúdio de fotos (?etapa=estudio&imagem=<id>) e Post na Agenda
+ * (?etapa=agenda&task=<id>&trabalho=<id>) entram no caminho principal.
  */
 export const ETAPAS_DA_MESA_FOTO = [
   { valor: "acervo", rotulo: "Fotos" },
   { valor: "kits", rotulo: "Produto" },
   { valor: "criar", rotulo: "Criar" },
+  { valor: "estudio", rotulo: "Estúdio de fotos" },
   { valor: "ensaio", rotulo: "Variações" },
   { valor: "campanha", rotulo: "Campanha" },
   { valor: "preparar", rotulo: "Preparar" },
   { valor: "revisar", rotulo: "Revisar" },
   { valor: "usar", rotulo: "Usar" },
+  { valor: "agenda", rotulo: "Post na Agenda" },
   { valor: "biblioteca", rotulo: "Biblioteca" },
   { valor: "modelos", rotulo: "Modelos" },
   { valor: "clones", rotulo: "Clones" },
@@ -51,8 +57,8 @@ export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
  */
 export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo: string; dica: string; inclui: EtapaDaMesaFoto[] }[] = [
   { passo: 1, etapa: "acervo", rotulo: "Fotos", dica: "Fotos do produto e o produto identificado", inclui: ["acervo", "kits"] },
-  { passo: 2, etapa: "criar", rotulo: "Criar", dica: "Variações, campanha ou ajuste de uma foto", inclui: ["criar", "ensaio", "campanha", "preparar"] },
-  { passo: 3, etapa: "usar", rotulo: "Usar", dica: "Revisar e usar: Mesa, Mesa Ads, baixar ou aprovação", inclui: ["usar", "revisar"] },
+  { passo: 2, etapa: "criar", rotulo: "Criar", dica: "Estúdio de fotos, variações, campanha ou ajuste de uma foto", inclui: ["criar", "estudio", "ensaio", "campanha", "preparar"] },
+  { passo: 3, etapa: "usar", rotulo: "Usar", dica: "Revisar e usar: post na Agenda para o cliente aprovar, Mesa, Mesa Ads ou baixar", inclui: ["usar", "revisar", "agenda"] },
 ];
 
 /** Ferramentas de apoio: à mão, discretas, sem disputar com o caminho principal. */
@@ -80,8 +86,9 @@ export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean;
   { etapa: "canvas", rotulo: "Canvas", disponivel: true, depoisDe: "criar" },
 ];
 
-/** As três formas de criar (passo 3). */
+/** As formas de criar (passo 2): o Estúdio de fotos primeiro (uma foto, todas as ferramentas). */
 export const FORMAS_DE_CRIAR: { etapa: EtapaDaMesaFoto; rotulo: string; dica: string }[] = [
+  { etapa: "estudio", rotulo: "Estúdio", dica: "Uma foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar e o recorte do post." },
   { etapa: "ensaio", rotulo: "Variações", dica: "Várias fotos do produto: fundo de cor, lifestyle, na mão, flat lay, macro." },
   { etapa: "campanha", rotulo: "Campanha", dica: "Modelo sintético usando o produto, com a pegada da marca." },
   { etapa: "preparar", rotulo: "Preparar", dica: "Ajuste fino de uma foto: fundo branco, luz, cenário." },
@@ -106,6 +113,10 @@ export interface MesaFotoValor {
   proximo?: ProximoPasso | null;
   /** Abre o diretor já com um pedido (atalhos das etapas). */
   pedirAoDiretor?: (mensagem: string) => void;
+  /** Frente MF: abre a foto no Estúdio de fotos (ferramenta opcional já aberta). */
+  abrirNoEstudio?: (imagemId: string, ferramenta?: string | null) => void;
+  /** Frente MF: leva as fotos para o Post na Agenda (foto única ou carrossel). */
+  prepararNaAgenda?: (imagemIds: string[]) => void;
 }
 
 const Contexto = createContext<MesaFotoValor | null>(null);
@@ -351,8 +362,9 @@ export function Pilulas<T extends string | number>({
 }
 
 /**
- * Dentro do passo 3 (Criar): as três formas lado a lado, para trocar sem
- * voltar. Variações, Campanha e Preparar usam o mesmo produto (kit) aberto.
+ * Dentro do passo 2 (Criar): as formas lado a lado, para trocar sem voltar.
+ * Variações, Campanha e Preparar usam o mesmo produto (kit) aberto; o
+ * Estúdio de fotos trabalha numa foto (com ou sem produto).
  */
 export function NavDoCriar({ atual }: { atual: EtapaDaMesaFoto }) {
   const { irPara } = useMesaFoto();
@@ -362,7 +374,7 @@ export function NavDoCriar({ atual }: { atual: EtapaDaMesaFoto }) {
         Criar
       </button>
       <span aria-hidden="true" className="mb-1 mr-2 text-[11px] text-muted-foreground/60">/</span>
-      <div className="mb-1 grid min-w-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5">
+      <div className="mb-1 grid min-w-0 grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5">
         {FORMAS_DE_CRIAR.map((f) => (
           <button
             key={f.etapa}

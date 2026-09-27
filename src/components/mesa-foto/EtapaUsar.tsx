@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ClipboardCheck, Filter, Megaphone, PenTool } from "lucide-react";
+import { ArrowUpRight, CalendarPlus, ClipboardCheck, Filter, Megaphone, PenTool } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro } from "@/components/mesa/Custo";
@@ -84,7 +84,7 @@ function ParaRevisar() {
 
 export default function EtapaUsar() {
   const { clientId } = useMesa();
-  const { ensaioId, irPara } = useMesaFoto();
+  const { ensaioId, irPara, prepararNaAgenda } = useMesaFoto();
   const levar = useLevarParaAsMesas();
   const fotos = useFotos(clientId);
   const ensaios = useEnsaios(clientId);
@@ -127,6 +127,15 @@ export default function EtapaUsar() {
 
   return (
     <div className="min-w-0 space-y-5">
+      {prepararNaAgenda && (
+        <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" data-atalho-da-agenda="">
+          <CalendarPlus className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          <span className="mr-2">Posts de fotos (legenda, data e aprovação do cliente):</span>
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => irPara("agenda")}>
+            abrir o Post na Agenda
+          </button>
+        </div>
+      )}
       <ParaRevisar />
 
       <Cartao
@@ -200,7 +209,13 @@ export default function EtapaUsar() {
             </span>
           }
         >
-          <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)}>
+          {/* Frente MF (27/09): o post na Agenda (foto única ou carrossel, com legenda, data e aprovação) vem primeiro. */}
+          {prepararNaAgenda && (
+            <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => prepararNaAgenda(escolhidas.map((f) => f.id))}>
+              <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Preparar na Agenda
+            </Button>
+          )}
+          <Button type="button" size="sm" variant={prepararNaAgenda ? "outline" : "default"} className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)}>
             <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa <ArrowUpRight className="ml-1 h-3 w-3" />
           </Button>
           <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("ads", escolhidas)}>

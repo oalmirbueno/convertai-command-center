@@ -383,6 +383,9 @@ import {
   travaDoTrecho,
 } from "../_shared/carrossel-continuo.ts";
 import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../_shared/fotos-do-plano.ts";
+// Frente MF (27/09): post de fotos da Mesa Foto no fluxo das artes (entrega, Agenda, aprovação).
+import { ehPostDeFotos } from "../_shared/post-de-fotos.ts";
+import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts";
 import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPublicaSegura } from "./links.ts";
 import { ANTI_GENERICO, CTA_PRINCIPIOS, FORMULAS_DE_TITULO, REVISAO_DE_MARCA, VOZ_DE_MARCA } from "../_shared/conhecimento-marketing.ts";
@@ -2896,6 +2899,12 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     if (estaEntregue(existente)) {
       throw erroTrabalhoEntregue();
     }
+    if (ehPostDeFotos(existente.direcao)) throw new ErroEstudio(409, "post_de_fotos", "Este post é de fotos da Mesa Foto: a direção de arte não entra nele. Troque as fotos na Mesa Foto.");
+  }
+  // Frente MF: item que já é post de fotos (com fotos) não recebe direção de arte por cima; o
+  // reservado pelo plano, ainda sem fotos, sai do item antes de gastar com a direção.
+  if (!existente && (await liberarItemParaArte(db, clientId, item.tarefa.id)).bloqueado) {
+    throw new ErroEstudio(409, "item_e_post_de_fotos", "Este item é um post de fotos da Mesa Foto e já tem fotos. Abra na Mesa Foto ou crie outro item para a arte.");
   }
 
   // O que o cliente já tem entra sozinho (pastas de referência, artes aprovadas
@@ -3726,6 +3735,8 @@ const estaEntregue = (t: Pick<Trabalho, "status"> & { entrega_status?: string | 
   t.status === "entregue" || t.entrega_status === "agendado";
 
 function garantirEditavel(t: Trabalho) {
+  // Frente MF: post de fotos não gera, não ajusta e não corrige lâmina (a foto real fica como está).
+  if (ehPostDeFotos(t.direcao)) throw new ErroEstudio(409, "post_de_fotos", "Este post é de fotos da Mesa Foto: aqui nada é gerado. Troque as fotos na Mesa Foto.");
   if (estaEntregue(t)) {
     throw erroTrabalhoEntregue();
   }
@@ -5857,10 +5868,13 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
     // no bucket files, enviado com o JWT de quem chamou.
     const fileId = crypto.randomUUID();
     const grupo: string = paiId ?? fileId;
-    const caminho: string = `${t.client_id}/${grupo}/v1/${i + 1}-${nomeSeguro(nomeBase)}.png`;
+    // Frente MF: a lâmina do post de fotos pode ser a foto JPEG como veio (a arte é sempre PNG):
+    // o arquivo leva o tipo de verdade dos bytes.
+    const tipoDaLamina = mimeDe(lamina.bytes) === "image/jpeg" ? { mime: "image/jpeg", ext: "jpg" } : { mime: "image/png", ext: "png" };
+    const caminho: string = `${t.client_id}/${grupo}/v1/${i + 1}-${nomeSeguro(nomeBase)}.${tipoDaLamina.ext}`;
     const { error: erroUpload } = await ch.doChamador.storage
       .from("files")
-      .upload(caminho, new Blob([new Uint8Array(lamina.bytes)], { type: "image/png" }), { contentType: "image/png", upsert: false });
+      .upload(caminho, new Blob([new Uint8Array(lamina.bytes)], { type: tipoDaLamina.mime }), { contentType: tipoDaLamina.mime, upsert: false });
     if (erroUpload) {
       throw new ErroEstudio(503, "envio_de_arquivo_falhou", "Não foi possível enviar a arte para Arquivos. Tente entregar de novo.", {
         card: card.ordem,
@@ -5877,8 +5891,8 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
         file_name: nome,
         file_url: `files://${caminho}`,
         file_type: ehCarrossel ? "carrossel" : "post",
-        mime_type: "image/png",
-        extension: "png",
+        mime_type: tipoDaLamina.mime,
+        extension: tipoDaLamina.ext,
         storage_bucket: "files",
         storage_path: caminho,
         size_bytes: lamina.bytes.byteLength,
@@ -7842,6 +7856,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   enfileirar,
   cancelar_fila: cancelarFila,
   processar_fila: processarFila,
+  // Frente MF: fotos_preparar (post de fotos da Mesa Foto, sem gerar arte).
+  ...acoesDasFotosNaAgenda({ servico, garantirAcesso, json, erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem) }).acoes,
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */

@@ -19,7 +19,7 @@ import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
-import { MenuDeUso } from "./UsoDaFoto";
+import { AtalhosDaFoto, MenuDeUso } from "./UsoDaFoto";
 import { useClones } from "./clonesApi";
 import { acrescentarFotos, classeDaFoto, invalidarFotos, semearUrl, subirOriginais, useBiblioteca, useFotos, useKits, type FotoDoAcervo, type ItemDaBiblioteca } from "./fotoApi";
 import { chaveDoAndamento, emParalelo, marcarAndamento, useAndamentos, usePersonas, usePrecoNoServidor } from "./modelosApi";
@@ -585,6 +585,9 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               </Button>
               <AprovarFoto foto={fotoAberta} onMudou={mudou} />
               <MenuDeUso foto={fotoAberta} rotulo="Usar" variante="outline" className="mb-1.5" />
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center">
+              <AtalhosDaFoto foto={fotoAberta} />
             </div>
             <p className={juntar(texto.rotulo, "mb-1.5")}>Ampliar e tirar fundo (pro)</p>
             <AcoesProDaFoto

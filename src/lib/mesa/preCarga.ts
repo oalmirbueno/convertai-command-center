@@ -89,6 +89,9 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       modelos: () => import("@/components/mesa-foto/EtapaModelos"),
       clones: () => import("@/components/mesa-foto/EtapaClones"),
       book: () => import("@/components/mesa-foto/EtapaBook"),
+      // Frente MF (27/09): Estúdio de fotos e Post na Agenda.
+      estudio: () => import("@/components/mesa-foto/EtapaEstudio"),
+      agenda: () => import("@/components/mesa-foto/EtapaAgenda"),
       // O Canvas (React Flow) só baixa quando o endereço já pede o Canvas.
       canvas: () => import("@/components/mesa-foto/EtapaCanvas"),
     },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type UIEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, ClipboardPaste, Eye, Filter, Loader2, Maximize2, Megaphone, MoreHorizontal, MousePointerClick, PackagePlus, PackageSearch, PenTool, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
+import { CalendarPlus, CheckSquare, ClipboardPaste, Eye, Filter, Loader2, Maximize2, Megaphone, MoreHorizontal, MousePointerClick, PackagePlus, PackageSearch, PenTool, ScanSearch, Scissors, Search, SlidersHorizontal, Upload, UsersRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -269,7 +269,7 @@ function DetalheDaFoto({
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const { irPara } = useMesaFoto();
+  const { irPara, abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
   const origem = foto.derivada_de ? todas.find((f) => f.id === foto.derivada_de) || null : null;
   const filhas = todas.filter((f) => f.derivada_de === foto.id);
   return (
@@ -295,8 +295,18 @@ function DetalheDaFoto({
           Imagem gerada por IA. Partes que não aparecem nas fotos originais podem ter sido criadas.
         </p>
       )}
-      {/* Principal: aprovar, usar (Mesa, Mesa Ads, baixar, aprovação) e ver grande. */}
+      {/* Principal: editar no Estúdio, post na Agenda, aprovar, usar (Mesa, Mesa Ads, baixar, aprovação) e ver grande. */}
       <div className="flex min-w-0 flex-wrap items-center" data-acoes-principais="">
+        {abrirNoEstudio && !foto.referencia_web && (
+          <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(foto.id)} title="A foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar">
+            <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
+          </Button>
+        )}
+        {prepararNaAgenda && !foto.referencia_web && (
+          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => prepararNaAgenda([foto.id])} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente">
+            <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Agenda
+          </Button>
+        )}
         <AprovarFoto foto={foto} />
         <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
         <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={onAmpliar}>
@@ -468,7 +478,7 @@ export default function EtapaAcervo() {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { selecionadas, setSelecionadas, imagemId, irPara } = useMesaFoto();
+  const { selecionadas, setSelecionadas, imagemId, irPara, abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
   const levar = useLevarParaAsMesas();
   const fotos = useFotos(clientId);
   const kits = useKits(clientId);
@@ -720,7 +730,24 @@ export default function EtapaAcervo() {
                   <span className="mb-1.5 mr-2 text-[12.5px] font-semibold tabular-nums">
                     {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
                   </span>
-                  <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("mesa")} title="Abre o Estúdio da Mesa com estas fotos, sem subir de novo">
+                  {/* Frente MF (27/09): o caminho principal da seleção é o post na Agenda e o Estúdio de fotos. */}
+                  {prepararNaAgenda && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mb-1.5 mr-1.5 h-8 text-[12px]"
+                      onClick={() => prepararNaAgenda(escolhidas.filter((f) => !f.referencia_web).map((f) => f.id))}
+                      title="Foto única ou carrossel na Agenda: legenda, data e aprovação do cliente"
+                    >
+                      <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Preparar na Agenda
+                    </Button>
+                  )}
+                  {abrirNoEstudio && (
+                    <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(escolhidas[0].id)} title="Abre a primeira marcada no Estúdio de fotos">
+                      <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Estúdio
+                    </Button>
+                  )}
+                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("mesa")} title="Abre o Estúdio da Mesa com estas fotos, sem subir de novo">
                     <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa
                   </Button>
                   <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("ads")} title="Abre o Estúdio da Mesa Ads com estas fotos">
