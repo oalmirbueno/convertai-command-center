@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronsUpDown, Crown, Images, Loader2, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
+import { AlertTriangle, Check, ChevronsUpDown, Crown, Images, Loader2, Maximize2, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -1066,12 +1067,42 @@ export function AntesEDepois({ antes, depois, proporcao }: { antes: ImagemDaPers
   );
 }
 
+/**
+ * Antes e depois no lugar, com "Ver grande" (pedido do dono, 27/09: "opção de
+ * deixar maior"): abre o mesmo comparador na tela quase inteira, sem cortar a
+ * foto (a largura segue a altura da janela).
+ */
+function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPersona; depois: ImagemDaPersona; proporcao: number }) {
+  const [grande, setGrande] = useState(false);
+  return (
+    <div className="min-w-0" data-antes-e-depois-com-zoom="">
+      <div className="mx-auto w-full max-w-[380px]">
+        <AntesEDepois antes={antes} depois={depois} proporcao={proporcao} />
+      </div>
+      <div className="mt-1 flex justify-center">
+        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => setGrande(true)}>
+          <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Ver grande
+        </Button>
+      </div>
+      <Dialog open={grande} onOpenChange={setGrande}>
+        <DialogContent className="w-auto max-w-[96vw] p-3 sm:p-4">
+          <DialogTitle className="text-[13px]">Antes e depois do 4K</DialogTitle>
+          <div className="mx-auto" style={{ width: `min(90vw, calc(80vh * ${proporcao}))` }}>
+            <AntesEDepois antes={antes} depois={depois} proporcao={proporcao} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPersona[] }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const resumo = resumoDaPersona(persona, imagens);
   const fontes = (resumo.ancora ? [resumo.ancora] : []).concat(VISTAS_DA_FOLHA.map((v) => resumo.vistas[v.valor]).filter((x): x is ImagemDaPersona => !!x));
   const [fonteId, setFonteId] = useState<string | null>(null);
+  const [vendoGrande, setVendoGrande] = useState(false);
   const fonte = fontes.find((f) => f.id === fonteId) || fontes[0] || null;
   const detalhe = fonte ? resumo.detalhes.filter((d) => d.derivada_de === fonte.id).pop() || null : null;
   // O 4K sai do gerador de detalhe (Nano Banana Pro); fora do catálogo, a função usa o padrão dela.
@@ -1084,17 +1115,22 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
     <Secao
       divisoria
       titulo="3. Detalhar em 4K"
-      ajuda="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino. Ampliar fiel precisa da conta fal.ai."
+      ajuda="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino."
     >
       {!fonte ? (
         <EstadoVazio compacto titulo="Escolha a âncora primeiro." />
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        /*
+         * 27/09 (dono: "melhorar, organizar essa parte"): em cima a escolha da imagem e o
+         * botão, cada um inteiro na sua linha; embaixo o antes e depois grande, com Ver grande.
+         * Antes eram duas colunas espremidas no painel (o preço e o botão cortavam).
+         */
+        <div className="min-w-0 space-y-3" data-detalhar-4k="">
           <div className="min-w-0">
             <p className={juntar(texto.rotulo, "mb-1.5")}>Imagem para detalhar</p>
             <ul className="flex min-w-0 flex-wrap" aria-label="Imagem para detalhar">
               {fontes.map((f) => (
-                <li key={f.id} className="mb-1.5 mr-1.5 w-12">
+                <li key={f.id} className="mb-1.5 mr-1.5 w-14">
                   <button type="button" aria-pressed={fonte.id === f.id} aria-label={f.vista ? rotuloDaVista(f.vista) : "Âncora"} onClick={() => setFonteId(f.id)} className={`block w-full rounded-lg border p-0.5 ${fonte.id === f.id ? "border-primary" : "border-transparent"}`}>
                     <Moldura proporcao={0.8}>
                       <ImagemDaPersonaNaTela imagem={f} alt={f.vista ? rotuloDaVista(f.vista) : "Âncora"} />
@@ -1103,39 +1139,39 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
                 </li>
               ))}
             </ul>
-            <div className="mt-2 flex min-w-0 flex-wrap items-center">
-              <BotaoComCusto
-                rotulo={
-                  <>
-                    <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Detalhar em 4K
-                  </>
-                }
-                titulo="Detalhe em 4K"
-                descricao={`${motor ? MOTOR_DO_DETALHE.rotulo : "Gerador 4K padrão da função"}: a imagem escolhida vai como primeira referência, com a âncora.`}
-                className="mb-1.5 mr-1.5 h-9 text-[12.5px]"
-                partes={() => partesDaVista(motorId, "alta", 2)}
-                executar={() => detalharImagem({ clientId, modeloId: persona.id, imagemId: fonte.id, motorId })}
-                aoConcluir={(data) => {
-                  if (data && data.imagem) guardarImagemDaPersona(queryClient, { ...data.imagem, papel: "detalhe", derivada_de: data.imagem.derivada_de || fonte.id });
-                  void queryClient.invalidateQueries({ queryKey: chaveDasImagensDaPersona(persona.id) });
-                }}
-              />
-              <Button type="button" size="sm" variant="outline" className="mb-1.5 h-9 text-[12.5px]" disabled title="Ampliação fiel (sem inventar detalhe) precisa da conta fal.ai com a chave FAL_KEY salva no Supabase.">
-                Ampliar fiel
-              </Button>
-            </div>
-            {typeof servidor.data === "number" && <p className={juntar(texto.auxiliar, "truncate")}>Preço do 4K pela função: ~{usd(servidor.data)}.</p>}
           </div>
           <div className="min-w-0">
-            {detalhe ? (
-              <AntesEDepois antes={fonte} depois={detalhe} proporcao={proporcaoDaImagem(fonte)} />
-            ) : (
-              <Moldura proporcao={proporcaoDaImagem(fonte)} className="border border-border">
-                <ImagemDaPersonaNaTela imagem={fonte} alt="Imagem escolhida" className="!object-contain" />
-                <SeloGerada />
-              </Moldura>
-            )}
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Detalhar em 4K
+                </>
+              }
+              titulo="Detalhe em 4K"
+              descricao={`${motor ? MOTOR_DO_DETALHE.rotulo : "Gerador 4K padrão da função"}: a imagem escolhida vai como primeira referência, com a âncora.`}
+              className="h-9 w-full text-[12.5px] sm:w-auto"
+              partes={() => partesDaVista(motorId, "alta", 2)}
+              executar={() => detalharImagem({ clientId, modeloId: persona.id, imagemId: fonte.id, motorId })}
+              aoConcluir={(data) => {
+                if (data && data.imagem) guardarImagemDaPersona(queryClient, { ...data.imagem, papel: "detalhe", derivada_de: data.imagem.derivada_de || fonte.id });
+                void queryClient.invalidateQueries({ queryKey: chaveDasImagensDaPersona(persona.id) });
+              }}
+            />
+            {typeof servidor.data === "number" && <p className={juntar(texto.auxiliar, "mt-1")}>Preço do 4K pela função: ~{usd(servidor.data)}.</p>}
           </div>
+          {detalhe ? (
+            <AntesEDepoisComZoom antes={fonte} depois={detalhe} proporcao={proporcaoDaImagem(fonte)} />
+          ) : (
+            <div className="mx-auto w-full max-w-[380px]">
+              <button type="button" className="block w-full cursor-zoom-in" aria-label="Ver a imagem escolhida grande" onClick={() => setVendoGrande(true)}>
+                <Moldura proporcao={proporcaoDaImagem(fonte)} className="border border-border">
+                  <ImagemDaPersonaNaTela imagem={fonte} alt="Imagem escolhida" className="!object-contain" />
+                  <SeloGerada />
+                </Moldura>
+              </button>
+              <Ampliar imagens={[ampliavel(fonte, `${persona.nome}, antes do 4K`)]} indice={vendoGrande ? 0 : null} onFechar={() => setVendoGrande(false)} />
+            </div>
+          )}
         </div>
       )}
     </Secao>

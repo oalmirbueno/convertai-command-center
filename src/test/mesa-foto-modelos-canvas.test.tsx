@@ -581,8 +581,12 @@ describe("aba Modelos", () => {
     // Sem a preview no catálogo, a tela não manda gerador: a função escolhe o primeiro com 4K de verdade.
     expect(chamadasDe("modelo_detalhar")[0]).toEqual({ acao: "modelo_detalhar", client_id: CLIENTE, modelo_id: P1, imagem_id: ANCORA, alvo: "pessoa" });
     expect(await screen.findByLabelText("Cortina entre antes e depois")).toBeTruthy();
-    // Ampliação fiel espera a conta fal.ai.
-    expect((screen.getByRole("button", { name: "Ampliar fiel" }) as HTMLButtonElement).disabled).toBe(true);
+    // 27/09: sem botão morto (Ampliar fiel volta quando a função ampliar a foto da persona); Ver grande abre o comparador.
+    expect(screen.queryByRole("button", { name: "Ampliar fiel" })).toBeNull();
+    fireEvent.click(within(document.querySelector("[data-detalhar-4k]") as HTMLElement).getByRole("button", { name: "Ver grande" }));
+    expect(await screen.findByText("Antes e depois do 4K")).toBeTruthy();
+    expect(screen.getAllByLabelText("Cortina entre antes e depois").length).toBe(2);
+    fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
     // Persona com âncora pode ir para o Canvas.
     expect(screen.getByRole("button", { name: /Usar no Canvas/ })).toBeTruthy();
     // Seis vistas e o detalhe na mesma rodada: com a suíte inteira em paralelo passa dos 5 s padrão.
