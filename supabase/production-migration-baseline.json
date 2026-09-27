@@ -1393,6 +1393,14 @@
       "remote_name": "notificacoes_um_fato_um_aviso",
       "remote_statements_sha256": "b69463bb90cdbad4edc4efb897181f4e6ec6b03b9ade7ffe2ac0b6f2c0289457",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260927030000",
+      "path": "supabase/migrations/20260927030000_entrega_na_agenda_congela_laminas.sql",
+      "local_sha256": "665c2dd890ed6ce5d139493455b9dc0c4e805d04a904487babce80d7e457973b",
+      "remote_name": "entrega_na_agenda_congela_laminas",
+      "remote_statements_sha256": "01670beae1ca66608cbf6f8a8ca0aa28c8ac316ae284396a709679f17bea2821",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
