@@ -244,7 +244,10 @@ describe("executar e desfazer na Meta (grafo falso)", () => {
       return new Response(JSON.stringify({ error: { code: 200, message: "Requires ads_management access_token=SEGREDO" } }), { status: 400 });
     }) as typeof fetch;
     const g = grafoDaMeta("SEGREDO", "v21.0", falso);
-    await expect(g.escrever("120000000000001", { status: "PAUSED" })).rejects.toThrow("não tem permissão de gestão");
+    const erro = await g.escrever("120000000000001", { status: "PAUSED" }).catch((e: Error) => e);
+    expect(erro).toBeInstanceOf(Error);
+    expect((erro as Error).message).toMatch(/recusou a gestão nesta conta \(código 200\): Requires ads_management/);
+    expect((erro as Error).message).not.toContain("SEGREDO");
     expect(chamadas[0].url).toBe("https://graph.facebook.com/v21.0/120000000000001");
     expect(String(chamadas[0].init && chamadas[0].init.body)).toContain("status=PAUSED");
   });

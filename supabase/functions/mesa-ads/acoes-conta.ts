@@ -479,7 +479,12 @@ export class ErroDaMeta extends Error {
 export function motivoDoErroDaMeta(corpo: unknown, status: number): string {
   const e = corpo && typeof corpo === "object" ? (corpo as Record<string, unknown>).error as Record<string, unknown> | undefined : undefined;
   const codigo = Number(e?.code ?? 0);
-  if (codigo === 200 || codigo === 10 || codigo === 294) return "A Meta recusou: o token não tem permissão de gestão nesta conta.";
+  if (codigo === 200 || codigo === 10 || codigo === 294) {
+    // O motivo exato da Meta separa "conta não marcada no login" de "perfil sem papel de anunciante".
+    const original = e && typeof e.message === "string" ? limpo(e.message.replace(/access_token=[^&\s]+/gi, ""), 200) : "";
+    const sub = e && e.error_subcode ? ` · subcódigo ${Number(e.error_subcode)}` : "";
+    return `A Meta recusou a gestão nesta conta (código ${codigo}${sub})${original ? `: ${original}` : ""}. Confira se esta conta de anúncios foi marcada ao conectar e se o seu perfil é administrador ou anunciante dela.`;
+  }
   if (codigo === 190) return "O acesso à Meta venceu. Conecte a conta de anúncios de novo.";
   if (codigo === 17 || codigo === 4 || codigo === 80004) return "A Meta pediu uma pausa (limite de chamadas). Tente de novo em alguns minutos.";
   if (codigo === 100 && e && typeof e.error_user_msg === "string") return `A Meta recusou: ${limpo(e.error_user_msg, 240)}`;
