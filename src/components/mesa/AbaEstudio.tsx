@@ -97,6 +97,7 @@ import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type An
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
+import { laminaCitada, pedidoDeAjustePendente } from "../../../supabase/functions/_shared/entrega-na-agenda";
 import {
   AVISO_CONTINUO_FORA_DO_4X5,
   copiarTexto,
@@ -1081,6 +1082,40 @@ function DetalheDoItem({
     if (painel === "livre" || painel === "versoes") setPainel("direcao");
   };
 
+  // Frente EA: pedido de ajuste do cliente (portal) no MESMO trabalho. Abrir
+  // pela Agenda, pelo aviso ou pela Entrega leva à lâmina citada, com o pedido
+  // já no campo do ajuste livre (ou no pedido ao diretor, sem lâmina): o dono
+  // só confere e aperta Ajustar. Nada é gerado sozinho.
+  const pedidoDoCliente =
+    trabalho && trabalho.entrega_status === "reprovado" && trabalho.status !== "entregue"
+      ? pedidoDeAjustePendente(trabalho.ajustes_do_cliente) ||
+        (trabalho.entrega_aviso ? { texto: trabalho.entrega_aviso, lamina: laminaCitada(trabalho.entrega_aviso) } : null)
+      : null;
+  const laminaDoPedido = (() => {
+    const daUrl = parametros.get("ajuste") === "cliente" ? Number(parametros.get("lamina") || "") : 0;
+    const n = daUrl > 0 ? daUrl : pedidoDoCliente?.lamina || 0;
+    return n > 0 && cardsDaDirecao.some((c) => c.ordem === n) ? n : null;
+  })();
+  const [instrucaoDoCliente, setInstrucaoDoCliente] = useState<{ ordem: number; texto: string } | null>(null);
+  const pedidoAplicado = useRef("");
+  const aplicarPedidoDoCliente = () => {
+    if (!pedidoDoCliente?.texto) return;
+    const texto = `Pedido do cliente: ${pedidoDoCliente.texto}`;
+    if (laminaDoPedido) {
+      setInstrucaoDoCliente({ ordem: laminaDoPedido, texto });
+      abrirPainel(laminaDoPedido, "livre");
+    } else {
+      setPedidoAoDiretor(texto);
+    }
+  };
+  useEffect(() => {
+    const chaveDoPedido = pedidoDoCliente?.texto && trabalho ? `${trabalho.id}:${pedidoDoCliente.texto}` : "";
+    if (!chaveDoPedido || pedidoAplicado.current === chaveDoPedido || !cardsDaDirecao.length) return;
+    pedidoAplicado.current = chaveDoPedido;
+    aplicarPedidoDoCliente();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trabalho?.id, pedidoDoCliente?.texto, cardsDaDirecao.length]);
+
   // Ver grande: todas as lâminas com arte; a escolhida na versão que está na tela.
   const paraAmpliar: { ordem: number; imagem: ImagemAmpliavel }[] = cardsDaDirecao
     .filter((c) => ultimas.has(c.ordem))
@@ -1296,8 +1331,10 @@ function DetalheDoItem({
         onClick={() => abrirFerramenta("entrega", false)}
         className="mb-3 w-full rounded-lg border border-warning/50 bg-background px-3 py-2 text-left text-[12px] leading-snug [overflow-wrap:anywhere]"
       >
-        <span className="font-semibold text-warning">Pediram ajuste</span>
-        {trabalho.entrega_aviso ? `: “${trabalho.entrega_aviso}”` : ". Ajuste as lâminas e entregue de novo."}
+        <span className="font-semibold text-warning">
+          Ajuste pedido pelo cliente{laminaDoPedido ? ` (lâmina ${laminaDoPedido})` : ""}
+        </span>
+        {pedidoDoCliente?.texto ? `: “${pedidoDoCliente.texto}”` : trabalho.entrega_aviso ? `: “${trabalho.entrega_aviso}”` : ". Ajuste as lâminas e entregue de novo."}
       </button>
     ) : null;
 
@@ -1552,6 +1589,7 @@ function DetalheDoItem({
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
+      instrucaoInicial={instrucaoDoCliente && instrucaoDoCliente.ordem === cardSelecionado.ordem ? instrucaoDoCliente.texto : null}
       refinarTexto={
         <div className="space-y-2">
           {/* Frente R5: texto enxugado ao gerar (voltar ao original), aviso de que vai enxugar e dividir em 2 lâminas. */}

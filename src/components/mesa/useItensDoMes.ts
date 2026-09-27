@@ -126,6 +126,15 @@ export interface Trabalho {
   aprovado_em?: string | null;
   post_id?: string | null;
   agendado_para?: string | null;
+  /** Frente EA (SQL EA-01): data de publicação proposta/confirmada, aviso e histórico da Agenda. */
+  publicar_em?: string | null;
+  publicar_em_confirmado_em?: string | null;
+  publicar_ao_aprovar?: boolean | null;
+  agenda_sincronizada_em?: string | null;
+  agenda_aviso?: string | null;
+  agenda_historico?: unknown;
+  /** Pedidos de ajuste do cliente (SQL EA-01, seção 5): texto, lâmina, atendido na reentrega. */
+  ajustes_do_cliente?: unknown;
 }
 
 export type EntregaStatus =
@@ -138,6 +147,9 @@ export type EntregaStatus =
 
 /** Publicação do post criado na Agenda a partir da arte aprovada. */
 export interface PublicacaoDoPost {
+  /** Id da publicação (Tentar de novo e estado do motor). Cache antigo pode não ter. */
+  id?: string;
+  platform?: string | null;
   post_id: string;
   status: string;
   scheduled_at: string | null;
@@ -512,12 +524,14 @@ export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[]):
   if (postIds.length) {
     const { data } = await sb
       .from("editorial_publications")
-      .select("post_id, status, scheduled_at, delivery_mode, published_at, permalink")
+      .select("id, platform, post_id, status, scheduled_at, delivery_mode, published_at, permalink")
       .in("post_id", postIds)
       .neq("status", "cancelled")
       .order("scheduled_at", { ascending: true });
+    // A do Instagram vale (é a que o motor publica); sem ela, a primeira viva.
     for (const p of (data || []) as PublicacaoDoPost[]) {
-      if (!dados.publicacoes[p.post_id]) dados.publicacoes[p.post_id] = p;
+      const atual = dados.publicacoes[p.post_id];
+      if (!atual || (atual.platform !== "instagram" && p.platform === "instagram")) dados.publicacoes[p.post_id] = p;
     }
   }
   return dados;

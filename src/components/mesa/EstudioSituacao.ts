@@ -143,7 +143,7 @@ export const ETAPAS_DA_ESTEIRA: { chave: string; rotulo: string; dica: string }[
   { chave: "laminas", rotulo: "Lâminas", dica: "O gerador faz cada lâmina inteira, com o texto dentro, e a leitura confere" },
   { chave: "legenda", rotulo: "Legenda", dica: "Legenda e 4 ou 5 hashtags, para copiar ou ir junto" },
   { chave: "arquivos", rotulo: "Arquivos", dica: "Entrega cria o post em Arquivos, ligado ao item da agenda" },
-  { chave: "aprovacao", rotulo: "Aprovação", dica: "O cliente aprova e o post entra sozinho na Agenda" },
+  { chave: "aprovacao", rotulo: "Aprovação", dica: "O post já está na Agenda; o cliente aprova e ele sai na data confirmada" },
 ];
 
 /** Índice da etapa em curso (0 a 4); 5 quando tudo terminou. */

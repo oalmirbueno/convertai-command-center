@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Loader2, Pencil, Send } from "lucide-react";
+import { CalendarCheck, CalendarClock, ChevronLeft, ChevronRight, Clock, Loader2, Pencil, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,11 +29,16 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, type Trabalho } from "./useItensDoMes";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { dataEHoraCurta, JanelaDaPublicacao, TOM_DO_ESTADO, useEstadoDaPeca } from "./PublicacaoDaPeca";
 
 /**
  * Aba Entrega (SPEC seção 6). O caminho de cada arte até a Agenda:
- * arte pronta → entregue em Arquivos → enviada para aprovação → aprovada →
- * agendada sozinha (segunda a sexta, no horário do cliente) → publicada.
+ * arte pronta → entregue em Arquivos (e já na Agenda, sem data) → data
+ * confirmada pelo dono ("Publicar em") → enviada para aprovação → aprovada →
+ * agendada → publicada. Frente EA (27/09): a entrega cria ou atualiza o post
+ * da Agenda na hora; a publicação só acontece com a aprovação do cliente e a
+ * data confirmada. Peças entregues antes seguem o caminho antigo (agendada
+ * sozinha na aprovação, de segunda a sexta, no horário do cliente).
  *
  * O envio usa o mesmo caminho da tela de Arquivos e o agendamento usa o
  * mesmo caminho da Agenda. Quem acompanha a aprovação é o banco (gatilho e
@@ -55,14 +60,6 @@ interface Estado {
   tom: Tom;
   detalhe?: string | null;
 }
-
-const TOM: Record<Tom, string> = {
-  neutro: "bg-secondary text-muted-foreground",
-  andamento: "bg-primary/10 text-primary",
-  ok: "bg-success/10 text-success",
-  alerta: "bg-warning/15 text-foreground",
-  erro: "bg-destructive/10 text-destructive",
-};
 
 /** A arte tem todos os cards da direção gerados? */
 export function artePronta(t: Pick<Trabalho, "direcao" | "cards">): boolean {
@@ -122,7 +119,8 @@ function estadoDoItem(t: Trabalho | null, pub: PublicacaoDoPost | null): Estado 
   return { rotulo: "em produção", tom: "neutro" };
 }
 
-function linkDaAgenda(clientId: string, t: Trabalho, pub: PublicacaoDoPost | null): string | null {
+/** Link que abre o post da peça na Agenda (o mesmo card, no dia dele). */
+export function linkDaAgenda(clientId: string, t: Pick<Trabalho, "post_id" | "agendado_para">, pub: Pick<PublicacaoDoPost, "scheduled_at"> | null): string | null {
   if (!t.post_id) return null;
   const quando = pub?.scheduled_at || t.agendado_para;
   const data = quando ? new Date(quando) : null;
@@ -142,6 +140,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
   const publicacaoDe = (t: Trabalho | null) => (t?.post_id ? dados.data?.publicacoes.get(t.post_id) || null : null);
 
   const [progresso, setProgresso] = useState<string | null>(null);
+  // Item com a janela "Publicar em" aberta (uma por vez).
+  const [janela, setJanela] = useState<string | null>(null);
+  const itemDaJanela = janela ? itens.find((i) => i.id === janela) || null : null;
+  const trabalhoDaJanela = itemDaJanela ? trabalhoDe(itemDaJanela) : null;
 
   const paraEntregar = useMemo(() => itens.map(trabalhoDe).filter(podeEntregarSozinha) as Trabalho[], [dados.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const paraEnviar = useMemo(() => itens.map(trabalhoDe).filter(faltaEnviar) as Trabalho[], [dados.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -178,7 +180,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         (paraEntregar.length
           ? `${paraEntregar.length} ${paraEntregar.length === 1 ? "arte pronta vai" : "artes prontas vão"} primeiro para Arquivos. `
           : "") +
-        `${clientName} recebe no painel para aprovar. Quando aprovar, cada post entra sozinho na Agenda, de segunda a sexta, no horário combinado.`,
+        `${clientName} recebe no painel para aprovar. Cada post já está na Agenda: com a data confirmada, publica depois que o cliente aprovar.`,
       confirmLabel: "Enviar",
     });
     if (!ok) return;
@@ -277,41 +279,108 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
           <ul className="divide-y divide-border">
             {itens.map((i) => {
               const t = trabalhoDe(i);
-              const pub = publicacaoDe(t);
-              const versoes = t ? ultimasVersoes(t.cards) : new Map();
-              const capa = versoes.get(1) || Array.from(versoes.values())[0] || null;
-              const totalCards = t?.direcao?.cards?.length || 0;
-              const estado = estadoDoItem(t, pub);
-              const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
               return (
-                <li key={i.id} className="flex min-w-0 items-center px-3 py-2.5 hover:bg-muted">
-                  <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
-                    <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
-                      <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
-                        {dataCurta(i.due_date)} · {TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type}
-                        {totalCards ? ` · ${versoes.size}/${totalCards} cards` : ""}
-                      </span>
-                      {estado.detalhe && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{estado.detalhe}</span>}
-                    </span>
-                  </button>
-                  <span className="ml-3 flex shrink-0 flex-col items-end">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM[estado.tom]}`}>{estado.rotulo}</span>
-                    {agenda && (
-                      <Link to={agenda} className="mt-1 inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline">
-                        <CalendarCheck className="mr-1 h-3 w-3" /> Agenda
-                      </Link>
-                    )}
-                  </span>
-                </li>
+                <LinhaDaArte
+                  key={i.id}
+                  item={i}
+                  trabalho={t}
+                  publicacao={publicacaoDe(t)}
+                  clientId={clientId}
+                  onAbrir={onAbrir}
+                  onData={setJanela}
+                />
               );
             })}
           </ul>
           </RegiaoRolavel>
         )}
       </section>
+
+      {itemDaJanela && trabalhoDaJanela && (
+        <JanelaDaPublicacao
+          aberta={!!janela}
+          onFechar={() => setJanela(null)}
+          titulo={itemDaJanela.title}
+          clientId={clientId}
+          diaDaPeca={itemDaJanela.due_date}
+          peca={trabalhoDaJanela}
+          publicacao={publicacaoDe(trabalhoDaJanela)}
+          podePublicar={podeRecarregar}
+          onMudou={() => void dados.refetch()}
+        />
+      )}
     </AreaDeTrabalho>
+  );
+}
+
+/**
+ * Uma arte do mês. Depois da entrega, o estado é o da publicação (com o
+ * cliente, agendado, publicado ou falhou com o motivo do motor) e o botão da
+ * data abre "Publicar em". Antes, o estado da produção (estadoDoItem).
+ */
+function LinhaDaArte({
+  item: i,
+  trabalho: t,
+  publicacao: pub,
+  clientId,
+  onAbrir,
+  onData,
+}: {
+  item: ItemDoMes;
+  trabalho: Trabalho | null;
+  publicacao: PublicacaoDoPost | null;
+  clientId: string;
+  onAbrir: (taskId: string) => void;
+  onData: (taskId: string) => void;
+}) {
+  const entregue = !!t && t.status === "entregue" && t.file_ids.length > 0;
+  const { estado: daPublicacao } = useEstadoDaPeca(entregue ? t : null, pub);
+  const versoes = t ? ultimasVersoes(t.cards) : new Map();
+  const capa = versoes.get(1) || Array.from(versoes.values())[0] || null;
+  const totalCards = t?.direcao?.cards?.length || 0;
+  const antigo = estadoDoItem(t, pub);
+  const estado = daPublicacao && daPublicacao.codigo !== "fora_da_agenda" ? daPublicacao : antigo;
+  const detalhe = daPublicacao && daPublicacao.codigo === "fora_da_agenda" && t?.agenda_aviso ? t.agenda_aviso : estado.detalhe;
+  const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
+  const quando = pub?.scheduled_at || t?.publicar_em || null;
+  return (
+    <li className="flex min-w-0 items-center px-3 py-2.5 hover:bg-muted">
+      <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
+        <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
+          <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+            {dataCurta(i.due_date)} · {TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type}
+            {totalCards ? ` · ${versoes.size}/${totalCards} cards` : ""}
+          </span>
+          {detalhe && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</span>}
+        </span>
+      </button>
+      <span className="ml-3 flex shrink-0 flex-col items-end">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        {entregue && pub?.status !== "published" && (
+          <button
+            type="button"
+            onClick={() => onData(i.id)}
+            className="toque-compacto mt-1 inline-flex items-center rounded text-[11px] text-primary underline-offset-2 hover:underline"
+            aria-label={`Publicar em: ${i.title}`}
+          >
+            <CalendarClock className="mr-1 h-3 w-3" />
+            {pub?.scheduled_at ? dataEHoraCurta(pub.scheduled_at) : quando ? `${dataEHoraCurta(quando)}?` : "Publicar em"}
+          </button>
+        )}
+        {entregue && pub?.status === "published" && pub.permalink && (
+          <a href={pub.permalink} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline">
+            Ver post
+          </a>
+        )}
+        {agenda && (
+          <Link to={agenda} className="mt-1 inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline">
+            <CalendarCheck className="mr-1 h-3 w-3" /> Agenda
+          </Link>
+        )}
+      </span>
+    </li>
   );
 }
 
@@ -463,8 +532,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
                 ? `Cada post sai no melhor horário do seu tipo, de segunda a sexta. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
                 : `Horário fixo: ${p?.hora_publicacao || "09:00"}, de segunda a sexta.`}{" "}
               {p?.agendar_ao_aprovar
-                ? "Quando o cliente aprova, o post entra sozinho na Agenda."
-                : "O agendamento automático está desligado: a equipe agenda pela Agenda."}
+                ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar."
+                : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
             </p>
             <p className="leading-relaxed text-muted-foreground">
               <span className="font-medium text-foreground">Plano:</span>{" "}

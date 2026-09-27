@@ -471,6 +471,41 @@ export async function enviarParaAprovacao(trabalhoIds: string[]): Promise<Result
   return ((data || {}).resultados || []) as ResultadoDoEnvio[];
 }
 
+// ------------------------------------------------------------------ entrega na Agenda (frente EA)
+
+/** Resposta das ações de publicação da peça (estudio-arte). */
+export interface RespostaDaPublicacao {
+  trabalho_id: string;
+  publicacao?: { post_id: string; publicacao_id: string; quando: string | null; status: string };
+  agenda?: { ok: boolean; acao: string | null; post_id: string | null; aviso: string | null; publicar_em: string | null };
+  trabalho?: Record<string, unknown>;
+}
+
+/** Leva (ou atualiza) a entrega na Agenda. Idempotente, sem custo. */
+export function levarParaAgenda(trabalhoId: string): Promise<RespostaDaPublicacao> {
+  return chamarFuncao<RespostaDaPublicacao>("estudio-arte", { acao: "agenda_sincronizar", trabalho_id: trabalhoId });
+}
+
+/** O dono confirma data e hora (ISO). Sem aprovação do cliente, espera; aprovada, agenda. */
+export function confirmarPublicacao(trabalhoId: string, publicarEm: string, publicarAoAprovar: boolean): Promise<RespostaDaPublicacao> {
+  return chamarFuncao<RespostaDaPublicacao>("estudio-arte", {
+    acao: "publicacao_confirmar",
+    trabalho_id: trabalhoId,
+    publicar_em: publicarEm,
+    publicar_ao_aprovar: publicarAoAprovar,
+  });
+}
+
+/** Publica daqui a 1 minuto (só com a arte aprovada pelo cliente). */
+export function publicarAgora(trabalhoId: string): Promise<RespostaDaPublicacao> {
+  return chamarFuncao<RespostaDaPublicacao>("estudio-arte", { acao: "publicacao_agora", trabalho_id: trabalhoId });
+}
+
+/** Tira a data: a publicação volta a planejada, sem horário. */
+export function desfazerAgendamento(trabalhoId: string): Promise<RespostaDaPublicacao> {
+  return chamarFuncao<RespostaDaPublicacao>("estudio-arte", { acao: "publicacao_desfazer", trabalho_id: trabalhoId });
+}
+
 export interface PrevisaoDoPlano {
   posts_por_mes: number | null;
   laminas_por_post: number | null;

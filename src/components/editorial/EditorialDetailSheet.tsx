@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import CarouselSlider from "@/components/shared/CarouselSlider";
+import { PublicacaoDaMesaNaAgenda } from "@/components/mesa/PublicacaoDaPeca";
 import {
   loadEditorialPostForMutation,
   useEditorialEditorOptions,
@@ -1027,6 +1028,24 @@ export default function EditorialDetailSheet({
           </SheetHeader>
 
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+            {/* Frente EA: post que veio de uma entrega do Estúdio mostra a
+                publicação da peça e o mesmo "Publicar em" da Entrega. */}
+            {isStaff && !isImpersonating && (
+              <PublicacaoDaMesaNaAgenda
+                postId={post.post.id}
+                clientId={post.post.client_id}
+                titulo={post.post.title}
+                publicacoes={post.publications.map(({ publication }) => ({
+                  id: publication.id,
+                  status: publication.status,
+                  platform: publication.platform,
+                  scheduled_at: publication.scheduled_at,
+                  published_at: publication.published_at,
+                  permalink: publication.permalink,
+                }))}
+                podePublicar={canPublish}
+              />
+            )}
             <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

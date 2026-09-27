@@ -241,6 +241,24 @@ import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } fro
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 // Frente AP (27/09): aprendizado contínuo com as entregas (memória da entrega, números reais, o que funcionou).
 import { aprenderComAEntrega, blocoParaODiretor, blocosParaALamina } from "./aprendizado-no-estudio.ts";
+// Frente EA (27/09): a entrega entra na Agenda e a data é confirmada na Entrega.
+import {
+  confirmarDataDaPeca,
+  desfazerDataDaPeca,
+  ErroDaAgenda,
+  sincronizarPecaNaAgenda,
+  type ResultadoDaSincronizacao,
+} from "./agenda-da-entrega.ts";
+import {
+  comHistorico,
+  FUSO_PADRAO,
+  horarioSugerido,
+  localParaIso,
+  marcarAjustesAtendidos,
+  partesNoFuso,
+  pedidoDeAjustePendente,
+  tipoDoConteudo,
+} from "../_shared/entrega-na-agenda.ts";
 import { conhecimentoEstudioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
 import {
@@ -917,6 +935,16 @@ type Trabalho = {
   /** Estado da aprovação (docs/mesa-do-cliente/SPEC.md): agendado também trava a edição até reabrir. */
   entrega_status?: string | null;
   entrega_aviso?: string | null;
+  /** Frente EA: post da Agenda da peça, data proposta/confirmada e histórico (SQL EA-01). */
+  post_id?: string | null;
+  publicar_em?: string | null;
+  publicar_em_confirmado_em?: string | null;
+  publicar_ao_aprovar?: boolean | null;
+  agendado_para?: string | null;
+  agenda_sincronizada_em?: string | null;
+  agenda_historico?: unknown;
+  /** Frente EA: pedidos de ajuste do cliente (gatilho do banco), marcados atendidos na reentrega. */
+  ajustes_do_cliente?: unknown;
   atualizado_em: string;
 };
 
@@ -5755,7 +5783,9 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   // Criativo de anúncio: entrega própria, fora da agenda e da aprovação de post.
   if (ehAds(t)) return await entregarAnuncio(ch, t, corpo);
   if (t.status === "entregue" && t.file_ids.length) {
-    return json({ trabalho_id: t.id, file_ids: t.file_ids, root_file_id: t.file_ids[0], ja_entregue: true });
+    // Entregar de novo o que já está em Arquivos só confere a Agenda (idempotente).
+    const agenda = await levarParaAgenda(ch, t);
+    return json({ trabalho_id: t.id, file_ids: t.file_ids, root_file_id: t.file_ids[0], ja_entregue: true, agenda });
   }
   if (!t.task_id) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
   const ultimas = t.direcao.cards.map((c) => ({ card: c, versao: versaoAtual(t, c.ordem) }));
@@ -5875,6 +5905,10 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const gravado = await mutarTrabalho(t.id, () => ({ file_ids: fileIds, status: "entregue", legenda: legendaTexto }));
   // Frente AP: cada entrega ensina (memória da entrega uma vez e os números das antigas), em segundo plano.
   aprenderComAEntrega(gravado, ch.userId, nomeBase);
+  // Frente EA: a peça já entra (ou se atualiza) na Agenda, sem data; a data
+  // proposta fica no trabalho até o dono confirmar. Falha aqui não desfaz a
+  // entrega: vira aviso na Entrega com "Levar para a Agenda".
+  const agenda = await levarParaAgenda(ch, gravado);
   return json({
     trabalho_id: t.id,
     status: gravado.status,
@@ -5882,6 +5916,7 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
     project_id: projetoId,
     root_file_id: fileIds[0],
     file_ids: fileIds,
+    agenda,
     formatos,
     aviso: formatos.some((f) => !f.redimensionada)
       ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada."
@@ -6021,6 +6056,209 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
       ? "Parte dos criativos não pôde ser recortada no formato final e foi entregue no tamanho gerado."
       : null,
   });
+}
+
+// ------------------------------------------------- entrega na Agenda (frente EA)
+//
+// Pedido do dono (27/09): "sempre quando entregar uma arte, ele já atualiza lá
+// na agenda; eu só confirmo a data; depois da aprovação do cliente ele publica
+// na data e horário selecionados". A publicação é do ciclo que já existe no
+// banco (promotor + motor do Instagram): aqui só se grava o post e a data,
+// pelas RPCs da Agenda, com o JWT de quem chamou (auditoria com o autor certo).
+
+type ResumoDaAgenda = { ok: boolean; acao: string | null; post_id: string | null; aviso: string | null; publicar_em: string | null };
+
+const contextoDaAgenda = (ch: Chamador) => ({ db: servico(), doChamador: ch.doChamador, userId: ch.userId });
+
+/** ErroDaAgenda vira o erro padrão da função (status e frase). */
+function comoErroDaAgenda(e: unknown): never {
+  if (e instanceof ErroDaAgenda) throw new ErroEstudio(e.status, e.codigo, e.message);
+  throw e;
+}
+
+/**
+ * Data e hora propostas para "Publicar em": o dia da peça (o do plano) e o
+ * melhor horário real do cliente para o tipo (mesa_melhor_hora: histórico de
+ * alcance; sem métrica, o padrão do tipo) quando o horário automático está
+ * ligado; senão o horário fixo do cliente.
+ */
+async function dataProposta(t: Trabalho, agora: Date): Promise<string | null> {
+  if (!t.task_id) return null;
+  const db = servico();
+  const [tarefaRes, cfgRes] = await Promise.all([
+    db.from("tasks").select("due_date").eq("id", t.task_id).maybeSingle(),
+    db.from("mesa_cliente_config").select("hora_publicacao, fuso, horario_automatico").eq("client_id", t.client_id).maybeSingle(),
+  ]);
+  const cfg = cfgRes.data as { hora_publicacao: string | null; fuso: string | null; horario_automatico: boolean | null } | null;
+  const fuso = cfg?.fuso || FUSO_PADRAO;
+  let melhor: string | null = null;
+  if (cfg?.horario_automatico !== false) {
+    const { data } = await db.rpc("mesa_melhor_hora", { _client_id: t.client_id, _tipo: tipoDoConteudo(t.file_ids || []) });
+    melhor = typeof data === "string" ? data.slice(0, 5) : null;
+  }
+  const agoraLocal = partesNoFuso(agora, fuso);
+  const s = horarioSugerido({
+    diaDaPeca: (tarefaRes.data as { due_date: string | null } | null)?.due_date ?? null,
+    hoje: agoraLocal.dia,
+    agoraHHMM: agoraLocal.hora,
+    melhorHora: melhor,
+    horaFixa: cfg?.hora_publicacao ? String(cfg.hora_publicacao).slice(0, 5) : null,
+  });
+  return localParaIso(s.dia, s.hora, fuso);
+}
+
+/**
+ * Leva a entrega para a Agenda e anota no trabalho (post, data proposta,
+ * aviso, histórico). Nunca lança: a entrega já está em Arquivos e a falha da
+ * Agenda vira aviso com "Levar para a Agenda" na Entrega.
+ */
+async function levarParaAgenda(ch: Chamador, t: Trabalho): Promise<ResumoDaAgenda> {
+  if (ehAds(t) || t.status !== "entregue" || !t.file_ids?.length || !t.task_id) {
+    return { ok: false, acao: null, post_id: t.post_id ?? null, aviso: null, publicar_em: t.publicar_em ?? null };
+  }
+  const agora = new Date();
+  let r: ResultadoDaSincronizacao | null = null;
+  let aviso: string | null = null;
+  try {
+    r = await sincronizarPecaNaAgenda(contextoDaAgenda(ch), t);
+    aviso = r.aviso;
+  } catch (e) {
+    aviso = e instanceof ErroDaAgenda ? e.message : "A Agenda não respondeu. Use Levar para a Agenda.";
+    console.error("estudio-arte: entrega na agenda falhou", { erro: e instanceof ErroDaAgenda ? e.codigo : e instanceof Error ? e.name : "desconhecido" });
+  }
+  const proposta = t.publicar_em_confirmado_em ? null : await dataProposta(t, agora).catch(() => null);
+  const feito = r;
+  try {
+    await mutarTrabalho(t.id, (a) => ({
+      // Entrega depois do pedido de ajuste do cliente: o pedido fica atendido (com quem e em que rodada).
+      ...(a.entrega_status === "reprovado" && pedidoDeAjustePendente(a.ajustes_do_cliente)
+        ? { ajustes_do_cliente: marcarAjustesAtendidos(a.ajustes_do_cliente, { em: agora.toISOString(), por: ch.userId, rodada: Math.max(1, Number(a.entrega_rodada) || 1) }) }
+        : {}),
+      ...(feito?.post_id ? { post_id: feito.post_id } : {}),
+      ...(feito ? { agenda_sincronizada_em: agora.toISOString() } : {}),
+      agenda_aviso: aviso,
+      ...(!a.publicar_em_confirmado_em && proposta ? { publicar_em: proposta } : {}),
+      ...(feito && feito.acao !== "nada"
+        ? {
+          agenda_historico: comHistorico(a.agenda_historico, {
+            em: agora.toISOString(),
+            por: ch.userId,
+            acao: feito.acao,
+            post_id: feito.post_id,
+            rodada: Math.max(1, Number(a.entrega_rodada) || 1),
+            laminas: (a.file_ids || []).length,
+            capa: (a.file_ids || [])[0] || null,
+          }),
+        }
+        : {}),
+    }));
+  } catch {
+    // Colunas da frente EA ainda não publicadas no banco: guarda ao menos o post.
+    if (feito?.post_id) await mutarTrabalho(t.id, () => ({ post_id: feito.post_id })).catch(() => null);
+  }
+  return { ok: !!r, acao: r?.acao ?? null, post_id: r?.post_id ?? t.post_id ?? null, aviso, publicar_em: t.publicar_em_confirmado_em ? t.publicar_em ?? null : proposta };
+}
+
+/** Publicar é ação externa: só admin ou gestor confirma data, publica ou desfaz. */
+async function exigirQuemPublica(ch: Chamador) {
+  const [admin, gestor] = await Promise.all([
+    servico().rpc("has_role", { _user_id: ch.userId, _role: "admin" }),
+    servico().rpc("has_role", { _user_id: ch.userId, _role: "manager" }),
+  ]);
+  if (admin.data !== true && gestor.data !== true) {
+    throw new ErroEstudio(403, "so_gestor_publica", "Só admin ou gestor confirma a data e publica.");
+  }
+}
+
+async function trabalhoDaAgenda(ch: Chamador, corpo: Record<string, unknown>): Promise<Trabalho> {
+  let t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  if (ehAds(t)) throw new ErroEstudio(409, "anuncio_fora_da_agenda", "Criativo de anúncio não vai para a Agenda de posts.");
+  if (t.status !== "entregue" || !t.file_ids?.length) throw new ErroEstudio(409, "sem_entrega", "Entregue a arte antes de agendar.");
+  // Peça entregue antes desta frente (ou que falhou na Agenda): entra agora.
+  if (!t.post_id) {
+    await levarParaAgenda(ch, t);
+    t = await lerTrabalho(t.id);
+  }
+  return t;
+}
+
+async function auditarPublicacao(ch: Chamador, ferramenta: string, t: Trabalho, entrada: Record<string, unknown>, ok: boolean) {
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: ferramenta, origin: "mesa:estudio-arte",
+    keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:publish"],
+    input: { client_id: t.client_id, trabalho_id: t.id, ...entrada },
+    success: ok, statusCode: ok ? 200 : 409, durationMs: 0, resultRef: t.id,
+  }).catch(() => null);
+}
+
+/** agenda_sincronizar { trabalho_id }: leva (ou atualiza) a entrega na Agenda. Idempotente, sem custo. */
+async function agendaSincronizar(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  if (ehAds(t)) throw new ErroEstudio(409, "anuncio_fora_da_agenda", "Criativo de anúncio não vai para a Agenda de posts.");
+  if (t.status !== "entregue" || !t.file_ids?.length) throw new ErroEstudio(409, "sem_entrega", "Entregue a arte antes de levar para a Agenda.");
+  const agenda = await levarParaAgenda(ch, t);
+  return json({ trabalho_id: t.id, agenda, trabalho: await lerTrabalho(t.id) });
+}
+
+/**
+ * publicacao_confirmar { trabalho_id, publicar_em (ISO), publicar_ao_aprovar }:
+ * o dono confirma data e hora. Sem aprovação, a publicação fica planejada e o
+ * banco agenda quando o cliente aprovar; aprovada, já fica agendada.
+ * publicacao_agora { trabalho_id }: publica daqui a 1 minuto, só aprovada.
+ */
+async function publicacaoConfirmar(ch: Chamador, corpo: Record<string, unknown>, agoraMesmo = false) {
+  await exigirQuemPublica(ch);
+  const t = await trabalhoDaAgenda(ch, corpo);
+  const publicarAoAprovar = corpo.publicar_ao_aprovar === true || (corpo.publicar_ao_aprovar == null && t.publicar_ao_aprovar === true);
+  const agora = new Date();
+  const ferramenta = agoraMesmo ? "estudio_publicar_agora" : "estudio_confirmar_publicacao";
+  let r;
+  try {
+    r = await confirmarDataDaPeca(contextoDaAgenda(ch), t, { quando: agoraMesmo ? null : texto(corpo.publicar_em, 40) || null, agoraMesmo, mutationId: crypto.randomUUID() }, agora);
+  } catch (e) {
+    await auditarPublicacao(ch, ferramenta, t, { publicar_em: texto(corpo.publicar_em, 40) || null, erro: e instanceof Error ? e.message : "erro" }, false);
+    comoErroDaAgenda(e);
+  }
+  await mutarTrabalho(t.id, (a) => ({
+    post_id: r.post_id,
+    publicar_em: r.quando,
+    publicar_em_confirmado_em: agora.toISOString(),
+    publicar_em_confirmado_por: ch.userId,
+    publicar_em_desfeito_em: null,
+    publicar_ao_aprovar: publicarAoAprovar,
+    agendado_para: r.quando,
+    entrega_status: a.entrega_status === "aprovado" && r.status === "scheduled" ? "agendado" : a.entrega_status,
+    entrega_aviso: a.entrega_status === "aprovado" || a.entrega_status === "agendado" ? null : a.entrega_aviso,
+    agenda_aviso: null,
+    agenda_historico: comHistorico(a.agenda_historico, {
+      em: agora.toISOString(), por: ch.userId, acao: agoraMesmo ? "publicar_agora" : "confirmou", quando: r.quando, publicar_ao_aprovar: publicarAoAprovar,
+    }),
+  }));
+  await auditarPublicacao(ch, ferramenta, t, { post_id: r.post_id, publicacao_id: r.publicacao_id, quando: r.quando, publicar_ao_aprovar: publicarAoAprovar }, true);
+  return json({ trabalho_id: t.id, publicacao: r, trabalho: await lerTrabalho(t.id) });
+}
+
+/** publicacao_desfazer { trabalho_id }: tira a data (a publicação volta a planejada, sem horário). */
+async function publicacaoDesfazer(ch: Chamador, corpo: Record<string, unknown>) {
+  await exigirQuemPublica(ch);
+  const t = await trabalhoDaAgenda(ch, corpo);
+  const agora = new Date();
+  // Primeiro a trava: o banco não promove a publicação enquanto a data sai.
+  await mutarTrabalho(t.id, () => ({ publicar_em_desfeito_em: agora.toISOString(), publicar_em_confirmado_em: null }));
+  let r;
+  try {
+    r = await desfazerDataDaPeca(contextoDaAgenda(ch), t, crypto.randomUUID());
+  } catch (e) {
+    await auditarPublicacao(ch, "estudio_desfazer_agendamento", t, { erro: e instanceof Error ? e.message : "erro" }, false);
+    comoErroDaAgenda(e);
+  }
+  await mutarTrabalho(t.id, (a) => ({
+    agendado_para: null,
+    entrega_status: a.entrega_status === "agendado" ? "aprovado" : a.entrega_status,
+    agenda_historico: comHistorico(a.agenda_historico, { em: agora.toISOString(), por: ch.userId, acao: "desfez", quando_antes: t.agendado_para ?? t.publicar_em ?? null }),
+  }));
+  await auditarPublicacao(ch, "estudio_desfazer_agendamento", t, { post_id: r.post_id, publicacao_id: r.publicacao_id }, true);
+  return json({ trabalho_id: t.id, publicacao: r, trabalho: await lerTrabalho(t.id) });
 }
 
 // ------------------------------------------------------------ referencias
@@ -7575,6 +7813,11 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   corrigir_card: corrigirCard,
   legenda,
   entregar,
+  // Frente EA: entrega na Agenda e data de publicação confirmada pelo dono.
+  agenda_sincronizar: agendaSincronizar,
+  publicacao_confirmar: (ch, corpo) => publicacaoConfirmar(ch, corpo),
+  publicacao_agora: (ch, corpo) => publicacaoConfirmar(ch, corpo, true),
+  publicacao_desfazer: publicacaoDesfazer,
   referencias,
   conversar,
   aplicar_mudancas: aplicarMudancas,

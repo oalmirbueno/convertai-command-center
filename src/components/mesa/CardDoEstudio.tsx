@@ -227,6 +227,7 @@ export default function CardDoEstudio({
   onConcluido,
   semTrocaDeFundo = false,
   refinarTexto,
+  instrucaoInicial,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -261,10 +262,18 @@ export default function CardDoEstudio({
   semTrocaDeFundo?: boolean;
   /** "Refinar texto" (26/09): o Estúdio passa o painel do refino; quem não passa (Estúdio Ads) segue igual. */
   refinarTexto?: ReactNode;
+  /**
+   * Frente EA: o pedido de ajuste do cliente, já no campo do ajuste livre
+   * (o dono só confere e aperta Ajustar). Muda = preenche de novo.
+   */
+  instrucaoInicial?: string | null;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
-  const [instrucao, setInstrucao] = useState("");
+  const [instrucao, setInstrucao] = useState(instrucaoInicial || "");
+  useEffect(() => {
+    if (instrucaoInicial) setInstrucao(instrucaoInicial);
+  }, [instrucaoInicial]);
   const [fundoId, setFundoId] = useState<string | null>(null);
   const [acervoAberto, setAcervoAberto] = useState<"fundo" | null>(null);
   const [editandoTexto, setEditandoTexto] = useState(false);

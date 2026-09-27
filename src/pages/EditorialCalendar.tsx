@@ -1062,7 +1062,7 @@ export default function EditorialCalendar() {
     const naMesa = mesaPorTarefa.data ? mesaPorTarefa.data[task.id] : undefined;
     if (naMesa && !targetStage) {
       toast.info("A arte deste item está na Mesa do cliente", {
-        description: "Quando o cliente aprovar, o post entra sozinho na Agenda. Criar o post aqui é só para quem vai agendar à mão.",
+        description: "Quando a arte for entregue, o post entra sozinho na Agenda. Criar o post aqui é só para quem vai agendar à mão.",
         action: {
           label: "Abrir na Mesa",
           onClick: () => navigate(`/mesa?client=${naMesa.clientId}&aba=estudio&task=${task.id}`),
