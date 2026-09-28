@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
-import { Briefcase, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
+import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { SeletorDeModelo, SeletorDeRaciocinio } from "@/components/mesa/Seletores";
@@ -20,6 +20,7 @@ import {
   partesDoAgenteSenior,
   rotuloDoRaciocinio,
   ROTULO_DA_GRAVIDADE,
+  type AndamentoDoPedido,
   type EscolhaDoModelo,
   type EstrategiaSenior,
   type MensagemDoAgenteSenior,
@@ -370,8 +371,25 @@ function Esqueleto() {
   );
 }
 
-function Andamento({ desde, pesquisar, assumindo = false }: { desde: number; pesquisar: boolean; assumindo?: boolean }) {
+function Andamento({ desde, pesquisar, assumindo = false, servidor = null }: { desde: number; pesquisar: boolean; assumindo?: boolean; servidor?: AndamentoDoPedido | null }) {
   const s = useSegundos(desde);
+  // Frente AD: com o andamento gravado pelo servidor, as etapas são as reais (não estimadas pelo tempo).
+  if (servidor && servidor.historico.length) {
+    const feitas = servidor.historico.slice(0, -1);
+    return (
+      <div className="min-w-0 space-y-1" data-andamento-real={servidor.etapa}>
+        <ul className="min-w-0 space-y-0.5">
+          {feitas.map((h, k) => (
+            <li key={k} className="flex items-start text-[11.5px] leading-snug text-muted-foreground">
+              <Check className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-success" />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{h.rotulo}</span>
+            </li>
+          ))}
+        </ul>
+        <Cronometro desde={desde} rotulo={servidor.rotulo || etapaDaResposta(s, pesquisar, assumindo)} previsao={servidor.etapa === "executando" || servidor.etapa === "entendendo" ? "alguns segundos" : pesquisar ? "1 a 4 minutos" : "1 a 2 minutos"} />
+      </div>
+    );
+  }
   return <Cronometro desde={desde} rotulo={etapaDaResposta(s, pesquisar, assumindo)} previsao={pesquisar ? "1 a 4 minutos" : "1 a 2 minutos"} />;
 }
 
@@ -469,7 +487,9 @@ export default function AgenteSenior({
   const botaoRef = useRef<HTMLSpanElement>(null);
   const assumidos = useRef<Set<string>>(new Set());
   // Persistida no navegador (cache da Mesa): abre na hora com a última conversa e relê por trás.
-  const conversa = useQuery({ queryKey: chavesAgente.conversa(clientId), queryFn: () => lerConversaDoAgente(clientId), staleTime: 60_000, retry: false });
+  const [esperando, setEsperando] = useState(false);
+  // Enquanto espera a resposta, relê a conversa a cada 3 s: a mensagem já está gravada e o andamento é o real.
+  const conversa = useQuery({ queryKey: chavesAgente.conversa(clientId), queryFn: () => lerConversaDoAgente(clientId), staleTime: 60_000, retry: false, refetchInterval: esperando ? 3000 : false });
   const mensagens: MensagemDoAgenteSenior[] = conversa.data ? conversa.data.mensagens : [];
   const corte = inicioDaUltimaTroca(mensagens);
   const antigas = mensagens.slice(0, corte);
@@ -499,6 +519,7 @@ export default function AgenteSenior({
   const enviarMensagem = async (mensagem: string, opcoes: { agirAgora?: boolean; assumirPlano?: { plano_id: string; nome: string } | null; limparCampo?: boolean } = {}) => {
     const assumindo = !!opcoes.assumirPlano;
     setEnvio({ mensagem: assumindo ? `Assuma o plano ${opcoes.assumirPlano!.nome} e monte a campanha.` : mensagem, desde: Date.now(), assumindo });
+    setEsperando(true);
     setNumerosDoEnvio(null);
     if (opcoes.limparCampo) setTexto("");
     setAviso(null);
@@ -536,7 +557,10 @@ export default function AgenteSenior({
       throw e;
     } finally {
       setEnvio(null);
+      setEsperando(false);
       setNumerosDoEnvio(null);
+      // Mesmo quando deu erro, a conversa tem o pedido e o motivo gravados.
+      void queryClient.invalidateQueries({ queryKey: chavesAgente.conversa(clientId) });
     }
   };
 
@@ -546,6 +570,10 @@ export default function AgenteSenior({
 
   // O plano mandado pelo "Enviar ao agente sênior": ele assume sozinho, uma vez (o custo apareceu no botão do plano).
   const conversaPronta = !!conversa.data;
+  // O pedido de agora já gravado no servidor (a mensagem do dono com o andamento): a tela não repete a fala.
+  const pedidoGravado = envio
+    ? mensagens.slice().reverse().filter((m) => m.papel === "usuario" && !!m.andamento && Date.parse(m.criado_em) >= envio.desde - 120_000)[0] || null
+    : null;
   useEffect(() => {
     if (!assumir || !conversaPronta || envio || assumidos.current.has(assumir.plano_id)) return;
     assumidos.current.add(assumir.plano_id);
@@ -566,7 +594,11 @@ export default function AgenteSenior({
         {m.estrategia ? (
           <EstrategiaNaTela e={m.estrategia} nomeDe={nomeDe} onCriarPlano={onCriarPlano} mensagemId={m.id} numeros={m.numeros} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />
         ) : (
-          <TextoDoAgente texto={m.conteudo} />
+          <div className="min-w-0 space-y-2">
+            <TextoDoAgente texto={m.conteudo} />
+            {/* Ordem direta (frente AD): a resposta curta vem com o cartão do que foi feito, a prova e o Voltar. */}
+            {m.acoes && <CartaoDasAcoes mensagemId={m.id} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />}
+          </div>
         )}
       </FalaDoAgente>
     );
@@ -679,11 +711,11 @@ export default function AgenteSenior({
       {recentes.map(mostrar)}
       {envio && (
         <div className="min-w-0 space-y-3">
-          {envio.mensagem && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
+          {envio.mensagem && !pedidoGravado && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
           <FalaDoAgente>
             <div className="space-y-2">
               {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
-              <Andamento desde={envio.desde} pesquisar={pesquisar} assumindo={envio.assumindo} />
+              <Andamento desde={envio.desde} pesquisar={pesquisar} assumindo={envio.assumindo} servidor={pedidoGravado ? pedidoGravado.andamento || null : null} />
             </div>
           </FalaDoAgente>
         </div>

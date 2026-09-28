@@ -159,8 +159,8 @@ describe("conta de anúncios v4", () => {
     expect(within(saldo).getByText("R$ 15.230,90")).toBeTruthy();
     expect(within(saldo).getByText(/A Meta recusou parte da leitura/)).toBeTruthy();
     expect(screen.getByRole("region", { name: "Tendência diária" })).toBeTruthy();
-    const tabela = screen.getByRole("region", { name: "Campanhas" });
-    expect(within(tabela).getByText("Tráfego | Site", { selector: "span" })).toBeTruthy();
+    // Frente AD (28/09): a tabela de campanhas saiu; as campanhas ficam no Gerenciador ao vivo (árvore lida na Meta).
+    expect(screen.getByRole("region", { name: "Gerenciador de anúncios" })).toBeTruthy();
     expect(screen.getAllByRole("article")).toHaveLength(ANUNCIOS_POR_PAGINA);
     fireEvent.click(screen.getByRole("button", { name: /Mostrar mais 3 de 3/ }));
     expect(screen.getAllByRole("article")).toHaveLength(15);

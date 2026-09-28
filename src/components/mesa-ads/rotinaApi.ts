@@ -82,11 +82,15 @@ export interface ProvaNaTela {
   pedido_ao_agente: string;
   /** "Ir para ..." (contrato comum dos agentes; só rota interna). */
   caminho: CaminhoNaTela | null;
+  /** Frente AD: o que a Meta respondeu à escrita ({ success: true }) e a hora da escrita. */
+  resposta_meta: Record<string, unknown> | null;
+  feito_em: string | null;
 }
 
 export interface AcaoFeita {
   id: string;
-  origem: "rotina" | "agente";
+  /** "equipe": feita por alguém da equipe no Gerenciador (frente AD). */
+  origem: "rotina" | "agente" | "equipe";
   tipo: string;
   estado: "feita" | "falhou" | "proposta" | "desfeita" | "descartada";
   alvo: AlvoNaTela | null;
@@ -152,6 +156,8 @@ export function normalizarProva(bruto: unknown): ProvaNaTela | null {
     decisao: txt(p.decisao),
     pedido_ao_agente: txt(p.pedido_ao_agente),
     caminho: caminhoDaTela(p.caminho),
+    resposta_meta: p.resposta_meta && typeof p.resposta_meta === "object" && !Array.isArray(p.resposta_meta) ? (p.resposta_meta as Record<string, unknown>) : null,
+    feito_em: txt(p.feito_em) || null,
   };
 }
 
@@ -214,7 +220,8 @@ export function normalizarRotina(bruto: unknown): LeituraDaRotina {
       const conta = depois ? obj(depois.conta) : {};
       return {
         id: txt(o.id),
-        origem: (o.origem === "agente" ? "agente" : "rotina") as AcaoFeita["origem"],
+        // Sem o SQL AD-01, a ação da equipe grava origem "agente" com prova.pela_equipe.
+        origem: (o.origem === "equipe" || obj(o.prova).pela_equipe === true ? "equipe" : o.origem === "agente" ? "agente" : "rotina") as AcaoFeita["origem"],
         tipo: txt(o.tipo),
         estado: (ESTADOS.indexOf(o.estado) >= 0 ? o.estado : "feita") as AcaoFeita["estado"],
         alvo: alvo(o.alvo),

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useInRouterContext, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Briefcase, CalendarDays, FileSearch, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Briefcase, CalendarDays, ExternalLink, FileSearch, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -37,7 +37,7 @@ import {
 } from "./adsApi";
 import { Andamento, CabecalhoDaParte, Diagnostico, Foto, SeloDoSinal, useAndamento } from "./Comuns";
 import JanelaDaReferencia from "./JanelaDaReferencia";
-import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TabelaDeCampanhas, TendenciaDiaria } from "./ContaPaineis";
+import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TendenciaDiaria } from "./ContaPaineis";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
 import AgenteSenior from "./AgenteSenior";
 import AtivarGestao from "./AtivarGestao";
@@ -46,6 +46,8 @@ import { esquecerPlanoParaOAgente, verPlanoParaOAgente } from "./ponteDoAgente";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
+import GerenciadorAoVivo, { BotaoAtualizarAgora, SituacaoDaConta, useAtualizarGerenciador, useGerenciador } from "./GerenciadorAoVivo";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
 /**
  * Conta ao vivo: tudo o que está rodando na conta de anúncios do cliente
@@ -77,6 +79,15 @@ import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from 
  * abre o agente e ele assume sozinho. O endereço aceita &campanha=<id>
  * (filtra a campanha: o caminho "Ir para a campanha montada") e &ver=feito
  * (abre "O que foi feito": o link dos avisos).
+ *
+ * 28/09 (frente AD, "a Mesa Ads não está me passando confiança; organize tudo;
+ * a área da conta mais enxuta; o gerenciador dentro do painel; ver o agente
+ * fazer"): a aba virou blocos que recolhem, nesta ordem: a situação da conta
+ * (ativa ou travada, com o motivo e o que fazer), o Gerenciador ao vivo
+ * (árvore campanha, conjunto e anúncio lida na Meta, com as ações e a prova),
+ * o que o agente faz e fez, e os resultados e criativos. Um só "Atualizar
+ * agora" (lê a Meta e pede a coleta); a tabela de campanhas saiu (o
+ * Gerenciador é a tabela).
  */
 
 /** Lê campanha e ver do endereço quando há roteador (os testes montam a aba sem ele). */
@@ -413,11 +424,27 @@ export default function AbaConta({
   // O agente e o pacote olham pelo menos 30 dias (menos que isso é pouco volume para decidir estrutura).
   const diasDoAgente = dias < 30 ? 30 : dias;
 
+  // Um botão só: lê a Meta agora (Gerenciador) e pede a coleta dos números (conta_sincronizar).
+  const gerenciador = useGerenciador(clientId, dias);
+  const { atualizando, atualizar: atualizarGerenciador } = useAtualizarGerenciador(clientId, dias);
+  const [gerRecolhido, setGerRecolhido] = useRecolhido("mesa-ads:conta:bloco:gerenciador", false);
+  const [feitoRecolhido, setFeitoRecolhido] = useRecolhido("mesa-ads:conta:bloco:agente", false);
+  const [resultadosRecolhido, setResultadosRecolhido] = useRecolhido("mesa-ads:conta:bloco:resultados", false);
+  const resultadosRef = useRef<HTMLElement>(null);
+  const verCriativosDaCampanha = (id: string) => {
+    setCampanha(id);
+    setResultadosRecolhido(false);
+    window.setTimeout(() => {
+      const el = resultadosRef.current;
+      if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" });
+    }, 50);
+  };
   const sincronizar = async () => {
     setSincronizando(true);
+    void atualizarGerenciador();
     try {
       await chamarAds("conta_sincronizar", { client_id: clientId });
-      toast.success("Coleta pedida à Meta", { description: "Os números novos aparecem em alguns segundos." });
+      toast.success("Lendo a Meta agora", { description: "O status já veio; os números do período chegam em alguns segundos." });
       if (espera.current !== null) window.clearTimeout(espera.current);
       espera.current = window.setTimeout(() => {
         espera.current = null;
@@ -506,11 +533,11 @@ export default function AbaConta({
         />
       )}
       <div className="min-w-0 space-y-5 pb-6">
-        <RotinaDoAgente onPedirAoAgente={levarAoAgente} abrirFeito={verFeito} />
-        <div>
+        {/* 1. Situação da conta: ativa ou travada, com o motivo e o que fazer; um só Atualizar agora. */}
+        <div className="min-w-0 space-y-2">
           <CabecalhoDaParte
-            titulo="Conta ao vivo"
-            ajuda={`Tudo o que roda na conta de anúncios, grátis. Relê sozinha a cada 10 min enquanto esta etapa está aberta; Sincronizar pede a coleta da Meta agora. O sinal de cada anúncio é regra em código, nunca IA.${
+            titulo="Conta de anúncios"
+            ajuda={`O Gerenciador lê a Meta na hora (status, entrega, verba e gasto de hoje) e relê sozinho a cada 2 min; os números do período vêm da coleta do painel (a cada 10 min). Atualizar agora faz as duas coisas. O sinal de cada anúncio é regra em código, nunca IA.${
               custoRef ? ` O sinal compara com ${brl(custoRef.valor)} por resultado (${custoRef.fonte === "briefing" ? "custo tolerável do briefing" : "média da conta"}).` : ""
             }`}
             descricao={
@@ -529,28 +556,18 @@ export default function AbaConta({
                   valor={String(dias)}
                   onEscolher={(v) => setDias(Number(v) as PeriodoDaConta)}
                 />
-                <Button type="button" size="sm" variant="outline" className="h-9" disabled={sincronizando} onClick={() => void sincronizar()} title="Pede a coleta da Meta agora e relê a conta (sem custo de IA)">
-                  {sincronizando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-                  Sincronizar agora
-                </Button>
-                <BotaoComCusto
-                  rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
-                  titulo="Analisar a conta"
-                  descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
-                  className="h-9"
-                  disabled={!dados || !anuncios.length || desdeAnalise !== null}
-                  partes={() => partesDaAnaliseDaConta(catalogo)}
-                  executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, dias }))}
-                  aoConcluir={(data) => {
-                    const a = normalizarAnalise(data && data.analise);
-                    if (a) setAnaliseNova({ analise: a, criado_em: new Date().toISOString() });
-                    void queryClient.invalidateQueries({ queryKey: chavesAds.analise(clientId) });
-                  }}
-                />
+                <BotaoAtualizarAgora atualizando={sincronizando || atualizando} onAtualizar={() => void sincronizar()} />
+                {gerenciador.data && gerenciador.data.contas[0] && gerenciador.data.contas[0].link_meta && (
+                  <a href={gerenciador.data.contas[0].link_meta} target="_blank" rel="noopener noreferrer" className={juntar(botao.discreto, "h-9")}>
+                    <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                    Gerenciador da Meta
+                  </a>
+                )}
               </>
             }
           />
-          {desdeAnalise !== null && <Andamento desde={desdeAnalise} rotulo="O estrategista está lendo a conta" />}
+          <SituacaoDaConta leitura={gerenciador.data || null} carregando={gerenciador.isLoading} erro={gerenciador.isError ? textoDoErro(gerenciador.error) : null} />
+          <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
         </div>
 
         {conta.isError && (
@@ -574,70 +591,114 @@ export default function AbaConta({
           />
         )}
 
+        {/* 2. O Gerenciador ao vivo: campanha, conjunto e anúncio, com as ações e a prova. */}
+        {(!dados || dados.conta.conectada) && (
+          <section className="min-w-0" aria-label="Gerenciador">
+            <TituloRecolhivel
+              titulo="Gerenciador"
+              recolhido={gerRecolhido}
+              onAlternar={() => setGerRecolhido(!gerRecolhido)}
+              resumo={gerenciador.data ? `${gerenciador.data.resumo.campanhas_entregando} de ${gerenciador.data.resumo.campanhas_ativas} campanhas ativas entregando` : undefined}
+              className="mb-2"
+            />
+            {!gerRecolhido && <GerenciadorAoVivo dias={dias} onVerCriativos={verCriativosDaCampanha} />}
+          </section>
+        )}
+
+        {/* 3. O agente: a rotina e tudo o que ele fez (e o que não deu, com o motivo), com a prova e o Desfazer. */}
+        <section className="min-w-0" aria-label="O agente">
+          <TituloRecolhivel titulo="O que o agente faz e fez" recolhido={feitoRecolhido} onAlternar={() => setFeitoRecolhido(!feitoRecolhido)} className="mb-2" />
+          {!feitoRecolhido && <RotinaDoAgente onPedirAoAgente={levarAoAgente} abrirFeito={verFeito} />}
+        </section>
+
+        {/* 4. Resultados e criativos (o que já existia, num bloco que recolhe). */}
         {dados && dados.conta.conectada && extras && (
-          <>
-            <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
-            <details className="min-w-0 border-y border-border py-2">
-              <summary className={juntar("cursor-pointer rounded text-[12.5px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
-              <div className="mt-3 min-w-0 space-y-3">
-                <ResumoDaConta totais={dados.conta.totais} extras={extras} />
-                <SaldosDasContas contas={extras.contas} />
-                <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} />
-              </div>
-            </details>
+          <section className="min-w-0 space-y-4" aria-label="Resultados e criativos" ref={resultadosRef}>
+            <div className="flex min-w-0 flex-wrap items-center">
+              <TituloRecolhivel titulo="Resultados e criativos" recolhido={resultadosRecolhido} onAlternar={() => setResultadosRecolhido(!resultadosRecolhido)} className="mr-3" />
+              {!resultadosRecolhido && (
+                <span className="ml-auto">
+                  <BotaoComCusto
+                    rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
+                    titulo="Analisar a conta"
+                    descricao="O estrategista lê os números da conta (calculados em código) e diz o que escalar, pausar e renovar, o que a copy ensina e os próximos testes."
+                    className="h-9"
+                    disabled={!dados || !anuncios.length || desdeAnalise !== null}
+                    partes={() => partesDaAnaliseDaConta(catalogo)}
+                    executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, dias }))}
+                    aoConcluir={(data) => {
+                      const a = normalizarAnalise(data && data.analise);
+                      if (a) setAnaliseNova({ analise: a, criado_em: new Date().toISOString() });
+                      void queryClient.invalidateQueries({ queryKey: chavesAds.analise(clientId) });
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+            {desdeAnalise !== null && <Andamento desde={desdeAnalise} rotulo="O estrategista está lendo a conta" />}
+            {!resultadosRecolhido && (
+              <>
+                <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
+                <details className="min-w-0 border-y border-border py-2">
+                  <summary className={juntar("cursor-pointer rounded text-[12.5px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
+                  <div className="mt-3 min-w-0 space-y-3">
+                    <ResumoDaConta totais={dados.conta.totais} extras={extras} />
+                    <SaldosDasContas contas={extras.contas} />
+                    <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} />
+                  </div>
+                </details>
 
-            <section className="min-w-0 space-y-2" aria-label="Otimização">
-              <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
-              <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-                <BaixarPacoteDeOtimizacao dias={diasDoAgente} />
-                <ImportarPacote onImportado={onImportado} />
-              </div>
-            </section>
+                {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
 
-            {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
-
-            <TabelaDeCampanhas campanhas={dados.conta.campanhas} rotuloPorId={extras.rotuloPorId} selecionada={campanha} onSelecionar={(id) => setCampanha(id)} />
-
-            <section className="min-w-0 border-t border-border pt-5" aria-label="Anúncios">
-              <CabecalhoDaParte
-                titulo="Anúncios"
-                nivel={3}
-                descricao={campanha ? "Só a campanha escolhida" : undefined}
-                acoes={
-                  <>
-                    <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
-                    {campanha && (
-                      <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={() => setCampanha("")}>
-                        Todas as campanhas
-                      </button>
-                    )}
-                  </>
-                }
-              />
-              {dadosDaLista && (
-                <PainelDeResultados
-                  key={`${grupo}|${campanha}`}
-                  dados={dadosDaLista}
-                  grupo={grupo}
-                  memoria={`mesa-ads:conta:aba:${clientId}`}
-                  renderAnuncio={(a) => (
-                    <CartaoDoAnuncio
-                      a={a}
-                      abrindo={abrindo === a.ad_id}
-                      onVariar={() => variar(a)}
-                      onFicha={() => void abrirFicha(a)}
-                      rotuloDoResultado={a.resultado_rotulo || extras.rotuloPorId[a.ad_id]}
-                      formato={a.formato || extras.formatoPorAd[a.ad_id]}
-                      conjunto={a.conjunto || extras.conjuntoPorAd[a.ad_id]}
+                <section className="min-w-0 border-t border-border pt-4" aria-label="Anúncios">
+                  <CabecalhoDaParte
+                    titulo="Criativos"
+                    nivel={3}
+                    descricao={campanha ? `Só a campanha ${(dados.conta.campanhas.filter((c) => c.campaign_id === campanha)[0] || { nome: null }).nome || "escolhida"}` : undefined}
+                    acoes={
+                      <>
+                        <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
+                        {campanha && (
+                          <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={() => setCampanha("")}>
+                            Todas as campanhas
+                          </button>
+                        )}
+                      </>
+                    }
+                  />
+                  {dadosDaLista && (
+                    <PainelDeResultados
+                      key={`${grupo}|${campanha}`}
+                      dados={dadosDaLista}
+                      grupo={grupo}
+                      memoria={`mesa-ads:conta:aba:${clientId}`}
+                      renderAnuncio={(a) => (
+                        <CartaoDoAnuncio
+                          a={a}
+                          abrindo={abrindo === a.ad_id}
+                          onVariar={() => variar(a)}
+                          onFicha={() => void abrirFicha(a)}
+                          rotuloDoResultado={a.resultado_rotulo || extras.rotuloPorId[a.ad_id]}
+                          formato={a.formato || extras.formatoPorAd[a.ad_id]}
+                          conjunto={a.conjunto || extras.conjuntoPorAd[a.ad_id]}
+                        />
+                      )}
                     />
                   )}
-                />
-              )}
-            </section>
+                </section>
 
-            <PainelDaEvolucao dias={dias} />
-            <PainelDoDesempenho dias={dias} />
-          </>
+                <section className="min-w-0 space-y-2" aria-label="Otimização">
+                  <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+                    <BaixarPacoteDeOtimizacao dias={diasDoAgente} />
+                    <ImportarPacote onImportado={onImportado} />
+                  </div>
+                </section>
+
+                <PainelDaEvolucao dias={dias} />
+                <PainelDoDesempenho dias={dias} />
+              </>
+            )}
+          </section>
         )}
       </div>
 

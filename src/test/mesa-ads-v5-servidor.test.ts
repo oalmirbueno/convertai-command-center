@@ -208,7 +208,10 @@ describe("agente sênior de tráfego", () => {
     expect(corpo).toContain("timeoutMs: TIMEOUT_TEXTO_ADS_MS,");
     expect(corpo).toContain("esquemaJson: ESQUEMA_AGENTE_SENIOR,");
     expect(corpo).toMatch(/custo_usd: custo,/);
-    expect(corpo.match(/chamarTexto\(/g) || []).toHaveLength(1);
+    // Frente AD (28/09): uma chamada por mensagem, com teto de tempo (e uma segunda tentativa mais leve só se estourar).
+    expect(corpo.match(/chamarComTetoDeTempo\(/g) || []).toHaveLength(1);
+    const teto = fonte.slice(fonte.indexOf("async function chamarComTetoDeTempo("), fonte.indexOf("const horaDeSaoPaulo"));
+    expect(teto.match(/chamarTexto\(/g) || []).toHaveLength(2);
     expect(fonte).not.toContain("ad_snapshot_url");
     // O token do cofre só aparece dentro de pesquisarBibliotecaMeta e nunca vai para a resposta.
     const busca = fonte.slice(fonte.indexOf("async function pesquisarBibliotecaMeta("), fonte.indexOf("/** Métricas curtas para o prompt"));

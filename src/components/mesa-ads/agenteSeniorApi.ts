@@ -37,6 +37,31 @@ export interface EstrategiaSenior {
   } | null;
 }
 
+/**
+ * Andamento do pedido (frente AD, 28/09): o servidor grava na mensagem do dono cada etapa real
+ * ("Recebi o pedido", "Lendo a conta", "Pensando", "Executando na Meta", "Pronto" ou "Não deu"),
+ * e a tela relê a conversa enquanto espera.
+ */
+export interface AndamentoDoPedido {
+  etapa: string;
+  rotulo: string;
+  fim: boolean;
+  erro: string | null;
+  historico: { etapa: string; rotulo: string; em: string }[];
+}
+
+export function normalizarAndamento(bruto: unknown): AndamentoDoPedido | null {
+  const a = obj(bruto);
+  if (!txt(a.etapa)) return null;
+  return {
+    etapa: txt(a.etapa),
+    rotulo: txt(a.rotulo),
+    fim: !!a.fim,
+    erro: txt(a.erro) || null,
+    historico: lista(a.historico).map((h) => ({ etapa: txt(obj(h).etapa), rotulo: txt(obj(h).rotulo), em: txt(obj(h).em) })).filter((h) => !!h.rotulo),
+  };
+}
+
 export interface MensagemDoAgenteSenior {
   id: string;
   papel: "usuario" | "agente" | "sistema";
@@ -47,6 +72,8 @@ export interface MensagemDoAgenteSenior {
   numeros: NumerosVistos | null;
   /** Ações propostas na conta, com o estado de cada uma. */
   acoes: AcoesDaConta | null;
+  /** Na mensagem do dono: o andamento do pedido (etapas reais do servidor). */
+  andamento?: AndamentoDoPedido | null;
 }
 
 const lista = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -121,6 +148,7 @@ export function normalizarMensagensDoAgente(bruto: unknown): { conversa_id: stri
           estrategia: normalizarEstrategiaSenior(o.estrategia),
           numeros: normalizarNumerosVistos(o.numeros),
           acoes: normalizarAcoesDaConta(o.acoes),
+          andamento: normalizarAndamento(o.andamento),
         } as MensagemDoAgenteSenior;
       })
       .filter((m) => !!m.id && (!!m.conteudo || !!m.estrategia)),

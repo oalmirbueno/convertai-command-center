@@ -354,9 +354,14 @@ describe("contratos v3 da função mesa-ads (fonte)", () => {
   });
 
   it("toda chamada de texto usa timeoutMs de 300 s e as ações longas respondem com fôlego", () => {
-    const chamadas = (fonte.match(/chamarTexto\(\{/g) || []).length;
+    // Frente AD (28/09): o agente sênior passa pelo teto de tempo (chamarComTetoDeTempo), que reenvia o mesmo
+    // pedido (nascido com TIMEOUT_TEXTO_ADS_MS) com prazo menor: 150 s e, se estourar, 90 s mais leve.
+    const chamadas = (fonte.match(/chamarTexto\(\{(?! \.\.\.pedido,)/g) || []).length;
     const comTempo = (fonte.match(/chamarTexto\(\{\n\s+timeoutMs: TIMEOUT_TEXTO_ADS_MS,/g) || []).length;
     expect(comTempo).toBe(chamadas);
+    expect(fonte).toMatch(/chamarComTetoDeTempo\(\{\n\s+timeoutMs: TIMEOUT_TEXTO_ADS_MS,/);
+    expect(fonte).toMatch(/TETO_DO_MODELO_MS = 150_000/);
+    expect(fonte).toMatch(/TETO_DA_SEGUNDA_TENTATIVA_MS = 90_000/);
     expect(fonte).toMatch(/TIMEOUT_TEXTO_ADS_MS = 300_000/);
     expect(fonte).toMatch(/"referencia_para_estudio",\n\]\);/);
   });

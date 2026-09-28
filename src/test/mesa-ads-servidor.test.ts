@@ -117,7 +117,9 @@ describe("honestidade", () => {
     // de oferta, agressivo, conta e pacote já está em CONHECIMENTO_ESTRATEGISTA_ADS.
     // Frente H: o mesmo sistema, com a tarefa escolhendo os blocos dos especialistas e de marketing.
     expect(corpoDe(fonte, "sistemaDoEstrategista")).toContain("function sistemaDoEstrategista(tarefa?: TarefaAds, objetivo?: unknown): string");
-    const chamadas = fonte.split("await chamarTexto({").slice(1);
+    // Frente AD (28/09): o agente sênior passa pelo teto de tempo (chamarComTetoDeTempo), que reenvia o
+    // MESMO pedido com outro prazo (...pedido); o pedido é conferido onde nasce.
+    const chamadas = fonte.split("await chamarTexto({").slice(1).filter((c) => !/^\s*\.\.\.pedido,/.test(c)).concat(fonte.split("await chamarComTetoDeTempo({").slice(1));
     expect(chamadas.length).toBeGreaterThanOrEqual(14);
     for (const c of chamadas) {
       const trecho = c.slice(0, 400);

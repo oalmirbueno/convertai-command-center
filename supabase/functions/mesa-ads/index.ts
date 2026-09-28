@@ -118,7 +118,7 @@ import {
   type ModeloIa,
   type Tarefa,
 } from "../_shared/ia-motor.ts";
-import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
+import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev, type RespostaJev } from "../_shared/jev.ts";
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
@@ -211,6 +211,9 @@ import {
   estadoLido,
   executarNaMeta,
   fotografar,
+  foraDasContas,
+  ORCAMENTO_MINIMO_BRL,
+  TETO_DE_ORCAMENTO,
   grafoDaMeta,
   type GrafoMeta,
   type ItemDaAcaoNaConta,
@@ -236,6 +239,31 @@ import {
   retratoParaOAgente,
   type AlvoDaRegra,
 } from "./rotina-trafego.ts";
+// Frente AD (28/09): o Gerenciador ao vivo (árvore da Meta, entrega, links) e as ações da equipe por ele.
+import {
+  type AnuncioLido,
+  anunciosDaMeta,
+  arvoreCompacta,
+  type CampanhaLida,
+  campanhasDaMeta,
+  centavosEmReais,
+  type ConjuntoLido,
+  conjuntosDaMeta,
+  type ContaNoGerenciador,
+  type HojeDoNo,
+  hojeDaMeta,
+  linkDaCobranca,
+  linkDoGerenciador,
+  listaCortada,
+  marcasDasAcoes,
+  type MetricasDoNo,
+  montarArvore,
+  type NoDoGerenciador,
+  pedidoDaEquipeInvalido,
+  resumoDaArvore,
+  situacaoDaConta,
+} from "./gerenciador.ts";
+import { candidatosDaOrdem, decidirOrdem, pareceOrdemDireta, perguntasDaOrdem } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
 import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
 import { caminhoSeguro } from "../_shared/acoes-do-agente.ts";
@@ -5852,6 +5880,8 @@ type MensagemDoAgente = {
   numeros: Record<string, unknown> | null;
   /** As ações propostas na conta (acoes-conta.ts), com o estado de cada uma. */
   acoes: Record<string, unknown> | null;
+  /** Frente AD: o andamento do pedido (etapa, rótulo, histórico), gravado na mensagem do dono. */
+  andamento: Record<string, unknown> | null;
 };
 
 async function mensagensDoAgenteSenior(servico: SupabaseClient, conversaId: string, limite = 60): Promise<MensagemDoAgente[]> {
@@ -5861,11 +5891,14 @@ async function mensagensDoAgenteSenior(servico: SupabaseClient, conversaId: stri
     const anexos = (Array.isArray(m.anexos) ? m.anexos : []) as Record<string, unknown>[];
     const anexo = anexos.find((a) => a && typeof a === "object" && a.tipo === "estrategia");
     const acoes = anexos.find((a) => a && typeof a === "object" && a.tipo === "acoes_conta") ?? null;
+    // Frente AD: o andamento do pedido (na mensagem do dono), que a tela mostra enquanto espera.
+    const andamento = anexos.find((a) => a && typeof a === "object" && a.tipo === "andamento") ?? null;
     return {
       id: m.id,
       papel: m.papel,
       conteudo: m.conteudo,
       criado_em: m.criado_em,
+      andamento,
       estrategia: anexo && anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null,
       numeros: anexo && anexo.numeros && typeof anexo.numeros === "object" ? anexo.numeros as Record<string, unknown> : null,
       acoes,
@@ -5943,6 +5976,8 @@ const chaveDoContexto = (clientId: string, corpo: Record<string, unknown>) =>
   `${clientId}|${periodoDoPedido({ dias: corpo.dias ?? 30 }, DIAS_DESEMPENHO, 30, hojeSaoPaulo()).dias}|${String(corpo.marca_id ?? "")}|${String(corpo.project_id ?? "")}`;
 function esquecerContextoDoCliente(clientId: string) {
   contextosEmCache.esquecer(`${clientId}|`);
+  // Frente AD: o Gerenciador relê na próxima abertura (a marca da ação e o status novo aparecem).
+  leiturasDoGerenciador.esquecer(`${clientId}:`);
 }
 
 function contextoDoAgenteSenior(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>) {
@@ -6046,6 +6081,20 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   if (modoAssumir && !plano) throw new ErroHttp(400, "plano_obrigatorio", "Mande um plano de teste para o agente sênior assumir.");
   const conversaId = (await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, chamador.userId)) as string;
   const modoAgir = corpo.modo === "agir" || modoAssumir;
+  // Frente AD (28/09, teste real na Verzelo: 6 min e provedor_timeout, nada gravado): a mensagem do dono
+  // fica gravada AO CHEGAR, com o andamento que a tela acompanha; qualquer falha também fica na conversa.
+  const pedidoId = crypto.randomUUID();
+  const inicioDoPedido = Date.now();
+  const andamento = andamentoDoPedido(servico, clientId, pedidoId);
+  await registrarMensagens(servico, conversaId, clientId, [{ id: pedidoId, papel: "usuario", conteudo: mensagem, anexos: [andamento.primeiro()] }]);
+  const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
+  try {
+  // Ordem direta e única (pausar, ativar, renomear, verba com valor): sem o modelo pesado, em segundos.
+  if (!modoAssumir && pareceOrdemDireta(mensagem)) {
+    const direta = await tentarOrdemDireta(servico, chamador, { clientId, conversaId, mensagem, andamento, cobranca, inicioDoPedido });
+    if (direta) return direta;
+  }
+  await andamento.passo("lendo", "Lendo a conta, os criativos e o que já foi feito");
   const [c, historico, modeloEscolhido, criativosDaMesa, rotina, feito] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
@@ -6062,7 +6111,6 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     anuncios: c.conta.anuncios.map((x) => ({ ad_id: x.ad_id, nome: x.nome, status: x.status, campanha: x.campanha })),
   });
   const criativosComRef = criativosComApelido(criativosDaMesa);
-  const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
   const achado = await nichoDoCliente(c.ctx, c.briefing, cobranca, corpo.nicho);
   // "Ele já vai fazendo": o Jev confere, junto com o agente, se a mensagem pede para fazer (não só analisar).
   const pedidoP = modoAgir ? Promise.resolve({ faz: true, custo: 0, prob: null as number | null }) : pedeParaFazer(mensagem, cobranca);
@@ -6077,7 +6125,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano),
     REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
   };
-  const s = await chamarTexto({
+  await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
+  const tentativa = await chamarComTetoDeTempo({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
@@ -6085,7 +6134,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     modeloId: modeloEscolhido.modelo.id,
     sistema: sistemaDoAgenteSenior(objetivo),
     mensagens: [
-      ...historico.filter((m) => m.papel === "usuario" || m.papel === "agente").map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
+      // A mensagem de agora já está gravada (pedidoId): vai uma vez só, no fim, com o contexto.
+      ...historico.filter((m) => m.id !== pedidoId && (m.papel === "usuario" || m.papel === "agente")).map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
       {
         papel: "usuario",
         conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
@@ -6096,7 +6146,16 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     esquemaJson: ESQUEMA_AGENTE_SENIOR,
     referencia: { tipo: REF_CLIENTE, id: clientId },
     criadoPor: chamador.userId,
-  });
+  }, modeloEscolhido, chamador, andamento);
+  if (!("s" in tentativa)) {
+    // O modelo não respondeu nem na segunda tentativa: diz na conversa o que não deu, sem travar e sem mexer na conta.
+    const texto = `Não consegui terminar a análise: ${tentativa.falhou} Nada foi feito na conta. Para uma ordem simples (pausar, ativar, renomear ou mudar a verba de um item pelo nome), mande só a ordem que eu faço na hora; para a análise, tente de novo ou escolha um raciocínio mais leve na linha do modelo.`;
+    const mensagemId = crypto.randomUUID();
+    await registrarMensagens(servico, conversaId, clientId, [{ id: mensagemId, papel: "agente", conteudo: texto }]);
+    await andamento.passo("falhou", "O modelo não respondeu a tempo: nada foi feito", { fim: true, erro: tentativa.falhou });
+    return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta: texto, estrategia: null, markdown: texto, acoes: null, feitas_sozinho: 0, pediu_para_fazer: false, erro_do_modelo: tentativa.falhou, numeros: null, tempo_ms: Date.now() - inicioDoPedido, custo_usd: 0 });
+  }
+  const s = tentativa.s;
   const ads = new Map(c.conta.anuncios.map((a) => [a.ad_id, { resultados: a.metricas.resultados }]));
   const estrategia = normalizarEstrategia(s.json, ads);
   const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
@@ -6113,13 +6172,13 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     const montar = itemDeMontagem(doPlano, "Você mandou o plano ao agente sênior: ele monta a campanha na Meta com os criativos aprovados, tudo pausado.", `i${(lista ? lista.itens.length : 0) + 1}`);
     lista = lista ? { ...lista, itens: [...lista.itens, montar] } : { tipo: "acoes_conta", resumo: "Montar a campanha do plano na Meta, pausada, para você ativar.", itens: [montar], ignorados: [], gestao: null };
   }
+  if (lista && lista.itens.length) await andamento.passo("executando", pedido.faz ? "Conferindo cada item na Meta e fazendo o que é seguro" : "Conferindo na Meta os itens propostos");
   const preparadas = await prepararAcoesDaConta(servico, clientId, lista, { plano, conta: c.conta, teto: configDaLinha(rotina).teto_diario_brl });
   const acoes = preparadas
     ? await fazerOQueESeguro(servico, chamador, { clientId, mensagemId, acoes: preparadas, executar: pedido.faz, montar: modoAssumir, conta: c.conta, regras: regrasDoDono })
     : null;
   const numeros = numerosVistos(c.conta);
   await registrarMensagens(servico, conversaId, clientId, [
-    { papel: "usuario", conteudo: mensagem },
     {
       id: mensagemId,
       papel: "agente",
@@ -6131,10 +6190,16 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       ],
     },
   ]);
-  if (acoes) await registrarFeitosDoAgente(servico, chamador, clientId, mensagemId, acoes.itens.filter((i) => i.auto && i.resultado && i.resultado.ok));
+  // Frente AD: o que ele fez sozinho E o que tentou e não deu entram em "O que o agente fez" (com o motivo).
+  if (acoes) await registrarFeitosDoAgente(servico, chamador, clientId, mensagemId, acoes.itens.filter((i) => i.auto && i.resultado));
+  const feitasAgora = acoes ? acoes.itens.filter((i) => i.auto && i.resultado && i.resultado.ok).length : 0;
+  const falhasAgora = acoes ? acoes.itens.filter((i) => i.auto && i.resultado && !i.resultado.ok).length : 0;
+  await andamento.passo("pronto", feitasAgora || falhasAgora ? `Pronto: ${feitasAgora} feita(s) e conferida(s) na Meta${falhasAgora ? `, ${falhasAgora} não deu (motivo no cartão)` : ""}` : "Pronto", { fim: true });
   return json({
     conversa_id: conversaId,
     mensagem_id: mensagemId,
+    tempo_ms: Date.now() - inicioDoPedido,
+    modelo_mais_leve: tentativa.leve ? tentativa.raciocinio ?? null : null,
     resposta: estrategia.resposta,
     estrategia,
     markdown,
@@ -6151,6 +6216,13 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     jev_erro: achado.jev_erro,
     reserva_usada: s.reservaUsada ?? null,
   });
+  } catch (err) {
+    // Nunca some: o motivo fica na conversa (e o erro segue para a tela como antes).
+    const motivo = err instanceof ErroHttp || err instanceof IaMotorErro ? err.message : "falha inesperada no servidor";
+    await registrarMensagens(servico, conversaId, clientId, [{ papel: "agente", conteudo: `Não consegui responder: ${motivo}. Nada foi feito na conta.` }]).catch(() => undefined);
+    await andamento.passo("falhou", `Não deu: ${motivo}`, { fim: true, erro: motivo }).catch(() => undefined);
+    throw err;
+  }
 }
 
 /** conta_conversa_ler { client_id } -> { conversa_id, mensagens: [{ id, papel, conteudo, criado_em, estrategia }], custo_usd: 0 }. Grátis. */
@@ -6159,6 +6231,171 @@ async function contaConversaLer(servico: SupabaseClient, chamador: Chamador, cor
   await exigirAcessoAoCliente(chamador, clientId);
   const conversaId = await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, null);
   return json({ conversa_id: conversaId, mensagens: conversaId ? await mensagensDoAgenteSenior(servico, conversaId) : [], custo_usd: 0 });
+}
+
+// ---- conta_conversar: andamento, teto de tempo do modelo e ordem direta (frente AD, 28/09)
+
+/** O andamento do pedido, gravado na própria mensagem do dono (a tela relê a conversa enquanto espera). */
+function andamentoDoPedido(servico: SupabaseClient, clientId: string, mensagemId: string) {
+  const historico: { etapa: string; rotulo: string; em: string }[] = [{ etapa: "recebido", rotulo: "Recebi o pedido", em: new Date().toISOString() }];
+  const anexo = (fim: boolean, erro: string | null) => ({ tipo: "andamento", etapa: historico[historico.length - 1].etapa, rotulo: historico[historico.length - 1].rotulo, fim, erro, historico: historico.slice(-12) });
+  return {
+    primeiro: () => anexo(false, null),
+    passo: async (etapa: string, rotulo: string, extra: { fim?: boolean; erro?: string | null } = {}) => {
+      historico.push({ etapa, rotulo: semTravessao(rotulo).slice(0, 200), em: new Date().toISOString() });
+      const { error } = await servico.from("agente_mensagens").update({ anexos: [anexo(!!extra.fim, extra.erro ?? null)] }).eq("id", mensagemId).eq("client_id", clientId);
+      if (error) console.error("[mesa-ads] andamento nao gravado", { code: error.code });
+    },
+  };
+}
+type Andamento = ReturnType<typeof andamentoDoPedido>;
+
+/**
+ * Teto de tempo por chamada do modelo, abaixo do limite da função (400 s): a primeira vai até 150 s;
+ * estourou, tenta UMA vez o mesmo modelo com raciocínio mais leve e sem pesquisa na web (até 90 s).
+ * Estourou de novo: devolve o motivo (a conversa diz o que não deu, sem travar).
+ */
+const TETO_DO_MODELO_MS = 150_000;
+const TETO_DA_SEGUNDA_TENTATIVA_MS = 90_000;
+
+function raciocinioMaisLeve(modelo: ModeloIa, atual: string | undefined): string | undefined {
+  const niveis = modelo.raciocinio ?? [];
+  if (!niveis.length) return undefined;
+  const i = atual ? niveis.indexOf(atual) : niveis.length - 1;
+  for (const alvo of ["medium", "low"]) {
+    const k = niveis.indexOf(alvo);
+    if (k >= 0 && (i < 0 || k < i)) return alvo;
+  }
+  return i > 0 ? niveis[0] : undefined;
+}
+
+async function chamarComTetoDeTempo(
+  pedido: Parameters<typeof chamarTexto>[0],
+  escolhido: { modelo: ModeloIa; raciocinio: string | undefined },
+  chamador: Chamador,
+  andamento: Andamento,
+): Promise<{ s: Awaited<ReturnType<typeof chamarTexto>>; leve: boolean; raciocinio?: string } | { falhou: string }> {
+  const teto1 = Math.max(30_000, Math.min(TETO_DO_MODELO_MS, restanteMs(chamador) - 150_000));
+  try {
+    return { s: await chamarTexto({ ...pedido, timeoutMs: teto1 }), leve: false };
+  } catch (e) {
+    if (!(e instanceof IaMotorErro && e.codigo === "provedor_timeout")) throw e;
+  }
+  const leve = raciocinioMaisLeve(escolhido.modelo, escolhido.raciocinio);
+  const teto2 = Math.min(TETO_DA_SEGUNDA_TENTATIVA_MS, restanteMs(chamador) - 40_000);
+  if (teto2 < 30_000) return { falhou: `o modelo não respondeu em ${Math.round(teto1 / 1000)} s.` };
+  await andamento.passo("pensando_leve", `Passou de ${Math.round(teto1 / 1000)} s: tentando de novo com raciocínio ${leve ?? "padrão"} e sem pesquisa na web`);
+  try {
+    return { s: await chamarTexto({ ...pedido, timeoutMs: teto2, raciocinio: leve ?? pedido.raciocinio, pesquisaWeb: false }), leve: true, raciocinio: leve };
+  } catch (e) {
+    if (e instanceof IaMotorErro && e.codigo === "provedor_timeout") return { falhou: `o modelo não respondeu em ${Math.round(teto1 / 1000)} s nem na segunda tentativa, mais leve (${Math.round(teto2 / 1000)} s).` };
+    throw e;
+  }
+}
+
+const horaDeSaoPaulo = (iso: string | null | undefined) => {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return "";
+  return new Date(t - 3 * 3600_000).toISOString().slice(11, 16);
+};
+
+function estadoEmTexto(e: { status: string | null; orcamento_diario_brl: number | null; nome: string | null } | null | undefined, tipo: string): string {
+  if (!e) return "sem releitura";
+  if (tipo === "renomear") return `o nome agora é "${e.nome ?? ""}"`;
+  if (tipo === "orcamento") return `a verba diária agora é ${brlDaAcao(e.orcamento_diario_brl)}`;
+  return e.status === "PAUSED" ? "está pausado" : e.status === "ACTIVE" ? "está ativo" : `status ${e.status ?? "?"}`;
+}
+
+/**
+ * Ordem direta ao agente (ordem-direta.ts): candidatos da coleta, o Jev confirma a ordem e o item (se o
+ * nome não casou sozinho), o acoes-conta faz e confere. Devolve a resposta pronta, ou null para seguir
+ * pelo modelo (não é ordem simples, item incerto, valor faltando, Jev fora do ar).
+ */
+async function tentarOrdemDireta(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  e: { clientId: string; conversaId: string; mensagem: string; andamento: Andamento; cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string }; inicioDoPedido: number },
+): Promise<Response | null> {
+  await e.andamento.passo("entendendo", "Entendendo a ordem e achando o item na conta");
+  const [campQ, adsQ] = await Promise.all([
+    servico.from("ads_campaigns").select("campaign_id, name, effective_status").eq("client_id", e.clientId).order("updated_at", { ascending: false }).limit(200),
+    servico.from("ads_creatives").select("ad_id, ad_name, adset_id, adset_name, campaign_id, effective_status").eq("client_id", e.clientId).limit(600),
+  ]);
+  const campanhas = ((campQ.data as { campaign_id: string; name: string | null; effective_status: string | null }[] | null) ?? []).map((c) => ({ id: String(c.campaign_id), nome: c.name, status: c.effective_status }));
+  const nomeDaCampanha = new Map(campanhas.map((c) => [c.id, c.nome]));
+  const ads = (adsQ.data as { ad_id: string; ad_name: string | null; adset_id: string | null; adset_name: string | null; campaign_id: string | null; effective_status: string | null }[] | null) ?? [];
+  const conjuntos = new Map<string, { id: string; nome: string | null; campanha: string | null }>();
+  for (const a of ads) if (a.adset_id && !conjuntos.has(a.adset_id)) conjuntos.set(a.adset_id, { id: a.adset_id, nome: a.adset_name, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null });
+  const { candidatos, direto } = candidatosDaOrdem(e.mensagem, {
+    campanhas,
+    conjuntos: [...conjuntos.values()],
+    anuncios: ads.map((a) => ({ id: String(a.ad_id), nome: a.ad_name, status: a.effective_status, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null })),
+  });
+  if (!candidatos.length) return null;
+  let custo = 0;
+  let respostas: Record<string, RespostaJev>;
+  try {
+    const r = await jevPerguntar({
+      state: { mensagem_da_equipe: e.mensagem.slice(0, 1500), ...(direto ? {} : { itens: candidatos.map((c) => ({ ref: c.ref, nivel: c.nivel, nome: c.nome, status: c.status, campanha: c.campanha })) }) },
+      questions: perguntasDaOrdem(candidatos, !direto),
+    });
+    const cobrado = await cobrarJev(r, { clientId: e.clientId, tarefa: TAREFA, referencia: e.cobranca.referencia, criadoPor: e.cobranca.criadoPor });
+    custo = cobrado?.custoUsd ?? 0;
+    respostas = r.answers;
+  } catch (err) {
+    console.error("[mesa-ads] jev da ordem direta falhou", { codigo: err instanceof JevErro ? err.codigo : "jev_falhou" });
+    return null;
+  }
+  const d = decidirOrdem(e.mensagem, respostas, candidatos, direto);
+  if (!("ordem" in d)) {
+    await e.andamento.passo("modelo", `Não é uma ordem simples (${d.motivo}): vou ler a conta inteira`);
+    return null;
+  }
+  const o = d.ordem;
+  const nivelTxt = o.alvo.nivel === "campanha" ? "a campanha" : o.alvo.nivel === "conjunto" ? "o conjunto" : "o anúncio";
+  const verbo = o.tipo === "pausar" ? "Pausando" : o.tipo === "ativar" ? "Preparando a ativação de" : o.tipo === "renomear" ? "Renomeando" : "Mudando a verba de";
+  await e.andamento.passo("executando", `${verbo} ${nivelTxt} ${o.alvo.nome}: relendo na Meta, fazendo e conferindo`);
+  const exec = await executarPedidoNaConta(servico, e.clientId, {
+    tipo: o.tipo,
+    nivel: o.alvo.nivel,
+    meta_id: o.alvo.meta_id,
+    nome_atual: o.alvo.nome,
+    nome_novo: o.nome_novo,
+    orcamento_diario_brl: o.orcamento_diario_brl,
+    motivo: `Ordem direta da equipe: "${semTravessao(e.mensagem).slice(0, 200)}"`,
+    id: "i1",
+    soSeSeguro: true,
+  });
+  const item: ItemDaAcaoNaConta = exec.preparado ? exec.item : { ...exec.item, auto: true };
+  const r = item.resultado;
+  const mensagemId = crypto.randomUUID();
+  let texto: string;
+  if (exec.preparado) {
+    texto = `Preparei: ${o.tipo === "ativar" ? `ativar ${nivelTxt} ${o.alvo.nome}` : `mudar a verba diária de ${nivelTxt} ${o.alvo.nome} de ${brlDaAcao(item.de ? item.de.orcamento_diario_brl : null)} para ${brlDaAcao(item.para ? item.para.orcamento_diario_brl ?? null : null)}`}. Como isso aumenta o gasto, falta o seu Confirmar aqui embaixo. Li na Meta agora: ${estadoEmTexto(item.de, o.tipo)}.`;
+  } else if (r && r.ok) {
+    texto = `Feito. ${resumoDoItemFeito(item)} Conferi na Meta às ${horaDeSaoPaulo(r.relido_em || r.feito_em)}: ${estadoEmTexto(r.depois, o.tipo)}. Para voltar, use o Voltar este no cartão.`;
+  } else {
+    texto = `Não fiz: ${(r && r.motivo) || "a Meta recusou."} Nada mudou na conta.`;
+  }
+  const acoes: AcoesDaConta = { tipo: "acoes_conta", resumo: texto.slice(0, 300), itens: [item], ignorados: [], gestao: exec.gestao, modo: "real", caminho: caminhoDasAcoes(e.clientId, [item]) };
+  await registrarMensagens(servico, e.conversaId, e.clientId, [{ id: mensagemId, papel: "agente", conteudo: texto, anexos: [acoes] }]);
+  if (r) await registrarFeitosDoAgente(servico, chamador, e.clientId, mensagemId, [item]);
+  if (r && r.ok) esquecerContextoDoCliente(e.clientId);
+  await e.andamento.passo("pronto", exec.preparado ? "Pronto: espera o seu Confirmar" : r && r.ok ? `Feito e conferido na Meta às ${horaDeSaoPaulo(r.relido_em || r.feito_em)}` : `Não deu: ${(r && r.motivo) || "a Meta recusou"}`, { fim: true, erro: r && !r.ok ? r.motivo ?? null : null });
+  return json({
+    conversa_id: e.conversaId,
+    mensagem_id: mensagemId,
+    resposta: texto,
+    estrategia: null,
+    markdown: texto,
+    acoes,
+    feitas_sozinho: r && r.ok ? 1 : 0,
+    pediu_para_fazer: true,
+    ordem_direta: { tipo: o.tipo, alvo_por: o.alvo_por, prob_ordem: o.prob_ordem, prob_alvo: o.prob_alvo, preparado: exec.preparado },
+    numeros: null,
+    tempo_ms: Date.now() - e.inicioDoPedido,
+    custo_usd: custo,
+  });
 }
 
 /**
@@ -6559,6 +6796,8 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
   const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
   const itens: ItemDaAcaoNaConta[] = [];
   const agoraFeitos: ItemDaAcaoNaConta[] = [];
+  // Frente AD: o que foi tentado agora (feito ou não), para "O que o agente fez" mostrar também o que não deu e por quê.
+  const agoraTentados: ItemDaAcaoNaConta[] = [];
   // Um de cada vez: a Meta limita chamadas por conta, e a ordem da lista é a ordem da confirmação.
   for (const i of itensDaMensagem) {
     if (jaFeito(i)) {
@@ -6589,6 +6828,7 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
       resultado = await executarItemInterno(servico, chamador, m, i);
     }
     itens.push({ ...i, resultado });
+    agoraTentados.push({ ...i, resultado });
     if (resultado.ok) agoraFeitos.push({ ...i, resultado });
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: `mesa_ads_acao_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
@@ -6610,8 +6850,8 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
     executada_em: new Date().toISOString(),
     executada_por: chamador.userId,
   });
-  // Frente TR: o que foi feito entra em "O que foi feito" (com a prova) e no dossiê.
-  await registrarFeitosDoAgente(servico, chamador, m.client_id, m.id, agoraFeitos);
+  // Frente TR: o que foi feito entra em "O que foi feito" (com a prova) e no dossiê; frente AD: o que não deu também (com o motivo).
+  await registrarFeitosDoAgente(servico, chamador, m.client_id, m.id, agoraTentados);
   if (m.conversa_id) {
     await registrarMensagens(servico, m.conversa_id, m.client_id, [{
       papel: "sistema",
@@ -7342,16 +7582,31 @@ function resumoDoItemFeito(i: ItemDaAcaoNaConta): string {
   }
 }
 
-/** Ações do agente sênior feitas agora: "O que foi feito" (com a prova) e o dossiê. */
+/** "Tentei pausar o anúncio X." (o que o agente tentou e a Meta ou o painel recusou). */
+function resumoDaTentativa(i: ItemDaAcaoNaConta): string {
+  const alvo = i.alvo ? `${i.alvo.nivel === "campanha" ? "a campanha" : i.alvo.nivel === "conjunto" ? "o conjunto" : "o anúncio"} ${i.alvo.nome}` : "";
+  const verbo: Partial<Record<ItemDaAcaoNaConta["tipo"], string>> = {
+    pausar: "pausar", ativar: "ativar", orcamento: "mudar a verba diária de", renomear: "renomear", duplicar_anuncio: "duplicar",
+    trocar_criativo: "subir o criativo novo em", vincular_criativo: "ligar ao criativo da Mesa", montar_campanha_do_plano: "montar a campanha do plano",
+  };
+  return `Tentei ${verbo[i.tipo] ?? i.tipo} ${alvo}`.replace(/\s+/g, " ").trim() + ", mas não deu.";
+}
+
+/**
+ * Ações do agente sênior tentadas agora: as feitas vão para "O que foi feito" (com a prova) e o dossiê;
+ * as que não deram (frente AD, 28/09: "quando eu pedi, eu não sei se ele fez") ficam registradas como
+ * "falhou", com o motivo e o que fazer, sem Desfazer e sem ir ao dossiê.
+ */
 async function registrarFeitosDoAgente(servico: SupabaseClient, chamador: Chamador, clientId: string, mensagemId: string, itens: ItemDaAcaoNaConta[]) {
-  const daConta = itens.filter((i) => i.resultado && i.resultado.ok && TIPO_NO_REGISTRO[i.tipo]);
+  const daConta = itens.filter((i) => i.resultado && TIPO_NO_REGISTRO[i.tipo]);
   if (!daConta.length) return;
   const { data: msg } = await servico.from("agente_mensagens").select("anexos").eq("id", mensagemId).maybeSingle();
   const anexos = Array.isArray((msg as { anexos?: unknown } | null)?.anexos) ? (msg as { anexos: Record<string, unknown>[] }).anexos : [];
   const estrategia = anexos.find((a) => a && a.tipo === "estrategia") ?? null;
   const numeros = estrategia && estrategia.numeros && typeof estrategia.numeros === "object" ? estrategia.numeros : null;
   for (const i of daConta) {
-    const resumo = resumoDoItemFeito(i);
+    const ok = !!(i.resultado && i.resultado.ok);
+    const resumo = ok ? resumoDoItemFeito(i) : resumoDaTentativa(i);
     const prova = {
       numeros,
       fonte: numeros ? "Meta Ads, coletado pelo painel (o que o agente viu)" : "Conversa com o agente sênior",
@@ -7359,7 +7614,13 @@ async function registrarFeitosDoAgente(servico: SupabaseClient, chamador: Chamad
       regra: i.motivo,
       antes: i.de,
       depois: i.resultado ? i.resultado.depois ?? null : null,
-      decisao: i.auto ? "Feito sozinho: a equipe pediu para fazer e a ação é reversível e sem aumento de gasto." : "Confirmado pela equipe no cartão do agente sênior.",
+      // Frente AD: a hora da escrita, a hora da releitura na Meta e o que a Meta respondeu.
+      feito_em: i.resultado ? i.resultado.feito_em ?? null : null,
+      relido_na_meta_em: i.resultado ? i.resultado.relido_em ?? null : null,
+      resposta_meta: i.resultado ? i.resultado.resposta ?? null : null,
+      decisao: !ok
+        ? `Não feito: ${(i.resultado && i.resultado.motivo) || "a Meta recusou."}`
+        : i.auto ? "Feito sozinho: a equipe pediu para fazer e a ação é reversível e sem aumento de gasto." : "Confirmado pela equipe no cartão do agente sênior.",
       criado: i.resultado ? i.resultado.criado ?? null : null,
       // Contrato comum dos agentes: a campanha montada abre filtrada na aba Conta.
       caminho: i.resultado && i.resultado.criado && i.resultado.criado.campanha_id ? caminhoSeguro({ rotulo: "Ir para a campanha montada", destino: `/mesa-ads?client=${clientId}&etapa=conta&campanha=${i.resultado.criado.campanha_id}` }) : null,
@@ -7368,15 +7629,16 @@ async function registrarFeitosDoAgente(servico: SupabaseClient, chamador: Chamad
       rodada_id: null,
       origem: "agente",
       tipo: TIPO_NO_REGISTRO[i.tipo] as string,
-      estado: "feita",
+      estado: ok ? "feita" : "falhou",
       alvo: i.alvo ? { nivel: i.alvo.nivel, meta_id: i.alvo.meta_id, nome: i.alvo.nome } : i.resultado && i.resultado.criado && i.resultado.criado.campanha_id ? { nivel: "campanha", meta_id: i.resultado.criado.campanha_id, nome: i.montagem ? i.montagem.campanha_nome : "Campanha montada" } : null,
       resumo,
-      porque: i.motivo || "Pedido da equipe ao agente sênior.",
+      porque: ok ? i.motivo || "Pedido da equipe ao agente sênior." : (i.resultado && i.resultado.motivo) || "A Meta recusou.",
       prova,
-      desfazer: temReverso(i) ? { mensagem_id: mensagemId, item_id: i.id } : null,
+      desfazer: ok && temReverso(i) ? { mensagem_id: mensagemId, item_id: i.id } : null,
       mensagem_id: mensagemId,
       item_id: i.id,
     });
+    if (!ok) continue;
     await mandarAoDossie(servico, clientId, chamador.userId, `Agente sênior de tráfego: ${resumo}`, `${i.motivo || ""} ${prova.decisao}`.trim(), { origem: "mesa_ads_agente", mensagem_id: mensagemId, item: i.id, tipo: i.tipo });
   }
 }
@@ -7737,6 +7999,493 @@ async function rotinaPropostaDescartar(servico: SupabaseClient, chamador: Chamad
   return json({ ...(await rotinaParaATela(servico, a.client_id)), custo_usd: 0 });
 }
 
+// ---- Gerenciador ao vivo (frente AD, 28/09; gerenciador.ts)
+//
+// Pedido do dono: "abrir a telinha do gerenciador de anúncios dentro do painel, o gerenciador real da
+// Meta, para fazer tudo por um lugar só; ver o que está ativo, o que está rodando e monitorar em tempo
+// real", e "o agente fazer, a gente vendo ele fazer; quando eu pedi, eu não sei se ele fez".
+// A Meta bloqueia o Gerenciador num iframe: a tela é nossa, fiel a ele, lida na Graph API na hora.
+// Cada leitura fica gravada em ads_gerenciador_leituras (SQL AD-01) para a Central ler; cada ação da
+// equipe vai para ads_rotina_acoes (origem "equipe") com a prova, como as do agente e da rotina.
+
+/** Leitura do gerenciador por cliente e período: 45 s na memória da função (a Graph limita chamadas por conta). */
+const leiturasDoGerenciador = new CacheCurto<Record<string, unknown>>(45_000, 40);
+/** "Atualizar agora" relê na Meta no máximo a cada 15 s por cliente. */
+const forcadasDoGerenciador = new Map<string, number>();
+const RELEITURA_FORCADA_MIN_MS = 15_000;
+/** Para a Central: grava uma leitura a cada 10 min por cliente, e toda leitura forçada. */
+const gravadasDoGerenciador = new Map<string, number>();
+const GRAVAR_LEITURA_A_CADA_MS = 10 * 60_000;
+/** Contas de anúncio lidas por cliente (a Graph lê cada uma com 5 chamadas). */
+const MAX_CONTAS_NO_GERENCIADOR = 3;
+
+const PLATAFORMAS_DE_ANUNCIO = [
+  { id: "meta", plataforma: "meta_ads", nome: "Meta Ads" },
+  { id: "google", plataforma: "google_ads", nome: "Google Ads" },
+  { id: "tiktok", plataforma: "tiktok_ads", nome: "TikTok Ads" },
+] as const;
+
+const CAMPOS_DA_CONTA_NO_GERENCIADOR = "name,account_status,disable_reason,currency,balance,amount_spent";
+const CAMPOS_DAS_CAMPANHAS = "id,name,status,effective_status,objective,daily_budget,lifetime_budget,stop_time,issues_info";
+const CAMPOS_DOS_CONJUNTOS = "id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,optimization_goal,end_time,issues_info";
+const CAMPOS_DOS_ANUNCIOS = "id,name,campaign_id,adset_id,status,effective_status,issues_info,ad_review_feedback";
+
+const tabelaDoGerenciadorAusente = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST204" || /ads_gerenciador/.test(String(e.message ?? "")));
+
+type EstruturaDaConta = {
+  conta: ContaNoGerenciador;
+  campanhas: CampanhaLida[];
+  conjuntos: ConjuntoLido[];
+  anuncios: AnuncioLido[];
+  hoje: Map<string, HojeDoNo> | null;
+  avisos: string[];
+};
+
+/** Uma conta lida na Meta agora: conta, campanhas, conjuntos, anúncios e o gasto de hoje (5 chamadas em paralelo). */
+async function estruturaDaMeta(grafo: GrafoMeta, act: string, nomeNoPainel: string | null): Promise<EstruturaDaConta> {
+  const [contaR, campR, setsR, adsR, hojeR] = await Promise.allSettled([
+    grafo.ler(`act_${act}`, CAMPOS_DA_CONTA_NO_GERENCIADOR),
+    grafo.ler(`act_${act}/campaigns?limit=200`, CAMPOS_DAS_CAMPANHAS),
+    grafo.ler(`act_${act}/adsets?limit=300`, CAMPOS_DOS_CONJUNTOS),
+    grafo.ler(`act_${act}/ads?limit=400`, CAMPOS_DOS_ANUNCIOS),
+    grafo.ler(`act_${act}/insights?level=ad&date_preset=today&limit=500`, "ad_id,spend,impressions"),
+  ]);
+  // Sem conta ou sem estrutura, não dá para afirmar nada ao vivo: quem chama cai na coleta do painel.
+  for (const r of [contaR, campR, setsR, adsR]) if (r.status === "rejected") throw r.reason;
+  const valor = (r: PromiseSettledResult<Record<string, unknown> | null>) => (r.status === "fulfilled" ? r.value : null);
+  const conta = valor(contaR);
+  if (!conta) throw new Error("A Meta não devolveu a conta de anúncios.");
+  const avisos: string[] = [];
+  const listas: [PromiseSettledResult<Record<string, unknown> | null>, string][] = [[campR, "campanhas"], [setsR, "conjuntos"], [adsR, "anúncios"]];
+  for (const [r, nome] of listas) {
+    if (listaCortada(valor(r))) avisos.push(`A lista de ${nome} veio cortada pela Meta (muitos itens): os mais antigos podem não aparecer.`);
+  }
+  if (hojeR.status === "rejected" || !valor(hojeR)) avisos.push("O gasto de hoje não veio da Meta nesta leitura: a entrega aparece como Ativo, sem afirmar que está entregando.");
+  const lidoEm = new Date().toISOString();
+  return {
+    conta: {
+      id: act,
+      nome: (typeof conta.name === "string" && conta.name.trim()) || nomeNoPainel || `Conta ${act}`,
+      moeda: typeof conta.currency === "string" ? conta.currency : null,
+      situacao: situacaoDaConta(conta.account_status),
+      saldo_a_pagar_brl: centavosEmReais(conta.balance),
+      gasto_total_brl: centavosEmReais(conta.amount_spent),
+      link_meta: linkDoGerenciador(act),
+      link_cobranca: linkDaCobranca(act),
+      fonte: "meta_ao_vivo",
+      lido_em: lidoEm,
+      aviso: null,
+    },
+    campanhas: campanhasDaMeta(valor(campR)),
+    conjuntos: conjuntosDaMeta(valor(setsR)),
+    anuncios: anunciosDaMeta(valor(adsR)),
+    hoje: hojeR.status === "fulfilled" && hojeR.value ? hojeDaMeta(hojeR.value) : null,
+    avisos,
+  };
+}
+
+/** A mesma conta pela última coleta do painel (sem acesso à Meta agora): status da coleta, sem o gasto de hoje. */
+async function estruturaDaColeta(
+  servico: SupabaseClient,
+  clientId: string,
+  externa: { id: string; external_id: string; display_name: string | null },
+  foto: Record<string, unknown> | null,
+  motivo: string,
+): Promise<EstruturaDaConta> {
+  const [campQ, adsQ] = await Promise.all([
+    servico.from("ads_campaigns").select("campaign_id, name, status, effective_status, objective, daily_budget, lifetime_budget, stop_time").eq("client_id", clientId).eq("external_account_id", externa.id).limit(300),
+    servico.from("ads_creatives").select("ad_id, ad_name, campaign_id, adset_id, adset_name, status, effective_status").eq("client_id", clientId).eq("external_account_id", externa.id).limit(800),
+  ]);
+  const reais = (v: unknown) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) || Number(v) <= 0 ? null : Number(v));
+  const ID = /^[0-9]{3,30}$/;
+  const campanhas: CampanhaLida[] = ((campQ.data as Record<string, unknown>[] | null) ?? []).filter((c) => ID.test(String(c.campaign_id ?? ""))).map((c) => ({
+    id: String(c.campaign_id),
+    nome: semTravessao(String(c.name ?? "")).slice(0, 200) || `Campanha ${c.campaign_id}`,
+    status: typeof c.status === "string" ? c.status : null,
+    efetivo: typeof c.effective_status === "string" ? c.effective_status : null,
+    objetivo: typeof c.objective === "string" ? c.objective : null,
+    orcamento_diario_brl: reais(c.daily_budget),
+    orcamento_total_brl: reais(c.lifetime_budget),
+    fim: typeof c.stop_time === "string" ? c.stop_time : null,
+    problemas: [],
+  }));
+  const ads = ((adsQ.data as Record<string, unknown>[] | null) ?? []).filter((a) => ID.test(String(a.ad_id ?? "")));
+  const anuncios: AnuncioLido[] = ads.map((a) => ({
+    id: String(a.ad_id),
+    nome: semTravessao(String(a.ad_name ?? "")).slice(0, 200) || `Anúncio ${a.ad_id}`,
+    campaign_id: typeof a.campaign_id === "string" ? a.campaign_id : null,
+    adset_id: typeof a.adset_id === "string" ? a.adset_id : null,
+    status: typeof a.status === "string" ? a.status : null,
+    efetivo: typeof a.effective_status === "string" ? a.effective_status : null,
+    problemas: [],
+    revisao: [],
+  }));
+  // Conjunto não é coletado com status próprio: ativo se algum anúncio dele está ativo.
+  const porConjunto = new Map<string, { nome: string; campaign_id: string | null; efetivos: string[] }>();
+  for (const a of ads) {
+    const id = String(a.adset_id ?? "");
+    if (!ID.test(id)) continue;
+    const g = porConjunto.get(id) ?? { nome: semTravessao(String(a.adset_name ?? "")).slice(0, 200) || `Conjunto ${id}`, campaign_id: typeof a.campaign_id === "string" ? a.campaign_id : null, efetivos: [] };
+    g.efetivos.push(String(a.effective_status ?? ""));
+    porConjunto.set(id, g);
+  }
+  const conjuntos: ConjuntoLido[] = [...porConjunto.entries()].map(([id, g]) => {
+    const efetivo = g.efetivos.indexOf("ACTIVE") >= 0 ? "ACTIVE" : g.efetivos.every((e) => e === "CAMPAIGN_PAUSED") ? "CAMPAIGN_PAUSED" : "PAUSED";
+    return { id, nome: g.nome, campaign_id: g.campaign_id, status: null, efetivo, orcamento_diario_brl: null, orcamento_total_brl: null, otimizacao: null, fim: null, problemas: [] };
+  });
+  const numeroOuNada = (v: unknown) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  return {
+    conta: {
+      id: externa.external_id,
+      nome: externa.display_name || `Conta ${externa.external_id}`,
+      moeda: foto && typeof foto.currency === "string" ? foto.currency : null,
+      situacao: situacaoDaConta(foto ? foto.account_status : null),
+      saldo_a_pagar_brl: foto ? numeroOuNada(foto.balance) : null,
+      gasto_total_brl: foto ? numeroOuNada(foto.amount_spent) : null,
+      link_meta: linkDoGerenciador(externa.external_id),
+      link_cobranca: linkDaCobranca(externa.external_id),
+      fonte: "coleta",
+      lido_em: foto && typeof foto.coletado_em === "string" ? foto.coletado_em : null,
+      aviso: motivo,
+    },
+    campanhas,
+    conjuntos,
+    anuncios,
+    hoje: null,
+    avisos: [],
+  };
+}
+
+/** Números do período por campanha, conjunto e anúncio (coleta do painel; resultado certo para o objetivo). */
+async function metricasDoGerenciador(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string }, paisDoAnuncio: Map<string, { campanha: string | null; conjunto: string | null }>) {
+  const [diarias, campQ] = await Promise.all([
+    lerDiariasAds(servico, clientId, periodo.inicio, periodo.fim).catch(() => null),
+    servico.from("ads_campaigns").select("campaign_id, objective, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(500),
+  ]);
+  const campanhasLidas = (campQ.data as { campaign_id: string; objective: string | null; updated_at: string | null }[] | null) ?? [];
+  const sincronizadoEm = campanhasLidas.length ? campanhasLidas[0].updated_at : null;
+  const vazio = { campanha: new Map<string, MetricasDoNo>(), conjunto: new Map<string, MetricasDoNo>(), anuncio: new Map<string, MetricasDoNo>() };
+  if (!diarias) return { metricas: vazio, sincronizadoEm, lidas: false };
+  const objetivos = new Map(campanhasLidas.map((c) => [c.campaign_id, c.objective]));
+  const tipos = tiposPorAnuncio(diarias, objetivos);
+  const grupos = { campanha: new Map<string, LinhaDiariaAds[]>(), conjunto: new Map<string, LinhaDiariaAds[]>(), anuncio: new Map<string, LinhaDiariaAds[]>() };
+  const juntar = (m: Map<string, LinhaDiariaAds[]>, k: string | null | undefined, l: LinhaDiariaAds) => {
+    if (!k) return;
+    const x = m.get(k);
+    if (x) x.push(l);
+    else m.set(k, [l]);
+  };
+  for (const l of diarias) {
+    const pais = paisDoAnuncio.get(l.ad_id);
+    juntar(grupos.anuncio, l.ad_id, l);
+    juntar(grupos.conjunto, l.adset_id || (pais ? pais.conjunto : null), l);
+    juntar(grupos.campanha, l.campaign_id || (pais ? pais.campanha : null), l);
+  }
+  const calcular = (m: Map<string, LinhaDiariaAds[]>) => {
+    const saida = new Map<string, MetricasDoNo>();
+    for (const [k, ls] of m) {
+      const x = metricasCompletas(ls, tipos, objetivos);
+      saida.set(k, { gasto: x.gasto, impressoes: x.impressoes, resultados: x.resultados, resultado_rotulo: x.resultado_rotulo, custo_por_resultado: x.custo_por_resultado, ctr_link: x.ctr_link, cpm: x.cpm, frequencia: x.frequencia, cliques_link: x.cliques_link });
+    }
+    return saida;
+  };
+  return { metricas: { campanha: calcular(grupos.campanha), conjunto: calcular(grupos.conjunto), anuncio: calcular(grupos.anuncio) }, sincronizadoEm, lidas: true };
+}
+
+/** A leitura inteira do gerenciador de um cliente (sem gravar). */
+async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string; dias: number }) {
+  const agoraMs = Date.now();
+  const [extQ, acesso, fotosQ, marcasQ] = await Promise.all([
+    servico.from("external_accounts").select("id, platform, external_id, display_name, status").eq("client_id", clientId).in("platform", PLATAFORMAS_DE_ANUNCIO.map((p) => p.plataforma)),
+    acessoDeGestao(servico, clientId).catch(() => null),
+    servico.from("ads_account_snapshot").select("external_account_id, account_status, balance, amount_spent, currency, coletado_em").eq("client_id", clientId),
+    servico.from("ads_rotina_acoes").select("id, origem, tipo, estado, alvo, resumo, criado_em, desfazer, prova").eq("client_id", clientId)
+      .gte("criado_em", new Date(agoraMs - 7 * 86400_000).toISOString()).order("criado_em", { ascending: false }).limit(150),
+  ]);
+  const externas = ((extQ.data as { id: string; platform: string; external_id: string | null; display_name: string | null; status: string | null }[] | null) ?? [])
+    .filter((x) => x.status !== "inactive" && x.status !== "disconnected");
+  const metas = externas.filter((x) => x.platform === "meta_ads" && /^(act_)?[0-9]{3,30}$/.test(String(x.external_id ?? "")))
+    .map((x) => ({ id: x.id, external_id: String(x.external_id).replace(/^act_/, ""), display_name: x.display_name }))
+    .slice(0, MAX_CONTAS_NO_GERENCIADOR);
+  const plataformas = PLATAFORMAS_DE_ANUNCIO.map((p) => {
+    const ligadas = externas.filter((x) => x.platform === p.plataforma).length;
+    if (p.id === "meta") return { id: p.id, nome: p.nome, conectada: ligadas > 0, lida: ligadas > 0, motivo: ligadas ? null : "Nenhuma conta de anúncios da Meta ligada a este cliente. Ligue no cadastro do cliente." };
+    return { id: p.id, nome: p.nome, conectada: ligadas > 0, lida: false, motivo: ligadas ? `${p.nome} está ligado, mas a leitura das campanhas ainda não existe no painel.` : `${p.nome} não está conectado.` };
+  });
+  const fotos = new Map(((fotosQ.data as Record<string, unknown>[] | null) ?? []).map((f) => [String(f.external_account_id), f]));
+  const marcas = marcasDasAcoes(marcasQ.error ? [] : ((marcasQ.data as Record<string, unknown>[] | null) ?? []));
+  const grafo = acesso ? acesso.grafo : null;
+  const avisos: string[] = [];
+
+  const estruturas = await Promise.all(metas.map(async (x) => {
+    if (!grafo) return await estruturaDaColeta(servico, clientId, x, fotos.get(x.id) ?? null, (acesso && acesso.gestao.motivo) || "Sem acesso à Meta agora: mostrando a última coleta do painel.");
+    try {
+      return await estruturaDaMeta(grafo, x.external_id, x.display_name);
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : "A Meta não respondeu.";
+      return await estruturaDaColeta(servico, clientId, x, fotos.get(x.id) ?? null, `A leitura ao vivo falhou (${motivo}). Mostrando a última coleta do painel.`);
+    }
+  }));
+  const paisDoAnuncio = new Map<string, { campanha: string | null; conjunto: string | null }>();
+  for (const e of estruturas) for (const a of e.anuncios) paisDoAnuncio.set(a.id, { campanha: a.campaign_id, conjunto: a.adset_id });
+  const m = await metricasDoGerenciador(servico, clientId, periodo, paisDoAnuncio);
+  if (!m.lidas) avisos.push("Os números do período não puderam ser lidos agora; o status e o gasto de hoje continuam valendo.");
+
+  const contas: ContaNoGerenciador[] = [];
+  let campanhas: NoDoGerenciador[] = [];
+  let semPai = 0;
+  for (const e of estruturas) {
+    contas.push(e.conta);
+    avisos.push(...e.avisos);
+    const arvore = montarArvore({ conta: e.conta.id, situacao: e.conta.situacao, campanhas: e.campanhas, conjuntos: e.conjuntos, anuncios: e.anuncios, hoje: e.hoje, metricas: m.metricas, marcas, agoraMs });
+    campanhas = campanhas.concat(arvore.campanhas);
+    semPai += arvore.sem_pai;
+  }
+  if (semPai) avisos.push(`${semPai} ${semPai === 1 ? "item ficou" : "itens ficaram"} fora da árvore (a campanha ou o conjunto dele não veio na leitura).`);
+  const aoVivo = contas.some((c) => c.fonte === "meta_ao_vivo");
+  return {
+    plataformas,
+    contas,
+    campanhas,
+    resumo: resumoDaArvore(campanhas, contas),
+    periodo,
+    fonte: contas.length && contas.every((c) => c.fonte === "meta_ao_vivo") ? "meta_ao_vivo" : aoVivo ? "misto" : "coleta",
+    lido_em: new Date().toISOString(),
+    sincronizado_em: m.sincronizadoEm,
+    gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : null,
+    avisos: [...new Set(avisos)].slice(0, 6),
+  };
+}
+
+/** Grava a leitura para a Central (uma a cada 10 min por cliente, ou a forçada). Sem a tabela (SQL AD-01), segue sem gravar. */
+async function gravarLeituraDoGerenciador(servico: SupabaseClient, clientId: string, userId: string, l: Awaited<ReturnType<typeof lerGerenciador>>, forcada: boolean): Promise<string | null> {
+  const agora = Date.now();
+  if (!forcada && agora - (gravadasDoGerenciador.get(clientId) ?? 0) < GRAVAR_LEITURA_A_CADA_MS) return null;
+  gravadasDoGerenciador.set(clientId, agora);
+  const { error } = await servico.from("ads_gerenciador_leituras").insert({
+    client_id: clientId,
+    plataforma: "meta",
+    fonte: l.fonte,
+    lido_em: l.lido_em,
+    sincronizado_em: l.sincronizado_em,
+    periodo_inicio: l.periodo.inicio,
+    periodo_fim: l.periodo.fim,
+    dias: l.periodo.dias,
+    contas: l.contas.map((c) => ({ id: c.id, nome: c.nome, moeda: c.moeda, situacao: c.situacao, saldo_a_pagar_brl: c.saldo_a_pagar_brl, gasto_total_brl: c.gasto_total_brl, fonte: c.fonte, lido_em: c.lido_em, aviso: c.aviso })),
+    resumo: l.resumo,
+    arvore: arvoreCompacta(l.campanhas),
+    gestao: l.gestao ?? {},
+    avisos: l.avisos,
+    forcada,
+    lido_por: userId,
+  });
+  if (error) {
+    gravadasDoGerenciador.delete(clientId);
+    if (!tabelaDoGerenciadorAusente(error)) console.error("[mesa-ads] leitura do gerenciador nao gravada", { code: error.code });
+    return null;
+  }
+  return l.lido_em;
+}
+
+/**
+ * gerenciador_ler { client_id, dias?: 7 | 14 | 30 | 60 | 90, ao_vivo? } -> { plataformas, contas, campanhas (árvore),
+ *   resumo, periodo, fonte, lido_em, sincronizado_em, gestao, avisos, gravada_em, custo_usd: 0 }
+ * A árvore campanha, conjunto e anúncio lida na Meta agora (status, entrega e o motivo, verba, gasto de
+ * hoje), com os números do período da coleta e a marca da última ação em cada item. Sem acesso à Meta,
+ * a última coleta do painel (e o aviso). `ao_vivo` ("Atualizar agora") ignora a memória de 45 s. Grátis.
+ */
+async function gerenciadorLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const periodo = periodoDoPedido({ dias: corpo.dias }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const chave = `${clientId}:${periodo.dias}`;
+  let forcada = false;
+  if (corpo.ao_vivo === true && Date.now() - (forcadasDoGerenciador.get(clientId) ?? 0) >= RELEITURA_FORCADA_MIN_MS) {
+    forcadasDoGerenciador.set(clientId, Date.now());
+    leiturasDoGerenciador.esquecer(`${clientId}:`);
+    forcada = true;
+  }
+  const leitura = (await leiturasDoGerenciador.obter(chave, () => lerGerenciador(servico, clientId, periodo))) as Awaited<ReturnType<typeof lerGerenciador>>;
+  const gravadaEm = await gravarLeituraDoGerenciador(servico, clientId, chamador.userId, leitura, forcada);
+  return json({ ...leitura, gravada_em: gravadaEm, custo_usd: 0 });
+}
+
+const NOME_DO_NIVEL_COM_ARTIGO: Record<string, string> = { campanha: "a campanha", conjunto: "o conjunto", anuncio: "o anúncio" };
+const brlDaAcao = (v: number | null | undefined) => (typeof v === "number" ? `R$ ${v.toFixed(2).replace(".", ",")}` : "?");
+
+/** Frase do que a equipe fez (ou tentou) pelo Gerenciador, para "O que foi feito" e o dossiê. */
+function resumoDaEquipe(i: ItemDaAcaoNaConta, ok: boolean): string {
+  const alvo = i.alvo ? `${NOME_DO_NIVEL_COM_ARTIGO[i.alvo.nivel] ?? ""} ${i.alvo.nome}`.trim() : "";
+  const de = i.de ? i.de.orcamento_diario_brl : null;
+  const para = i.para && typeof i.para.orcamento_diario_brl === "number" ? i.para.orcamento_diario_brl : null;
+  if (!ok) {
+    const verbo = i.tipo === "pausar" ? "pausar" : i.tipo === "ativar" ? "ativar" : i.tipo === "orcamento" ? "mudar a verba diária de" : "renomear";
+    return `Tentativa de ${verbo} ${alvo}: não feito.`;
+  }
+  if (i.tipo === "pausar") return `Pausou ${alvo}.`;
+  if (i.tipo === "ativar") return `Ativou ${alvo}.`;
+  if (i.tipo === "orcamento") return `Mudou a verba diária de ${alvo} de ${brlDaAcao(de)} para ${brlDaAcao(para)}.`;
+  return `Renomeou ${alvo} para ${i.texto ?? ""}.`;
+}
+
+/**
+ * "O que foi feito" da equipe: origem "equipe" (SQL AD-01). Sem o SQL, a origem cai para "agente" com
+ * prova.pela_equipe = true (a tela e a Central leem as duas formas). Devolve o id da linha.
+ */
+async function registrarDaEquipe(servico: SupabaseClient, clientId: string, userId: string, linha: Record<string, unknown>): Promise<string | null> {
+  const inserir = (origem: string) => servico.from("ads_rotina_acoes").insert({ ...linha, client_id: clientId, origem, criado_por: userId }).select("id").maybeSingle();
+  let r = await inserir("equipe");
+  if (r.error && r.error.code === "23514") r = await inserir("agente");
+  if (r.error) {
+    if (!erroDeTabelaAusente(r.error)) console.error("[mesa-ads] acao da equipe nao gravada", { code: r.error.code });
+    return null;
+  }
+  return r.data ? (r.data as { id: string }).id : null;
+}
+
+/**
+ * gerenciador_acao { client_id, tipo: pausar | ativar | orcamento | renomear, nivel, meta_id, nome?, orcamento_diario_brl? }
+ * -> { resultado: { ok, motivo, feito_em, relido_em, antes, depois, resposta }, acao_id, gestao, custo_usd: 0 }
+ * A ação da equipe no Gerenciador, pelo mesmo caminho do agente (acoes-conta.ts): confere a gestão e a
+ * conta na Meta agora, relê o item, recusa se não é deste cliente, escreve, relê de novo (a prova) e
+ * grava em "O que foi feito" com o Desfazer. Verba muda até 30% por vez (o mesmo teto do agente). Não
+ * feito = motivo claro (conta travada, sem gestão, já estava assim) e também fica registrado.
+ */
+async function gerenciadorAcao(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const invalido = pedidoDaEquipeInvalido(corpo);
+  if (invalido) throw new ErroHttp(400, "pedido_invalido", invalido);
+  const tipo = String(corpo.tipo) as "pausar" | "ativar" | "orcamento" | "renomear";
+  const nivel = String(corpo.nivel) as "campanha" | "conjunto" | "anuncio";
+  const metaId = String(corpo.meta_id);
+  const nomeNovo = tipo === "renomear" ? semTravessao(String(corpo.nome ?? "")).replace(/\s+/g, " ").trim().slice(0, 250) : null;
+  const r = await executarPedidoNaConta(servico, clientId, {
+    tipo,
+    nivel,
+    meta_id: metaId,
+    nome_atual: String(corpo.nome_atual ?? ""),
+    nome_novo: nomeNovo,
+    orcamento_diario_brl: tipo === "orcamento" ? Number(corpo.orcamento_diario_brl) : null,
+    motivo: "Pedido da equipe no Gerenciador do painel.",
+  });
+  const feito = r.item;
+  const res = feito.resultado as NonNullable<ItemDaAcaoNaConta["resultado"]>;
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: `mesa_ads_gerenciador_${tipo}`, origin: PRINCIPAL_MESA_ADS,
+    keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:write"],
+    input: { client_id: clientId, tipo, nivel, meta_id: metaId, de: feito.de, para: feito.para },
+    success: !!res.ok, statusCode: res.ok ? 200 : 409, durationMs: r.duracaoMs,
+    errorCode: res.ok ? null : "nao_feito", errorMessage: res.ok ? null : res.motivo ?? null, resultRef: metaId,
+  });
+  const resumo = resumoDaEquipe(feito, !!res.ok);
+  const acaoId = await registrarDaEquipe(servico, clientId, chamador.userId, {
+    rodada_id: null,
+    tipo,
+    estado: res.ok ? "feita" : "falhou",
+    alvo: { nivel, meta_id: metaId, nome: feito.alvo ? feito.alvo.nome : metaId },
+    resumo: semTravessao(resumo).slice(0, 600),
+    porque: semTravessao(res.ok ? "Pedido da equipe no Gerenciador do painel." : res.motivo || "A Meta recusou.").slice(0, 2000),
+    prova: {
+      pela_equipe: true,
+      fonte: "Meta Ads ao vivo (Gerenciador do painel)",
+      antes: feito.de,
+      depois: res.depois ?? null,
+      feito_em: res.feito_em ?? null,
+      relido_na_meta_em: res.relido_em ?? null,
+      resposta_meta: res.resposta ?? null,
+      decisao: res.ok ? "Feito pela equipe no Gerenciador do painel." : `Não feito: ${res.motivo || "a Meta recusou."}`,
+    },
+    desfazer: res.ok && temReverso(feito) ? { item: feito } : null,
+    mensagem_id: null,
+    item_id: feito.id,
+  });
+  if (res.ok) {
+    await mandarAoDossie(servico, clientId, chamador.userId, `Equipe no Gerenciador: ${resumo}`, "Feito pela equipe no Gerenciador da Mesa Ads, com a releitura na Meta como prova.", { origem: "mesa_ads_gerenciador", tipo, meta_id: metaId });
+  }
+  esquecerContextoDoCliente(clientId);
+  return json({
+    resultado: { ok: !!res.ok, motivo: res.motivo ?? null, feito_em: res.feito_em ?? null, relido_em: res.relido_em ?? null, antes: feito.de, depois: res.depois ?? null, resposta: res.resposta ?? null },
+    resumo,
+    acao_id: acaoId,
+    gestao: r.gestao,
+    custo_usd: 0,
+  });
+}
+
+/**
+ * Um pedido direto na conta (pausar, ativar, verba com valor, renomear), sem modelo: confere a gestão e a
+ * conta na Meta agora, relê o item, recusa se não é deste cliente, escreve pelo acoes-conta e relê de
+ * novo (a prova). Usado pelo Gerenciador (equipe) e pela ordem direta ao agente sênior. Nunca lança.
+ */
+async function executarPedidoNaConta(
+  servico: SupabaseClient,
+  clientId: string,
+  p: { tipo: "pausar" | "ativar" | "orcamento" | "renomear"; nivel: "campanha" | "conjunto" | "anuncio"; meta_id: string; nome_atual: string; nome_novo: string | null; orcamento_diario_brl: number | null; motivo: string; id?: string; soSeSeguro?: boolean },
+): Promise<{ item: ItemDaAcaoNaConta; gestao: { disponivel: boolean; motivo: string | null }; duracaoMs: number; preparado: boolean }> {
+  const inicio = Date.now();
+  let item: ItemDaAcaoNaConta = {
+    id: p.id ?? `eq-${crypto.randomUUID().slice(0, 8)}`,
+    tipo: p.tipo,
+    na_meta: true,
+    alvo: { ref: "direto", nivel: p.nivel, meta_id: p.meta_id, nome: semTravessao(p.nome_atual).slice(0, 200) || `${p.nivel} ${p.meta_id}` },
+    criativo: null,
+    texto: p.tipo === "renomear" ? p.nome_novo : null,
+    variacao_pct: null,
+    motivo: p.motivo,
+    de: null,
+    para: p.tipo === "pausar" ? { status: "PAUSED" } : p.tipo === "ativar" ? { status: "ACTIVE" } : p.tipo === "renomear" ? { nome: p.nome_novo ?? "" } : null,
+    limitado: false,
+    indisponivel: null,
+  };
+  let gestao = { disponivel: false, motivo: null as string | null };
+  let resultado: NonNullable<ItemDaAcaoNaConta["resultado"]> | null = null;
+  try {
+    const [acesso, contas] = await Promise.all([acessoDeGestao(servico, clientId, { conferir: true }), contasMetaDoCliente(servico, clientId)]);
+    gestao = { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo };
+    if (!acesso.grafo || !acesso.gestao.disponivel) {
+      resultado = { ok: false, motivo: acesso.gestao.motivo || "Sem permissão de gestão na Meta." };
+    } else {
+      const bruto = await acesso.grafo.ler(p.meta_id, CAMPOS_DO_ESTADO(p.nivel));
+      const fora = foraDasContas(bruto, contas);
+      const lido = estadoLido(bruto);
+      if (fora) resultado = { ok: false, motivo: fora };
+      else if (!lido) resultado = { ok: false, motivo: "Não achei este item na Meta agora (pode ter sido excluído). Atualize o Gerenciador." };
+      else {
+        if (item.alvo) item.alvo.nome = lido.nome || item.alvo.nome;
+        if (p.tipo === "orcamento") {
+          const atual = lido.orcamento_diario_brl;
+          const novo = Math.round(Number(p.orcamento_diario_brl) * 100) / 100;
+          if (atual === null) {
+            resultado = { ok: false, motivo: p.nivel === "campanha" ? "Esta campanha não tem verba diária própria (a verba fica nos conjuntos). Mude no conjunto." : "Este conjunto não tem verba diária própria (a verba fica na campanha). Mude na campanha." };
+          } else if (!Number.isFinite(novo) || Math.abs(novo - atual) < 0.01) {
+            resultado = { ok: false, motivo: "A verba diária já é essa." };
+          } else if (novo < ORCAMENTO_MINIMO_BRL) {
+            resultado = { ok: false, motivo: `Verba diária mínima pelo painel: ${brlDaAcao(ORCAMENTO_MINIMO_BRL)}.` };
+          } else if (Math.abs(novo - atual) / atual > TETO_DE_ORCAMENTO + 0.0001) {
+            const min = Math.max(ORCAMENTO_MINIMO_BRL, Math.ceil(atual * (1 - TETO_DE_ORCAMENTO) * 100) / 100);
+            const max = Math.floor(atual * (1 + TETO_DE_ORCAMENTO) * 100) / 100;
+            resultado = { ok: false, motivo: `Pelo painel a verba muda até 30% por vez, para não reiniciar o aprendizado da Meta: hoje ${brlDaAcao(atual)}, dá de ${brlDaAcao(min)} a ${brlDaAcao(max)}. Mude em passos ou direto no Gerenciador da Meta.` };
+          } else {
+            item.variacao_pct = ((novo - atual) / atual) * 100;
+          }
+        }
+        if (!resultado) {
+          item = fotografar(item, lido);
+          if (item.indisponivel) resultado = { ok: false, motivo: item.indisponivel };
+          // Ordem ao agente: o que aumenta gasto (ativar, subir verba) fica pronto para o Confirmar, lido na Meta agora.
+          else if (p.soSeSeguro && !acaoSemRisco(item)) return { item, gestao, duracaoMs: Date.now() - inicio, preparado: true };
+          else resultado = await executarNaMeta(item, acesso.grafo, null, contas);
+        }
+      }
+    }
+  } catch (e) {
+    resultado = { ok: false, motivo: e instanceof Error ? e.message : "A Meta não respondeu agora." };
+  }
+  return { item: { ...item, resultado: resultado as NonNullable<ItemDaAcaoNaConta["resultado"]> }, gestao, duracaoMs: Date.now() - inicio, preparado: false };
+}
+
 /** Clientes por chamada do cron (a função tem 2 s de CPU por chamada e o relógio de 400 s). */
 const CLIENTES_POR_RODADA_DO_CRON = 2;
 
@@ -7817,6 +8566,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   rotina_rodar: rotinaRodar,
   rotina_desfazer: rotinaDesfazer,
   rotina_proposta_descartar: rotinaPropostaDescartar,
+  // Frente AD (28/09): o Gerenciador ao vivo dentro do painel e as ações da equipe por ele.
+  gerenciador_ler: gerenciadorLer,
+  gerenciador_acao: gerenciadorAcao,
 };
 
 /**
@@ -7831,6 +8583,8 @@ const ACOES_LONGAS = new Set([
   "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
   "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar", "conta_numeros",
   "conta_montagem_ativar", "rotina_regra", "rotina_rodar", "rotina_desfazer",
+  // Frente AD (28/09): o Gerenciador lê a Meta (5 chamadas por conta) e a ação da equipe relê antes e depois.
+  "gerenciador_ler", "gerenciador_acao",
   "referencia_para_estudio",
 ]);
 

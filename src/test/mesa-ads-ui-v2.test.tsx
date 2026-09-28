@@ -317,7 +317,9 @@ describe("conta ao vivo", () => {
     expect(within(escalar).getByText("Custo abaixo do tolerável")).toBeTruthy();
     // v5: o investimento aparece no resumo do topo (e de novo em "Mais números do período").
     expect(screen.getAllByText("R$ 1.540,50").length).toBeGreaterThan(0);
-    expect(screen.getByText("Mensagens | Clareamento", { selector: "span" })).toBeTruthy();
+    // Frente AD (28/09): a tabela de campanhas virou o Gerenciador ao vivo (gerenciador_ler); a campanha aparece no cartão do anúncio.
+    expect(screen.getByRole("region", { name: "Gerenciador de anúncios" })).toBeTruthy();
+    expect(chamadasDe("gerenciador_ler")[0]).toMatchObject({ acao: "gerenciador_ler", client_id: CLIENTE, dias: 14 });
 
     // Período num seletor compacto (sistema de design: mais de 4 opções vira lista).
     fireEvent.click(screen.getByRole("button", { name: "Período: 14 dias" }));
@@ -326,8 +328,10 @@ describe("conta ao vivo", () => {
     fireEvent.click(screen.getByRole("button", { name: "Período: 30 dias" }));
     fireEvent.click(await screen.findByRole("option", { name: "14 dias" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Sincronizar agora/ }));
+    // Frente AD: um botão só, Atualizar agora: lê a Meta na hora (gerenciador_ler ao_vivo) e pede a coleta (conta_sincronizar).
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
     await waitFor(() => expect(chamadasDe("conta_sincronizar")).toEqual([{ acao: "conta_sincronizar", client_id: CLIENTE }]));
+    await waitFor(() => expect(chamadasDe("gerenciador_ler").some((c) => c.ao_vivo === true)).toBe(true));
 
     fireEvent.click(screen.getByRole("button", { name: /Analisar com o estrategista/ }));
     await waitFor(() => expect(chamadasDe("conta_analisar")).toEqual([{ acao: "conta_analisar", client_id: CLIENTE, dias: 14 }]));

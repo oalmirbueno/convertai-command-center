@@ -100,6 +100,12 @@ function Prova({ p }: { p: ProvaNaTela }) {
               </dd>
             </div>
           )}
+          {p.resposta_meta && typeof p.resposta_meta.success === "boolean" && (
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">Resposta da Meta</dt>
+              <dd>{p.resposta_meta.success ? "sucesso" : "sem sucesso"}{p.feito_em ? `, escrito às ${horaCurta(p.feito_em)}` : ""}</dd>
+            </div>
+          )}
           {p.custo_alvo_brl !== null && (
             <div className="min-w-0">
               <dt className="text-muted-foreground">Custo-alvo</dt>
@@ -134,7 +140,7 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
         <span className="mr-2 min-w-0 font-medium [overflow-wrap:anywhere]">{a.resumo}</span>
         {selo && <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">{selo}</span>}
         <span className="text-[11px] text-muted-foreground">
-          {dataEHora(a.criado_em)} · {a.origem === "rotina" ? "rotina" : "agente sênior"}
+          {dataEHora(a.criado_em)} · {a.origem === "rotina" ? "rotina" : a.origem === "equipe" ? "você, no Gerenciador" : "agente sênior"}
           {a.alvo ? ` · ${NIVEL[a.alvo.nivel] || "Item"}` : ""}
         </span>
       </p>
@@ -266,6 +272,9 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
   const regras = r ? r.regras.filter((x) => x.ativa) : [];
   const feitas = l.acoes.filter((a) => a.estado !== "descartada");
   const propostas = l.acoes.filter((a) => a.estado === "proposta").length;
+  const naoDeram = l.acoes.filter((a) => a.estado === "falhou").length;
+  // Frente AD: a última ação fica sempre à vista (o dono quer ter certeza do que foi feito sem abrir nada).
+  const ultima = l.acoes.filter((a) => a.estado === "feita" || a.estado === "falhou" || a.estado === "desfeita").filter((a) => a.tipo !== "parada")[0] || null;
   const proxima = r ? r.proxima_rodada_em || (e ? e.proxima_rodada_em : null) : null;
 
   const interferir = (ev: FormEvent) => {
@@ -372,10 +381,18 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
         </ul>
       )}
 
+      {ultima && (
+        <p className={juntar("mt-2 flex min-w-0 items-start text-[12px] leading-snug", ultima.estado === "falhou" ? "text-destructive" : "text-foreground")} data-ultima-acao={ultima.estado}>
+          {ultima.estado === "falhou" ? <X className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" /> : <Check className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />}
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {`Última ação (${horaCurta(ultima.criado_em)}, ${ultima.origem === "rotina" ? "rotina" : ultima.origem === "equipe" ? "você" : "agente"}): ${ultima.resumo}${ultima.estado === "falhou" && ultima.porque ? ` Motivo: ${ultima.porque}` : ultima.estado === "desfeita" ? " Desfeita depois." : ""}`}
+          </span>
+        </p>
+      )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" ref={feitoRef}>
         <button type="button" className={juntar("mr-4 inline-flex items-center rounded text-[12.5px] font-medium", foco)} onClick={() => setFeitoAberto(!feitoAberto)} aria-expanded={feitoAberto}>
           <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${feitoAberto ? "rotate-180" : ""}`} />
-          O que foi feito ({feitas.length}){propostas ? ` · ${propostas} ${propostas === 1 ? "proposta" : "propostas"}` : ""}
+          O que foi feito ({feitas.length}){naoDeram ? ` · ${naoDeram} não ${naoDeram === 1 ? "deu" : "deram"}` : ""}{propostas ? ` · ${propostas} ${propostas === 1 ? "proposta" : "propostas"}` : ""}
         </button>
         <button type="button" className={juntar("inline-flex items-center rounded text-[12px] text-muted-foreground hover:text-foreground", foco)} onClick={() => setAjustesAbertos(!ajustesAbertos)} aria-expanded={ajustesAbertos}>
           <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${ajustesAbertos ? "rotate-180" : ""}`} />

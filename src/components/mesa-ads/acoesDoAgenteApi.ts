@@ -88,6 +88,10 @@ export interface ItemDaAcao {
     /** Estado relido na Meta logo depois (prova). */
     depois: EstadoNaMeta | null;
     ativada_em: string | null;
+    /** Frente AD: hora da escrita, hora da releitura na Meta e o que a Meta respondeu. */
+    feito_em: string | null;
+    relido_em: string | null;
+    resposta: Record<string, unknown> | null;
   } | null;
 }
 
@@ -192,6 +196,9 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
               motivo_desfazer: txt(r.motivo_desfazer),
               depois: estado(r.depois),
               ativada_em: txt(r.ativada_em) || null,
+              feito_em: txt(r.feito_em) || null,
+              relido_em: txt(r.relido_em) || null,
+              resposta: Object.keys(obj(r.resposta)).length ? obj(r.resposta) : null,
             }
           : null,
       } as ItemDaAcao;

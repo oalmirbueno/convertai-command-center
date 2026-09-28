@@ -26,6 +26,7 @@ import {
   type NumerosVistos,
 } from "./acoesDoAgenteApi";
 import { chavesRotina } from "./rotinaApi";
+import { juntar } from "@/components/sistema/estilos";
 
 /**
  * Agente sênior que age (pedido do dono em 25/09 à noite): o que ele viu
@@ -166,6 +167,10 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const semGestao = !ensaio && atual.gestao && !atual.gestao.disponivel && atual.itens.some((i) => i.na_meta && !i.ensaio);
   const confirmaveis = itensDisponiveis(atual).length;
   const feitosSozinho = atual.itens.filter((i) => i.auto && i.resultado && i.resultado.ok);
+  // Frente AD: o que ele tentou sozinho e não deu (ordem direta com a conta travada, por exemplo).
+  const falhasSozinho = atual.itens.filter((i) => i.auto && i.resultado && !i.resultado.ok);
+  // Todo item já resolvido sozinho (feito ou não): nada a confirmar, o cartão só mostra o resultado.
+  const resolvidoSozinho = atual.itens.length > 0 && atual.itens.every((i) => i.auto && !!i.resultado);
 
   const releituras = () => {
     void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-conta", clientId] });
@@ -246,10 +251,10 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {ensaio && estado === "aberta" && (
         <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
-          Sem permissão de gestão, os itens da Meta mostram como seria feito, sem mexer na conta. Ative em Gestão de campanhas, nesta aba.
+          Não mexi na conta: {atual.gestao && atual.gestao.motivo ? atual.gestao.motivo : "sem permissão de gestão."} Os itens da Meta mostram como seria feito. Resolvido isso, peça de novo.
         </p>
       )}
-      {semGestao && estado === "aberta" && <AvisoDeGestao motivo={atual.gestao ? atual.gestao.motivo : null} />}
+      {semGestao && estado === "aberta" && !resolvidoSozinho && <AvisoDeGestao motivo={atual.gestao ? atual.gestao.motivo : null} />}
       <ul className="mt-2 divide-y divide-border border-y border-border">
         {atual.itens.map((i) => {
           const r = i.resultado;
@@ -290,6 +295,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                 {i.indisponivel && estado === "aberta" && !sozinho && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
                 {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{r.motivo}</span>}
+                {r && r.ok && !r.desfeito && r.depois && <ProvaNaMeta i={i} />}
                 {r && r.ok && (i.tipo === "duplicar_anuncio" || i.tipo === "trocar_criativo") && (
                   <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Criado pausado na Meta. Nada entra no ar sem alguém ativar.</span>
                 )}
@@ -323,11 +329,22 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
           );
         })}
       </ul>
+      {fazendo === "confirmar" && (
+        <p className="mt-2 flex items-center rounded-md bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug" role="status" data-fazendo-na-meta="">
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+          Fazendo na Meta, um item por vez: relê o item, faz e relê de novo para provar.
+        </p>
+      )}
       {atual.ignorados.length > 0 && estado === "aberta" && (
         <p className="mt-1.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">Fora da lista (o agente citou algo que não existe ou não faz sentido): {atual.ignorados.join("; ")}.</p>
       )}
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
-        {estado === "aberta" && confirmaveis === 0 && feitosSozinho.length > 0 && !ensaio ? (
+        {estado === "aberta" && resolvidoSozinho ? (
+          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px]", falhasSozinho.length && !feitosSozinho.length ? "bg-destructive/10 text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
+            {falhasSozinho.length && !feitosSozinho.length ? <X className="mr-1 h-3 w-3" /> : <Check className="mr-1 h-3 w-3" />}
+            {falhasSozinho.length ? (feitosSozinho.length ? `Feito em parte: ${feitosSozinho.length} feito, ${falhasSozinho.length} não deu` : "Não feito: o motivo está no item") : "Feito e conferido na Meta"}
+          </span>
+        ) : estado === "aberta" && confirmaveis === 0 && feitosSozinho.length > 0 && !ensaio ? (
           <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Feito o que era seguro. Nada espera confirmação.</span>
         ) : estado === "aberta" ? (
           <>
@@ -369,6 +386,22 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         {atual.caminho && (estado === "feita" || feitosSozinho.length > 0) && <CaminhoPronto caminho={atual.caminho} abrirSozinho={irSozinho && !!atual.caminho.abrir_sozinho} className="ml-auto" />}
       </div>
     </section>
+  );
+}
+
+/** A prova de um item feito: o estado relido na Meta logo depois, com a hora (e a resposta da Meta). */
+function ProvaNaMeta({ i }: { i: ItemDaAcao }) {
+  const r = i.resultado;
+  if (!r || !r.depois) return null;
+  const d = r.depois;
+  const valor = i.tipo === "renomear" ? `nome "${d.nome || ""}"` : i.tipo === "orcamento" ? `${brl(d.orcamento_diario_brl)} por dia` : d.status === "PAUSED" ? "pausado" : d.status === "ACTIVE" ? "ativo" : d.status ? d.status.toLowerCase() : "sem status";
+  const quando = r.relido_em || r.feito_em;
+  const hora = quando && isFinite(Date.parse(quando)) ? new Date(Date.parse(quando) - 3 * 3600_000).toISOString().slice(11, 16) : "";
+  return (
+    <span className="mt-0.5 block text-[11.5px] text-success [overflow-wrap:anywhere]" data-prova-na-meta="">
+      Conferido na Meta{hora ? ` às ${hora}` : ""}: {valor}
+      {r.resposta && typeof r.resposta.success === "boolean" ? ` (a Meta respondeu ${r.resposta.success ? "sucesso" : "sem sucesso"})` : ""}.
+    </span>
   );
 }
 

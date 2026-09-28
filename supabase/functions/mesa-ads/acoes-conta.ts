@@ -156,6 +156,10 @@ export type ResultadoDoItem = {
   motivo_desfazer?: string;
   /** Prova da escrita: o estado relido na Meta logo depois (sem token). */
   depois?: Estado | null;
+  /** Hora da releitura na Meta depois de escrever (frente AD, 28/09: a prova mostra quando foi relido). */
+  relido_em?: string;
+  /** O que a Meta respondeu à escrita, só os campos sem segredo (ex.: { success: true }). */
+  resposta?: Record<string, unknown> | null;
   /** Campanha montada e depois ativada pelo Confirmar da equipe. */
   ativada_em?: string;
   motivo_ativar?: string;
@@ -647,6 +651,16 @@ export function grafoDaMeta(token: string, versao = "v21.0", buscar: typeof fetc
   };
 }
 
+/** A resposta da Meta a uma escrita, sem nada que possa carregar segredo: só sucesso e ids. */
+export function respostaCurta(r: unknown): Record<string, unknown> | null {
+  if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+  const o = r as Record<string, unknown>;
+  const saida: Record<string, unknown> = {};
+  if (typeof o.success === "boolean") saida.success = o.success;
+  if (typeof o.id === "string" && ID_META.test(o.id)) saida.id = o.id;
+  return Object.keys(saida).length ? saida : null;
+}
+
 /** Apoio para trocar o criativo: a arte em base64 e a copy do criativo da Mesa. */
 export type ApoioDoCriativo = {
   imagemBase64: () => Promise<string | null>;
@@ -672,24 +686,27 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
     const mudou = mudouDesdeAProposta(item, estadoLido(bruto));
     if (mudou) return { ok: false, motivo: mudou };
 
-    // Prova da escrita: o estado relido logo depois (sem token; falha na releitura não desfaz nada).
+    // Prova da escrita: o estado relido logo depois (sem token; falha na releitura não desfaz nada),
+    // a hora da releitura e o que a Meta respondeu (frente AD: "a prova lida da Meta depois de escrever").
     const relerDepois = async () => estadoLido(await grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO(alvo.nivel)).catch(() => null));
+    const provado = async (resposta: Record<string, unknown>): Promise<ResultadoDoItem> => {
+      const feito = agoraIso();
+      const depois = await relerDepois();
+      return { ok: true, feito_em: feito, depois, relido_em: agoraIso(), resposta: respostaCurta(resposta) };
+    };
     if (item.tipo === "pausar" || item.tipo === "ativar") {
-      await grafo.escrever(alvo.meta_id, { status: item.tipo === "pausar" ? "PAUSED" : "ACTIVE" });
-      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
+      return await provado(await grafo.escrever(alvo.meta_id, { status: item.tipo === "pausar" ? "PAUSED" : "ACTIVE" }));
     }
     if (item.tipo === "orcamento") {
       const para = item.para?.orcamento_diario_brl;
       const de = item.de?.orcamento_diario_brl ?? null;
       if (!para || !de) return { ok: false, motivo: "Sem orçamento para mudar." };
       if (Math.abs(para - de) / de > TETO_DE_ORCAMENTO + 0.0001 && para > ORCAMENTO_MINIMO_BRL) return { ok: false, motivo: "A mudança passa do teto de 30% por confirmação." };
-      await grafo.escrever(alvo.meta_id, { daily_budget: String(Math.round(para * 100)) });
-      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
+      return await provado(await grafo.escrever(alvo.meta_id, { daily_budget: String(Math.round(para * 100)) }));
     }
     if (item.tipo === "renomear") {
       if (!item.texto) return { ok: false, motivo: "Nome novo vazio." };
-      await grafo.escrever(alvo.meta_id, { name: item.texto });
-      return { ok: true, feito_em: agoraIso(), depois: await relerDepois() };
+      return await provado(await grafo.escrever(alvo.meta_id, { name: item.texto }));
     }
     if (item.tipo === "duplicar_anuncio") {
       const conjunto = bruto && typeof bruto.adset_id === "string" ? bruto.adset_id : null;
