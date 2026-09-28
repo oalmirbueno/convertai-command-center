@@ -228,20 +228,35 @@
   color: #FFFFFF;
 }
 
-/* Scrollbar */
+/* Barras de rolagem quase invisíveis no painel inteiro (28/09, dono: "invisível,
+   bem transparente, pode ver bem pouquinho"). A rolagem funciona igual; a barra
+   é fina, some no fundo e aparece um pouco mais só com o mouse em cima da área.
+   Chrome 121+ e Firefox usam scrollbar-width/scrollbar-color (e ignoram as
+   regras -webkit- quando elas existem); Safari e Chrome antigo usam -webkit-. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--foreground) / 0.07) transparent;
+}
+*:hover {
+  scrollbar-color: hsl(var(--foreground) / 0.18) transparent;
+}
 ::-webkit-scrollbar {
   width: 6px;
-  height: 4px;
+  height: 6px;
 }
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(0 0% 20%);
+  background: hsl(var(--foreground) / 0.07);
   border-radius: 999px;
 }
+:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--foreground) / 0.18);
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(145 100% 50%);
+  background: hsl(var(--foreground) / 0.3);
 }
 
 /* Grid perspective for login */

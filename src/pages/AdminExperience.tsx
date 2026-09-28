@@ -2612,14 +2612,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   </DropdownMenu>
                 </div>
 
-                {/* Duas colunas no computador, uma no celular. 28/09 (dono: "muito
-                    solto, muito branco"): cada seção num cartão, como o Dossiê,
-                    com espaço justo entre eles. */}
-                <div data-tour="central-carteira" className="grid items-start gap-4 lg:grid-cols-2">
+                {/* Duas colunas no computador, uma no celular. Seções ABERTAS, sem
+                    caixa (28/09, dono: cartões deixaram tudo "encaixotado, antigo";
+                    o pedido era organizar). Ritmo: 32 px entre colunas, 28 px entre
+                    seções, divisória fina só entre seções da mesma coluna. */}
+                <div data-tour="central-carteira" className="grid items-start gap-y-7 lg:grid-cols-2 lg:gap-x-8">
                   {/* Plano de mensagens do período */}
                   <div className="min-w-0" data-coluna="rituais">
                     <Secao
-                      cartao
                       recolher={`central:perfis:rituais:${client.id}`}
                       resumo={(() => {
                         const deHoje = RITUALS.find((r) => ritualQuando(r).destaque);
@@ -2628,18 +2628,17 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       titulo="O que enviar e quando"
                       ajuda="Cada geração usa a movimentação real deste cliente e varia o texto semana a semana. Você revisa e edita antes de qualquer coisa chegar nele."
                     >
-                      <ul className="-mx-4 -mb-3.5 divide-y divide-border border-t border-border sm:-mx-5 sm:-mb-4">
+                      {/* Lista aberta: linha com canto e fundo suave ao passar o mouse; a
+                          de hoje com fundo verde leve. Sem caixa e sem traço entre linhas. */}
+                      <ul className="-mx-2">
                         {RITUALS.map((r) => {
                           const status = ritualStatus(r.value);
                           const quando = ritualQuando(r);
                           return (
                             <li
                               key={r.value}
-                              className={`relative flex min-w-0 flex-wrap items-center px-4 py-2.5 transition-colors last:rounded-b-xl sm:px-5 ${quando.destaque ? "bg-primary/[0.04]" : ""}`}
+                              className={`relative flex min-w-0 flex-wrap items-center rounded-lg px-2 py-2.5 transition-colors ${quando.destaque ? "bg-primary/[0.07]" : "hover:bg-muted/50"}`}
                             >
-                              {/* Faixa lateral só no que é de hoje: dá para achar
-                                  a linha certa sem ler as cinco. */}
-                              <span aria-hidden className={`absolute bottom-2.5 left-0 top-2.5 w-[3px] rounded-r ${quando.destaque ? "bg-primary" : "bg-transparent"}`} />
                               <div className="w-full min-w-0 sm:mr-3 sm:w-auto sm:flex-1">
                                 <div className="flex min-w-0 flex-wrap items-center">
                                   <p className="text-[13.5px] font-medium leading-tight text-foreground">{r.label}</p>
@@ -2665,13 +2664,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   </div>
 
                   {/* Mensagens do grupo por momento + contexto */}
-                  <div className="min-w-0 space-y-4" data-coluna="mensagens">
+                  <div className="min-w-0 space-y-6" data-coluna="mensagens">
                     {/* A mensagem é montada da leitura ao vivo do painel. Se
                         alguém acabou de liberar material, marcar etapa ou
                         registrar decisão, "Atualizar" traz o texto já com isso,
                         sem recarregar a página inteira. */}
                     <Secao
-                      cartao
                       recolher={`central:perfis:mensagem:${client.id}`}
                       resumo="abertura, meio e fechamento"
                       titulo="Mensagem do grupo"
@@ -2778,7 +2776,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     </Secao>
 
                     <Secao
-                      cartao
+                      divisoria
                       recolher={`central:perfis:onde-estamos:${client.id}`}
                       resumo={lastRitual ? lastRitual.title : "nada publicado ainda"}
                       titulo="Onde estamos com este cliente"
@@ -2807,12 +2805,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       clientName={nomeDoCliente(client)}
                     />
 
-                    <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm sm:px-5 sm:py-4">
+                    <div className="min-w-0 border-t border-border pt-5">
                       <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite />
                     </div>
 
                     <Secao
-                      cartao
+                      divisoria
                       recolher={`central:perfis:contexto:${client.id}`}
                       resumo={[client.plan_name || "Sem plano", `${clientProjs.length} ${clientProjs.length === 1 ? "frente ativa" : "frentes ativas"}`].join(" · ")}
                       titulo="Contexto agora"
