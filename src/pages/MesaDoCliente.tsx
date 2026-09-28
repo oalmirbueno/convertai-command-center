@@ -24,7 +24,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
  *
  * Traz para dentro do painel o calendário e a arte que eram feitos fora.
- * Cinco abas em sequência (Contexto, Mês, Campanhas, Estúdio, Entrega) e uma
+ * Seis abas em sequência (Contexto, Instagram, Mês, Campanhas, Estúdio, Entrega) e uma
  * barra fina fixa no topo (pedido do dono em 23/09, noite: sem o título
  * grande, tudo numa faixa só): seletor de cliente com busca, as etapas e o
  * saldo e o gasto pequenos, com recarga, modelos e chaves em botões curtos. Endereço completo:
@@ -45,6 +45,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 // Cada aba em arquivo próprio: a Mesa pinta o cabeçalho e a barra sem
 // esperar o código do Estúdio, que é o maior.
 const carregarContexto = () => import("@/components/mesa/AbaContexto");
+const carregarInstagram = () => import("@/components/mesa/AbaInstagram");
 const carregarMes = () => import("@/components/mesa/AbaMes");
 const carregarCampanhas = () => import("@/components/mesa/AbaCampanhas");
 const carregarEstudio = () => import("@/components/mesa/AbaEstudio");
@@ -52,6 +53,7 @@ const carregarEntrega = () => import("@/components/mesa/AbaEntrega");
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts): o que já
 // baixou antes do clique aparece direto, sem esqueleto.
 const AbaContexto = lazyComPreCarga("mesa/contexto", carregarContexto);
+const AbaInstagram = lazyComPreCarga("mesa/instagram", carregarInstagram);
 const AbaMes = lazyComPreCarga("mesa/mes", carregarMes);
 const AbaCampanhas = lazyComPreCarga("mesa/campanhas", carregarCampanhas);
 const AbaEstudio = lazyComPreCarga("mesa/estudio", carregarEstudio);
@@ -65,6 +67,8 @@ const PainelDeCustos = lazy(() => import("@/components/mesa/PainelDeCustos"));
 
 const ABAS = [
   { valor: "contexto", rotulo: "Contexto" },
+  // Frente IG (28/09): toda a frente do Instagram do cliente, logo depois do Contexto.
+  { valor: "instagram", rotulo: "Instagram" },
   { valor: "mes", rotulo: "Mês" },
   { valor: "campanhas", rotulo: "Campanhas" },
   { valor: "estudio", rotulo: "Estúdio" },
@@ -416,7 +420,7 @@ export default function MesaDoCliente() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const aba of [AbaContexto, AbaMes, AbaCampanhas, AbaEstudio, AbaEntrega]) {
+        for (const aba of [AbaContexto, AbaInstagram, AbaMes, AbaCampanhas, AbaEstudio, AbaEntrega]) {
           aba.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a aba abrir */
           });
@@ -591,6 +595,7 @@ export default function MesaDoCliente() {
           <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className={painel ? "hidden" : "min-w-0"}>
             <Suspense fallback={<EsqueletoDaAba />}>
               {aba === "contexto" && <AbaContexto />}
+              {aba === "instagram" && <AbaInstagram />}
               {aba === "mes" && (
                 <AbaMes
                   onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem })}

@@ -1,0 +1,216 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { chamarFuncao } from "@/lib/mesa/api";
+import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+import type { ChaveDaRede } from "../../../../supabase/functions/_shared/instagram-do-cliente";
+
+/**
+ * Aba Instagram da Mesa (frente IG, 28/09): tipos e chamadas da função
+ * mesa-instagram. Uma leitura só ("painel") traz tudo o que a aba mostra;
+ * as ações que gastam (bio, conversar, gerar_capa) devolvem o custo real.
+ */
+
+export interface ContaDaAba {
+  id: string;
+  username: string;
+  conectada: boolean;
+}
+
+export interface MidiaDoPerfil {
+  id: string;
+  formato: string;
+  imagem: string | null;
+  permalink: string | null;
+  data: string | null;
+  curtidas: number | null;
+  comentarios: number | null;
+  legenda: string;
+}
+
+export interface PerfilDaAba {
+  username: string;
+  nome: string;
+  bio: string;
+  site: string;
+  seguidores: number | null;
+  seguindo: number | null;
+  posts: number | null;
+  foto_url: string | null;
+  midias: MidiaDoPerfil[];
+  fonte: "conta_do_cliente" | "descoberta" | "guardado" | "nenhuma";
+  lido_em: string | null;
+  aviso: string | null;
+}
+
+export interface ItemDaGradeNaAba {
+  id: string;
+  titulo: string;
+  formato: string;
+  origem: "arte" | "foto" | "agenda";
+  data: string | null;
+  data_confirmada: boolean;
+  imagem: { bucket: string; caminho: string } | null;
+  estado: string;
+  /** O trabalho do Estúdio ou da Mesa Foto (abre o "Publicar em"). */
+  peca: Record<string, unknown> | null;
+  publicacao: Record<string, unknown> | null;
+  dia_da_peca: string | null;
+  task_id: string | null;
+}
+
+export interface AnaliseDaBio {
+  bio_lida: string;
+  nome_lido: string;
+  username: string;
+  veredito: VereditoDaBio;
+  sugestoes: { bios: SugestaoDeBio[]; nomes: SugestaoDeNome[]; observacao: string };
+  escolha: { bio: EscolhaDoJev | null; nome: EscolhaDoJev | null };
+  modelo_id: string | null;
+  gerado_em: string;
+}
+
+export interface CapaGuardada {
+  id: string;
+  nome: string;
+  icone: string | null;
+  estilo: EstiloDaCapa;
+  caminho: string | null;
+  modelo_id?: string | null;
+  custo_usd?: number;
+  ordem?: number;
+}
+
+export interface MensagemDaAba {
+  id?: string;
+  papel: "usuario" | "agente" | "sistema";
+  conteudo: string;
+  anexos?: unknown[] | null;
+  criado_em?: string;
+}
+
+export interface PainelDoInstagram {
+  contas: ContaDaAba[];
+  conta_id: string | null;
+  perfil: PerfilDaAba;
+  grade: { itens: ItemDaGradeNaAba[]; ordem: string[] };
+  bio_analise: AnaliseDaBio | null;
+  kit: { paleta: CorDaPaleta[]; estilo: string | null; logo: { bucket: string; caminho: string } | null };
+  resumo: { nome: string; negocio: string; publico: string; oferta: string; tom_de_voz: string; diferenciais: string[] };
+  capas: CapaGuardada[];
+  redes: { adicionadas: Array<{ id: string; rede: ChaveDaRede; endereco: string }>; conectadas: Array<{ rede: string; endereco: string }> };
+  mensagens: MensagemDaAba[];
+  sql_pendente: boolean;
+  aviso_sql: string | null;
+}
+
+export const chaveDoPainel = (clientId: string, contaId: string | null) => ["mesa", "instagram", clientId, contaId || "principal"];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function chamarInstagram<T = any>(acao: string, clientId: string, extra: Record<string, unknown> = {}): Promise<T> {
+  return chamarFuncao<T>("mesa-instagram", { acao, client_id: clientId, ...extra });
+}
+
+/** Normaliza para a tela nunca quebrar com campo faltando. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizarPainel(d: any): PainelDoInstagram {
+  const p = (d && d.perfil) || {};
+  const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+  return {
+    contas: lista<ContaDaAba>(d && d.contas),
+    conta_id: d && typeof d.conta_id === "string" ? d.conta_id : null,
+    perfil: {
+      username: String(p.username || ""),
+      nome: String(p.nome || ""),
+      bio: String(p.bio || ""),
+      site: String(p.site || ""),
+      seguidores: typeof p.seguidores === "number" ? p.seguidores : null,
+      seguindo: typeof p.seguindo === "number" ? p.seguindo : null,
+      posts: typeof p.posts === "number" ? p.posts : null,
+      foto_url: typeof p.foto_url === "string" ? p.foto_url : null,
+      midias: lista<MidiaDoPerfil>(p.midias),
+      fonte: p.fonte || "nenhuma",
+      lido_em: p.lido_em || null,
+      aviso: p.aviso || null,
+    },
+    grade: { itens: lista<ItemDaGradeNaAba>(d && d.grade && d.grade.itens), ordem: lista<string>(d && d.grade && d.grade.ordem) },
+    bio_analise: d && d.bio_analise && d.bio_analise.veredito ? (d.bio_analise as AnaliseDaBio) : null,
+    kit: {
+      paleta: lista<CorDaPaleta>(d && d.kit && d.kit.paleta),
+      estilo: (d && d.kit && d.kit.estilo) || null,
+      logo: (d && d.kit && d.kit.logo) || null,
+    },
+    resumo: {
+      nome: String((d && d.resumo && d.resumo.nome) || ""),
+      negocio: String((d && d.resumo && d.resumo.negocio) || ""),
+      publico: String((d && d.resumo && d.resumo.publico) || ""),
+      oferta: String((d && d.resumo && d.resumo.oferta) || ""),
+      tom_de_voz: String((d && d.resumo && d.resumo.tom_de_voz) || ""),
+      diferenciais: lista<string>(d && d.resumo && d.resumo.diferenciais),
+    },
+    capas: lista<CapaGuardada>(d && d.capas),
+    redes: {
+      adicionadas: lista(d && d.redes && d.redes.adicionadas),
+      conectadas: lista(d && d.redes && d.redes.conectadas),
+    },
+    mensagens: lista<MensagemDaAba>(d && d.mensagens),
+    sql_pendente: !!(d && d.sql_pendente),
+    aviso_sql: (d && d.aviso_sql) || null,
+  };
+}
+
+/** Tudo da aba numa leitura (sem IA). Vale 2 minutos; cada ação atualiza na hora. */
+export function usePainelDoInstagram(clientId: string, contaId: string | null) {
+  return useQuery({
+    queryKey: chaveDoPainel(clientId, contaId),
+    enabled: !!clientId,
+    staleTime: 2 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async () => normalizarPainel(await chamarInstagram("painel", clientId, contaId ? { conta_id: contaId } : {})),
+  });
+}
+
+/** Troca um pedaço do painel guardado sem reler tudo (depois de uma ação). */
+export function useAtualizarPainel(clientId: string, contaId: string | null) {
+  const queryClient = useQueryClient();
+  return {
+    mudar: (fn: (p: PainelDoInstagram) => PainelDoInstagram) =>
+      queryClient.setQueryData<PainelDoInstagram>(chaveDoPainel(clientId, contaId), (p) => (p ? fn(p) : p)),
+    reler: () => queryClient.invalidateQueries({ queryKey: ["mesa", "instagram", clientId] }),
+  };
+}
+
+export type { DestaqueProposto };
+
+/** Número curto do Instagram: 1.234 / 12,3 mil / 1,2 mi. */
+export function numeroDoPerfil(v: number | null | undefined): string {
+  if (v === null || v === undefined || !isFinite(v)) return "-";
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1).replace(".", ",").replace(",0", "")} mi`;
+  if (v >= 10000) return `${(v / 1000).toFixed(1).replace(".", ",").replace(",0", "")} mil`;
+  return v.toLocaleString("pt-BR");
+}
+
+/** Copia texto (com a reserva do textarea para navegador antigo). */
+export async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(texto);
+      return true;
+    }
+  } catch {
+    /* cai na reserva */
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = texto;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
+}

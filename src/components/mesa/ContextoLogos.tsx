@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, Loader2, Maximize2 } from "lucide-react";
+import { FolderOpen, Instagram, Loader2, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
@@ -14,13 +14,40 @@ import NavegadorDePastas, { type ImagemEscolhida } from "./NavegadorDePastas";
 import { useInvalidarContexto, type CandidatoALogo, type KitDoContexto } from "./contextoDoCliente";
 import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
 import { estiloDoFundoDaLogo, fundoDeConferencia, tomGravado, useTomDaLogo, type FundoDaLogo, type TomDaLogo } from "./logoAnalise";
+import { escolherIdentidadePrincipal } from "@/lib/identidadePrincipal";
 
 /**
  * Logo principal e alternativa lado a lado: miniatura que abre maior, e
  * "Trocar" abre o navegador de pastas (Workspace, Arquivos ou acervo). A
  * escolha vai para a marca do cliente pelo agente de contexto (definir_logo,
  * sem custo). Usado no cartão Marca e no editor de Marca.
+ *
+ * Frente IG (28/09, pedido do dono): quando não há logo ou ela não é a certa,
+ * "Instagram" puxa a foto do perfil do cliente direto (mesa-instagram,
+ * foto_do_perfil, sem custo), passa pela mesma conferência de fundo e vira a
+ * logo. A foto de perfil é pequena (cerca de 320 px): serve até chegar o
+ * arquivo original.
  */
+
+/** Foto do perfil do Instagram do cliente (a conta que representa a marca), guardada pelo robô de métricas. */
+export function useFotoDoInstagram(clientId: string, nomeDoCliente: string) {
+  return useQuery({
+    queryKey: ["mesa", "foto-instagram", clientId],
+    enabled: !!clientId,
+    staleTime: 10 * 60_000,
+    retry: false,
+    queryFn: async (): Promise<{ url: string | null; username: string | null; contaId: string | null } | null> => {
+      const { data, error } = await (supabase as any)
+        .from("social_client_identity")
+        .select("client_id, external_account_id, username, profile_picture_url, captured_at")
+        .eq("client_id", clientId);
+      if (error || !data || !data.length) return null;
+      const escolhida = escolherIdentidadePrincipal(data as any[], nomeDoCliente) as any;
+      if (!escolhida) return null;
+      return { url: escolhida.profile_picture_url || null, username: escolhida.username || null, contaId: escolhida.external_account_id || null };
+    },
+  });
+}
 
 export interface ArquivoDoPainel {
   id: string;
@@ -240,9 +267,11 @@ export default function LogosDaMarca({
   candidatos?: CandidatoALogo[];
   compacto?: boolean;
 }) {
-  const { clientId, userId } = useMesa();
+  const { clientId, userId, clientName } = useMesa();
   const queryClient = useQueryClient();
   const invalidar = useInvalidarContexto();
+  const fotoIg = useFotoDoInstagram(clientId, clientName);
+  const [puxandoIg, setPuxandoIg] = useState<QualLogo | null>(null);
   const avisarErro = useAvisarErro();
   const [escolhendo, setEscolhendo] = useState<QualLogo | null>(null);
   const [gravando, setGravando] = useState<string | null>(null);
@@ -328,6 +357,54 @@ export default function LogosDaMarca({
     }
   };
 
+  /** Puxa a foto do perfil do Instagram, confere o fundo e aponta o kit para ela. */
+  const usarFotoDoInstagram = async (qual: QualLogo) => {
+    const alternativaFlag = qual === "alt";
+    setPuxandoIg(qual);
+    try {
+      const r = await chamarFuncao<{ bucket: string; caminho: string; username?: string }>("mesa-instagram", {
+        acao: "foto_do_perfil",
+        client_id: clientId,
+        ...(fotoIg.data && fotoIg.data.contaId ? { conta_id: fotoIg.data.contaId } : {}),
+      });
+      const nome = r.username ? `Foto do Instagram @${r.username}` : "Foto do Instagram";
+      const { data: blob, error } = await supabase.storage.from(r.bucket).download(r.caminho);
+      let tom: TomDaLogo | null = null;
+      if (!error && blob) {
+        const c = await conferir(blob, nome);
+        if (c.acao === "cancelar") return;
+        if (c.acao === "outra") {
+          toast.message("A foto do perfil não serve como logo. Escolha a logo em PNG transparente.");
+          return;
+        }
+        tom = c.tom;
+        if (c.semFundo) {
+          await gravarBlobDaLogo(clientId, userId, alternativaFlag, c.blob, "instagram-sem-fundo");
+          await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+          toast.success("Logo puxada do Instagram, sem o fundo", { description: "A foto de perfil é pequena: troque pelo arquivo original quando tiver." });
+          invalidar(clientId);
+          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+          return;
+        }
+      }
+      const campos = alternativaFlag ? { logo_alt_path: r.caminho, logo_alt_file_id: null } : { logo_path: r.caminho, logo_file_id: null };
+      const { error: erroKit } = await (supabase as any)
+        .from("cliente_kit_marca")
+        .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
+      if (erroKit) throw erroKit;
+      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+      toast.success(alternativaFlag ? "Logo alternativa puxada do Instagram" : "Logo puxada do Instagram", { description: "A foto de perfil é pequena: troque pelo arquivo original quando tiver." });
+      invalidar(clientId);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+    } catch (e) {
+      avisarErro(e, "Foto do Instagram não puxada");
+    } finally {
+      setPuxandoIg(null);
+    }
+  };
+
   const tirar = async (qual: QualLogo) => {
     setTirando(qual);
     try {
@@ -396,6 +473,18 @@ export default function LogosDaMarca({
                       Tirar
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-[11.5px]"
+                    onClick={() => void usarFotoDoInstagram(t.qual)}
+                    disabled={!!puxandoIg || !!gravando}
+                    title="Usar a foto do perfil do Instagram do cliente"
+                    aria-label={`Usar a foto do Instagram como logo ${t.rotulo.toLowerCase()}`}
+                  >
+                    {puxandoIg === t.qual ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Instagram className="h-3.5 w-3.5" />}
+                  </Button>
                   <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => setEscolhendo(t.qual)}>
                     <FolderOpen className="mr-1 h-3.5 w-3.5" />
                     {t.imagem ? "Trocar" : "Escolher"}
@@ -406,6 +495,19 @@ export default function LogosDaMarca({
           );
         })}
       </div>
+
+      {!principal && !principalArquivo.isLoading && fotoIg.data && fotoIg.data.url && (
+        <div className="flex min-w-0 items-center rounded-lg border border-primary/30 bg-primary/5 p-2" data-logo-do-instagram="">
+          <img src={fotoIg.data.url} alt="Foto do perfil do Instagram" referrerPolicy="no-referrer" className="h-10 w-10 shrink-0 rounded-full border border-border object-cover" />
+          <p className="mx-2 min-w-0 flex-1 text-[12px] leading-4 text-foreground">
+            Sem logo? Use a foto do perfil do Instagram{fotoIg.data.username ? ` (@${fotoIg.data.username})` : ""}.
+          </p>
+          <Button type="button" size="sm" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => void usarFotoDoInstagram("logo")} disabled={!!puxandoIg}>
+            {puxandoIg === "logo" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Instagram className="mr-1 h-3.5 w-3.5" />}
+            Usar como logo
+          </Button>
+        </div>
+      )}
 
       {!principal && !principalArquivo.isLoading && candidatos.length > 0 && (
         <div className="min-w-0 rounded-lg border border-border bg-muted/60 p-2">

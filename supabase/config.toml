@@ -101,6 +101,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.perfis-instagram]
     verify_jwt = true
+  [functions.mesa-instagram]
+    verify_jwt = true
   [functions.mesa-videos]
     verify_jwt = true
   [functions.editor-video]

@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { corpoComMarca } from "@/lib/mesa/marcas";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -43,6 +43,7 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "mesa-roteiros": "roteirista",
   "agente-estilo": "agente de estilo",
   "perfis-instagram": "agente dos perfis do Instagram",
+  "mesa-instagram": "agente do Instagram",
 };
 
 const PROVEDORES: Record<string, string> = {
