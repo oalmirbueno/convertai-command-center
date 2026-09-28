@@ -855,6 +855,21 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     },
     intocado: "Texto dentro do limite: nada é chamado e o prompt é o de hoje; capa que já tem versão não muda; anúncio (Mesa Ads) igual; lâmina com referência (qualquer nível), foto, recorte, contínuo, a capa e o fechamento ficam na zona da direção; promptDaLamina e promptDoReplicar não mudam (fixtures iguais).",
   },
+  {
+    id: "navegacao_do_carrossel",
+    em: "2026-09-28",
+    pedido: "Dono: capa do carrossel sempre com o indicador \"arraste para o lado\" na base; lâminas do meio também; última com os ícones de curtir, comentar, salvar e enviar; padronizado, na cor e na fonte da marca. Correção: \"não quero que faça nada por cima, e sim pelo gerador\".",
+    o_que: "No carrossel orgânico, o bloco NAVEGAÇÃO DO CARROSSEL entra no fim da base da lâmina (todos os modos) e no replicar: capa e meio pedem o indicador com seta no canto inferior direito, a última a fileira dos quatro ícones centralizada; posição em px, tamanho relativo, cor e fonte da marca iguais em todas. Com foto real, a faixa da base abre na máscara. A conferência pergunta ao Jev (Noul, na mesma chamada da identidade) se veio e grava só o aviso; o texto do indicador não conta como sobrando.",
+    modulo: "_shared/navegacao-do-carrossel.ts",
+    ligacao: {
+      arquivo: ESTUDIO,
+      trechos: [
+        "const navegacaoDaGeracao = navegacaoDaLamina({ ordem, total, anuncio: ads, post: quadro.post });",
+        "questions.navegacao = perguntaDaNavegacao(navegacaoDaConferencia)",
+      ],
+    },
+    intocado: "Arte única, story ou reel (9:16) e criativo de anúncio: bloco vazio e o prompt de hoje; promptDaLamina e promptDoReplicar não mudam (fixtures iguais); a autocorreção não lê o aviso (sem laço).",
+  },
 ];
 
 // ------------------------------------------------------------------ consultas

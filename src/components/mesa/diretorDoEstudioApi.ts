@@ -20,6 +20,8 @@ import { acoesDaMensagem, caminhoDosAnexos, type AcaoDoAgente, type CaminhoDoAge
 
 export const REFERENCIA_DA_CONVERSA_DO_ESTUDIO = "estudio_trabalho";
 export const SEM_FOTO = "sem_foto";
+/** Foto enviada no pedido da arte rápida (arquivo no bucket, sem id no acervo). */
+export const PREFIXO_FOTO_DO_PEDIDO = "pedido:";
 
 export const chavesDoDiretor = {
   conversa: (trabalhoId: string) => ["mesa", "estudio-diretor", trabalhoId] as const,
@@ -54,6 +56,10 @@ export interface MudancaDoDiretor {
   campos: Partial<Record<CampoDaMudanca, string>>;
   /** Lâminas que precisam ser refeitas para a arte mostrar a mudança. */
   regerar: number[];
+  /** Frente AG (28/09): o valor de hoje de cada campo que muda (antes e depois no cartão). */
+  antes?: Partial<Record<CampoDaMudanca, string>>;
+  /** Frente AG: como mostrar o valor novo quando ele não é legível (a foto nova pelo apelido e nome). */
+  rotulos?: Partial<Record<CampoDaMudanca, string>>;
 }
 
 export interface MensagemDoDiretor {
@@ -103,21 +109,40 @@ export const ehHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
 /** Texto mostrado para o valor de um campo. */
 export function valorParaMostrar(campo: CampoDaMudanca, valor: string): string {
-  if (campo === "foto_acervo") return valor === SEM_FOTO ? "Tirar a foto real e desenhar a cena" : "Usar uma foto do acervo do cliente";
+  if (campo === "foto_acervo") return valor === SEM_FOTO ? "Tirar a foto real e desenhar a cena" : valor.indexOf(PREFIXO_FOTO_DO_PEDIDO) === 0 ? "Usar outra foto do pedido" : "Usar uma foto do acervo do cliente";
   if (campo === "zona_texto") return valor.replace(/-/g, " ");
   return valor;
 }
 
-/** Os campos da mudança na ordem da tela, com rótulo e valor legível. */
-export function camposParaMostrar(m: MudancaDoDiretor): { campo: CampoDaMudanca; rotulo: string; valor: string; hex: string | null }[] {
-  const saida: { campo: CampoDaMudanca; rotulo: string; valor: string; hex: string | null }[] = [];
+/** Os campos da mudança na ordem da tela, com rótulo, valor legível e (frente AG) o valor de antes. */
+export function camposParaMostrar(m: MudancaDoDiretor): { campo: CampoDaMudanca; rotulo: string; valor: string; hex: string | null; antes: string | null; hexAntes: string | null }[] {
+  const saida: { campo: CampoDaMudanca; rotulo: string; valor: string; hex: string | null; antes: string | null; hexAntes: string | null }[] = [];
   ROTULOS_DOS_CAMPOS.forEach((r) => {
     const v = m.campos[r.campo];
     if (typeof v === "string" && v.trim()) {
-      saida.push({ campo: r.campo, rotulo: r.rotulo, valor: valorParaMostrar(r.campo, v.trim()), hex: ehHex(v.trim()) ? v.trim().toUpperCase() : null });
+      const rotuloNovo = m.rotulos && m.rotulos[r.campo];
+      const a = m.antes && typeof m.antes[r.campo] === "string" ? String(m.antes[r.campo]).trim() : "";
+      saida.push({
+        campo: r.campo,
+        rotulo: r.rotulo,
+        valor: rotuloNovo ? `${valorParaMostrar(r.campo, v.trim())}: ${rotuloNovo}` : valorParaMostrar(r.campo, v.trim()),
+        hex: ehHex(v.trim()) ? v.trim().toUpperCase() : null,
+        antes: a ? (r.campo === "foto_acervo" ? a : valorParaMostrar(r.campo, a)) : null,
+        hexAntes: a && ehHex(a) ? a.toUpperCase() : null,
+      });
     }
   });
   return saida;
+}
+
+/** Campos de texto e cor: dá para ajustar só a área do texto, sem refazer a lâmina (a foto e a cena ficam). */
+const CAMPOS_SO_DE_TEXTO: CampoDaMudanca[] = ["texto_exato", "cor_texto", "cor_destaque"];
+
+/** A mudança é só de texto e cor numa lâmina (frente AG): "Aplicar e ajustar o texto" em vez de refazer. */
+export function mudancaSoDeTexto(m: MudancaDoDiretor): boolean {
+  if (m.alvo !== "lamina" || m.ordem === null) return false;
+  const chaves = Object.keys(m.campos) as CampoDaMudanca[];
+  return chaves.length > 0 && chaves.every((c) => CAMPOS_SO_DE_TEXTO.indexOf(c) >= 0);
 }
 
 /** Lê uma mudança vinda do servidor (resposta ou anexo gravado) sem confiar no formato. */
@@ -135,6 +160,17 @@ export function lerMudanca(x: unknown): MudancaDoDiretor | null {
     if (typeof v === "string" && v.trim()) campos[c] = v;
   });
   if (!Object.keys(campos).length) return null;
+  const textos = (v: unknown): Partial<Record<CampoDaMudanca, string>> | undefined => {
+    if (!v || typeof v !== "object") return undefined;
+    const saida: Partial<Record<CampoDaMudanca, string>> = {};
+    CAMPOS_VALIDOS.forEach((c) => {
+      const x = (v as Record<string, unknown>)[c];
+      if (typeof x === "string") saida[c] = x;
+    });
+    return Object.keys(saida).length ? saida : undefined;
+  };
+  const antes = textos(o.antes);
+  const rotulos = textos(o.rotulos);
   const regerar = (Array.isArray(o.regerar) ? o.regerar : [])
     .map((n) => Number(n))
     .filter((n) => isFinite(n) && n > 0 && Math.floor(n) === n);
@@ -146,6 +182,8 @@ export function lerMudanca(x: unknown): MudancaDoDiretor | null {
     motivo: typeof o.motivo === "string" ? o.motivo : "",
     campos,
     regerar: regerar.length ? regerar : ordem !== null ? [ordem] : [],
+    ...(antes ? { antes } : {}),
+    ...(rotulos ? { rotulos } : {}),
   };
 }
 
@@ -232,6 +270,25 @@ export function corpoDeAplicarMudancas(c: CorpoDeAplicar): Record<string, unknow
 }
 
 export const conversarComODiretor = (c: CorpoDaConversaDoDiretor) => chamarFuncao<any>("estudio-arte", corpoDaConversaDoDiretor(c));
+
+/**
+ * Frente AG: depois de aplicar uma mudança só de texto e cor, a arte muda só
+ * na área do texto (edição com máscara, a foto e a cena ficam). Não existe
+ * camada de texto editável: é uma edição de imagem, mais barata que refazer.
+ */
+export const corpoDoAjusteDeTexto = (trabalhoId: string, ordem: number): Record<string, unknown> => ({ acao: "ajustar_texto", trabalho_id: trabalhoId, ordem });
+export const ajustarTextoDaLamina = (trabalhoId: string, ordem: number) => chamarFuncao<any>("estudio-arte", corpoDoAjusteDeTexto(trabalhoId, ordem));
+
+/** Preço do ajuste de texto: a leitura curta do pedido e uma edição de imagem na qualidade do trabalho. */
+export function partesDoAjusteDeTexto(catalogo: ModeloIa[], modeloImagemId: string | null | undefined, qualidade: string | null | undefined): ParteDaEstimativa[] {
+  const leitor = padraoPara(catalogo, "leitura");
+  const imagem = modeloImagemId || (padraoPara(catalogo, "imagem") || { id: null }).id;
+  const q = qualidade === "baixa" || qualidade === "alta" ? qualidade : "media";
+  return [
+    { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.ajuste.entrada, tokensSaida: TAMANHOS.ajuste.saida },
+    { modeloId: imagem, tipo: "imagem", imagens: 1, qualidade: q as ParteDaEstimativa["qualidade"], tokensEntrada: TAMANHOS.imagemAnexos.entrada },
+  ];
+}
 export const aplicarMudancasDoDiretor = (c: CorpoDeAplicar) => chamarFuncao<any>("estudio-arte", corpoDeAplicarMudancas(c));
 
 // ------------------------------------------------------------------ estimativa e regras da tela
@@ -280,6 +337,9 @@ export function rotuloDeRefazer(ordens: number[], prefixo = "Aplicar e refazer")
 
 /** Pontos de partida para a conversa (preenchem o campo, não enviam). */
 export const ATALHOS_DO_DIRETOR = [
+  // Frente AG: ajuste fino (o diretor muda só o que foi pedido e mostra antes e depois).
+  { rotulo: "Cor do título", texto: "Troque a cor do título para " },
+  { rotulo: "Tirar um trecho", texto: "Tire do texto da lâmina: " },
   { rotulo: "Mudar o cenário", texto: "Quero outro cenário para as lâminas: " },
   { rotulo: "Outro estilo", texto: "Mude o estilo do conjunto para " },
   { rotulo: "Luz e clima", texto: "Deixe a luz e o clima mais " },

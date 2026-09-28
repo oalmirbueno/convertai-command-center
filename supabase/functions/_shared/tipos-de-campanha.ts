@@ -178,8 +178,13 @@ export function perguntaDoTipoDaCampanha(): PerguntaDeEscolha {
   };
 }
 
-/** Confiança mínima para aceitar o tipo que o Jev escolheu (abaixo disso fica sem tipo). */
-export const CONFIANCA_MINIMA_DO_TIPO = 0.45;
+/**
+ * Confiança mínima para aceitar o tipo que o Jev escolheu (abaixo disso fica
+ * sem tipo e o estrategista segue o pedido). Frente AG, 28/09: "Automático"
+ * só vale com confiança alta (era 0,45; os docs do Jev põem 0,5 a 0,9 como
+ * faixa de confirmar).
+ */
+export const CONFIANCA_MINIMA_DO_TIPO = 0.7;
 
 /** Lê a resposta do Jev: o tipo aceito ou null ("outro" ou pouca confiança). */
 export function tipoPelaResposta(r: { choice?: string; confidence?: number } | null | undefined): TipoDeCampanha | null {

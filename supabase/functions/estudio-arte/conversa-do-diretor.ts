@@ -29,6 +29,7 @@ import {
 } from "../_shared/direcao-arte.ts";
 import { panoramaApagado, type PanoramaGravado } from "../_shared/carrossel-continuo.ts";
 import { ESQUEMA_DAS_ACOES_DO_DIRETOR } from "./acoes-do-diretor.ts";
+import { textoDoAjusteFiel } from "./fiel-ao-pedido.ts";
 
 export const ZONAS_DA_CONVERSA: ZonaTexto[] = [
   "topo-esquerda", "topo-centro", "centro-esquerda", "centro", "base-esquerda", "base-centro", "base-direita", "coluna-esquerda", "coluna-direita",
@@ -39,6 +40,12 @@ const ALINHAMENTOS = ["esquerda", "centro", "direita"] as const;
 export const MAX_MUDANCAS = 6;
 /** Valor de foto_acervo que tira a foto real da lâmina (a cena volta a ser desenhada). */
 export const SEM_FOTO = "sem_foto";
+/**
+ * Prefixo de foto_acervo para uma foto enviada no pedido da arte rápida
+ * (arquivo no bucket, sem id no acervo): "pedido:<caminho>". O diretor nunca
+ * escreve isso: ele usa o apelido (F1, F2...) e o servidor traduz.
+ */
+export const PREFIXO_FOTO_DO_PEDIDO = "pedido:";
 
 /** Campos que a mudança pode trazer. String vazia = não muda. */
 export type CamposDaMudanca = {
@@ -71,7 +78,7 @@ const TODOS_OS_CAMPOS: (keyof CamposDaMudanca)[] = [...CAMPOS_DO_CONJUNTO, ...CA
 const MAXIMO: Record<keyof CamposDaMudanca, number> = {
   conceito: 1200, fio_visual: 800, estilo: 600,
   imagem: 600, ponto_focal: 400, fundo: 400, tratamento: 500, zona_texto: 40, alinhamento: 20,
-  cor_fundo: 7, cor_texto: 7, cor_destaque: 7, evitar: 600, foto_acervo: 64, texto_exato: 1200,
+  cor_fundo: 7, cor_texto: 7, cor_destaque: 7, evitar: 600, foto_acervo: 360, texto_exato: 1200,
 };
 
 export type MudancaProposta = {
@@ -85,6 +92,10 @@ export type MudancaProposta = {
   campos: Partial<CamposDaMudanca>;
   /** Lâminas que precisam ser refeitas para a arte mostrar a mudança. */
   regerar: number[];
+  /** Frente AG: o valor de hoje de cada campo que muda (a tela mostra antes e depois). */
+  antes?: Partial<CamposDaMudanca>;
+  /** Frente AG: como mostrar o valor novo quando ele não é legível (a foto nova pelo apelido e nome). */
+  rotulos?: Partial<Record<keyof CamposDaMudanca, string>>;
 };
 
 export const ESQUEMA_CONVERSA = {
@@ -162,7 +173,17 @@ REGRAS DA CASA (obrigatórias)
 - Lâmina com foto real (\`foto_real\` preenchida): a foto é usada como está. Para trocar o cenário dessa lâmina, proponha foto_acervo com outra foto do acervo ou "${SEM_FOTO}" junto com a imagem nova.
 - Carrossel contínuo: a cena atravessa as lâminas; mudança de cenário, luz ou estilo vale para o conjunto (fio_visual ou estilo), nunca para uma lâmina solta.
 - Série: a mesma protagonista, cenário, luz e paleta do começo ao fim; varia só pose, gesto e enquadramento.
-- Seja honesto: se a arte atual já resolve, diga; se algo não dá para fazer no estúdio, diga.`;
+- Seja honesto: se a arte atual já resolve, diga; se algo não dá para fazer no estúdio, diga.
+
+AJUSTE FINO (frente AG, 28/09: o dono pediu um agente que entende o ajuste e faz só o que foi pedido)
+- O que a pessoa pede é a fonte da verdade. Você recebe o estado atual de cada lâmina (\`laminas[].texto_exato\`, \`blocos\`, \`layout\` com as cores, \`foto_real\`, \`leva_logo\`, \`texto_lido_na_arte\`) e o pedido original do trabalho (\`trabalho.pedido_original\`). Mude SÓ o que foi pedido: um pedido pequeno vira UMA mudança na lâmina em foco (ou na citada), com só o campo que muda; nunca mexa em cena, foto, conceito, texto ou outras cores que o pedido não citou.
+- "Muda a cor do título" ou "troca a cor do título para o verde da marca": cor_texto com o hex da paleta; a palavra de destaque, o preço e o CTA ficam em cor_destaque. "Verde da marca" é o hex verde da paleta; com dois verdes ou nenhum, pergunte qual (sem mudança).
+- "Tira o preço" (ou a data, o selo, uma frase): texto_exato é o texto atual da lâmina sem aquele trecho, o resto palavra por palavra igual, com as mesmas quebras de linha.
+- "Troca a foto pela segunda" e parecidos: foto_acervo com o apelido da foto (F1, F2... são as fotos do pedido, na ordem em que a equipe mandou; A1, A2... são as do acervo, na ordem de \`acervo\`). Nunca escreva id.
+- "Deixa o selo menor", "logo maior", "sobe o texto": tratamento ou zona_texto da lâmina, com a instrução concreta (ex.: "selo da campanha pequeno, cerca de 12% da largura, no canto de baixo"). "Mais minimalista", "mais elegante": estilo (conjunto) ou tratamento (lâmina) com menos elementos e mais respiro, sem mudar texto nem foto.
+- Na dúvida, pergunte UMA coisa só, curta, e não proponha mudança: palavra que não faz sentido aqui (provável erro do ditado por voz, como "select" no lugar de "selo"), ou nome de loja, site, marketplace, marca ou produto que não aparece no trabalho, na marca nem na campanha.
+- Nunca invente preço, desconto, prazo, produto, loja, site ou promessa que não estejam no pedido, no texto atual, na campanha ou na marca. Letras da logo e letras impressas no produto da foto nunca entram no texto_exato.
+- Na resposta, diga em uma frase o que vai mudar e o que fica igual.`;
 
 // ------------------------------------------------------------------ utilidades
 
@@ -228,7 +249,8 @@ export function regraProibeCaixa(regras: string | null | undefined): boolean {
 export function pedidoMexeNoTexto(mensagem: string): boolean {
   const m = String(mensagem || "");
   const verbo = /(^|[^a-zà-ú])(mud|troc|troq|reescrev|escrev|corrig|corrij|encurt|diminu|aument|tir|remov|acrescent|coloc|ponh|p[oô]r|ajust|alter|substitu|edit|refa)[a-zà-ú]*/i;
-  const alvo = /(^|[^a-zà-ú])(textos?|frases?|t[ií]tulos?|headline|palavras?|chamada|cta|subt[ií]tulos?|escrita|copy|ortografia|acentos?|acentua[cç][aã]o)([^a-zà-ú]|$)/i;
+  // Frente AG: "tira o preço", "muda a data", "troca o selo" também mexem no texto escrito na arte.
+  const alvo = /(^|[^a-zà-ú])(textos?|frases?|t[ií]tulos?|headline|palavras?|chamada|cta|subt[ií]tulos?|escrita|copy|ortografia|acentos?|acentua[cç][aã]o|pre[cç]os?|valor(es)?|ofertas?|descontos?|promo[cç][aã]o|datas?|hor[aá]rios?|telefone|whatsapp|endere[cç]o|site|selos?)([^a-zà-ú]|$)/i;
   return (verbo.test(m) && alvo.test(m)) || /"[^"]{2,}"|“[^”]{2,}”/.test(m);
 }
 
@@ -247,6 +269,14 @@ export type ContextoDasMudancas = {
   semCaixa: Set<number>;
   /** Carrossel contínuo: mudança de cena, luz ou estilo vale para o conjunto e refaz todas. */
   continuo: boolean;
+  /** Frente AG: fotos do pedido da arte rápida aceitas em foto_acervo ("pedido:<caminho>"). */
+  fotosDoPedido?: Set<string>;
+  /**
+   * Frente AG: fontes do texto (texto atual por lâmina, mensagem da equipe,
+   * contexto confirmado e palavras do nome da marca). Com elas, o texto novo
+   * não ganha fato inventado, letras da logo nem letras lidas do produto.
+   */
+  fontesDoTexto?: { atual: Record<number, string>; pedido: string; confirmados: string[]; marca: string[] };
 };
 
 const TEXTOS_LIVRES: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "evitar"];
@@ -321,13 +351,24 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
         continue;
       }
       if (chave === "foto_acervo") {
-        if (valor === SEM_FOTO || ctx.acervo.has(valor)) campos.foto_acervo = valor;
+        if (valor === SEM_FOTO || ctx.acervo.has(valor) || (!!ctx.fotosDoPedido && ctx.fotosDoPedido.has(valor))) campos.foto_acervo = valor;
         else avisar("Uma foto sugerida não está no acervo do cliente e ficou de fora.");
         continue;
       }
       if (chave === "texto_exato") {
         if (!ctx.permitirTexto) {
           avisar("O texto das lâminas não mudou: só muda quando você pede mudança de texto.");
+          continue;
+        }
+        const f = ctx.fontesDoTexto;
+        if (f && ordem !== null) {
+          // Frente AG: sem fato inventado, letras da logo ou do produto no texto novo.
+          const atual = (f.atual[ordem] || "").trim();
+          const fiel = textoDoAjusteFiel(atual, valor, f.pedido, f.marca, f.confirmados);
+          if (fiel.removidas.length) {
+            avisar(`Tirei do texto novo o que não veio do pedido nem do texto atual: ${fiel.removidas.map((r) => `"${r}"`).join(", ")}.`);
+          }
+          if (fiel.texto && fiel.texto !== atual) campos.texto_exato = fiel.texto;
           continue;
         }
         campos.texto_exato = valor;
@@ -441,10 +482,17 @@ export function aplicarNaDirecao<D extends DirecaoParaMudar>(
       const nova: CardDirecao = { ...base, layout, composicao: resumoDaComposicao(layout) };
       if (c.imagem) nova.ilustracao = layout.imagem;
       if (c.evitar) nova.evitar = c.evitar;
-      if (c.foto_acervo) nova.imagens_ids = c.foto_acervo === SEM_FOTO ? [] : [c.foto_acervo];
-      if (c.foto_acervo === SEM_FOTO && nova.fotos_livres && nova.fotos_livres.length) {
-        // Sem foto real: a foto de fundo trazida pela equipe também sai (os elementos ficam).
+      const doPedido = !!c.foto_acervo && c.foto_acervo.indexOf(PREFIXO_FOTO_DO_PEDIDO) === 0;
+      if (c.foto_acervo) nova.imagens_ids = c.foto_acervo === SEM_FOTO || doPedido ? [] : [c.foto_acervo];
+      if ((c.foto_acervo === SEM_FOTO || doPedido) && nova.fotos_livres && nova.fotos_livres.length) {
+        // Sem foto real ou foto do pedido nova: a foto de fundo anterior sai (os elementos, como logos do pedido, ficam).
         nova.fotos_livres = nova.fotos_livres.filter((f) => f.papel !== "fundo");
+      }
+      if (doPedido) {
+        // Frente AG: "troca a foto pela segunda" na arte rápida: a foto do pedido vira a base, como está.
+        const caminho = (c.foto_acervo as string).slice(PREFIXO_FOTO_DO_PEDIDO.length);
+        const base: NonNullable<CardDirecao["fotos_livres"]> = [{ caminho, papel: "fundo", nota: "Foto real do pedido: entra como está, sem ser refeita nem escurecida." }];
+        nova.fotos_livres = base.concat(nova.fotos_livres || []);
       }
       if (c.texto_exato && c.texto_exato !== base.texto_exato) {
         nova.texto_exato = c.texto_exato;
@@ -480,4 +528,67 @@ export function blocoDoEstiloPedido(estilo: string | null | undefined): string {
   return e
     ? `ESTILO PEDIDO PELA EQUIPE PARA ESTE TRABALHO (vale em todas as lâminas, sempre dentro da marca): ${e}\nMesmo com este estilo: não escureça a foto nem a capa para criar destaque, e use só as cores da paleta.`
     : "";
+}
+
+// ------------------------------------------------------------------ antes e depois (frente AG)
+
+/** Campos de texto e cor: o ajuste mexe só na área do texto (edição com máscara), sem refazer a cena. */
+export const CAMPOS_SO_DE_TEXTO: (keyof CamposDaMudanca)[] = ["texto_exato", "cor_texto", "cor_destaque"];
+
+/** A mudança é só de texto e cor numa lâmina: dá para ajustar só a área do texto, a foto e a cena ficam. */
+export function mudancaSoDeTexto(m: Pick<MudancaProposta, "alvo" | "campos">): boolean {
+  if (m.alvo !== "lamina") return false;
+  const chaves = Object.keys(m.campos) as (keyof CamposDaMudanca)[];
+  return chaves.length > 0 && chaves.every((c) => CAMPOS_SO_DE_TEXTO.indexOf(c) >= 0);
+}
+
+/**
+ * O valor de hoje de cada campo que a mudança traz, para a tela mostrar antes
+ * e depois. `rotuloDaFoto` diz como mostrar a foto de hoje (apelido e nome).
+ */
+export function antesDaMudanca(
+  direcao: Pick<DirecaoParaMudar, "conceito" | "fio_visual" | "estilo_pedido" | "cards">,
+  m: Pick<MudancaProposta, "alvo" | "ordem" | "campos">,
+  rotuloDaFoto: (card: CardDirecao) => string = () => "",
+): Partial<CamposDaMudanca> {
+  const antes: Partial<CamposDaMudanca> = {};
+  const chaves = Object.keys(m.campos) as (keyof CamposDaMudanca)[];
+  if (m.alvo === "conjunto") {
+    for (const k of chaves) {
+      if (k === "conceito") antes.conceito = limparTexto(direcao.conceito, 1200);
+      if (k === "fio_visual") antes.fio_visual = limparTexto(direcao.fio_visual, 800);
+      if (k === "estilo") antes.estilo = limparTexto(direcao.estilo_pedido, 600);
+    }
+    return antes;
+  }
+  const card = direcao.cards.filter((c) => c.ordem === m.ordem)[0];
+  if (!card) return antes;
+  const l = (card.layout || {}) as Record<string, unknown>;
+  for (const k of chaves) {
+    let v = "";
+    if (k === "texto_exato") v = card.texto_exato || "";
+    else if (k === "evitar") v = card.evitar || "";
+    else if (k === "foto_acervo") v = rotuloDaFoto(card);
+    else if (k === "imagem") v = String(l.imagem || card.ilustracao || "");
+    else if (l[k] != null) v = String(l[k]);
+    antes[k] = limparTexto(v, Math.max(MAXIMO[k], 400));
+  }
+  return antes;
+}
+
+/**
+ * Traduz o apelido de foto que o diretor escreveu (F1, A3) para o valor real
+ * (id do acervo ou "pedido:<caminho>"). Apelido desconhecido fica como veio e
+ * cai na conferência (aviso). O modelo nunca recebe nem devolve id.
+ */
+export function traduzirApelidosDeFoto(bruto: unknown, apelidos: Record<string, string>): unknown {
+  if (!Array.isArray(bruto)) return bruto;
+  return bruto.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const o = item as Record<string, unknown>;
+    const campos = o.campos && typeof o.campos === "object" ? (o.campos as Record<string, unknown>) : null;
+    if (!campos || typeof campos.foto_acervo !== "string") return item;
+    const real = apelidos[campos.foto_acervo.trim().toUpperCase()];
+    return real ? { ...o, campos: { ...campos, foto_acervo: real } } : item;
+  });
 }

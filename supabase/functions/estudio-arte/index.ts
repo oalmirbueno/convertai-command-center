@@ -158,7 +158,17 @@ import {
   type LogoMedida,
   type TipoDoAnexo,
   valorDaCor,
+  margensDoQuadro,
 } from "../_shared/direcao-arte.ts";
+import {
+  areaDaNavegacao,
+  avisoDaNavegacao,
+  blocoDaNavegacao,
+  navegacaoDaLamina,
+  type NavegacaoDaLamina,
+  perguntaDaNavegacao,
+  semTextoDaNavegacao,
+} from "../_shared/navegacao-do-carrossel.ts";
 import {
   blocoDaVariedade,
   capasNoHistorico,
@@ -280,7 +290,23 @@ import {
   pedidoMexeNoTexto,
   regraProibeCaixa,
   SEM_FOTO,
+  antesDaMudanca,
+  PREFIXO_FOTO_DO_PEDIDO,
+  traduzirApelidosDeFoto,
 } from "./conversa-do-diretor.ts";
+import {
+  avisoDaFidelidade,
+  blocosSemNomeDaMarca,
+  conferirTextoContraOPedido,
+  type DuvidaGuardada,
+  duvidaDoAjuste,
+  estadoDaFidelidade,
+  palavrasDaMarca,
+  pedidoConfirmado,
+  perguntaDaFidelidade,
+  perguntaDoAjusteClaro,
+  textoDoAjusteFiel,
+} from "./fiel-ao-pedido.ts";
 import { blocoDoEstiloParaOGerador, estiloNaGeracao, ROTULO_DA_REFERENCIA_DO_ESTILO, templateNaLamina } from "./estilo-na-geracao.ts";
 import {
   adaptacaoDaReferencia,
@@ -784,6 +810,13 @@ type Direcao = {
   arte_rapida?: (ArteRapida & { textos?: DocumentoDaArteRapida[] }) | null;
   /** Marca escolhida na tela (Acerbi ou CME) para o trabalho sem item (marca.ts lê direcao.marca_id). */
   marca_id?: string | null;
+  /**
+   * Frente AG (28/09): conferência do texto da direção contra o pedido (código
+   * e nota do Jev) e o que o diretor avisou. Só aviso: nada é gerado de novo.
+   */
+  conferencia_do_pedido?: { avisos: string[]; nota: number | null; confianca: number | null; em: string } | null;
+  /** Frente AG: pergunta pendente de um ajuste (a resposta "sim" retoma o pedido). */
+  duvida_do_ajuste?: DuvidaGuardada | null;
 };
 
 type Reabertura = {
@@ -927,10 +960,15 @@ type Verificacao = {
   custo_usd?: number;
   /** Decisão da autocorreção sobre esta conferência (autocorrecao.ts). */
   autocorrecao?: DecisaoDeAutocorrecao;
+  /**
+   * Frente AG (28/09), só AVISO (a autocorreção não lê; sem laço): no carrossel,
+   * se o indicador de arrastar (capa e meio) ou os ícones (última) vieram (Noul do Jev).
+   */
+  navegacao?: { esperado: NavegacaoDaLamina; probabilidade: number | null; veio: boolean | null; aviso: string | null } | { esperado: NavegacaoDaLamina; erro: string } | null;
 };
 
 /** Marca da versão que nasceu da autocorreção (corrigir_card). */
-type MarcaDeAutocorrecao = { rodada: number; motivos: string[]; pedido_da_equipe?: boolean; areas?: Area[] };
+type MarcaDeAutocorrecao = { rodada: number; motivos: string[]; pedido_da_equipe?: boolean; areas?: Area[]; conversa?: boolean };
 
 type NotaJev = { nota: number | null; escala_max: number; nivel: string | null; confianca: number | null } | { erro: string };
 
@@ -2726,11 +2764,13 @@ const ESQUEMA_DIRECAO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["conceito", "fio_visual", "carrossel_infinito", "cards"],
+    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe"],
     properties: {
       conceito: { type: "string" },
       fio_visual: { type: "string" },
       carrossel_infinito: { type: "boolean" },
+      // Frente AG: o que faltou no pedido, o que conflita com a marca ou a campanha e o que não deu para fazer.
+      avisos_para_a_equipe: { type: "array", items: { type: "string" } },
       cards: {
         type: "array",
         items: {
@@ -2805,6 +2845,8 @@ NARRATIVA E CONTINUIDADE (obrigatório)
 - Formato: \`item.formato_da_arte\` diz o quadro (4:5, 3:4, 1:1 ou 9:16); pense a composição nele (no 9:16 o texto fica longe dos 14% de cima e dos 20% de baixo; no 1:1 a capa perde as laterais na grade do perfil).
 - As regras da marca aprendidas com este cliente (no fim do sistema, quando houver) valem acima da sua preferência: aplique sem que peçam de novo.
 - Se \`pedido_da_equipe\` vier preenchido, refaça a direção atendendo o pedido e mantenha o que ele não manda mudar da \`direcao_atual\`.
+- O PEDIDO DA EQUIPE É A FONTE DA VERDADE (\`pedido_da_equipe\`, \`item.pedido_avulso\`): o que ele pede entra, mesmo contra a campanha; nunca o oposto. Nada de preço, prazo, loja ou promessa inventados.
+- avisos_para_a_equipe: 0 a 4 frases curtas (dado que faltou, conflito, dúvida).
 - Se \`item.campanha\` vier, o conteúdo é de uma campanha: siga o tema visual, as cores de apoio, os elementos e o tom da campanha, sempre dentro da marca; o fio_visual inclui o tema da campanha. O briefing (produto em foco, oferta, mensagem central) guia a escolha das imagens; as fotos em \`item.campanha.imagens_da_campanha\` também estão no \`acervo\`.
 - Se o plano indicar foto para a lâmina (\`item.campanha.pecas_do_plano\`, pela ordem da lâmina), use imagem_acervo = esse id nessa lâmina (com uso "elemento", descreva em layout.imagem o produto da foto na cena). No carrossel contínuo deixe imagem_acervo vazio: a cena é o panorama.
 
@@ -2832,9 +2874,13 @@ function cardsDoDiretor(
   const cards = base.map((c, i) => {
     const ordem = i + 1;
     const funcao = ordem === 1 ? "capa" : ordem === total && total > 1 ? "cta" : (c.funcao === "cta" ? "cta" : "conteudo");
-    const blocos = (c.blocos as any[])
-      .map((b) => ({ papel: b?.papel, texto: texto(b?.texto, 600) }))
-      .filter((b) => b.texto) as BlocoTexto[];
+    // Frente AG: bloco que é só o nome da marca sai (a marca aparece pela logo; em 28/09 "STOP" e "INFORMÁTICA" viraram texto).
+    const blocos = blocosSemNomeDaMarca(
+      (c.blocos as any[])
+        .map((b) => ({ papel: b?.papel, texto: texto(b?.texto, 600) }))
+        .filter((b) => b.texto) as BlocoTexto[],
+      palavrasDaMarca([marca.nomeCliente]),
+    ).blocos;
     const layout = normalizarLayout(c.layout, funcao, ordem, total);
     const card: CardDirecao = {
       ordem,
@@ -3012,6 +3058,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   let usoId: string | null = null;
   let saldo: number | null = null;
   let reserva: string | null = null;
+  // Frente AG: o que o diretor avisou (dado que faltou, conflito resolvido a favor do pedido).
+  let avisosDoDiretor: string[] = [];
 
   if (modoPedido === "roteiro" && roteiro.length) {
     direcao = direcaoDoRoteiro(roteiro as any, marca, {
@@ -3149,6 +3197,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
     direcao = { conceito, fio_visual: fioVisual, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
+    avisosDoDiretor = (Array.isArray(bruto.avisos_para_a_equipe) ? bruto.avisos_para_a_equipe : []).map((a: unknown) => texto(a, 300)).filter(Boolean).slice(0, 4);
     custo = r.custoUsd;
     usoId = r.usoId;
     saldo = r.saldoUsd;
@@ -3203,6 +3252,25 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     return !!c && !!sugestaoDeDividirEmDuas(c, direcao.cards.length);
   });
 
+  // Frente AG (28/09): o texto da direção conferido contra o pedido (código e nota do Jev), só como aviso.
+  // Na arte rápida o pedido é a fonte inteira; no item do plano, só quando a equipe pediu algo ao diretor.
+  const pedidoParaConferir = [rapida ? rapida.gravada.pedido : "", instrucao].filter(Boolean).join("\n");
+  let conferenciaDoPedido: { avisos: string[]; nota: number | null; confianca: number | null; custo: number } | null = null;
+  if (modoPedido === "diretor" && pedidoParaConferir && direcao.cards.length) {
+    conferenciaDoPedido = await conferirTextoDoPedido(ch, clientId, trabalhoId, {
+      pedido: pedidoParaConferir,
+      confirmados: fontesConfirmadas(campanha, rapida ? rapida.documentos : [], marca.nomeCliente, rapida ? null : item),
+      cards: direcao.cards,
+      comJev: !!rapida,
+    });
+    custo = arred(custo + conferenciaDoPedido.custo);
+  }
+  const avisosDoPedido = [...new Set([...avisosDoDiretor, ...(conferenciaDoPedido ? conferenciaDoPedido.avisos : [])])].slice(0, 8);
+  direcao.conferencia_do_pedido = avisosDoPedido.length || conferenciaDoPedido
+    ? { avisos: avisosDoPedido, nota: conferenciaDoPedido?.nota ?? null, confianca: conferenciaDoPedido?.confianca ?? null, em: new Date().toISOString() }
+    : null;
+  if (rapida && avisosDoPedido.length) rapida.avisos.push(...avisosDoPedido);
+
   // Formato escolhido na tela (o 4:5 fica sem o campo, como sempre foi).
   if (formato !== "feed_4x5") direcao.formato = formato;
   if (campanha) {
@@ -3210,7 +3278,15 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     if (!direcao.referencias_ids?.length && campanha.referencias_ids?.length) direcao.referencias_ids = campanha.referencias_ids.slice(0, 4);
   }
   if (rapida) {
-    direcao.arte_rapida = { ...rapida.gravada, campanha_id: campanha ? campanha.id : null, textos: rapida.documentos };
+    // Os avisos da conferência ficam na arte (o histórico mostra); os de uma direção anterior saem.
+    const antigos = existente?.direcao.conferencia_do_pedido?.avisos ?? [];
+    const daDecisao = rapida.gravada.avisos.filter((a) => antigos.indexOf(a) < 0);
+    direcao.arte_rapida = {
+      ...rapida.gravada,
+      avisos: [...new Set([...daDecisao, ...avisosDoPedido])].slice(0, 6),
+      campanha_id: campanha ? campanha.id : null,
+      textos: rapida.documentos,
+    };
     const marcaPedida = texto(corpo.marca_id, 64);
     const marcaAntes = existente?.direcao.marca_id ?? null;
     if (UUID.test(marcaPedida)) direcao.marca_id = marcaPedida;
@@ -3256,7 +3332,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
-    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, ...extraDaRapida });
+    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida });
   }
 
   const { data: criado, error } = await db
@@ -3277,7 +3353,57 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, ...extraDaRapida });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida });
+}
+
+// ------------------------------------------------------ fiel ao pedido (frente AG)
+
+/** O que vale como contexto confirmado na conferência: campanha escolhida, textos dos arquivos, marca e o roteiro do item. */
+function fontesConfirmadas(campanha: CampanhaDaLamina | null, documentos: DocumentoDaArteRapida[], nomeDaMarca: string, item: ItemDaAgenda | null): string[] {
+  const saida: string[] = [];
+  if (campanha) {
+    const b = briefingDaCampanha(campanha);
+    saida.push([campanha.nome, b.oferta, b.mensagem_central, b.produtos.map((p) => p.nome).join(", "), campanha.identidade?.selo?.texto ?? "", texto((campanha.briefing ?? {} as Record<string, unknown>).cta, 300)].filter(Boolean).join(". "));
+  }
+  for (const d of documentos) saida.push(d.texto.slice(0, 4000));
+  if (nomeDaMarca) saida.push(nomeDaMarca);
+  if (item) saida.push([item.tarefa.title, texto(item.tarefa.description, 4000), texto(item.post?.default_caption, 1500)].filter(Boolean).join("\n"));
+  return saida.filter(Boolean);
+}
+
+/**
+ * Conferência do texto da direção contra o pedido: em código (fato inventado,
+ * fato do pedido que faltou) e, na arte rápida, a nota do Jev (Score). Só
+ * aviso para a equipe; nunca gera de novo (sem laço de correção).
+ */
+async function conferirTextoDoPedido(
+  ch: Chamador,
+  clientId: string,
+  trabalhoId: string,
+  e: { pedido: string; confirmados: string[]; cards: CardDirecao[]; comJev: boolean },
+): Promise<{ avisos: string[]; nota: number | null; confianca: number | null; custo: number }> {
+  const textos = e.cards.map((c) => ({ ordem: c.ordem, texto: c.texto_exato || "" }));
+  const doCodigo = conferirTextoContraOPedido(textos, { pedido: e.pedido, confirmados: e.confirmados });
+  const avisos = doCodigo.avisos.slice();
+  let nota: number | null = null;
+  let confianca: number | null = null;
+  let custo = 0;
+  if (e.comJev) {
+    try {
+      const r = await jevPerguntar({ state: estadoDaFidelidade(e.pedido, e.confirmados, textos), questions: { fiel: perguntaDaFidelidade() as PerguntaJev } });
+      const cobrado = await cobrarJev(r, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+      custo = cobrado?.custoUsd ?? 0;
+      const f = r.answers.fiel;
+      nota = notaScore(f);
+      confianca = typeof f?.confidence === "number" ? f.confidence : null;
+      const aviso = avisoDaFidelidade(f);
+      if (aviso) avisos.push(aviso);
+    } catch (err) {
+      if (!(err instanceof JevErro)) throw err;
+      // Sem o Jev fica a conferência em código.
+    }
+  }
+  return { avisos, nota, confianca, custo };
 }
 
 // ------------------------------------------------------ arte rápida (frente AE)
@@ -3759,7 +3885,7 @@ const ESQUEMA_LEITURA = {
 
 const SISTEMA_LEITURA = `Você é o leitor de artes do estúdio. Olhe a imagem e devolva:
 - texto_lido: TODO o texto visível, exatamente como está desenhado, na ordem de leitura, com a grafia, os acentos e a pontuação que aparecem, inclusive erros e letras deformadas. Não corrija nada. Não transcreva o texto que faz parte da logo da marca.
-- descricao_visual: em até 6 frases, a paleta observada (cores com hex aproximado), a tipografia (estilo, peso, caixa), a composição, o estilo da imagem e qualquer defeito (letra quebrada, objeto deformado, texto cortado).
+- descricao_visual: em até 6 frases, a paleta observada (cores com hex aproximado), a tipografia (estilo, peso, caixa), a composição, o estilo da imagem e qualquer defeito (letra quebrada, objeto deformado, texto cortado). Diga também se aparece perto da base um indicador de arrastar (texto ou seta para a direita) ou uma fileira de ícones de curtir, comentar, enviar e salvar.
 - logo_presente: se aparece uma logo de marca na imagem.
 Escreva sem travessão.`;
 
@@ -3785,6 +3911,8 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   const ads = ehAds(t);
   // Tom do criativo enviado pela Mesa Ads (sobrio, direto, agressivo); inválido ou ausente: sem a pergunta do tom.
   const tomPedido = ads ? tomValido(t.direcao.tom) : null;
+  // Frente AG: no carrossel orgânico, o indicador de arrastar ou os ícones que o gerador tinha de desenhar.
+  const navegacaoDaConferencia = navegacaoDaLamina({ ordem: card.ordem, total: totalCards(t), anuncio: ads, post: quadro.post });
   try {
     const recorte = await laminaFinal(caminho, quadro.final);
     v.leitura_no_recorte = recorte.redimensionada;
@@ -3823,6 +3951,13 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     v.ortografia_ok = cmp.ortografia_ok;
     v.faltando = cmp.faltando;
     v.sobrando = cmp.sobrando;
+    if (navegacaoDaConferencia) {
+      // Frente AG: o indicador "Arraste para o lado" do carrossel não conta como texto sobrando.
+      const semNavegacao = compararTexto(card.texto_exato, semTextoDaNavegacao(v.texto_lido));
+      v.ortografia_ok = semNavegacao.ortografia_ok;
+      v.faltando = semNavegacao.faltando;
+      v.sobrando = semNavegacao.sobrando;
+    }
   } catch (e) {
     // Saldo, cota e chave voltam como erro da chamada (402/403/503); o resto fica na verificacao.
     if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
@@ -3868,6 +4003,8 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         };
       }
     }
+    // Frente AG: o indicador ou os ícones do carrossel, na mesma chamada (só aviso).
+    if (navegacaoDaConferencia) questions.navegacao = perguntaDaNavegacao(navegacaoDaConferencia) as PerguntaJev;
     const res = await jevPerguntar({
       state: {
         kit: {
@@ -3903,6 +4040,15 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     });
     if (cobrado) usos.push(cobrado);
     v.identidade = notaDoJev(res.answers.identidade, NIVEIS_IDENTIDADE);
+    if (navegacaoDaConferencia) {
+      const p = probabilidadeNoul(res.answers.navegacao);
+      v.navegacao = {
+        esperado: navegacaoDaConferencia,
+        probabilidade: p == null ? null : Math.round(p * 100) / 100,
+        veio: p == null ? null : p >= 0.5,
+        aviso: avisoDaNavegacao(navegacaoDaConferencia, p),
+      };
+    }
     if (ads) {
       v.politica = notaDoJev(res.answers.politica, NIVEIS_RISCO_POLITICA);
       v.clareza = notaDoJev(res.answers.clareza, NIVEIS_CLAREZA);
@@ -3912,6 +4058,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     }
   } catch (e) {
     v.identidade = { erro: codigoMotor(e) };
+    if (navegacaoDaConferencia) v.navegacao = { esperado: navegacaoDaConferencia, erro: codigoMotor(e) };
     if (ads) {
       v.politica = { erro: codigoMotor(e) };
       v.clareza = { erro: codigoMotor(e) };
@@ -5149,6 +5296,20 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente R5: os blocos desta lâmina (já enxutos) para a divisão em partes; o que a versão guarda dela.
   const blocosDaLaminaR5 = cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : blocosDoTexto(cardDoPrompt.texto_exato, cardDoPrompt.funcao);
   const partesDaLamina = replicar || ads || !(total >= 3 && ordem >= 2 && ordem < total) ? null : registroDasPartes(blocosDaLaminaR5);
+  // Frente AG (28/09): navegação do carrossel desenhada pelo próprio gerador ("não quero nada por cima, e sim
+  // pelo gerador"): indicador de arrastar na capa e no meio, ícones do Instagram na última. Mesmo texto em todas
+  // as lâminas do mesmo tipo (posição, tamanho, cor e fonte da marca). Nada em arte única, 9:16 nem anúncio.
+  const navegacaoDaGeracao = navegacaoDaLamina({ ordem, total, anuncio: ads, post: quadro.post });
+  const margensDaNavegacao = margensDoQuadro(quadro.formato, quadro.post);
+  const corDaNavegacao = (papel: string) => (marca.paleta.find((p) => String(p.papel || "").toLowerCase().indexOf(papel) >= 0) || { hex: null }).hex || null;
+  const blocoDaNavegacaoAqui = blocoDaNavegacao(navegacaoDaGeracao, {
+    quadro: quadro.final,
+    margemBasePct: margensDaNavegacao.base,
+    margemLateralPct: margensDaNavegacao.x,
+    cor: corDaNavegacao("texto") || corDaNavegacao("prim") || corDaNavegacao("destaque"),
+    corSobreEscuro: corDaNavegacao("fundo"),
+    fonte: marca.fontes.find((f) => f.papel === "texto")?.nome || marca.fontes.find((f) => f.papel === "titulo")?.nome || null,
+  });
   const baseComCampanha = [
     base,
     // Frente R2: rosto escolhido na lâmina normal que pede pessoa (vazio sem rosto: o de hoje).
@@ -5161,6 +5322,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente AP: o que funcionou nas entregas deste cliente e, na capa, não repetir a composição das últimas capas entregues.
     dasEntregas.bloco,
     dasEntregas.variedade,
+    // Frente AG: navegação do carrossel (indicador de arrastar ou ícones), pelo próprio gerador.
+    blocoDaNavegacaoAqui,
     // Frente R4: no post, a série herda da capa só a identidade (o anúncio segue com o bloco de sempre).
     replicar ? "" : ads ? blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }) : blocoDaIdentidadeDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
     replicar || ads || !separacaoDaSerie ? "" : blocoDaSerieDaReferencia({
@@ -5291,6 +5454,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       // Frente AP: padrões das entregas, sem mexer no layout da referência (sem a linha da variedade: aqui manda a referência).
       dasEntregas.bloco ? `Os padrões abaixo, das entregas deste cliente, valem desde que não mudem o layout da referência.\n${dasEntregas.bloco}` : "",
       variedade ? variedade.bloco : "",
+      // Frente AG: a navegação do carrossel também no modo replicar (a referência não traz a nossa).
+      blocoDaNavegacaoAqui,
       continuidade,
       // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).
       blocoDaTipografiaAqui,
@@ -5375,7 +5540,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     // Para Si Ótica, 23/09), mas o que volta é a fatia INTACTA com só as letras
     // e a logo coladas por cima (colarMudancasNaBase): a fatia nunca é
     // reenquadrada e a emenda com as vizinhas fica exata.
-    const areasDoTexto = areasDeDesenho(card, total, false, quadro);
+    // Frente AG: no carrossel, a faixa da base também abre para o gerador desenhar o indicador ou os ícones
+    // (sem ela, os pixels originais da foto voltavam por cima e apagavam o que ele desenhou).
+    const navegacaoAqui = navegacaoDaLamina({ ordem, total, anuncio: ads, post: quadro.post });
+    const margensAqui = margensDoQuadro(quadro.formato, quadro.post);
+    const areasDoTexto = areasDeDesenho(card, total, false, quadro).concat(navegacaoAqui ? [areaDaNavegacao(margensAqui.base, margensAqui.x)] : []);
     const areasComLogo = caixaDaLogoAqui ? areasDoTexto.concat([ampliar(caixaDaLogoAqui, 0.02)]) : areasDoTexto;
     const areas = panorama ? [INTERIOR_DA_LAMINA] : areasComLogo;
     const prompt = [
@@ -5569,11 +5738,13 @@ const ESQUEMA_AJUSTE = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["instrucao_edicao", "texto_exato", "memoria"],
+    required: ["instrucao_edicao", "texto_exato", "memoria", "entendi", "pergunta"],
     properties: {
       instrucao_edicao: { type: "string" },
       texto_exato: { type: "string" },
       memoria: { type: "string" },
+      entendi: { type: "string" },
+      pergunta: { type: "string" },
     },
   },
 };
@@ -5586,6 +5757,14 @@ A imagem anexada é a versão atual da lâmina. A pessoa da equipe pediu um ajus
 - memoria: uma frase curta, reutilizável em outros trabalhos deste cliente, com o que o pedido ensina sobre o gosto da marca (ou vazio se for só correção pontual).
 - Se vier \`areas\` (frações da lâmina, de 0 a 1), o ajuste acontece SÓ dentro delas: descreva a mudança para aquele ponto e diga que o resto fica idêntico.
 - Se \`tipo\` for "fundo", troque SÓ o fundo: texto, logo, pessoas e objetos em primeiro plano ficam idênticos, na mesma posição. Com \`nova_foto_de_fundo\`, o fundo novo é essa foto real do cliente (anexada depois da lâmina).
+- Com \`recorte_da_area\`, a imagem 2 é o recorte ampliado da área marcada: "isso", "esse", "aqui" e "ali" são o que está nela. Diga em instrucao_edicao exatamente o que está no recorte e o que muda.
+- entendi: uma frase curta com o que você vai fazer (ex.: "tirar a linha 'ou compre agora pelo Lazada' e manter o resto").
+
+O PEDIDO É A FONTE DA VERDADE (frente AG, 28/09)
+- Faça só o que foi pedido; o resto da lâmina fica igual.
+- texto_exato é o texto que a EQUIPE quer escrito: o texto atual da lâmina (\`lamina.texto_exato\`) com só as mudanças pedidas. Nunca ponha nele as letras da logo, o nome da marca nem letras impressas no produto da foto (modelo, fabricante), mesmo que apareçam na imagem.
+- Nunca acrescente preço, desconto, prazo, loja, site, marketplace, produto ou promessa que o pedido não mandou escrever com clareza.
+- O pedido muitas vezes vem do ditado por voz, com palavras trocadas pelo som ("select" ou "seleo" = selo; "shop" = a loja da marca). Entenda pelo contexto da lâmina e da marca. Se mesmo assim uma palavra não fizer sentido, ou o pedido mandar escrever um nome de loja, site, marketplace ou marca que não aparece na lâmina nem na marca, NÃO chute: escreva em pergunta UMA pergunta curta (ex.: "Lazada é isso mesmo? Não vi essa loja na marca da Stop."). Pedido claro: pergunta vazia.
 Escreva sem travessão.`;
 
 /**
@@ -5602,9 +5781,13 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   // Ajuste pontual: só as áreas marcadas na tela mudam (máscara + devolução dos pixels originais).
   // Correção automática: só as áreas de texto e logo da lâmina (o resto volta do original).
   const areas = tipo === "fundo" ? [] : auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas);
-  const pedido = texto(corpo.instrucao, auto ? 4000 : 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
-  if (!pedido) throw new ErroEstudio(400, "instrucao_vazia", "Descreva o ajuste que você quer.");
+  const pedidoBruto = texto(corpo.instrucao, auto ? 4000 : 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
+  if (!pedidoBruto) throw new ErroEstudio(400, "instrucao_vazia", "Descreva o ajuste que você quer.");
   garantirEditavel(t);
+  // Frente AG: "sim" (ou o mesmo pedido de novo) responde a pergunta pendente desta lâmina e retoma o pedido.
+  const retomado = auto ? { pedido: pedidoBruto, confirmado: true } : pedidoConfirmado(pedidoBruto, ordem, t.direcao.duvida_do_ajuste ?? null);
+  const pedido = retomado.pedido;
+  const confirmado = retomado.confirmado || corpo.confirmado === true;
   const card = cardDaDirecao(t, ordem);
   const atualVersao = versaoAtual(t, ordem);
   if (!atualVersao) throw new ErroEstudio(409, "card_sem_versao", "Gere este card antes de pedir ajuste.");
@@ -5635,12 +5818,33 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
 
   // O ajuste é uma tradução do pedido em instrução de edição: o modelo de
   // leitura (com visão) resolve bem e custa uma fração do diretor.
-  const [kit, leitor, preferencias] = await Promise.all([
+  const [kit, leitor, preferencias, campanhaDoAjuste] = await Promise.all([
     lerKit(t.client_id, t),
     modeloDoPapel("leitura"),
     // A autocorreção só conserta texto e logo: as regras do cliente ficam para o ajuste pedido.
     auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch(() => ""),
+    !auto && t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id).catch(() => null) : Promise.resolve(null),
   ]);
+  const nomeDaMarca = (await marcaDoCliente(t.client_id, kit, undefined, t).catch(() => null))?.nomeCliente || "";
+  // Frente AG: com área marcada, o leitor vê de perto o que está nela (em 28/09 "apague isso" apagou a linha errada).
+  const recorteDaArea = !auto && areas.length ? await recorteDasAreas(atual, areas) : null;
+  // Frente AG: o Jev diz, junto com o leitor, se o pedido é claro (ruído do ditado, nome fora do contexto, vago).
+  const jevDoAjuste: Promise<{ resposta: { choice?: string; confidence?: number } | undefined; custo: number } | null> = !auto && !confirmado
+    ? jevPerguntar({
+      state: {
+        pedido,
+        texto_atual: card.texto_exato,
+        marca: { nome: nomeDaMarca || null },
+        campanha: campanhaDoAjuste ? { nome: campanhaDoAjuste.nome, oferta: briefingDaCampanha(campanhaDoAjuste).oferta || null } : null,
+      },
+      questions: { claro: perguntaDoAjusteClaro() as PerguntaJev },
+    })
+      .then(async (r) => {
+        const cobrado = await cobrarJev(r, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId }).catch(() => null);
+        return { resposta: r.answers.claro, custo: cobrado?.custoUsd ?? 0 };
+      })
+      .catch(() => null)
+    : Promise.resolve(null);
   const dir = await chamarTexto({
     clientId: t.client_id,
     tarefa: "estudio",
@@ -5657,33 +5861,56 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         // Correção automática: o texto exato é o combinado e não muda.
         autocorrecao: auto ? { motivos: auto.motivos, texto_exato_fixo: true } : null,
         areas: areas.length ? areas : null,
+        recorte_da_area: recorteDaArea ? "a imagem 2 é o recorte ampliado da área marcada" : null,
         nova_foto_de_fundo: fotoFundo ? resumoDaFoto(fotoFundo) : null,
         lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, leva_logo: levaLogo(t, ordem) },
         verificacao_atual: atualVersao.verificacao,
-        marca: { paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null },
+        marca: { nome: nomeDaMarca || null, paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null },
+        campanha: campanhaDoAjuste ? { nome: campanhaDoAjuste.nome, oferta: briefingDaCampanha(campanhaDoAjuste).oferta || null } : null,
       }),
-      imagens: [{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }],
+      imagens: ([{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }] as ImagemEntrada[]).concat(recorteDaArea ? [recorteDaArea] : []),
     }],
     esquemaJson: ESQUEMA_AJUSTE,
     maxTokensSaida: 3_000,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });
-  const a = (dir.json ?? {}) as { instrucao_edicao?: string; texto_exato?: string; memoria?: string };
+  const a = (dir.json ?? {}) as { instrucao_edicao?: string; texto_exato?: string; memoria?: string; entendi?: string; pergunta?: string };
+  const jev = await jevDoAjuste;
+  const custoDaLeitura = arred(dir.custoUsd + (jev ? jev.custo : 0));
+  // Frente AG: na dúvida, UMA pergunta curta e nenhuma imagem gerada (só a leitura foi paga).
+  const duvida = auto || confirmado ? null : duvidaDoAjuste(jev ? jev.resposta : null, { pergunta: a.pergunta, entendi: a.entendi });
+  if (duvida) {
+    const guardada: DuvidaGuardada = { ordem, pedido, pergunta: duvida.pergunta, em: new Date().toISOString() };
+    await mutarTrabalho(t.id, (x) => ({ direcao: { ...x.direcao, duvida_do_ajuste: guardada }, custo_usd: arred(num(x.custo_usd) + custoDaLeitura) }));
+    throw new ErroEstudio(
+      409,
+      "ajuste_com_duvida",
+      `${duvida.pergunta} Para seguir assim, responda "sim" no ajuste desta lâmina; ou escreva o pedido de outro jeito. Nenhuma imagem foi gerada.`,
+      { pergunta: duvida.pergunta, entendi: texto(a.entendi, 300) || null, motivo: duvida.motivo, custo_usd: custoDaLeitura },
+    );
+  }
   const instrucaoEdicao = texto(a.instrucao_edicao, 4000);
   if (!instrucaoEdicao) throw new ErroEstudio(502, "ajuste_vazio", "O diretor não devolveu a instrução de edição. Tente de novo.");
-  const novoTexto = auto ? card.texto_exato : texto(a.texto_exato, 1200) || card.texto_exato;
+  // Frente AG: o texto combinado não ganha letras da logo, nome da marca, letras do produto nem fato inventado.
+  const fiel = auto
+    ? null
+    : textoDoAjusteFiel(card.texto_exato, texto(a.texto_exato, 1200) || card.texto_exato, pedido, palavrasDaMarca([nomeDaMarca]), campanhaDoAjuste ? fontesConfirmadas(campanhaDoAjuste, [], "", null) : []);
+  const novoTexto = auto ? card.texto_exato : (fiel && fiel.texto) || card.texto_exato;
   const cardAjustado: CardDirecao = { ...card, texto_exato: novoTexto };
 
-  // O texto novo passa a valer na direcao, para a conferencia comparar certo.
+  // O texto novo passa a valer na direcao, para a conferencia comparar certo. A pergunta pendente (se havia) foi respondida.
   let base = t;
   if (novoTexto !== card.texto_exato) {
     base = await mutarTrabalho(t.id, (x) => ({
-      direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, texto_exato: novoTexto } : c)) },
-      custo_usd: arred(num(x.custo_usd) + dir.custoUsd),
+      direcao: { ...x.direcao, duvida_do_ajuste: null, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, texto_exato: novoTexto } : c)) },
+      custo_usd: arred(num(x.custo_usd) + custoDaLeitura),
     }));
   } else {
-    base = await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + dir.custoUsd) }));
+    base = await mutarTrabalho(t.id, (x) => ({
+      ...(x.direcao.duvida_do_ajuste ? { direcao: { ...x.direcao, duvida_do_ajuste: null } } : {}),
+      custo_usd: arred(num(x.custo_usd) + custoDaLeitura),
+    }));
   }
 
   // Edicao DENTRO do gerador sobre a versao atual (primeira imagem). A logo
@@ -5847,8 +6074,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
 
   return await gravarVersao(ch, base, cardAjustado, img, {
     origem: "ajuste",
-    instrucao: auto ? `Correção automática ${auto.rodada}: ${auto.motivos.join("; ")}` : pedido,
-    custoExtraUsd: dir.custoUsd,
+    instrucao: auto ? (auto.conversa ? auto.motivos.join("; ") : `Correção automática ${auto.rodada}: ${auto.motivos.join("; ")}`) : pedido,
+    custoExtraUsd: custoDaLeitura,
     referencias: idsReferencias,
     extra: {
       ...logoDoAjuste,
@@ -5856,6 +6083,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ...acabamentoDoAjuste,
       ...(auto ? { autocorrecao: auto } : {}),
       instrucao_edicao: instrucaoEdicao,
+      // Frente AG: o que o leitor entendeu e o que saiu do texto combinado (letras da logo, do produto, fato novo).
+      ...(a.entendi ? { entendi: texto(a.entendi, 300) } : {}),
+      ...(fiel && fiel.removidas.length ? { texto_removido: fiel.removidas } : {}),
       versao_editada: atualVersao.versao,
       uso_diretor: dir.usoId,
       tamanho: img.tamanho,
@@ -5863,6 +6093,50 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       areas: comMascara ? areas : undefined,
       imagem_id: fotoFundo?.id,
     },
+  });
+}
+
+/** Recorte ampliado da área marcada no ajuste (união das áreas, com folga), para o leitor ver o que está nela. */
+async function recorteDasAreas(png: Uint8Array, areas: Area[]): Promise<ImagemEntrada | null> {
+  if (!areas.length) return null;
+  const u = ampliar({
+    x0: Math.min(...areas.map((a) => a.x0)),
+    y0: Math.min(...areas.map((a) => a.y0)),
+    x1: Math.max(...areas.map((a) => a.x1)),
+    y1: Math.max(...areas.map((a) => a.y1)),
+  }, 0.03);
+  return await recortarQuadro({ bytes: png, mime: "image/png", nome: "area" }, { x0: u.x0 * 100, y0: u.y0 * 100, x1: u.x1 * 100, y1: u.y1 * 100 }, "area-marcada");
+}
+
+/**
+ * ajustar_texto { trabalho_id, ordem } (frente AG, 28/09): a mudança de texto
+ * ou de cor que a equipe aplicou na conversa com o diretor aparece na arte
+ * sem refazer a lâmina. Não existe camada de texto editável (o gerador desenha
+ * a lâmina inteira): a edição mais próxima é a da autocorreção, com máscara só
+ * na área do texto, e os pixels de fora (foto, fundo, logo) voltam do original.
+ * Uma edição de imagem, sem laço; a conferência vem depois, pela tela.
+ */
+async function ajustarTextoDaLamina(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  garantirEditavel(t);
+  const card = cardDaDirecao(t, ordem);
+  if (!versaoAtual(t, ordem)) throw new ErroEstudio(409, "card_sem_versao", "Gere esta lâmina antes de ajustar o texto.");
+  if (!card.layout) throw new ErroEstudio(409, "lamina_sem_layout", "Esta lâmina é antiga e não tem a área do texto marcada: use Refazer a lâmina.");
+  const l = card.layout;
+  const instrucao = [
+    `Reescreva o texto da arte EXATAMENTE assim, com a mesma grafia, os mesmos acentos e as mesmas quebras de linha, e nenhum outro texto: "${card.texto_exato}".`,
+    l.cor_texto ? `Cor do texto (título e apoio): ${l.cor_texto}.` : "",
+    l.cor_destaque ? `Cor de destaque (palavra-chave, número, preço, CTA): ${l.cor_destaque}.` : "",
+    "Mantenha a mesma fonte, o mesmo peso, o mesmo tamanho e a mesma posição do texto; só as letras e as cores mudam. Todo o resto fica igual: foto, fundo, logo, objetos e composição. Nunca escureça a foto nem ponha véu, sombra ou caixa atrás do texto. Sem travessão.",
+  ].filter(Boolean).join("\n");
+  const areas = areasDeDesenho(card, totalCards(t), false, quadroDoCard(t, card));
+  return await ajustarCard(ch, { trabalho_id: t.id, ordem, instrucao }, {
+    rodada: 1,
+    motivos: ["Ajuste de texto e cor pedido na conversa com o diretor"],
+    areas,
+    pedido_da_equipe: true,
+    conversa: true,
   });
 }
 
@@ -7305,6 +7579,8 @@ function resumoDaConferencia(v: VersaoCard | null): Record<string, unknown> | nu
     sobrando: ver.sobrando?.slice(0, 8) ?? [],
     logo_ok: ver.logo_ok ?? null,
     identidade: nota(ver.identidade),
+    // Frente AG: o aviso da navegação do carrossel (indicador ou ícones que não vieram).
+    navegacao: ver.navegacao && "aviso" in ver.navegacao ? ver.navegacao.aviso : null,
     descricao_visual: texto(ver.descricao_visual, 400) || null,
     motivos_da_autocorrecao: ver.autocorrecao?.precisa ? ver.autocorrecao.motivos : [],
   };
@@ -7330,6 +7606,32 @@ function hexDaPaleta(kit: Kit): string[] {
 }
 
 /**
+ * Apelidos das fotos para a conversa com o diretor (frente AG): F1, F2... as
+ * fotos do pedido da arte rápida (o mesmo código que a equipe viu), A1, A2...
+ * as do acervo. `apelidos` traduz o apelido (maiúsculo) para o valor gravado
+ * (id do acervo ou "pedido:<caminho>"); `rotuloDoValor` mostra a foto na tela.
+ */
+function apelidosDasFotos(arte: ArteRapida | null, acervo: ImagemAcervo[]) {
+  const apelidos: Record<string, string> = {};
+  const rotuloDoValor: Record<string, string> = {};
+  const fotosDoPedido: { apelido: string; nome: string; valor: string }[] = [];
+  for (const f of (arte?.arquivos ?? []).filter((a) => a.papel === "foto")) {
+    const valor = f.imagem_id ? f.imagem_id : f.caminho ? `${PREFIXO_FOTO_DO_PEDIDO}${f.caminho}` : "";
+    if (!valor || !f.codigo) continue;
+    const apelido = f.codigo.toUpperCase();
+    apelidos[apelido] = valor;
+    rotuloDoValor[valor] = `${apelido} (${texto(f.nome, 60)})`;
+    fotosDoPedido.push({ apelido, nome: texto(f.nome, 80), valor });
+  }
+  acervo.forEach((a, i) => {
+    const apelido = `A${i + 1}`;
+    apelidos[apelido] = a.id;
+    if (!rotuloDoValor[a.id]) rotuloDoValor[a.id] = `${apelido} (${texto(a.nome, 60)})`;
+  });
+  return { apelidos, rotuloDoValor, fotosDoPedido };
+}
+
+/**
  * conversar { trabalho_id, mensagem, ordem? }: o diretor de arte lê o
  * conteúdo inteiro do trabalho (conceito, fio visual, lâminas com texto
  * exato, layout, fotos reais, referências, conferências), a marca e o acervo,
@@ -7345,8 +7647,14 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!t.direcao.cards.length) throw new ErroEstudio(409, "trabalho_sem_direcao", "Este trabalho ainda não tem direção de arte. Prepare a direção antes de conversar.");
   const total = totalCards(t);
   const ordemPedida = Number(corpo.ordem);
-  const emFoco = Number.isInteger(ordemPedida) && t.direcao.cards.some((c) => c.ordem === ordemPedida) ? ordemPedida : null;
+  // Frente AG: arte de uma lâmina só está sempre em foco (o diretor olha a imagem dela).
+  const emFoco = Number.isInteger(ordemPedida) && t.direcao.cards.some((c) => c.ordem === ordemPedida)
+    ? ordemPedida
+    : t.direcao.cards.length === 1
+      ? t.direcao.cards[0].ordem
+      : null;
   const textoPodeMudar = pedidoMexeNoTexto(mensagem);
+  const arteRapida = arteRapidaDa(t.direcao);
 
   const conversaExistente = await conversaDoTrabalho(t, ch.userId, false);
   const idsDasFotos = t.direcao.cards.flatMap((c) => c.imagens_ids ?? []);
@@ -7379,6 +7687,16 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const semCaixa = laminasSemCaixa(t, kit);
   const fotoPorId = new Map<string, ImagemAcervo>();
   for (const a of [...acervo, ...fotosEmUso]) fotoPorId.set(a.id, a);
+  // Frente AG: fotos por apelido (F1, F2 do pedido; A1, A2 do acervo). O modelo nunca recebe nem devolve id
+  // (agente-uuid-transposto); "troca a foto pela segunda" vira F2 e o servidor traduz.
+  const { apelidos, rotuloDoValor, fotosDoPedido } = apelidosDasFotos(arteRapida, [...acervo, ...fotosEmUso.filter((f) => !acervo.some((a) => a.id === f.id))]);
+  const rotuloDaFoto = (c: CardDirecao) => {
+    const id = (c.imagens_ids ?? [])[0];
+    if (id) return rotuloDoValor[id] || "foto do acervo";
+    const fundo = (c.fotos_livres ?? []).filter((f) => f.papel === "fundo")[0];
+    if (fundo) return rotuloDoValor[`${PREFIXO_FOTO_DO_PEDIDO}${fundo.caminho}`] || "foto enviada pela equipe";
+    return "cena desenhada, sem foto real";
+  };
 
   const laminas = t.direcao.cards.slice().sort((a, b) => a.ordem - b.ordem).map((bruto) => {
     const c = comLayout(bruto, total);
@@ -7394,9 +7712,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       blocos: c.blocos ?? [],
       layout: c.layout,
       evitar: c.evitar || null,
-      foto_real: foto ? { id: foto.id, resumo: resumoDaFoto(foto) } : null,
+      foto_real: foto || (c.fotos_livres ?? []).some((f) => f.papel === "fundo") ? { apelido: rotuloDaFoto(c), resumo: foto ? resumoDaFoto(foto) : null } : null,
       fotos_da_equipe: (c.fotos_livres ?? []).map((f) => ({ papel: f.papel, nota: f.nota ?? null })),
       referencias_proprias: (c.referencias_ids ?? []).length,
+      leva_logo: levaLogo(t, c.ordem),
+      // Frente AG: o que está escrito hoje na arte (lido na conferência), sem as letras da logo.
+      texto_lido_na_arte: atual && !(atual.verificacao as VerificacaoPendente)?.pendente ? texto((atual.verificacao as Verificacao).texto_lido, 800) || null : null,
       versoes: versoes.length,
       ultima_conferencia: resumoDaConferencia(atual),
       ultimo_ajuste: ultimoAjuste ? texto(ultimoAjuste.instrucao, 300) : null,
@@ -7418,7 +7739,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       carrossel_continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
       total_de_laminas: total,
       ultimo_pedido_ao_diretor: t.direcao.pedido ?? null,
-      campanha: campanha ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade } : null,
+      // Frente AG: o pedido que deu origem ao trabalho (arte rápida) e o que a conferência avisou.
+      pedido_original: arteRapida ? arteRapida.pedido : null,
+      avisos_da_conferencia_do_pedido: t.direcao.conferencia_do_pedido?.avisos ?? [],
+      campanha: campanha
+        ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade, oferta: briefingDaCampanha(campanha).oferta || null }
+        : null,
     },
     item: item
       ? {
@@ -7443,7 +7769,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     referencias_escolhidas: refsEscolhidas.map((r) => ({ id: r.id, papel: r.papel ?? null, tecnica: texto(r.leitura, 500) || null })),
     referencias_do_cliente: (((refsDoCliente as { data: unknown }).data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
       .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 400), tags: r.tags })),
-    acervo: acervo.map((a) => ({ id: a.id, nome: texto(a.nome, 80), categoria: a.categoria, descricao: texto(a.descricao, 200) || null })),
+    // Frente AG: fotos pelo apelido (foto_acervo = apelido); as do pedido primeiro, na ordem em que a equipe mandou.
+    fotos_do_pedido: fotosDoPedido.map((f) => ({ apelido: f.apelido, nome: f.nome })),
+    acervo: acervo.map((a) => ({ apelido: (rotuloDoValor[a.id] || "").split(" ")[0] || null, nome: texto(a.nome, 80), categoria: a.categoria, descricao: texto(a.descricao, 200) || null })),
     // Com o cérebro no sistema, a lista crua da memória não se repete aqui.
     memoria_do_diretor: doDiretor.usouCerebro ? undefined : memoria,
   };
@@ -7501,13 +7829,33 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     criadoPor: ch.userId,
   });
   const bruto = (r.json ?? {}) as Record<string, unknown>;
-  const { mudancas, avisos } = normalizarMudancas(bruto.mudancas, {
+  const textoAtualPorLamina: Record<number, string> = {};
+  for (const c of t.direcao.cards) textoAtualPorLamina[c.ordem] = c.texto_exato || "";
+  const normalizadas = normalizarMudancas(traduzirApelidosDeFoto(bruto.mudancas, apelidos), {
     ordens: t.direcao.cards.map((c) => c.ordem),
     paleta: hexDaPaleta(kit),
     acervo: new Set(acervo.map((a) => a.id).concat(fotosEmUso.map((a) => a.id))),
     permitirTexto: textoPodeMudar,
     semCaixa,
     continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
+    fotosDoPedido: new Set(fotosDoPedido.map((f) => f.valor)),
+    // Frente AG: o texto novo só com o que veio da mensagem, do texto atual, do pedido original e da campanha.
+    fontesDoTexto: {
+      atual: textoAtualPorLamina,
+      pedido: mensagem,
+      confirmados: [arteRapida ? arteRapida.pedido : "", ...fontesConfirmadas(campanha, [], "", item)].filter(Boolean),
+      marca: palavrasDaMarca([marca.nomeCliente]),
+    },
+  });
+  const avisos = normalizadas.avisos;
+  // Frente AG: cada mudança leva o valor de hoje (a tela mostra antes e depois) e o nome da foto nova.
+  const mudancas: MudancaProposta[] = normalizadas.mudancas.map((m) => {
+    const foto = m.campos.foto_acervo;
+    return {
+      ...m,
+      antes: antesDaMudanca(t.direcao, m, rotuloDaFoto),
+      ...(foto && foto !== SEM_FOTO ? { rotulos: { foto_acervo: rotuloDoValor[foto] || "foto do acervo" } } : {}),
+    };
   });
   const resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
@@ -7581,13 +7929,16 @@ async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
   const idsDeFoto = brutas
     .map((m) => (m && typeof m === "object" ? ((m as { campos?: Record<string, unknown> }).campos ?? {}).foto_acervo : null))
     .map((v) => texto(v, 64))
-    .filter((v) => v && v !== SEM_FOTO);
+    .filter((v) => v && v !== SEM_FOTO && UUID.test(v));
   const fotos = idsDeFoto.length ? await imagensDoAcervo(t.client_id, idsDeFoto) : [];
   const total = totalCards(t);
+  const arteRapida = arteRapidaDa(t.direcao);
   const { mudancas, avisos } = normalizarMudancas(brutas, {
     ordens: t.direcao.cards.map((c) => c.ordem),
     paleta: hexDaPaleta(kit),
     acervo: new Set(fotos.map((f) => f.id)),
+    // Frente AG: foto do pedido da arte rápida ("troca a foto pela segunda").
+    fotosDoPedido: new Set(apelidosDasFotos(arteRapida, []).fotosDoPedido.map((f) => f.valor)),
     // Quem clica em Aplicar viu o texto novo no cartão da mudança.
     permitirTexto: true,
     semCaixa: laminasSemCaixa(t, kit),
@@ -8177,6 +8528,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   gerar_card: gerarCard,
   conferir_card: conferirCard,
   ajustar_card: (ch, corpo) => ajustarCard(ch, corpo),
+  // Frente AG: texto e cor aplicados na conversa aparecem só na área do texto (sem refazer a lâmina).
+  ajustar_texto: ajustarTextoDaLamina,
   corrigir_card: corrigirCard,
   legenda,
   entregar,
@@ -8213,7 +8566,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
-const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
+const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

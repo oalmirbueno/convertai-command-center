@@ -111,9 +111,14 @@ describe("custo do Jev na carteira", () => {
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
     // direcaoPedePessoa (Noul "a direção pede pessoa?", uma por geração da lâmina normal com
     // rosto escolhido, fora de laço). Cada pergunta, uma cobrança; nenhuma se repete.
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(6);
+    // + frente AG (28/09): a fidelidade do texto ao pedido na arte rápida (Score, só aviso, uma por direção)
+    // e a clareza do pedido de ajuste (Choice, em paralelo com o leitor, cobrada no .then; fora da autocorreção).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(8);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(8);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(6);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(7);
+    const ajuste = estudio.slice(estudio.indexOf("const jevDoAjuste"), estudio.indexOf("const dir = await chamarTexto({", estudio.indexOf("const jevDoAjuste")));
+    expect(ajuste).toContain("jevPerguntar({");
+    expect(ajuste).toContain("await cobrarJev(r,");
     // Cada jevPerguntar do Estúdio tem o seu cobrarJev logo depois (uma cobrança por pergunta).
     const perguntas = estudio.split("await jevPerguntar(").slice(1);
     for (const trecho of perguntas) expect(trecho.slice(0, 1200)).toContain("await cobrarJev(");

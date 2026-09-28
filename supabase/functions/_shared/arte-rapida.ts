@@ -390,8 +390,14 @@ export function perguntasDaArteRapida(p: PedidoDaArteRapida, campanhas: Campanha
   return { state, questions, campanhas: mapaCampanhas, papeis };
 }
 
-/** Confiança mínima para aceitar a campanha que o Jev achou no pedido. */
-export const CONFIANCA_MINIMA_DA_CAMPANHA = 0.5;
+/**
+ * Confiança mínima para aceitar a campanha que o Jev achou no pedido (frente
+ * AG, 28/09: "Automático" só com confiança alta; abaixo, só a marca e aviso).
+ */
+export const CONFIANCA_MINIMA_DA_CAMPANHA = 0.8;
+/** Confiança mínima para aceitar a peça (arte única ou carrossel) e o papel de um arquivo que o Jev escolheu. */
+export const CONFIANCA_MINIMA_DA_PECA = 0.7;
+export const CONFIANCA_MINIMA_DO_PAPEL = 0.7;
 
 export interface RespostaDeEscolha {
   choice?: string;
@@ -433,11 +439,15 @@ export function decidirArteRapida(
     } else {
       const id = perguntas ? Object.keys(perguntas.papeis).filter((k) => perguntas.papeis[k] === i)[0] : undefined;
       const doJev = id ? papelValido(r[id] && r[id].choice) : null;
-      if (doJev) {
+      const certeza = id ? confianca(r[id]) : null;
+      if (doJev && (certeza === null || certeza >= CONFIANCA_MINIMA_DO_PAPEL)) {
         papel = doJev;
         por = "jev";
       } else {
-        papel = papelPeloNome(a.nome) || "foto";
+        const peloNome = papelPeloNome(a.nome);
+        papel = peloNome || "foto";
+        // O Jev respondeu com pouca certeza: a regra decide e a equipe confere.
+        if (doJev && !peloNome && doJev !== papel) avisos.push(`Não ficou claro o papel de "${a.nome}": entrou como ${ROTULO_DO_PAPEL[papel].toLowerCase()}. Troque se for ${ROTULO_DO_PAPEL[doJev].toLowerCase()}.`);
       }
     }
     contagem[papel] += 1;
@@ -451,10 +461,12 @@ export function decidirArteRapida(
   if (p.peca !== "auto") {
     peca = p.peca;
     pecaPor = "equipe";
-  } else if (r.peca && (r.peca.choice === "unica" || r.peca.choice === "carrossel")) {
+  } else if (r.peca && (r.peca.choice === "unica" || r.peca.choice === "carrossel") && (confianca(r.peca) === null || (confianca(r.peca) as number) >= CONFIANCA_MINIMA_DA_PECA || !pecaPelaRegra(p.pedido))) {
     peca = r.peca.choice as PecaDaArteRapida;
     pecaPor = "jev";
     pecaConfianca = confianca(r.peca);
+    // Sem regra que decida e o Jev em dúvida: segue a escolha dele, com aviso.
+    if (pecaConfianca !== null && pecaConfianca < CONFIANCA_MINIMA_DA_PECA) avisos.push(`Não ficou claro se é arte única ou carrossel: fiz ${ROTULO_DA_PECA[peca].toLowerCase()}. Troque se precisar.`);
   } else {
     const pelaRegra = pecaPelaRegra(p.pedido);
     peca = pelaRegra || (contagem.foto > 2 ? "carrossel" : "unica");
@@ -490,13 +502,17 @@ export function decidirArteRapida(
 // ------------------------------------------------------------------ diretor
 
 export const INSTRUCOES_DA_ARTE_RAPIDA = `ARTE RÁPIDA (pedido avulso, fora do plano do mês)
-- O conteúdo vem de \`item.pedido_avulso\`: o pedido da equipe, os textos dos arquivos e as imagens anexadas (nesta mensagem, na ordem dos códigos). Use só o que está ali e no contexto do cliente: preço, data, hora, local, nome de pessoa e oferta exatamente como vieram; nunca invente um dado que falta (deixe de fora).
+O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pediu "90% off, oferta por tempo limitado, algo bem agressivo, com selo" e a direção escreveu o contrário).
+- Ordem de quem vale: 1) \`item.pedido_avulso.pedido\` (o que a equipe pediu, com as palavras dela); 2) a campanha em \`item.campanha\`; 3) a marca. O que o pedido manda pôr ENTRA na arte (desconto, percentual, prazo, preço, selo, tom agressivo), mesmo que a campanha ou uma regra da marca diga outra coisa; nunca escreva o oposto do pedido. Quando o pedido bater numa regra da marca ou da campanha (ex.: "sem urgência"), siga o pedido e diga o conflito em \`avisos_para_a_equipe\`.
+- Só entra o que está no pedido, nos textos dos arquivos, na campanha escolhida ou na marca: preço, percentual, data, hora, local, loja, site, nome de pessoa, produto, especificação e promessa (frete, parcelamento, garantia, brinde) exatamente como vieram. Nunca invente um dado que falta: deixe de fora e diga em \`avisos_para_a_equipe\` o que faltou.
+- Você não pesquisa na internet: se o pedido pede especificações ou dados que não vieram (ex.: "pesquisa o que esse mouse faz"), não invente; peça em \`avisos_para_a_equipe\` (ex.: "Mande as especificações do mouse para entrarem na arte").
+- O pedido pode vir do ditado por voz, com palavras trocadas pelo som ("sell" ou "seleo" = selo; "shop" = a loja da marca). Entenda pelo contexto; se uma palavra não fizer sentido, deixe a parte dela de fora e pergunte em \`avisos_para_a_equipe\`. Nome de loja, site ou marketplace que não aparece no pedido escrito com clareza nem no contexto nunca vai para a arte.
 - Peça: \`item.pedido_avulso.peca\` manda. "unica" é exatamente 1 card. "carrossel" é a quantidade que o conteúdo pede (3 a 7) ou \`item.quantidade_de_laminas_pedida\`.
-- Fotos do pedido (códigos F1, F2...): fotos reais que entram como estão, nunca refeitas e nunca escurecidas. Para usar uma numa lâmina, ponha o código em imagem_acervo (ex.: "F1") e escreva o layout com o texto na área calma da foto. Toda foto do pedido aparece em alguma lâmina; em arte única, a F1 é a base.
+- Fotos do pedido (códigos F1, F2...): fotos reais que entram como estão, nunca refeitas e nunca escurecidas. Para usar uma numa lâmina, ponha o código em imagem_acervo (ex.: "F1") e escreva o layout com o texto na área calma da foto. Toda foto do pedido aparece em alguma lâmina; em arte única, a F1 é a base. Letras impressas no produto da foto (modelo, marca do fabricante) nunca viram texto da arte.
 - Logos do pedido (L1, L2...): logos de parceiros, patrocinadores ou do evento, anexadas pela equipe. Entram como estão, alinhadas e legíveis (faixa de logos na base ou junto do bloco de texto), sempre com a logo da marca do cliente também. Diga no layout onde ficam; nunca invente logo.
 - Arte a melhorar (A1...): a arte que o cliente mandou. Leia o texto e a intenção dela e refaça com a identidade da marca (fontes, cores, logo), mais clara e profissional, mantendo todas as informações.
 - Referência (R1...): composição ou clima para seguir; nunca copie texto nem marca dela.
-- Campanha: com \`item.campanha\`, a peça é daquela campanha (tema, oferta, preço, cores de apoio e selo) e o selo entra pequeno, sem poluir.`;
+- Campanha: com \`item.campanha\`, a peça é daquela campanha (tema, cores de apoio e selo) e o selo entra pequeno, sem poluir. O preço e a oferta da campanha entram quando o pedido não disser outra coisa; o que o pedido disser vale sobre a campanha.`;
 
 /** Contexto do pedido para o diretor (vai em item.pedido_avulso). */
 export function pedidoParaODiretor(arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos">, documentos: DocumentoDaArteRapida[]) {

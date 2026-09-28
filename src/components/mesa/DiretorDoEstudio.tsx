@@ -4,7 +4,7 @@ import { Check, Loader2, MessageSquare, RefreshCw, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { custoDaResposta, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { chamarFuncao, custoDaResposta, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Ditado } from "./Ditado";
@@ -17,6 +17,7 @@ import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import {
+  ajustarTextoDaLamina,
   aplicarMudancasDoDiretor,
   ATALHOS_DO_DIRETOR,
   camposParaMostrar,
@@ -25,7 +26,9 @@ import {
   lerConversaDoDiretor,
   marcarPedidoAoDiretor,
   mudancaMexeNoTexto,
+  mudancaSoDeTexto,
   ordensParaRefazer,
+  partesDoAjusteDeTexto,
   partesDaConversaDoDiretor,
   refazFundoContinuo,
   rotuloDeRefazer,
@@ -194,6 +197,30 @@ export default function DiretorDoEstudio({
     }
   };
 
+  /**
+   * Frente AG: mudança só de texto e cor. Grava na direção e muda a arte só na
+   * área do texto (a foto, a cena e a logo ficam); depois confere, sem laço.
+   */
+  const aplicarEAjustarTexto = async (m: MensagemDoDiretor, mud: MudancaDoDiretor, chaveDoBotao: string) => {
+    setAplicando(chaveDoBotao);
+    try {
+      await aplicarNoServidor(m, [mud], false);
+      const r = await ajustarTextoDaLamina(trabalho.id, mud.ordem as number);
+      onAtualizar();
+      let custo = custoDaResposta(r) || 0;
+      try {
+        const c = await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalho.id, ordem: mud.ordem });
+        custo += custoDaResposta(c) || 0;
+      } catch {
+        // A conferência é aviso: a arte ajustada já está gravada.
+      }
+      onAtualizar();
+      return { custo_usd: custo };
+    } finally {
+      setAplicando(null);
+    }
+  };
+
   const refazerSo = async (ordens: number[], chaveDoBotao: string) => {
     setAplicando(chaveDoBotao);
     try {
@@ -212,6 +239,8 @@ export default function DiretorDoEstudio({
     const campos = camposParaMostrar(mud);
     const ordens = ordensParaRefazer([mud]);
     const chaveDoBotao = `${m.id}:${mud.id}`;
+    // Frente AG: texto e cor numa lâmina que já tem arte mudam só na área do texto.
+    const soTexto = mudancaSoDeTexto(mud) && (trabalho.cards || []).some((v) => v.ordem === mud.ordem);
     return (
       <div key={mud.id} className={`min-w-0 rounded-lg border bg-background p-2.5 ${aplicada ? "border-success/40" : "border-border"}`} data-mudanca={mud.id}>
         <div className="flex min-w-0 items-start">
@@ -221,11 +250,20 @@ export default function DiretorDoEstudio({
         {mud.motivo && <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{mud.motivo}</p>}
         <dl className="mt-2 space-y-1">
           {campos.map((c) => (
-            <div key={c.campo} className="min-w-0 text-[11.5px] leading-snug [overflow-wrap:anywhere]">
+            <div key={c.campo} className="min-w-0 text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-campo-da-mudanca={c.campo}>
               <dt className="inline font-medium">{c.rotulo}: </dt>
-              <dd className="inline text-muted-foreground">
+              {/* Frente AG: antes e depois, para a equipe ver que só isto muda. */}
+              {c.antes !== null && (
+                <dd className="text-muted-foreground line-through decoration-muted-foreground/60" data-antes>
+                  <span className="sr-only">Antes: </span>
+                  {c.hexAntes && <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm border border-border align-middle" style={{ backgroundColor: c.hexAntes }} aria-hidden="true" />}
+                  <span className="whitespace-pre-line">{c.antes || "vazio"}</span>
+                </dd>
+              )}
+              <dd className={c.antes !== null ? "text-foreground" : "inline text-muted-foreground"} data-depois>
+                {c.antes !== null && <span className="sr-only">Depois: </span>}
                 {c.hex && <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm border border-border align-middle" style={{ backgroundColor: c.hex }} aria-hidden="true" />}
-                {c.valor}
+                <span className={c.campo === "texto_exato" ? "whitespace-pre-line" : undefined}>{c.valor}</span>
               </dd>
             </div>
           ))}
@@ -267,9 +305,23 @@ export default function DiretorDoEstudio({
               {aplicando === chaveDoBotao ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
               Aplicar
             </Button>
+            {soTexto && (
+              <span className="mb-1 mr-1.5">
+                <BotaoComCusto
+                  rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" />Aplicar e ajustar o texto</>}
+                  titulo="Aplicar e ajustar só o texto"
+                  descricao="Grava a mudança e edita só a área do texto da lâmina: a foto, a cena e a logo ficam como estão. É uma edição de imagem (não há camada de texto), mais barata que refazer a lâmina."
+                  className="h-8 px-2.5 text-[11.5px]"
+                  disabled={travado}
+                  partes={() => partesDoAjusteDeTexto(catalogo, trabalho.modelo_imagem_id, trabalho.qualidade)}
+                  executar={() => aplicarEAjustarTexto(m, mud, `${chaveDoBotao}:texto`)}
+                />
+              </span>
+            )}
             {ordens.length > 0 && (
               <span className="mb-1">
                 <BotaoComCusto
+                  variant={soTexto ? "outline" : undefined}
                   rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" />{rotuloDeRefazer(ordens)}</>}
                   titulo={rotuloDeRefazer(ordens)}
                   descricao={
