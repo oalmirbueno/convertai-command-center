@@ -271,7 +271,7 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
 
   return (
     <div
-      className={juntar("relative min-w-0 space-y-5 pb-6", arrastando && "rounded-lg outline-dashed outline-2 outline-primary/60")}
+      className={juntar("relative min-w-0 space-y-6 pb-6", arrastando && "rounded-lg outline-dashed outline-2 outline-primary/60")}
       onDragOver={(e) => {
         e.preventDefault();
         if (!arrastando) setArrastando(true);

@@ -137,7 +137,7 @@ export default function EtapaResultados({ irPara }: { irPara: IrPara }) {
   };
 
   return (
-    <div className="min-w-0 space-y-5 pb-6">
+    <div className="min-w-0 space-y-6 pb-6">
       <Secao
         titulo="Resultados"
         descricao={`${gerados.length} ${gerados.length === 1 ? "vídeo" : "vídeos"} · ${naEdicao} na Edição · ${naFila} na fila`}

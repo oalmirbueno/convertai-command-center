@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { EstadoVazio } from "@/components/sistema/Estados";
-import { botao, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import {
   aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, salvarEPublicarRitual,
   type ClienteDoAgente,
@@ -130,12 +130,12 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
         {tarefas.map((t, i) => (
           <li key={i} className="flex items-start">
             <div className="mr-2 min-w-0 flex-1">
-              <p className="text-[12px] font-medium text-foreground">{t.titulo}</p>
-              {t.passo && <p className="text-[11px] leading-snug text-muted-foreground">{t.passo}</p>}
-              <p className="text-[10.5px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
+              <p className="text-[13px] font-medium text-foreground">{t.titulo}</p>
+              {t.passo && <p className="text-[12px] leading-snug text-muted-foreground">{t.passo}</p>}
+              <p className="text-[11.5px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
             </div>
             {criadas.includes(i) ? (
-              <span className="inline-flex shrink-0 items-center text-[11px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
+              <span className="inline-flex shrink-0 items-center text-[12px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
             ) : (
               <button type="button" onClick={() => void criar(i)} disabled={criando !== null} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
                 {criando === i ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ListPlus className="mr-1 h-3 w-3" />} Criar tarefa
@@ -179,23 +179,23 @@ function SugestoesRecentes() {
         type="button"
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
-        className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-[12px] font-medium text-primary hover:opacity-80"
+        className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-[13px] font-medium text-primary hover:opacity-80"
       >
         <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", aberto ? "rotate-180" : "")} />
         Tarefas sugeridas pelos rituais dos últimos 10 dias
       </button>
       {aberto && (
         <div className="mt-2 space-y-2">
-          <div className="flex items-center text-[11px] text-muted-foreground">
+          <div className="flex items-center text-[12px] text-muted-foreground">
             <span className="mr-2 min-w-0 flex-1">Cada sugestão nasce de uma promessa do ritual. Vira tarefa só quando alguém da equipe cria.</span>
             <button type="button" onClick={() => void refetch()} className={botao.icone} aria-label="Recarregar">
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             </button>
           </div>
-          {!isFetching && data.length === 0 && <p className="text-[11px] text-muted-foreground">Nenhuma sugestão nos rituais recentes.</p>}
+          {!isFetching && data.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma sugestão nos rituais recentes.</p>}
           {data.map((r) => (
             <div key={r.id} className="rounded-md border border-border p-2.5">
-              <p className="text-[12px] font-medium text-foreground">{r.nome} <span className="font-normal text-muted-foreground">· {r.titulo} · {new Date(r.quando).toLocaleDateString("pt-BR")}</span></p>
+              <p className="text-[13px] font-medium text-foreground">{r.nome} <span className="font-normal text-muted-foreground">· {r.titulo} · {new Date(r.quando).toLocaleDateString("pt-BR")}</span></p>
               <TarefasDoRitual
                 clientId={r.clientId}
                 reportId={r.id}
@@ -417,7 +417,7 @@ export default function AgenteDaCentral() {
         <ul className="mt-2 divide-y divide-border rounded-md border border-border">
           {itens.map((i) => (
             <li key={i.cliente.id}>
-              <label className="flex min-h-10 min-w-0 cursor-pointer items-center px-3 py-2 text-[13px] text-foreground">
+              <label className="flex min-h-10 min-w-0 cursor-pointer items-center px-3 py-2 text-[14px] text-foreground">
                 <input
                   type="checkbox"
                   className="mr-2.5 h-4 w-4 shrink-0 accent-primary"
@@ -426,7 +426,7 @@ export default function AgenteDaCentral() {
                   onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, incluir: e.target.checked, situacao: e.target.checked ? (x.preparo ? x.situacao : "fila") : "pulado" }))}
                 />
                 <span className="mr-2 min-w-0 flex-1 truncate">{i.cliente.nome}</span>
-                <span className={juntar("shrink-0 text-[11px]", corDaSituacao(i.situacao))}>
+                <span className={juntar("shrink-0 text-[12px]", corDaSituacao(i.situacao))}>
                   {["lendo", "aplicando", "publicando"].includes(i.situacao) && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                   {ROTULO[i.situacao]}
                 </span>
@@ -449,7 +449,7 @@ export default function AgenteDaCentral() {
         placeholder="Contexto que vale para todos (opcional)"
         aria-label="Contexto que vale para todos"
         rows={2}
-        className={juntar(campoTexto, "min-h-[64px]")}
+        className={juntar(campoTexto, conversa.campo, "min-h-[64px]")}
       />
       <ul className="space-y-2">
         {lidos.map((i) => {
@@ -466,8 +466,8 @@ export default function AgenteDaCentral() {
                 className="flex min-h-11 w-full min-w-0 cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left hover:bg-muted/60"
               >
                 <span className="mr-2 min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold text-foreground">{i.cliente.nome}</span>
-                  <span className={juntar("block text-[11px]", corDaSituacao(i.situacao))}>
+                  <span className="block truncate text-[14px] font-semibold text-foreground">{i.cliente.nome}</span>
+                  <span className={juntar("block text-[12px]", corDaSituacao(i.situacao))}>
                     {i.situacao === "perguntas"
                       ? faltam === 0 ? `${qtd} de ${qtd} respondidas` : `${qtd - faltam} de ${qtd} respondidas`
                       : ROTULO[i.situacao]}
@@ -488,14 +488,14 @@ export default function AgenteDaCentral() {
                         Acelera · {FASE[i.preparo.fase] ?? i.preparo.fase}
                       </span>
                     )}
-                    {i.preparo?.dossie_versao != null && <span className="mb-1 text-[11px] text-muted-foreground">dossiê v{i.preparo.dossie_versao}</span>}
+                    {i.preparo?.dossie_versao != null && <span className="mb-1 text-[12px] text-muted-foreground">dossiê v{i.preparo.dossie_versao}</span>}
                   </div>
-                  {i.preparo?.leitura.onde_estamos && <p className="text-[12px] leading-relaxed text-muted-foreground">{i.preparo.leitura.onde_estamos}</p>}
-                  {i.preparo?.dossie_aviso && <p className="mt-1 text-[11px] text-warning">{i.preparo.dossie_aviso}</p>}
+                  {i.preparo?.leitura.onde_estamos && <p className="text-[13px] leading-relaxed text-muted-foreground">{i.preparo.leitura.onde_estamos}</p>}
+                  {i.preparo?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.preparo.dossie_aviso}</p>}
                   {(i.preparo?.perguntas ?? []).map((p, k) => (
                     <div key={k} className="mt-3">
-                      <p className="text-[13px] font-medium text-foreground">{p.pergunta}</p>
-                      {p.por_que && <p className="text-[11px] text-muted-foreground">{p.por_que}</p>}
+                      <p className="text-[14px] font-medium text-foreground">{p.pergunta}</p>
+                      {p.por_que && <p className="text-[12px] text-muted-foreground">{p.por_que}</p>}
                       <textarea
                         value={i.respostas[k] ?? ""}
                         disabled={travado}
@@ -507,7 +507,7 @@ export default function AgenteDaCentral() {
                         })}
                         rows={2}
                         placeholder="Sua resposta"
-                        className={juntar(campoTexto, "mt-1 min-h-[64px]")}
+                        className={juntar(campoTexto, conversa.campo, "mt-1 min-h-[64px]")}
                       />
                     </div>
                   ))}
@@ -518,9 +518,9 @@ export default function AgenteDaCentral() {
                     onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, contexto: e.target.value }))}
                     rows={2}
                     placeholder="Contexto extra deste cliente (opcional)"
-                    className={juntar(campoTexto, "mt-3 min-h-[64px]")}
+                    className={juntar(campoTexto, conversa.campo, "mt-3 min-h-[64px]")}
                   />
-                  {i.erro && <p className="mt-1 text-[11px] text-destructive">{i.erro}</p>}
+                  {i.erro && <p className="mt-1 text-[12px] text-destructive">{i.erro}</p>}
                 </div>
               )}
             </li>
@@ -538,7 +538,7 @@ export default function AgenteDaCentral() {
         O agente incorpora as respostas no dossiê, escreve o ritual de cada cliente e publica no portal. Pergunta sem resposta fica de fora.
       </p>
       {semResposta > 0 && (
-        <p className="rounded-md bg-warning/10 px-3 py-2 text-[12px] text-warning">
+        <p className="rounded-md bg-warning/10 px-3 py-2 text-[13px] text-warning">
           {semResposta} de {totalDePerguntas} pergunta(s) sem resposta.{" "}
           <button type="button" onClick={() => setEtapa("responder")} className="cursor-pointer border-none bg-transparent p-0 font-medium text-warning underline">Responder agora</button>
         </p>
@@ -549,13 +549,13 @@ export default function AgenteDaCentral() {
           return (
             <li key={i.cliente.id} className="px-3 py-2">
               <div className="flex min-w-0 items-center">
-                <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{i.cliente.nome}</span>
-                <span className={juntar("shrink-0 text-[11px]", corDaSituacao(i.situacao))}>
+                <span className="mr-2 min-w-0 flex-1 truncate text-[14px] text-foreground">{i.cliente.nome}</span>
+                <span className={juntar("shrink-0 text-[12px]", corDaSituacao(i.situacao))}>
                   {["aplicando", "publicando"].includes(i.situacao) && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                   {i.situacao === "perguntas" ? `${qtd - perguntasSemResposta(i)} de ${qtd} respondidas` : ROTULO[i.situacao]}
                 </span>
               </div>
-              {i.erro && <p className="mt-0.5 text-[11px] text-destructive">{i.erro}</p>}
+              {i.erro && <p className="mt-0.5 text-[12px] text-destructive">{i.erro}</p>}
             </li>
           );
         })}
@@ -575,11 +575,11 @@ export default function AgenteDaCentral() {
             return (
               <li key={i.cliente.id} className="rounded-md border border-border p-3">
                 <div className="flex min-w-0 flex-wrap items-center">
-                  <p className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">{i.cliente.nome}</p>
+                  <p className="mr-2 min-w-0 truncate text-[14px] font-semibold text-foreground">{i.cliente.nome}</p>
                   <span className={juntar(etiqueta, "mr-2", i.publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
                     {i.publicado ? "Publicado no portal" : "Rascunho na fila da Central"}
                   </span>
-                  {i.aplicado?.dossie_versao != null && <span className="text-[11px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
+                  {i.aplicado?.dossie_versao != null && <span className="text-[12px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
                   <button
                     type="button"
                     onClick={() => void copiar(r.body).then((ok) => (ok ? toast.success(`Ritual de ${i.cliente.nome} copiado.`) : toast.error("Não consegui copiar.")))}
@@ -588,10 +588,10 @@ export default function AgenteDaCentral() {
                     <ClipboardCopy className="mr-1 h-3.5 w-3.5" /> Copiar
                   </button>
                 </div>
-                {r.title && <p className="mt-1.5 text-[12px] font-medium text-foreground">{r.title}</p>}
-                {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[11px] text-warning">{aviso}</p>}
-                {i.aplicado?.dossie_aviso && <p className="mt-1 text-[11px] text-warning">{i.aplicado.dossie_aviso}</p>}
-                <p className="mt-1.5 whitespace-pre-line text-[12.5px] leading-relaxed text-foreground/90">{r.body}</p>
+                {r.title && <p className="mt-1.5 text-[13px] font-medium text-foreground">{r.title}</p>}
+                {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">{aviso}</p>}
+                {i.aplicado?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.aplicado.dossie_aviso}</p>}
+                <p className="mt-1.5 whitespace-pre-line text-[13.5px] leading-relaxed text-foreground/90">{r.body}</p>
                 {i.reportId && (
                   <TarefasDoRitual
                     clientId={i.cliente.id}
@@ -649,7 +649,7 @@ export default function AgenteDaCentral() {
       )}
       {etapa === "aplicar" && (
         <>
-          <label className="mr-auto flex cursor-pointer items-center py-1 text-[12.5px] text-foreground">
+          <label className="mr-auto flex cursor-pointer items-center py-1 text-[13.5px] text-foreground">
             <input
               type="checkbox"
               className="mr-2 h-4 w-4 accent-primary"
@@ -689,7 +689,7 @@ export default function AgenteDaCentral() {
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.total ? Math.round((progresso.feito / progresso.total) * 100) : 0}%` }} />
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-[12px] text-muted-foreground">
             {rodando === "lendo" ? "Lendo" : "Aplicando"} {progresso.feito} de {progresso.total}. Dois por vez. Pode fechar: a rodada continua.
           </p>
         </div>
@@ -748,13 +748,13 @@ export default function AgenteDaCentral() {
             {!rodada ? (
               erroLista && !carregandoLista ? (
                 <div className="space-y-2">
-                  <p className="text-[12.5px] text-destructive">{erroLista}</p>
+                  <p className="text-[13.5px] text-destructive">{erroLista}</p>
                   <button type="button" onClick={() => void abrir(true)} className={botao.primario}>
                     <RefreshCw className="mr-1.5 h-4 w-4" /> Tentar de novo
                   </button>
                 </div>
               ) : (
-                <p className="flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lendo a carteira...</p>
+                <p className="flex items-center text-[13.5px] text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lendo a carteira...</p>
               )
             ) : etapa === "ler" ? conteudoLer : etapa === "responder" ? conteudoResponder : etapa === "aplicar" ? conteudoAplicar : conteudoCopiar}
           </PainelDoAgente>

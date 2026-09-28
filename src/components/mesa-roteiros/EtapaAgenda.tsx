@@ -8,7 +8,7 @@ import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ROTULO_DO_FORMATO, ROTULO_DO_STATUS, modoDoTipo, type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { roteiroDaPeca, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 1: a agenda. Lista as peças de vídeo da agenda do cliente (Reels,
@@ -108,25 +108,27 @@ export default function EtapaAgenda({
         )}
       </section>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5">
-        <Cabecalho
-          icone={<FileText className="h-4 w-4" />}
-          titulo="Roteiros avulsos e de outras datas"
-          estado={roteirosQ.isSuccess ? `${outros.length} ${outros.length === 1 ? "roteiro" : "roteiros"}` : undefined}
-          acoes={
-            arquivados > 0 ? (
-              <SeletorCompacto
-                rotulo="Mostrar roteiros"
-                opcoes={[
-                  { valor: "ativos", rotulo: "Ativos" },
-                  { valor: "todos", rotulo: "Com arquivados", contador: arquivados },
-                ]}
-                valor={filtro}
-                onEscolher={(v) => setFiltro(v === "todos" ? "todos" : "ativos")}
-              />
-            ) : null
-          }
-        />
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:avulsos:${clientId}`}
+        nivel={2}
+        icone={<FileText className="h-4 w-4" />}
+        titulo="Roteiros avulsos e de outras datas"
+        estado={roteirosQ.isSuccess ? `${outros.length} ${outros.length === 1 ? "roteiro" : "roteiros"}` : undefined}
+        resumo={roteirosQ.isSuccess ? `${outros.length} ${outros.length === 1 ? "roteiro" : "roteiros"}` : undefined}
+        acoes={
+          arquivados > 0 ? (
+            <SeletorCompacto
+              rotulo="Mostrar roteiros"
+              opcoes={[
+                { valor: "ativos", rotulo: "Ativos" },
+                { valor: "todos", rotulo: "Com arquivados", contador: arquivados },
+              ]}
+              valor={filtro}
+              onEscolher={(v) => setFiltro(v === "todos" ? "todos" : "ativos")}
+            />
+          ) : null
+        }
+      >
         {roteirosQ.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os roteiros" />}
         {roteirosQ.isError && (
           <EstadoDeErro
@@ -159,7 +161,7 @@ export default function EtapaAgenda({
             ))}
           </ul>
         )}
-      </section>
+      </BlocoRecolhivel>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { guardarFotosParaUsar } from "@/components/mesa-foto/UsoDaFoto";
 import { invalidarFotos } from "@/components/mesa-foto/fotoApi";
 import { EstadoVazio } from "@/components/sistema/Estados";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { AvisoDoRascunho, CabecalhoDaEtapa, MolduraDaFoto, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { DESTINOS, encaminhar, enderecoDoDestino, FUNCOES_DAS_TOMADAS, paraEncaminhar, type DestinoDoAtivo } from "./publicidadeApi";
@@ -29,6 +30,7 @@ export default function EtapaEnvio() {
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [enviando, setEnviando] = useState<DestinoDoAtivo | null>(null);
+  const [linhagemRecolhida, setLinhagemRecolhida] = useRecolhido(`mesa-publicidade:linhagem:${clientId}`, false);
   if (!campanha) return <SemCampanha etapa="o envio" />;
   const aprovadas = campanha.revisoes.filter((r) => r.decisao === "aprovada" && r.avaliacao.veredito !== "reprovada");
 
@@ -59,7 +61,7 @@ export default function EtapaEnvio() {
   };
 
   return (
-    <div className="min-w-0 space-y-5" data-etapa-publicidade="envio">
+    <div className="min-w-0 space-y-6" data-etapa-publicidade="envio">
       <CabecalhoDaEtapa
         titulo="Envio"
         ajuda="Leve as fotos aprovadas para a Mesa e para a Mesa Ads, com a linhagem registrada: campanha, versão do briefing, território, tomada, versão da foto e fontes do produto."
@@ -115,25 +117,32 @@ export default function EtapaEnvio() {
         </>
       )}
       {campanha.encaminhamentos.length > 0 && (
-        <section className="min-w-0 space-y-2" data-linhagem="">
+        <section className="min-w-0 space-y-2" data-linhagem="" data-recolhido={linhagemRecolhida ? "sim" : "nao"}>
           <CabecalhoDaEtapa
             nivel={3}
             titulo="Linhagem"
             ajuda="Cada foto enviada guarda de onde veio. Anúncio e verba seguem sem aprovação até a Mesa Ads aprovar."
             estado={!campanha.persistida ? "Rascunho: vale só nesta aba até o banco ser publicado." : `${campanha.encaminhamentos.length} ${campanha.encaminhamentos.length === 1 ? "envio" : "envios"}`}
+            recolher={{
+              recolhido: linhagemRecolhida,
+              onAlternar: () => setLinhagemRecolhida(!linhagemRecolhida),
+              resumo: `${campanha.encaminhamentos.length} ${campanha.encaminhamentos.length === 1 ? "envio" : "envios"}`,
+            }}
           />
-          <ul className="divide-y divide-border border-t border-border text-[12px]">
-            {campanha.encaminhamentos.map((e) => (
-              <li key={`${e.destino}:${e.imagem_id}`} className="py-1.5 leading-snug [overflow-wrap:anywhere]">
-                <span className="font-medium">{e.destino === "ads" ? "Mesa Ads" : "Mesa"}</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {rotuloDaFuncao(e.linhagem.funcao || null)} v{e.linhagem.versao} · território {e.linhagem.territorio_nome || "?"} · briefing v{e.linhagem.briefing_versao} ·{" "}
-                  {(e.linhagem.fontes_do_produto || []).length} fontes do produto · anúncio e verba sem aprovação
-                </span>
-              </li>
-            ))}
-          </ul>
+          {!linhagemRecolhida && (
+            <ul className="divide-y divide-border border-t border-border text-[12px]">
+              {campanha.encaminhamentos.map((e) => (
+                <li key={`${e.destino}:${e.imagem_id}`} className="py-1.5 leading-snug [overflow-wrap:anywhere]">
+                  <span className="font-medium">{e.destino === "ads" ? "Mesa Ads" : "Mesa"}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {rotuloDaFuncao(e.linhagem.funcao || null)} v{e.linhagem.versao} · território {e.linhagem.territorio_nome || "?"} · briefing v{e.linhagem.briefing_versao} ·{" "}
+                    {(e.linhagem.fontes_do_produto || []).length} fontes do produto · anúncio e verba sem aprovação
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>

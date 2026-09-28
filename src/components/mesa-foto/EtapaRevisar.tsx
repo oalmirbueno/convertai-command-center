@@ -11,6 +11,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, FotoInteira, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { Carregando } from "@/components/sistema/Estados";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { MenuDeUso, MOTIVOS_RAPIDOS } from "./UsoDaFoto";
 import {
   chaveDosEnsaios,
@@ -399,6 +400,7 @@ export default function EtapaRevisar() {
           <Carregando linhas={3} rotulo="Lendo os ensaios" />
         ) : lista.length ? (
           <Cartao titulo="Qual ensaio revisar?">
+            <RegiaoRolavel modo="lg" sobre="cartao" memoria={`mesa-foto:revisar:lista:${clientId}`} classeDeFora="lg:max-h-[65vh]">
             <ul className="space-y-1.5">
               {lista.map((e) => {
                 const r = resumoDoEnsaio(e);
@@ -414,6 +416,7 @@ export default function EtapaRevisar() {
                 );
               })}
             </ul>
+            </RegiaoRolavel>
           </Cartao>
         ) : (
           <Vazio

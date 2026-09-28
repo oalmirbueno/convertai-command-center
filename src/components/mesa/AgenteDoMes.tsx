@@ -158,7 +158,7 @@ const imagensDaMensagem = (m: MensagemDoAgente) =>
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
     <div
-      className={`min-w-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${
+      className={`min-w-0 rounded-2xl px-3.5 py-2.5 text-[14px] leading-[1.6] [overflow-wrap:anywhere] ${
         papel === "usuario" ? "ml-10 rounded-br-md bg-primary text-primary-foreground" : "mr-6 rounded-bl-md bg-muted text-foreground"
       }`}
     >
@@ -173,7 +173,7 @@ function LinhaDaDiferenca({ sinal, titulo, detalhe }: { sinal: "entra" | "sai" |
   const Icone = sinal === "entra" ? Plus : sinal === "sai" ? Minus : RefreshCw;
   const cor = sinal === "entra" ? "text-success" : sinal === "sai" ? "text-destructive" : "text-primary";
   return (
-    <li className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+    <li className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
       <Icone className={`mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 ${cor}`} />
       <span className="min-w-0 [overflow-wrap:anywhere]">
         <span className="font-medium">{titulo}</span>
@@ -222,7 +222,7 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
         <Wand2 className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Mudança sugerida na proposta{mudanca.periodo ? ` de ${periodoCurto(mudanca.periodo.inicio, mudanca.periodo.fim)}` : ""}
       </p>
-      {mudanca.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{mudanca.resumo}</p>}
+      {mudanca.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{mudanca.resumo}</p>}
       {d && (
         <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-background px-2.5 py-1">
           {d.entram.map((i) => <LinhaDaDiferenca key={`e-${i.tema_id}`} sinal="entra" titulo={i.tema} detalhe={`${diaCurto(i.data)} · ${formato(i.formato)}`} />)}
@@ -372,7 +372,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
     const c = i.campos || {};
     const o_que = [c.titulo || c.tema ? "título" : "", c.publico ? "público" : "", c.gancho ? "gancho" : "", c.cards && c.cards.length ? `${c.cards.length} ${c.cards.length === 1 ? "lâmina" : "lâminas"}` : "", c.cta ? "CTA" : "", c.copy ? "legenda" : ""].filter(Boolean).join(", ");
     return (
-      <li key={`t-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+      <li key={`t-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
         <PenLine className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           <span className="text-muted-foreground">Reescrever: </span>
@@ -393,7 +393,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         : `${i.data ? diaCurto(i.data) : "sem data"}${sinal === "formato" ? ` · ${i.formato} para ${i.formato_para_nome || i.formato_para || ""}` : ""}`;
     const Icone = sinal === "sai" ? Trash2 : sinal === "refaz" ? Sparkles : RefreshCw;
     return (
-      <li key={`${sinal}-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+      <li key={`${sinal}-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
         <Icone className={`mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 ${sinal === "sai" ? "text-destructive" : "text-primary"}`} />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {sinal === "refaz" && <span className="text-muted-foreground">Refazer: </span>}
@@ -411,7 +411,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
         Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
       </p>
-      {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {atual.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
         {atual.apagar.map((i) => linha(i, "sai"))}
         {atual.refazer.map((i) => linha(i, "refaz"))}
@@ -421,7 +421,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         {atual.editar_campanhas.map((c) => {
           const r = campanhasFeitas.find((x) => x.campanha_id === c.campanha_id);
           return (
-            <li key={`c-${c.campanha_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+            <li key={`c-${c.campanha_id}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
               <Wand2 className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <span className="min-w-0 [overflow-wrap:anywhere]">
                 <span className="text-muted-foreground">Campanha: </span>
@@ -543,10 +543,10 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
         <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Criar conteúdos · {criacao.itens.length}
       </p>
-      {criacao.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{criacao.resumo}</p>}
+      {criacao.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{criacao.resumo}</p>}
       <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-background px-2.5 py-1">
         {visiveis.map((i, k) => (
-          <li key={`${i.data}-${k}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+          <li key={`${i.data}-${k}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
             <Plus className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
             <span className="min-w-0 [overflow-wrap:anywhere]">
               <span className="font-medium">{i.tema}</span>
@@ -656,7 +656,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Gerar os conteúdos · {atual.meses.length} {atual.meses.length === 1 ? "mês" : "meses"}
       </p>
-      {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {atual.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       <p className="mt-1.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
         <span className="capitalize">{atual.meses.map((m) => nomeDoMes(m)).join(", ")}</span> · {atual.frequencia_semanal} por semana · cerca de {estimativa.total}{" "}
         {estimativa.total === 1 ? "publicação" : "publicações"}
@@ -958,8 +958,8 @@ export default function AgenteDoMes({
           <Sparkles className="h-4 w-4 text-primary" />
         </span>
         <div className="mr-3 min-w-0 flex-1">
-          <h2 className="truncate text-[14.5px] font-semibold">Agente do mês</h2>
-          <p className="truncate text-[11.5px] text-muted-foreground">
+          <h2 className="truncate text-[15px] font-semibold leading-5">Agente do mês</h2>
+          <p className="truncate text-[12.5px] leading-[18px] text-muted-foreground">
             {planejando ? "Planeja com você, seguindo o prompt geral do cliente" : "Cria conteúdos prontos para gravar na agenda"}
           </p>
         </div>
@@ -1038,12 +1038,12 @@ export default function AgenteDoMes({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Casca fixa do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
           <MensagensDoAgente ref={listaRef} rotulo="Conversa com o agente do mês" className="px-4 py-4">
-            {conversa.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo a conversa…</p>}
+            {conversa.isLoading && <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo a conversa…</p>}
             {conversa.isError && <AvisoDeErro erro={conversa.error} />}
             {conversaVazia && (
               <div className="mx-auto max-w-md py-8 text-center">
-                <p className="text-[14px] font-semibold">{planejando ? `Vamos planejar ${nome}?` : "O que o mês precisa?"}</p>
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                <p className="text-[15px] font-semibold">{planejando ? `Vamos planejar ${nome}?` : "O que o mês precisa?"}</p>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted-foreground">
                   {planejando
                     ? "Converse sobre estratégia, datas, campanhas, frequência e formatos. O agente lê o que já foi publicado e aprovado, as métricas, as campanhas e os hypes."
                     : "Peça em português. Os conteúdos chegam prontos para gravar na agenda."}
@@ -1052,7 +1052,7 @@ export default function AgenteDoMes({
             )}
             {lista.map((m) => {
               if (m.papel === "sistema") {
-                return <p key={m.id} className="text-center text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>;
+                return <p key={m.id} className="text-center text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>;
               }
               const imagens = imagensDaMensagem(m);
               const idsDaMsg = propostasDaMensagem(m);
@@ -1214,7 +1214,7 @@ export default function AgenteDoMes({
                         ? `Peça ou cole o material de ${nome}. Arraste arquivos e ZIP.`
                         : "Peça ao agente. Cole o material ou arraste arquivos, ZIP e prints."
                   }
-                  className="min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[14px] leading-[1.55] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 <div className="mt-1 flex min-w-0 items-center">
                   {!ajustando && <BotaoDeAnexarArquivos arquivos={arquivos} anexos={anexos} className="mr-1.5" />}

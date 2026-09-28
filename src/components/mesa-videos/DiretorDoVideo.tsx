@@ -11,7 +11,7 @@ import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campoTexto, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
 import { useProjetoDoDiretor } from "@/lib/mesa-videos/api";
 import { FASES_DO_DIRETOR, type FaseDoDiretor, type ProjetoDoDiretor } from "../../../supabase/functions/_shared/diretor-de-video";
 import type { IrPara } from "./MesaDeVideo";
@@ -153,13 +153,13 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
       }
     >
       {!mensagens.length && !pensando && (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground" data-diretor-vazio="">
+        <p className={juntar(conversa.apoio, "leading-relaxed")} data-diretor-vazio="">
           Conte o vídeo que quer (nicho, lugar, jeito). Ou escolha um kit e peça para o diretor completar.
         </p>
       )}
       {mensagens.map((m) => (
         <div key={m.id} className="min-w-0 space-y-2">
-          <div className={juntar("rounded-lg px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60")}>
+          <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
             <p className="whitespace-pre-wrap">{m.texto}</p>
             {m.perguntas && m.perguntas.length > 0 && (
               <ul className="mt-2 list-disc space-y-0.5 pl-4">
@@ -193,7 +193,7 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
         </div>
       ))}
       {pensando && (
-        <p className="mr-6 flex items-center px-1 text-[12px] text-muted-foreground">
+        <p className={juntar(conversa.apoio, "mr-6 flex items-center px-1")}>
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O diretor está pensando{fase === "pesquisa" ? " e pesquisando" : ""}...
         </p>
       )}

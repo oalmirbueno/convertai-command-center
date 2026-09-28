@@ -295,6 +295,7 @@ function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { pers
   return (
     <SeletorLateral
       titulo="Personas"
+      recolher={`mesa-foto:modelos:lista:${clientId}`}
       itens={itens}
       escolhido={escolhida}
       onEscolher={onEscolher}
@@ -841,6 +842,8 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
   return (
     <Secao
       titulo="1. Rodada lado a lado"
+      recolher={`mesa-foto:modelos:rodada:${clientId}`}
+      resumo={`${escolhidos.length} ${escolhidos.length === 1 ? "motor ligado" : "motores ligados"}`}
       ajuda="Cada motor gera uma candidata com a mesma ficha. Compare pele, olhos, mãos e cabelo e escolha a mais real como âncora. O que sair fica salvo mesmo se você sair da aba."
       acao={
         <BotaoComCusto
@@ -982,6 +985,8 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
       divisoria
       titulo="2. Folha de 6 vistas"
       descricao={semAncora ? "Escolha a âncora na rodada primeiro." : `${resumo.vistasProntas} de 6 prontas`}
+      recolher={`mesa-foto:modelos:folha:${clientId}`}
+      resumo={semAncora ? "sem âncora ainda" : `${resumo.vistasProntas} de 6 prontas`}
       ajuda={semAncora ? "A folha parte da âncora escolhida na rodada." : `A mesma pessoa em 6 vistas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Trocar de motor aumenta a deriva do rosto.`}
       acao={
         !semAncora && faltam.length > 0 ? (

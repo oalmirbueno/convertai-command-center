@@ -10,7 +10,7 @@ import { botao, campo, juntar, superficie, texto } from "@/components/sistema/es
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modoDoTipo, type EstruturaDoModelo } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useModelos, useRoteiros, type ModeloDeRoteiro } from "./roteirosApi";
-import { AvisoDoBanco, Cabecalho } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel, Cabecalho } from "./Comuns";
 
 /**
  * Etapa 5: memória (MEMORIA-E-TEMPLATES.md, de forma simples). Todo roteiro
@@ -97,25 +97,30 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-modelos="">
-      <section className="min-w-0 space-y-3">
-        <Cabecalho
-          icone={<UserRound className="h-4 w-4" />}
-          titulo="Modelos deste cliente"
-          ajuda="Todo roteiro aprovado vira modelo daqui, com estrutura, ritmo, direção e as falas como exemplo. Fica só com este cliente."
-          estado={modelosQ.isSuccess ? `${doCliente.length} ${doCliente.length === 1 ? "modelo" : "modelos"}` : undefined}
-        />
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:modelos:cliente:${clientId}`}
+        nivel={2}
+        divisoria={false}
+        icone={<UserRound className="h-4 w-4" />}
+        titulo="Modelos deste cliente"
+        ajuda="Todo roteiro aprovado vira modelo daqui, com estrutura, ritmo, direção e as falas como exemplo. Fica só com este cliente."
+        estado={modelosQ.isSuccess ? `${doCliente.length} ${doCliente.length === 1 ? "modelo" : "modelos"}` : undefined}
+        resumo={modelosQ.isSuccess ? `${doCliente.length} ${doCliente.length === 1 ? "modelo" : "modelos"}` : undefined}
+      >
         {modelosQ.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os modelos" />}
         {!modelosQ.isLoading && !doCliente.length && <EstadoVazio compacto titulo="Nenhum ainda." descricao="Aprove um roteiro na Revisão." />}
         {doCliente.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{doCliente.map(linha)}</ul>}
-      </section>
+      </BlocoRecolhivel>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5">
-        <Cabecalho
-          icone={<Building2 className="h-4 w-4" />}
-          titulo="Modelos da agência"
-          ajuda="Estrutura e ritmo que servem a qualquer cliente, sem dado privado. Sai do modelo: fala, legenda, CTA, nome, contato, número e oferta do cliente de origem."
-          estado={modelosQ.isSuccess ? `${daAgencia.length} ${daAgencia.length === 1 ? "modelo" : "modelos"}` : undefined}
-        />
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:modelos:agencia:${clientId}`}
+        nivel={2}
+        icone={<Building2 className="h-4 w-4" />}
+        titulo="Modelos da agência"
+        ajuda="Estrutura e ritmo que servem a qualquer cliente, sem dado privado. Sai do modelo: fala, legenda, CTA, nome, contato, número e oferta do cliente de origem."
+        estado={modelosQ.isSuccess ? `${daAgencia.length} ${daAgencia.length === 1 ? "modelo" : "modelos"}` : undefined}
+        resumo={modelosQ.isSuccess ? `${daAgencia.length} ${daAgencia.length === 1 ? "modelo" : "modelos"}` : undefined}
+      >
         {!modelosQ.isLoading && !daAgencia.length && <EstadoVazio compacto titulo="Nenhum ainda." />}
         {daAgencia.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{daAgencia.map(linha)}</ul>}
 
@@ -171,7 +176,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
             </div>
           )}
         </div>
-      </section>
+      </BlocoRecolhivel>
     </div>
   );
 }

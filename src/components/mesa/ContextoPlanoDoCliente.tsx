@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import { acaoDoAnexo, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { textoDoErro } from "@/lib/mesa/api";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AvisoDeErro, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { chaveDoHistorico, useInvalidarContexto } from "./contextoDoCliente";
@@ -43,15 +45,20 @@ export const PEDIDO_DO_CAMINHO =
 
 const dataCurta = (iso: string | null | undefined) => (iso ? `${String(iso).slice(8, 10)}/${String(iso).slice(5, 7)}` : "");
 
-function Bloco({ icone, titulo, dica, children }: { icone: ReactNode; titulo: string; dica?: string; children: ReactNode }) {
+/** Bloco do plano: sem caixa, título recolhível (lembrado por cliente) e a explicação no "?". */
+function Bloco({ chave, icone, titulo, dica, children }: { chave: string; icone: ReactNode; titulo: string; dica?: string; children: ReactNode }) {
+  const { clientId } = useMesa();
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:contexto:plano:${chave}:${clientId}`, false);
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-background p-3">
-      <p className="flex items-center text-[12.5px] font-semibold">
-        <span className="mr-1.5 shrink-0 text-primary">{icone}</span>
-        {titulo}
-      </p>
-      {dica && <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{dica}</p>}
-      <div className="mt-2.5 min-w-0">{children}</div>
+    <section className="min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0" data-recolhido={recolhido ? "sim" : "nao"}>
+      <CabecalhoDeSecao
+        nivel={3}
+        icone={icone}
+        titulo={titulo}
+        ajuda={dica}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido) }}
+      />
+      {!recolhido && <div className="mt-2.5 min-w-0">{children}</div>}
     </section>
   );
 }
@@ -72,7 +79,7 @@ export function VisorDoPacote({ pacote }: { pacote: PacoteExterno }) {
           ))}
         </ul>
       )}
-      <pre className="max-h-72 min-w-0 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-card p-2.5 text-[11.5px] leading-relaxed [overflow-wrap:anywhere]">{pacote.markdown}</pre>
+      <pre className="max-h-72 min-w-0 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2.5 text-[11.5px] leading-relaxed [overflow-wrap:anywhere]">{pacote.markdown}</pre>
       <div className="mt-2 flex flex-wrap items-center">
         <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void copiar()}>
           <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar
@@ -416,8 +423,8 @@ export default function ContextoPlanoDoCliente({ onPedirAoAgente }: { onPedirAoA
   };
   const d = plano.data;
   return (
-    <div className="min-w-0 space-y-3">
-      <Bloco icone={<Compass className="h-3.5 w-3.5" />} titulo="Começo do cliente" dica="O agente ao lado lê tudo o que o painel tem, define nicho e posicionamento com você e propõe o plano. Nada muda sem confirmar.">
+    <div className="min-w-0 space-y-4">
+      <Bloco chave="comeco" icone={<Compass className="h-3.5 w-3.5" />} titulo="Começo do cliente" dica="O agente ao lado lê tudo o que o painel tem, define nicho e posicionamento com você e propõe o plano. Nada muda sem confirmar.">
         {plano.isLoading && <div className="h-10 animate-pulse rounded-lg bg-muted" aria-label="Lendo o plano" />}
         {plano.isError && <AvisoDeErro erro={plano.error} />}
         {d && (
@@ -448,19 +455,19 @@ export default function ContextoPlanoDoCliente({ onPedirAoAgente }: { onPedirAoA
         </Button>
       </Bloco>
 
-      <Bloco icone={<Mapa className="h-3.5 w-3.5" />} titulo="Caminho e tech stack" dica="O que fazer primeiro, com que ferramenta e por quê. Custo só com fonte.">
+      <Bloco chave="caminho" icone={<Mapa className="h-3.5 w-3.5" />} titulo="Caminho e tech stack" dica="O que fazer primeiro, com que ferramenta e por quê. Custo só com fonte.">
         <Caminho clientId={clientId} caminho={d ? d.caminho : null} onPedirAoAgente={onPedirAoAgente} />
       </Bloco>
 
-      <Bloco icone={<Package className="h-3.5 w-3.5" />} titulo="Pacote para LLM externo" dica="Contexto do cliente, tarefa e instruções prontos para colar no ChatGPT ou no Claude. Google Meu Negócio sai com os dados de cadastro; o cadastro é feito com o dono.">
+      <Bloco chave="pacote" icone={<Package className="h-3.5 w-3.5" />} titulo="Pacote para LLM externo" dica="Contexto do cliente, tarefa e instruções prontos para colar no ChatGPT ou no Claude. Google Meu Negócio sai com os dados de cadastro; o cadastro é feito com o dono.">
         <Pacote clientId={clientId} tarefas={d ? d.tarefas : []} />
       </Bloco>
 
-      <Bloco icone={<Palette className="h-3.5 w-3.5" />} titulo="Identidade visual" dica="Prepara o briefing de identidade para o gerador externo e traz o brand book de volta para o kit.">
+      <Bloco chave="identidade" icone={<Palette className="h-3.5 w-3.5" />} titulo="Identidade visual" dica="Prepara o briefing de identidade para o gerador externo e traz o brand book de volta para o kit.">
         <Identidade clientId={clientId} identidade={d ? d.identidade : null} onMudou={mudou} />
       </Bloco>
 
-      <Bloco icone={<FolderTree className="h-3.5 w-3.5" />} titulo="Organizar arquivos" dica="Arquivos soltos do workspace vão para pastas por tipo (Marca, Fotos, Vídeos, Documentos...). Você confirma a lista antes.">
+      <Bloco chave="organizar" icone={<FolderTree className="h-3.5 w-3.5" />} titulo="Organizar arquivos" dica="Arquivos soltos do workspace vão para pastas por tipo (Marca, Fotos, Vídeos, Documentos...). Você confirma a lista antes.">
         <Organizar clientId={clientId} onMudou={mudou} />
       </Bloco>
     </div>

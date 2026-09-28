@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import EtapasDaEntrega from "@/components/ciclo/EtapasDaEntrega";
 import { RegiaoRolavel } from "@/components/sistema";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import {
   CYCLES, DICA_DA_ETAPA, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS,
   SERVICE_LABELS,
@@ -135,6 +136,11 @@ export default function ClientCycleSheet({
   const [etapaAberta, setEtapaAberta] = useState<number | null>(null);
   const [criandoTarefa, setCriandoTarefa] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  // Recolher (dono, 28/09): contexto, história e evolução lembram, por cliente, se estão abertos.
+  const idDaFolha = client?.id ? String(client.id) : "nenhum";
+  const [contextoRecolhido, setContextoRecolhido] = useRecolhido(`ciclo:antigo:contexto:${idDaFolha}`);
+  const [historiaRecolhida, setHistoriaRecolhida] = useRecolhido(`ciclo:antigo:historia:${idDaFolha}`);
+  const [evolucaoRecolhida, setEvolucaoRecolhida] = useRecolhido(`ciclo:antigo:evolucao:${idDaFolha}`);
 
   /**
    * O contexto de cada rotulo que veio de pendencia: por que a etapa
@@ -1302,10 +1308,15 @@ export default function ClientCycleSheet({
               {/* O que já está armado e o que saiu */}
               {(contexto0?.agendadas?.length || contexto0?.arquivos?.length) ? (
                 <>
-                  <p className="mt-5 text-[12px] font-medium text-muted-foreground">
-                    Contexto do cliente
-                  </p>
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-5">
+                    <TituloRecolhivel
+                      titulo="Contexto do cliente"
+                      recolhido={contextoRecolhido}
+                      onAlternar={() => setContextoRecolhido(!contextoRecolhido)}
+                      resumo={`${(contexto0?.agendadas?.length || 0) + (contexto0?.arquivos?.length || 0)} itens`}
+                    />
+                  </div>
+                  {!contextoRecolhido && <div className="mt-2 space-y-1.5">
                     {(contexto0?.agendadas || []).map((pub: any) => (
                       <div key={pub.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
                         <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -1332,7 +1343,7 @@ export default function ClientCycleSheet({
                         )}
                       </div>
                     ))}
-                  </div>
+                  </div>}
                 </>
               ) : null}
 
@@ -1488,9 +1499,15 @@ export default function ClientCycleSheet({
               )}
 
               {/* A história do cliente: cada passo, na ordem em que aconteceu */}
-              <p className="mt-5 text-[12px] font-medium text-muted-foreground">
-                História deste cliente
-              </p>
+              <div className="mt-5">
+                <TituloRecolhivel
+                  titulo="História deste cliente"
+                  recolhido={historiaRecolhida}
+                  onAlternar={() => setHistoriaRecolhida(!historiaRecolhida)}
+                  resumo={historia.length ? `${historia.length} ${historia.length === 1 ? "registro" : "registros"}` : "nada ainda"}
+                />
+              </div>
+              {!historiaRecolhida && <>
               <div className="mt-2">
                 <textarea
                   value={novaNota}
@@ -1539,17 +1556,22 @@ export default function ClientCycleSheet({
                   fechada e anotação passa a aparecer aqui, em ordem.
                 </p>
               )}
+              </>}
 
               {/* Evolução */}
-              <p className="mt-5 text-[12px] font-medium text-muted-foreground">
-                Evolução · {HISTORY_WEEKS} semanas
+              <div className="mt-5 flex min-w-0 items-center">
+                <TituloRecolhivel
+                  titulo={`Evolução · ${HISTORY_WEEKS} semanas`}
+                  recolhido={evolucaoRecolhida}
+                  onAlternar={() => setEvolucaoRecolhida(!evolucaoRecolhida)}
+                />
                 {streak > 0 && (
-                  <span className="ml-2 font-bold normal-case tracking-normal text-success">
+                  <span className="ml-2 shrink-0 text-[12px] font-bold text-success">
                     {streak} {streak === 1 ? "semana 100%" : "semanas 100%"}
                   </span>
                 )}
-              </p>
-              <div className="mt-2 flex items-end gap-1.5">
+              </div>
+              {!evolucaoRecolhida && <div className="mt-2 flex items-end gap-1.5">
                 {historyWeekKeys.map((key, index) => {
                   const fill = (historySets.get(`${client.id}:${key}`)?.size || 0) / totalSteps;
                   const start = addDays(realMonday, (index - (HISTORY_WEEKS - 1)) * 7);
@@ -1567,7 +1589,7 @@ export default function ClientCycleSheet({
                     </div>
                   );
                 })}
-              </div>
+              </div>}
 
               {servicos.length > 0 && (
                 <>

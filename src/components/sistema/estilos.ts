@@ -24,6 +24,26 @@ export const texto = {
   auxiliar: "text-[12px] leading-4 text-muted-foreground",
 } as const;
 
+/**
+ * Conversa com agente (dono, 28/09: "o texto está muito curtinho, não consigo
+ * ler bem"). Um tamanho só para toda conversa do painel: 14 px com altura de
+ * linha folgada, balão com respiro e a mesma forma em todo agente.
+ */
+export const conversa = {
+  /** Texto de mensagem (o TextoDoAgente já usa). */
+  mensagem: "text-[14px] leading-[1.6]",
+  /** Balão de mensagem: junte com `doUsuario` ou `doAgente`. */
+  balao: "min-w-0 rounded-xl px-3.5 py-2.5 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]",
+  /** Balão de quem pediu: à direita, com a cor da marca. */
+  doUsuario: "ml-8 bg-primary/10",
+  /** Balão do agente: quase a largura toda (texto longo lê melhor). */
+  doAgente: "mr-2 bg-secondary/60",
+  /** Linha de apoio dentro da conversa (vazio, lendo, aviso do sistema). */
+  apoio: "text-[12.5px] leading-5 text-muted-foreground",
+  /** Campo de digitar a mensagem. */
+  campo: "text-[14px] leading-[1.55]",
+} as const;
+
 /** Anel de foco visível (teclado). */
 export const foco = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 

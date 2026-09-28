@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitBranch, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { AjudaRecolhida, botao, juntar, texto } from "@/components/sistema";
+import { botao, juntar } from "@/components/sistema";
+import Secao from "@/components/sistema/Secao";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { useAvisarErro } from "./Custo";
 import {
@@ -130,11 +131,15 @@ export default function LinhaDeEvolucaoDoMes({ clientId }: { clientId: string })
   const linhas = consulta.data || [];
   if (!linhas.length) return null;
   return (
-    <section className="min-w-0 space-y-2 border-t border-border pt-6" aria-label="Linha de evolução">
-      <h2 className={juntar(texto.tituloSecao, "flex items-center")}>
-        Linha de evolução
-        <AjudaRecolhida titulo="Linha de evolução">Os temas que voltaram com um ângulo novo, por pilar: do básico ao avançado, do problema à solução, da dúvida à prova.</AjudaRecolhida>
-      </h2>
+    // Histórico de apoio: recolhível (lembrado por cliente), começa recolhido.
+    <Secao
+      divisoria
+      titulo="Linha de evolução"
+      recolher={`mesa:mes:evolucao:${clientId}`}
+      recolhidaDeInicio
+      resumo={`${linhas.length} ${linhas.length === 1 ? "pilar" : "pilares"}`}
+      ajuda="Os temas que voltaram com um ângulo novo, por pilar: do básico ao avançado, do problema à solução, da dúvida à prova."
+    >
       <ul className="divide-y divide-border">
         {linhas.map((l, i) => (
           <li key={`${l.pilar}-${i}`} className="min-w-0 py-2.5">
@@ -153,6 +158,6 @@ export default function LinhaDeEvolucaoDoMes({ clientId }: { clientId: string })
           </li>
         ))}
       </ul>
-    </section>
+    </Secao>
   );
 }

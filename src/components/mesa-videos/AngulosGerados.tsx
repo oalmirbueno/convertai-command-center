@@ -35,8 +35,11 @@ export default function AngulosGerados({ arquivos, irPara }: { arquivos: Arquivo
   };
   return (
     <Secao
+      divisoria
       titulo="Imagens"
       descricao={`${imagens.filter((a) => a.tipo === "angulo").length} ângulos · ${imagens.filter((a) => a.tipo === "quadro").length} quadros`}
+      recolher={`mesa-videos:imagens:${clientId}`}
+      resumo={`${imagens.filter((a) => a.tipo === "angulo").length} ângulos · ${imagens.filter((a) => a.tipo === "quadro").length} quadros`}
       acao={
         <>
           <SeletorCompacto rotulo="Tipo de imagem" opcoes={[{ valor: "angulo", rotulo: "Ângulos" }, { valor: "quadro", rotulo: "Quadros" }]} valor={filtro} onEscolher={(v) => setFiltro(v as "angulo" | "quadro")} />

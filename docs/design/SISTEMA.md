@@ -145,6 +145,11 @@ microfone, enviar). Peças avulsas para agentes grandes: `CabecalhoDoAgente`, `M
 `CompositorDoAgente` (o Agente do mês usa as peças dentro da janela grande; o diretor do Estúdio usa as
 mesmas peças dentro da coluna dele, sem mudar comportamento).
 
+Texto da conversa (dono, 28/09: "muito curtinho, não consigo ler"): 14 px com linha 1,6 em todo agente.
+`TextoDoAgente` já nasce assim; o balão é `BalaoDaConversa de="usuario" | "agente"` (ou `conversa.balao` +
+`conversa.doUsuario`/`conversa.doAgente` de `estilos.ts`); apoio dentro da conversa (vazio, lendo) é
+`conversa.apoio`; o campo de digitar dentro do `CompositorDoAgente` fica em 14 px sozinho.
+
 ## 10. Formulários
 
 - Rótulo **em cima**, altura única de campo (36 px, `campo`), apoio em uma linha embaixo, erro no lugar
@@ -203,8 +208,8 @@ Sem `dvh/svh` como única medida. Sem ResizeObserver obrigatório (MutationObser
 | `AreaDeTrabalho` | `children` (principal), `lateral?`, `rotuloDaLateral?`, `iconeDaLateral?`, `larguraDaLateral?: "padrao" \| "larga"`, `principalRolavel?`, `rotuloDoPrincipal?`, `memoria?` (lateral recolhida), `memoriaDaRolagem?`, `nasceRecolhida?`, `pedidoDeAbrir?` (muda a cada pedido). Função `abrirLateralDaArea()` abre de qualquer lugar (computador: tira do recolhido; celular: abre a gaveta) |
 | `RegiaoRolavel` | `modo?: "lg" \| "sempre"`, `rotulo?`, `memoria?`, `sombras?`, `sobre?: "fundo" \| "cartao"`, `className?`, `classeDeFora?`, `onScroll?`, ref = o elemento que rola |
 | `PainelDoAgente` | `titulo?`, `descricao?`, `icone?`, `acoes?`, `topo?`, `avisos?`, `compositor?`, `refDasMensagens?`, `rotuloDasMensagens?`, `semMoldura?`, `children` (mensagens) |
-| `Secao` | `titulo?`, `descricao?` (estado), `acao?`, `ajuda?`, `divisoria?`, `nivel?`, `id?`, `data-*`. As ações quebram por dentro no celular (o título guarda 96 px) |
-| `CabecalhoDeSecao` | só o cabeçalho da Secao: `titulo?`, `descricao?`, `acao?`, `ajuda?`, `rotuloDaAjuda?`, `nivel?`, `icone?`, `truncar?`, `classeDoTitulo?`, `className?`, `data-*`. Os cabeçalhos das mesas (`CabecalhoDaParte` da Mesa Ads, `CabecalhoDaEtapa` da Publicidade, `Cabecalho` dos Roteiros) usam este |
+| `Secao` | `titulo?`, `descricao?` (estado), `acao?`, `ajuda?`, `divisoria?`, `nivel?`, `id?`, `data-*`. As ações quebram por dentro no celular (o título guarda 96 px). Recolher (28/09): `recolher="<area>:<bloco>:<cliente>"`, `resumo?` (à vista recolhida), `recolhidaDeInicio?`; o título vira o botão, descrição e ações somem recolhida |
+| `CabecalhoDeSecao` | só o cabeçalho da Secao: `titulo?`, `descricao?`, `acao?`, `ajuda?`, `rotuloDaAjuda?`, `nivel?`, `icone?`, `truncar?`, `classeDoTitulo?`, `recolher?: { recolhido, onAlternar, resumo? }`, `className?`, `data-*`. Os cabeçalhos das mesas (`CabecalhoDaParte` da Mesa Ads, `CabecalhoDaEtapa` da Publicidade, `Cabecalho` dos Roteiros) usam este |
 | `Painel` | `titulo?`, `descricao?`, `acao?`, `ajuda?` (o "?" ao lado do título; some na impressão), `rodape?`, `semEspaco?`, `as?` |
 | `CabecalhoDePagina` | `titulo`, `descricao?`, `acoes?`, `ajuda?`, `voltar?: {para, rotulo}`, `nivel?`. As ações quebram por dentro no celular (o título guarda 120 px) |
 | `FaixaDeNumeros` | `itens?: {rotulo, valor, apoio?, aoLado?, ponto?, corDoValor?, lado?, extra?, para?, aoClicar?, dica?, chave?}[]` ou `children` com `CelulaDeNumero`; `rotulo?`, `colunas?: 1..6` (2 no celular; nunca mais que os itens), `grade?` (classes exatas), `tamanho?: "grande" \| "compacto"`, `apoioAoLado?`, `semMoldura?` (já dentro de um Painel), `data-*`. `para` = número que leva a outra tela (link de verdade) |

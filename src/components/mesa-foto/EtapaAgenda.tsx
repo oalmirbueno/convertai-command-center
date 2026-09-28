@@ -32,6 +32,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Cartao, Moldura, useMesaFoto, Vazio } from "./Comuns";
 import SeletorDoPerfil from "./SeletorDoPerfil";
 import SeletorDeFotos from "./SeletorDeFotos";
@@ -675,18 +676,24 @@ export default function EtapaAgenda() {
         <PostAberto post={postAberto} onTrocarFotos={() => setMontando({ fotos: postAberto.imagem_ids, postId: postAberto.id, task: postAberto.task_id })} />
       )}
 
-      <Cartao titulo={`Posts de fotos${pendentes.length ? ` · ${pendentes.length}` : ""}`} dica="Os posts de fotos do cliente, do mais próximo ao mais distante. Os do plano do mês (perfil só fotos ou alternar) aparecem aqui esperando as fotos.">
+      <Cartao
+        titulo={`Posts de fotos${pendentes.length ? ` · ${pendentes.length}` : ""}`}
+        recolher={`mesa-foto:agenda:posts:${clientId}`}
+        resumo={lista.length ? `${pendentes.length} a caminho · ${publicados.length} no ar` : "nenhum ainda"}
+        dica="Os posts de fotos do cliente, do mais próximo ao mais distante. Os do plano do mês (perfil só fotos ou alternar) aparecem aqui esperando as fotos.">
         {posts.isLoading && <p className="text-[12px] text-muted-foreground">Lendo os posts...</p>}
         {posts.isError && <p className="text-[12px] text-destructive">Não foi possível ler os posts: {textoDoErro(posts.error)}</p>}
         {posts.isSuccess && !lista.length && (
           <Vazio titulo="Nenhum post de fotos ainda">Marque fotos em Fotos (ou no Estúdio) e use Preparar na Agenda.</Vazio>
         )}
         {pendentes.length > 0 && (
-          <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
-            {pendentes.map((p) => (
-              <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
-            ))}
-          </ul>
+          <RegiaoRolavel modo="lg" sobre="cartao" memoria={`mesa-foto:agenda:posts:${clientId}`} classeDeFora="lg:max-h-[60vh]">
+            <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+              {pendentes.map((p) => (
+                <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
+              ))}
+            </ul>
+          </RegiaoRolavel>
         )}
         {publicados.length > 0 && (
           <details className="mt-3">

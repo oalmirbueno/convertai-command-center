@@ -29,7 +29,7 @@ import {
   type TipoDeRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { atualizarNoCache, chamarRoteiros, gerarRoteiro, roteiroDaPeca, salvarVersao, useModelos, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, Cabecalho, OBJETIVOS, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, Cabecalho, OBJETIVOS, RotuloLargo, SeloDoStatus } from "./Comuns";
 import { baixarBytes, itemSolto, montarPdf } from "./pdfNoNavegador";
 
 /**
@@ -470,12 +470,13 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         <AvisoDoJevCartao aviso={versao ? versao.aviso : null} />
       </section>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5" data-ganchos="">
-        <Cabecalho
-          nivel={3}
-          titulo="Gancho"
-          ajuda="Três aberturas de mecanismos diferentes. A escolhida vira a fala do bloco 1; as outras vão para o PDF como aberturas para testar."
-        />
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:ganchos:${mesa.clientId}`}
+        titulo="Gancho"
+        ajuda="Três aberturas de mecanismos diferentes. A escolhida vira a fala do bloco 1; as outras vão para o PDF como aberturas para testar."
+        resumo={rascunho.ganchos.length ? `${rascunho.ganchos.length} ganchos · usando o ${rascunho.gancho_escolhido + 1}` : undefined}
+        data-ganchos=""
+      >
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-3" role="radiogroup" aria-label="Ganchos">
           {rascunho.ganchos.map((g, i) => (
             <div key={i} className={juntar("min-w-0 rounded-md border p-2.5", rascunho.gancho_escolhido === i ? "border-primary bg-primary/5" : "border-border")}>
@@ -521,7 +522,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
             />
           </div>
         )}
-      </section>
+      </BlocoRecolhivel>
 
       <section className="min-w-0 space-y-3 border-t border-border pt-5" data-blocos="">
         <Cabecalho
@@ -593,8 +594,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         </ol>
       </section>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5" data-direcao="">
-        <Cabecalho nivel={3} titulo="Direção de gravação" />
+      <BlocoRecolhivel chave={`mesa-roteiros:direcao:${mesa.clientId}`} titulo="Direção de gravação" data-direcao="">
         <GrupoDeCampos colunas={3}>
           {(
             [
@@ -622,10 +622,9 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
             </CampoDeFormulario>
           )}
         </GrupoDeCampos>
-      </section>
+      </BlocoRecolhivel>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5" data-publicacao="">
-        <Cabecalho nivel={3} titulo="CTA e legenda do post" />
+      <BlocoRecolhivel chave={`mesa-roteiros:publicacao:${mesa.clientId}`} titulo="CTA e legenda do post" resumo={rascunho.cta ? rascunho.cta : undefined} data-publicacao="">
         <GrupoDeCampos>
           <CampoDeFormulario rotulo="CTA">
             <input value={rascunho.cta} onChange={(e) => mudar({ cta: e.target.value })} disabled={desabilitado} className={campo} />
@@ -641,34 +640,34 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
           </CampoDeFormulario>
         </GrupoDeCampos>
         {rascunho.fontes.length > 0 && <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Fontes: {rascunho.fontes.join("; ")}</p>}
-      </section>
+      </BlocoRecolhivel>
 
       {!travado && (
-        <section className="min-w-0 space-y-3 border-t border-border pt-5" data-refazer="">
-          <Cabecalho
-            nivel={3}
-            titulo="Pedir ao roteirista"
-            ajuda="Cada pedido gera uma versão nova. A atual fica no histórico da Revisão. Gerar de novo usa os comentários abertos da Revisão."
-            estado={alterado ? "Salve as mudanças antes." : undefined}
-            acoes={
-              <BotaoComCusto
-                rotulo={
-                  <>
-                    <Wand2 className="mr-1 h-3.5 w-3.5" />
-                    Gerar de novo
-                  </>
-                }
-                titulo="Roteiro gerado de novo"
-                variant="outline"
-                className="h-9"
-                disabled={alterado || !modeloIa}
-                descricao="Escreve o roteiro de novo, com os comentários abertos da Revisão."
-                partes={() => [{ modeloId: modeloIa, tipo: "texto", tokensEntrada: TAMANHO_DA_GERACAO.entrada, tokensSaida: TAMANHO_DA_GERACAO.saida }]}
-                executar={() => chamarRoteiros("gerar", { client_id: mesa.clientId, roteiro_id: linha.id, tipo: linha.tipo, duracao_s: rascunho.duracao_alvo_s, objetivo: rascunho.objetivo || undefined })}
-                aoConcluir={depoisDaIa}
-              />
-            }
-          />
+        <BlocoRecolhivel
+          chave={`mesa-roteiros:refazer:${mesa.clientId}`}
+          titulo="Pedir ao roteirista"
+          ajuda="Cada pedido gera uma versão nova. A atual fica no histórico da Revisão. Gerar de novo usa os comentários abertos da Revisão."
+          estado={alterado ? "Salve as mudanças antes." : undefined}
+          data-refazer=""
+          acoes={
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <Wand2 className="mr-1 h-3.5 w-3.5" />
+                  Gerar de novo
+                </>
+              }
+              titulo="Roteiro gerado de novo"
+              variant="outline"
+              className="h-9"
+              disabled={alterado || !modeloIa}
+              descricao="Escreve o roteiro de novo, com os comentários abertos da Revisão."
+              partes={() => [{ modeloId: modeloIa, tipo: "texto", tokensEntrada: TAMANHO_DA_GERACAO.entrada, tokensSaida: TAMANHO_DA_GERACAO.saida }]}
+              executar={() => chamarRoteiros("gerar", { client_id: mesa.clientId, roteiro_id: linha.id, tipo: linha.tipo, duracao_s: rascunho.duracao_alvo_s, objetivo: rascunho.objetivo || undefined })}
+              aoConcluir={depoisDaIa}
+            />
+          }
+        >
           <div className="flex min-w-0 items-center">
             <input value={tom} onChange={(e) => setTom(e.target.value)} maxLength={160} placeholder="Tom novo. Ex.: mais leve e próximo" className={juntar(campo, "mr-2 min-w-0 flex-1")} aria-label="Tom novo" />
             <BotaoComCusto
@@ -685,7 +684,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
               }}
             />
           </div>
-        </section>
+        </BlocoRecolhivel>
       )}
     </div>
   );

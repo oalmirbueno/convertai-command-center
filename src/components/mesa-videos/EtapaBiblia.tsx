@@ -116,8 +116,11 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
       </Secao>
 
       <Secao
+        divisoria
         titulo="Personagens"
         descricao={`${b.personagens.filter((p) => p.folha_path).length} de ${b.personagens.length} com folha`}
+        recolher={`mesa-videos:biblia:personagens:${clientId}`}
+        resumo={`${b.personagens.length} ${b.personagens.length === 1 ? "personagem" : "personagens"}`}
         ajuda="Folha de referência: a mesma pessoa de frente, 3/4 e perfil. Gere os ângulos a partir de uma foto na ferramenta de ângulo e escolha a melhor como folha."
         acao={
           <>
@@ -174,8 +177,11 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
       </Secao>
 
       <Secao
+        divisoria
         titulo="Cenários"
         descricao={`${b.cenarios.filter((c) => c.ancora_path).length} de ${b.cenarios.length} com quadro âncora`}
+        recolher={`mesa-videos:biblia:cenarios:${clientId}`}
+        resumo={`${b.cenarios.length} ${b.cenarios.length === 1 ? "cenário" : "cenários"}`}
         ajuda="Quadro âncora: a imagem do lugar de onde os planos partem (foto real do cliente ou gerada). Mesma hora do dia em todos os planos do cenário."
         acao={
           <button type="button" className={botao.secundario} onClick={() => mudarBiblia({ cenarios: b.cenarios.concat([{ id: proximoId("ce", b.cenarios.map((x) => x.id)), nome: "Cenário", descricao: "", ancora_path: null, hora: "" }]) })} aria-label="Novo cenário">
@@ -214,7 +220,14 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
         )}
       </Secao>
 
-      <Secao titulo="Regras e fatos" descricao={`${b.regras.length} regras · ${b.perguntas.length} perguntas abertas`} ajuda="Regras de continuidade valem para todos os planos. Fato só entra com fonte; o que o diretor não achou vira pergunta.">
+      <Secao
+        divisoria
+        titulo="Regras e fatos"
+        descricao={`${b.regras.length} regras · ${b.perguntas.length} perguntas abertas`}
+        ajuda="Regras de continuidade valem para todos os planos. Fato só entra com fonte; o que o diretor não achou vira pergunta."
+        recolher={`mesa-videos:biblia:regras:${clientId}`}
+        resumo={`${b.regras.length} regras · ${b.fatos.length} fatos`}
+      >
         <CampoDeFormulario rotulo="Regras (uma por linha)" largo>
           <textarea className={juntar(campoTexto, "min-h-[96px]")} value={b.regras.join("\n")} onChange={(e) => mudarBiblia({ regras: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 20) })} />
         </CampoDeFormulario>

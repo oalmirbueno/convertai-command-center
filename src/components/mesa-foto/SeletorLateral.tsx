@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AjudaRecolhida, EstadoVazio, botao, foco, juntar, texto } from "@/components/sistema";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
 /**
  * Seletor lateral compacto das personas (Modelos), dos clones e dos books
@@ -13,6 +15,10 @@ import { AjudaRecolhida, EstadoVazio, botao, foco, juntar, texto } from "@/compo
  * linha. No celular e no tablet, um seletor (lista que abre); de 1024 px para
  * cima, a lista curta com miniatura pequena, nome e o estado em ponto de cor.
  * A explicação vai no "?" (ajuda).
+ *
+ * 28/09 (dono: "tudo organizado para recolher"): com `recolher` (chave por
+ * cliente), o título recolhe a lista e deixa à vista só o escolhido; a lista
+ * longa rola por dentro no computador (RegiaoRolavel, nada disso no celular).
  */
 
 export interface ItemDoSeletor {
@@ -38,6 +44,7 @@ export default function SeletorLateral({
   vazio,
   filtro,
   ajuda,
+  recolher,
 }: {
   titulo: string;
   itens: ItemDoSeletor[];
@@ -51,20 +58,30 @@ export default function SeletorLateral({
   filtro?: ReactNode;
   /** O que é esta lista, no "?" ao lado do título. */
   ajuda?: ReactNode;
+  /** Chave para lembrar a lista recolhida (com o cliente). Sem ela, a lista fica sempre aberta. */
+  recolher?: string;
 }) {
   const atual = itens.find((i) => i.id === escolhido) || null;
+  const [recolhidoGuardado, setRecolhido] = useRecolhido(recolher || "mesa-foto:seletor-lateral:sem-chave");
+  const recolhido = !!recolher && recolhidoGuardado;
   return (
-    <section className="min-w-0" aria-label={titulo} data-seletor-lateral="">
-      <div className="mb-2 flex min-w-0 items-center">
-        <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{titulo}</h2>
+    <section className="min-w-0" aria-label={titulo} data-seletor-lateral="" data-recolhido={recolher ? (recolhido ? "sim" : "nao") : undefined}>
+      <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
+        {recolher ? (
+          <h2 className="min-w-0">
+            <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={atual ? atual.nome : undefined} />
+          </h2>
+        ) : (
+          <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{titulo}</h2>
+        )}
         <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{itens.length}</span>
-        {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
+        {ajuda && !recolhido && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
         <button type="button" className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")} onClick={onNovo} disabled={novoAberto}>
           <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {novoRotulo}
         </button>
       </div>
-      {filtro && <div className="mb-2 min-w-0">{filtro}</div>}
-      {itens.length === 0 ? (
+      {recolhido ? null : filtro && <div className="mb-2 min-w-0">{filtro}</div>}
+      {recolhido ? null : itens.length === 0 ? (
         <EstadoVazio compacto titulo={vazio} />
       ) : (
         <>
@@ -82,7 +99,9 @@ export default function SeletorLateral({
               </SelectContent>
             </Select>
           </div>
-          <ul className="hidden min-w-0 space-y-0.5 lg:block" aria-label={titulo}>
+          <div className="hidden min-w-0 lg:block">
+          <RegiaoRolavel modo="lg" memoria={recolher ? `${recolher}:rolagem` : undefined} classeDeFora="lg:max-h-[60vh]">
+          <ul className="min-w-0 space-y-0.5" aria-label={titulo}>
             {itens.map((i) => {
               const ativo = i.id === escolhido;
               return (
@@ -111,6 +130,8 @@ export default function SeletorLateral({
               );
             })}
           </ul>
+          </RegiaoRolavel>
+          </div>
         </>
       )}
     </section>

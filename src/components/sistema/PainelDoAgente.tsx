@@ -2,7 +2,7 @@ import { forwardRef, type ReactNode } from "react";
 import { PanelRightClose, X } from "lucide-react";
 import RegiaoRolavel from "./RegiaoRolavel";
 import { useAreaDeTrabalho } from "./AreaDeTrabalho";
-import { botao, juntar } from "./estilos";
+import { botao, conversa, juntar } from "./estilos";
 
 /**
  * Painel do agente (docs/design/SISTEMA.md, "Agentes"): a casca fixa de toda
@@ -40,7 +40,7 @@ export function CabecalhoDoAgente({
 }) {
   const area = useAreaDeTrabalho();
   return (
-    <div className={juntar("shrink-0 border-b border-border px-3 pb-2.5 pt-3", className)} data-cabecalho-do-agente="">
+    <div className={juntar("shrink-0 border-b border-border px-3.5 pb-2.5 pt-3", className)} data-cabecalho-do-agente="">
       <div className="flex min-w-0 items-center">
         {icone && (
           <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
@@ -49,7 +49,7 @@ export function CabecalhoDoAgente({
         )}
         <div className="mr-2 min-w-0 flex-1">
           <h2 className="truncate text-[14px] font-semibold leading-5 text-foreground">{titulo}</h2>
-          {descricao && <p className="truncate text-[12px] leading-4 text-muted-foreground">{descricao}</p>}
+          {descricao && <p className="truncate text-[12.5px] leading-[18px] text-muted-foreground">{descricao}</p>}
         </div>
         {acoes && <div className="flex shrink-0 items-center [&>*+*]:ml-1">{acoes}</div>}
         {area && area.largo && (
@@ -68,22 +68,54 @@ export function CabecalhoDoAgente({
   );
 }
 
-/** A conversa: rola por dentro em qualquer largura (o painel tem altura fixa). */
+/**
+ * A conversa: rola por dentro em qualquer largura (o painel tem altura fixa).
+ * Respiro entre mensagens e nas bordas maior que o do resto do painel (dono,
+ * 28/09: "refinar alinhamento para não ficar tudo muito apertado").
+ */
 export const MensagensDoAgente = forwardRef<HTMLDivElement, { children?: ReactNode; rotulo?: string; className?: string }>(function MensagensDoAgente(
   { children, rotulo = "Conversa com o agente", className = "" },
   ref,
 ) {
   return (
-    <RegiaoRolavel ref={ref} modo="sempre" sobre="cartao" rotulo={rotulo} aria-live="polite" data-mensagens-do-agente="" className={juntar("space-y-3 px-3 py-3", className)}>
+    <RegiaoRolavel ref={ref} modo="sempre" sobre="cartao" rotulo={rotulo} aria-live="polite" data-mensagens-do-agente="" className={juntar("space-y-4 px-3.5 py-4", className)}>
       {children}
     </RegiaoRolavel>
   );
 });
 
-/** Pé fixo: atalhos, campo de texto e enviar. Nunca sai da tela. */
+/**
+ * Balão de mensagem, a mesma forma em todo agente (estilos: `conversa`).
+ * `de="usuario"` fica à direita com a cor da marca; `de="agente"` ocupa
+ * quase a largura toda. O texto vai dentro (TextoDoAgente ou o que o agente
+ * já mostrava).
+ */
+export function BalaoDaConversa({
+  de,
+  children,
+  className = "",
+  ...resto
+}: {
+  de: "usuario" | "agente";
+  children?: ReactNode;
+  className?: string;
+} & Record<`data-${string}`, string | undefined>) {
+  return (
+    <div className={juntar(conversa.balao, de === "usuario" ? conversa.doUsuario : conversa.doAgente, className)} data-balao={de} {...resto}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Pé fixo: atalhos, campo de texto e enviar. Nunca sai da tela. O campo de
+ * digitar de qualquer agente fica no tamanho da conversa (14 px), sem cada
+ * agente precisar repetir a classe: o seletor de descendente vence a classe
+ * de tamanho do próprio campo.
+ */
 export function CompositorDoAgente({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={juntar("shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5", className)} data-compositor-do-agente="">
+    <div className={juntar("shrink-0 space-y-2.5 border-t border-border px-3.5 pb-3.5 pt-3 [&_textarea]:text-[14px] [&_textarea]:leading-[1.55]", className)} data-compositor-do-agente="">
       {children}
     </div>
   );
@@ -134,11 +166,11 @@ export default function PainelDoAgente({
           {topo}
         </CabecalhoDoAgente>
       )}
-      {!titulo && topo && <div className="shrink-0 border-b border-border px-3 py-2">{topo}</div>}
+      {!titulo && topo && <div className="shrink-0 border-b border-border px-3.5 py-2">{topo}</div>}
       <MensagensDoAgente ref={refDasMensagens} rotulo={rotuloDasMensagens}>
         {children}
       </MensagensDoAgente>
-      {avisos && <div className="shrink-0 space-y-2 px-3 pb-1">{avisos}</div>}
+      {avisos && <div className="shrink-0 space-y-2 px-3.5 pb-1">{avisos}</div>}
       {compositor && <CompositorDoAgente>{compositor}</CompositorDoAgente>}
     </section>
   );

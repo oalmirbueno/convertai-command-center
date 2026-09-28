@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao from "@/components/sistema/Secao";
+import { superficie } from "@/components/sistema/estilos";
 
 type Agente = "estrategista" | "diretor_arte";
 
@@ -175,33 +176,31 @@ export function PromptDoCliente() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="-m-0.5 flex flex-wrap">
         {AGENTES.map((a) => (
           <button
             key={a.valor}
             type="button"
             onClick={() => setAgente(a.valor)}
-            className={`rounded-full px-3 py-1.5 text-[12px] ${agente === a.valor ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+            className={`m-0.5 rounded-full px-3 py-1.5 text-[12px] ${agente === a.valor ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
           >
             {a.rotulo}
           </button>
         ))}
       </div>
 
-      <Collapsible className="rounded-xl border border-border bg-card">
-        <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-[12.5px]">
-          <span className="min-w-0">
-            <span className="font-medium">Prompt global</span>
-            <span className="text-muted-foreground"> · v{prompts.data?.global?.versao ?? "?"}, vale para todos os clientes (só leitura)</span>
-          </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <pre className="whitespace-pre-wrap border-t border-border px-3.5 py-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            {prompts.data?.global?.conteudo || "Sem prompt global ativo."}
-          </pre>
-        </CollapsibleContent>
-      </Collapsible>
+      <Secao
+        nivel={3}
+        titulo="Prompt global"
+        recolher={`mesa:contexto:prompt:global:${clientId}`}
+        recolhidaDeInicio
+        resumo={`v${prompts.data?.global?.versao ?? "?"}, vale para todos os clientes (só leitura)`}
+        descricao={`v${prompts.data?.global?.versao ?? "?"}, vale para todos os clientes (só leitura)`}
+      >
+        <pre className={`whitespace-pre-wrap px-3.5 py-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] ${superficie.poco}`}>
+          {prompts.data?.global?.conteudo || "Sem prompt global ativo."}
+        </pre>
+      </Secao>
 
       <Campo rotulo={`Complemento deste cliente${ativo ? ` (v${ativo.versao} em uso)` : " (nenhum em uso)"}`}>
         <Textarea
@@ -211,7 +210,7 @@ export function PromptDoCliente() {
           placeholder="O que vale só para este cliente: tom de voz, temas proibidos, jeito de falar da região, CTA preferido."
         />
       </Campo>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="-m-1 flex flex-wrap justify-end [&>*]:m-1">
         {ativo && (
           <Button type="button" variant="ghost" size="sm" onClick={() => void semComplemento()} disabled={salvando}>
             Usar só o global
@@ -224,10 +223,17 @@ export function PromptDoCliente() {
       </div>
 
       {(prompts.data?.versoes.length || 0) > 0 && (
+        <Secao
+          nivel={3}
+          titulo={`Versões (${prompts.data!.versoes.length})`}
+          recolher={`mesa:contexto:prompt:versoes:${clientId}`}
+          recolhidaDeInicio
+          resumo={ativo ? `v${ativo.versao} em uso` : "nenhuma em uso"}
+        >
         <ul className="divide-y divide-border rounded-xl border border-border">
           {prompts.data!.versoes.map((p) => (
-            <li key={p.id} className="flex items-start gap-3 px-3 py-2.5">
-              <div className="min-w-0 flex-1">
+            <li key={p.id} className="flex items-start px-3 py-2.5">
+              <div className="mr-3 min-w-0 flex-1">
                 <p className="text-[12px] font-medium">
                   v{p.versao} <span className="font-normal text-muted-foreground">· {new Date(p.criado_em).toLocaleDateString("pt-BR")}</span>
                   {p.ativo && <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">em uso</span>}
@@ -242,6 +248,7 @@ export function PromptDoCliente() {
             </li>
           ))}
         </ul>
+        </Secao>
       )}
     </div>
   );
@@ -302,9 +309,8 @@ export function MemoriaDoAgente() {
   const lista = (memoria.data || []).filter((m) => filtro === "todos" || m.agente === filtro);
 
   return (
-    <div className="space-y-4">
-      <section className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-        <TituloDeSecao>Ensinar algo ao agente</TituloDeSecao>
+    <div className="space-y-6">
+      <Secao titulo="Ensinar algo ao agente" recolher={`mesa:contexto:memoria:ensinar:${clientId}`} corpoClassName="space-y-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Select value={novoAgente} onValueChange={(v) => setNovoAgente(v as Agente)}>
             <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
@@ -322,17 +328,21 @@ export function MemoriaDoAgente() {
             Adicionar
           </Button>
         </div>
-      </section>
+      </Secao>
 
-      <TituloDeSecao
+      <Secao
+        titulo={`Memória (${lista.length})`}
+        recolher={`mesa:contexto:memoria:lista:${clientId}`}
+        resumo={memoria.data ? `${memoria.data.filter((m) => m.ativa).length} em uso` : undefined}
+        corpoClassName="space-y-3"
         acao={
-          <div className="flex flex-wrap gap-1">
+          <div className="-m-0.5 flex flex-wrap">
             {([{ valor: "todos", rotulo: "Todos" }] as { valor: "todos" | Agente; rotulo: string }[]).concat(AGENTES).map((a) => (
               <button
                 key={a.valor}
                 type="button"
                 onClick={() => setFiltro(a.valor)}
-                className={`rounded-full px-2.5 py-1 text-[11px] ${filtro === a.valor ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                className={`m-0.5 rounded-full px-2.5 py-1 text-[11px] ${filtro === a.valor ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {a.rotulo}
               </button>
@@ -340,13 +350,12 @@ export function MemoriaDoAgente() {
           </div>
         }
       >
-        Memória ({lista.length})
-      </TituloDeSecao>
       {memoria.data && lista.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nada guardado ainda. A memória cresce com as escolhas, os ajustes e as aprovações.</p>}
+      {lista.length > 0 && (
       <ul className="divide-y divide-border rounded-xl border border-border">
         {lista.map((m) => (
-          <li key={m.id} className={`flex items-start gap-3 px-3 py-2.5 ${m.ativa ? "" : "opacity-60"}`}>
-            <div className="min-w-0 flex-1">
+          <li key={m.id} className={`flex items-start px-3 py-2.5 ${m.ativa ? "" : "opacity-60"}`}>
+            <div className="mr-3 min-w-0 flex-1">
               <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{m.texto}</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {TIPOS.find((t) => t.valor === m.tipo)?.rotulo || m.tipo} · {AGENTES.find((a) => a.valor === m.agente)?.rotulo || m.agente} · {ORIGENS[m.origem] || m.origem}
@@ -356,6 +365,8 @@ export function MemoriaDoAgente() {
           </li>
         ))}
       </ul>
+      )}
+      </Secao>
     </div>
   );
 }

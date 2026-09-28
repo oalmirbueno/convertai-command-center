@@ -2,6 +2,7 @@ import { Link, useInRouterContext } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { pedacosComLinks, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
 import { clienteDaRota } from "@/lib/lancador";
+import { conversa, juntar } from "@/components/sistema/estilos";
 
 /** O cliente do endereço atual (?client= ou /clientes/<id>), sem depender do roteador. */
 function clienteDoEndereco(): string | null {
@@ -15,6 +16,9 @@ function clienteDoEndereco(): string | null {
  * para você?" e a pessoa clica. Rota fora do mapa fica como texto. Sem
  * `clientId`, vale o cliente do endereço (?client=), como no lançador. Fora
  * do roteador (testes, prévias), o link vira âncora comum.
+ *
+ * Tamanho da conversa (14 px, altura de linha folgada) em todo agente, sem
+ * cada um repetir: `className` com outro tamanho ainda vence (juntar).
  */
 export default function TextoDoAgente({ texto, clientId, className = "" }: { texto: string; clientId?: string | null; className?: string }) {
   const noRoteador = useInRouterContext();
@@ -22,7 +26,7 @@ export default function TextoDoAgente({ texto, clientId, className = "" }: { tex
   const pedacos = pedacosComLinks(texto, cliente);
   const classeDoLink = "font-medium text-primary underline-offset-2 hover:underline";
   return (
-    <p className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${className}`}>
+    <p className={juntar("whitespace-pre-wrap [overflow-wrap:anywhere]", conversa.mensagem, className)} data-texto-do-agente="">
       {pedacos.map((p, i) =>
         p.tipo === "link" ? (
           noRoteador ? (

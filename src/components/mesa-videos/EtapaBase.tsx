@@ -63,7 +63,14 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
   const fotosQ = useFotos(clientId);
   // Fotos marcadas como cena na Mesa Foto (mesmo fora de uma História).
   const soltas = fotosDeCena.length ? (
-    <Secao divisoria titulo="Fotos de cena" descricao={`${fotosDeCena.length}`} ajuda="Fotos marcadas como cena na Mesa Foto, dentro ou fora de uma História.">
+    <Secao
+      divisoria
+      titulo="Fotos de cena"
+      descricao={`${fotosDeCena.length}`}
+      ajuda="Fotos marcadas como cena na Mesa Foto, dentro ou fora de uma História."
+      recolher={`mesa-videos:fotos-de-cena:${clientId}`}
+      resumo={`${fotosDeCena.length} ${fotosDeCena.length === 1 ? "foto" : "fotos"}`}
+    >
       <GradeDeFotos fotos={fotosDeCena} onde="cena" vazio="" />
     </Secao>
   ) : null;
@@ -77,17 +84,17 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
   if (!historias.length) {
     return (
       <div className="space-y-6">
-      <EstadoVazio
-        icone={<Clapperboard className="h-5 w-5" />}
-        titulo="Nenhuma história ainda"
-        descricao="Marque os Resultados como cenas no Canvas da Mesa Foto."
-        acao={
-          <Link to={linkDoCanvas} className={botao.secundario}>
-            Abrir o Canvas <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-          </Link>
-        }
-      />
-      {soltas}
+        <EstadoVazio
+          icone={<Clapperboard className="h-5 w-5" />}
+          titulo="Nenhuma história ainda"
+          descricao="Marque os Resultados como cenas no Canvas da Mesa Foto."
+          acao={
+            <Link to={linkDoCanvas} className={botao.secundario}>
+              Abrir o Canvas <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            </Link>
+          }
+        />
+        {soltas}
       </div>
     );
   }
@@ -100,6 +107,8 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
           titulo={h.nome}
           descricao={`${h.cenas.length} ${h.cenas.length === 1 ? "cena" : "cenas"}`}
           ajuda={h.sinopse || "O mesmo Canvas da Mesa Foto: a foto de cada cena é o primeiro quadro do vídeo."}
+          recolher={`mesa-videos:historia:${h.canvas_id}:${clientId}`}
+          resumo={`${h.cenas.length} ${h.cenas.length === 1 ? "cena" : "cenas"}`}
           acao={
             <Link to={linkDoCanvas} className={botao.discreto} aria-label="Abrir no Canvas">
               <ExternalLink className="h-3.5 w-3.5 sm:mr-1.5" />
@@ -304,7 +313,7 @@ export default function EtapaBase({ irPara }: { irPara: IrPara }) {
   const pessoas = (grupos.personagem || []).length + (grupos.clone || []).length;
 
   return (
-    <div className="min-w-0 space-y-5 pb-6">
+    <div className="min-w-0 space-y-6 pb-6">
       <SeletorCompacto
         rotulo="Parte da base"
         larguraTotal
@@ -325,10 +334,23 @@ export default function EtapaBase({ irPara }: { irPara: IrPara }) {
           <Carregando forma="grade" linhas={6} rotulo="Lendo as fotos" />
         ) : (
           <div className="space-y-6">
-            <Secao titulo="Personagens" descricao={`${(grupos.personagem || []).length}`} ajuda="Personagens criadas na Mesa Foto (Modelos ou Canvas).">
+            <Secao
+              titulo="Personagens"
+              descricao={`${(grupos.personagem || []).length}`}
+              ajuda="Personagens criadas na Mesa Foto (Modelos ou Canvas)."
+              recolher={`mesa-videos:personagens:${clientId}`}
+              resumo={`${(grupos.personagem || []).length}`}
+            >
               <GradeDeFotos fotos={grupos.personagem || []} onde="personagem" vazio="Crie na aba Modelos ou no Canvas da Mesa Foto." />
             </Secao>
-            <Secao divisoria titulo="Clones" descricao={`${(grupos.clone || []).length}`} ajuda="Clone de pessoa real só com autorização registrada (Mesa Foto, Clones).">
+            <Secao
+              divisoria
+              titulo="Clones"
+              descricao={`${(grupos.clone || []).length}`}
+              ajuda="Clone de pessoa real só com autorização registrada (Mesa Foto, Clones)."
+              recolher={`mesa-videos:clones:${clientId}`}
+              resumo={`${(grupos.clone || []).length}`}
+            >
               <GradeDeFotos fotos={grupos.clone || []} onde="clone" vazio="Nenhum clone autorizado." />
             </Secao>
           </div>

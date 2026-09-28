@@ -402,6 +402,8 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
       <Secao
         titulo="Na fila"
         descricao={pedidosQ.isLoading ? undefined : `${fila.length} ${fila.length === 1 ? "pedido" : "pedidos"}`}
+        recolher={`mesa-videos:fila:${clientId}`}
+        resumo={pedidosQ.isLoading ? undefined : `${fila.length} ${fila.length === 1 ? "pedido" : "pedidos"}`}
         acao={
           <button type="button" className={botao.discreto} onClick={() => irPara("resultados")}>
             Resultados

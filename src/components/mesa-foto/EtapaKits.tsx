@@ -436,9 +436,11 @@ export default function EtapaKits() {
   return (
     <div className="min-w-0">
       <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="min-w-0 space-y-4">
+        <aside className="min-w-0 space-y-5">
           <Cartao
             titulo="Kits do cliente"
+            recolher={`mesa-foto:kits:lista:${clientId}`}
+            resumo={kitSalvo ? `${lista.length} · aberto: ${kitSalvo.nome}` : `${lista.length} ${lista.length === 1 ? "kit" : "kits"}`}
             acao={
               <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => abrirNovo()}>
                 <Plus className="mr-1 h-3.5 w-3.5" /> Novo
@@ -476,7 +478,11 @@ export default function EtapaKits() {
             </ul>
           </Cartao>
 
-          <Cartao titulo="Separar em kits" dica="Várias fotos de produtos diferentes: a leitura separa cada produto, a embalagem e o estilo. O kit volta salvo como rascunho.">
+          <Cartao
+            titulo="Separar em kits"
+            recolher={`mesa-foto:kits:separar:${clientId}`}
+            resumo={selecionadas.length ? `${selecionadas.length} ${selecionadas.length === 1 ? "foto marcada" : "fotos marcadas"}` : "nenhuma foto marcada"}
+            dica="Várias fotos de produtos diferentes: a leitura separa cada produto, a embalagem e o estilo. O kit volta salvo como rascunho.">
             {selecionadas.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">
                 Marque as fotos no{" "}
@@ -528,8 +534,12 @@ export default function EtapaKits() {
           </Cartao>
         </aside>
 
-        <div className="min-w-0 space-y-4">
-          <Cartao titulo="Identificar o produto" dica="Pela embalagem ou por uma foto: marca, modelo e variante, e as fotos oficiais da internet para o produto sair fiel.">
+        <div className="min-w-0 space-y-5">
+          <Cartao
+            titulo="Identificar o produto"
+            recolher={`mesa-foto:kits:identificar:${clientId}`}
+            resumo={identificacao ? "leitura pronta" : fotosParaLer.length ? `${fotosParaLer.length} ${fotosParaLer.length === 1 ? "foto" : "fotos"} para ler` : undefined}
+            dica="Pela embalagem ou por uma foto: marca, modelo e variante, e as fotos oficiais da internet para o produto sair fiel.">
             <div className="flex min-w-0 flex-wrap items-center">
               <BotaoComCusto
                 rotulo={

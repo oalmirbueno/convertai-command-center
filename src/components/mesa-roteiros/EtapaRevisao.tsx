@@ -18,7 +18,7 @@ import {
   type StatusDoRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { atualizarNoCache, chamarRoteiros, mudarStatus, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 3: revisão salva. Versões (cada uma com origem, nota, custo e código),
@@ -208,8 +208,16 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
       </div>
 
       <aside className="min-w-0 space-y-6 border-t border-border pt-5 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
-        <section className="min-w-0 space-y-2" data-versoes="">
-          <Cabecalho nivel={3} icone={<ClipboardCheck className="h-4 w-4" />} titulo="Versões" estado={`${linha.versoes.length} ${linha.versoes.length === 1 ? "versão" : "versões"}`} />
+        <BlocoRecolhivel
+          chave={`mesa-roteiros:versoes:${clientId}`}
+          divisoria={false}
+          className="space-y-2"
+          icone={<ClipboardCheck className="h-4 w-4" />}
+          titulo="Versões"
+          estado={`${linha.versoes.length} ${linha.versoes.length === 1 ? "versão" : "versões"}`}
+          resumo={`${linha.versoes.length} ${linha.versoes.length === 1 ? "versão" : "versões"}`}
+          data-versoes=""
+        >
           <ul className="space-y-0.5 xl:max-h-[320px] xl:overflow-y-auto xl:overscroll-contain">
             {linha.versoes
               .slice()
@@ -239,16 +247,18 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
                 </li>
               ))}
           </ul>
-        </section>
+        </BlocoRecolhivel>
 
-        <section className="min-w-0 space-y-2 border-t border-border pt-5" data-comentarios="">
-          <Cabecalho
-            nivel={3}
-            icone={<MessageSquare className="h-4 w-4" />}
-            titulo="Comentários"
-            ajuda={'Os abertos entram no próximo "Gerar de novo".'}
-            estado={abertos.length ? `${abertos.length} ${abertos.length === 1 ? "aberto" : "abertos"}` : "Nenhum aberto"}
-          />
+        <BlocoRecolhivel
+          chave={`mesa-roteiros:comentarios:${clientId}`}
+          className="space-y-2"
+          icone={<MessageSquare className="h-4 w-4" />}
+          titulo="Comentários"
+          ajuda={'Os abertos entram no próximo "Gerar de novo".'}
+          estado={abertos.length ? `${abertos.length} ${abertos.length === 1 ? "aberto" : "abertos"}` : "Nenhum aberto"}
+          resumo={abertos.length ? `${abertos.length} ${abertos.length === 1 ? "aberto" : "abertos"}` : "Nenhum aberto"}
+          data-comentarios=""
+        >
           <ul className="divide-y divide-border xl:max-h-[320px] xl:overflow-y-auto xl:overscroll-contain">
             {linha.comentarios
               .slice()
@@ -302,7 +312,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
               Comentar
             </button>
           </div>
-        </section>
+        </BlocoRecolhivel>
       </aside>
     </div>
   );

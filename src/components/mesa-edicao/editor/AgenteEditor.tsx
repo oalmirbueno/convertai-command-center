@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import { textoDoErro, usd, type ModeloIa } from "@/lib/mesa/api";
 import type { AcaoDoAgente, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
@@ -563,18 +563,18 @@ export default function AgenteEditor({
       }
     >
       {!projeto && <div className={juntar(texto.auxiliar, "px-1 py-2")} data-agente-sem-editor="">{semEditor || "Abra um vídeo no editor para o agente editar."}</div>}
-      {projeto && !mensagens.length && !rodando && <p className={juntar(texto.auxiliar, "px-1 py-2")}>Peça uma edição ou use um atalho. O agente mexe na linha do tempo e mostra a lista antes de mudar.</p>}
+      {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>Peça uma edição ou use um atalho. O agente mexe na linha do tempo e mostra a lista antes de mudar.</p>}
       {mensagens.map((m, k) => (
-        <div key={k} className={juntar("mb-2 min-w-0 text-[12.5px]", m.quem === "dono" ? "ml-6 rounded-md bg-primary/10 px-2.5 py-1.5" : "mr-4")}>
+        <div key={k} className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
           {m.itens.map((i, j) => (
-            <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[11.5px] text-muted-foreground", i.tipo === "aviso" && "text-[11.5px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
+            <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[12.5px] text-muted-foreground", i.tipo === "aviso" && "text-[12.5px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
               {i.texto}
             </p>
           ))}
         </div>
       ))}
       {rodando && (
-        <p className={juntar(texto.auxiliar, "flex items-center")}>
+        <p className={juntar(conversa.apoio, "flex items-center")}>
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           {rodando}
         </p>

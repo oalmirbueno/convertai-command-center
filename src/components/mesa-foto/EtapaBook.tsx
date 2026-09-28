@@ -291,6 +291,8 @@ function ArsenalDePrompts({ aberto, paraODiretor, onParaODiretor }: { aberto: Bo
         </span>
       }
       descricao={`${prompts.length} ${prompts.length === 1 ? "prompt" : "prompts"}`}
+      recolher={`mesa-foto:book:arsenal:${clientId}`}
+      resumo={`${prompts.length} ${prompts.length === 1 ? "prompt" : "prompts"}`}
       ajuda="Os prompts da biblioteca que servem ao assunto. Pôr na fila vira um pedido; mandar ao diretor entra na próxima conversa dele."
       aria-label="Arsenal de prompts"
       data-arsenal-de-prompts=""
@@ -364,6 +366,8 @@ function DiretorDoBook({ aberto, paraODiretor, onLimpar }: { aberto: BookAberto;
           <MessageSquare className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Diretor do book
         </span>
       }
+      recolher={`mesa-foto:book:bloco-diretor:${clientId}`}
+      resumo={ultima ? "última resposta guardada" : "montar pedidos com o diretor"}
       ajuda="Diga ao diretor como quer o assunto, ou ponha prompts do arsenal na fila. Ele lê o contexto do cliente, o assunto, os prompts escolhidos e as referências e monta os pedidos (texto, não gera imagem)."
       data-diretor-do-book=""
     >
@@ -451,6 +455,8 @@ function FilaDePedidos({ aberto }: { aberto: BookAberto }) {
       divisoria
       titulo="Fila de pedidos"
       descricao={`${escolhidos.length} de ${pedidos.length} marcados`}
+      recolher={`mesa-foto:book:fila:${clientId}`}
+      resumo={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"}${gerando ? ` · ${gerando} gerando` : ""}`}
       ajuda="Uma foto por pedido. Aparece aqui assim que sai e fica salva mesmo se você sair da aba."
       data-fila-do-book=""
     >
@@ -704,6 +710,8 @@ function ReferenciasDoBook({ aberto }: { aberto: BookAberto }) {
       divisoria
       titulo={`Referências · ${refs.length}`}
       descricao={`Só como estilo; até ${MAX_ESTILO_POR_FOTO} por foto`}
+      recolher={`mesa-foto:book:referencias:${clientId}`}
+      resumo="só como estilo"
       ajuda="Solte, cole (Ctrl+V) ou escolha. A referência dá luz, cenário, paleta e clima; o assunto sai sempre das fotos de identidade."
       acao={
         <>
@@ -962,6 +970,7 @@ export default function EtapaBook() {
   ) : (
     <SeletorLateral
       titulo="Books"
+      recolher={`mesa-foto:book:lista:${clientId}`}
       itens={itens}
       escolhido={aberto ? aberto.id : null}
       onEscolher={(id) => {

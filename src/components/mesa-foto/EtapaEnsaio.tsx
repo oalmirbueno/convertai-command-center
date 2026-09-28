@@ -179,7 +179,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
           valor={modo}
           onEscolher={setModo}
         />
-        <Cartao titulo="Produto">
+        <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome : "nenhum escolhido"}>
           <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
             <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Produto das variações">
               <SelectValue placeholder="Escolha o produto" />
@@ -201,7 +201,11 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         <SeletorDaCampanha escolhida={campanha} />
 
         {modo === "variacoes" && (
-          <Cartao titulo="Variações" dica="Quantas fotos e de que tipos. Cada uma sai realmente diferente: câmera, cenário e luz próprios.">
+          <Cartao
+            titulo="Variações"
+            recolher={`mesa-foto:ensaio:variacoes:${clientId}`}
+            resumo={`${quantidade} ${quantidade === 1 ? "foto" : "fotos"} · ${tiposEscolhidos.length ? `${tiposEscolhidos.length} ${tiposEscolhidos.length === 1 ? "tipo" : "tipos"}` : "tipos pelo diretor"}`}
+            dica="Quantas fotos e de que tipos. Cada uma sai realmente diferente: câmera, cenário e luz próprios.">
             <Pilulas rotulo="Quantas fotos" opcoes={QUANTIDADES_DE_VARIACAO} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
             <p className="mb-1 mt-2 text-[12px] text-muted-foreground">Tipos</p>
             <div className="flex min-w-0 flex-wrap" role="group" aria-label="Tipos de variação">
@@ -233,7 +237,11 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         )}
 
         {modo === "receita" && (
-          <Cartao titulo="Receita" dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
+          <Cartao
+            titulo="Receita"
+            recolher={`mesa-foto:ensaio:receita:${clientId}`}
+            resumo={receita ? `${receita.nome} · ${tomadas.length} ${tomadas.length === 1 ? "tomada" : "tomadas"}` : "nenhuma escolhida"}
+            dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
             {receitas.isLoading && <Carregando linhas={2} rotulo="Lendo as receitas" />}
             <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               {combinam.concat(outras).map((r) => {
@@ -763,11 +771,11 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
           />
         </Cartao>
         {kit && (
-          <Cartao titulo={`Produto: ${kit.nome}`}>
+          <Cartao titulo={`Produto: ${kit.nome}`} recolher={`mesa-foto:ensaio:produto-do-lote:${clientId}`} resumo={rotuloDoTipo(kit.tipo)}>
             <ResumoDoKit kit={kit} />
           </Cartao>
         )}
-        <Cartao titulo="Guia (opcional)">
+        <Cartao titulo="Guia (opcional)" recolher={`mesa-foto:ensaio:guia:${clientId}`} resumo={guia.modo === "nenhum" ? "sem guia" : "com guia"}>
           <SeletorDeGuia guia={guia} onMudar={setGuia} />
         </Cartao>
       </div>

@@ -132,8 +132,11 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
   if (!pedidos.length) return null;
   return (
     <Secao
+      divisoria
       titulo="Gerações"
       descricao={`${emAndamento.length} em andamento`}
+      recolher={`mesa-videos:geracoes:${clientId}`}
+      resumo={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"} · ${emAndamento.length} em andamento`}
       ajuda="Cada pedido mostra as variações. A consulta ao provedor só acontece quando você abre esta etapa ou toca em Conferir. Erro não é tentado de novo sozinho e não é cobrado."
       acao={
         <button type="button" className={botao.secundario} disabled={!!conferindo || !emAndamento.length} onClick={() => void conferir(null)} aria-label="Conferir as gerações em andamento">

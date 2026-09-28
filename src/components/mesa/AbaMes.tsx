@@ -50,7 +50,8 @@ import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useFiltroDaMarca, useMesa } from "./MesaContexto";
 import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
-import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
+import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
+import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -478,8 +479,8 @@ function PlanejarComEstrategista() {
 
   // ------------------------------------------------------------ formulário
   const formulario = (
-    <section className="space-y-4 rounded-xl border border-border bg-card p-4">
-      <TituloDeSecao>Período e objetivo</TituloDeSecao>
+    <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <CabecalhoDeSecao nivel={3} icone={<CalendarRange className="h-4 w-4" />} titulo="Período e objetivo" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Campo rotulo="Início"><Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9" /></Campo>
         <Campo rotulo="Fim"><Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9" /></Campo>
@@ -601,14 +602,17 @@ function PlanejarComEstrategista() {
           <DiagnosticoDoMes proposta={proposta} />
 
           {temas.length > 0 && (proposta.status === "temas" || itens.length === 0) && (
-            <section className="space-y-3">
-              <TituloDeSecao acao={<span className="text-[11.5px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}>
-                Temas propostos
-              </TituloDeSecao>
+            <Secao
+              nivel={3}
+              titulo="Temas propostos"
+              recolher={`mesa:mes:proposta:temas:${clientId}`}
+              resumo={`${escolhidos.size} de ${temas.length} escolhidos`}
+              acao={<span className="text-[11.5px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}
+            >
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {temas.map((t) => <CartaoDeTema key={t.id} tema={t} marcado={escolhidos.has(t.id)} onToggle={() => alternarTema(t.id)} />)}
               </div>
-            </section>
+            </Secao>
           )}
 
           {podeDetalhar && (proposta.status === "temas" || proposta.status === "detalhando" || itens.length === 0) && (
@@ -658,8 +662,12 @@ function PlanejarComEstrategista() {
           )}
 
           {itens.length > 0 && (
-            <section className="space-y-3">
-              <TituloDeSecao>Publicações ({itens.length})</TituloDeSecao>
+            <Secao
+              nivel={3}
+              titulo={`Publicações (${itens.length})`}
+              recolher={`mesa:mes:proposta:publicacoes:${clientId}`}
+              resumo={`${dataCurta(proposta.periodo_inicio)} a ${dataCurta(proposta.periodo_fim)}`}
+            >
               <div className="space-y-2">
                 {itens.map((it, i) => (
                   <LinhaDoItem
@@ -674,7 +682,7 @@ function PlanejarComEstrategista() {
                   />
                 ))}
               </div>
-            </section>
+            </Secao>
           )}
 
           {itens.length > 0 && proposta.status !== "gravada" && (
@@ -952,10 +960,14 @@ export default function AbaMes({
 
       <LinhaDeEvolucaoDoMes clientId={clientId} />
 
-      <section className="space-y-3 border-t border-border pt-6">
-        <TituloDeSecao ajuda="O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês.">
-          Gerador de meses
-        </TituloDeSecao>
+      <Secao
+        divisoria
+        titulo="Gerador de meses"
+        recolher={`mesa:mes:gerador:${clientId}`}
+        resumo={modo === "automatico" ? "Planejar e preencher a agenda" : "Uma proposta por vez"}
+        ajuda="O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês."
+        corpoClassName="space-y-3"
+      >
         <SeletorCompacto
           rotulo="Como planejar"
           opcoes={[
@@ -966,7 +978,7 @@ export default function AbaMes({
           onEscolher={(v) => trocarModo(v as ModoDePlanejar)}
         />
         {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
-      </section>
+      </Secao>
       </div>
       </AreaDeTrabalho>
 

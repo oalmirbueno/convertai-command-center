@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Check, Copy, Download, ExternalLink, Filter, ImageIcon, Library, Loader2, Search, Sparkles, Star, Users, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { campo, juntar, texto as textoDoSistema } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import {
   buscarReferencias,
   CATEGORIAS_DA_BIBLIOTECA,
@@ -532,28 +533,22 @@ export default function EtapaBiblioteca() {
       )}
 
       {prompts.length > 0 && (
-        <section className="min-w-0" aria-label="Prompts">
-          <h3 className="mb-2 text-[13px] font-semibold">
-            Prompts <span className="font-normal tabular-nums text-muted-foreground">{prompts.length}</span>
-          </h3>
+        <GrupoDaBiblioteca rotulo="Prompts" total={prompts.length} chave={`mesa-foto:biblioteca:lista-prompts:${clientId}`}>
           <ul className="grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-2">
             {prompts.map((i) => (
               <CartaoDoPrompt key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
             ))}
           </ul>
-        </section>
+        </GrupoDaBiblioteca>
       )}
       {referencias.length > 0 && (
-        <section className="min-w-0" aria-label="Referências de imagem">
-          <h3 className="mb-2 text-[13px] font-semibold">
-            Referências de imagem <span className="font-normal tabular-nums text-muted-foreground">{referencias.length}</span>
-          </h3>
+        <GrupoDaBiblioteca rotulo="Referências de imagem" total={referencias.length} chave={`mesa-foto:biblioteca:lista-referencias:${clientId}`}>
           <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {referencias.map((i) => (
               <CartaoDaReferencia key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
             ))}
           </ul>
-        </section>
+        </GrupoDaBiblioteca>
       )}
 
       <div className="min-w-0 space-y-5">
@@ -562,6 +557,27 @@ export default function EtapaBiblioteca() {
       </div>
       <Ampliar imagens={ampliada ? [ampliavelDoItem(ampliada)] : []} indice={ampliada ? 0 : null} onFechar={() => setAmpliada(null)} />
     </div>
+  );
+}
+
+/** Grupo da lista (Prompts, Referências): o título recolhe a lista e a contagem fica à vista. */
+function GrupoDaBiblioteca({ rotulo, total, chave, children }: { rotulo: string; total: number; chave: string; children: ReactNode }) {
+  const [recolhido, setRecolhido] = useRecolhido(chave);
+  return (
+    <section className="min-w-0" aria-label={rotulo} data-recolhido={recolhido ? "sim" : "nao"}>
+      <h3 className={recolhido ? "" : "mb-2"}>
+        <TituloRecolhivel
+          titulo={
+            <>
+              {rotulo} <span className="font-normal tabular-nums text-muted-foreground">{total}</span>
+            </>
+          }
+          recolhido={recolhido}
+          onAlternar={() => setRecolhido(!recolhido)}
+        />
+      </h3>
+      {!recolhido && children}
+    </section>
   );
 }
 
@@ -655,6 +671,8 @@ export function ExemplosDaBiblioteca() {
   return (
     <Cartao
       titulo="Exemplos dos prompts (admin)"
+      recolher={`mesa-foto:biblioteca:exemplos-admin:${clientId}`}
+      resumo="limpar e gerar os exemplos"
       dica="As fotos do Openverse vieram por busca de palavras e não mostram a direção do prompt. Limpe e gere o exemplo de cada prompt com o próprio prompt."
     >
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">

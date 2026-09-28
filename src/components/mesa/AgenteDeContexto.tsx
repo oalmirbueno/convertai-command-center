@@ -20,7 +20,8 @@ import {
   type RespostaDaConversa,
 } from "./contextoDoCliente";
 import { chaveDoPlano, type ModoDoAgente } from "./planoDoClienteApi";
-import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import PainelDoAgente, { BalaoDaConversa } from "@/components/sistema/PainelDoAgente";
+import { conversa, juntar } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -147,7 +148,7 @@ export default function AgenteDeContexto({
         mudanca || (erro && erro.clientId === clientId) ? (
           <>
             {mudanca && (
-              <p className="rounded-md bg-muted/60 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                 {nomesDoQueMudou.length ? `Mudou no kit: ${nomesDoQueMudou.join(", ")}.` : "Nada mudou no kit."}
                 {mudanca.memorias > 0 && ` ${mudanca.memorias === 1 ? "1 memória guardada" : `${mudanca.memorias} memórias guardadas`} para os agentes.`}
               </p>
@@ -179,7 +180,7 @@ export default function AgenteDeContexto({
             />
           )}
           <Textarea
-            className="shrink-0 resize-none text-[13px]"
+            className="shrink-0 resize-none"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
@@ -218,20 +219,18 @@ export default function AgenteDeContexto({
       )}
       {historico.isError && <AvisoDeErro erro={historico.error} />}
       {historico.data && mensagens.length === 0 && !pendente && (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+        <p className={conversa.apoio}>
           Nenhuma conversa ainda. Exemplos: "a cor principal é o verde da fachada", "o público são mães de 30 a 45 anos", "nunca usar fundo preto".
         </p>
       )}
       {mensagens.map((m, i) =>
         m.papel === "sistema" ? (
-          <p key={`${m.criado_em}-${i}`} className="text-center text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>
+          <p key={`${m.criado_em}-${i}`} className={juntar(conversa.apoio, "text-center [overflow-wrap:anywhere]")}>{m.conteudo}</p>
         ) : (
           <div key={`${m.criado_em}-${i}`} className="min-w-0 space-y-2">
-            <div
-              className={`rounded-lg px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}
-            >
+            <BalaoDaConversa de={m.papel === "usuario" ? "usuario" : "agente"}>
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
-            </div>
+            </BalaoDaConversa>
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
             {m.papel === "agente" && m.id &&
               acoesDaMensagem(m.anexos).map((a) => (
@@ -255,10 +254,10 @@ export default function AgenteDeContexto({
       )}
       {pendente && (
         <>
-          <div className="ml-6 rounded-lg bg-primary/10 px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
+          <BalaoDaConversa de="usuario">
             <p className="whitespace-pre-wrap">{pendente}</p>
-          </div>
-          <p className="mr-6 flex items-center px-1 text-[12px] text-muted-foreground">
+          </BalaoDaConversa>
+          <p className={juntar(conversa.apoio, "flex items-center px-1")}>
             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O agente está lendo o contexto...
           </p>
         </>

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ExternalLink, Flame, Megaphone, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
@@ -31,6 +33,7 @@ import {
  * campanha (abre a aba Campanhas já preenchida).
  */
 
+/** Chave antiga (sem cliente): só dá o ponto de partida de quem já tinha escolhido. */
 const CHAVE_RECOLHIDO = "mesa:hypes:recolhido";
 const VISIVEIS = 3;
 
@@ -148,7 +151,8 @@ export default function HypesDaSemana({
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [recolhido, setRecolhido] = useState(lerRecolhido);
+  // Recolher padronizado (TituloRecolhivel): lembrado por cliente.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:mes:hypes:${clientId}`, lerRecolhido());
   const [todos, setTodos] = useState(false);
   const [buscandoDesde, setBuscandoDesde] = useState<number | null>(null);
 
@@ -159,15 +163,7 @@ export default function HypesDaSemana({
   const itens = dados ? dados.itens : [];
   const visiveis = todos ? itens : itens.slice(0, VISIVEIS);
 
-  const alternar = () => {
-    const novo = !recolhido;
-    setRecolhido(novo);
-    try {
-      window.localStorage.setItem(CHAVE_RECOLHIDO, novo ? "1" : "0");
-    } catch {
-      /* sem armazenamento */
-    }
-  };
+  const alternar = () => setRecolhido(!recolhido);
 
   const buscar = async (forcar: boolean) => {
     setBuscandoDesde(Date.now());
@@ -189,47 +185,52 @@ export default function HypesDaSemana({
   const rotuloQuando = quando && !Number.isNaN(quando.getTime())
     ? `busca de ${quando.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`
     : "";
+  // Uma linha de estado: quantos e de quando (à vista também com o bloco recolhido).
+  const linhaDeEstado = [
+    itens.length ? `${itens.length} ${itens.length === 1 ? "hype" : "hypes"}` : "",
+    dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     // Seção sem caixa (docs/design/SISTEMA.md): título de seção, ação à direita, conteúdo logo abaixo.
     <section className="min-w-0" aria-label="Hypes da semana">
-      <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" onClick={alternar} aria-expanded={!recolhido} className="mr-2 flex min-w-0 flex-1 items-center text-left">
-          <Flame className="mr-2 h-4 w-4 shrink-0 text-primary" />
-          <span className="mr-2 shrink-0 text-[15px] font-semibold leading-[22px]">Hypes da semana</span>
-          {itens.length > 0 && <span className="mr-2 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{itens.length}</span>}
-          <span className="hidden min-w-0 truncate text-[11.5px] text-muted-foreground sm:inline">
-            {dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : ""}
-          </span>
-          <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform ${recolhido ? "" : "rotate-180"}`} />
-        </button>
-        <div className="flex shrink-0 items-center">
-          {buscandoDesde !== null && <span className="mr-2 hidden sm:inline-flex"><Cronometro desde={buscandoDesde} rotulo="Pesquisando" previsao="~90s" /></span>}
-          {daSemana ? (
-            <BotaoComCusto
-              rotulo={<><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Buscar de novo</>}
-              titulo="Hypes da semana"
-              descricao="Refaz a pesquisa na web com o contexto do cliente e a nota do Jev."
-              partes={() => partesDosHypes(catalogo)}
-              executar={() => buscar(true)}
-              aoConcluir={aoBuscar}
-              variant="ghost"
-              className="h-8"
-            />
-          ) : (
-            <BotaoComCusto
-              rotulo={<><Flame className="mr-1.5 h-3.5 w-3.5" />Buscar hypes</>}
-              titulo="Hypes da semana"
-              descricao="Pesquisa na web o que está em alta para o público deste cliente, com a nota do Jev. Leva de 60 a 90 segundos."
-              partes={() => partesDosHypes(catalogo)}
-              executar={() => buscar(false)}
-              aoConcluir={aoBuscar}
-              variant={dados ? "outline" : "default"}
-              className="h-8"
-            />
-          )}
-        </div>
-      </div>
+      <CabecalhoDeSecao
+        titulo="Hypes da semana"
+        icone={<Flame className="h-4 w-4" />}
+        truncar
+        descricao={linhaDeEstado || undefined}
+        recolher={{ recolhido, onAlternar: alternar, resumo: linhaDeEstado || undefined }}
+        acao={
+          <>
+            {buscandoDesde !== null && <span className="hidden sm:inline-flex"><Cronometro desde={buscandoDesde} rotulo="Pesquisando" previsao="~90s" /></span>}
+            {daSemana ? (
+              <BotaoComCusto
+                rotulo={<><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Buscar de novo</>}
+                titulo="Hypes da semana"
+                descricao="Refaz a pesquisa na web com o contexto do cliente e a nota do Jev."
+                partes={() => partesDosHypes(catalogo)}
+                executar={() => buscar(true)}
+                aoConcluir={aoBuscar}
+                variant="ghost"
+                className="h-8"
+              />
+            ) : (
+              <BotaoComCusto
+                rotulo={<><Flame className="mr-1.5 h-3.5 w-3.5" />Buscar hypes</>}
+                titulo="Hypes da semana"
+                descricao="Pesquisa na web o que está em alta para o público deste cliente, com a nota do Jev. Leva de 60 a 90 segundos."
+                partes={() => partesDosHypes(catalogo)}
+                executar={() => buscar(false)}
+                aoConcluir={aoBuscar}
+                variant={dados ? "outline" : "default"}
+                className="h-8"
+              />
+            )}
+          </>
+        }
+      />
       {buscandoDesde !== null && (
         <div className="pb-2 pt-1 sm:hidden"><Cronometro desde={buscandoDesde} rotulo="Pesquisando na web" previsao="~90s" /></div>
       )}

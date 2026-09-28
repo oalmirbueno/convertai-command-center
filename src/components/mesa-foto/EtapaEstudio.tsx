@@ -27,6 +27,7 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AprovarFoto } from "./AcoesDeUso";
 import AcoesProDaFoto from "./AcoesProDaFoto";
 import { MiniaturaDaFoto, Moldura, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
@@ -167,18 +168,37 @@ export function larguraQueCabe(palco: { largura: number; altura: number } | null
 }
 
 function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: string; icone: ReactNode; ajuda?: ReactNode; destaque?: boolean; id: string; children: ReactNode }) {
+  const { clientId } = useMesa();
+  // 28/09: cada grupo de ferramentas recolhe (lembrado por cliente); a ferramenta pedida no endereço abre o grupo dela.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:estudio:grupo-${id}:${clientId}`);
+  useEffect(() => {
+    if (destaque && recolhido) setRecolhido(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destaque]);
   return (
     <section
       className={juntar("min-w-0 rounded-lg border p-3 transition-colors", destaque ? "border-primary/60 bg-primary/5" : "border-border bg-card")}
       data-grupo-do-estudio={id}
+      data-recolhido={recolhido ? "sim" : "nao"}
       aria-label={titulo}
     >
-      <div className="mb-2 flex min-w-0 items-center">
-        <span className="mr-1.5 text-primary">{icone}</span>
-        <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{titulo}</h3>
-        {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
+      <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
+        <h3 className="min-w-0 flex-1">
+          <TituloRecolhivel
+            titulo={
+              <span className="inline-flex min-w-0 items-center">
+                <span className="mr-1.5 shrink-0 text-primary">{icone}</span>
+                <span className="truncate">{titulo}</span>
+              </span>
+            }
+            recolhido={recolhido}
+            onAlternar={() => setRecolhido(!recolhido)}
+            className="w-full"
+          />
+        </h3>
+        {ajuda && !recolhido && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
       </div>
-      {children}
+      {!recolhido && children}
     </section>
   );
 }

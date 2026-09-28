@@ -107,7 +107,7 @@ export default function EtapaDirecao() {
       : `${campanha.territorios.length} ${campanha.territorios.length === 1 ? "território" : "territórios"}`;
 
   return (
-    <div className="min-w-0 space-y-5" data-etapa-publicidade="direcao">
+    <div className="min-w-0 space-y-6" data-etapa-publicidade="direcao">
       <CabecalhoDaEtapa
         titulo="Direção"
         ajuda="Três territórios criativos com conceito, direção de arte, casting, ambiente e luz. A equipe aprova um; só então as tomadas saem."

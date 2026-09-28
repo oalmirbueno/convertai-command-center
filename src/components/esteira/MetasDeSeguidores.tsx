@@ -83,7 +83,7 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
 
   if (data && !data.instalada) {
     return (
-      <Secao nivel={3} divisoria titulo="Metas de seguidores">
+      <Secao nivel={3} divisoria titulo="Metas de seguidores" recolher={`ciclo:folha:metas:${clientId}`}>
         <p className={texto.auxiliar}>As metas ainda não foram ativadas no banco (SQL CE-01). Depois disso, cadastre aqui os degraus e a mensagem da Central comemora quando bater.</p>
       </Secao>
     );
@@ -91,7 +91,13 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
 
   const batidas = new Set(situacao.batidas.map((b) => b.id));
   return (
-    <Secao nivel={3} divisoria titulo="Metas de seguidores" descricao={situacao.atual !== null ? `Hoje ${milhar(situacao.atual)} seguidores${situacao.medidoEm ? `, medido até ${dm(situacao.medidoEm)}` : ""}` : "Sem medição de seguidores ainda"}>
+    <Secao
+      nivel={3}
+      divisoria
+      recolher={`ciclo:folha:metas:${clientId}`}
+      resumo={situacao.proxima ? `próxima: ${milhar(situacao.proxima.meta)}` : `${(data?.metas ?? []).length} ${(data?.metas ?? []).length === 1 ? "meta" : "metas"}`}
+      titulo="Metas de seguidores"
+      descricao={situacao.atual !== null ? `Hoje ${milhar(situacao.atual)} seguidores${situacao.medidoEm ? `, medido até ${dm(situacao.medidoEm)}` : ""}` : "Sem medição de seguidores ainda"}>
       {isLoading && <p className={texto.auxiliar}>Carregando as metas…</p>}
       {data?.erro && <p className="text-[12px] text-destructive">Não foi possível ler as metas: {data.erro}</p>}
       {situacao.proxima && (

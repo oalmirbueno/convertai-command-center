@@ -14,7 +14,8 @@ import { extensao, textoDoErro } from "@/lib/mesa/api";
 import { Ampliar } from "./Ampliar";
 import BibliotecaDeFontes from "./ContextoBibliotecaDeFontes";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao from "@/components/sistema/Secao";
 import { chaveDasFontes, useInvalidarContexto } from "./contextoDoCliente";
 
 const PAPEIS_DA_FONTE = [
@@ -190,61 +191,32 @@ export default function ContextoFontes() {
 
   return (
     <div className="space-y-6">
-      <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1 sm:mr-3">
-          <p className="text-[13px] font-medium">Biblioteca da agência</p>
-          <p className="text-[12px] leading-relaxed text-muted-foreground">Galeria com a amostra de cada família. Escolha a fonte de título e a de texto; a antiga do mesmo papel sai.</p>
-        </div>
-        <Button type="button" variant="outline" className="mt-2 h-9 shrink-0 sm:mt-0" onClick={() => setGaleria(true)}>
-          <Library className="mr-1.5 h-4 w-4" />
-          Escolher da biblioteca
-        </Button>
-      </section>
-
-      <section className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-        <TituloDeSecao>Enviar arquivo de fonte</TituloDeSecao>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_150px_auto] sm:items-end">
-          <Campo rotulo="Arquivo (.ttf, .otf, .woff, .woff2)">
-            <Input
-              ref={entrada}
-              type="file"
-              accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-              onChange={(e) => setArquivo(e.target.files?.[0] || null)}
-              className="h-9 text-[12px]"
-            />
-          </Campo>
-          <Campo rotulo="Nome">
-            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Playfair Display" className="h-9" />
-          </Campo>
-          <Campo rotulo="Papel">
-            <Select value={papel} onValueChange={setPapel}>
-              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {PAPEIS_DA_FONTE.map((p) => <SelectItem key={p.valor} value={p.valor}>{p.rotulo}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Campo>
-          <Button type="button" onClick={() => void enviar()} disabled={!arquivo || enviando}>
-            {enviando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
-            Enviar
-          </Button>
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <TituloDeSecao
-          ajuda="O Estúdio anexa a amostra de cada fonte na geração para o gerador copiar o desenho, o peso e a proporção das letras. Ela se refaz sozinha quando a fonte entra ou muda de papel."
-          acao={
-            lista.length > 0 ? (
+      <Secao
+        titulo={marca && !marca.principal ? `Fontes da ${marca.nome}` : "Fontes do cliente"}
+        recolher={`mesa:contexto:fontes:lista:${clientId}`}
+        resumo={tipografia.data ? `${lista.length} ${lista.length === 1 ? "fonte" : "fontes"}` : undefined}
+        corpoClassName="space-y-3"
+        ajuda={
+          <>
+            <span className="block">Escolher da biblioteca abre a galeria da agência com a amostra de cada família. Escolha a fonte de título e a de texto; a antiga do mesmo papel sai.</span>
+            <span className="mt-1.5 block">O Estúdio anexa a amostra de cada fonte na geração para o gerador copiar o desenho, o peso e a proporção das letras. Ela se refaz sozinha quando a fonte entra ou muda de papel.</span>
+          </>
+        }
+        acao={
+          <>
+            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => setGaleria(true)}>
+              <Library className="mr-1 h-3.5 w-3.5" />
+              Escolher da biblioteca
+            </Button>
+            {lista.length > 0 ? (
               <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => void gerarTodas()} disabled={gerandoTodas || !!refazendo}>
                 {gerandoTodas ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Type className="mr-1 h-3.5 w-3.5" />}
                 Gerar amostra da tipografia
               </Button>
-            ) : undefined
-          }
-        >
-          {marca && !marca.principal ? `Fontes da ${marca.nome}` : "Fontes do cliente"}
-        </TituloDeSecao>
+            ) : null}
+          </>
+        }
+      >
         {tipografia.isLoading && <p className="text-[12.5px] text-muted-foreground">Lendo fontes…</p>}
         {tipografia.data && tipografia.data.usaDoCliente && marca && (
           <p className="text-[12px] text-muted-foreground">A {marca.nome} não tem fonte própria: usa as do cliente. Envie ou escolha para ter as dela.</p>
@@ -270,7 +242,7 @@ export default function ContextoFontes() {
                   </span>
                 )}
               </button>
-              <div className="flex flex-wrap items-center gap-2 p-3">
+              <div className="flex flex-wrap items-center p-2 [&>*]:m-1">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium">{f.nome}</p>
                   <p className="truncate text-[11px] text-muted-foreground">
@@ -297,7 +269,36 @@ export default function ContextoFontes() {
             </li>
           ))}
         </ul>
-      </section>
+      </Secao>
+
+      <Secao titulo="Enviar arquivo de fonte" recolher={`mesa:contexto:fontes:enviar:${clientId}`} resumo=".ttf, .otf, .woff, .woff2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_150px_auto] sm:items-end">
+          <Campo rotulo="Arquivo (.ttf, .otf, .woff, .woff2)">
+            <Input
+              ref={entrada}
+              type="file"
+              accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+              onChange={(e) => setArquivo(e.target.files?.[0] || null)}
+              className="h-9 text-[12px]"
+            />
+          </Campo>
+          <Campo rotulo="Nome">
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Playfair Display" className="h-9" />
+          </Campo>
+          <Campo rotulo="Papel">
+            <Select value={papel} onValueChange={setPapel}>
+              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAPEIS_DA_FONTE.map((p) => <SelectItem key={p.valor} value={p.valor}>{p.rotulo}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Campo>
+          <Button type="button" onClick={() => void enviar()} disabled={!arquivo || enviando}>
+            {enviando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
+            Enviar
+          </Button>
+        </div>
+      </Secao>
 
       <BibliotecaDeFontes aberto={galeria} onOpenChange={setGaleria} />
       <Ampliar

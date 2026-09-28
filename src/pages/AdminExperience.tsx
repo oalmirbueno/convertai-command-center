@@ -2618,6 +2618,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   {/* Plano de mensagens do período */}
                   <div className="min-w-0" data-coluna="rituais">
                     <Secao
+                      recolher={`central:perfis:rituais:${client.id}`}
+                      resumo={(() => {
+                        const deHoje = RITUALS.find((r) => ritualQuando(r).destaque);
+                        return deHoje ? `hoje: ${deHoje.label}` : `${RITUALS.length} rituais`;
+                      })()}
                       titulo="O que enviar e quando"
                       ajuda="Cada geração usa a movimentação real deste cliente e varia o texto semana a semana. Você revisa e edita antes de qualquer coisa chegar nele."
                     >
@@ -2664,6 +2669,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         registrar decisão, "Atualizar" traz o texto já com isso,
                         sem recarregar a página inteira. */}
                     <Secao
+                      recolher={`central:perfis:mensagem:${client.id}`}
+                      resumo="abertura, meio e fechamento"
                       titulo="Mensagem do grupo"
                       ajuda="Escolha o momento da semana. A mensagem é montada na hora com entregas, frentes e pendências reais, seguindo a linha da semana (abertura, meio e fechamento). O texto varia a cada semana para nunca soar repetido."
                       acao={
@@ -2769,6 +2776,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
                     <Secao
                       divisoria
+                      recolher={`central:perfis:onde-estamos:${client.id}`}
+                      resumo={lastRitual ? lastRitual.title : "nada publicado ainda"}
                       titulo="Onde estamos com este cliente"
                       acao={lastRitual ? (
                         <button type="button" onClick={() => navigate(`/relatorios/${lastRitual.id}`)} className={botao.discreto}>
@@ -2799,7 +2808,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite />
                     </div>
 
-                    <Secao divisoria titulo="Contexto agora">
+                    <Secao
+                      divisoria
+                      recolher={`central:perfis:contexto:${client.id}`}
+                      resumo={[client.plan_name || "Sem plano", `${clientProjs.length} ${clientProjs.length === 1 ? "frente ativa" : "frentes ativas"}`].join(" · ")}
+                      titulo="Contexto agora"
+                    >
                       <dl className="space-y-1 text-[12.5px]">
                         <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Plano:</dt><dd className="min-w-0 text-foreground">{client.plan_name || "Sem plano"}{client.plan_value ? ` · ${fmt(Number(client.plan_value))}/mês` : ""}</dd></div>
                         <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Frentes ativas:</dt><dd className="min-w-0 text-foreground">{clientProjs.length > 0 ? clientProjs.map((p: any) => p.name).join(", ") : "nenhuma"}</dd></div>
@@ -3004,6 +3018,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 )}
                 <Secao
                   divisoria={comPedido}
+                  recolher={comPedido ? (cycleReview ? `ciclo:revisao:rascunhos:${reviewClientId || "todos"}` : "central:fila:rascunhos") : undefined}
+                  resumo={`${rascunhosVisiveis.length} ${rascunhosVisiveis.length === 1 ? "rascunho" : "rascunhos"}`}
                   titulo="Mensagens geradas"
                   descricao={`${rascunhosVisiveis.length} ${rascunhosVisiveis.length === 1 ? "rascunho" : "rascunhos"} na fila`}
                   ajuda="Nada daqui chegou ao cliente ainda. Abra a mensagem, aprimore com a IA se quiser, copie para o grupo ou publique no portal. Ao registrar o envio, ela entra no histórico, no dossiê e marca o ritual no Ciclo. A revisão formal com o Hermes fica em Ciclo › Revisão."
@@ -3207,6 +3223,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             <RegiaoRolavel modo="lg" rotulo="Histórico" memoria="central:historico" className="lg:pb-16 lg:pr-1">
               <div className="space-y-8">
                 <Secao
+                  recolher="central:historico:linha-do-tempo"
+                  resumo={`${timeline.length} ${timeline.length === 1 ? "movimento" : "movimentos"}`}
                   titulo="Linha do tempo"
                   descricao={`${timeline.length} ${timeline.length === 1 ? "movimento" : "movimentos"}`}
                   ajuda="Dossiê, plano da semana, vendas, mensagens, publicações, aprovações e materiais, do mais novo para o mais antigo."
@@ -3246,6 +3264,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
                 <Secao
                   divisoria
+                  recolher="central:historico:atualizacoes"
+                  resumo={`${publishedReports.length} ${publishedReports.length === 1 ? "publicada" : "publicadas"}`}
                   titulo="Atualizações enviadas aos clientes"
                   descricao={`${publishedReports.length} ${publishedReports.length === 1 ? "publicada" : "publicadas"}`}
                 >

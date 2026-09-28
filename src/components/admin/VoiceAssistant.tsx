@@ -1422,9 +1422,9 @@ export default function VoiceAssistant({
                     {respostas.map((r) => (
                       <div key={r.id} className="space-y-1.5" data-resposta-do-agente="">
                         <div className="flex justify-end">
-                          <p className="max-w-[85%] rounded-lg bg-muted px-3 py-1.5 text-[12.5px] text-foreground [overflow-wrap:anywhere]">{r.pergunta}</p>
+                          <p className="max-w-[85%] rounded-xl bg-muted px-3.5 py-2 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]">{r.pergunta}</p>
                         </div>
-                        <div className="max-w-[92%] rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] leading-5 text-foreground">
+                        <div className="max-w-[92%] rounded-xl border border-border bg-background px-3.5 py-2.5 text-[14px] leading-[1.6] text-foreground">
                           {r.carregando ? (
                             <span className="inline-flex items-center text-muted-foreground"><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo o que o painel sabe…</span>
                           ) : (
@@ -1435,7 +1435,7 @@ export default function VoiceAssistant({
                                   {r.passos.map((p, i) => <li key={i} className="[overflow-wrap:anywhere]">{p}</li>)}
                                 </ol>
                               )}
-                              {r.aviso && <p className="mt-1 text-[11.5px] text-muted-foreground">{r.aviso}</p>}
+                              {r.aviso && <p className="mt-1 text-[12.5px] text-muted-foreground">{r.aviso}</p>}
                               {r.destino && <BotaoDaArea destino={r.destino} onAbrir={(link) => navigate(link)} className="mt-1.5" />}
                             </>
                           )}
@@ -1447,10 +1447,10 @@ export default function VoiceAssistant({
                       <div key={a.acao.id} className="space-y-1.5" data-acao-do-aceleriq="">
                         {a.pedido && (
                           <div className="flex justify-end">
-                            <p className="max-w-[85%] rounded-lg bg-muted px-3 py-1.5 text-[12.5px] text-foreground [overflow-wrap:anywhere]">{a.pedido}</p>
+                            <p className="max-w-[85%] rounded-xl bg-muted px-3.5 py-2 text-[14px] leading-[1.6] text-foreground [overflow-wrap:anywhere]">{a.pedido}</p>
                           </div>
                         )}
-                        {a.resposta && <TextoDoAgente texto={a.resposta} clientId={answers.client_id || null} className="text-[12.5px] leading-5 text-foreground" />}
+                        {a.resposta && <TextoDoAgente texto={a.resposta} clientId={answers.client_id || null} className="text-foreground" />}
                         <CartaoDeAcao
                           acao={a.acao}
                           recemFeita
@@ -1972,7 +1972,7 @@ export default function VoiceAssistant({
                       placeholder={listening ? "Pode falar…" : "Fale ou escreva o que precisa"}
                       aria-label="Pedido para o Aceleriq"
                       rows={2}
-                      className={juntar(campoTexto, "min-h-[60px] resize-none")}
+                      className={juntar(campoTexto, "min-h-[60px] resize-none text-[14px] leading-[1.55]")}
                     />
                     {interim && <p className="mt-1 truncate text-[12px] italic text-muted-foreground">{interim}</p>}
                     <div className="mt-2 flex min-w-0 items-center">

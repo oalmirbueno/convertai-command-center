@@ -10,7 +10,7 @@ import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao 
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campoTexto, juntar } from "@/components/sistema/estilos";
+import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
 import { montarPacote } from "../../../supabase/functions/_shared/pacote-de-edicao";
 import { ehPedidoDeVideo } from "../../../supabase/functions/_shared/pedidos-de-video";
 import { INTENCOES, NENHUMA, intencaoPorPalavras, type MesaDoAgente } from "../../../supabase/functions/_shared/agente-de-video";
@@ -310,13 +310,13 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       }
     >
       {!mensagens.length && !pensando && (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground" data-agente-vazio={mesa}>
+        <p className={juntar(conversa.apoio, "leading-relaxed")} data-agente-vazio={mesa}>
           {mesa === "edicao" ? "Suba os vídeos e peça para organizar. Você confere a lista antes de qualquer mudança." : "Escolha uma cena na Base ou peça para gerar a próxima."}
         </p>
       )}
       {mensagens.map((m) => (
         <div key={m.id} className="min-w-0 space-y-2">
-          <div className={juntar("rounded-lg px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60")}>
+          <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
             <p className="whitespace-pre-wrap">{m.texto}</p>
           </div>
           {m.acao && m.mensagem_id && (
@@ -331,7 +331,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         </div>
       ))}
       {pensando && (
-        <p className="mr-6 flex items-center px-1 text-[12px] text-muted-foreground" data-etapa-do-agente={etapa}>
+        <p className={juntar(conversa.apoio, "mr-6 flex items-center px-1")} data-etapa-do-agente={etapa}>
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Entendendo o pedido...
         </p>
       )}

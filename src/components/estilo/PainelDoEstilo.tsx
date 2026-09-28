@@ -6,7 +6,7 @@ import { Check, ImagePlus, Loader2, Palette, Send, ThumbsDown, ThumbsUp, Trash2,
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { AjudaRecolhida, EstadoVazio, PainelDoAgente, SeletorCompacto, botao, campo, juntar, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, EstadoVazio, PainelDoAgente, SeletorCompacto, botao, campo, conversa, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import { BotaoComCusto, EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -377,19 +377,20 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
             <div className={m.papel === "usuario" ? "flex justify-end" : ""}>
               <div
                 className={juntar(
-                  "max-w-full rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]",
-                  m.papel === "usuario" ? "bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
+                  conversa.balao,
+                  "max-w-full",
+                  m.papel === "usuario" ? "ml-8 bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "bg-muted/40",
                 )}
               >
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
-                {m.custo_usd != null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
+                {m.custo_usd != null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
             </div>
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
             {leitura && (
               <details className="mt-1.5 rounded-md bg-muted/40 px-3 py-2">
-                <summary className="cursor-pointer text-[12px] text-muted-foreground">Leitura das referências</summary>
-                <p className="mt-1 whitespace-pre-wrap text-[12px] leading-5">{leitura.texto}</p>
+                <summary className="cursor-pointer text-[12.5px] text-muted-foreground">Leitura das referências</summary>
+                <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed">{leitura.texto}</p>
               </details>
             )}
             {m.id &&

@@ -157,6 +157,7 @@ export function Cartao({
   className = "",
   recolher,
   resumo,
+  recolhidoDeInicio = false,
 }: {
   titulo: ReactNode;
   /** Explicação longa: vai para o "?" ao lado do título. */
@@ -168,10 +169,12 @@ export function Cartao({
   recolher?: string;
   /** Linha curta que fica à vista com o bloco recolhido. */
   resumo?: ReactNode;
+  /** Começa recolhido enquanto a pessoa não escolheu (bloco claramente secundário). */
+  recolhidoDeInicio?: boolean;
 }) {
   if (recolher) {
     return (
-      <CartaoRecolhivel titulo={titulo} dica={dica} acao={acao} className={className} chave={recolher} resumo={resumo}>
+      <CartaoRecolhivel titulo={titulo} dica={dica} acao={acao} className={className} chave={recolher} resumo={resumo} inicial={recolhidoDeInicio}>
         {children}
       </CartaoRecolhivel>
     );
@@ -190,13 +193,34 @@ export function Cartao({
   );
 }
 
-function CartaoRecolhivel({ titulo, dica, acao, children, className, chave, resumo }: { titulo: ReactNode; dica?: ReactNode; acao?: ReactNode; children: ReactNode; className: string; chave: string; resumo?: ReactNode }) {
-  const [recolhido, setRecolhido] = useRecolhido(chave);
+function CartaoRecolhivel({
+  titulo,
+  dica,
+  acao,
+  children,
+  className,
+  chave,
+  resumo,
+  inicial,
+}: {
+  titulo: ReactNode;
+  dica?: ReactNode;
+  acao?: ReactNode;
+  children: ReactNode;
+  className: string;
+  chave: string;
+  resumo?: ReactNode;
+  inicial: boolean;
+}) {
+  const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
   return (
     <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="" data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={juntar("flex min-w-0 flex-wrap items-center justify-between", recolhido ? "" : "mb-2.5")}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
-          <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
+          {/* O título continua heading (h3), como no Cartao sem recolher: quem navega por títulos acha o bloco. */}
+          <h3 className="min-w-0">
+            <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
+          </h3>
           {dica && !recolhido && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
         </div>
         {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end">{acao}</div>}

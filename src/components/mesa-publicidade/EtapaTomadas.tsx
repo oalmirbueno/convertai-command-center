@@ -184,7 +184,7 @@ export default function EtapaTomadas() {
 
   if (!territorio) {
     return (
-      <div className="min-w-0 space-y-5" data-etapa-publicidade="tomadas">
+      <div className="min-w-0 space-y-6" data-etapa-publicidade="tomadas">
         <CabecalhoDaEtapa titulo="Tomadas" ajuda="Seis tomadas, uma por função, pedidas à Mesa Foto." />
         <EstadoVazio
           icone={<Camera className="h-5 w-5" />}
@@ -218,7 +218,7 @@ export default function EtapaTomadas() {
   };
 
   return (
-    <div className="min-w-0 space-y-5" data-etapa-publicidade="tomadas">
+    <div className="min-w-0 space-y-6" data-etapa-publicidade="tomadas">
       <CabecalhoDaEtapa
         titulo="Tomadas"
         ajuda="Seis funções: atrair, apresentar, contexto, detalhe, conceito e apoiar a ação. O diretor de fotografia monta o ensaio com as fontes reais do produto, a pessoa sintética do casting e o que não pode mudar. As fotos saem da Mesa Foto, na carteira do cliente."

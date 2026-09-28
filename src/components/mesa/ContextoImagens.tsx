@@ -22,7 +22,8 @@ import { legendaDaFoto } from "./ContextoFotos";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ExploradorDePastas, Quadrado } from "./NavegadorDePastas";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { invalidarAcervo, useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
 import { pastaDaFoto, pastasDoAcervo, useArvoreDoWorkspace } from "@/lib/mesa/pastas";
 
@@ -248,51 +249,52 @@ export default function ContextoImagens() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-start">
-          <div className="min-w-0 flex-1 sm:mr-3">
-            <p className="text-[13px] font-medium">Fotos reais do cliente</p>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-              {todas.length
-                ? `${ativas.length} ${ativas.length === 1 ? "ativa" : "ativas"} de ${todas.length}. ${semDescricao.length ? `${semDescricao.length} sem descrição.` : "Todas organizadas."}`
-                : "Traga as imagens de todas as pastas do Workspace e de Arquivos (fora os materiais entregues)."}
-            </p>
-          </div>
-          <div className="mt-2 flex flex-wrap sm:mt-0 sm:justify-end">
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-2 h-8 text-[12px]" onClick={() => void sincronizar()} disabled={sincronizando}>
-              {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FolderSync className="mr-1.5 h-3.5 w-3.5" />}
-              Buscar imagens do workspace e de Arquivos
-            </Button>
-            <BotaoComCusto
-              rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Organizar com IA{semDescricao.length ? ` (${semDescricao.length})` : ""}</>}
-              titulo="Organizar o acervo com IA"
-              descricao="O modelo de leitura olha cada imagem sem descrição e preenche descrição, categoria e tags. A equipe pode corrigir depois."
-              className="mb-1.5 h-8 text-[12px]"
-              disabled={semDescricao.length === 0}
-              fecharAoConfirmar
-              partes={() => [
-                {
-                  modeloId: leitor?.id,
-                  tipo: "texto",
-                  tokensEntrada: TOKENS_ENTRADA_POR_IMAGEM,
-                  tokensSaida: TOKENS_SAIDA_POR_IMAGEM,
-                  vezes: Math.min(semDescricao.length, MAX_ORGANIZAR_POR_VEZ),
-                },
-              ]}
-              executar={() => chamarFuncao("agente-contexto", { acao: "acervo_classificar", client_id: clientId })}
-              aoConcluir={(data) => {
-                const n = Number(data?.classificadas || 0);
-                const restantes = Number(data?.restantes || 0);
-                avisarCustoReal(
-                  `${n} ${n === 1 ? "imagem organizada" : "imagens organizadas"}${restantes > 0 ? `. Faltam ${restantes}: clique de novo para seguir` : ""}`,
-                  data,
-                  atualizarCusto,
-                );
-                invalidarAcervo(queryClient, clientId);
-              }}
-            />
-          </div>
-        </div>
+      <section className="min-w-0 space-y-3">
+        <CabecalhoDeSecao
+          titulo="Fotos reais do cliente"
+          descricao={
+            todas.length
+              ? `${ativas.length} ${ativas.length === 1 ? "ativa" : "ativas"} de ${todas.length}. ${semDescricao.length ? `${semDescricao.length} sem descrição.` : "Todas organizadas."}`
+              : "Acervo ainda vazio"
+          }
+          ajuda="Traga as imagens de todas as pastas do Workspace e de Arquivos (fora os materiais entregues). Organizar com IA preenche descrição, categoria e tags das que ainda não têm."
+          acao={
+            <>
+              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => void sincronizar()} disabled={sincronizando}>
+                {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FolderSync className="mr-1.5 h-3.5 w-3.5" />}
+                Buscar imagens do workspace e de Arquivos
+              </Button>
+              <BotaoComCusto
+                rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Organizar com IA{semDescricao.length ? ` (${semDescricao.length})` : ""}</>}
+                titulo="Organizar o acervo com IA"
+                descricao="O modelo de leitura olha cada imagem sem descrição e preenche descrição, categoria e tags. A equipe pode corrigir depois."
+                className="h-8 text-[12px]"
+                disabled={semDescricao.length === 0}
+                fecharAoConfirmar
+                partes={() => [
+                  {
+                    modeloId: leitor?.id,
+                    tipo: "texto",
+                    tokensEntrada: TOKENS_ENTRADA_POR_IMAGEM,
+                    tokensSaida: TOKENS_SAIDA_POR_IMAGEM,
+                    vezes: Math.min(semDescricao.length, MAX_ORGANIZAR_POR_VEZ),
+                  },
+                ]}
+                executar={() => chamarFuncao("agente-contexto", { acao: "acervo_classificar", client_id: clientId })}
+                aoConcluir={(data) => {
+                  const n = Number(data?.classificadas || 0);
+                  const restantes = Number(data?.restantes || 0);
+                  avisarCustoReal(
+                    `${n} ${n === 1 ? "imagem organizada" : "imagens organizadas"}${restantes > 0 ? `. Faltam ${restantes}: clique de novo para seguir` : ""}`,
+                    data,
+                    atualizarCusto,
+                  );
+                  invalidarAcervo(queryClient, clientId);
+                }}
+              />
+            </>
+          }
+        />
 
         {todas.length > 0 && (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
@@ -362,10 +364,15 @@ export default function ContextoImagens() {
         const aberto = !!abertos[idGrupo];
         const visiveis = aberto ? imagens : imagens.slice(0, POR_GRUPO);
         return (
-          <section key={idGrupo} className="min-w-0 space-y-2">
-            <TituloDeSecao acao={<span className="text-[11px] text-muted-foreground">{imagens.length}</span>}>
-              <span className="[overflow-wrap:anywhere]">{rotuloDoGrupo(chave)}</span>
-            </TituloDeSecao>
+          <Secao
+            key={idGrupo}
+            nivel={3}
+            titulo={rotuloDoGrupo(chave)}
+            recolher={`mesa:contexto:imagens:grupo:${idGrupo}:${clientId}`}
+            resumo={`${imagens.length}`}
+            acao={<span className="text-[11px] text-muted-foreground">{imagens.length}</span>}
+            corpoClassName="space-y-2"
+          >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               {visiveis.map((i, n) => (
                 <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista: imagens, indice: n })} />
@@ -382,7 +389,7 @@ export default function ContextoImagens() {
                 {aberto ? "Mostrar menos" : `Ver mais ${imagens.length - POR_GRUPO}`}
               </Button>
             )}
-          </section>
+          </Secao>
         );
       })}
 

@@ -516,7 +516,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const [erroDoMontar, setErroDoMontar] = useState<{ clientId: string; erro: unknown } | null>(null);
   const [sugestoesPorCliente, setSugestoesPorCliente] = useState<Record<string, SugestoesDoContexto>>({});
   const [aplicando, setAplicando] = useState<string | null>(null);
-  const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO);
+  const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO, clientId);
   const aprendizados = useAprendizadosDoCliente(clientId);
 
   const dados = leitura.data;
@@ -867,7 +867,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
             ) : documentos.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho.</p>
             ) : (
-              <ul className="-mr-1.5 max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1.5">
+              <ul className="-mr-1.5 space-y-1 pr-1.5 lg:max-h-[40vh] lg:overflow-y-auto lg:overscroll-contain">
                 {documentos.map((d) => (
                   <li key={d.file_id} className="flex min-w-0 items-center rounded-lg px-1.5 py-1 text-[12.5px] hover:bg-muted/50">
                     <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -885,7 +885,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
             ) : lacunas.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">O agente não aponta nada faltando.</p>
             ) : (
-              <ul className="-mr-1.5 max-h-[40vh] space-y-1.5 overflow-y-auto overscroll-contain pr-1.5">
+              <ul className="-mr-1.5 space-y-1.5 pr-1.5 lg:max-h-[40vh] lg:overflow-y-auto lg:overscroll-contain">
                 {lacunas.map((l) => (
                   <li key={l} className="flex min-w-0 items-start text-[12.5px] leading-relaxed">
                     <Circle className="mr-2 mt-1.5 h-2.5 w-2.5 shrink-0 text-muted-foreground" />

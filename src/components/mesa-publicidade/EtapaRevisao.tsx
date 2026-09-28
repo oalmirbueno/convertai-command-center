@@ -181,7 +181,7 @@ export default function EtapaRevisao() {
 
   if (!campanha.ensaio_id) {
     return (
-      <div className="min-w-0 space-y-5" data-etapa-publicidade="revisao">
+      <div className="min-w-0 space-y-6" data-etapa-publicidade="revisao">
         <CabecalhoDaEtapa titulo="Revisão" ajuda={ajuda} />
         <EstadoVazio
           icone={<ScanSearch className="h-5 w-5" />}
@@ -198,7 +198,7 @@ export default function EtapaRevisao() {
 
   const n = campanha.revisoes.length;
   return (
-    <div className="min-w-0 space-y-5" data-etapa-publicidade="revisao">
+    <div className="min-w-0 space-y-6" data-etapa-publicidade="revisao">
       <CabecalhoDaEtapa
         titulo="Revisão"
         ajuda={ajuda}

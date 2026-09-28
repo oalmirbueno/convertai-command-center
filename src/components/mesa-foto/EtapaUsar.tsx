@@ -43,6 +43,8 @@ function ParaRevisar() {
   return (
     <Cartao
       titulo={`Para revisar · ${pendentes.length}`}
+      recolher={`mesa-foto:usar:para-revisar:${clientId}`}
+      resumo="esperando a decisão da equipe"
       dica="Fotos geradas esperando a decisão da equipe. Aprovar põe a foto no acervo, pronta para a Mesa e a Mesa Ads."
       acao={
         <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: pendentes[0].ensaio.id })}>

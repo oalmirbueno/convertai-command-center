@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
-import type { ReactNode } from "react";
+import { Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -18,7 +17,7 @@ import EsteiraItemRow from "./EsteiraItemRow";
 import MetasDeSeguidores from "./MetasDeSeguidores";
 import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
 import TrafegoVendas from "./TrafegoVendas";
-import { Carregando, EstadoVazio, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoVazio, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 
 const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
   { fontes: ["onboarding"], titulo: "Entrada do cliente" },
@@ -43,14 +42,21 @@ function fmtNumero(n: Numero): string {
 
 const ROTULO_PLATAFORMA: Record<PlataformaAds, string> = { meta_ads: "Meta Ads", google_ads: "Google Ads", tiktok_ads: "TikTok Ads" };
 
-function Numeros({ leitura }: { leitura: Leitura }) {
+function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) {
   const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-primary" : t === "cai" ? "text-destructive" : "text-muted-foreground");
   const titulo = leitura.frente === "social" ? "Números do Instagram" : `Números · ${leitura.plataforma ? ROTULO_PLATAFORMA[leitura.plataforma] : "anúncios"}`;
   const colunas = leitura.numeros.length >= 5 ? "grid-cols-2 sm:grid-cols-3" : leitura.numeros.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
   // Sistema de design: seção sem caixa; cada número num poço; subiu, parado e
   // caiu em colunas de texto, sem caixa por grupo.
   return (
-    <SecaoDoSistema nivel={3} divisoria titulo={titulo} descricao={leitura.periodo}>
+    <SecaoDoSistema
+      nivel={3}
+      divisoria
+      recolher={recolher}
+      resumo={leitura.numeros.slice(0, 2).map((n) => `${n.rotulo} ${fmtNumero(n)}`).join(" · ")}
+      titulo={titulo}
+      descricao={leitura.periodo}
+    >
       <div className={`grid gap-2 ${colunas}`}>
         {leitura.numeros.map((n) => (
           <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
@@ -87,23 +93,6 @@ function Numeros({ leitura }: { leitura: Leitura }) {
   );
 }
 
-/** Linha que abre e fecha (lista com divisória, sem caixa). */
-function Recolhivel({ titulo, contador, aberta, onToggle, children }: { titulo: string; contador?: number; aberta: boolean; onToggle: () => void; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <button type="button" onClick={onToggle} aria-expanded={aberta} className={juntar("flex h-11 w-full min-w-0 items-center rounded-md text-left", foco)}>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{titulo}</span>
-        {typeof contador === "number" && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>{contador}</span>}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} aria-hidden="true" />
-      </button>
-      {aberta && <div className="pb-3">{children}</div>}
-    </div>
-  );
-}
-
-type Recolhidos = { lista: boolean; feitos: boolean; historia: boolean; jaTem: boolean };
-const RECOLHIDOS: Recolhidos = { lista: false, feitos: false, historia: false, jaTem: false };
-
 interface Props {
   cliente: ClienteDaEsteira | null;
   frente: "social" | "trafego";
@@ -117,11 +106,6 @@ interface Props {
 
 export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrite, canReview = false, aberta, onFechar, onMudou }: Props) {
   const queryClient = useQueryClient();
-  // Partes abertas da folha: lembradas no navegador (sair e voltar mantém).
-  const [abertos, setAbertos] = useEstadoDaTela<Recolhidos>("ciclo:folha:abertos", RECOLHIDOS, {
-    validar: (v) => !!v && typeof v === "object",
-  });
-  const alternar = (k: keyof Recolhidos) => setAbertos((a) => ({ ...RECOLHIDOS, ...a, [k]: !a[k] }));
   const [pedido, setPedido] = useState("");
   const [montando, setMontando] = useState(false);
   const [plano, setPlano] = useState<PlanoDaSemana | null>(null);
@@ -219,6 +203,11 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
   const feitosNaSemana = e.feitos.length + planoFeitos.length;
   const ritualFeitos = e.rituais.filter((r) => r.feito).length;
+  const historiaVisivel = historia.filter((h: MemoryEntry) => h.kind !== "esteira_plano");
+  const passosDeEntrada = ONBOARDING.filter((p) => !p.soSe || cliente.fatos.servicos[p.soSe]);
+  const temPasso = (p: (typeof ONBOARDING)[number]) => (p.key in cliente.fatos.onboardingHas ? cliente.fatos.onboardingHas[p.key] : (p.auto ? p.auto(cliente.fatos) : false));
+  // Recolher (dono, 28/09): cada bloco da folha lembra se está aberto, por cliente.
+  const chave = (bloco: string) => `ciclo:folha:${bloco}:${cliente.id}`;
 
   // Sistema de design: a folha é uma janela. Cabeçalho parado, corpo rolando
   // por dentro (RegiaoRolavel "sempre", com a posição lembrada por cliente),
@@ -241,6 +230,8 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             {/* Pelo dossiê: foco, o que foi feito, o que vem */}
             <SecaoDoSistema
               nivel={3}
+              recolher={chave("dossie")}
+              resumo={plano?.foco || (planoAbertos.length ? `${planoAbertos.length} ${planoAbertos.length === 1 ? "próximo passo" : "próximos passos"}` : undefined)}
               titulo={<span className="inline-flex items-center"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Pelo dossiê</span>}
               ajuda="Foco da semana, o que foi feito e os próximos passos, lidos do dossiê e da história dos últimos 14 dias. Reler força uma nova leitura."
               descricao={plano ? `${plano.source === "ai" ? `Lido pela IA${plano.modelo ? ` (${plano.modelo})` : ""}` : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}${plano.removidos_por_ja_feito ? ` · ${plano.removidos_por_ja_feito} já feito(s) fora do plano` : ""}${plano.reserva ? ` · ${plano.reserva}` : ""}` : undefined}
@@ -289,13 +280,13 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             {frente === "trafego" && plataformaAtual && (
               <>
                 <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
-                {leitura ? <Numeros leitura={leitura} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
+                {leitura ? <Numeros leitura={leitura} recolher={chave("numeros")} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
                 {plataformaAtual.estado !== "nao-configurada" && (
                   <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
                 )}
               </>
             )}
-            {frente === "social" && leitura && <Numeros leitura={leitura} />}
+            {frente === "social" && leitura && <Numeros leitura={leitura} recolher={chave("numeros")} />}
             {frente === "social" && <MetasDeSeguidores clientId={cliente.id} metricas={cliente.fatos.metricas} canWrite={canWrite} />}
 
             {insights.length > 0 && (
@@ -312,6 +303,8 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             <SecaoDoSistema
               nivel={3}
               divisoria
+              recolher={chave("rituais")}
+              resumo={`${ritualFeitos} de ${e.rituais.length}`}
               titulo="Rituais da semana"
               descricao={`${ritualFeitos} de ${e.rituais.length}`}
               acao={canReview ? (
@@ -332,15 +325,24 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
               <EstadoVazio compacto titulo="Em dia." descricao="Nada pendente nesta frente." />
             )}
             {grupos.map((g) => (
-              <SecaoDoSistema key={g.titulo} nivel={3} divisoria titulo={g.titulo} descricao={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}>
+              <SecaoDoSistema
+                key={g.titulo}
+                nivel={3}
+                divisoria
+                recolher={chave(`grupo:${g.fontes[0]}`)}
+                resumo={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
+                titulo={g.titulo}
+                descricao={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
+              >
                 <div className="divide-y divide-border">
                   {g.itens.map((it: EsteiraItem) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
                 </div>
               </SecaoDoSistema>
             ))}
 
+            {/* Apoio da folha: começa recolhido e cada bloco lembra a escolha. */}
             <div className="divide-y divide-border border-y border-border">
-              <Recolhivel titulo="Lista rápida" aberta={abertos.lista} onToggle={() => alternar("lista")}>
+              <SecaoDoSistema nivel={3} className="py-3" recolher={chave("lista")} recolhidaDeInicio titulo="Lista rápida">
                 <textarea
                   value={pedido}
                   onChange={(ev) => setPedido(ev.target.value)}
@@ -355,22 +357,29 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                     <Sparkles className={`mr-1.5 h-3.5 w-3.5 ${montando ? "animate-pulse" : ""}`} aria-hidden="true" />{montando ? "Montando…" : "Montar checklist"}
                   </button>
                 </div>
-              </Recolhivel>
+              </SecaoDoSistema>
 
               {feitosNaSemana > 0 && (
-                <Recolhivel titulo="Feitos nesta semana" contador={feitosNaSemana} aberta={abertos.feitos} onToggle={() => alternar("feitos")}>
+                <SecaoDoSistema nivel={3} className="py-3" recolher={chave("feitos")} recolhidaDeInicio resumo={String(feitosNaSemana)} titulo="Feitos nesta semana">
                   <div className="divide-y divide-border">
                     {[...e.feitos, ...planoFeitos].map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
                   </div>
-                </Recolhivel>
+                </SecaoDoSistema>
               )}
 
-              <Recolhivel titulo="História deste cliente" contador={historia.length} aberta={abertos.historia} onToggle={() => alternar("historia")}>
-                {historia.length === 0 ? (
+              <SecaoDoSistema
+                nivel={3}
+                className="py-3"
+                recolher={chave("historia")}
+                recolhidaDeInicio
+                resumo={historiaVisivel.length ? `${historiaVisivel.length} ${historiaVisivel.length === 1 ? "registro" : "registros"}` : "nada ainda"}
+                titulo="História deste cliente"
+              >
+                {historiaVisivel.length === 0 ? (
                   <p className={texto.auxiliar}>Nada registrado ainda.</p>
                 ) : (
                   <ul className="divide-y divide-border">
-                    {historia.filter((h: MemoryEntry) => h.kind !== "esteira_plano").map((h: MemoryEntry) => (
+                    {historiaVisivel.map((h: MemoryEntry) => (
                       <li key={h.id} className="min-w-0 py-2">
                         <p className={texto.auxiliar}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
                         <p className="text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
@@ -379,13 +388,20 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                     ))}
                   </ul>
                 )}
-              </Recolhivel>
+              </SecaoDoSistema>
 
               {!e.onboardingCompleto && (
-                <Recolhivel titulo="O que este cliente já tem" aberta={abertos.jaTem} onToggle={() => alternar("jaTem")}>
+                <SecaoDoSistema
+                  nivel={3}
+                  className="py-3"
+                  recolher={chave("ja-tem")}
+                  recolhidaDeInicio
+                  resumo={`${passosDeEntrada.filter((p) => temPasso(p)).length} de ${passosDeEntrada.length}`}
+                  titulo="O que este cliente já tem"
+                >
                   <ul className="divide-y divide-border">
-                    {ONBOARDING.filter((p) => !p.soSe || cliente.fatos.servicos[p.soSe]).map((p) => {
-                      const tem = p.key in cliente.fatos.onboardingHas ? cliente.fatos.onboardingHas[p.key] : (p.auto ? p.auto(cliente.fatos) : false);
+                    {passosDeEntrada.map((p) => {
+                      const tem = temPasso(p);
                       return (
                         <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
                           <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[11.5px] text-muted-foreground">(detectado)</span> : null}</span>
@@ -394,7 +410,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                       );
                     })}
                   </ul>
-                </Recolhivel>
+                </SecaoDoSistema>
               )}
             </div>
 

@@ -16,6 +16,7 @@ import SeletorDeGuia from "./SeletorDeGuia";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { BotaoTirarFundo } from "./EtapaAcervo";
 import {
   acrescentarFotos,
@@ -72,6 +73,7 @@ export default function EtapaPreparar() {
   const [modeloId, setModeloId] = useState("");
   const [qualidade, setQualidade] = useState<Qualidade>("alta");
   const modeloEscolhido = modeloId || (padrao ? padrao.id : "");
+  const [versoesRecolhidas, setVersoesRecolhidas] = useRecolhido(`mesa-foto:preparar:versoes:${clientId}`);
 
   useEffect(() => {
     if (imagemId) setFotoId(imagemId);
@@ -224,8 +226,15 @@ export default function EtapaPreparar() {
             )}
           </div>
           {derivadas.length > 0 && (
-            <div className="mt-3 border-t border-border pt-3">
-              <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Versões feitas a partir desta foto</p>
+            <div className="mt-3 border-t border-border pt-3" data-recolhido={versoesRecolhidas ? "sim" : "nao"}>
+              <TituloRecolhivel
+                titulo="Versões feitas a partir desta foto"
+                recolhido={versoesRecolhidas}
+                onAlternar={() => setVersoesRecolhidas(!versoesRecolhidas)}
+                resumo={`${derivadas.length} ${derivadas.length === 1 ? "versão" : "versões"}`}
+                className={versoesRecolhidas ? "" : "mb-1.5"}
+              />
+              {!versoesRecolhidas && (
               <div className="flex min-w-0 flex-wrap">
                 {derivadas.slice(0, 12).map((d) => (
                   <button
@@ -240,6 +249,7 @@ export default function EtapaPreparar() {
                   </button>
                 ))}
               </div>
+              )}
             </div>
           )}
         </Cartao>
@@ -247,6 +257,8 @@ export default function EtapaPreparar() {
         <div className="min-w-0 space-y-5">
           <Cartao
             titulo="O que fazer com a foto"
+            recolher={`mesa-foto:preparar:o-que-fazer:${clientId}`}
+            resumo={modoAtual.rotulo}
             dica="Cada modo diz o que muda e o que fica. As áreas protegidas voltam com os pixels originais."
             acao={podeTirarFundo(foto) ? <BotaoTirarFundo foto={foto} onPronta={(id) => setDepoisId(id)} /> : undefined}
           >
@@ -289,7 +301,7 @@ export default function EtapaPreparar() {
             </div>
           </Cartao>
 
-          <Cartao titulo="Guia">
+          <Cartao titulo="Guia" recolher={`mesa-foto:preparar:guia:${clientId}`} resumo={guia.modo === "nenhum" ? "sem guia" : "com guia"}>
             <SeletorDeGuia guia={guia} onMudar={setGuia} />
           </Cartao>
 

@@ -81,6 +81,8 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
     <Secao
       nivel={3}
       divisoria
+      recolher={`ciclo:folha:vendas:${fatos.clientId}`}
+      resumo={`${r30.total} em 30 dias`}
       titulo={<span className="inline-flex items-center"><BadgeDollarSign className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />Vendas</span>}
       ajuda="O número que fecha o funil. Registre a venda que o cliente fechou (WhatsApp, Instagram, loja) ou veja as rastreadas pela plataforma. Cada venda vai para o diário e o dossiê lê ao otimizar a campanha."
       acao={canWrite ? (

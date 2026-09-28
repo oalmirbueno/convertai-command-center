@@ -112,28 +112,28 @@ export function ChatDoAgente({
       )}
       {/* Casca do sistema (PainelDoAgente em peças): a conversa rola por dentro, numa caixa de altura fixa; o campo fica logo abaixo, sempre à vista. */}
       <div className="flex h-[30vh] min-h-[120px] min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900/60" data-caixa-da-conversa="">
-      <MensagensDoAgente ref={conversa} rotulo="Conversa com o agente" className="nowheel nopan nodrag !space-y-1.5 !p-2">
-        {mensagens.length === 0 && <p className="text-[12px] text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
+      <MensagensDoAgente ref={conversa} rotulo="Conversa com o agente" className="nowheel nopan nodrag !space-y-2 !p-2.5">
+        {mensagens.length === 0 && <p className="text-[12.5px] leading-snug text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
         {mensagens.map((msg, i) => (
           <p
             key={i}
-            className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-2.5 py-1.5 text-[12px] leading-snug [overflow-wrap:anywhere] ${msg.papel === "usuario" ? "ml-auto bg-emerald-500/20 text-emerald-50" : "bg-white/[0.07] text-zinc-100"}`}
+            className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-[1.5] [overflow-wrap:anywhere] ${msg.papel === "usuario" ? "ml-auto bg-emerald-500/20 text-emerald-50" : "bg-white/[0.07] text-zinc-100"}`}
             data-mensagem={msg.papel}
           >
             {msg.texto}
           </p>
         ))}
         {enviando && (
-          <p className="inline-flex items-center rounded-2xl bg-white/[0.07] px-2.5 py-1.5 text-[12px] text-zinc-300">
+          <p className="inline-flex items-center rounded-2xl bg-white/[0.07] px-3 py-2 text-[13px] text-zinc-300">
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> pensando
           </p>
         )}
       </MensagensDoAgente>
       </div>
-      <CompositorDoAgente className="!border-t-0 !px-0 !pb-0 !pt-0">
+      <CompositorDoAgente className="!border-t-0 !px-0 !pb-0 !pt-0 [&_textarea]:text-[13px]">
       <div className="flex min-w-0 flex-wrap">
         {ATALHOS.map((a) => (
-          <button key={a} type="button" disabled={enviando} onClick={() => void enviar(a)} className="mb-1 mr-1 rounded-full border border-white/10 px-2 py-0.5 text-[10.5px] text-zinc-400 hover:text-white disabled:opacity-50">
+          <button key={a} type="button" disabled={enviando} onClick={() => void enviar(a)} className="mb-1 mr-1 rounded-full border border-white/10 px-2 py-0.5 text-[11.5px] text-zinc-400 hover:text-white disabled:opacity-50">
             {a}
           </button>
         ))}

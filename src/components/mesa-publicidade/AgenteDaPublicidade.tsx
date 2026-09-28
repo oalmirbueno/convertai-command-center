@@ -11,7 +11,7 @@ import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, juntar } from "@/components/sistema/estilos";
+import { botao, campoTexto, conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
 import { useMesaPublicidade } from "./Comuns";
 import { chaveDaCampanha, conversarComOAgente, lerHistorico, normalizarCampanha, type MensagemDoAgente } from "./publicidadeApi";
 
@@ -174,7 +174,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
           </div>
         )}
         {!mensagens.length && conversa.lida && (
-          <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          <p className={juntar(estiloDaConversa.apoio, "leading-relaxed")}>
             {campanha ? "Peça o que precisa. Quando for uma ação, eu mostro a lista e você confirma." : "Abra uma campanha para eu agir nela. Posso orientar a escolha do produto."}
           </p>
         )}
@@ -184,12 +184,12 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
             <div key={m.id || `m-${i}`} className="min-w-0">
               <div
                 className={juntar(
-                  "rounded-lg px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]",
-                  m.papel === "usuario" ? "ml-6 bg-primary/10" : m.papel === "sistema" ? "bg-muted text-muted-foreground" : "mr-6 bg-secondary/60",
+                  estiloDaConversa.balao,
+                  m.papel === "usuario" ? estiloDaConversa.doUsuario : m.papel === "sistema" ? "bg-muted text-muted-foreground" : estiloDaConversa.doAgente,
                 )}
               >
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
-                {m.custo_usd !== null && <p className="mt-1 text-[11px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
+                {m.custo_usd !== null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
               {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
               {m.id &&
@@ -216,7 +216,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
           );
         })}
         {enviando && (
-          <p className="flex items-center text-[12px] text-muted-foreground">
+          <p className={juntar(estiloDaConversa.apoio, "flex items-center")}>
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Pensando na campanha...
           </p>
         )}

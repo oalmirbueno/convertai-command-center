@@ -22,6 +22,7 @@ import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carreg
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
+import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 import { AtalhosDaFoto, MenuDeUso } from "./UsoDaFoto";
 import { useSelecaoParaODiretor } from "./diretorApi";
 import { acrescentarFotos, baixarDoStorage, baixarUmaAUma, classeDaFoto, invalidarFotos, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
@@ -373,6 +374,7 @@ const PONTO_DO_CLONE: Record<string, string> = { rascunho: "bg-muted-foreground/
 
 /** Clones no seletor lateral compacto (o mesmo das personas, 26/09). */
 function ListaDeClones({ clones, escolhido, onEscolher, onNovo, novoAberto }: { clones: Clone[]; escolhido: string | null; onEscolher: (id: string) => void; onNovo: () => void; novoAberto: boolean }) {
+  const { clientId } = useMesa();
   const itens: ItemDoSeletor[] = clones.map((c) => ({
     id: c.id,
     nome: c.nome,
@@ -394,6 +396,7 @@ function ListaDeClones({ clones, escolhido, onEscolher, onNovo, novoAberto }: { 
   return (
     <SeletorLateral
       titulo="Clones"
+      recolher={`mesa-foto:clones:lista:${clientId}`}
       itens={itens}
       escolhido={escolhido}
       onEscolher={onEscolher}
@@ -822,6 +825,8 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
     <Secao
       titulo="Folha de identidade"
       descricao={`${aberto.folha.aprovadas} de ${aberto.folha.total} aprovadas${aberto.folha.pronto ? " · pronta" : ""}`}
+      recolher={`mesa-foto:clones:folha:${clientId}`}
+      resumo={`${aberto.folha.aprovadas} de ${aberto.folha.total} aprovadas${aberto.folha.pronto ? " · pronta" : ""}`}
       ajuda={`A mesma pessoa em 6 vistas, fundo neutro e luz uniforme: é a identidade das variações (todas as vistas aprovadas vão em cada variação) e, depois, do vídeo. Gerador: ${motor ? motor.rotulo : "padrão"}.${aberto.folha.pronto ? " Pronto." : " Aprove a frente e mais 2 para ficar pronto."}`}
       data-folha-do-clone=""
       acao={
@@ -1456,6 +1461,8 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
       className="border-t border-border pt-5 min-[1600px]:border-t-0 min-[1600px]:pt-0"
       titulo="Variações"
       descricao={`${aberto.variacoes.length} ${aberto.variacoes.length === 1 ? "pronta" : "prontas"}`}
+      recolher={`mesa-foto:clones:variacoes:${clientId}`}
+      resumo={`${aberto.variacoes.length} ${aberto.variacoes.length === 1 ? "pronta" : "prontas"}`}
       ajuda={
         aberto.folha.aprovadas
           ? `Mesmo rosto em outra roupa, cenário, pose ou expressão. Cada variação leva a foto real e as ${aberto.folha.aprovadas} ${aberto.folha.aprovadas === 1 ? "vista aprovada" : "vistas aprovadas"} da folha, com os traços repetidos no pedido.`
@@ -2082,11 +2089,19 @@ function ClonesArquivados({ onRestaurado }: { onRestaurado: (c: Clone) => void }
   };
   return (
     <section className="mt-4 min-w-0 border-t border-border pt-3" aria-label="Clones arquivados" data-clones-arquivados="">
-      <button type="button" className={juntar("flex w-full min-w-0 items-center rounded text-left text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)} aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
-        <Archive className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="mr-auto truncate">Arquivados{q.data ? ` · ${lista.length}` : ""}</span>
-        <span aria-hidden="true">{aberto ? "−" : "+"}</span>
-      </button>
+      {/* Mesmo cabeçalho que recolhe dos outros blocos (seta que gira); fechado de início e a lista só é lida ao abrir. */}
+      <h3 className="min-w-0">
+        <TituloRecolhivel
+          titulo={
+            <span className="inline-flex min-w-0 items-center">
+              <Archive className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="truncate">Arquivados{q.data ? ` · ${lista.length}` : ""}</span>
+            </span>
+          }
+          recolhido={!aberto}
+          onAlternar={() => setAberto(!aberto)}
+        />
+      </h3>
       {aberto && (
         <div className="mt-2 min-w-0">
           {q.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os arquivados" />}

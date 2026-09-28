@@ -3,7 +3,7 @@ import { Bot, Loader2, Send } from "lucide-react";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
@@ -211,7 +211,7 @@ export default function AgenteDoPerfil({
         }
         return (
           <div key={m.id || i} className={juntar("min-w-0", m.papel === "usuario" ? "flex justify-end" : "")}>
-            <div className={juntar("min-w-0 max-w-full rounded-lg px-3 py-2 text-[13px] leading-5 [overflow-wrap:anywhere]", m.papel === "usuario" ? "ml-6 bg-primary/10" : "bg-muted/50")}>
+            <div className={juntar(conversa.balao, "max-w-full", m.papel === "usuario" ? conversa.doUsuario : "mr-2 bg-muted/50")}>
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {pautas && <PautasDoAnexo anexo={pautas} />}
             </div>
@@ -239,7 +239,7 @@ export default function AgenteDoPerfil({
         <>
           {pedidoAgora && (
             <div className="flex justify-end">
-              <p className="ml-6 rounded-lg bg-primary/10 px-3 py-2 text-[13px] [overflow-wrap:anywhere]">{pedidoAgora}</p>
+              <p className={juntar(conversa.balao, conversa.doUsuario)}>{pedidoAgora}</p>
             </div>
           )}
           <p className={juntar(texto.auxiliar, "flex items-center")} aria-live="polite">

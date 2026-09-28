@@ -86,7 +86,7 @@ export default function AbaContexto() {
     validar: (v) => PARTES.some((p) => p.valor === v),
   });
   const detalhes = useRef<HTMLDivElement>(null);
-  const hubs = useHubsAbertos(DETALHES_DE_INICIO);
+  const hubs = useHubsAbertos(DETALHES_DE_INICIO, clientId);
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
   const { marca } = useMarcaDaMesa();
   // Frente C: o agente ao lado vira o agente do cliente (modo plano); o Hub do plano preenche o pedido.
@@ -159,6 +159,7 @@ export default function AbaContexto() {
             resumo="O que chegou pelo MCP e o que vale para o planejamento"
             aberto={hubs.aberto("ctx-mcp")}
             onAlternar={() => hubs.alternar("ctx-mcp")}
+            rolagem
           >
             <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Carregando o MCP" />}>
               <ContextoMcp />

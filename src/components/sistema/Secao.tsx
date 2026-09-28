@@ -1,6 +1,16 @@
 import type { ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import AjudaRecolhida from "./AjudaRecolhida";
-import { juntar, texto } from "./estilos";
+import { useRecolhido } from "./TituloRecolhivel";
+import { foco, juntar, texto } from "./estilos";
+
+/** Título que vira o botão de recolher (Secao com `recolher`). */
+export interface RecolherDoCabecalho {
+  recolhido: boolean;
+  onAlternar: () => void;
+  /** Linha curta à vista com o bloco recolhido (ex.: "12 itens"). */
+  resumo?: ReactNode;
+}
 
 /**
  * Cabeçalho de seção (só o cabeçalho, sem o conteúdo): título curto com o "?"
@@ -26,6 +36,7 @@ export function CabecalhoDeSecao({
   icone,
   truncar = false,
   classeDoTitulo = "",
+  recolher,
   className = "",
   ...resto
 }: {
@@ -45,9 +56,12 @@ export function CabecalhoDeSecao({
   truncar?: boolean;
   /** Ajuste do título (tamanho), somado por cima do padrão do nível. */
   classeDoTitulo?: string;
+  /** O título vira o botão de recolher (seta que gira; recolhido, o resumo fica ao lado). */
+  recolher?: RecolherDoCabecalho;
   className?: string;
 } & Record<`data-${string}`, string | undefined>) {
   const Titulo = nivel === 3 ? "h3" : "h2";
+  const recolhido = !!(recolher && recolher.recolhido);
   return (
     <div className={juntar("flex min-w-0 items-start", className)} data-cabecalho-de-secao="" {...resto}>
       {/* Título: cresce para ocupar a sobra; as ações encolhem com peso 5 (cedem primeiro). Pesos >= 1: com soma menor que 1 o flex não tira todo o excesso. */}
@@ -59,19 +73,34 @@ export function CabecalhoDeSecao({
                 {icone}
               </span>
             )}
-            {titulo && (
+            {titulo && recolher ? (
+              <Titulo className={juntar(nivel === 3 ? "text-[13px] font-semibold leading-5 text-foreground" : texto.tituloSecao, "min-w-0", classeDoTitulo)}>
+                <button
+                  type="button"
+                  onClick={recolher.onAlternar}
+                  aria-expanded={!recolhido}
+                  title={recolhido ? "Mostrar" : "Recolher"}
+                  className={juntar("-ml-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco)}
+                  data-titulo-recolhivel=""
+                >
+                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+                  <span className={juntar("min-w-0", truncar ? "truncate" : "[overflow-wrap:anywhere]")}>{titulo}</span>
+                </button>
+              </Titulo>
+            ) : titulo ? (
               <Titulo className={juntar(nivel === 3 ? "text-[13px] font-semibold leading-5 text-foreground" : texto.tituloSecao, "min-w-0", truncar && "truncate", classeDoTitulo)}>
                 {titulo}
               </Titulo>
-            )}
-            {ajuda && (
+            ) : null}
+            {recolhido && recolher && recolher.resumo ? <span className="ml-2 min-w-0 truncate text-[12px] font-normal text-muted-foreground">{recolher.resumo}</span> : null}
+            {ajuda && !recolhido && (
               <AjudaRecolhida className="ml-1.5" rotulo={rotuloDaAjuda}>
                 {ajuda}
               </AjudaRecolhida>
             )}
           </div>
         )}
-        {descricao && <p className={juntar(texto.auxiliar, "mt-0.5", truncar && "truncate")}>{descricao}</p>}
+        {descricao && !recolhido && <p className={juntar(texto.auxiliar, "mt-0.5", recolher && "pl-5", truncar && "truncate")}>{descricao}</p>}
       </div>
       {/* Sem min-w-0 de propósito: o grupo nunca fica mais estreito que a maior ação. */}
       {acao && <div className="-m-1 flex flex-initial shrink-[5] flex-wrap items-center justify-end [&>*]:m-1">{acao}</div>}
@@ -95,6 +124,9 @@ export default function Secao({
   id,
   className = "",
   corpoClassName = "",
+  recolher,
+  resumo,
+  recolhidaDeInicio = false,
   children,
   ...resto
 }: {
@@ -112,13 +144,91 @@ export default function Secao({
   id?: string;
   className?: string;
   corpoClassName?: string;
+  /**
+   * Chave para recolher a seção (lembrada no navegador; ponha o cliente ou a
+   * área nela). Com ela, o título vira o botão de recolher. Precisa de `titulo`.
+   */
+  recolher?: string;
+  /** Linha curta à vista com a seção recolhida ("12 itens"). */
+  resumo?: ReactNode;
+  /** Começa recolhida enquanto a pessoa não escolheu. */
+  recolhidaDeInicio?: boolean;
   children?: ReactNode;
 } & Record<`data-${string}`, string | undefined>) {
+  if (recolher && titulo) {
+    return (
+      <SecaoRecolhivel
+        chave={recolher}
+        inicial={recolhidaDeInicio}
+        resumo={resumo}
+        titulo={titulo}
+        descricao={descricao}
+        acao={acao}
+        ajuda={ajuda}
+        divisoria={divisoria}
+        nivel={nivel}
+        id={id}
+        className={className}
+        corpoClassName={corpoClassName}
+        resto={resto}
+      >
+        {children}
+      </SecaoRecolhivel>
+    );
+  }
   const temCabecalho = !!(titulo || descricao || acao);
   return (
     <section id={id} className={juntar("min-w-0", divisoria && "border-t border-border pt-5", className)} {...resto}>
       {temCabecalho && <CabecalhoDeSecao className="mb-3" titulo={titulo} descricao={descricao} acao={acao} ajuda={titulo ? ajuda : undefined} nivel={nivel} />}
       <div className={juntar("min-w-0", corpoClassName)}>{children}</div>
+    </section>
+  );
+}
+
+function SecaoRecolhivel({
+  chave,
+  inicial,
+  resumo,
+  titulo,
+  descricao,
+  acao,
+  ajuda,
+  divisoria,
+  nivel,
+  id,
+  className,
+  corpoClassName,
+  resto,
+  children,
+}: {
+  chave: string;
+  inicial: boolean;
+  resumo?: ReactNode;
+  titulo: ReactNode;
+  descricao?: ReactNode;
+  acao?: ReactNode;
+  ajuda?: ReactNode;
+  divisoria: boolean;
+  nivel: 2 | 3;
+  id?: string;
+  className: string;
+  corpoClassName: string;
+  resto: Record<string, string | undefined>;
+  children?: ReactNode;
+}) {
+  const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
+  return (
+    <section id={id} className={juntar("min-w-0", divisoria && "border-t border-border pt-5", className)} data-recolhido={recolhido ? "sim" : "nao"} {...resto}>
+      <CabecalhoDeSecao
+        className={recolhido ? "" : "mb-3"}
+        titulo={titulo}
+        descricao={descricao}
+        acao={recolhido ? undefined : acao}
+        ajuda={ajuda}
+        nivel={nivel}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo }}
+      />
+      {!recolhido && <div className={juntar("min-w-0", corpoClassName)}>{children}</div>}
     </section>
   );
 }

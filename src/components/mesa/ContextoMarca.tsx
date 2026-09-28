@@ -10,7 +10,9 @@ import { textoDoErro } from "@/lib/mesa/api";
 import LogosDaMarca from "./ContextoLogos";
 import { PaletaDaMarca } from "./ContextoPaleta";
 import { useMesa } from "./MesaContexto";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao from "@/components/sistema/Secao";
+import { superficie } from "@/components/sistema/estilos";
 import { useInvalidarContexto, useKitDoCliente } from "./contextoDoCliente";
 
 interface Cor {
@@ -107,16 +109,17 @@ export default function ContextoMarca() {
 
   return (
     <div className="space-y-6">
-      <section className="space-y-3">
-        <TituloDeSecao
-          acao={
-            <Button type="button" size="sm" variant="ghost" onClick={() => setPaleta((p) => p.concat([{ nome: "", hex: "#00C853", papel: "principal" }]))}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> Cor
-            </Button>
-          }
-        >
-          Paleta
-        </TituloDeSecao>
+      <Secao
+        titulo="Paleta"
+        recolher={`mesa:contexto:marca:paleta:${clientId}`}
+        resumo={paleta.length ? `${paleta.length} ${paleta.length === 1 ? "cor" : "cores"}` : "sem cores"}
+        corpoClassName="space-y-3"
+        acao={
+          <Button type="button" size="sm" variant="ghost" onClick={() => setPaleta((p) => p.concat([{ nome: "", hex: "#00C853", papel: "principal" }]))}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> Cor
+          </Button>
+        }
+      >
         {paleta.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma cor ainda. Comece pela cor principal da marca.</p>}
         {paleta.length > 0 && (
           // Prévia ao vivo, como a paleta aparece no hub Marca (clique copia o hex).
@@ -124,7 +127,7 @@ export default function ContextoMarca() {
         )}
         <ul className="space-y-2">
           {paleta.map((cor, i) => (
-            <li key={i} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border bg-card p-2 sm:grid-cols-[40px_minmax(0,1fr)_120px_140px_auto]">
+            <li key={i} className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 p-2 sm:grid-cols-[40px_minmax(0,1fr)_120px_140px_auto] ${superficie.poco}`}>
               <input
                 type="color"
                 value={HEX.test(cor.hex) ? cor.hex : "#000000"}
@@ -148,15 +151,17 @@ export default function ContextoMarca() {
             </li>
           ))}
         </ul>
-      </section>
+      </Secao>
 
-      <section className="space-y-3">
-        <TituloDeSecao>Logo</TituloDeSecao>
-        <p className="text-[12px] text-muted-foreground">Escolha em qualquer pasta do Workspace, de Arquivos ou do acervo. A alternativa é a versão para fundo escuro ou claro.</p>
+      <Secao
+        titulo="Logo"
+        recolher={`mesa:contexto:marca:logo:${clientId}`}
+        ajuda="Escolha em qualquer pasta do Workspace, de Arquivos ou do acervo. A alternativa é a versão para fundo escuro ou claro."
+      >
         <div className="max-w-xl">
           <LogosDaMarca kit={kit.data} />
         </div>
-      </section>
+      </Secao>
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Campo rotulo="Estilo (como a marca se parece)">

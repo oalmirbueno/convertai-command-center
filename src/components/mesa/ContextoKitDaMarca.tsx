@@ -11,7 +11,9 @@ import { extensao, textoDoErro } from "@/lib/mesa/api";
 import { chaveDasMarcas, type MarcaDoCliente } from "@/lib/mesa/marcas";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { PaletaDaMarca } from "./ContextoPaleta";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao from "@/components/sistema/Secao";
+import { superficie } from "@/components/sistema/estilos";
 import { useFontesDoCliente, useInvalidarContexto, useReferenciasDoCliente } from "./contextoDoCliente";
 import { gravarTomDaLogo, reduzirArquivoDeLogo } from "./ContextoLogos";
 import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
@@ -248,7 +250,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
     const entrada = alternativa ? entradaAlt : entradaLogo;
     const ocupado = enviando === (alternativa ? "alt" : "logo");
     return (
-      <div className="min-w-0 rounded-lg border border-border bg-card p-2.5">
+      <div className={`min-w-0 p-2.5 ${superficie.poco}`}>
         <p className="text-[11.5px] font-medium text-foreground">{alternativa ? "Logo alternativa (fundo oposto)" : `Logo da ${marca.nome}`}</p>
         {caminho ? (
           <PreviaDaLogoDaMarca caminho={caminho} alt={alternativa ? "Logo alternativa" : "Logo"} />
@@ -288,29 +290,29 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
         As artes, o mês e os agentes usam este kit enquanto a {marca.nome} estiver escolhida no topo.
       </p>
 
-      <section className="space-y-3">
-        <TituloDeSecao>Logo</TituloDeSecao>
+      <Secao titulo="Logo" recolher={`mesa:contexto:kit:${marca.id}:logo:${clientId}`} resumo={marca.logo_path ? "com logo" : "sem logo"}>
         <div className="grid max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
           {blocoLogo(false)}
           {blocoLogo(true)}
         </div>
-      </section>
+      </Secao>
 
-      <section className="space-y-3">
-        <TituloDeSecao
-          acao={
-            <Button type="button" size="sm" variant="ghost" onClick={() => setPaleta((p) => p.concat([{ nome: "", hex: "#E91E63", papel: "principal" }]))}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> Cor
-            </Button>
-          }
-        >
-          Paleta
-        </TituloDeSecao>
+      <Secao
+        titulo="Paleta"
+        recolher={`mesa:contexto:kit:${marca.id}:paleta:${clientId}`}
+        resumo={paleta.length ? `${paleta.length} ${paleta.length === 1 ? "cor" : "cores"}` : "sem cores"}
+        corpoClassName="space-y-3"
+        acao={
+          <Button type="button" size="sm" variant="ghost" onClick={() => setPaleta((p) => p.concat([{ nome: "", hex: "#E91E63", papel: "principal" }]))}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> Cor
+          </Button>
+        }
+      >
         {paleta.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma cor ainda. Comece pela cor principal da {marca.nome}.</p>}
         {paleta.length > 0 && <PaletaDaMarca paleta={paleta.filter((c) => HEX.test(c.hex))} />}
         <ul className="space-y-2">
           {paleta.map((cor, i) => (
-            <li key={i} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border bg-card p-2 sm:grid-cols-[40px_minmax(0,1fr)_120px_auto]">
+            <li key={i} className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 p-2 sm:grid-cols-[40px_minmax(0,1fr)_120px_auto] ${superficie.poco}`}>
               <input
                 type="color"
                 value={HEX.test(cor.hex) ? cor.hex : "#000000"}
@@ -326,7 +328,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
             </li>
           ))}
         </ul>
-      </section>
+      </Secao>
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Campo rotulo={`Estilo da ${marca.nome}`}>
@@ -350,13 +352,13 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
         </Button>
       </div>
 
-      <section className="space-y-2">
-        <TituloDeSecao>
-          Referências da {marca.nome} ({refsDaMarca})
-        </TituloDeSecao>
-        <p className="text-[12px] text-muted-foreground">
-          Marque as do cliente que valem para a {marca.nome}: elas saem da marca principal. As enviadas com a {marca.nome} escolhida já entram como dela.
-        </p>
+      <Secao
+        titulo={`Referências da ${marca.nome} (${refsDaMarca})`}
+        recolher={`mesa:contexto:kit:${marca.id}:referencias:${clientId}`}
+        resumo={`${refs.length} do cliente`}
+        ajuda={`Marque as do cliente que valem para a ${marca.nome}: elas saem da marca principal. As enviadas com a ${marca.nome} escolhida já entram como dela.`}
+        corpoClassName="space-y-2"
+      >
         {(referencias.isLoading || vinculos.isLoading) && <p className="text-[12px] text-muted-foreground">Lendo referências...</p>}
         {vinculos.isError && <p className="text-[12px] text-destructive">Não foi possível ler as marcas das referências.</p>}
         {!referencias.isLoading && refs.length === 0 && <p className="text-[12px] text-muted-foreground">O cliente ainda não tem referência com imagem.</p>}
@@ -380,12 +382,15 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
             );
           })}
         </ul>
-      </section>
+      </Secao>
 
       {listaFontes.length > 0 && (
-        <section className="space-y-2">
-          <TituloDeSecao>Fontes da {marca.nome}</TituloDeSecao>
-          <p className="text-[12px] text-muted-foreground">Sem nenhuma marcada, a {marca.nome} usa as fontes do cliente.</p>
+        <Secao
+          titulo={`Fontes da ${marca.nome}`}
+          recolher={`mesa:contexto:kit:${marca.id}:fontes:${clientId}`}
+          resumo={`${listaFontes.filter((f) => mapaFontes[f.id] === marca.id).length} marcada(s)`}
+          ajuda={`Sem nenhuma marcada, a ${marca.nome} usa as fontes do cliente.`}
+        >
           <ul className="space-y-1">
             {listaFontes.map((f) => {
               const daMarca = mapaFontes[f.id] === marca.id;
@@ -407,7 +412,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
               );
             })}
           </ul>
-        </section>
+        </Secao>
       )}
     </div>
   );

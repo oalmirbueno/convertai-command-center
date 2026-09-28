@@ -81,6 +81,8 @@ function ComputadorDoAgente() {
       nivel={3}
       titulo="Computador do agente"
       descricao="Desligado"
+      recolher={`mesa-edicao:computador:${clientId}`}
+      resumo="Desligado"
       ajuda="Um agente que opera um programa de computador (organizar o projeto no Premiere, por exemplo). Nenhuma tarefa roda sem aprovação do dono, nada com senha de cliente passa pelo painel e cada passo deixa um print como prova."
       acao={
         <button type="button" className={botao.discreto} disabled title="Desligado. Desenho em docs/motores/COMPUTADOR-DO-AGENTE.md" aria-label="Pedir tarefa">

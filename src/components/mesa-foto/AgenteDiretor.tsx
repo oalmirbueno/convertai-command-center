@@ -45,7 +45,7 @@ import {
 import { lerDaSessao } from "./sessao";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { botao, foco, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, foco, juntar } from "@/components/sistema/estilos";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
@@ -251,8 +251,8 @@ function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
   };
   return (
     <li className="min-w-0 rounded-md border border-primary/30 p-2.5" data-sugestao={sugestao.chave}>
-      <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
-      {sugestao.descricao && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
+      <p className="text-[13.5px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      {sugestao.descricao && <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <div className="mt-2 flex items-center">
         <Button type="button" size="sm" variant={aplicada ? "ghost" : "outline"} className="h-7 text-[11.5px]" disabled={bloqueada || aplicando || aplicada} onClick={() => void aplicar()}>
           {aplicando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : aplicada ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
@@ -311,10 +311,10 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
 
   return (
     <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-plano-de-variacoes="">
-      <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
-      {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
+      <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {variacoes.length > 0 && (
-        <ol className="ml-4 list-decimal space-y-0.5 text-[12px] leading-snug">
+        <ol className="ml-4 list-decimal space-y-0.5 text-[13px] leading-snug">
           {variacoes.map((v, i) => (
             <li key={`${v.nome}-${i}`} className="[overflow-wrap:anywhere]">
               <span className="font-medium">{v.nome}</span>
@@ -347,7 +347,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
           })}
         </div>
       </div>
-      {!kit && <p className="text-[11.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
+      {!kit && <p className="text-[12.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -416,11 +416,11 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
   };
   return (
     <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-campanha="">
-      <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
-      {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
+      <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <GuiaDeEstiloNaTela guia={plano.guia_de_estilo} modelo={plano.modelo} compacto />
       {plano.fotos.length > 0 && (
-        <ol className="ml-4 list-decimal space-y-0.5 text-[12px] leading-snug">
+        <ol className="ml-4 list-decimal space-y-0.5 text-[13px] leading-snug">
           {plano.fotos.slice(0, quantidade).map((f, i) => (
             <li key={`${f.nome}-${i}`} className="[overflow-wrap:anywhere]">
               <span className="font-medium">{f.nome}</span>
@@ -429,9 +429,9 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
           ))}
         </ol>
       )}
-      <p className="text-[11px] leading-snug text-muted-foreground">Pessoa sintética, adulta, sem parecer com ninguém real. O produto não muda. Toda foto sai marcada como gerada.</p>
+      <p className="text-[12px] leading-snug text-muted-foreground">Pessoa sintética, adulta, sem parecer com ninguém real. O produto não muda. Toda foto sai marcada como gerada.</p>
       <Pilulas rotulo="Quantidade de fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
-      {!kit && <p className="text-[11.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
+      {!kit && <p className="text-[12.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -482,8 +482,8 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
   const [resultado, setResultado] = useState<IdentificacaoDoProduto | null>(null);
   return (
     <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-identificar-produto="">
-      <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
-      {sugestao.descricao && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
+      <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       {resultado ? (
         <IdentificacaoComAcoes identificacao={resultado} />
       ) : (
@@ -506,7 +506,7 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
           }}
         />
       )}
-      {!ids.length && <p className="text-[11.5px] text-muted-foreground">Marque as fotos no passo 1 ou anexe um print aqui embaixo.</p>}
+      {!ids.length && <p className="text-[12.5px] text-muted-foreground">Marque as fotos no passo 1 ou anexe um print aqui embaixo.</p>}
     </li>
   );
 }
@@ -556,11 +556,11 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
   const irSozinhoPara = caminhoParaIrSozinho(m);
   if (m.papel === "usuario") {
     return (
-      <div className="ml-6 min-w-0">
-        <div className="min-w-0 whitespace-pre-wrap rounded-lg bg-primary/10 px-3 py-2 text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
+      <div className="ml-8 min-w-0">
+        <div className={juntar(conversa.balao, "whitespace-pre-wrap bg-primary/10")}>
           {m.texto}
           {m.anexos > 0 && (
-            <span className="mt-1 block text-[11px] text-muted-foreground">
+            <span className="mt-1 block text-[12px] text-muted-foreground">
               {m.anexos} {m.anexos === 1 ? "foto junto" : "fotos junto"}
               {m.estilos ? `, ${m.estilos} como referência de estilo` : ""}
             </span>
@@ -570,23 +570,23 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
     );
   }
   return (
-    <div className="mr-3 min-w-0">
-      <div className="min-w-0 space-y-2 rounded-lg bg-muted/60 px-3 py-2 text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
+    <div className="mr-2 min-w-0">
+      <div className={juntar(conversa.balao, "space-y-2 bg-muted/60")}>
         {m.entendi && (
-          <p className="rounded-md bg-background/60 px-2.5 py-1.5 text-[12px]" data-entendi="">
+          <p className="rounded-md bg-background/60 px-2.5 py-1.5 text-[13px]" data-entendi="">
             <span className="font-semibold">Entendi: </span>
             {m.entendi}
           </p>
         )}
         <TextoOrganizado texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} />
         {m.proximo_passo && (
-          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[12.5px]" data-proximo-do-diretor="">
+          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[13.5px]" data-proximo-do-diretor="">
             <span className="font-semibold text-primary">Próximo passo: </span>
             {m.proximo_passo}
           </p>
         )}
         {m.kit_ids && m.kit_ids.length > 0 && (
-          <button type="button" className="text-[12px] font-medium text-primary hover:underline" onClick={() => irPara("kits", { kit: (m.kit_ids || [])[0] })}>
+          <button type="button" className="text-[13px] font-medium text-primary hover:underline" onClick={() => irPara("kits", { kit: (m.kit_ids || [])[0] })}>
             Kit salvo como rascunho: abrir em Produto
           </button>
         )}
@@ -646,7 +646,7 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
           <CaminhoPronto caminho={m.caminho} abrirSozinho={!!m.nova && !m.geracao && m.caminho.abrir_sozinho === true} />
         </div>
       )}
-      {m.custo_usd !== null && <p className="mt-1 text-[10.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
+      {m.custo_usd !== null && <p className="mt-1 text-[11.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
     </div>
   );
 }
@@ -712,7 +712,7 @@ function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDireto
   return (
     <>
       {mensagens.length === 0 && !pendente && (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground" data-diretor-vazio="">
+        <p className={juntar(conversa.apoio, "leading-relaxed")} data-diretor-vazio="">
           Ele já conhece o cliente e o que está aberto na tela. Peça o que quer: melhorar uma foto, variações, campanha, book, um carrossel na Agenda. O que é claro e sem custo ele já faz (dá para desfazer); o que custa mostra o preço antes. No fim ele deixa o botão para ir à área certa.
         </p>
       )}
@@ -720,7 +720,7 @@ function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDireto
         <Mensagem key={m.id} m={m} anexosDaConversa={anexos} />
       ))}
       {pendente && (
-        <p role="status" className="mr-6 inline-flex items-center rounded-lg bg-muted px-3 py-2 text-[12.5px] text-muted-foreground">
+        <p role="status" className="mr-6 inline-flex items-center rounded-xl bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O diretor está pensando...
         </p>
       )}
@@ -969,7 +969,7 @@ export default function AgenteDiretor({
                 rows={3}
                 placeholder="Ex.: 8 variações do mouse, uma com fundo verde da marca."
                 aria-label="Mensagem ao diretor"
-                className="resize-none text-[13px]"
+                className="resize-none"
               />
               <div className="mt-2 flex min-w-0 items-center justify-between">
                 <div className="mr-2 min-w-0 flex-1">

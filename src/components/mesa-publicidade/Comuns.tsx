@@ -3,7 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import type { FotoDoAcervo } from "@/components/mesa-foto/fotoApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { CabecalhoDeSecao, type RecolherDoCabecalho } from "@/components/sistema/Secao";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { ROTULO_DO_STATUS, statusDaCampanha, type CampanhaDePublicidade } from "./publicidadeApi";
@@ -61,7 +61,22 @@ export function useMesaPublicidade(): MesaPublicidadeValor {
  * ações à direita, na mesma linha. No celular as ações encolhem (ícone) e, se
  * ainda faltar espaço, descem juntas à direita; o título nunca some.
  */
-export function CabecalhoDaEtapa({ titulo, ajuda, estado, acoes, nivel = 2 }: { titulo: ReactNode; ajuda?: ReactNode; estado?: ReactNode; acoes?: ReactNode; nivel?: 2 | 3 }) {
+export function CabecalhoDaEtapa({
+  titulo,
+  ajuda,
+  estado,
+  acoes,
+  nivel = 2,
+  recolher,
+}: {
+  titulo: ReactNode;
+  ajuda?: ReactNode;
+  estado?: ReactNode;
+  acoes?: ReactNode;
+  nivel?: 2 | 3;
+  /** O título vira o botão de recolher o bloco (use com useRecolhido; recolhido, as ações somem). */
+  recolher?: RecolherDoCabecalho;
+}) {
   // O cabeçalho do sistema (mesmo desenho que nasceu aqui). Promovido em 26/09 (frente C).
   return (
     <CabecalhoDeSecao
@@ -70,8 +85,9 @@ export function CabecalhoDaEtapa({ titulo, ajuda, estado, acoes, nivel = 2 }: { 
       ajuda={ajuda}
       rotuloDaAjuda={typeof titulo === "string" ? `Sobre ${titulo}` : "O que é isto?"}
       descricao={estado}
-      acao={acoes}
+      acao={recolher && recolher.recolhido ? undefined : acoes}
       nivel={nivel}
+      recolher={recolher}
       classeDoTitulo={nivel === 3 ? "text-[13.5px]" : ""}
       truncar
     />

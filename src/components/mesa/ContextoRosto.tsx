@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { extensao, textoDoErro } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
-import { Campo, TituloDeSecao } from "./Seletores";
+import { Campo } from "./Seletores";
+import Secao from "@/components/sistema/Secao";
 import { AvisoDeErro } from "./Custo";
 
 interface Rosto {
@@ -106,11 +107,12 @@ export default function ContextoRosto() {
 
   return (
     <div className="space-y-6">
-      <section className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-        <TituloDeSecao>Registrar rosto autorizado</TituloDeSecao>
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          O gerador só usa o rosto de uma pessoa real com autorização registrada. Guarde o termo ou a mensagem de autorização fora daqui e informe quem autorizou e quando.
-        </p>
+      <Secao
+        titulo="Registrar rosto autorizado"
+        recolher={`mesa:contexto:rosto:registrar:${clientId}`}
+        ajuda="O gerador só usa o rosto de uma pessoa real com autorização registrada. Guarde o termo ou a mensagem de autorização fora daqui e informe quem autorizou e quando."
+        corpoClassName="space-y-3"
+      >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo rotulo="Foto">
             <Input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setArquivo(e.target.files?.[0] || null)} className="h-9 text-[12px]" />
@@ -125,8 +127,8 @@ export default function ContextoRosto() {
             <Input type="date" value={quando} max={hoje()} onChange={(e) => setQuando(e.target.value)} className="h-9" />
           </Campo>
         </div>
-        <label className="flex items-start gap-2 text-[12.5px]">
-          <Checkbox checked={confirmo} onCheckedChange={(v) => setConfirmo(v === true)} className="mt-0.5" />
+        <label className="flex items-start text-[12.5px]">
+          <Checkbox checked={confirmo} onCheckedChange={(v) => setConfirmo(v === true)} className="mr-2 mt-0.5" />
           <span>Confirmo que a autorização existe e está guardada.</span>
         </label>
         <div className="flex justify-end">
@@ -135,33 +137,37 @@ export default function ContextoRosto() {
             Registrar
           </Button>
         </div>
-      </section>
+      </Secao>
 
-      <section className="space-y-3">
-        <TituloDeSecao>Rostos do cliente</TituloDeSecao>
+      <Secao
+        titulo="Rostos do cliente"
+        recolher={`mesa:contexto:rosto:lista:${clientId}`}
+        resumo={rostos.data ? `${rostos.data.length} ${rostos.data.length === 1 ? "rosto" : "rostos"}` : undefined}
+        corpoClassName="space-y-3"
+      >
         {rostos.isError && <AvisoDeErro erro={rostos.error} />}
         {rostos.data && rostos.data.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhum rosto registrado.</p>}
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(rostos.data || []).map((r) => (
-            <li key={r.id} className={`flex min-w-0 gap-3 rounded-xl border border-border bg-card p-2.5 ${r.ativa ? "" : "opacity-60"}`}>
-              <ImagemDaMesa caminho={r.storage_path} alt={r.pessoa} className="h-20 w-16 shrink-0 rounded-lg" />
+            <li key={r.id} className={`flex min-w-0 rounded-xl border border-border bg-card p-2.5 ${r.ativa ? "" : "opacity-60"}`}>
+              <ImagemDaMesa caminho={r.storage_path} alt={r.pessoa} className="mr-3 h-20 w-16 shrink-0 rounded-lg" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium">{r.pessoa}</p>
-                <p className="mt-0.5 flex items-start gap-1 text-[11px] leading-snug text-muted-foreground">
-                  <ShieldCheck className="mt-px h-3 w-3 shrink-0 text-success" />
+                <p className="mt-0.5 flex items-start text-[11px] leading-snug text-muted-foreground">
+                  <ShieldCheck className="mr-1 mt-px h-3 w-3 shrink-0 text-success" />
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {r.autorizado_por} em {new Date(r.autorizacao_registrada_em).toLocaleDateString("pt-BR")}
                   </span>
                 </p>
-                <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Switch checked={r.ativa} onCheckedChange={(v) => void alternar(r, v)} className="scale-75" />
+                <label className="mt-1.5 flex items-center text-[11px] text-muted-foreground">
+                  <Switch checked={r.ativa} onCheckedChange={(v) => void alternar(r, v)} className="mr-1.5 scale-75" />
                   {r.ativa ? "em uso" : "fora"}
                 </label>
               </div>
             </li>
           ))}
         </ul>
-      </section>
+      </Secao>
     </div>
   );
 }

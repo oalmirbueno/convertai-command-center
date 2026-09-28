@@ -195,6 +195,8 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
           titulo="Templates"
           descricao={`${templates.length} salvos`}
           ajuda="Um projeto pronto (bíblia e roteiro) vira template: do cliente (com as referências dele) ou da agência (sem arquivos de cliente)."
+          recolher={`mesa-videos:templates:${clientId}`}
+          resumo={`${templates.length} salvos`}
           acao={
             <>
               <button type="button" className={botao.secundario} disabled={salvando || !projeto.roteiro.planos.length} onClick={() => void salvarTemplate(false)} aria-label="Salvar o projeto atual como template do cliente">
@@ -234,7 +236,14 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
           )}
         </Secao>
 
-        <Secao titulo="Projetos" descricao={`${salvos.length} salvos`} ajuda="Projetos do diretor gravados no banco. Abrir troca o projeto aberto (dá para desfazer).">
+        <Secao
+          divisoria
+          titulo="Projetos"
+          descricao={`${salvos.length} salvos`}
+          ajuda="Projetos do diretor gravados no banco. Abrir troca o projeto aberto (dá para desfazer)."
+          recolher={`mesa-videos:projetos:${clientId}`}
+          resumo={`${salvos.length} salvos`}
+        >
           {salvos.length ? (
             <ul className="divide-y divide-border" aria-label="Projetos do diretor">
               {salvos.map((p) => (

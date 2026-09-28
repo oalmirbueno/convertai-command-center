@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { AlertTriangle, Database, Info } from "lucide-react";
 import { ROTULO_DO_STATUS, type AvisoDoJev, type StatusDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { CabecalhoDeSecao, type RecolherDoCabecalho } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 
 /** Peças pequenas repetidas nas etapas da Mesa Roteiros. */
@@ -37,7 +38,24 @@ export function SeloDoStatus({ status }: { status: StatusDoRoteiro }) {
  * estado e as ações na mesma linha. No celular as ações encolhem (ícone) e,
  * se faltar espaço, descem juntas à direita; o título nunca some.
  */
-export function Cabecalho({ titulo, ajuda, estado, acoes, nivel = 2, icone }: { titulo: ReactNode; ajuda?: ReactNode; estado?: ReactNode; acoes?: ReactNode; nivel?: 2 | 3; icone?: ReactNode }) {
+export function Cabecalho({
+  titulo,
+  ajuda,
+  estado,
+  acoes,
+  nivel = 2,
+  icone,
+  recolher,
+}: {
+  titulo: ReactNode;
+  ajuda?: ReactNode;
+  estado?: ReactNode;
+  acoes?: ReactNode;
+  nivel?: 2 | 3;
+  icone?: ReactNode;
+  /** O título vira o botão de recolher o bloco (recolhido, as ações somem). */
+  recolher?: RecolherDoCabecalho;
+}) {
   // O cabeçalho do sistema (mesmo desenho). Promovido em 26/09 (frente C).
   return (
     <CabecalhoDeSecao
@@ -46,12 +64,55 @@ export function Cabecalho({ titulo, ajuda, estado, acoes, nivel = 2, icone }: { 
       ajuda={ajuda}
       rotuloDaAjuda={typeof titulo === "string" ? `Sobre ${titulo}` : "O que é isto?"}
       descricao={estado}
-      acao={acoes}
+      acao={recolher && recolher.recolhido ? undefined : acoes}
       nivel={nivel}
       icone={icone}
+      recolher={recolher}
       classeDoTitulo={nivel === 3 ? "text-[13.5px]" : ""}
       truncar
     />
+  );
+}
+
+/**
+ * Bloco recolhível das etapas (o mesmo desenho em todas): linha fina em cima,
+ * o Cabecalho com o título que recolhe (lembrado por `chave`, com o cliente) e
+ * o conteúdo, que sai da tela quando recolhido. Recolhido, fica o `resumo`.
+ */
+export function BlocoRecolhivel({
+  chave,
+  titulo,
+  ajuda,
+  estado,
+  acoes,
+  resumo,
+  icone,
+  nivel = 3,
+  divisoria = true,
+  recolhidoDeInicio = false,
+  className = "",
+  children,
+  ...resto
+}: {
+  chave: string;
+  titulo: ReactNode;
+  ajuda?: ReactNode;
+  estado?: ReactNode;
+  acoes?: ReactNode;
+  resumo?: ReactNode;
+  icone?: ReactNode;
+  nivel?: 2 | 3;
+  divisoria?: boolean;
+  recolhidoDeInicio?: boolean;
+  className?: string;
+  children?: ReactNode;
+} & Record<`data-${string}`, string | undefined>) {
+  const [recolhido, setRecolhido] = useRecolhido(chave, recolhidoDeInicio);
+  return (
+    <section className={juntar("min-w-0 space-y-3", divisoria && "border-t border-border pt-5", className)} data-recolhido={recolhido ? "sim" : "nao"} {...resto}>
+      <Cabecalho nivel={nivel} icone={icone} titulo={titulo} ajuda={ajuda} estado={estado} acoes={acoes} recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo }} />
+      {!recolhido && children}
+    </section>
   );
 }
 

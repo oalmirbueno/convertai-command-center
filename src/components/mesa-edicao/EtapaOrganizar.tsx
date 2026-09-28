@@ -7,6 +7,7 @@ import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao 
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro } from "@/lib/mesa/api";
 import Secao from "@/components/sistema/Secao";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { AvisoDeAtivacao, SeloDoTipo } from "@/components/mesa-videos/Comuns";
@@ -142,6 +143,33 @@ function LinhaDoTake({ take, podeEditar, roteiros }: { take: ArquivoDeVideo; pod
   );
 }
 
+/** Um grupo de takes (roteiro e cena): o nome vira o botão de recolher, lembrado por cliente. */
+function GrupoDeTakes({ grupo, takes, roteiros, clientId }: { grupo: string; takes: ArquivoDeVideo[]; roteiros: RoteiroCurto[]; clientId: string }) {
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-edicao:grupo:${grupo}:${clientId}`, false);
+  const quantos = `${takes.length} ${takes.length === 1 ? "take" : "takes"}`;
+  return (
+    <section aria-label={grupo} className="min-w-0" data-recolhido={recolhido ? "sim" : "nao"}>
+      <TituloRecolhivel
+        titulo={
+          <>
+            {grupo} <span className="font-normal tabular-nums text-muted-foreground">({takes.length})</span>
+          </>
+        }
+        recolhido={recolhido}
+        onAlternar={() => setRecolhido(!recolhido)}
+        resumo={quantos}
+      />
+      {!recolhido && (
+        <ul className="divide-y divide-border">
+          {takes.map((t) => (
+            <LinhaDoTake key={t.id} take={t} podeEditar={!t.so_no_storage} roteiros={roteiros} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
@@ -197,7 +225,7 @@ export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
   };
 
   return (
-    <div className="min-w-0 space-y-5 pb-6">
+    <div className="min-w-0 space-y-6 pb-6">
       <Secao
         titulo="Organizar"
         descricao={arquivosQ.data ? `${arquivos.length} ${arquivos.length === 1 ? "vídeo" : "vídeos"} · ${grupos.filter((g) => g.grupo !== "Sem grupo").length} grupos · ${melhores} ${melhores === 1 ? "melhor" : "melhores"}` : undefined}
@@ -242,18 +270,9 @@ export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
             }
           />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {grupos.map((g) => (
-              <section key={g.grupo} aria-label={g.grupo} className="min-w-0">
-                <p className={texto.rotulo}>
-                  {g.grupo} <span className="font-normal tabular-nums">({g.takes.length})</span>
-                </p>
-                <ul className="divide-y divide-border">
-                  {g.takes.map((t) => (
-                    <LinhaDoTake key={t.id} take={t} podeEditar={!t.so_no_storage} roteiros={roteiros} />
-                  ))}
-                </ul>
-              </section>
+              <GrupoDeTakes key={g.grupo} grupo={g.grupo} takes={g.takes} roteiros={roteiros} clientId={clientId} />
             ))}
           </div>
         )}

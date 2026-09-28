@@ -8,7 +8,7 @@ import { centralReviewError, centralReviewLink, latestReviewReports, reviewAlert
 import type { CentralApproval, ReviewClient, ReviewDecision, ReviewDestination, ReviewDraftEdits, ReviewLane, ReviewReport } from "@/lib/centralReview";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { proximoPassoDoTexto } from "@/lib/ritualTexto";
-import { Carregando, EstadoDeErro, EstadoVazio, Secao, SeletorCompacto, botao, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, Secao, SeletorCompacto, botao, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 import { useEstadoDaTela } from "@/components/central/useEstadoDaTela";
 
 const LANES: { value: ReviewLane; label: string }[] = [
@@ -253,8 +253,9 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
     </details>
     {destination && <p className={texto.corpo}><strong className="font-medium">Destino congelado:</strong> {destination.channel === "portal" ? "Portal do cliente" : "WhatsApp"} · {destination.recipient}</p>}
     {sendable && <div className={juntar(superficie.poco, "space-y-3 p-3 sm:p-4")} aria-label="Enviar e registrar">
-      <p className="text-[13px] font-medium">Aprovado. Agora é enviar e registrar.</p>
-      <p className={texto.auxiliar}>Envie o texto congelado ao destino acima (ou deixe o Hermes enviar pelo WhatsApp dele). Quem enviar registra aqui; sem o registro, a fila continua mostrando "não enviado".</p>
+      <p className="flex items-center text-[13px] font-medium">Aprovado. Agora é enviar e registrar.
+        <AjudaRecolhida className="ml-1.5" rotulo="Como registrar o envio">Envie o texto congelado ao destino acima (ou deixe o Hermes enviar pelo WhatsApp dele). Quem enviar registra aqui; sem o registro, a fila continua mostrando "não enviado".</AjudaRecolhida>
+      </p>
       <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
         <button type="button" onClick={() => void copyMessage()} className={botao.secundario}>Copiar mensagem aprovada</button>
         {destination?.channel === "whatsapp" && <a href={`https://wa.me/?text=${encodeURIComponent(mensagemParaEnviar)}`} target="_blank" rel="noopener noreferrer" className={botao.secundario}>Abrir no WhatsApp</a>}
@@ -278,8 +279,8 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
           <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "rejeitado", comment)} className={botao.secundario}>Rejeitar</button></>}
         <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "comentario", comment)} className={botao.secundario}>Comentar</button>
         <button type="button" onClick={() => void copyLink()} className={botao.discreto}>Copiar link autenticado</button>
+        <AjudaRecolhida rotulo="Como funciona a decisão">A decisão fica neste mesmo pedido, seja dada aqui ou ao Hermes no WhatsApp. Aprovar não envia: o envio é registrado à parte, com evidência.</AjudaRecolhida>
       </div>
-      <p className={texto.auxiliar}>A decisão fica neste mesmo pedido, seja dada aqui ou ao Hermes no WhatsApp. Aprovar não envia: o envio é registrado à parte, com evidência.</p>
     </div>}
   </article>;
 }

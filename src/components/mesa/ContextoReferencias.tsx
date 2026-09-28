@@ -7,6 +7,7 @@ import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { chamarFuncao, extensao, padraoPara, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
 import { PAPEIS, type PapelDaReferencia, type ReferenciaComDestaque } from "@/lib/mesa/referencias";
 import { marcaParaGravarAgora } from "@/lib/mesa/marcas";
@@ -164,22 +165,23 @@ export default function ContextoReferencias() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-center">
-        <p className="mb-2 min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground sm:mb-0 sm:mr-3">
-          Marque com a estrela as preferidas: o diretor de arte usa as em destaque sempre, antes das outras.
-        </p>
-        <div className="flex shrink-0 flex-wrap">
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={() => void sincronizar()} disabled={ocupado !== null}>
-            {ocupado === "workspace" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FolderSync className="mr-1 h-3.5 w-3.5" />}
-            Sincronizar pastas de referências
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="mb-1 h-8 text-[12px]" onClick={() => entrada.current?.click()} disabled={ocupado !== null}>
-            {ocupado === "upload" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-            Enviar imagens
-          </Button>
-          <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => void enviar(e.target.files)} />
-        </div>
-      </section>
+      <CabecalhoDeSecao
+        titulo="Referências do cliente"
+        ajuda="Marque com a estrela as preferidas: o diretor de arte usa as em destaque sempre, antes das outras."
+        acao={
+          <>
+            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => void sincronizar()} disabled={ocupado !== null}>
+              {ocupado === "workspace" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FolderSync className="mr-1 h-3.5 w-3.5" />}
+              Sincronizar pastas de referências
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => entrada.current?.click()} disabled={ocupado !== null}>
+              {ocupado === "upload" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+              Enviar imagens
+            </Button>
+          </>
+        }
+      />
+      <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => void enviar(e.target.files)} />
 
       <SeletorDeReferencias
         modo="gerenciar"

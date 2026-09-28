@@ -1,22 +1,27 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { faixaDoScore } from "./contextoDoCliente";
 
 /**
  * Grupos recolhíveis da aba Contexto (pedido do dono em 23/09: "muito
  * solta, tudo misturado"). Cada hub tem título, uma linha de resumo, o score
  * dele e as ações à direita; aberto, mostra o conteúdo com rolagem própria
- * quando a lista é longa. Quais hubs ficam abertos é lembrado no navegador
- * (só conveniência de quem usa; sem armazenamento, volta ao padrão).
+ * quando a lista é longa (só no computador; no celular a página rola normal).
+ * Quais hubs ficam abertos é lembrado no navegador, por cliente quando a tela
+ * passa o `escopo` (só conveniência de quem usa; sem armazenamento, volta ao
+ * padrão). Cliente sem escolha guardada herda a escolha antiga, sem cliente.
  */
 
 const CHAVE_DOS_HUBS = "mesa:contexto:hubs";
 
 export type HubsAbertos = Record<string, boolean>;
 
-function lerHubs(): HubsAbertos {
+const chaveDosHubs = (escopo?: string) => (escopo ? `${CHAVE_DOS_HUBS}:${escopo}` : CHAVE_DOS_HUBS);
+
+function lerHubs(escopo?: string): HubsAbertos {
   try {
-    const bruto = window.localStorage.getItem(CHAVE_DOS_HUBS);
+    const bruto = window.localStorage.getItem(chaveDosHubs(escopo)) || (escopo ? window.localStorage.getItem(CHAVE_DOS_HUBS) : null);
     if (!bruto) return {};
     const v = JSON.parse(bruto);
     if (!v || typeof v !== "object") return {};
@@ -28,27 +33,34 @@ function lerHubs(): HubsAbertos {
   }
 }
 
-function gravarHubs(h: HubsAbertos) {
+function gravarHubs(h: HubsAbertos, escopo?: string) {
   try {
-    window.localStorage.setItem(CHAVE_DOS_HUBS, JSON.stringify(h));
+    window.localStorage.setItem(chaveDosHubs(escopo), JSON.stringify(h));
   } catch {
     /* armazenamento indisponível: segue sem lembrar */
   }
 }
 
-/** Estado aberto/fechado dos hubs, com o padrão de cada um. */
-export function useHubsAbertos(padrao: HubsAbertos) {
-  const [salvos, setSalvos] = useState<HubsAbertos>(() => lerHubs());
+/** Estado aberto/fechado dos hubs, com o padrão de cada um. `escopo`: o cliente (lembra por cliente). */
+export function useHubsAbertos(padrao: HubsAbertos, escopo?: string) {
+  const [estado, setEstado] = useState<{ escopo?: string; salvos: HubsAbertos }>(() => ({ escopo, salvos: lerHubs(escopo) }));
+  // Trocou de cliente sem desmontar: lê o que está guardado para o novo.
+  const salvos = estado.escopo === escopo ? estado.salvos : lerHubs(escopo);
+  if (estado.escopo !== escopo) setEstado({ escopo, salvos });
   const aberto = useCallback((id: string) => (id in salvos ? salvos[id] : !!padrao[id]), [salvos, padrao]);
-  const definir = useCallback((id: string, valor: boolean) => {
-    // Relê o guardado antes de gravar: a aba tem mais de um grupo de hubs
-    // (coluna principal e "Editar em detalhe") escrevendo na mesma chave.
-    setSalvos((s) => {
-      const novo = { ...s, ...lerHubs(), [id]: valor };
-      gravarHubs(novo);
-      return novo;
-    });
-  }, []);
+  const definir = useCallback(
+    (id: string, valor: boolean) => {
+      // Relê o guardado antes de gravar: a aba tem mais de um grupo de hubs
+      // (coluna principal e "Editar em detalhe") escrevendo na mesma chave.
+      setEstado((e) => {
+        const base = e.escopo === escopo ? e.salvos : {};
+        const novo = { ...base, ...lerHubs(escopo), [id]: valor };
+        gravarHubs(novo, escopo);
+        return { escopo, salvos: novo };
+      });
+    },
+    [escopo],
+  );
   const alternar = useCallback((id: string) => definir(id, !aberto(id)), [aberto, definir]);
   return { aberto, definir, alternar };
 }
@@ -136,7 +148,13 @@ export function Hub({
       </div>
       {aberto && (
         <div id={corpo} className="min-w-0 pb-5 pt-1 sm:pl-[26px]">
-          {rolagem ? <div className="-mr-1.5 max-h-[70vh] min-w-0 overflow-y-auto overscroll-contain pr-1.5">{children}</div> : children}
+          {rolagem ? (
+            <RegiaoRolavel className="-mr-1.5 pr-1.5 lg:max-h-[70vh]">
+              {children}
+            </RegiaoRolavel>
+          ) : (
+            children
+          )}
         </div>
       )}
     </section>

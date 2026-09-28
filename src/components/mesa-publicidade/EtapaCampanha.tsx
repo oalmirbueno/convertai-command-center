@@ -12,6 +12,7 @@ import Painel from "@/components/sistema/Painel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { botao, campo, campoTexto, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { RECEITAS_DE_PUBLICIDADE, receitaDaCategoria, receitaParaProduto } from "../../../supabase/functions/_shared/receitas-de-publicidade.ts";
 import {
   AvisoDoRascunho,
@@ -345,6 +346,7 @@ export default function EtapaCampanha() {
   const fotos = useFotos(clientId);
   const campanhas = useCampanhas(clientId);
   const [nova, setNova] = useState(false);
+  const [produtoRecolhido, setProdutoRecolhido] = useRecolhido(`mesa-publicidade:produto:${clientId}`, false);
   const listaDeKits = useMemo(() => (kits.data || []).filter((k) => k.tipo !== "pessoa" && k.status !== "arquivado" && !!k.id), [kits.data]);
   const lista = (campanhas.data && campanhas.data.campanhas) || [];
   const mostrarEscolha = nova || (!campanha && !campanhas.isLoading && lista.length === 0);
@@ -355,7 +357,7 @@ export default function EtapaCampanha() {
   }));
 
   return (
-    <div className="min-w-0 space-y-5" data-etapa-publicidade="campanha">
+    <div className="min-w-0 space-y-6" data-etapa-publicidade="campanha">
       <CabecalhoDaEtapa
         titulo="Campanha"
         ajuda="Escolha o produto, complete o briefing e siga para a direção. A Publicidade dirige; a Mesa Foto produz; a Mesa Ads testa."
@@ -415,14 +417,19 @@ export default function EtapaCampanha() {
 
       {campanha && !nova && (
         <>
-          <section className="min-w-0 space-y-2" data-produto-da-campanha="">
+          <section className="min-w-0 space-y-2" data-produto-da-campanha="" data-recolhido={produtoRecolhido ? "sim" : "nao"}>
             <CabecalhoDaEtapa
               nivel={3}
               titulo={`Produto: ${campanha.kit_nome || "sem produto"}`}
               ajuda="As fotos reais do kit são a fonte da verdade do produto. A revisão compara cada foto com elas."
               estado={`${campanha.produto_fontes.length} ${campanha.produto_fontes.length === 1 ? "fonte" : "fontes"} da verdade`}
+              recolher={{
+                recolhido: produtoRecolhido,
+                onAlternar: () => setProdutoRecolhido(!produtoRecolhido),
+                resumo: `${campanha.produto_fontes.length} ${campanha.produto_fontes.length === 1 ? "fonte" : "fontes"}`,
+              }}
             />
-            <FontesDoProduto ids={campanha.produto_fontes} fotos={fotos.data || []} />
+            {!produtoRecolhido && <FontesDoProduto ids={campanha.produto_fontes} fotos={fotos.data || []} />}
           </section>
           <FormularioDoBriefing />
         </>

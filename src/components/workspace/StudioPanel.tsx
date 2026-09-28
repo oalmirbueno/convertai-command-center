@@ -3161,20 +3161,20 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   const pastaCurta = folderPath ? folderPath.split("/").slice(-2).join("/") : "";
   const lendoConversa = !!activeId && carregadoPara !== activeId && msgs.length === 0 && !streaming;
   const classeDaResposta = cn(
-    "max-w-none text-foreground text-[13px] leading-[1.7] break-words",
+    "max-w-none text-foreground text-[14px] leading-[1.7] break-words",
     "prose prose-sm prose-invert",
     "prose-p:my-2.5 prose-p:leading-[1.7]",
     "prose-headings:font-semibold prose-headings:tracking-normal prose-headings:text-foreground",
-    "prose-h1:text-[14px] prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
-    "prose-h2:text-[13.5px] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
-    "prose-h3:text-[13px] prose-h3:mt-4 prose-h3:mb-1.5",
+    "prose-h1:text-[15px] prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
+    "prose-h2:text-[14.5px] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
+    "prose-h3:text-[14px] prose-h3:mt-4 prose-h3:mb-1.5",
     "prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1.5",
     "prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1.5",
     "prose-li:my-0 prose-li:leading-[1.65] prose-li:marker:text-primary/60",
     "prose-strong:font-semibold prose-strong:text-foreground",
-    "prose-code:text-[11.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-[11.5px]",
-    "prose-table:my-4 prose-table:text-[12px] prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
+    "prose-code:text-[12.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:before:content-none prose-code:after:content-none",
+    "prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-[12.5px]",
+    "prose-table:my-4 prose-table:text-[13px] prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
     "prose-hr:my-4 prose-hr:border-border/50",
     "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
     "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
@@ -3347,7 +3347,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           {msgs.map(m => (
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-[13px] leading-[1.55] text-primary-foreground">
+                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-[14px] leading-[1.6] text-primary-foreground">
                   {m.content}
                 </div>
               </div>
@@ -3383,7 +3383,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </article>
           )}
           {streaming && !streamBuf && (
-            <p className="flex items-center text-[12px] text-muted-foreground" role="status">
+            <p className="flex items-center text-[12.5px] text-muted-foreground" role="status">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
               Reunindo contexto
             </p>
