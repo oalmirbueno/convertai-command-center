@@ -128,6 +128,9 @@ export interface IdentidadeDaCampanha {
   elementos?: string;
   tom?: string;
   selo?: { texto?: string; descricao?: string };
+  /** Frente AE (28/09): tipo da campanha (_shared/tipos-de-campanha.ts) e a marca (Acerbi ou CME) em que nasceu. */
+  tipo?: string;
+  marca_id?: string;
 }
 
 export type EstadoDaCampanha = "planejada" | "gravada" | "encerrada";
@@ -500,10 +503,13 @@ export interface CorpoDaCampanha {
   /** O que a equipe já definiu; vale sobre o que o estrategista sugerir. */
   briefing?: BriefingDaCampanha | null;
   imagens?: ImagemDaCampanha[];
+  /** Frente AE: tipo escolhido na tela (promocao, lancamento...); sem ele, o Jev lê o pedido. */
+  tipo?: string | null;
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "campanha_criar", client_id: c.clientId, pedido: c.pedido };
+  if (c.tipo) corpo.tipo = c.tipo;
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   if (c.quantidade) corpo.quantidade = c.quantidade;

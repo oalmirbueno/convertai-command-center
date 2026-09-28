@@ -195,6 +195,10 @@ import {
   contextoComMarca,
   filtrarReferenciasDaMarca,
   fontesDaMarca,
+  fotoDaMarca,
+  campanhaDaMarca,
+  marcasDoCliente,
+  type MarcaLeve,
   kitComMarca,
   type MarcaDoCliente,
   marcaParaGravar,
@@ -386,6 +390,26 @@ import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../
 // Frente MF (27/09): post de fotos da Mesa Foto no fluxo das artes (entrega, Agenda, aprovação).
 import { ehPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts";
+// Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
+import {
+  aplicarArquivosNasLaminas,
+  arteRapidaDa,
+  type ArteRapida,
+  type CampanhaCandidata,
+  decidirArteRapida,
+  descricaoDoItemDaArteRapida,
+  type DocumentoDaArteRapida,
+  ehArteRapida,
+  INSTRUCOES_DA_ARTE_RAPIDA,
+  linkDoItemNoEstudio,
+  normalizarPedidoDaArteRapida,
+  pedidoParaODiretor,
+  pedidoProntoParaIr,
+  perguntasDaArteRapida,
+  type RespostaDeEscolha,
+  tituloDoPedido,
+} from "../_shared/arte-rapida.ts";
+import { criarItemDaArteRapida, dataDaAgendaValida, ErroDoItemDaArte, hojeEmSaoPaulo } from "./arte-rapida-na-agenda.ts";
 import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPublicaSegura } from "./links.ts";
 import { ANTI_GENERICO, CTA_PRINCIPIOS, FORMULAS_DE_TITULO, REVISAO_DE_MARCA, VOZ_DE_MARCA } from "../_shared/conhecimento-marketing.ts";
@@ -756,6 +780,10 @@ type Direcao = {
   adaptar_conteudo_a_copy?: boolean;
   /** Frente R (26/09): rosto escolhido para a pessoa da referência (rosto-na-geracao.ts). Ausente = nenhum. */
   rosto?: RostoEscolhido | null;
+  /** Frente AE (28/09): arte rápida, fora do plano do mês (_shared/arte-rapida.ts). Sem item até ir para a Agenda. */
+  arte_rapida?: (ArteRapida & { textos?: DocumentoDaArteRapida[] }) | null;
+  /** Marca escolhida na tela (Acerbi ou CME) para o trabalho sem item (marca.ts lê direcao.marca_id). */
+  marca_id?: string | null;
 };
 
 type Reabertura = {
@@ -2490,8 +2518,13 @@ type ImagemAcervo = {
 
 const CAMPOS_ACERVO = "id, client_id, storage_bucket, storage_path, nome, pasta, categoria, tags, descricao";
 
-/** Acervo ativo do cliente para o diretor escolher a foto de cada lâmina (sem custo). */
-async function lerAcervo(clientId: string, limite = 60): Promise<ImagemAcervo[]> {
+/**
+ * Acervo ativo do cliente para o diretor escolher a foto de cada lâmina (sem
+ * custo). Frente AE (28/09): com marca (Acerbi e CME), só as fotos dela
+ * (etiqueta marca:<id>; sem etiqueta, só na principal), para o diretor não
+ * pôr a foto de uma marca na arte da outra.
+ */
+async function lerAcervo(clientId: string, limite = 60, marca: MarcaLeve | null = null): Promise<ImagemAcervo[]> {
   const { data } = await servico()
     .from("cliente_imagens")
     .select(CAMPOS_ACERVO)
@@ -2500,8 +2533,8 @@ async function lerAcervo(clientId: string, limite = 60): Promise<ImagemAcervo[]>
     // neq sozinho descartava as fotos ainda sem categoria (NULL); arte pronta e logo não servem de base.
     .or("categoria.is.null,categoria.not.in.(logo,arte)")
     .order("atualizado_em", { ascending: false })
-    .limit(limite);
-  return (data as ImagemAcervo[] | null) ?? [];
+    .limit(marca ? limite * 2 : limite);
+  return ((data as ImagemAcervo[] | null) ?? []).filter((f) => fotoDaMarca(f.tags, marca)).slice(0, limite);
 }
 
 async function imagensDoAcervo(clientId: string, ids: string[]): Promise<ImagemAcervo[]> {
@@ -2871,8 +2904,32 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   if (corpo.trabalho_id) {
     const alvo = await lerTrabalho(texto(corpo.trabalho_id, 64));
     if (ehAds(alvo)) return await prepararAnuncio(ch, alvo, corpo);
+    // Frente AE: arte rápida ainda sem item da Agenda refaz a direção pelo mesmo diretor (o task_id da tela é ignorado).
+    if (!alvo.task_id && ehArteRapida(alvo.direcao)) return await rapidaPreparar(ch, { ...corpo, client_id: alvo.client_id }, alvo);
   }
   const item = await lerItemDaAgenda(texto(corpo.task_id, 64));
+  return await prepararItem(ch, corpo, item, null);
+}
+
+/**
+ * Frente AE: o que a arte rápida leva para o preparo do item (o pedido já
+ * decidido, os textos dos arquivos, as fotos do acervo e as imagens que o
+ * diretor olha). Com ela, o item é sintético (sem task_id).
+ */
+type PreparoRapido = {
+  existente: Trabalho | null;
+  trabalhoId: string;
+  campanhaId: string | null;
+  gravada: ArteRapida;
+  documentos: DocumentoDaArteRapida[];
+  fotosDoAcervo: ImagemAcervo[];
+  imagens: ImagemEntrada[];
+  avisos: string[];
+  custoJev: number;
+};
+
+/** A direção do item (da Agenda ou, com `rapida`, da arte rápida). */
+async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: ItemDaAgenda, rapida: PreparoRapido | null) {
   await garantirAcesso(ch, item.clientId);
   const clientId = item.clientId;
   if (FORMATOS_FORA_DO_ESTUDIO.has(item.tarefa.delivery_type)) {
@@ -2891,7 +2948,9 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   // trabalho é refeita a partir do pedido (as versões geradas ficam).
   const instrucao = texto(corpo.instrucao, 2000);
   let existente: Trabalho | null = null;
-  if (corpo.trabalho_id) {
+  if (rapida) {
+    existente = rapida.existente;
+  } else if (corpo.trabalho_id) {
     existente = await lerTrabalho(texto(corpo.trabalho_id, 64));
     if (existente.client_id !== clientId || existente.task_id !== item.tarefa.id) {
       throw new ErroEstudio(409, "trabalho_de_outro_item", "Este trabalho não é deste item da agenda.");
@@ -2903,14 +2962,15 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente MF: item que já é post de fotos (com fotos) não recebe direção de arte por cima; o
   // reservado pelo plano, ainda sem fotos, sai do item antes de gastar com a direção.
-  if (!existente && (await liberarItemParaArte(db, clientId, item.tarefa.id)).bloqueado) {
+  if (!rapida && !existente && (await liberarItemParaArte(db, clientId, item.tarefa.id)).bloqueado) {
     throw new ErroEstudio(409, "item_e_post_de_fotos", "Este item é um post de fotos da Mesa Foto e já tem fotos. Abra na Mesa Foto ou crie outro item para a arte.");
   }
 
   // O que o cliente já tem entra sozinho (pastas de referência, artes aprovadas
   // e fotos reais para o acervo), em paralelo com a leitura do kit.
   // Marca do item (ex.: Acerbi ou CME) pelo projeto da tarefa; cliente sem marca segue igual.
-  const alvoDaMarca: AlvoDaMarca = { task_id: item.tarefa.id, marca_id: corpo.marca_id };
+  // Arte rápida: sem item, a marca vem da tela ou da direção gravada (direcao.marca_id).
+  const alvoDaMarca: AlvoDaMarca = rapida ? { marca_id: corpo.marca_id, direcao: existente?.direcao } : { task_id: item.tarefa.id, marca_id: corpo.marca_id };
   const [, , kit, fontes, marcaDoItem] = await Promise.all([
     sincronizarReferencias(db, clientId).catch(() => null),
     sincronizarAcervo(db, clientId).catch(() => null),
@@ -2946,7 +3006,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   if (modoPedido === "roteiro" && !roteiro.length) {
     throw new ErroEstudio(409, "sem_roteiro", "Este item não tem roteiro do estrategista. Use o diretor de arte para montar a direção.");
   }
-  const trabalhoId = existente?.id ?? crypto.randomUUID();
+  const trabalhoId = existente?.id ?? rapida?.trabalhoId ?? crypto.randomUUID();
   let direcao: Direcao;
   let custo = 0;
   let usoId: string | null = null;
@@ -2967,11 +3027,13 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     const [prompt, memoria, acervo, refsRes, artesRes, preferencias] = await Promise.all([
       promptDoDiretor(clientId),
       memoriaDoDiretor(clientId),
-      lerAcervo(clientId, 40).then((lista) => {
+      lerAcervo(clientId, 40, marcaDoItem).then((lista) => {
         // As fotos da campanha entram no acervo que o diretor vê: senão a
         // checagem de fotos conhecidas recusava o id que o plano indicou.
         const junto = lista.slice();
         for (const f of plano.fotos.values()) if (!junto.some((a) => a.id === f.id)) junto.push(f);
+        // Frente AE: as fotos do acervo que vieram no pedido (ex.: da Mesa Foto) também.
+        for (const f of rapida?.fotosDoAcervo ?? []) if (!junto.some((a) => a.id === f.id)) junto.push(f);
         return junto;
       }),
       filtrarReferenciasDaMarca(
@@ -3004,7 +3066,9 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         roteiro_e_contexto: texto(item.tarefa.description, 4000),
         objetivo_do_post: item.post?.objective ?? null,
         legenda_prevista: texto(item.post?.default_caption, 1500) || null,
-        detalhe_do_estrategista: item.itemProposta ?? null,
+        detalhe_do_estrategista: rapida ? null : item.itemProposta ?? null,
+        // Frente AE: o pedido avulso (texto, imagens por código e textos dos arquivos).
+        pedido_avulso: rapida ? pedidoParaODiretor(rapida.gravada, rapida.documentos) : undefined,
         carrossel_infinito_pedido: pedidoInfinito,
         formato_da_arte: QUADRO_DO_POST[formato].rotulo,
         // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
@@ -3061,7 +3125,12 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       // As regras aprendidas com o cliente vêm por último: o prefixo fixo continua no cache do provedor.
       // Frente H: base de marketing do diretor (com teto) logo depois da base de design; cérebro e dossiê no fim.
       sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join("\n\n"),
-      mensagens: [{ papel: "usuario", conteudo: `Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}` }],
+      // Frente AE: as regras da arte rápida vão na mensagem (o sistema fica igual e segue no cache do provedor).
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
+        imagens: rapida && rapida.imagens.length ? rapida.imagens : undefined,
+      }],
       esquemaJson: ESQUEMA_DIRECAO,
       maxTokensSaida: 12_000,
       // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
@@ -3073,7 +3142,9 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     const conceito = texto(bruto.conceito, 1200);
     const fioVisual = texto(bruto.fio_visual, 800) || null;
     const infinito = pedidoInfinito ?? !!bruto.carrossel_infinito;
-    const cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn, new Set(acervo.map((a) => a.id)), fioVisual);
+    let cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn, new Set(acervo.map((a) => a.id)), fioVisual);
+    // Frente AE: as fotos do pedido (F1, F2...) que o diretor pôs em cada lâmina, as que sobraram e as logos.
+    if (rapida && cards.length) cards = aplicarArquivosNasLaminas(cards, codigosDasFotosDoDiretor(bruto.cards, postUnico), rapida.gravada.arquivos, rapida.gravada.peca);
     if (!cards.length) {
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
@@ -3138,6 +3209,16 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     direcao.campanha_id = campanha.id;
     if (!direcao.referencias_ids?.length && campanha.referencias_ids?.length) direcao.referencias_ids = campanha.referencias_ids.slice(0, 4);
   }
+  if (rapida) {
+    direcao.arte_rapida = { ...rapida.gravada, campanha_id: campanha ? campanha.id : null, textos: rapida.documentos };
+    const marcaPedida = texto(corpo.marca_id, 64);
+    const marcaAntes = existente?.direcao.marca_id ?? null;
+    if (UUID.test(marcaPedida)) direcao.marca_id = marcaPedida;
+    else if (marcaAntes) direcao.marca_id = marcaAntes;
+    custo = arred(custo + rapida.custoJev);
+  }
+  // A resposta da arte rápida leva o que foi decidido (sem os textos longos) e os avisos.
+  const extraDaRapida = rapida && direcao.arte_rapida ? { arte_rapida: { ...direcao.arte_rapida, textos: undefined }, avisos: rapida.avisos } : {};
 
   if (existente) {
     // Mantém o que a equipe escolheu na tela (referências do conjunto e de cada
@@ -3154,10 +3235,17 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         ...(velho && velho.fidelidade_referencia ? { fidelidade_referencia: velho.fidelidade_referencia } : {}),
       };
     });
+    // Frente AE: na arte rápida, as fotos e as logos do pedido voltam para as lâminas novas.
+    const cardsFinais = rapida
+      ? cardsMesclados.map((c) => {
+        const novo = direcao.cards.find((x) => x.ordem === c.ordem);
+        return novo && novo.fotos_livres?.length ? { ...c, fotos_livres: novo.fotos_livres } : c;
+      })
+      : cardsMesclados;
     const atualizado = await mutarTrabalho(existente.id, (x) => ({
       direcao: {
         ...direcao,
-        cards: cardsMesclados,
+        cards: cardsFinais,
         referencias_ids: anterior.referencias_ids,
         // Frente E: a fidelidade do trabalho e os papéis dos quadros das pranchas ficam.
         ...(anterior.fidelidade_referencia ? { fidelidade_referencia: anterior.fidelidade_referencia } : {}),
@@ -3168,7 +3256,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
-    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas });
+    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, ...extraDaRapida });
   }
 
   const { data: criado, error } = await db
@@ -3176,7 +3264,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     .insert({
       id: trabalhoId,
       client_id: clientId,
-      task_id: item.tarefa.id,
+      task_id: item.tarefa.id || null,
       status: "dirigido",
       direcao,
       modelo_imagem_id: modeloImagem.id,
@@ -3189,7 +3277,267 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, ...extraDaRapida });
+}
+
+// ------------------------------------------------------ arte rápida (frente AE)
+
+/** O código de foto do pedido (F1, F2...) que o diretor pôs em cada lâmina, pela mesma ordem de cardsDoDiretor. */
+function codigosDasFotosDoDiretor(bruto: unknown, postUnico: boolean): Record<number, string> {
+  const lista = (Array.isArray(bruto) ? bruto : []) as Record<string, any>[];
+  const validos = lista
+    .filter((c) => c && Array.isArray(c.blocos) && c.blocos.some((b: any) => texto(b?.texto)))
+    .sort((a, b) => num(a.ordem) - num(b.ordem))
+    .slice(0, postUnico ? 1 : MAX_CARDS);
+  const codigos: Record<number, string> = {};
+  validos.forEach((c, i) => {
+    codigos[i + 1] = texto(c.imagem_acervo, 8).toUpperCase();
+  });
+  return codigos;
+}
+
+/** Item sintético da arte rápida (sem task_id): o preparo e a legenda leem o pedido como se fosse a pauta. */
+function itemSinteticoDaArteRapida(clientId: string, a: ArteRapida, campanhaId: string | null): ItemDaAgenda {
+  return {
+    tarefa: {
+      id: "",
+      project_id: "",
+      title: a.titulo,
+      description: descricaoDoItemDaArteRapida(a),
+      delivery_type: a.peca === "carrossel" ? "carousel" : "static",
+      due_date: null,
+      deleted_at: null,
+    },
+    clientId,
+    projeto: { id: "", name: "" },
+    post: null,
+    // Contínuo desligado por padrão (custa mais); a campanha entra pelo mesmo caminho do item do plano.
+    itemProposta: { carrossel_infinito: false, campanha_id: campanhaId },
+  };
+}
+
+/** O item da arte rápida para a legenda (trabalho sem task_id). Outro trabalho sem item: erro de sempre. */
+function itemDaArteRapida(t: Trabalho): ItemDaAgenda {
+  const a = arteRapidaDa(t.direcao);
+  if (!a) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
+  return itemSinteticoDaArteRapida(t.client_id, a, t.direcao.campanha_id ?? null);
+}
+
+/** Campanhas do cliente (da marca pedida) que o Jev pode reconhecer no pedido (as que não acabaram, mais novas primeiro). */
+async function campanhasParaAArteRapida(clientId: string, marca: MarcaLeve | null): Promise<CampanhaCandidata[]> {
+  const { data } = await servico()
+    .from("mesa_campanhas")
+    .select("*")
+    .eq("client_id", clientId)
+    .neq("status", "encerrada")
+    .order("criado_em", { ascending: false })
+    .limit(40);
+  return ((data as Record<string, unknown>[] | null) ?? []).filter((c) => campanhaDaMarca(c.identidade, marca)).slice(0, 20).map((c) => ({
+    id: String(c.id),
+    nome: texto(c.nome, 120),
+    objetivo: texto(c.objetivo, 300) || null,
+    identidade: c.identidade ?? null,
+    briefing: c.briefing ?? null,
+    periodo_inicio: typeof c.periodo_inicio === "string" ? c.periodo_inicio : null,
+    periodo_fim: typeof c.periodo_fim === "string" ? c.periodo_fim : null,
+  }));
+}
+
+/** Até 4 imagens do pedido à vista do diretor (arte a melhorar, fotos e referências; as logos só entram na geração). */
+async function imagensDoPedidoParaODiretor(a: ArteRapida, fotos: ImagemAcervo[]): Promise<{ imagens: ImagemEntrada[]; avisos: string[] }> {
+  const ordem: Record<string, number> = { arte_para_melhorar: 0, foto: 1, referencia: 2 };
+  const alvos = a.arquivos.filter((x) => x.papel !== "logo").sort((x, y) => ordem[x.papel] - ordem[y.papel]).slice(0, 4);
+  const imagens: ImagemEntrada[] = [];
+  const avisos: string[] = [];
+  for (const arq of alvos) {
+    try {
+      if (arq.imagem_id) {
+        const f = fotos.find((x) => x.id === arq.imagem_id);
+        if (f) imagens.push(await anexoLeve(f.storage_bucket || "mesa", f.storage_path, arq.codigo));
+      } else if (arq.caminho) {
+        imagens.push(await anexoLeve("mesa", arq.caminho, arq.codigo));
+      }
+    } catch {
+      avisos.push(`O diretor não conseguiu abrir ${arq.nome}: ele seguiu pelo texto.`);
+    }
+  }
+  return { imagens, avisos };
+}
+
+/**
+ * rapida_preparar { client_id, pedido, peca?, campanha_id?, arquivos?, documentos?, formato?, laminas?, marca_id?, modelo_imagem_id?, qualidade? }
+ *   -> o mesmo retorno do preparar ({ trabalho, custo_usd, ... }) mais { arte_rapida, avisos }.
+ * A arte avulsa, fora do plano do mês: o Jev decide o que ficou em
+ * "Automático" (arte única ou carrossel, a campanha citada, o papel de cada
+ * imagem), e o MESMO diretor escreve a direção com a marca. Sem item da
+ * Agenda até a equipe levar (rapida_para_agenda). Com `existente` (o
+ * preparar de um trabalho que já é arte rápida), refaz a direção com o mesmo
+ * pedido, o pedido novo da equipe (instrucao) e, se veio, a campanha nova.
+ */
+async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, existente: Trabalho | null) {
+  const clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  if (existente && estaEntregue(existente)) throw erroTrabalhoEntregue();
+  // Cliente com duas marcas (Acerbi e CME): a arte nova nunca nasce sem marca (pergunta antes, na tela).
+  if (!existente && !UUID.test(texto(corpo.marca_id, 64)) && (await marcasDoCliente(servico(), clientId)).length >= 2) {
+    throw new ErroEstudio(400, "escolha_a_marca", "Este cliente tem mais de uma marca. Escolha a marca no topo da Mesa antes de criar a arte.");
+  }
+  const marcaDoPedido = await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(() => null);
+  const trabalhoId = existente?.id ?? crypto.randomUUID();
+  const avisos: string[] = [];
+  let custoJev = 0;
+  let gravada: ArteRapida;
+  let documentos: DocumentoDaArteRapida[];
+  let campanhaId: string | null;
+
+  if (existente) {
+    const antes = arteRapidaDa(existente.direcao);
+    if (!antes) throw new ErroEstudio(409, "nao_e_arte_rapida", "Este trabalho não é uma arte rápida.");
+    gravada = antes;
+    documentos = (existente.direcao.arte_rapida?.textos ?? []).filter((d) => d && d.texto).slice(0, 4);
+    campanhaId = existente.direcao.campanha_id ?? antes.campanha_id ?? null;
+    // Trocar de campanha ao refazer: id da campanha, ou null para seguir só a marca.
+    if (corpo.campanha_id !== undefined) {
+      const pedida = typeof corpo.campanha_id === "string" && UUID.test(corpo.campanha_id) ? corpo.campanha_id : null;
+      campanhaId = pedida && (await lerCampanha(clientId, pedida)) ? pedida : null;
+      gravada = { ...gravada, campanha_id: campanhaId, campanha_por: campanhaId ? "equipe" : null };
+    }
+  } else {
+    const pedido = normalizarPedidoDaArteRapida(corpo, clientId);
+    if (!pedidoProntoParaIr(pedido.pedido, pedido.arquivos.length, pedido.documentos.length)) {
+      throw new ErroEstudio(400, "pedido_vazio", "Escreva o que precisa ou envie uma imagem ou um arquivo.");
+    }
+    // Fotos do acervo: só as deste cliente, ativas e publicáveis.
+    const ids = pedido.arquivos.map((a) => a.imagem_id).filter((x): x is string => !!x);
+    const achadas = ids.length ? (await imagensDoAcervo(clientId, ids)).filter((f) => !fotoNaoPublicavel(f)) : [];
+    const antesDoFiltro = pedido.arquivos.length;
+    pedido.arquivos = pedido.arquivos.filter((a) => !a.imagem_id || achadas.some((f) => f.id === a.imagem_id));
+    if (pedido.arquivos.length < antesDoFiltro) avisos.push("Uma foto do acervo não está disponível para peça publicada e ficou de fora.");
+    // Campanha escolhida na tela: tem que ser deste cliente e desta marca.
+    if (pedido.campanha && pedido.campanha !== "auto") {
+      const escolhida = await lerCampanha(clientId, pedido.campanha);
+      if (!escolhida || !campanhaDaMarca(escolhida.identidade, marcaDoPedido)) {
+        pedido.campanha = null;
+        avisos.push("A campanha escolhida não é desta marca ou não foi encontrada: a arte seguiu só a marca.");
+      }
+    }
+    const candidatas = pedido.campanha === "auto" ? await campanhasParaAArteRapida(clientId, marcaDoPedido) : [];
+    const perguntas = perguntasDaArteRapida(pedido, candidatas);
+    let respostas: Record<string, RespostaDeEscolha> | null = null;
+    if (Object.keys(perguntas.questions).length) {
+      try {
+        const r = await jevPerguntar({ state: perguntas.state, questions: perguntas.questions as Record<string, PerguntaJev> });
+        const cobrado = await cobrarJev(r, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+        custoJev = cobrado?.custoUsd ?? 0;
+        respostas = r.answers as Record<string, RespostaDeEscolha>;
+      } catch (e) {
+        if (!(e instanceof JevErro)) throw e;
+        avisos.push("O Jev não respondeu agora: a peça e o papel das imagens seguiram regras simples. Confira antes de gerar.");
+      }
+    }
+    const d = decidirArteRapida(pedido, perguntas, respostas);
+    avisos.push(...d.avisos);
+    campanhaId = d.campanha_id;
+    documentos = pedido.documentos;
+    const primeiroNome = d.arquivos.length ? d.arquivos[0].nome.replace(/\.[a-z0-9]+$/i, "") : "";
+    gravada = {
+      pedido: pedido.pedido,
+      titulo: pedido.pedido ? tituloDoPedido(pedido.pedido) : primeiroNome ? `Arte com ${primeiroNome}`.slice(0, 80) : "Arte rápida",
+      peca: d.peca,
+      peca_por: d.peca_por,
+      peca_confianca: d.peca_confianca,
+      campanha_id: campanhaId,
+      campanha_por: d.campanha_por,
+      arquivos: d.arquivos,
+      documentos: pedido.documentos.map((x) => ({ nome: x.nome, caracteres: x.texto.length })),
+      criada_em: new Date().toISOString(),
+      criada_por: ch.userId,
+      avisos: d.avisos,
+    };
+    // Carrossel com a quantidade da tela; arte única nunca leva "laminas".
+    if (gravada.peca === "unica") delete corpo.laminas;
+  }
+
+  const idsDasFotos = gravada.arquivos.map((a) => a.imagem_id).filter((x): x is string => !!x);
+  const fotosDoAcervo = idsDasFotos.length ? await imagensDoAcervo(clientId, idsDasFotos) : [];
+  const vistas = await imagensDoPedidoParaODiretor(gravada, fotosDoAcervo);
+  avisos.push(...vistas.avisos);
+  const item = itemSinteticoDaArteRapida(clientId, gravada, campanhaId);
+  return await prepararItem(ch, { ...corpo, modo: "diretor" }, item, {
+    existente,
+    trabalhoId,
+    campanhaId,
+    gravada,
+    documentos,
+    fotosDoAcervo,
+    imagens: vistas.imagens,
+    avisos,
+    custoJev,
+  });
+}
+
+/**
+ * rapida_para_agenda { trabalho_id, data (AAAA-MM-DD), titulo?, pedido_id }
+ *   -> { trabalho, task: { id, title, due_date }, item_criado, caminho }
+ * A arte rápida vira um item da Agenda na data escolhida (pergunta e
+ * confirmação na tela) pelo escritor editorial, e o trabalho ganha o task_id.
+ * Daí valem a entrega em Arquivos, a Agenda, a data confirmada e a aprovação
+ * do cliente, pelo fluxo de sempre (a tela chama em seguida). Sem custo.
+ */
+async function rapidaParaAgenda(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const a = arteRapidaDa(t.direcao);
+  if (!a) throw new ErroEstudio(409, "nao_e_arte_rapida", "Este trabalho não é uma arte rápida.");
+  const caminhoDoItem = (taskId: string, data: string | null) => ({ rotulo: "Abrir o item no Estúdio", destino: linkDoItemNoEstudio(t.client_id, taskId, data) });
+  if (t.task_id) {
+    // Já foi (outra aba ou clique repetido): devolve o item de agora, sem criar outro.
+    return json({ trabalho: t, task: { id: t.task_id, title: a.titulo, due_date: a.data ?? null }, item_criado: false, ja_levada: true, caminho: caminhoDoItem(t.task_id, a.data ?? null) });
+  }
+  if (!t.direcao.cards.length) throw new ErroEstudio(409, "sem_direcao", "Crie a arte antes de levar para a Agenda.");
+  const data = texto(corpo.data, 10);
+  if (!dataDaAgendaValida(data, hojeEmSaoPaulo())) throw new ErroEstudio(400, "data_invalida", "Escolha uma data de hoje em diante.");
+  const pedidoId = texto(corpo.pedido_id, 80) || `${t.id}:${data}`;
+  const marca = await marcaDe(t.client_id, t).catch(() => null);
+  let criado;
+  try {
+    criado = await criarItemDaArteRapida(servico(), {
+      clientId: t.client_id,
+      userId: ch.userId,
+      titulo: texto(corpo.titulo, 200) || a.titulo,
+      data,
+      carrossel: t.direcao.cards.length > 1,
+      pedidoId,
+      descricao: descricaoDoItemDaArteRapida(a),
+      // O projeto da marca do trabalho (Acerbi ou CME); sem marca, o editorial mais recente.
+      projetoId: marca ? marca.project_id : null,
+    });
+  } catch (e) {
+    if (e instanceof ErroDoItemDaArte) throw new ErroEstudio(e.status, e.codigo, e.message);
+    throw e;
+  }
+  const agora = new Date().toISOString();
+  const atualizado = await mutarTrabalho(t.id, (x) => ({
+    task_id: x.task_id || criado.task_id,
+    direcao: { ...x.direcao, arte_rapida: { ...(x.direcao.arte_rapida ?? a), levada_em: agora, task_id: criado.task_id, data } },
+  }));
+  return json({
+    trabalho: atualizado,
+    task: { id: criado.task_id, title: criado.title, due_date: criado.due_date },
+    item_criado: !criado.replayed,
+    caminho: caminhoDoItem(criado.task_id, data),
+    custo_usd: 0,
+  });
+}
+
+/** rapida_arquivar { trabalho_id, desfazer? }: tira do histórico (deletar = arquivar; nada é apagado). */
+async function rapidaArquivar(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  if (!ehArteRapida(t.direcao)) throw new ErroEstudio(409, "nao_e_arte_rapida", "Este trabalho não é uma arte rápida.");
+  const desfazer = corpo.desfazer === true;
+  const atualizado = await mutarTrabalho(t.id, (x) => ({
+    direcao: { ...x.direcao, arte_rapida: { ...(x.direcao.arte_rapida as ArteRapida), arquivada_em: desfazer ? null : new Date().toISOString() } },
+  }));
+  return json({ trabalho: atualizado, arquivada: !desfazer, custo_usd: 0 });
 }
 
 // ------------------------------------------------------ referencias (Jev)
@@ -5651,8 +5999,8 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   if (ehAds(t)) {
     throw new ErroEstudio(409, "anuncio_sem_legenda", "Criativo de anúncio não tem legenda de post: o texto do anúncio fica na copy da Mesa Ads.");
   }
-  if (!t.task_id) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
-  const item = await lerItemDaAgenda(t.task_id);
+  // Frente AE: a arte rápida ainda sem item escreve a legenda pelo pedido (item sintético).
+  const item = t.task_id ? await lerItemDaAgenda(t.task_id) : itemDaArteRapida(t);
   const [prompt, diretor, contexto, recentes, perfil, marcaDaLegenda] = await Promise.all([
     promptDoDiretor(t.client_id),
     modeloDoPapel("diretor_arte"),
@@ -7007,7 +7355,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     lerKit(t.client_id, t),
     lerFontes(t.client_id, t),
     memoriaDoDiretor(t.client_id),
-    lerAcervo(t.client_id, 30),
+    marcaDe(t.client_id, t).then((m) => lerAcervo(t.client_id, 30, m)).catch(() => lerAcervo(t.client_id, 30)),
     imagensDoAcervo(t.client_id, idsDasFotos),
     // Sem o prompt global ativo a conversa ainda ajuda: a base de conhecimento vale.
     promptDoDiretor(t.client_id).catch(() => ""),
@@ -7856,12 +8204,16 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   enfileirar,
   cancelar_fila: cancelarFila,
   processar_fila: processarFila,
+  // Frente AE: arte rápida (pedido avulso), levar para a Agenda com a data, arquivar (deletar = arquivar).
+  rapida_preparar: (ch, corpo) => rapidaPreparar(ch, corpo, null),
+  rapida_para_agenda: rapidaParaAgenda,
+  rapida_arquivar: rapidaArquivar,
   // Frente MF: fotos_preparar (post de fotos da Mesa Foto, sem gerar arte).
   ...acoesDasFotosNaAgenda({ servico, garantirAcesso, json, erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem) }).acoes,
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
-const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
+const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

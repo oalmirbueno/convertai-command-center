@@ -407,9 +407,9 @@ describe("4. Sem misturar clientes nem marcas", () => {
     }
     expect(fontesDaMarcaNaTela(fontes, ACERBI).map((f) => f.id)).toEqual(["c1", "c2"]);
     expect(fontesDaMarcaNaTela(fontes, CME).map((f) => f.id)).toEqual(["m1"]);
-    // CME sem fonte própria: usa as do cliente (a tela avisa), nunca a de outra marca.
+    // Frente AE (28/09): CME sem fonte própria fica sem nenhuma (o Estúdio trava e oferece copiar as do cliente num clique).
     const semDaCme = fontes.filter((f) => f.id !== "m1");
-    expect(fontesDaMarcaNaTela(semDaCme, CME).map((f) => f.id)).toEqual(["c1", "c2"]);
+    expect(fontesDaMarcaNaTela(semDaCme, CME).map((f) => f.id)).toEqual([]);
     expect(usaFontesDoCliente(semDaCme, CME)).toBe(true);
     expect(usaFontesDoCliente(fontes, CME)).toBe(false);
     expect(marcaParaGravarNaTela(CME)).toEqual({ marca_id: CME.id });

@@ -34,6 +34,8 @@ import {
 import CampanhaBriefing from "./CampanhaBriefing";
 import { ImagensDaCampanhaSalvas } from "./CampanhaImagens";
 import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
+import CampanhaNasMesas from "./CampanhaNasMesas";
+import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**
  * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
@@ -274,6 +276,11 @@ export default function CampanhaDetalhe({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center">
               <h2 className="mr-2 min-w-0 text-[17px] font-semibold leading-snug [overflow-wrap:anywhere]">{campanha.nome}</h2>
+              {tipoDaCampanha(campanha.identidade) && (
+                <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+                  {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
+                </span>
+              )}
               <SeloDoEstado estado={campanha.status} />
             </div>
             <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
@@ -303,6 +310,9 @@ export default function CampanhaDetalhe({
           )}
         </div>
       </header>
+
+      {/* Frente AE: a campanha ligada às mesas (usar nas mesas, levar para, tipo e a base). */}
+      <CampanhaNasMesas campanha={campanha} />
 
       {/* Visão geral. */}
       <Secao titulo="Visão geral" resumo={campanha.objetivo || undefined} aberta={aberta("visao")} onAlternar={() => alternar("visao")}>

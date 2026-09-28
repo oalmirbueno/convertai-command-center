@@ -19,6 +19,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ehPostDeFotos, ErroDoPost, prepararPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { criarItemDoPostDeFotos } from "../_shared/post-de-fotos-item.ts";
+import { resolverMarca } from "../_shared/marca.ts";
 
 type Chamador = { userId: string; token: string; doChamador: SupabaseClient };
 
@@ -69,8 +70,11 @@ export function acoesDasFotosNaAgenda(d: DepsDasFotos) {
       const data = texto(novo.data, 10);
       if (!DATA.test(data)) throw d.erro(400, "sem_item", "Escolha o item da Agenda ou a data do post novo.");
       const pedido = texto(corpo.pedido_id, 80) || crypto.randomUUID();
+      // Frente AE: o item novo nasce no projeto da marca aberta (Acerbi ou CME), nunca no da outra.
+      const marca = await resolverMarca(db(), clientId, { marca_id: corpo.marca_id }).catch(() => null);
       try {
         const criado = await criarItemDoPostDeFotos(db(), {
+          projetoId: marca ? marca.project_id : null,
           clientId,
           userId: ch.userId,
           titulo: texto(novo.titulo, 200) || "Post de fotos",

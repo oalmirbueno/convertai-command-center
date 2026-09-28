@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { ImageOff, Loader2, PanelTopClose, PanelTopOpen, Star } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Archive, Check, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
 import { dataCurta, rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
@@ -90,7 +90,35 @@ export function emSemanas(itens: ItemDoMes[]): { semana: string; itens: ItemDoMe
   return grupos;
 }
 
-function CartaoDoItem({ item, ativo, fontes, onEscolher }: { item: ItemDoMes; ativo: boolean; fontes: FontesDaLista; onEscolher: (id: string) => void }) {
+/** Frente AE (28/09): arquivar pela faixa (um ou vários) e o aviso de pauta parecida no mesmo dia. */
+export interface ArquivarNaFaixa {
+  onArquivar: (ids: string[]) => void;
+  /** id -> ids das pautas parecidas no mesmo dia (pautasParecidas em arquivarDaFaixa.ts). */
+  parecidas?: Record<string, string[]>;
+  arquivando?: boolean;
+}
+
+function CartaoDoItem({
+  item,
+  ativo,
+  fontes,
+  onEscolher,
+  selecionando = false,
+  marcado = false,
+  onMarcar,
+  onArquivar,
+  parecidaCom = [],
+}: {
+  item: ItemDoMes;
+  ativo: boolean;
+  fontes: FontesDaLista;
+  onEscolher: (id: string) => void;
+  selecionando?: boolean;
+  marcado?: boolean;
+  onMarcar?: (id: string) => void;
+  onArquivar?: (id: string) => void;
+  parecidaCom?: string[];
+}) {
   const t = fontes.trabalhoDe(item);
   const arte = fontes.arteDe(item);
   const roteiro = fontes.temRoteiro(item);
@@ -99,17 +127,28 @@ function CartaoDoItem({ item, ativo, fontes, onEscolher }: { item: ItemDoMes; at
   const capaDaAgenda = !capaDoEstudio && arte ? fonteDoArquivo(arte.capa) : null;
   const capa = { width: LARGURA_DA_CAPA, height: Math.round(LARGURA_DA_CAPA * 1.25) };
   return (
+    <div className="group relative" style={{ width: LARGURA_DO_CARTAO }}>
     <button
       type="button"
-      onClick={() => onEscolher(item.id)}
+      onClick={() => (selecionando && onMarcar ? onMarcar(item.id) : onEscolher(item.id))}
       aria-current={ativo ? "true" : undefined}
+      aria-pressed={selecionando ? marcado : undefined}
       title={item.title}
       data-item-id={item.id}
       style={{ width: LARGURA_DO_CARTAO }}
       className={`flex min-w-0 items-center rounded-lg border px-2 py-1.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-        ativo ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-background hover:border-primary/50"
+        selecionando && marcado
+          ? "border-destructive bg-destructive/5 ring-1 ring-destructive"
+          : ativo
+            ? "border-primary bg-primary/5 ring-1 ring-primary"
+            : "border-border bg-background hover:border-primary/50"
       }`}
     >
+      {selecionando && (
+        <span className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${marcado ? "border-destructive bg-destructive text-destructive-foreground" : "border-border bg-background"}`} aria-hidden="true">
+          {marcado && <Check className="h-3 w-3" />}
+        </span>
+      )}
       {capaDoEstudio ? (
         <span className="block shrink-0 overflow-hidden rounded" style={capa}>
           <ImagemDaMesa caminho={capaDoEstudio.storage_path} alt="" className="h-full w-full" />
@@ -133,11 +172,29 @@ function CartaoDoItem({ item, ativo, fontes, onEscolher }: { item: ItemDoMes; at
           )}
         </span>
         <span className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-[1.3] text-foreground [overflow-wrap:anywhere]">{item.title}</span>
-        <span className="mt-1 flex min-w-0">
+        <span className="mt-1 flex min-w-0 flex-wrap">
           <SeloDoItem tom={situacao.tom}>{situacao.rotulo}</SeloDoItem>
+          {parecidaCom.length > 0 && (
+            <span title={`Parecida com: ${parecidaCom.join("; ")}. Veja se é duplicada e arquive a que não quer.`} className="ml-1">
+              <SeloDoItem tom="alerta">parecida com outra</SeloDoItem>
+            </span>
+          )}
         </span>
       </span>
     </button>
+    {!selecionando && onArquivar && (
+      <button
+        type="button"
+        onClick={() => onArquivar(item.id)}
+        aria-label={`Arquivar ${item.title}`}
+        title="Arquivar: sai da faixa, do mês e da fila (dá para desfazer)"
+        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        data-arquivar-pauta={item.id}
+      >
+        <Archive className="h-3.5 w-3.5" />
+      </button>
+    )}
+    </div>
   );
 }
 
@@ -157,6 +214,7 @@ export default function EstudioLista({
   onEscolher,
   recolhida = false,
   onRecolher,
+  arquivar,
 }: {
   janela: string;
   meses: string[];
@@ -176,8 +234,31 @@ export default function EstudioLista({
   /** Só a linha de cima (período e filtros): mais altura para o estúdio. */
   recolhida?: boolean;
   onRecolher?: (recolher: boolean) => void;
+  /** Frente AE: arquivar pela faixa (sem ele, a faixa fica como antes). */
+  arquivar?: ArquivarNaFaixa;
 }) {
   const proximos = janela === PROXIMOS_DIAS;
+  const [selecionando, setSelecionando] = useState(false);
+  const [marcados, setMarcados] = useState<string[]>([]);
+  const marcar = (id: string) => setMarcados((l) => (l.indexOf(id) >= 0 ? l.filter((x) => x !== id) : l.concat([id])));
+  const sairDaSelecao = () => {
+    setSelecionando(false);
+    setMarcados([]);
+  };
+  const tituloDe = (id: string) => {
+    const i = itens.filter((x) => x.id === id)[0];
+    return i ? `${i.title}${fontes.trabalhoDe(i) ? " (com trabalho no Estúdio)" : ""}` : id;
+  };
+  const propsDoCartao = (item: ItemDoMes) =>
+    arquivar
+      ? {
+          selecionando,
+          marcado: marcados.indexOf(item.id) >= 0,
+          onMarcar: marcar,
+          onArquivar: (id: string) => arquivar.onArquivar([id]),
+          parecidaCom: ((arquivar.parecidas && arquivar.parecidas[item.id]) || []).map(tituloDe),
+        }
+      : {};
   const faixa = useRef<HTMLDivElement>(null);
   const contagem: Record<FiltroDoEstudio, number> = { a_fazer: 0, com_arte: 0, na_agenda: 0 };
   for (const i of itens) {
@@ -241,6 +322,36 @@ export default function EstudioLista({
         ))}
       </div>
       {atualizando && <Loader2 className="mb-1 mt-1 h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Atualizando" />}
+      {arquivar && !recolhida && !selecionando && itens.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setSelecionando(true)}
+          className="mb-1 mt-1 flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+          title="Marcar várias pautas para arquivar de uma vez"
+        >
+          <ListChecks className="mr-1 h-4 w-4" /> Selecionar
+        </button>
+      )}
+      {arquivar && selecionando && (
+        <span className="mb-1 mt-1 flex shrink-0 items-center" role="group" aria-label="Arquivar as marcadas">
+          <button
+            type="button"
+            onClick={() => {
+              if (!marcados.length) return;
+              arquivar.onArquivar(marcados.slice());
+              sairDaSelecao();
+            }}
+            disabled={!marcados.length || !!arquivar.arquivando}
+            className="flex h-8 items-center rounded-md bg-destructive px-2.5 text-[11.5px] font-medium text-destructive-foreground disabled:opacity-50"
+          >
+            {arquivar.arquivando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1 h-3.5 w-3.5" />}
+            Arquivar {marcados.length ? `(${marcados.length})` : ""}
+          </button>
+          <button type="button" onClick={sairDaSelecao} className="ml-1 h-8 rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+            Cancelar
+          </button>
+        </span>
+      )}
       {proximos && !recolhida && (
         <span className="mb-1 ml-1 mt-1 hidden min-w-0 truncate text-[11px] text-muted-foreground lg:inline" title="Com a arte que já está na Agenda das últimas semanas">
           com as artes já na Agenda
@@ -289,7 +400,7 @@ export default function EstudioLista({
                 {itemFora && (
                   <div className="mr-4 flex shrink-0 flex-col">
                     <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Aberto, fora do período</p>
-                    <CartaoDoItem item={itemFora} ativo={itemFora.id === tarefaId} fontes={fontes} onEscolher={onEscolher} />
+                    <CartaoDoItem item={itemFora} ativo={itemFora.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(itemFora)} />
                   </div>
                 )}
                 {semanas.map((s, i) => {
@@ -303,7 +414,7 @@ export default function EstudioLista({
                       <ul className="flex">
                         {s.itens.map((item, j) => (
                           <li key={item.id} className={j < s.itens.length - 1 ? "mr-2" : ""}>
-                            <CartaoDoItem item={item} ativo={item.id === tarefaId} fontes={fontes} onEscolher={onEscolher} />
+                            <CartaoDoItem item={item} ativo={item.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(item)} />
                           </li>
                         ))}
                       </ul>

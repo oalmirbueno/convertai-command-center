@@ -85,6 +85,8 @@ import {
   respostaComAvisos,
 } from "./tetos-do-pedido.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
+// Frente AE (28/09): tipos de campanha (promoção, lançamento, data comemorativa...), cada um com identidade e selo próprios.
+import { blocoDoTipoParaOEstrategista, direcaoDoSeloDoTipo, perguntaDoTipoDaCampanha, tipoDaCampanha, tipoPelaResposta, tipoValido, type TipoDeCampanha } from "../_shared/tipos-de-campanha.ts";
 import {
   createEditorialItem,
   createEditorialItemSchema,
@@ -4153,10 +4155,15 @@ const ESQUEMA_CAMPANHA = {
   }),
 };
 
-function normalizarIdentidade(bruto: unknown): Record<string, unknown> {
+function normalizarIdentidade(bruto: unknown, antes: { tipo?: unknown; marca_id?: unknown } | null = null): Record<string, unknown> {
   const o = (bruto ?? {}) as Record<string, any>;
   const HEX = /^#[0-9a-f]{6}$/i;
+  // Frente AE: o tipo e a marca (Acerbi ou CME) moram na identidade; o modelo não os devolve, então os de antes ficam.
+  const tipo = tipoValido(o.tipo) ?? tipoValido(antes?.tipo);
+  const marcaId = typeof antes?.marca_id === "string" && UUID.test(antes.marca_id) ? antes.marca_id : null;
   return {
+    ...(tipo ? { tipo } : {}),
+    ...(marcaId ? { marca_id: marcaId } : {}),
     tema_visual: texto(o.tema_visual, 1200),
     paleta_apoio: (Array.isArray(o.paleta_apoio) ? o.paleta_apoio : [])
       .map((p: any) => ({ nome: texto(p?.nome, 40), hex: texto(p?.hex, 7).toUpperCase() }))
@@ -4167,6 +4174,27 @@ function normalizarIdentidade(bruto: unknown): Record<string, unknown> {
     tom: texto(o.tom, 400),
     selo: { texto: texto(o.selo?.texto, 60), descricao: texto(o.selo?.descricao, 600) },
   };
+}
+
+/**
+ * Frente AE: o tipo da campanha pelo pedido (Choice do Jev, centavos). Sem o
+ * Jev ou com pouca confiança, fica sem tipo e o estrategista segue o pedido.
+ */
+async function tipoDaCampanhaPeloJev(
+  clientId: string,
+  pedido: string,
+  hype: unknown,
+  userId: string,
+): Promise<{ tipo: TipoDeCampanha | null; por: "jev" | null }> {
+  try {
+    const r = await jevPerguntar({ state: { pedido, hype: hype ?? null }, questions: { tipo: perguntaDoTipoDaCampanha() as PerguntaJev } });
+    await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: "mesa_campanha", id: clientId }, criadoPor: userId }).catch(() => null);
+    const tipo = tipoPelaResposta(r.answers.tipo);
+    return { tipo, por: tipo ? "jev" : null };
+  } catch (e) {
+    if (!(e instanceof JevErro)) console.error("[agente-calendario] tipo da campanha pelo Jev falhou", { erro: e instanceof Error ? e.name : "desconhecido" });
+    return { tipo: null, por: null };
+  }
 }
 
 /**
@@ -4193,6 +4221,10 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const briefingDaEquipe = normalizarBriefing(corpo.briefing);
   const imagensPedidas = normalizarImagensDaCampanha(corpo.imagens);
 
+  // Frente AE: o tipo escolhido na tela; sem escolha, o Jev lê o pedido (junto com as outras leituras).
+  const tipoPedidoP: Promise<{ tipo: TipoDeCampanha | null; por: "equipe" | "jev" | null }> = tipoValido(corpo.tipo)
+    ? Promise.resolve({ tipo: tipoValido(corpo.tipo), por: "equipe" as const })
+    : tipoDaCampanhaPeloJev(clientId, pedidoTexto, hype, chamador.userId);
   const [ctx, anexosLidos, projectId, fotosAchadas] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
@@ -4224,10 +4256,14 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
 
   // O id nasce antes: o uso de IA fica ligado à campanha, não ao cliente.
   const campanhaId = crypto.randomUUID();
+  const tipoDaCriacao = await tipoPedidoP;
+  const blocoDoTipo = blocoDoTipoParaOEstrategista(tipoDaCriacao.tipo);
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
-${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}${notaDoSistema(avisosDasImagens.join(" ") || null)}
+${blocoDoTipo ? `
+${blocoDoTipo}
+` : ""}${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}${notaDoSistema(avisosDasImagens.join(" ") || null)}
 TAREFA: crie a campanha completa para ${inicio} a ${fim}. Nada genérico: cada parte fala do produto em foco, da oferta e do público deste cliente.
 - nome: nome curto e memorável da campanha (é o tema, não o nome da marca).
 - objetivo: o resultado de negócio que a campanha busca, em 1 frase.
@@ -4323,7 +4359,8 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     periodo_inicio: inicio,
     periodo_fim: fim,
     conceito: texto(r.conceito, 2000) || null,
-    identidade: normalizarIdentidade(r.identidade),
+    // A campanha nasce na marca aberta (Acerbi ou CME): as mesas só a mostram nela.
+    identidade: normalizarIdentidade(r.identidade, { tipo: tipoDaCriacao.tipo, marca_id: (await marcaDaChamada(servico, clientId, corpo).catch(() => null))?.id ?? null }),
     referencias_ids: referencias,
     proposta_id: proposta.id,
     status: "planejada",
@@ -4357,7 +4394,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     console.error("[agente-calendario] conversa inicial da campanha nao gravada", { campanha_id: campanhaId, erro: String(e) });
   }
 
-  return json({ campanha, proposta, resposta: respostaComAvisos(texto(r.resposta, 2000), avisosDasImagens), avisos: avisosDasImagens, project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta, resposta: respostaComAvisos(texto(r.resposta, 2000), avisosDasImagens), avisos: avisosDasImagens, tipo: tipoDaCriacao.tipo, tipo_por: tipoDaCriacao.por, project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 const ESQUEMA_AJUSTE_CAMPANHA = {
@@ -4399,7 +4436,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
       nome: texto(r.nome, 120) || c.nome,
       objetivo: texto(r.objetivo, 600) || c.objetivo,
       conceito: texto(r.conceito, 2000) || c.conceito,
-      identidade: r.identidade ? normalizarIdentidade(r.identidade) : c.identidade,
+      identidade: r.identidade ? normalizarIdentidade(r.identidade, (c.identidade ?? null) as Record<string, unknown> | null) : c.identidade,
       // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
       ...(c.briefing !== undefined && r.briefing ? { briefing: normalizarBriefing(r.briefing) } : {}),
     })
@@ -4434,6 +4471,8 @@ async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: 
     `SELO (logo do tema) da campanha "${c.nome}".`,
     `Escreva exatamente este texto, com a grafia e os acentos certos, e nenhum outro: "${textoSelo}".`,
     id.selo?.descricao ? `Desenho do selo: ${id.selo.descricao}` : "Selo gráfico simples e marcante, legível em tamanho pequeno.",
+    // Frente AE: cada tipo de campanha tem o seu selo, bonito e sem poluir.
+    direcaoDoSeloDoTipo(tipoDaCampanha(c.identidade)),
     id.tipografia ? `Tipografia: ${id.tipografia}` : "",
     paleta ? `Cores: ${paleta}.` : "",
     "Fundo branco liso e vazio em volta (o fundo será removido). Um único selo centralizado, com margem, sem mockup, sem sombra de cena, sem outros elementos, vetorial e limpo.",
@@ -4592,7 +4631,7 @@ ${REGRAS_DOS_ITENS}`;
     campos.nome = texto(nova.nome, 120) || c.nome;
     campos.objetivo = texto(nova.objetivo, 600) || c.objetivo;
     campos.conceito = texto(nova.conceito, 2000) || c.conceito;
-    if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade);
+    if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade, (c.identidade ?? null) as Record<string, unknown> | null);
     // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
     if (nova.briefing && c.briefing !== undefined) campos.briefing = normalizarBriefing(nova.briefing);
   }
@@ -4656,13 +4695,21 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   let recusadas: string[] = [];
   if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing(corpo.briefing);
   if (typeof corpo.objetivo === "string") campos.objetivo = texto(corpo.objetivo, 600) || null;
+  // Frente AE: trocar o tipo da campanha na tela (sem IA); "nenhum" tira o tipo.
+  if (corpo.tipo !== undefined) {
+    const base = { ...((c.identidade ?? {}) as Record<string, unknown>) };
+    const tipo = tipoValido(corpo.tipo);
+    if (tipo) base.tipo = tipo;
+    else delete base.tipo;
+    campos.identidade = base;
+  }
   if (corpo.imagens !== undefined) {
     const pedidas = normalizarImagensDaCampanha(corpo.imagens);
     const achadas = new Set((await fotosDoAcervoPorId(servico, c.client_id, pedidas.map((i) => i.imagem_id))).map((f) => f.id));
     campos.imagens = pedidas.filter((i) => achadas.has(i.imagem_id));
     recusadas = pedidas.filter((i) => !achadas.has(i.imagem_id)).map((i) => i.imagem_id);
   }
-  if (!Object.keys(campos).length) throw new ErroHttp(400, "nada_para_salvar", "Nada para salvar: mande briefing, imagens ou objetivo.");
+  if (!Object.keys(campos).length) throw new ErroHttp(400, "nada_para_salvar", "Nada para salvar: mande briefing, imagens, objetivo ou tipo.");
   const { data, error } = await servico
     .from("mesa_campanhas")
     .update(campos)
@@ -5776,6 +5823,22 @@ async function arquivarItemDaAgenda(servico: SupabaseClient, chamador: Chamador,
     throw new ErroHttp(409, "item_com_arte", "Este conteúdo já tem arte no Estúdio. Confirme para apagar: a arte fica guardada no Estúdio e nenhum arquivo é apagado.", { arte: true });
   }
 
+  // Frente AE (28/09, dono: "apagar os conteúdos que não quero mais pela faixa do Estúdio"): com
+  // arquivar_post, o post da Agenda só planejado sai junto (archive_editorial_post, com o JWT de quem
+  // pediu, antes da tarefa: se o banco recusar, nada muda). Agendado ou no ar já parou acima.
+  let postArquivado: string | null = null;
+  if (corpo.arquivar_post === true && postId) {
+    const { data: post } = await servico.from("editorial_posts").select("id, version, archived_at").eq("id", postId).eq("client_id", clientId).maybeSingle();
+    const p = post as { id: string; version: number; archived_at: string | null } | null;
+    if (p && !p.archived_at) {
+      const { error: erroDoPost } = await clienteDoChamador(chamador.token).rpc("archive_editorial_post", { p_post_id: p.id, p_expected_version: p.version });
+      if (erroDoPost) {
+        throw new ErroHttp(409, "post_nao_arquivado", "O post deste conteúdo na Agenda não pôde ser arquivado agora. Nada foi mudado; tente de novo ou arquive pela Agenda.");
+      }
+      postArquivado = p.id;
+    }
+  }
+
   const inicio = Date.now();
   const { error } = await servico.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", t.id).is("deleted_at", null);
   if (error) throw new ErroHttp(500, "item_nao_apagado", "Não foi possível apagar o item da agenda. Tente de novo.");
@@ -5788,10 +5851,37 @@ async function arquivarItemDaAgenda(servico: SupabaseClient, chamador: Chamador,
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_apagar_item_da_agenda", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
-    input: { client_id: clientId, task_id: t.id, confirmar_arte: corpo.confirmar_arte === true },
+    input: { client_id: clientId, task_id: t.id, confirmar_arte: corpo.confirmar_arte === true, post_arquivado: postArquivado },
     success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
   });
-  return json({ task_id: t.id, titulo, arte: temArte, memoria_id: memoriaId });
+  return json({ task_id: t.id, titulo, arte: temArte, memoria_id: memoriaId, post_arquivado: postArquivado });
+}
+
+/**
+ * Frente AE: desfaz o arquivamento do post planejado que saiu junto com o
+ * item (o inverso exato do archive_editorial_post: volta o estado de
+ * produção que o evento post_archived guardou). As publicações planejadas
+ * que o arquivamento cancelou não voltam sozinhas: a data é confirmada de
+ * novo na Entrega. Só o post ligado a este item; falha vira aviso.
+ */
+async function desarquivarPostDoItem(servico: SupabaseClient, clientId: string, taskId: string, postId: unknown): Promise<string | null> {
+  const id = String(postId ?? "");
+  if (!UUID.test(id)) return null;
+  const { data: vinculo } = await servico.from("editorial_post_internal").select("post_id").eq("task_id", taskId).eq("post_id", id).maybeSingle();
+  if (!vinculo) return "O post da Agenda não é deste item: ficou como estava.";
+  const { data: post } = await servico.from("editorial_posts").select("id, archived_at").eq("id", id).eq("client_id", clientId).maybeSingle();
+  if (!post || !(post as { archived_at: string | null }).archived_at) return null;
+  const { data: eventos } = await servico
+    .from("editorial_events")
+    .select("from_status")
+    .eq("post_id", id)
+    .eq("event_type", "post_archived")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const antes = String(((eventos ?? []) as { from_status: string | null }[])[0]?.from_status || "draft");
+  const volta = ["draft", "production", "ready"].includes(antes) ? antes : "draft";
+  const { error } = await servico.from("editorial_posts").update({ production_status: volta, archived_at: null }).eq("id", id).eq("client_id", clientId);
+  return error ? "O item voltou, mas o post da Agenda continua arquivado. Entregue a arte de novo para ele voltar." : null;
 }
 
 /** restaurar_item_agenda { client_id, task_id, memoria_id? }: desfaz o arquivar_item_agenda. */
@@ -5804,13 +5894,15 @@ async function restaurarItemDaAgenda(servico: SupabaseClient, chamador: Chamador
   const inicio = Date.now();
   const { error } = await servico.from("tasks").update({ deleted_at: null }).eq("id", t.id);
   if (error) throw new ErroHttp(500, "item_nao_restaurado", "Não foi possível devolver o item para a agenda. Tente de novo.");
+  // Frente AE: o post planejado que saiu junto volta também.
+  const avisoDoPost = corpo.post_id ? await desarquivarPostDoItem(servico, clientId, t.id, corpo.post_id).catch(() => "O post da Agenda continua arquivado.") : null;
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_restaurar_item_da_agenda", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
     input: { client_id: clientId, task_id: t.id },
     success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
   });
-  return json({ task_id: t.id, titulo: t.title });
+  return json({ task_id: t.id, titulo: t.title, aviso: avisoDoPost });
 }
 
 /** Anexo acao_agenda de uma mensagem do agente do mês, com o acesso conferido. */

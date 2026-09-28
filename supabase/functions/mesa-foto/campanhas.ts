@@ -20,6 +20,8 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ErroDeRegra, limpo, listaDeTextos, UUID } from "./calculos.ts";
+// Frente AE (28/09): com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
+import { campanhaDaMarca, type MarcaLeve, resolverMarca } from "../_shared/marca.ts";
 import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
 
 // ------------------------------------------------------------------ tipos
@@ -259,7 +261,7 @@ export function campanhaParaOContexto(c: CampanhaParaFoto, papel: "escolhida" | 
  * Lê as campanhas do cliente e o calendário do mês (chave de serviço). Tabela
  * ausente ou erro de leitura: lista vazia (a Mesa Foto segue sem campanha).
  */
-export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string, agora: Date = new Date()) {
+export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string, agora: Date = new Date(), marca: MarcaLeve | null = null) {
   const ref = mesDeSaoPaulo(agora);
   const [campanhas, propostas] = await Promise.all([
     db.from("mesa_campanhas")
@@ -276,7 +278,7 @@ export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string,
       .order("periodo_inicio", { ascending: false })
       .limit(20),
   ]);
-  const linhas = campanhas.error ? [] : ((campanhas.data ?? []) as LinhaCampanhaDaMesa[]);
+  const linhas = (campanhas.error ? [] : ((campanhas.data ?? []) as LinhaCampanhaDaMesa[])).filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca));
   const itens = propostas.error ? [] : itensDasPropostas((propostas.data ?? []) as { id: string; itens: unknown }[]);
   return marcarCampanhaDoMes(linhas, itens, agora);
 }
@@ -289,7 +291,8 @@ export function acoesDeCampanhas(f: FerramentasDaMesa) {
     const clientId = typeof corpo.client_id === "string" && UUID.test(corpo.client_id) ? corpo.client_id : "";
     if (!clientId) throw new ErroDeRegra(400, "client_id_invalido", "client_id inválido.");
     await f.garantirAcesso(ch, clientId);
-    const r = await lerCampanhasParaFoto(f.servico(), clientId);
+    const marca = await resolverMarca(f.servico(), clientId, { marca_id: corpo.marca_id }).catch(() => null);
+    const r = await lerCampanhasParaFoto(f.servico(), clientId, new Date(), marca);
     return f.json({ ...r, custo_usd: 0 });
   }
   return { campanhas_listar: campanhasListar } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>;

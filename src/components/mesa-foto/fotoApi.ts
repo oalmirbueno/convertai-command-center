@@ -2,6 +2,7 @@ import { acaoDoAnexo, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } f
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
+import { marcaAtual } from "@/lib/mesa/marcas";
 import {
   chamarFuncao,
   ErroDaMesa,
@@ -2751,7 +2752,11 @@ export function periodoDaCampanha(c: Pick<CampanhaDaMesa, "periodo_inicio" | "pe
   return base ? `${base}${c.periodo_pelo_calendario ? " (pelo calendário)" : ""}` : "sem período";
 }
 
-export const chaveDasCampanhasDaMesa = (clientId: string) => ["mesa-foto", "campanhas-da-mesa", clientId];
+// Frente AE (28/09): a marca aberta entra na chave (Acerbi e CME não dividem a lista em cache).
+export const chaveDasCampanhasDaMesa = (clientId: string) => {
+  const m = marcaAtual();
+  return ["mesa-foto", "campanhas-da-mesa", clientId, m && m.clientId === clientId ? m.marcaId : "geral"];
+};
 
 /** As campanhas que a Mesa usa, com a do mês marcada pelo calendário (campanhas_listar, sem IA). */
 export function useCampanhasDaMesa(clientId: string, ativo = true) {

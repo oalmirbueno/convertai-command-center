@@ -31,6 +31,34 @@ import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from ".
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
+
+/**
+ * Tipo da campanha (frente AE, 28/09, dono: "não é só promoção"): cada tipo
+ * tem identidade e selo próprios. "Automático": o Jev lê o pedido.
+ */
+export function EscolhaDoTipo({ valor, onValor, desabilitado }: { valor: TipoDeCampanha | ""; onValor: (v: TipoDeCampanha | "") => void; desabilitado?: boolean }) {
+  const pilula = (ativa: boolean) =>
+    `mb-1.5 mr-1.5 inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-[12px] transition-colors ${
+      ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+    }`;
+  return (
+    <div className="min-w-0">
+      <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Tipo</p>
+      <div role="radiogroup" aria-label="Tipo da campanha" className="flex min-w-0 flex-wrap" data-tipo-da-campanha={valor || "auto"}>
+        <button type="button" role="radio" aria-checked={valor === ""} disabled={desabilitado} className={pilula(valor === "")} onClick={() => onValor("")} title="O agente reconhece o tipo pelo pedido">
+          Automático
+        </button>
+        {TIPOS_DE_CAMPANHA.map((t) => (
+          <button key={t} type="button" role="radio" aria-checked={valor === t} disabled={desabilitado} className={pilula(valor === t)} onClick={() => onValor(t)} title={DEFINICAO_DO_TIPO[t].dica}>
+            {DEFINICAO_DO_TIPO[t].rotulo}
+          </button>
+        ))}
+      </div>
+      {valor && <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{DEFINICAO_DO_TIPO[valor].dica} Selo: {DEFINICAO_DO_TIPO[valor].selo.split(".")[0].toLowerCase()}.</p>}
+    </div>
+  );
+}
 
 /**
  * Nova campanha, numa coluna só e com o mínimo à vista: um campo grande
@@ -67,6 +95,7 @@ export default function CampanhaNova({
   const [imagens, setImagens] = useState<ImagemDaCampanha[]>([]);
   const [briefing, setBriefing] = useState<BriefingDaCampanha>(briefingEmBranco);
   const [maisOpcoes, setMaisOpcoes] = useState(false);
+  const [tipo, setTipo] = useState<TipoDeCampanha | "">("");
   const [galeria, setGaleria] = useState(false);
   const [desde, setDesde] = useState<number | null>(null);
 
@@ -94,6 +123,7 @@ export default function CampanhaNova({
         hype: hype || null,
         briefing: briefingParaEnviar(briefing),
         imagens,
+        tipo: tipo || null,
       });
     } finally {
       setDesde(null);
@@ -142,8 +172,12 @@ export default function CampanhaNova({
           </div>
         )}
 
+        <div className="mt-4">
+          <EscolhaDoTipo valor={tipo} onValor={setTipo} desabilitado={desde !== null} />
+        </div>
+
         {/* O campo grande, como uma conversa: texto, microfone e imagens. */}
-        <div className="mt-4 rounded-xl border border-border bg-background p-2.5 focus-within:border-primary/60">
+        <div className="mt-3 rounded-xl border border-border bg-background p-2.5 focus-within:border-primary/60">
           <label htmlFor="pedido-da-campanha" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
             O que é a campanha?
           </label>
@@ -153,7 +187,7 @@ export default function CampanhaNova({
             onChange={(e) => setPedido(e.target.value)}
             rows={5}
             aria-label="Pedido da campanha"
-            placeholder="Ex.: promoção do amor no Dia dos Namorados, 20% em kits para casal, tom leve e romântico"
+            placeholder={tipo ? `Ex.: ${DEFINICAO_DO_TIPO[tipo].exemplo}` : "Ex.: promoção do amor no Dia dos Namorados, 20% em kits para casal, tom leve e romântico"}
             className="min-h-[120px] resize-y border-0 bg-transparent px-1 py-1 text-[13.5px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <MiniaturasDosAnexos anexos={anexos} />

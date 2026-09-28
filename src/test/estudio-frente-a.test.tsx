@@ -450,7 +450,8 @@ describe("5. formatos do Instagram", () => {
     expect(corpoDe("entregar")).toContain('"laminas_em_outro_formato"');
     expect(corpoDe("entregar")).toContain("const lamina = await laminaFinal(versao!.storage_path, quadroFinal);");
     expect(corpoDe("configurar")).toContain("formatoNovo = conjunto.formato as FormatoDoPost;");
-    expect(corpoDe("preparar")).toContain('if (formato !== "feed_4x5") direcao.formato = formato;');
+    // Frente AE (28/09): o corpo do preparar foi para prepararItem (o mesmo diretor serve a arte rápida).
+    expect(corpoDe("prepararItem")).toContain('if (formato !== "feed_4x5") direcao.formato = formato;');
   });
 
   it("tela: seletor com os quatro, corpo do preparar e versão de outro formato", () => {

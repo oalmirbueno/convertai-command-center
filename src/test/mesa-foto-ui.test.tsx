@@ -1670,7 +1670,8 @@ describe("25/09: usar de verdade (Mesa, Mesa Ads, baixar, aprovação em cada fo
     expect(within(pendente).getByText("gerada")).toBeTruthy();
     fireEvent.click(within(pendente).getByRole("button", { name: /^Usar/ }));
     const itens = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
-    expect(itens).toEqual(["Aprovar e usar na Mesa (Estúdio)", "Aprovar e usar na Mesa Ads", "Aprovar e mandar para aprovação"]);
+    // Frente AE (28/09): "Aprovar e fazer arte com a foto" leva à arte rápida da Mesa.
+    expect(itens).toEqual(["Aprovar e fazer arte com a foto (Mesa)", "Aprovar e usar na Mesa (Estúdio)", "Aprovar e usar na Mesa Ads", "Aprovar e mandar para aprovação"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Aprovar e usar na Mesa Ads" }));
     await waitFor(() => expect(chamadasDe("versao_decidir")).toEqual([{ acao: "versao_decidir", ensaio_id: ENSAIO, tomada_id: "t3", versao: 1, decisao: "aprovar" }]));
     await waitFor(() => expect(screen.getByTestId("onde").textContent).toBe(`/mesa-ads?client=${CLIENTE}&etapa=estudio&fotos=${NOVA}`));
@@ -1701,6 +1702,8 @@ describe("25/09: passo 1 mais claro (selos simples, menu por foto, produto ident
       "Tirar fundo",
       "Variações desta pessoa (clone)",
       "Preparar (fundo, luz, cenário)",
+      // Frente AE (28/09): a foto vira arte na Mesa (arte rápida).
+      "Fazer arte com a foto (Mesa)",
       "Usar na Mesa (Estúdio)",
       "Usar na Mesa Ads",
       "Baixar",

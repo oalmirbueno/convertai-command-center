@@ -39,13 +39,15 @@ export async function criarItemDoPostDeFotos(db: BancoDoPost, p: {
   carrossel: boolean;
   pedidoId: string;
   descricao?: string | null;
+  /** Frente AE (28/09): o projeto da marca (Acerbi ou CME); sem ele, o editorial mais recente. */
+  projetoId?: string | null;
 }): Promise<{ task_id: string; project_id: string; title: string; due_date: string; replayed: boolean }> {
   if (!UUID.test(p.clientId)) throw new ErroDoPost(400, "client_id_invalido", "Cliente inválido.");
   if (!DATA.test(p.data)) throw new ErroDoPost(400, "data_invalida", "Escolha a data do post (AAAA-MM-DD).");
   const titulo = String(p.titulo || "").replace(/\s+/g, " ").trim().slice(0, 200) || "Post de fotos";
   const pedido = String(p.pedidoId || "").replace(/[^0-9a-zA-Z:_-]/g, "").slice(0, 80);
   if (!pedido) throw new ErroDoPost(400, "pedido_invalido", "Pedido sem identificador.");
-  const projectId = await projetoDoPostDeFotos(db, p.clientId);
+  const projectId = p.projetoId && UUID.test(p.projetoId) ? p.projetoId : await projetoDoPostDeFotos(db, p.clientId);
   const dataScope = { unrestricted: false, clientIds: [p.clientId], principalUserId: p.userId, source: "oauth" as const };
   const correlationId = crypto.randomUUID();
   const resultRefHolder: { value?: string } = {};

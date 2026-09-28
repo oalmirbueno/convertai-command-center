@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { AvisoDeErro } from "./Custo";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
+import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
 import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
@@ -60,6 +62,7 @@ function ItemDaLista({
         <span className={`block truncate text-[13px] ${ativa ? "font-semibold" : "font-medium"}`}>{campanha.nome}</span>
         <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
           <span className="mr-1.5 min-w-0 truncate">
+            {rotuloDoTipo(tipoDaCampanha(campanha.identidade)) ? `${rotuloDoTipo(tipoDaCampanha(campanha.identidade))} · ` : ""}
             {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
             {conteudos !== null ? ` · ${conteudos} cont.` : ""}
           </span>
@@ -174,7 +177,9 @@ export default function AbaCampanhas({
   const chaveDaNova = useRef("nova");
   if (hype && hypeIndice !== null) chaveDaNova.current = `hype-${hypeIndice}`;
 
-  const lista = campanhas.data || [];
+  // Frente AE: com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
+  const { marca } = useMarcaDaMesa();
+  const lista = (campanhas.data || []).filter((c) => campanhaDaMarcaNaTela(c.identidade, marca));
   const idsDasPropostas = lista.map((c) => c.proposta_id || "").filter(Boolean).sort();
   const contagem = useQuery({
     queryKey: chavesDaCampanha.contagem(clientId, idsDasPropostas),

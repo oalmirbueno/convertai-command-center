@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { arquivoDoProprioCliente, gerarAmostrasDaTipografia } from "@/lib/mesa/amostraDaFonte";
 import { chamarFuncao, padraoDoContexto, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
-import { depsDaAmostraNoSupabase, fontesDaMarcaNaTela, lerFontesComMarca, useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
+import { depsDaAmostraNoSupabase, fontesDaMarcaNaTela, lerFontesComMarca, useSemTipografia, useTipografiaDaMarca } from "@/lib/mesa/tipografiaDoCliente";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { chaveDasFontes, useInvalidarContexto } from "./contextoDoCliente";
@@ -43,9 +43,29 @@ function lerSugestao(data: any): Sugestao | null {
   return { titulo: String(s.titulo || ""), texto: String(s.texto || ""), titulo_id: s.titulo_id, texto_id: s.texto_id, porque: s.porque ? String(s.porque) : null };
 }
 
+/**
+ * Frente AE (28/09): a outra marca (ex.: CME) não usa mais a letra da
+ * principal sem pedir. Um clique explícito copia as fontes do cliente para
+ * ela (linhas novas com marca_id dela; as da principal ficam como estão).
+ */
+export function linhasCopiadasParaAMarca(fontes: Record<string, unknown>[], marcaId: string): Record<string, unknown>[] {
+  return fontes
+    .filter((f) => !f.marca_id)
+    .map((f) => {
+      const copia: Record<string, unknown> = {};
+      Object.keys(f).forEach((k) => {
+        if (k !== "id" && k !== "criado_em" && k !== "atualizado_em") copia[k] = f[k];
+      });
+      copia.marca_id = marcaId;
+      return copia;
+    });
+}
+
 export default function EstudioSemTipografia({ clientId }: { clientId: string }) {
   const { catalogo, atualizarCusto } = useMesa();
-  const { marca } = useMarcaDaMesa();
+  const { marca, marcas } = useMarcaDaMesa();
+  const tipografia = useTipografiaDaMarca(clientId, marca);
+  const [copiando, setCopiando] = useState(false);
   const queryClient = useQueryClient();
   const invalidar = useInvalidarContexto();
   const avisarErro = useAvisarErro();
@@ -72,6 +92,31 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
     } catch (e) {
       toast.error("Não foi possível desfazer", { description: textoDoErro(e) });
     } finally {
+      reler();
+    }
+  };
+
+  const principal = marcas.filter((m) => m.principal)[0] || null;
+  const podeCopiar = !!(marca && !marca.principal && tipografia.data && tipografia.data.usaDoCliente);
+  const copiarDaPrincipal = async () => {
+    if (!marca || marca.principal) return;
+    setCopiando(true);
+    try {
+      const { data, error } = await (supabase as any).from("cliente_fontes").select("*").eq("client_id", clientId).is("marca_id", null);
+      if (error) throw error;
+      const linhas = linhasCopiadasParaAMarca((data || []) as Record<string, unknown>[], marca.id);
+      if (!linhas.length) throw new Error("O cliente não tem fontes para copiar.");
+      const { data: novas, error: erroNovas } = await (supabase as any).from("cliente_fontes").insert(linhas).select("id");
+      if (erroNovas) throw erroNovas;
+      const ids = ((novas || []) as { id: string }[]).map((n) => n.id);
+      toast.success(`Fontes copiadas para a ${marca.nome}`, {
+        description: "Agora elas são da marca também. Dá para trocar no Contexto, em Fontes.",
+        action: ids.length ? { label: "Desfazer", onClick: () => void desfazer(ids, []) } : undefined,
+      });
+    } catch (e) {
+      avisarErro(e, "Fontes não copiadas");
+    } finally {
+      setCopiando(false);
       reler();
     }
   };
@@ -113,6 +158,12 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
           <span className="min-w-0 truncate">{TEXTO_SEM_TIPOGRAFIA}</span>
           <AjudaRecolhida className="ml-1.5" rotulo="Por que a geração está parada">{AJUDA_SEM_TIPOGRAFIA}</AjudaRecolhida>
         </p>
+        {podeCopiar && !sugestao && marca && (
+          <Button type="button" size="sm" variant="outline" className="my-0.5 ml-2 h-8 shrink-0 text-[12px]" onClick={() => void copiarDaPrincipal()} disabled={copiando} data-copiar-fontes-da-principal="">
+            {copiando && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            Usar as fontes {principal ? `da ${principal.nome}` : "do cliente"} na {marca.nome}
+          </Button>
+        )}
         {!sugestao && (
           <BotaoComCusto
             rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" />Sugerir da biblioteca</>}

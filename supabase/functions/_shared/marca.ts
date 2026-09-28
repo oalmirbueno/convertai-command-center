@@ -118,7 +118,9 @@ type KitBase = {
 /**
  * Kit do cliente com a marca por cima. Sem marca devolve o mesmo objeto.
  * Principal: cada campo preenchido na marca vale; o resto é do cliente.
- * Outra marca: logo e paleta só dela; estilo e regras dela ou do cliente.
+ * Outra marca: logo, paleta e estilo só dela (frente AE, 28/09, dono: "na
+ * Acerbi está misturando tudo"); as regras dela ou, sem nenhuma, as do
+ * cliente (as regras do dono valem para as duas marcas).
  */
 export function kitComMarca<K extends KitBase | null>(kit: K, marca: MarcaDoCliente | null): K {
   if (!marca) return kit;
@@ -142,6 +144,7 @@ export function kitComMarca<K extends KitBase | null>(kit: K, marca: MarcaDoClie
     base.logo_alt_file_id = marca.logo_alt_file_id;
   }
   if (temTexto(marca.estilo)) base.estilo = marca.estilo;
+  else if (!marca.principal) base.estilo = null;
   if (temTexto(marca.regras)) base.regras = marca.regras;
   if ("contexto" in base || marca.contexto) {
     const c = base.contexto && typeof base.contexto === "object" ? (base.contexto as ContextoConsolidado) : {};
@@ -166,6 +169,8 @@ export function contextoComMarca(base: ContextoConsolidado, marca: MarcaDoClient
     saida[k] = v;
   }
   if (temTexto(marca.tom)) saida.tom_de_voz = marca.tom;
+  // Frente AE: outra marca sem tom próprio não herda o tom da principal (fica sem tom, nunca o da outra).
+  else if (!marca.principal && !temTexto((daMarca as Record<string, unknown>).tom_de_voz)) delete saida.tom_de_voz;
   if (!marca.principal && !(daMarca as Record<string, unknown>).logo) delete saida.logo;
   saida.marca = {
     nome: marca.nome,
@@ -177,14 +182,42 @@ export function contextoComMarca(base: ContextoConsolidado, marca: MarcaDoClient
 
 /**
  * Fontes da marca: principal fica com as do cliente (sem marca) e as dela;
- * outra marca fica com as dela e, sem nenhuma, com as do cliente.
+ * outra marca fica SÓ com as dela (frente AE, 28/09, dono: "está misturando
+ * tudo"). Sem nenhuma, a geração trava pela tipografia (nunca inventa nem
+ * usa a letra da outra marca); a tela oferece copiar as da principal para
+ * ela, num clique explícito.
  */
 export function fontesDaMarca<F extends { marca_id?: string | null }>(fontes: F[], marca: MarcaLeve | null): F[] {
   if (!marca) return fontes;
-  const doCliente = fontes.filter((f) => !f.marca_id);
   if (marca.principal) return fontes.filter((f) => !f.marca_id || f.marca_id === marca.id);
-  const dela = fontes.filter((f) => f.marca_id === marca.id);
-  return dela.length ? dela : doCliente;
+  return fontes.filter((f) => f.marca_id === marca.id);
+}
+
+/** Etiqueta da marca numa foto do acervo (cliente_imagens.tags), sem SQL novo. */
+export const etiquetaDaMarca = (marcaId: string) => `marca:${marcaId}`;
+
+/**
+ * A foto do acervo vale para a escolha automática desta marca? Sem marca:
+ * sempre. Com a etiqueta de outra marca: nunca. Com a dela: sim. Sem
+ * etiqueta: só na principal (onde o acervo sempre esteve). A equipe ainda
+ * escolhe qualquer foto à mão no Estúdio; aqui é o que o diretor pega sozinho.
+ */
+export function fotoDaMarca(tags: string[] | null | undefined, marca: MarcaLeve | null): boolean {
+  if (!marca) return true;
+  const lista = Array.isArray(tags) ? tags : [];
+  const deMarcas = lista.filter((t) => typeof t === "string" && t.indexOf("marca:") === 0);
+  if (!deMarcas.length) return marca.principal;
+  return deMarcas.indexOf(etiquetaDaMarca(marca.id)) >= 0;
+}
+
+/**
+ * A campanha é desta marca? A marca mora em identidade.marca_id (sem SQL
+ * novo). Sem marca no pedido: todas. Campanha sem marca: só na principal.
+ */
+export function campanhaDaMarca(identidade: unknown, marca: MarcaLeve | null): boolean {
+  if (!marca) return true;
+  const id = identidade && typeof identidade === "object" ? idValido((identidade as Record<string, unknown>).marca_id) : null;
+  return id ? id === marca.id : marca.principal;
 }
 
 /** Colunas da consulta com marca_id só quando há marca (sem a tabela, a coluna não existe). */

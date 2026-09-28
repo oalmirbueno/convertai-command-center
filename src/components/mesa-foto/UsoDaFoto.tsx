@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Check, ChevronDown, Loader2, Megaphone, MoreHorizontal, PenTool, SlidersHorizontal, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronDown, Loader2, Megaphone, MoreHorizontal, PenTool, SlidersHorizontal, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,9 @@ import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-context
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAcoesDeUso } from "./AcoesDeUso";
+import { lerCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
+import { marcaAtual } from "@/lib/mesa/marcas";
+import { linkDaArteRapida } from "../../../supabase/functions/_shared/arte-rapida";
 import { useMesaFoto } from "./Comuns";
 import {
   acrescentarFotos,
@@ -63,11 +66,22 @@ export function enderecoParaUsar(destino: "mesa" | "ads", clientId: string, ids:
 /** Foto que precisa da aprovação da equipe antes de ir para as mesas ou para o cliente. */
 export const precisaAprovar = (f: Pick<FotoDoAcervo, "gerada" | "aprovada" | "derivada_de" | "modo">) => classeDaFoto(f) === "gerada" && !f.aprovada;
 
+/**
+ * Frente AE (28/09, dono: "melhoro a foto no Estúdio de fotos e depois quero
+ * abrir na Mesa normal, como arte"): a arte rápida do Estúdio com a foto e a
+ * campanha em uso (a escolhida aqui na Mesa Foto), na mesma marca.
+ */
+export function enderecoDaArteComAFoto(clientId: string, ids: string[]): string {
+  const base = linkDaArteRapida(clientId, "nova", { fotos: ids, campanha: lerCampanhaEmUso(clientId) });
+  const m = marcaAtual();
+  return m && m.clientId === clientId ? `${base}&marca=${encodeURIComponent(m.marcaId)}` : base;
+}
+
 export function useLevarParaAsMesas() {
   const { clientId } = useMesa();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  return (destino: "mesa" | "ads", fotos: FotoDoAcervo[]) => {
+  return (destino: "mesa" | "ads" | "arte", fotos: FotoDoAcervo[]) => {
     const validas = fotos.filter((f) => !ehReferenciaWeb(f));
     if (!validas.length) {
       toast.warning("Referência da internet não vai para as mesas", { description: "É uso interno, só para o produto sair fiel." });
@@ -77,6 +91,11 @@ export function useLevarParaAsMesas() {
     guardarFotosParaUsar(clientId, ids);
     // O Estúdio lê o acervo pela chave dele: relê já, com a foto aprovada agora.
     invalidarFotos(queryClient, clientId);
+    if (destino === "arte") {
+      toast.success("Abrindo a arte rápida", { description: "A foto entra como está; escreva o que a arte precisa (preço, campanha, data) e crie.", duration: 7000 });
+      navigate(enderecoDaArteComAFoto(clientId, ids));
+      return;
+    }
     toast.success(destino === "mesa" ? "Abrindo o Estúdio da Mesa" : "Abrindo o Estúdio da Mesa Ads", {
       description: `${ids.length === 1 ? "A foto aparece" : `As ${ids.length} fotos aparecem`} em "Fotos que vieram da Mesa Foto", na ferramenta Fotos da lâmina.`,
       duration: 9000,
@@ -87,7 +106,7 @@ export function useLevarParaAsMesas() {
 
 // ------------------------------------------------------------------ menu "Usar"
 
-type Saida = "mesa" | "ads" | "baixar" | "aprovacao" | "arquivos" | "estudio" | "agenda";
+type Saida = "mesa" | "ads" | "arte" | "baixar" | "aprovacao" | "arquivos" | "estudio" | "agenda";
 
 /**
  * O menu "Usar" de uma foto. `foto` é a foto do acervo; `pendente` é a versão
@@ -148,7 +167,7 @@ export function MenuDeUso({
     if (ocupado) return;
     // Baixar, Arquivos, Estúdio e Agenda (rascunho) não pedem aprovação; Mesa, Mesa Ads e cliente pedem (foto gerada).
     // A versão ainda pendente de um ensaio precisa entrar no acervo antes (aprovar) para abrir no Estúdio ou no post.
-    const aprovar = saida === "mesa" || saida === "ads" || saida === "aprovacao" || (!!pendente && (saida === "estudio" || saida === "agenda"));
+    const aprovar = saida === "mesa" || saida === "ads" || saida === "arte" || saida === "aprovacao" || (!!pendente && (saida === "estudio" || saida === "agenda"));
     if (pendente && !aprovar) {
       toast.info("Aprove primeiro", { description: "A foto gerada entra no acervo quando a equipe aprova." });
       return;
@@ -158,7 +177,7 @@ export function MenuDeUso({
       const f = await obter(aprovar);
       if (!f) throw new Error("A foto aprovada não voltou da função. Tente de novo.");
       if (pendente || (foto && f.aprovada && !foto.aprovada)) toast.success("Foto aprovada pela equipe", { description: "Ela entrou no acervo do cliente como gerada e aprovada." });
-      if (saida === "mesa" || saida === "ads") levar(saida, [f]);
+      if (saida === "mesa" || saida === "ads" || saida === "arte") levar(saida, [f]);
       else if (saida === "estudio") {
         if (abrirNoEstudio) abrirNoEstudio(f.id);
       } else if (saida === "agenda") {
@@ -181,6 +200,8 @@ export function MenuDeUso({
         ...(abrirNoEstudio ? [{ rotulo: pendente ? "Aprovar e abrir no Estúdio de fotos" : "Abrir no Estúdio de fotos", acao: () => void sair("estudio") }] : []),
         ...(prepararNaAgenda ? [{ rotulo: pendente ? "Aprovar e preparar na Agenda" : "Preparar na Agenda", acao: () => void sair("agenda") }] : []),
         ...(abrirNoEstudio || prepararNaAgenda ? [{ separador: true }] : []),
+        // Frente AE: a foto vira arte na Mesa (arte rápida), com a campanha em uso.
+        { rotulo: `${prefixo}${semAprovar ? "fazer" : "Fazer"} arte com a foto (Mesa)`, acao: () => void sair("arte") },
         { rotulo: `${prefixo}${semAprovar ? "usar" : "Usar"} na Mesa (Estúdio)`, acao: () => void sair("mesa") },
         { rotulo: `${prefixo}${semAprovar ? "usar" : "Usar"} na Mesa Ads`, acao: () => void sair("ads") },
         { separador: true },
@@ -254,9 +275,9 @@ export function AtalhosDaFoto({ foto, className = "" }: { foto: FotoDoAcervo; cl
   const avisarErro = useAvisarErro();
   const { abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
   const levar = useLevarParaAsMesas();
-  const [ocupado, setOcupado] = useState<"" | "mesa" | "ads">("");
+  const [ocupado, setOcupado] = useState<"" | "mesa" | "ads" | "arte">("");
   if (ehReferenciaWeb(foto)) return null;
-  const nasMesas = async (destino: "mesa" | "ads") => {
+  const nasMesas = async (destino: "mesa" | "ads" | "arte") => {
     if (ocupado) return;
     setOcupado(destino);
     try {
@@ -288,6 +309,9 @@ export function AtalhosDaFoto({ foto, className = "" }: { foto: FotoDoAcervo; cl
           <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Agenda
         </Button>
       )}
+      <Button type="button" size="sm" variant="outline" className={botao} disabled={!!ocupado} onClick={() => void nasMesas("arte")} title={precisaAprovar(foto) ? "Aprova e abre a arte rápida da Mesa com esta foto e a campanha em uso" : "Abre a arte rápida da Mesa com esta foto e a campanha em uso: preço, campanha, data"}>
+        {ocupado === "arte" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1 h-3.5 w-3.5" />} Arte
+      </Button>
       <Button type="button" size="sm" variant="outline" className={botao} disabled={!!ocupado} onClick={() => void nasMesas("mesa")} title={precisaAprovar(foto) ? "Aprova e abre o Estúdio da Mesa com esta foto" : "Abre o Estúdio da Mesa com esta foto"}>
         {ocupado === "mesa" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PenTool className="mr-1 h-3.5 w-3.5" />} Mesa
       </Button>

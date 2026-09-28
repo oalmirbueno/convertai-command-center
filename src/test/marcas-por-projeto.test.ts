@@ -236,7 +236,8 @@ describe("regras do servidor", () => {
     expect(cmeVazia.logo_path).toBeNull();
     expect(cmeVazia.logo_file_id).toBeNull();
     expect(cmeVazia.paleta).toEqual([]);
-    expect(cmeVazia.estilo).toBe("institucional");
+    // Frente AE (28/09, dono: "está misturando tudo"): a CME não herda o estilo da principal; as regras do dono valem para as duas.
+    expect(cmeVazia.estilo).toBeNull();
     expect(cmeVazia.regras).toBe("sem travessão");
     const cme = kitComMarca(kit, noServidor(CME, { paleta: [{ hex: "#E91E63" }], logo_path: `${CLIENTE}/marcas/${ID_CME}/logo.png`, estilo: "rosa" }));
     expect(cme.paleta).toEqual([{ hex: "#E91E63" }]);
@@ -259,14 +260,15 @@ describe("regras do servidor", () => {
     expect(c.marca).toEqual({ nome: "CME", principal: false, contexto_extra: "Núcleo feminino" });
   });
 
-  it("fontes: CME com as dela ou, sem nenhuma, as do cliente; principal sem as da CME", () => {
+  it("fontes: CME só com as dela (sem nenhuma, nenhuma); principal sem as da CME", () => {
     const fontes = [
       { id: "1", marca_id: null },
       { id: "2", marca_id: ID_CME },
     ];
     expect(fontesDaMarca(fontes, null)).toBe(fontes);
     expect(fontesDaMarca(fontes, CME).map((f) => f.id)).toEqual(["2"]);
-    expect(fontesDaMarca([{ id: "1", marca_id: null }], CME).map((f) => f.id)).toEqual(["1"]);
+    // Frente AE (28/09): sem fonte própria a CME não usa a letra da principal (o Estúdio trava e oferece copiar).
+    expect(fontesDaMarca([{ id: "1", marca_id: null }], CME).map((f) => f.id)).toEqual([]);
     expect(fontesDaMarca(fontes, ACERBI).map((f) => f.id)).toEqual(["1"]);
     expect(colunasComMarca("id, nome", null)).toBe("id, nome");
     expect(colunasComMarca("id, nome", CME)).toBe("id, nome, marca_id");
@@ -360,7 +362,8 @@ describe("contrato: marca_id em cada ponto de leitura", () => {
     expect(estudio).toContain("async function lerKit(clientId: string, alvo?: AlvoDaMarca): Promise<Kit>");
     expect(estudio).toContain("return kitComMarca((data as Kit) ?? null, marca);");
     expect(estudio).toContain("async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]>");
-    expect(estudio).toContain("const alvoDaMarca: AlvoDaMarca = { task_id: item.tarefa.id, marca_id: corpo.marca_id };");
+    // Frente AE (28/09): sem item (arte rápida), a marca vem da tela ou da direção; com item, pela tarefa.
+    expect(estudio).toContain("const alvoDaMarca: AlvoDaMarca = rapida ? { marca_id: corpo.marca_id, direcao: existente?.direcao } : { task_id: item.tarefa.id, marca_id: corpo.marca_id };");
     // nenhum lerKit ou lerFontes do trabalho sem o alvo
     expect(estudio.match(/lerKit\(t\.client_id\)/g)).toBeNull();
     expect(estudio.match(/lerFontes\(t\.client_id\)/g)).toBeNull();

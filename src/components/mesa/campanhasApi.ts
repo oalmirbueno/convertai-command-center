@@ -317,10 +317,13 @@ export interface CorpoDoSalvar {
   briefing?: BriefingDaCampanha;
   imagens?: ImagemDaCampanha[];
   objetivo?: string;
+  /** Frente AE: trocar o tipo da campanha (sem IA); "nenhum" tira. */
+  tipo?: string;
 }
 
 export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "campanha_salvar", campanha_id: c.campanhaId };
+  if (typeof c.tipo === "string") corpo.tipo = c.tipo;
   if (c.briefing) corpo.briefing = c.briefing;
   if (c.imagens) corpo.imagens = c.imagens.slice(0, MAX_IMAGENS_CAMPANHA);
   if (typeof c.objetivo === "string") corpo.objetivo = c.objetivo;

@@ -459,6 +459,23 @@ export function gravarTrabalhoNoCache(queryClient: ClienteDoCache, clientId: str
   if (!trabalho || !trabalho.id) return;
   queryClient.setQueriesData({ queryKey: ["mesa", "itens-do-mes", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
   queryClient.setQueriesData({ queryKey: ["mesa", "item-avulso", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
+  // Frente AE: a arte rápida (sem item da Agenda) mora nas consultas próprias (lista e a aberta).
+  queryClient.setQueriesData({ queryKey: ["mesa", "arte-rapida", clientId] }, (antes) => comArteRapidaTrocada(antes, trabalho));
+}
+
+/**
+ * Troca o trabalho nas consultas da arte rápida (a lista ou o trabalho
+ * aberto) quando o id bate. Função pura: devolve o mesmo valor se nada mudou.
+ */
+export function comArteRapidaTrocada<T>(dados: T, trabalho: TrabalhoGravado): T {
+  if (!dados || !trabalho || !trabalho.id) return dados;
+  if (Array.isArray(dados)) {
+    const lista = dados as unknown as { id?: string }[];
+    if (!lista.some((x) => x && x.id === trabalho.id)) return dados;
+    return lista.map((x) => (x && x.id === trabalho.id ? { ...x, ...trabalho } : x)) as unknown as T;
+  }
+  const um = dados as unknown as { id?: string };
+  return typeof um === "object" && um.id === trabalho.id ? ({ ...um, ...trabalho } as unknown as T) : dados;
 }
 
 // ------------------------------------------------------------ referência na hora

@@ -206,6 +206,19 @@ export function marcaParaGravarAgora(clientId: string): { marca_id: string } | R
 }
 
 /**
+ * A campanha é da marca aberta? (frente AE, 28/09; mesma regra de
+ * campanhaDaMarca em supabase/functions/_shared/marca.ts). A marca mora em
+ * identidade.marca_id. Sem marca aberta: todas. Campanha sem marca: só na
+ * principal (onde sempre esteve).
+ */
+export function campanhaDaMarcaNaTela(identidade: unknown, marca: Pick<MarcaDoCliente, "id" | "principal"> | null): boolean {
+  if (!marca) return true;
+  const bruto = identidade && typeof identidade === "object" ? (identidade as Record<string, unknown>).marca_id : null;
+  const id = typeof bruto === "string" && UUID.test(bruto) ? bruto : null;
+  return id ? id === marca.id : marca.principal;
+}
+
+/**
  * A referência é da marca aberta? Sem marca, todas; principal, as do cliente
  * (sem marca) e as dela; outra marca, só as dela.
  */

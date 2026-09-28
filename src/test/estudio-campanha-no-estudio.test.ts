@@ -96,15 +96,15 @@ describe("imagens da campanha no Estúdio", () => {
     expect(p).toContain("pecasDoPlanoGravado(c.plano_imagens).filter((p) => p.tema_id === tema)");
     expect(p).toContain('.eq("client_id", clientId).eq("ativa", true)');
     expect(p).toContain("!fotoNaoPublicavel(f)");
-    expect(corpoDe(estudio, "preparar")).toContain("await planoDaCampanhaNoItem(clientId, campanha, item.itemProposta?.tema_id)");
+    expect(corpoDe(estudio, "prepararItem")).toContain("await planoDaCampanhaNoItem(clientId, campanha, item.itemProposta?.tema_id)");
   });
 
   it("modo roteiro aplica as fotos do plano como o gravar", () => {
-    expect(corpoDe(estudio, "preparar")).toContain("if (campanha && plano.pecas.length) aplicarFotosDoPlano(direcao, plano.tema, plano.pecas, plano.fotos);");
+    expect(corpoDe(estudio, "prepararItem")).toContain("if (campanha && plano.pecas.length) aplicarFotosDoPlano(direcao, plano.tema, plano.pecas, plano.fotos);");
   });
 
   it("modo diretor recebe briefing, imagens da campanha e peças do plano, e as fotos entram no acervo", () => {
-    const p = corpoDe(estudio, "preparar");
+    const p = corpoDe(estudio, "prepararItem");
     expect(p).toContain("briefing: campanha.briefing && Object.keys(campanha.briefing).length ? campanha.briefing : null,");
     expect(p).toContain("imagens_da_campanha: imagensDaCampanha(campanha)");
     expect(p).toContain("pecas_do_plano: plano.pecas.map((p) => ({ ordem: p.ordem, imagem_acervo: p.imagem_id, uso: p.uso, por_que: p.por_que || null })),");

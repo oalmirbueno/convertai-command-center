@@ -8,8 +8,9 @@ import type { DependenciasDaAmostra } from "./amostraDaFonte";
  * supabase/functions/_shared/marca.ts):
  * - sem marca (cliente com uma marca só): todas as fontes do cliente;
  * - marca principal: as do cliente (sem marca) e as dela;
- * - outra marca (ex.: CME dentro da Acerbi): as dela e, sem nenhuma, as do
- *   cliente. Fonte de OUTRA marca nunca entra.
+ * - outra marca (ex.: CME dentro da Acerbi): só as dela (frente AE, 28/09,
+ *   dono: "está misturando tudo"); sem nenhuma, o Estúdio trava e oferece
+ *   copiar as do cliente para ela num clique. Fonte de OUTRA marca nunca entra.
  *
  * A consulta é sempre por client_id e a chave do cache leva o cliente e a
  * marca: trocar de cliente ou de marca nunca mostra a fonte do outro.
@@ -33,13 +34,12 @@ export type MarcaDaTipografia = { id: string; principal: boolean } | null | unde
 /** Mesma regra do servidor (fontesDaMarca). */
 export function fontesDaMarcaNaTela<F extends { marca_id?: string | null }>(fontes: F[], marca: MarcaDaTipografia): F[] {
   if (!marca) return fontes;
-  const doCliente = fontes.filter((f) => !f.marca_id);
   if (marca.principal) return fontes.filter((f) => !f.marca_id || f.marca_id === marca.id);
-  const dela = fontes.filter((f) => f.marca_id === marca.id);
-  return dela.length ? dela : doCliente;
+  // Frente AE (28/09): outra marca fica só com as dela (sem nenhuma, trava; a tela oferece copiar as da principal).
+  return fontes.filter((f) => f.marca_id === marca.id);
 }
 
-/** Outra marca sem fonte própria usando as do cliente (a tela avisa). */
+/** Outra marca sem fonte própria, com fontes do cliente que dá para copiar para ela (a tela oferece, num clique). */
 export function usaFontesDoCliente(fontes: { marca_id?: string | null }[], marca: MarcaDaTipografia): boolean {
   return !!marca && !marca.principal && !fontes.some((f) => f.marca_id === marca.id) && fontes.some((f) => !f.marca_id);
 }

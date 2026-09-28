@@ -5,6 +5,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cartao } from "./Comuns";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import { periodoDaCampanha, useCampanhasDaMesa, type CampanhaDaMesa } from "./fotoApi";
+import { useCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
 
 /**
  * A campanha da Mesa dentro da Mesa Foto (pedido do dono, 25/09: "na
@@ -27,13 +28,18 @@ export function useCampanhaEscolhida() {
   const { clientId } = useMesa();
   const q = useCampanhasDaMesa(clientId);
   const [escolha, setEscolhaNaTela] = useState<string | null>(() => lerDaSessao<string>(clientId, "campanha"));
+  // Frente AE (28/09): a campanha em uso nas mesas (selecionada nas Campanhas ou no Estúdio) vem antes da do mês.
+  const [emUso, setEmUso] = useCampanhaEmUso(clientId);
   const lista = q.data ? q.data.campanhas : [];
   const valida = escolha === SEM_CAMPANHA || (!!escolha && lista.some((c) => c.id === escolha));
-  const efetiva = valida ? escolha : q.data ? q.data.campanhaDoMesId : null;
+  const emUsoValida = !!emUso && lista.some((c) => c.id === emUso);
+  const efetiva = valida ? escolha : emUsoValida ? emUso : q.data ? q.data.campanhaDoMesId : null;
   const campanha: CampanhaDaMesa | null = efetiva && efetiva !== SEM_CAMPANHA ? lista.find((c) => c.id === efetiva) || null : null;
   const escolher = (id: string) => {
     setEscolhaNaTela(id);
     gravarNaSessao(clientId, "campanha", id);
+    // Escolher uma campanha aqui também a põe em uso nas outras mesas.
+    if (id !== SEM_CAMPANHA) setEmUso(id);
   };
   return {
     consulta: q,

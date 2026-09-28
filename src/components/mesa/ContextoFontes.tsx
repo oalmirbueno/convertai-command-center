@@ -219,7 +219,7 @@ export default function ContextoFontes() {
       >
         {tipografia.isLoading && <p className="text-[12.5px] text-muted-foreground">Lendo fontes…</p>}
         {tipografia.data && tipografia.data.usaDoCliente && marca && (
-          <p className="text-[12px] text-muted-foreground">A {marca.nome} não tem fonte própria: usa as do cliente. Envie ou escolha para ter as dela.</p>
+          <p className="text-[12px] text-muted-foreground">A {marca.nome} não tem fonte própria: o Estúdio não gera com a letra da outra marca. Envie, escolha ou copie as do cliente para ela (no aviso do Estúdio).</p>
         )}
         {tipografia.data && lista.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma fonte ainda. Sem fonte, o Estúdio não gera a arte.</p>}
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">

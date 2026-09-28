@@ -1107,7 +1107,8 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId
     servico().from("ads_planos").select("estrutura").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(1),
     servico().from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(20),
-    lerCampanhasParaFoto(servico(), clientId).catch(() => null),
+    // Frente AE: só as campanhas da marca escolhida (a do mês da outra marca não entra).
+    lerCampanhasParaFoto(servico(), clientId, new Date(), marcaEscolhida).catch(() => null),
   ]);
   const listaDeCampanhas: CampanhaParaFoto[] = campanhas ? campanhas.campanhas : [];
   const escolhida = pedida ? listaDeCampanhas.find((c) => c.id === pedida) || null : null;

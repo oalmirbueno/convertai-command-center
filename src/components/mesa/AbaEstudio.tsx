@@ -69,6 +69,9 @@ import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
 import EstudioAvisoDoRosto from "./EstudioAvisoDoRosto";
 import EstudioEntrega from "./EstudioEntrega";
+// Frente AE (28/09): arte rápida, fora do plano do mês, no mesmo Estúdio.
+import EstudioArteRapida, { EscolhaDoModo, type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
+import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA } from "../../../supabase/functions/_shared/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
 import EstudioLista, { DICA_DO_ROTEIRO, formatoDoItem, SeloDoItem, type FontesDaLista } from "./EstudioLista";
@@ -83,7 +86,9 @@ import {
   situacaoDoItem,
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
-import { useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { itemDaMarca } from "@/lib/mesa/marcas";
+import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
 import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
@@ -374,6 +379,7 @@ function DetalheDoItem({
   modo,
   foco = false,
   onFoco,
+  rapida = null,
 }: {
   item: ItemDoMes;
   trabalho: Trabalho | null;
@@ -386,6 +392,8 @@ function DetalheDoItem({
   /** Tela cheia (modo foco): o estúdio ocupa a janela. */
   foco?: boolean;
   onFoco?: (ligado: boolean) => void;
+  /** Frente AE: arte rápida (sem item da Agenda): a barra mostra o pedido e a Entrega vira "Levar para a Agenda". */
+  rapida?: ModoRapidoDoDetalhe | null;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
@@ -446,6 +454,8 @@ function DetalheDoItem({
     // mostrava o estado de antes por até 2 minutos.
     void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
     void queryClient.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
+    // Frente AE: o histórico da arte rápida lê os mesmos trabalhos.
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "arte-rapida", clientId] });
     mesa.atualizarCusto();
   };
 
@@ -787,10 +797,10 @@ function DetalheDoItem({
 
   /** Primeiro posto: a direção com as escolhas feitas antes (modo, quantidade, contínuo e pedido). */
   const preparar = async (escolhas: EscolhasDoPreparo) => {
-    const r = await chamarFuncao<any>(
-      "estudio-arte",
-      corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade }),
-    );
+    const corpoDoPedido = corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade });
+    // Arte rápida: o trabalho vai junto (a função refaz a direção pelo pedido guardado, sem item da Agenda).
+    if (rapida && trabalho) corpoDoPedido.trabalho_id = trabalho.id;
+    const r = await chamarFuncao<any>("estudio-arte", corpoDoPedido);
     // Frente R3: lâminas longas chegam enxutas (uma chamada curta); a tela diz quantas.
     const enxuto = textoDoMioloEnxuto(r);
     // Frente R5: a lâmina que ainda passa do limite e tem mais de uma ideia pode ser dividida em 2 (ferramenta Lâmina).
@@ -1280,7 +1290,7 @@ function DetalheDoItem({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[15px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
             <p className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
-              <span className="truncate">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
+              <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
               {trabalho && trabalho.custo_usd > 0 && (
                 <span className="ml-2 shrink-0 tabular-nums" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
@@ -1907,7 +1917,7 @@ function DetalheDoItem({
     </div>
   ) : null;
 
-  const ferramentaEntrega = trabalho ? (
+  const ferramentaEntrega = rapida ? rapida.entrega : trabalho ? (
     <EstudioEntrega
       trabalho={trabalho}
       laminasFeitas={laminasComArte}
@@ -2084,6 +2094,16 @@ export default function AbaEstudio({
   onTarefa: (id: string | null) => void;
 }) {
   const { clientId } = useMesa();
+  // Frente AE: &rapida=nova (pedido novo) ou &rapida=<trabalho> abre a arte rápida no lugar das pautas.
+  const [parametrosDoModo, setParametrosDoModo] = useSearchParams();
+  const alvoRapido = (parametrosDoModo.get(PARAMETRO_DA_ARTE_RAPIDA) || "").trim() || null;
+  const irParaRapida = (alvo: string | null, limpar: string[] = []) => {
+    const p = new URLSearchParams(parametrosDoModo.toString());
+    if (alvo) p.set(PARAMETRO_DA_ARTE_RAPIDA, alvo);
+    else p.delete(PARAMETRO_DA_ARTE_RAPIDA);
+    limpar.forEach((k) => p.delete(k));
+    setParametrosDoModo(p);
+  };
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
   const altura = useAlturaDaEsteira(colunas);
@@ -2134,7 +2154,11 @@ export default function AbaEstudio({
   // Item aberto fora da janela: consulta pequena à parte, só depois que a lista certa chegou.
   const avulso = useItemAvulso(clientId, tarefaId, !!tarefaId && listaPronta && !naLista);
   const itemFora = !naLista && tarefaId && avulso.data ? avulso.data.itens.find((i) => i.id === tarefaId) || null : null;
-  const selecionado = naLista || itemFora;
+  // Frente AE (dono, 28/09: "na Acerbi está misturando tudo"): o item de outra marca aberto pelo endereço não abre aqui.
+  const filtroDaMarca = useFiltroDaMarca();
+  const { marca: marcaAberta } = useMarcaDaMesa();
+  const itemDeOutraMarca = !!itemFora && !itemDaMarca(itemFora.project_id, filtroDaMarca);
+  const selecionado = naLista || (itemDeOutraMarca ? null : itemFora);
   const meses = useMemo(() => mesesDoSeletor(mes), [mes]);
 
   useEffect(() => {
@@ -2155,6 +2179,81 @@ export default function AbaEstudio({
     }
     setModoDaLista("mes");
     if (v !== mes) onMes(v);
+  };
+
+  // Frente AE (dono, 28/09: "apagar os conteúdos que não quero mais por aqui também"): arquivar pela faixa.
+  const queryClientDaFaixa = useQueryClient();
+  const confirmarDaFaixa = useConfirm();
+  const avisarDaFaixa = useAvisarErro();
+  const [arquivando, setArquivando] = useState(false);
+  const parecidas = useMemo(() => pautasParecidas(itens), [itens]);
+  const relerDepoisDeArquivar = () => {
+    void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
+    void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
+    void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
+    void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
+    void queryClientDaFaixa.invalidateQueries({ queryKey: ["editorial-calendar"] });
+  };
+  const arquivarPautas = async (ids: string[]) => {
+    const alvos = ids.map((id) => itens.filter((i) => i.id === id)[0] || (itemFora && itemFora.id === id ? itemFora : null)).filter(Boolean) as ItemDoMes[];
+    if (!alvos.length) return;
+    const comArte = alvos.filter((i) => !!fontes.trabalhoDe(i)).length;
+    const ok = await confirmarDaFaixa({
+      title: alvos.length === 1 ? `Arquivar "${alvos[0].title}"?` : `Arquivar ${alvos.length} pautas?`,
+      description: `Sai da faixa, do mês e da fila de geração. ${comArte ? "A arte feita fica guardada no Estúdio. " : ""}O post da Agenda só planejado sai junto; agendado ou publicado não sai. Dá para desfazer.`,
+      confirmLabel: "Arquivar",
+      destructive: true,
+    });
+    if (!ok) return;
+    setArquivando(true);
+    const feitas: ArquivadaDaFaixa[] = [];
+    const recusadas: RecusadaDaFaixa[] = [];
+    try {
+      for (const i of alvos) {
+        try {
+          const r = await arquivarDaFaixa(clientId, i.id);
+          feitas.push({ taskId: i.id, titulo: i.title, memoriaId: (r && r.memoria_id) || null, postId: (r && r.post_arquivado) || null });
+          const t = fontes.trabalhoDe(i);
+          if (t) await tirarDaFila(t.id).catch(() => null);
+        } catch (e) {
+          recusadas.push({ taskId: i.id, titulo: i.title, motivo: textoDoErro(e) });
+        }
+      }
+    } finally {
+      setArquivando(false);
+      relerDepoisDeArquivar();
+    }
+    if (tarefaId && feitas.some((f) => f.taskId === tarefaId)) onTarefa(null);
+    if (feitas.length) {
+      toast.success(feitas.length === 1 ? `Arquivada: ${feitas[0].titulo}` : `${feitas.length} pautas arquivadas`, {
+        description: "Saíram da faixa, do mês e da fila.",
+        duration: 10000,
+        action: {
+          label: "Desfazer",
+          onClick: () => {
+            void (async () => {
+              const avisos: string[] = [];
+              for (const f of feitas) {
+                try {
+                  const r = await restaurarDaFaixa(clientId, f);
+                  if (r && r.aviso) avisos.push(r.aviso);
+                } catch (e) {
+                  avisarDaFaixa(e, `"${f.titulo}" não voltou`);
+                }
+              }
+              relerDepoisDeArquivar();
+              toast.success(feitas.length === 1 ? "Pauta de volta" : "Pautas de volta", { description: avisos.length ? avisos.join(" ") : undefined });
+            })();
+          },
+        },
+      });
+    }
+    if (recusadas.length) {
+      toast.warning(recusadas.length === 1 ? `"${recusadas[0].titulo}" não foi arquivada` : `${recusadas.length} pautas não foram arquivadas`, {
+        description: recusadas.map((r) => r.motivo).filter((m, k, l) => l.indexOf(m) === k).join(" ").slice(0, 400),
+        duration: 12000,
+      });
+    }
   };
 
   const escolher = (id: string) => {
@@ -2181,6 +2280,7 @@ export default function AbaEstudio({
       onEscolher={escolher}
       recolhida={recolhida}
       onRecolher={setRecolhida}
+      arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas, arquivando }}
     />
   );
 
@@ -2200,7 +2300,53 @@ export default function AbaEstudio({
   ) : null;
 
   const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));
-  const vazio = <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />;
+  const vazio = itemDeOutraMarca ? (
+    <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
+      <p className="text-[14px] font-semibold">Este item é de outra marca</p>
+      <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. O Estúdio mostra e gera só a marca {marcaAberta ? marcaAberta.nome : "aberta"}, com o kit dela.</p>
+    </div>
+  ) : (
+    <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />
+  );
+
+  // Frente AE: a troca entre as pautas do mês e a arte rápida (pedido avulso), no topo do Estúdio.
+  const escolhaDoModo = <EscolhaDoModo modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} />;
+
+  if (alvoRapido) {
+    return (
+      <EstudioArteRapida
+        alvo={alvoRapido}
+        onAlvo={(alvo, limpar) => irParaRapida(alvo, limpar)}
+        colunas={colunas}
+        altura={altura}
+        foco={focoLigado}
+        alturaDaJanela={alturaDaJanela}
+        topo={escolhaDoModo}
+        onAbrirItem={(taskId) => {
+          const p = new URLSearchParams(parametrosDoModo.toString());
+          p.delete(PARAMETRO_DA_ARTE_RAPIDA);
+          p.delete("fotos");
+          p.set("task", taskId);
+          setParametrosDoModo(p);
+        }}
+        renderPeca={(peca) => (
+          <DetalheDoItem
+            key={peca.item.id}
+            item={peca.item}
+            trabalho={peca.trabalho}
+            arte={null}
+            roteiro={null}
+            temRoteiro={false}
+            publicacaoDe={() => null}
+            modo={colunas ? "colunas" : "pilha"}
+            foco={focoLigado}
+            onFoco={setFoco}
+            rapida={peca.rapida}
+          />
+        )}
+      />
+    );
+  }
 
   // Tela cheia: a faixa de pautas e o topo saem; o estúdio ocupa a janela, estático, até o Voltar ou o Esc.
   if (focoLigado && detalhe) {
@@ -2219,7 +2365,10 @@ export default function AbaEstudio({
         {/* A faixa de pautas fica fora da conta de altura: o estúdio sozinho
             ocupa uma tela inteira abaixo da barra da Mesa e a página rola
             entre os dois (antes os dois dividiam uma tela e a lâmina cortava). */}
-        <div className="shrink-0">{faixaDasPautas}</div>
+        <div className="shrink-0">
+          {escolhaDoModo}
+          {faixaDasPautas}
+        </div>
         <div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined}>
           {detalhe || vazio}
         </div>
@@ -2230,6 +2379,7 @@ export default function AbaEstudio({
   // Celular e tablet em pé: uma coluna; a faixa em cima e o estúdio embaixo, a página rola.
   return (
     <div ref={raiz} className="min-w-0 space-y-3">
+      {escolhaDoModo}
       {faixaDasPautas}
       {detalhe || vazio}
     </div>
