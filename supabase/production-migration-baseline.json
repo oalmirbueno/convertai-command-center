@@ -1441,6 +1441,14 @@
       "remote_name": "metas_de_seguidores",
       "remote_statements_sha256": "a9fc57cff4b2a8b3a1ba31762a2db908c0fe1e9b722162e769ce0258a5dc5a14",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928040000",
+      "path": "supabase/migrations/20260928040000_token_da_pagina.sql",
+      "local_sha256": "2c7b47b2f49911c686b047d46a6898440dff462ae0d686fc9ad0ee18e93f5e0c",
+      "remote_name": "token_da_pagina",
+      "remote_statements_sha256": "d4d52ecedb3aec096bbaf9e2044b6b8639d19845c73bf766cf0cedaa26ac9f69",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
