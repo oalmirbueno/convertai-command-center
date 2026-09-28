@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { chamarFuncao } from "@/lib/mesa/api";
 import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
-import type { ChaveDaRede } from "../../../../supabase/functions/_shared/instagram-do-cliente";
+import type { ChaveDaRede, PaginaNaPrevia } from "../../../../supabase/functions/_shared/instagram-do-cliente";
 
 /**
  * Aba Instagram da Mesa (frente IG, 28/09): tipos e chamadas da função
@@ -87,8 +87,16 @@ export interface MensagemDaAba {
   criado_em?: string;
 }
 
+/** Página do Facebook ligada ao cliente (a leitura vem pela ação "pagina"). */
+export interface PaginaDaAba {
+  id: string;
+  nome: string;
+  conectada: boolean;
+}
+
 export interface PainelDoInstagram {
   contas: ContaDaAba[];
+  paginas: PaginaDaAba[];
   conta_id: string | null;
   perfil: PerfilDaAba;
   grade: { itens: ItemDaGradeNaAba[]; ordem: string[] };
@@ -109,28 +117,36 @@ export function chamarInstagram<T = any>(acao: string, clientId: string, extra: 
   return chamarFuncao<T>("mesa-instagram", { acao, client_id: clientId, ...extra });
 }
 
+const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
+/** Perfil do Instagram como a tela usa (campo faltando vira vazio). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizarPerfil(p: any): PerfilDaAba {
+  const o = p || {};
+  return {
+    username: String(o.username || ""),
+    nome: String(o.nome || ""),
+    bio: String(o.bio || ""),
+    site: String(o.site || ""),
+    seguidores: typeof o.seguidores === "number" ? o.seguidores : null,
+    seguindo: typeof o.seguindo === "number" ? o.seguindo : null,
+    posts: typeof o.posts === "number" ? o.posts : null,
+    foto_url: typeof o.foto_url === "string" ? o.foto_url : null,
+    midias: lista<MidiaDoPerfil>(o.midias),
+    fonte: o.fonte || "nenhuma",
+    lido_em: o.lido_em || null,
+    aviso: o.aviso || null,
+  };
+}
+
 /** Normaliza para a tela nunca quebrar com campo faltando. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizarPainel(d: any): PainelDoInstagram {
-  const p = (d && d.perfil) || {};
-  const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
   return {
     contas: lista<ContaDaAba>(d && d.contas),
+    paginas: lista<PaginaDaAba>(d && d.paginas),
     conta_id: d && typeof d.conta_id === "string" ? d.conta_id : null,
-    perfil: {
-      username: String(p.username || ""),
-      nome: String(p.nome || ""),
-      bio: String(p.bio || ""),
-      site: String(p.site || ""),
-      seguidores: typeof p.seguidores === "number" ? p.seguidores : null,
-      seguindo: typeof p.seguindo === "number" ? p.seguindo : null,
-      posts: typeof p.posts === "number" ? p.posts : null,
-      foto_url: typeof p.foto_url === "string" ? p.foto_url : null,
-      midias: lista<MidiaDoPerfil>(p.midias),
-      fonte: p.fonte || "nenhuma",
-      lido_em: p.lido_em || null,
-      aviso: p.aviso || null,
-    },
+    perfil: normalizarPerfil(d && d.perfil),
     grade: { itens: lista<ItemDaGradeNaAba>(d && d.grade && d.grade.itens), ordem: lista<string>(d && d.grade && d.grade.ordem) },
     bio_analise: d && d.bio_analise && d.bio_analise.veredito ? (d.bio_analise as AnaliseDaBio) : null,
     kit: {
@@ -169,6 +185,51 @@ export function usePainelDoInstagram(clientId: string, contaId: string | null) {
   });
 }
 
+/** Leitura de novo a cada 3 minutos com a aba visível (pedido do dono: prévia em tempo real). */
+export const RELER_PERFIL_MS = 3 * 60_000;
+
+/**
+ * Só a prévia do perfil, em tempo real: começa com a leitura do painel (sem
+ * pedir de novo na abertura) e relê sozinha a cada 3 minutos com a aba
+ * visível, ao voltar para a janela e no botão Atualizar.
+ */
+export function usePerfilAoVivo(clientId: string, contaId: string | null, doPainel: PerfilDaAba | null, lidoEm: number) {
+  return useQuery({
+    queryKey: ["mesa", "instagram-perfil", clientId, contaId || "principal"],
+    enabled: !!clientId && !!doPainel,
+    initialData: doPainel || undefined,
+    initialDataUpdatedAt: lidoEm,
+    staleTime: 60_000,
+    refetchInterval: RELER_PERFIL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    retry: 0,
+    queryFn: async () => normalizarPerfil((await chamarInstagram<{ perfil: unknown }>("perfil", clientId, contaId ? { conta_id: contaId } : {})).perfil),
+  });
+}
+
+/** Página do Facebook (nome, sobre, seguidores, posts), relida a cada 3 minutos como o perfil. */
+export function usePaginaDoFacebook(clientId: string, paginaId: string | null) {
+  return useQuery({
+    queryKey: ["mesa", "facebook-pagina", clientId, paginaId],
+    enabled: !!clientId && !!paginaId,
+    staleTime: 60_000,
+    refetchInterval: RELER_PERFIL_MS,
+    refetchIntervalInBackground: false,
+    retry: 0,
+    queryFn: async () => (await chamarInstagram<{ pagina: PaginaNaPrevia }>("pagina", clientId, { pagina_id: paginaId })).pagina,
+  });
+}
+
+/** "11:02" da leitura (ou vazio). */
+export function horaDaLeitura(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (!isFinite(d.getTime())) return "";
+  const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
+  return `${dois(d.getHours())}:${dois(d.getMinutes())}`;
+}
+
 /** Troca um pedaço do painel guardado sem reler tudo (depois de uma ação). */
 export function useAtualizarPainel(clientId: string, contaId: string | null) {
   const queryClient = useQueryClient();
@@ -179,7 +240,7 @@ export function useAtualizarPainel(clientId: string, contaId: string | null) {
   };
 }
 
-export type { DestaqueProposto };
+export type { DestaqueProposto, PaginaNaPrevia };
 
 /** Número curto do Instagram: 1.234 / 12,3 mil / 1,2 mi. */
 export function numeroDoPerfil(v: number | null | undefined): string {

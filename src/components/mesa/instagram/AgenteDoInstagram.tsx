@@ -84,9 +84,9 @@ export default function AgenteDoInstagram({
       setRascunho("");
       setRecebida(r && r.mensagem_id ? String(r.mensagem_id) : null);
       if (r && Array.isArray(r.mensagens)) onMensagens(r.mensagens as MensagemDaAba[]);
-      if (Number(r && r.custo_usd) > 0) avisarCustoReal("Agente do Instagram", r, atualizarCusto);
+      if (Number(r && r.custo_usd) > 0) avisarCustoReal("Agente das redes", r, atualizarCusto);
     } catch (e) {
-      avisarErro(e, "Agente do Instagram");
+      avisarErro(e, "Agente das redes");
     } finally {
       setTrabalhando(false);
       setPedidoAgora(null);
@@ -107,11 +107,11 @@ export default function AgenteDoInstagram({
 
   return (
     <PainelDoAgente
-      titulo="Agente do Instagram"
-      descricao="Bio, destaques, grade e métricas"
+      titulo="Agente das redes"
+      descricao="Instagram, Facebook, destaques e grade"
       icone={<Instagram className="h-4 w-4" />}
       refDasMensagens={lista}
-      rotuloDasMensagens="Conversa com o agente do Instagram"
+      rotuloDasMensagens="Conversa com o agente das redes"
       compositor={
         <>
           <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos do agente do Instagram">
@@ -128,8 +128,8 @@ export default function AgenteDoInstagram({
               value={rascunho}
               onChange={(e) => setRascunho(e.target.value)}
               onKeyDown={aoTeclar}
-              placeholder="Peça ao agente do Instagram"
-              aria-label="Mensagem para o agente do Instagram"
+              placeholder="Peça ao agente das redes"
+              aria-label="Mensagem para o agente das redes"
             />
             <button type="button" className={juntar(botao.primario, "ml-2 h-10 w-10 px-0")} onClick={() => void enviar(rascunho)} disabled={trabalhando || !rascunho.trim()} aria-label="Enviar">
               {trabalhando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}

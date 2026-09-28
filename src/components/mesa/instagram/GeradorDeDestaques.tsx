@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ErroDaMesa, padraoPara, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { BotaoComCusto, useAvisarErro } from "../Custo";
@@ -91,6 +92,8 @@ export default function GeradorDeDestaques({
   const [novo, setNovo] = useState("");
   const [andamento, setAndamento] = useState<{ feitos: number; total: number; atual: string } | null>(null);
   const [baixando, setBaixando] = useState<string | null>(null);
+  const [listaRecolhida, setListaRecolhida] = useRecolhido(`mesa:instagram:destaques-lista:${clientId}`, false);
+  const [estiloRecolhido, setEstiloRecolhido] = useRecolhido(`mesa:instagram:destaques-estilo:${clientId}`, false);
   const parar = useRef(false);
 
   // Cores sempre do kit: a guardada que saiu do kit volta para a primeira e a segunda cor.
@@ -207,12 +210,14 @@ export default function GeradorDeDestaques({
 
       <div className="min-w-0">
         <div className="flex min-w-0 items-center justify-between">
-          <p className={texto.rotulo}>Destaques ({lista.length})</p>
-          <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={onPedirAoAgente}>
+          <TituloRecolhivel titulo={`Lista e nomes (${lista.length})`} recolhido={listaRecolhida} onAlternar={() => setListaRecolhida(!listaRecolhida)} resumo={lista.map((d) => d.nome).join(", ")} />
+          <button type="button" className={juntar(botao.discreto, "h-8 shrink-0 px-2 text-[12px]")} onClick={onPedirAoAgente}>
             <Bot className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             Pedir ao agente
           </button>
         </div>
+        {!listaRecolhida && (
+        <>
         {lista.length === 0 && <p className={juntar(texto.auxiliar, "mt-1")}>Nenhum destaque na lista. Comece pelas sugestões ou peça ao agente.</p>}
         <ul className="mt-1 min-w-0 space-y-1.5">
           {lista.map((d, i) => {
@@ -265,8 +270,18 @@ export default function GeradorDeDestaques({
             </button>
           ))}
         </div>
+        </>
+        )}
       </div>
 
+      {!semPaleta && (
+        <TituloRecolhivel
+          titulo="Estilo e modelo"
+          recolhido={estiloRecolhido}
+          onAlternar={() => setEstiloRecolhido(!estiloRecolhido)}
+          resumo={modo === "logo" ? "logo da marca" : `ícone ${traco === "cheio" ? "cheio" : "de linha"}, qualidade ${qualidade === "baixa" ? "rascunho" : qualidade}`}
+        />
+      )}
       {semPaleta ? (
         <div className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-[12.5px] leading-5">
           O cliente ainda não tem cores no kit. As capas usam só as cores da marca (trava da marca).{" "}
@@ -274,7 +289,7 @@ export default function GeradorDeDestaques({
             Definir a paleta em Contexto
           </Link>
         </div>
-      ) : (
+      ) : estiloRecolhido ? null : (
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
           <div className="min-w-0 space-y-2">
             <SeletorCompacto

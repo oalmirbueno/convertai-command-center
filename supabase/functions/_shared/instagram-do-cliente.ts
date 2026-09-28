@@ -82,7 +82,8 @@ export const ehBloco = (v: unknown): v is BlocoDaAba => BLOCOS_DA_ABA.indexOf(v 
 /**
  * O caminho que o agente da aba sempre deixa (contrato `caminho`): o bloco
  * onde a equipe continua; sem bloco, a área que a resposta citou; sem
- * nada, a própria aba Instagram. Nunca volta vazio para um cliente válido.
+ * nada, a própria aba Redes (a antiga aba Instagram; o endereço segue
+ * aba=instagram para os links já dados valerem). Nunca volta vazio.
  */
 export function caminhoDoAgente(clientId: string, bloco: string, texto: string): CaminhoDoAgente | null {
   if (ehBloco(bloco)) {
@@ -90,7 +91,109 @@ export function caminhoDoAgente(clientId: string, bloco: string, texto: string):
   }
   const citado = caminhoDaResposta(texto, clientId);
   if (citado && citado.destino.indexOf("aba=instagram") < 0) return citado;
-  return caminhoNaArea("mesa", { clientId, etapa: "instagram", rotulo: "Ir para a aba Instagram" });
+  return caminhoNaArea("mesa", { clientId, etapa: "instagram", rotulo: "Ir para a aba Redes" });
+}
+
+// ------------------------------------------------------------------ simulador da grade (rodada 2, 28/09)
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+/** Intervalo padrão entre posts quando não há dois com data para medir. */
+export const INTERVALO_PADRAO_DIAS = 2;
+
+/**
+ * Datas da simulação. O dono escolhe os posts e a ordem; só a data muda, para
+ * a grade sair na ordem escolhida:
+ * - as datas que já existem entre os escolhidos são redistribuídas em ordem;
+ * - quem não tem data ganha uma depois da última, no mesmo horário, com o
+ *   intervalo mediano entre as datas que existem (sem duas, 2 dias);
+ * - sem nenhuma data, começa em `inicio` (amanhã no horário padrão).
+ * Devolve a data de cada id, na ordem.
+ */
+export function datasDaSimulacao(escolhidos: ItemPlanejado[], inicio: string): Array<{ id: string; data: string }> {
+  const datas = escolhidos.filter((i) => !!i.data).map((i) => i.data as string).sort();
+  const intervalos: number[] = [];
+  for (let k = 1; k < datas.length; k++) {
+    const d = Date.parse(datas[k]) - Date.parse(datas[k - 1]);
+    if (d > 0) intervalos.push(d);
+  }
+  intervalos.sort((a, b) => a - b);
+  const mediana = intervalos.length ? intervalos[Math.floor(intervalos.length / 2)] : INTERVALO_PADRAO_DIAS * DIA_MS;
+  const passo = Math.max(DIA_MS, Math.round(mediana / DIA_MS) * DIA_MS);
+  const slots = datas.slice();
+  let ultima = slots.length ? Date.parse(slots[slots.length - 1]) : Date.parse(inicio) - passo;
+  while (slots.length < escolhidos.length) {
+    ultima += passo;
+    slots.push(new Date(ultima).toISOString());
+  }
+  return escolhidos.map((i, k) => ({ id: i.id, data: slots[k] }));
+}
+
+/** O que muda (de e para) na simulação; quem não tinha data aparece com `de` null. */
+export function mudancasDaSimulacao(escolhidos: ItemPlanejado[], inicio: string): Array<{ id: string; titulo: string; de: string | null; para: string }> {
+  const novas = datasDaSimulacao(escolhidos, inicio);
+  const saida: Array<{ id: string; titulo: string; de: string | null; para: string }> = [];
+  escolhidos.forEach((i, k) => {
+    const para = novas[k].data;
+    if (!i.data || Date.parse(i.data) !== Date.parse(para)) saida.push({ id: i.id, titulo: i.titulo, de: i.data, para });
+  });
+  return saida;
+}
+
+/** Amanhã às `hora` (HH:MM) no fuso do navegador, em ISO: o começo quando ninguém tem data. */
+export function amanhaAs(hora: string, agora = new Date()): string {
+  const [h, m] = (/^\d{2}:\d{2}$/.test(hora) ? hora : "11:30").split(":").map(Number);
+  const d = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1, h, m, 0, 0);
+  return d.toISOString();
+}
+
+// ------------------------------------------------------------------ Facebook (rodada 2, 28/09)
+
+export type PostDaPagina = { id: string; texto: string; imagem: string | null; data: string | null; link: string | null };
+
+export type PaginaNaPrevia = {
+  id: string;
+  nome: string;
+  categoria: string;
+  sobre: string;
+  site: string;
+  link: string | null;
+  seguidores: number | null;
+  curtidas: number | null;
+  foto_url: string | null;
+  capa_url: string | null;
+  posts: PostDaPagina[];
+  lido_em: string | null;
+  aviso: string | null;
+};
+
+/** Página lida pela Graph API (campos públicos da página e os últimos posts). */
+export function paginaDaApi(corpo: Record<string, unknown>, posts: unknown, agora = new Date()): PaginaNaPrevia {
+  const n = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : null);
+  const s = (v: unknown, max: number) => (typeof v === "string" ? v.replace(new RegExp("[" + String.fromCharCode(8212, 8211) + "]", "g"), ",").trim().slice(0, max) : "");
+  const foto = corpo.picture && typeof corpo.picture === "object" ? ((corpo.picture as Record<string, unknown>).data as Record<string, unknown> | undefined) : undefined;
+  const capa = corpo.cover && typeof corpo.cover === "object" ? (corpo.cover as Record<string, unknown>) : undefined;
+  const lista = posts && typeof posts === "object" && Array.isArray((posts as Record<string, unknown>).data) ? ((posts as Record<string, unknown>).data as Array<Record<string, unknown>>) : [];
+  return {
+    id: String(corpo.id || ""),
+    nome: s(corpo.name, 120),
+    categoria: s(corpo.category, 80),
+    sobre: s(corpo.about, 600) || s(corpo.description, 600),
+    site: s(corpo.website, 200),
+    link: typeof corpo.link === "string" ? corpo.link : null,
+    seguidores: n(corpo.followers_count),
+    curtidas: n(corpo.fan_count),
+    foto_url: foto && typeof foto.url === "string" ? foto.url : null,
+    capa_url: capa && typeof capa.source === "string" ? capa.source : null,
+    posts: lista.filter((p) => p && p.id).slice(0, 12).map((p) => ({
+      id: String(p.id),
+      texto: s(p.message, 300),
+      imagem: typeof p.full_picture === "string" ? p.full_picture : null,
+      data: typeof p.created_time === "string" ? p.created_time : null,
+      link: typeof p.permalink_url === "string" ? p.permalink_url : null,
+    })),
+    lido_em: agora.toISOString(),
+    aviso: null,
+  };
 }
 
 // ------------------------------------------------------------------ redes
@@ -140,7 +243,7 @@ export const REDES_SOCIAIS: RedeSocial[] = [
     rotulo: "Facebook",
     conectaHoje: true,
     permite: [
-      "Ler a página conectada e as métricas de engajamento",
+      "Ler a página conectada: nome, categoria, sobre, site, seguidores, curtidas, foto, capa e os últimos posts (aqui na aba)",
       "A permissão de publicar na página já vem no login (pages_manage_posts), com agendamento de 10 minutos a 30 dias pela API",
     ],
     naoPermite: [

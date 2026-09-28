@@ -24,7 +24,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
  *
  * Traz para dentro do painel o calendário e a arte que eram feitos fora.
- * Seis abas em sequência (Contexto, Instagram, Mês, Campanhas, Estúdio, Entrega) e uma
+ * Seis abas em sequência (Contexto, Redes, Mês, Campanhas, Estúdio, Entrega) e uma
  * barra fina fixa no topo (pedido do dono em 23/09, noite: sem o título
  * grande, tudo numa faixa só): seletor de cliente com busca, as etapas e o
  * saldo e o gasto pequenos, com recarga, modelos e chaves em botões curtos. Endereço completo:
@@ -67,8 +67,9 @@ const PainelDeCustos = lazy(() => import("@/components/mesa/PainelDeCustos"));
 
 const ABAS = [
   { valor: "contexto", rotulo: "Contexto" },
-  // Frente IG (28/09): toda a frente do Instagram do cliente, logo depois do Contexto.
-  { valor: "instagram", rotulo: "Instagram" },
+  // Frente IG (28/09): as redes do cliente (Instagram e páginas do Facebook), logo depois do
+  // Contexto. O nome na tela é "Redes"; o endereço segue aba=instagram para os links já dados.
+  { valor: "instagram", rotulo: "Redes" },
   { valor: "mes", rotulo: "Mês" },
   { valor: "campanhas", rotulo: "Campanhas" },
   { valor: "estudio", rotulo: "Estúdio" },

@@ -54,21 +54,32 @@ import {
   sugestoesLimpas,
   vereditoDaBio,
   conhecimentoDoPerfil,
+  CANDIDATOS_A_DESTAQUE,
+  escolherDestaques,
+  MIN_DESTAQUES_SUGERIDOS,
+  perguntasDosDestaques,
+  poolDeDestaques,
 } from "../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import {
   avisosDaSequencia,
   capaDoTrabalho,
   caminhoDoAgente,
+  datasDaSimulacao,
   escolherConta,
   mover,
+  mudancasDaSimulacao,
   ordemDoPlano,
+  paginaDaApi,
   REDES_SOCIAIS,
   trocasDeData,
   usernameDe,
   type ItemPlanejado,
 } from "../../supabase/functions/_shared/instagram-do-cliente";
+import { lerAlvo } from "@/components/mesa/AbaInstagram";
+import { pontosDaLinha } from "@/components/mesa/instagram/MetricasDoPerfil";
+import { semanasDoMes } from "@/components/mesa/instagram/ColunaDoCliente";
 import { AREAS_DO_PAINEL, AGENTES_DO_PAINEL, blocoDoMapaDoPainel } from "../../supabase/functions/_shared/mapa-do-painel";
-import PreviaDoPerfil from "@/components/mesa/instagram/PreviaDoPerfil";
+import PreviaDoPerfil, { bolinhasDosDestaques } from "@/components/mesa/instagram/PreviaDoPerfil";
 import BioENome from "@/components/mesa/instagram/BioENome";
 import GeradorDeDestaques from "@/components/mesa/instagram/GeradorDeDestaques";
 import PlanoDaGrade from "@/components/mesa/instagram/PlanoDaGrade";
@@ -314,7 +325,7 @@ describe("contas, redes e o caminho do agente", () => {
     expect(caminhoDoAgente(CLIENTE, "destaques", "")).toEqual({ rotulo: "Ir para Destaques", destino: `/mesa?client=${CLIENTE}&aba=instagram&bloco=destaques` });
     const citado = caminhoDoAgente(CLIENTE, "nenhum", "Isso é na Mesa Ads (/mesa-ads).");
     expect(citado && citado.destino.indexOf("/mesa-ads")).toBe(0);
-    expect(caminhoDoAgente(CLIENTE, "nenhum", "ok")).toEqual({ rotulo: "Ir para a aba Instagram", destino: `/mesa?client=${CLIENTE}&aba=instagram` });
+    expect(caminhoDoAgente(CLIENTE, "nenhum", "ok")).toEqual({ rotulo: "Ir para a aba Redes", destino: `/mesa?client=${CLIENTE}&aba=instagram` });
   });
 
   it("mapa do painel: a aba vem depois de Contexto e o agente do Instagram mora na Mesa", () => {
@@ -332,16 +343,19 @@ describe("contrato da função mesa-instagram e da aba", () => {
   const f = ler("supabase/functions/mesa-instagram/index.ts");
   const pagina = ler("src/pages/MesaDoCliente.tsx");
 
-  it("Jev só duas vezes (julgar a bio e escolher entre as sugestões), sem laço de correção", () => {
-    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(2);
+  it("Jev em três lugares (julgar a bio, escolher entre as sugestões e pontuar os destaques), sem laço de correção", () => {
+    // Rodada 2 (28/09): +1 Jev e +1 texto na sugestão de destaques (o modelo escreve
+    // destaques próprios só com "Com IA"; o Jev pontua todos numa chamada só).
+    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(3);
     expect(f).not.toMatch(/while\s*\(/);
-    // O texto gera 3 de cada de uma vez: uma chamada de texto na bio e uma na conversa.
-    expect((f.match(/chamarTexto\(/g) || []).length).toBe(2);
+    // O texto gera de uma vez: bio (3 bios e 3 nomes), conversa e destaques com IA.
+    expect((f.match(/chamarTexto\(/g) || []).length).toBe(3);
     expect((f.match(/chamarImagem\(/g) || []).length).toBe(1);
   });
 
   it("ações longas com fôlego; token só no servidor; o agente monta o mapa e grava o caminho", () => {
-    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa"]);');
+    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques"]);');
+    expect(f).toContain('rpc("mesa_facebook_token"');
     expect(f).toContain('rpc("perfis_instagram_token"');
     expect(f).toContain('blocoDoMapaDoPainel("instagram")');
     expect(f).toContain("anexoDoCaminho(caminho)");
@@ -356,7 +370,8 @@ describe("contrato da função mesa-instagram e da aba", () => {
     expect(f).toContain("corDoKitOuNulo(e.fundo, kit.paleta)");
   });
 
-  it("a Mesa tem seis abas, Instagram logo depois de Contexto, com pré-carga", () => {
+  it("a Mesa tem seis abas, Redes (aba=instagram) logo depois de Contexto, com pré-carga", () => {
+    expect(pagina).toContain('{ valor: "instagram", rotulo: "Redes" }');
     const abas = pagina.slice(pagina.indexOf("const ABAS = ["), pagina.indexOf("] as const;"));
     const ordem = (abas.match(/valor: "([a-z]+)"/g) || []).map((x) => x.replace(/valor: "|"/g, ""));
     expect(ordem).toEqual(["contexto", "instagram", "mes", "campanhas", "estudio", "entrega"]);
@@ -382,6 +397,8 @@ describe("contrato da função mesa-instagram e da aba", () => {
       "src/components/mesa/instagram/ColunaDoCliente.tsx",
       "src/components/mesa/instagram/OutrasRedes.tsx",
       "src/components/mesa/instagram/AgenteDoInstagram.tsx",
+      "src/components/mesa/instagram/PreviaDaPagina.tsx",
+      "src/components/mesa/instagram/SugestaoDeDestaques.tsx",
     ]) {
       expect(TRAVESSAO.test(ler(arq)), arq).toBe(false);
     }
@@ -425,29 +442,36 @@ const planejado = (id: string, data: string | null, extra: Partial<ItemDaGradeNa
 });
 
 describe("tela: prévia do perfil", () => {
-  it("mostra @, números, nome, bio, link e a grade; o plano entra por cima quando pedido", () => {
-    const aoMudar = vi.fn();
-    const { rerender } = montar(<PreviaDoPerfil perfil={perfil} capas={[]} planejados={[planejado("a", "2026-10-01T12:00:00Z")]} mostrarPlano={false} onMostrarPlano={aoMudar} />);
+  it("mostra @, números, nome, bio, link e a grade; na simulação o plano entra por cima", () => {
+    const { rerender } = montar(<PreviaDoPerfil perfil={perfil} capas={[]} planejados={[planejado("a", "2026-10-01T12:00:00Z")]} simulando={false} />);
     expect(screen.getByText("@aceleriq")).toBeTruthy();
     expect(screen.getByText("1.234")).toBeTruthy();
     expect(screen.getByText("Marketing que não para no anúncio.")).toBeTruthy();
     expect(screen.getByText("aceleriq.com")).toBeTruthy();
     const grade = screen.getByRole("list", { name: "Grade do perfil" });
     expect(within(grade).getAllByRole("listitem").length).toBe(2);
-    expect(screen.getByText(/A API do Instagram não entrega os destaques/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("switch", { name: "Mostrar os posts planejados na grade" }));
-    expect(aoMudar).toHaveBeenCalledWith(true);
+    expect(screen.getByText(/A API do Instagram não entrega os destaques do perfil/)).toBeTruthy();
     rerender(
       <MemoryRouter>
         <QueryClientProvider client={new QueryClient()}>
           <MesaProvider valor={valorDaMesa()}>
-            <PreviaDoPerfil perfil={perfil} capas={[]} planejados={[planejado("a", "2026-10-01T12:00:00Z")]} mostrarPlano onMostrarPlano={aoMudar} />
+            <PreviaDoPerfil perfil={perfil} capas={[]} planejados={[planejado("a", "2026-10-01T12:00:00Z")]} simulando />
           </MesaProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
     expect(within(screen.getByRole("list", { name: "Grade do perfil" })).getAllByRole("listitem").length).toBe(3);
     expect(screen.getByText("1º")).toBeTruthy();
+  });
+
+  it("as bolinhas dos destaques aparecem: capa gerada com imagem, planejado na cor da marca", () => {
+    const capa = { id: "c1", nome: "Preços", icone: "etiqueta", estilo: { fundo: "#0a7c66", desenho: "#ffffff", traco: "linha" as const }, caminho: `${CLIENTE}/instagram/destaques/c1.png` };
+    montar(<PreviaDoPerfil perfil={perfil} capas={[capa]} lista={[{ nome: "Serviços", icone: "lista" }, { nome: "Preços", icone: "etiqueta" }]} corDaMarca="#0a7c66" planejados={[]} simulando={false} />);
+    const fileira = screen.getByRole("list", { name: "Destaques" });
+    const itens = within(fileira).getAllByRole("listitem");
+    expect(itens.map((i) => i.getAttribute("data-bolinha"))).toEqual(["planejada", "capa"]);
+    expect(within(fileira).getByText("Serviços")).toBeTruthy();
+    expect(bolinhasDosDestaques([capa], []).map((b) => b.nome)).toEqual(["Preços"]);
   });
 });
 
@@ -565,12 +589,13 @@ describe("tela: gerador de destaques", () => {
   });
 });
 
-describe("tela: planejar a grade", () => {
-  it("setas reordenam, a ordem é guardada e as datas trocadas pedem confirmação", async () => {
+describe("tela: grade e simulador", () => {
+  it("setas reordenam, a ordem é guardada e as datas da simulação pedem confirmação", async () => {
     mock.invoke.mockResolvedValue({ data: { ok: true }, error: null });
     const aoOrdenar = vi.fn();
     const itens = [planejado("a", "2026-10-01T12:00:00Z"), planejado("b", "2026-10-03T12:00:00Z")];
-    const { rerender } = montar(<PlanoDaGrade itens={itens} ordemSalva={[]} contaId="conta-1" podePublicar onOrdem={aoOrdenar} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />);
+    const { rerender } = montar(<PlanoDaGrade itens={itens} ordemSalva={[]} foraDaSimulacao={[]} onForaDaSimulacao={vi.fn()} contaId="conta-1" podePublicar onOrdem={aoOrdenar} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />);
+    expect(screen.getByText(/As datas já estão na ordem da simulação/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pôr Post a depois" }));
     expect(aoOrdenar).toHaveBeenCalledWith(["b", "a"]);
     await waitFor(() => expect(chamadasDe("salvar_ordem")[0]).toMatchObject({ ordem: ["b", "a"], conta_id: "conta-1" }), { timeout: 2000 });
@@ -579,7 +604,7 @@ describe("tela: planejar a grade", () => {
         <QueryClientProvider client={new QueryClient()}>
           <ConfirmDialogProvider>
             <MesaProvider valor={valorDaMesa()}>
-              <PlanoDaGrade itens={itens} ordemSalva={["b", "a"]} contaId="conta-1" podePublicar onOrdem={aoOrdenar} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />
+              <PlanoDaGrade itens={itens} ordemSalva={["b", "a"]} foraDaSimulacao={[]} onForaDaSimulacao={vi.fn()} contaId="conta-1" podePublicar onOrdem={aoOrdenar} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />
             </MesaProvider>
           </ConfirmDialogProvider>
         </QueryClientProvider>
@@ -587,10 +612,22 @@ describe("tela: planejar a grade", () => {
     );
     expect(screen.getByText("Com esta ordem, as datas mudam assim:")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Aplicar as novas datas" })).toBeTruthy();
+    expect(screen.getByText("Publica só com aprovação do cliente e data confirmada")).toBeTruthy();
+  });
+
+  it("tirar da simulação é um clique; Ver na prévia leva ao modo Simulação", () => {
+    const aoFora = vi.fn();
+    const aoVer = vi.fn();
+    montar(<PlanoDaGrade itens={[planejado("a", "2026-10-01T12:00:00Z"), planejado("b", null)]} ordemSalva={[]} foraDaSimulacao={["b"]} onForaDaSimulacao={aoFora} contaId={null} podePublicar onOrdem={vi.fn()} onVerNaPrevia={aoVer} onMudou={vi.fn()} />);
+    expect(screen.getByText(/1 de 2 na simulação/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Post b entra na simulação" }));
+    expect(aoFora).toHaveBeenCalledWith([]);
+    fireEvent.click(screen.getByRole("button", { name: /Ver na prévia/ }));
+    expect(aoVer).toHaveBeenCalled();
   });
 
   it("sem posts prontos: explica de onde eles vêm", () => {
-    montar(<PlanoDaGrade itens={[]} ordemSalva={[]} contaId={null} podePublicar={false} onOrdem={vi.fn()} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />);
+    montar(<PlanoDaGrade itens={[]} ordemSalva={[]} foraDaSimulacao={[]} onForaDaSimulacao={vi.fn()} contaId={null} podePublicar={false} onOrdem={vi.fn()} onVerNaPrevia={vi.fn()} onMudou={vi.fn()} />);
     expect(screen.getByText(/Agenda, do Estúdio e os posts de fotos da Mesa Foto/)).toBeTruthy();
   });
 });
@@ -608,25 +645,41 @@ describe("tela: outras redes", () => {
   });
 });
 
+function painelFalso() {
+  return {
+    contas: [{ id: "a", username: "aceleriq", conectada: true }, { id: "s", username: "sitebolt", conectada: true }],
+    paginas: [{ id: "fb1", nome: "AcelerIQ Página", conectada: true }],
+    conta_id: "a",
+    perfil,
+    grade: { itens: [planejado("x", "2099-10-01T12:00:00Z")], ordem: [] },
+    bio_analise: null,
+    kit: { paleta: [{ hex: "#0a7c66" }], estilo: null, logo: null },
+    resumo: { nome: "AcelerIQ", negocio: "Agência de marketing para negócio local", publico: "", oferta: "", tom_de_voz: "", diferenciais: [] },
+    capas: [],
+    redes: { adicionadas: [], conectadas: [{ rede: "instagram", endereco: "@aceleriq" }] },
+    mensagens: [],
+    sql_pendente: false,
+    aviso_sql: null,
+  };
+}
+
 describe("tela: a aba inteira", () => {
   it("lê o painel uma vez, mostra os blocos e a coluna do cliente, e abre o bloco do caminho (?bloco=)", async () => {
     const { default: AbaInstagram } = await import("@/components/mesa/AbaInstagram");
     mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
-      if (body.acao === "painel") {
+      if (body.acao === "painel") return { data: painelFalso(), error: null };
+      if (body.acao === "sugerir_destaques") {
         return {
           data: {
-            contas: [{ id: "a", username: "aceleriq", conectada: true }, { id: "s", username: "sitebolt", conectada: true }],
-            conta_id: "a",
-            perfil,
-            grade: { itens: [planejado("x", "2099-10-01T12:00:00Z")], ordem: [] },
-            bio_analise: null,
-            kit: { paleta: [{ hex: "#0a7c66" }], estilo: null, logo: null },
-            resumo: { nome: "AcelerIQ", negocio: "Agência de marketing para negócio local", publico: "", oferta: "", tom_de_voz: "", diferenciais: [] },
-            capas: [],
-            redes: { adicionadas: [], conectadas: [{ rede: "instagram", endereco: "@aceleriq" }] },
-            mensagens: [],
-            sql_pendente: false,
-            aviso_sql: null,
+            destaques: [
+              { nome: "Serviços", icone: "lista", para: "", etapa: 1, nota: 2.9 },
+              { nome: "Resultados", icone: "gráfico", para: "", etapa: 2, nota: 2.7 },
+              { nome: "Dúvidas", icone: "interrogação", para: "", etapa: 4, nota: 2.1 },
+              { nome: "Contato", icone: "balão", para: "", etapa: 5, nota: 2 },
+            ],
+            custo_usd: 0.0002,
+            com_ia: false,
+            sem_jev: false,
           },
           error: null,
         };
@@ -647,15 +700,131 @@ describe("tela: a aba inteira", () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByText("Prévia do perfil")).toBeTruthy();
-    for (const t of ["Bio e nome", "Destaques", "Planejar a grade", "Métricas", "Próximos posts", "Pastas e arquivos"]) expect(screen.getAllByText(t).length).toBeGreaterThan(0);
-    expect(screen.getByText("Agência de marketing para negócio local")).toBeTruthy();
+    // O bloco do caminho abre a ferramenta: o gerador de destaques aparece.
+    expect(await screen.findByText(/A API do Instagram não lê nem cria destaques/)).toBeTruthy();
     expect(chamadasDe("painel").length).toBe(1);
     expect(chamadasDe("painel")[0]).toMatchObject({ client_id: CLIENTE });
-    // Rede no topo (Instagram por padrão) e conta quando há mais de uma.
-    expect(screen.getByRole("tab", { name: /Instagram/ }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getAllByText("@sitebolt").length).toBeGreaterThan(0);
-    // O bloco do caminho abre: o gerador de destaques aparece.
-    expect(screen.getByText(/A API do Instagram não lê nem cria destaques/)).toBeTruthy();
+    // Contas no topo: as duas do Instagram e a página do Facebook; a principal aberta.
+    expect(screen.getByRole("tab", { name: "Instagram @aceleriq" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Instagram @sitebolt" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Facebook AcelerIQ Página" })).toBeTruthy();
+    // Publicado e Simulação no topo da prévia, com a leitura e o atualizar.
+    expect(screen.getByRole("button", { name: "Ler de novo agora" })).toBeTruthy();
+    expect(screen.getByText(/lido às/)).toBeTruthy();
+    // Sem lista e sem capas, a sugestão de destaques já vem (Jev) e vira bolinha na prévia.
+    await waitFor(() => expect(chamadasDe("sugerir_destaques").length).toBe(1));
+    expect(chamadasDe("sugerir_destaques")[0]).toMatchObject({ com_ia: false, conta_id: "a" });
+    await waitFor(() => expect(within(screen.getByRole("list", { name: "Destaques" })).getAllByRole("listitem").length).toBe(4));
+    // Resumo abre ali dentro, sem sair da aba.
+    fireEvent.click(screen.getByRole("button", { name: "Resumo" }));
+    expect(await screen.findByText("Agência de marketing para negócio local")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Contexto completo/ })).toBeTruthy();
+  });
+
+  it("a página do Facebook abre na mesma aba, com o que a API permite", async () => {
+    const { default: AbaInstagram } = await import("@/components/mesa/AbaInstagram");
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
+      if (body.acao === "painel") return { data: painelFalso(), error: null };
+      if (body.acao === "pagina") {
+        return {
+          data: { pagina_id: "fb1", pagina: { id: "222", nome: "AcelerIQ Página", categoria: "Agência de marketing", sobre: "Marketing para negócio local.", site: "https://aceleriq.com", link: "https://facebook.com/aceleriq", seguidores: 320, curtidas: 300, foto_url: null, capa_url: null, posts: [{ id: "p1", texto: "Post da página", imagem: null, data: "2026-09-20T12:00:00Z", link: "https://facebook.com/p1" }], lido_em: "2026-09-28T12:00:00Z", aviso: null } },
+          error: null,
+        };
+      }
+      return { data: { destaques: [], custo_usd: 0 }, error: null };
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <MemoryRouter initialEntries={[`/mesa?client=${CLIENTE}&aba=instagram`]}>
+        <QueryClientProvider client={qc}>
+          <TooltipProvider>
+            <ConfirmDialogProvider>
+              <MesaProvider valor={valorDaMesa()}>
+                <AbaInstagram />
+              </MesaProvider>
+            </ConfirmDialogProvider>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "Facebook AcelerIQ Página" }));
+    expect(await screen.findByText("Marketing para negócio local.")).toBeTruthy();
+    expect(screen.getByText("Post da página")).toBeTruthy();
+    expect(screen.getByText(/320 seguidores/)).toBeTruthy();
+    expect(chamadasDe("pagina")[0]).toMatchObject({ pagina_id: "fb1" });
+    expect(screen.getByText(/O que dá para fazer hoje/)).toBeTruthy();
+  });
+});
+
+describe("rodada 2: regras em código", () => {
+  it("destaques: o Jev escolhe de 4 a 6, na ordem da visita; sem Jev, a ordem padrão", () => {
+    const pool = poolDeDestaques([{ nome: "Cases", icone: "troféu", para: "clientes atendidos", etapa: 2 }, { nome: "Serviços", icone: "x", etapa: 1 }]);
+    expect(pool.length).toBe(CANDIDATOS_A_DESTAQUE.length + 1);
+    const q = perguntasDosDestaques(pool);
+    expect(Object.keys(q).length).toBe(pool.length);
+    expect((q.d0 as any).criteria.length).toBe(4);
+    const respostas: Record<string, { score: number }> = {};
+    pool.forEach((c, i) => (respostas[`d${i}`] = { score: ["Onde fica", "Serviços", "Cases", "Dúvidas", "Preços"].indexOf(c.nome) >= 0 ? 2.8 : 0.5 }));
+    const escolhidos = escolherDestaques(pool, respostas);
+    expect(escolhidos.map((d) => d.nome)).toEqual(["Serviços", "Cases", "Preços", "Dúvidas", "Onde fica"]);
+    expect(escolherDestaques(pool, null).map((d) => d.nome)).toEqual(["Serviços", "Sobre", "Clientes", "Preços", "Dúvidas", "Onde fica"]);
+    // Poucos acima da nota mínima: completa até 4 pelos melhores.
+    const fracos: Record<string, { score: number }> = {};
+    pool.forEach((_, i) => (fracos[`d${i}`] = { score: i === 0 ? 2 : 1 }));
+    expect(escolherDestaques(pool, fracos).length).toBe(MIN_DESTAQUES_SUGERIDOS);
+  });
+
+  it("simulação: só a data muda; datas trocam na ordem e quem não tem data ganha no mesmo ritmo", () => {
+    const itens: ItemPlanejado[] = [
+      { id: "c", data: "2026-10-05T14:30:00.000Z", formato: "carrossel", origem: "arte", titulo: "C" },
+      { id: "a", data: "2026-10-01T14:30:00.000Z", formato: "estatico", origem: "arte", titulo: "A" },
+      { id: "n", data: null, formato: "foto", origem: "foto", titulo: "N" },
+    ];
+    const datas = datasDaSimulacao(itens, "2026-09-29T14:30:00.000Z");
+    expect(datas).toEqual([
+      { id: "c", data: "2026-10-01T14:30:00.000Z" },
+      { id: "a", data: "2026-10-05T14:30:00.000Z" },
+      { id: "n", data: "2026-10-09T14:30:00.000Z" },
+    ]);
+    expect(mudancasDaSimulacao(itens, "2026-09-29T14:30:00.000Z").map((m) => [m.id, m.de === null])).toEqual([["c", false], ["a", false], ["n", true]]);
+    // Ninguém com data: começa no início, de 2 em 2 dias.
+    expect(datasDaSimulacao([{ ...itens[2] }, { ...itens[2], id: "m" }], "2026-09-29T14:30:00.000Z").map((d) => d.data)).toEqual(["2026-09-29T14:30:00.000Z", "2026-10-01T14:30:00.000Z"]);
+  });
+
+  it("página do Facebook: campos da API viram a prévia, sem travessão", () => {
+    const t = String.fromCharCode(8212);
+    const p = paginaDaApi(
+      { id: "1", name: `Aceleriq ${t} Marketing`, category: "Agência", about: "Sobre", followers_count: 10, fan_count: 9, picture: { data: { url: "https://f/p.jpg" } }, cover: { source: "https://f/c.jpg" } },
+      { data: [{ id: "p1", message: "Oi", created_time: "2026-09-01T00:00:00+0000", full_picture: "https://f/i.jpg", permalink_url: "https://f/p1" }] },
+    );
+    expect(p.nome).toBe("Aceleriq , Marketing");
+    expect(p.seguidores).toBe(10);
+    expect(p.foto_url).toBe("https://f/p.jpg");
+    expect(p.capa_url).toBe("https://f/c.jpg");
+    expect(p.posts[0]).toMatchObject({ id: "p1", texto: "Oi", imagem: "https://f/i.jpg" });
+  });
+
+  it("agenda do painel, linha das métricas e o alvo do topo", () => {
+    const set26 = semanasDoMes(2026, 8);
+    expect(set26[0][0]).toBeNull();
+    expect(set26[0][1]).toBe("2026-09-01");
+    expect(set26.every((s) => s.length === 7)).toBe(true);
+    expect(pontosDaLinha([1, 2, 3], 100, 10)).toBe("0,10 50,5 100,0");
+    expect(pontosDaLinha([5], 100, 10)).toBe("");
+    expect(lerAlvo("fb:abc")).toEqual({ tipo: "facebook", id: "abc" });
+    expect(lerAlvo("rede:tiktok")).toEqual({ tipo: "rede", rede: "tiktok" });
+    expect(lerAlvo("rede:orkut")).toEqual({ tipo: "instagram", id: null });
+    expect(lerAlvo("ig:x")).toEqual({ tipo: "instagram", id: "x" });
+  });
+
+  it("prévia em tempo real: relê a cada 3 minutos com a aba visível e ao voltar para a janela", () => {
+    const api = ler("src/components/mesa/instagram/instagramApi.ts");
+    expect(api).toContain("export const RELER_PERFIL_MS = 3 * 60_000;");
+    expect(api).toContain("refetchInterval: RELER_PERFIL_MS,");
+    expect(api).toContain("refetchIntervalInBackground: false,");
+    expect(api).toContain("refetchOnWindowFocus: true,");
+    const aba = ler("src/components/mesa/AbaInstagram.tsx");
+    expect(aba).toContain('principalRolavel={false}');
+    expect(aba).toContain("<RegiaoRolavel");
   });
 });
