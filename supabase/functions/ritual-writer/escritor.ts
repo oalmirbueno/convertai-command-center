@@ -2,36 +2,29 @@
 //
 // Mora aqui, fora do index.ts, para dois chamadores usarem o MESMO escritor:
 // a função ritual-writer (Central, Perfis, aprimorar) e o agente da Central
-// (agente-central, "Atualizar todos"). O modelo e a rota são os que o dono
-// escolheu para o ritual (cadeia gpt-4.1 > gpt-4o > gpt-4o-mini, AI_MODEL do
-// segredo sobrepõe): nada disso mudou.
+// (agente-central, "Atualizar todos").
+//
+// Modelo (frente CE, 28/09): GPT-6 Luna com raciocínio máximo pelo motor das
+// mesas (_shared/modelo-da-central.ts), escolhido na Central; a cadeia antiga
+// (gpt-4.1 > gpt-4o > gpt-4o-mini) só entra como reserva, uma vez, com aviso.
+// O que o escritor lê também mudou: primeiro o ESTADO REAL lido no servidor
+// (orgânico e pago separados, com período), depois as promessas conferidas, a
+// memória do que já foi dito e, por último, os fatos do painel como
+// complemento. Antes o dossiê inteiro vinha na frente e o corte de 12 mil
+// caracteres jogava fora a semana.
 
-import {
-  DEFAULT_LOVABLE_MODEL_CHAIN,
-  requestAiChatCompletion,
-  resolveAiProviderChain,
-} from "../_shared/ai-provider.ts";
 import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
+import { BRIEF_POR_RITUAL, blocoDeComunicacao, expressoesDeRobo, semTravessao, TOM_DE_GENTE } from "../_shared/comunicacao-com-cliente.ts";
+import { type EscolhaDoModelo, escreverComModeloDaCentral, type TextoEscrito } from "../_shared/modelo-da-central.ts";
 import { type ResultadoDaRepeticao, type RitualParaComparar, verificarRepeticao } from "./memoria.ts";
 
-// O modelo forte escreve; o mini fica de reserva. O custo por mensagem com o
-// gpt-4.1 fica na casa de centavos (ver a estimativa na Central).
+// A cadeia antiga continua exportada: é a reserva do motor e o agente da
+// Central ainda a usa como caminho de reserva nas perguntas.
 export const PRIMARY_MODEL_CHAIN = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
 
-// O que cada ritual precisa entregar. É a diferença entre um recado semanal
-// e um relatório: cada um tem um trabalho distinto na relação com o cliente.
-export const RITUAL_BRIEF: Record<string, string> = {
-  rota_semana:
-    "ROTA DA SEMANA (segunda). Abre a semana apresentando o PLANO e a lógica dele: o que a gente vai fazer, por que nessa ordem, e que resultado essa sequência persegue. Cubra conteúdo e campanhas. Fecha com o que depende do cliente para o plano acontecer.",
-  meio_semana:
-    "CHECAGEM DE MEIO DE SEMANA (quarta). Direto: o que já saiu do papel e o que ainda entra até sexta. Se algo depende do cliente, apresente como a peça que falta para fechar a semana redonda, com prazo e ganho.",
-  prova_movimento:
-    "PROVA DE MOVIMENTO (sexta). Fecha a semana com o trabalho que existiu e o que ele significa: cada entrega ligada ao objetivo que ela serve. Prova, não promessa. Encerre apontando o que a semana que vem constrói em cima disso.",
-  radar_aceleriq:
-    "RADAR (mensal). Antecipação estratégica: o que a gente enxerga chegando para o negócio dele, por que isso importa agora, e o movimento que propomos antes de ele precisar pedir.",
-  marco_90:
-    "MARCO DE 90 DIAS. Balanço do trimestre com leitura de estratégia: o que mudou de verdade no negócio, o que os números ensinaram, os ajustes que o aprendizado trouxe, e a tese para o próximo ciclo.",
-};
+// O que cada ritual precisa entregar (o conhecimento mora em
+// _shared/comunicacao-com-cliente.ts, com as fontes).
+export const RITUAL_BRIEF: Record<string, string> = BRIEF_POR_RITUAL;
 
 // A Central manda o ritual; a gaveta de Perfis manda o momento do grupo.
 export const MOMENTO: Record<string, string> = { abertura: "rota_semana", meio: "meio_semana", fechamento: "prova_movimento" };
@@ -64,7 +57,7 @@ REGRAS ABSOLUTAS:
 7. Quando houver material esperando o aval dele, esse é o ponto mais importante da mensagem, e ele é apresentado como algo PRONTO que só precisa do sinal verde.
 8. Português claro do Brasil. SEM TRAVESSÃO (use vírgula ou ponto). Sem jargão ("sinergia", "otimização", "estratégia robusta", "engajamento"). Sem elogio vazio ("grande semana!", "estamos animados").
 9. Trate por "você" e chame a agência de "a gente".
-10. FORMATO DE WHATSAPP, pronto para colar no grupo: blocos curtos separados por linha em branco, cada bloco com um título curto em negrito de WhatsApp (asteriscos: *Onde estamos*) e de 1 a 4 linhas embaixo; use "•" para listar quando houver mais de um item. Sem markdown de cabeçalho (#), sem emoji, sem tabela. Entre 10 e 18 linhas de texto no total. A pessoa lê no celular em 40 segundos e entende tudo.
+10. FORMATO DE WHATSAPP, pronto para colar no grupo: blocos curtos separados por linha em branco, cada bloco com um título curto em negrito de WhatsApp (asteriscos: *Onde estamos*) e de 1 a 4 linhas embaixo; use "•" para listar quando houver mais de um item. Sem markdown de cabeçalho (#), sem emoji, sem tabela. Entre 10 e 18 linhas de texto no total nas mensagens da semana (no balanço do mês e no marco de 90 dias, entre 18 e 35 linhas, com os números do período). A pessoa lê no celular e entende tudo.
 11. O título tem no máximo 60 caracteres e nomeia o movimento da semana daquele cliente. Nunca genérico, e nunca igual ao título de uma mensagem anterior.
 12. NÚMEROS E VENDAS: quando os fatos trouxerem números (seguidores, alcance, leads, gasto, vendas, receita), eles entram em um bloco próprio, com o número exato e a comparação que os fatos deram, seguido de UMA frase do que faremos por causa disso. Venda registrada é o resultado mais importante da mensagem: nunca fica de fora.
 13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê", "o que mudou desde o último ritual" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
@@ -75,6 +68,11 @@ REGRAS ABSOLUTAS:
 18. NADA DE REPETIÇÃO: quando os fatos trouxerem O QUE JÁ FOI DITO A ESTE CLIENTE, é proibido repetir a abertura (a frase depois do cumprimento), frases, a mesma sequência de títulos de blocos ou um assunto já contado como se fosse novo. O que já foi dito só volta como continuação, dizendo o que mudou desde então. Se um assunto não teve fato novo, ele não entra de novo. Uma mensagem de segunda nunca repete a de sexta; a de sexta nunca repete a de segunda.
 19. PROGRESSÃO DA SEMANA: segunda PLANEJA (parte do fechamento da sexta e diz o plano novo), quarta ACOMPANHA (parte do plano da segunda e diz o que já saiu do papel), sexta FECHA (parte do que a segunda prometeu e prova o que virou realidade). Siga a PROGRESSÃO DA SEMANA dos fatos.
 20. MÉTODO: quando os fatos trouxerem a fase do MÉTODO ACELERA, a condução da mensagem segue o que aquela fase pede e o que o ritual de hoje conduz nela. Diga o próximo degrau do negócio dele, não o mesmo passo de sempre.
+21. ESTADO REAL MANDA: o bloco ESTADO REAL DO CLIENTE foi lido agora no banco e é a fonte da verdade do que está sendo feito. Quando ele e os fatos do painel ou o dossiê discordarem, vale o ESTADO REAL. Todo número que você citar sai dele ou dos fatos, com o período (datas) que ele traz.
+22. CAMPANHA DA MESA NÃO É ANÚNCIO: "campanha" na área de Campanhas da Mesa é um tema ou oferta de comunicação. Só fale dela como anúncio se o canal dela disser "paga" ou "orgânica e com anúncio". Anúncio pago é SÓ o que está no bloco ANÚNCIOS PAGOS. Nunca atribua a uma campanha de conteúdo número de anúncio, e nunca diga que um anúncio está no ar sem ele estar lá.
+23. PROMESSA EM ANDAMENTO: o que o bloco de promessas marca como EM ANDAMENTO não volta como novidade nem como promessa nova. Para o cliente, diga com naturalidade que segue em andamento (uma frase, sem prazo inventado); o reforço interno já foi para a equipe. O que está CUMPRIDA entra como entregue, com o dia.
+24. METAS: quando houver META BATIDA E AINDA NÃO COMEMORADA, reconheça em uma frase de gente ("batemos os 1.000 seguidores, parabéns, a gente chegou lá junto") e anuncie a próxima meta cadastrada com quanto falta. Meta já comemorada não se comemora de novo. Sem meta cadastrada, não invente meta.
+25. COMO ESTÁ INDO: diga, com o número, se a semana (ou o mês) foi melhor ou pior que a anterior em cada frente e o que vamos fazer por causa disso. Previsão só a que vem calculada no ESTADO REAL.
 
 ESTRUTURA (base que funciona; títulos em negrito de WhatsApp, pulando o bloco que não tiver fato):
 Linha de abertura: cumprimento com o nome e uma frase NOVA que diga o momento (segunda abre a semana, quarta mostra o meio, sexta fecha), diferente das aberturas já usadas.
@@ -167,8 +165,16 @@ export interface PedidoDoRitual {
   facts: string;
   /** Bloco de memória e continuidade montado no servidor (contexto.ts). */
   continuidade?: string;
+  /** Estado real lido no servidor (estado-real-do-cliente.ts). */
+  estado?: string;
+  /** Promessas da última mensagem conferidas contra o painel. */
+  promessas?: string;
   textoAtual?: string;
   passoAtual?: string;
+  /** Carteira de IA que paga a chamada e registro do uso. */
+  clientId?: string;
+  criadoPor?: string | null;
+  escolha?: EscolhaDoModelo;
 }
 
 export interface RitualEscrito {
@@ -178,57 +184,94 @@ export interface RitualEscrito {
   alertas: string[];
   tarefas_sugeridas: TarefaSugerida[];
   model: string;
+  /** Rótulo legível do modelo que respondeu. */
+  modelo_rotulo: string;
+  raciocinio: string | null;
+  /** Aviso quando não foi o modelo escolhido (reserva). */
+  reserva: string | null;
+  custo_usd: number | null;
+  /** Expressões de molde que escaparam (aviso, nunca correção). */
+  robo: string[];
   usage: unknown;
 }
 
-/**
- * Escreve o ritual. Devolve null quando a cadeia de IA não respondeu ou veio
- * sem texto: quem chama usa o texto de reserva (nunca um erro para o cliente).
- */
-export async function escreverRitual(p: PedidoDoRitual): Promise<RitualEscrito | null> {
-  // AB2: 429 de tokens por minuto na OpenAI direta cai no mesmo modelo pelo OpenRouter (quando há chave).
-  const providers = resolveAiProviderChain({
-    primaryModels: PRIMARY_MODEL_CHAIN,
-    lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
-    openRouterReserve: true,
-  });
-  const { response, provider } = await requestAiChatCompletion(providers, {
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content:
-          `TIPO DE MENSAGEM: ${RITUAL_BRIEF[p.ritual]}\n\n` +
-          `NEGÓCIO: ${p.clientName}\n` +
-          `PESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${p.contactName || "não informado; use o nome do negócio"}\n\n` +
-          (p.continuidade ? `MEMÓRIA E CONTINUIDADE (lido agora no servidor; manda sobre o que é dito nos fatos quando os dois falam do mesmo ritual):\n${p.continuidade}\n\n` : "") +
-          `FATOS REAIS DESTA SEMANA (do painel):\n${p.facts}` +
-          (p.textoAtual
-            ? `\n\nTEXTO ATUAL (aprimorar e complementar com os fatos acima; manter o que esta certo):\n${p.textoAtual}` +
-              (p.passoAtual ? `\n\nPROXIMO PASSO ATUAL: ${p.passoAtual}` : "")
-            : ""),
-      },
-    ],
-    temperature: p.textoAtual ? 0.35 : 0.55,
-  });
-  if (!response.ok) {
-    console.warn(`[ritual] cadeia esgotada, último: ${provider.label} HTTP ${response.status}`);
-    return null;
-  }
-  const completion = await response.json();
-  const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
-  const body = String(parsed?.body || "").trim();
+/** A mensagem de usuário que o escritor recebe, na ordem que decide o texto. */
+export function montarPedidoAoEscritor(p: PedidoDoRitual): string {
+  const partes = [
+    `TIPO DE MENSAGEM: ${RITUAL_BRIEF[p.ritual]}`,
+    `NEGÓCIO: ${p.clientName}\nPESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${p.contactName || "não informado; use o nome do negócio"}`,
+    blocoDeComunicacao(p.ritual),
+    TOM_DE_GENTE,
+    p.estado || "",
+    p.promessas || "",
+    p.continuidade ? `MEMÓRIA E CONTINUIDADE (lido agora no servidor; manda sobre o que é dito nos fatos quando os dois falam do mesmo ritual):\n${p.continuidade}` : "",
+    `FATOS DO PAINEL (complemento montado na tela; o dossiê e o histórico ajudam a entender o cliente, mas o ESTADO REAL acima manda nos números e no que está sendo feito):\n${p.facts}`,
+    p.textoAtual
+      ? `TEXTO ATUAL (aprimorar e complementar com os fatos acima; manter o que esta certo):\n${p.textoAtual}` + (p.passoAtual ? `\n\nPROXIMO PASSO ATUAL: ${p.passoAtual}` : "")
+      : "",
+  ];
+  return partes.filter(Boolean).join("\n\n");
+}
+
+/** Lê o JSON do escritor e devolve o ritual pronto (texto sem travessão). */
+export function lerRespostaDoEscritor(bruto: string, passoAtual?: string): { title: string | null; body: string; next_steps: string; alertas: string[]; tarefas_sugeridas: TarefaSugerida[] } | null {
+  const parsed = extractJson(bruto);
+  const body = semTravessao(String(parsed?.body || "").trim());
   if (!body) return null;
   const alertas = Array.isArray(parsed?.alertas) ? (parsed.alertas as unknown[]).map((a) => String(a).slice(0, 160)).filter(Boolean).slice(0, 4) : [];
-  const nextSteps = (String(parsed?.next_steps || "").trim() || proximoPassoDoTexto(body) || p.passoAtual || "").slice(0, 600);
+  const nextSteps = semTravessao((String(parsed?.next_steps || "").trim() || proximoPassoDoTexto(body) || passoAtual || "").slice(0, 600));
   return {
-    title: String(parsed?.title || "").trim() || null,
+    title: semTravessao(String(parsed?.title || "").trim()) || null,
     body,
     next_steps: nextSteps,
     alertas,
     tarefas_sugeridas: normalizarTarefas(parsed?.tarefas_sugeridas),
-    model: provider.model,
-    usage: completion?.usage ?? null,
+  };
+}
+
+/**
+ * Escreve o ritual. Devolve null quando nenhum modelo respondeu ou veio sem
+ * texto: quem chama usa o texto de reserva (nunca um erro para o cliente).
+ */
+export async function escreverRitual(
+  p: PedidoDoRitual,
+  escrever: typeof escreverComModeloDaCentral = escreverComModeloDaCentral,
+): Promise<RitualEscrito | null> {
+  const usuario = montarPedidoAoEscritor(p);
+  let saida: TextoEscrito | null = null;
+  if (p.clientId) {
+    saida = await escrever({
+      clientId: p.clientId,
+      sistema: SYSTEM_PROMPT,
+      usuario,
+      escolha: p.escolha,
+      temperatura: p.textoAtual ? 0.35 : 0.55,
+      criadoPor: p.criadoPor ?? null,
+    });
+  } else {
+    // Sem cliente não há carteira: só a cadeia antiga.
+    saida = await escrever({ clientId: "", sistema: SYSTEM_PROMPT, usuario, escolha: { modelo: "legado:gpt-4.1", raciocinio: "max" }, temperatura: p.textoAtual ? 0.35 : 0.55 });
+  }
+  if (!saida) {
+    console.warn("[ritual] nenhum modelo respondeu");
+    return null;
+  }
+  let lido: ReturnType<typeof lerRespostaDoEscritor> = null;
+  try {
+    lido = lerRespostaDoEscritor(saida.texto, p.passoAtual);
+  } catch {
+    lido = null;
+  }
+  if (!lido) return null;
+  return {
+    ...lido,
+    model: saida.modelo,
+    modelo_rotulo: saida.rotulo,
+    raciocinio: saida.raciocinio,
+    reserva: saida.reserva,
+    custo_usd: saida.custoUsd,
+    robo: expressoesDeRobo(lido.body),
+    usage: saida.usage ?? null,
   };
 }
 

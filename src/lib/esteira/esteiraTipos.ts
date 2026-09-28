@@ -252,6 +252,9 @@ export interface FatosDoCliente {
   onboardingHas: Record<string, boolean>;
   /** Marcacao humana desta semana por chave de item. */
   estados: Record<string, { status: EstadoHumano; note: string | null; doneAt: string | null }>;
+  /** Feito marcado nas semanas anteriores (ate 5), por chave: o que a gente
+      finalizou nao volta como item novo (frente CE, 28/09). */
+  estadosAnteriores?: Record<string, { doneAt: string | null; weekStart: string }>;
   /** Rituais ja marcados nesta semana. */
   rituais: Array<{ key: RitualKey; source: "manual" | "central"; doneAt: string | null }>;
   /** Frentes em que o cliente esta oculto, e ate quando (null = sempre). */

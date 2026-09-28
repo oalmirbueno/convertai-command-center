@@ -62,7 +62,8 @@ describe("a Central abre leve", () => {
   });
 
   it("gerar e copiar esperam o contexto chegar", () => {
-    expect(central).toContain("disabled={!contextoPronto}");
+    // Frente CE (28/09): o botão também fica preso enquanto o gerador escreve (mostra "Escrevendo N de M").
+    expect(central).toContain("disabled={!contextoPronto || progressoDaGeracao !== null}");
     expect((central.match(/if \(!contextoPronto\) \{ avisarContextoCarregando\(\); return; \}/g) || []).length).toBe(3);
   });
 

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { recordMemory } from "@/lib/clientMemory";
 import type { EstadoHumano, EsteiraItem, RitualKey } from "./esteiraTipos";
 import { ONBOARDING, RITUAIS } from "./esteiraMontar";
+import { corpoDoModelo, escolhaGuardada } from "@/components/central/modeloDaCentral";
 
 async function quemSou(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -38,6 +39,8 @@ export async function marcarItem(input: {
       .eq("week_start", weekStart)
       .eq("item_key", item.key);
     if (error) return false;
+    // Desfazer reabre a origem que o feito fechou (tarefa volta para "A fazer").
+    await reabrirOrigem(item);
     // O diario faz parte da acao: sem o registro, a historia e o dossie nao
     // veem o que aconteceu. Se falhou, a acao nao foi completa.
     return recordMemory({
@@ -55,6 +58,20 @@ export async function marcarItem(input: {
     { onConflict: "client_id,week_start,item_key" },
   );
   if (error) return false;
+
+  // Frente CE (28/09): "a gente finaliza, depois ele volta, e não atualiza".
+  // Feito na esteira fecha a ORIGEM: a tarefa no Kanban e o marco na Timeline.
+  // Antes só a marca da semana era gravada; a tarefa seguia aberta e voltava
+  // na semana seguinte como atrasada (42 de 59 tarefas marcadas feitas
+  // continuavam abertas em 28/09). O gatilho do banco registra a tarefa
+  // concluída no diário, então aqui não duplicamos.
+  if (status === "done") {
+    const fechou = await fecharOrigem(item);
+    if (fechou === "tarefa") {
+      await atualizarAvancosDoDossie(item.clientId);
+      return true;
+    }
+  }
 
   // O diario recebe o fato com o nome do item; o dossie le o diario. Se o
   // registro falhar, a resposta e falso: antes dizia "feito" com o diario vazio.
@@ -80,6 +97,39 @@ export async function marcarItem(input: {
   // Central e a proxima leitura da IA partirem do ponto novo.
   if (status === "done") await atualizarAvancosDoDossie(item.clientId);
   return true;
+}
+
+/** Id da tarefa ou do marco por trás do item (task:<id>, marco:<id>). */
+export function origemDoItem(item: Pick<EsteiraItem, "key" | "fonte">): { tipo: "tarefa" | "marco"; id: string } | null {
+  const [prefixo, id] = item.key.split(":");
+  if (!id || id === "mais") return null;
+  if (prefixo === "task" && item.fonte === "tarefa") return { tipo: "tarefa", id };
+  if (prefixo === "marco" && item.fonte === "marco") return { tipo: "marco", id };
+  return null;
+}
+
+/** Fecha a tarefa (Kanban) ou o marco (Timeline). Falha não desfaz a marca da semana. */
+export async function fecharOrigem(item: Pick<EsteiraItem, "key" | "fonte">): Promise<"tarefa" | "marco" | null> {
+  const origem = origemDoItem(item);
+  if (!origem) return null;
+  const db = supabase as any;
+  if (origem.tipo === "tarefa") {
+    const { error } = await db.from("tasks").update({ status: "done", kanban_status: "done" }).eq("id", origem.id).neq("status", "done");
+    return error ? null : "tarefa";
+  }
+  // Marco: só admin altera (RLS). Sem permissão, fica a marca da esteira.
+  const { error } = await db.from("milestones").update({ status: "completed" }).eq("id", origem.id);
+  return error ? null : "marco";
+}
+
+export async function reabrirOrigem(item: Pick<EsteiraItem, "key" | "fonte">): Promise<void> {
+  const origem = origemDoItem(item);
+  if (!origem) return;
+  const db = supabase as any;
+  try {
+    if (origem.tipo === "tarefa") await db.from("tasks").update({ status: "todo", kanban_status: "todo" }).eq("id", origem.id).eq("status", "done");
+    else await db.from("milestones").update({ status: "in_progress" }).eq("id", origem.id).eq("status", "completed");
+  } catch { /* melhor esforço: a marca da semana já foi desfeita */ }
 }
 
 async function concluirItemDeChecklist(key: string): Promise<void> {
@@ -140,14 +190,20 @@ export interface PlanoDaSemana {
   source: string;
   cached: boolean;
   generated_at?: string;
+  /** Modelo que escreveu o plano e o aviso quando foi a reserva. */
+  modelo?: string | null;
+  reserva?: string | null;
+  /** Passos que a IA propôs e já tinham sido feitos (tirados do plano). */
+  removidos_por_ja_feito?: number;
 }
 
 /** Plano da semana lido do dossie e da historia (funcao esteira-semana). */
 export async function lerPlanoDaSemana(clientId: string, weekStart: string, refresh = false): Promise<PlanoDaSemana | null> {
-  const { data, error } = await supabase.functions.invoke("esteira-semana", { body: { client_id: clientId, week_start: weekStart, refresh } });
+  // O modelo escolhido na Central (GPT-6 Luna, raciocínio máximo, por padrão).
+  const { data, error } = await supabase.functions.invoke("esteira-semana", { body: { client_id: clientId, week_start: weekStart, refresh, ...corpoDoModelo(escolhaGuardada()) } });
   if (error || !data || (data as any).error) return null;
   const d = data as any;
-  return { foco: String(d.foco ?? ""), feito: Array.isArray(d.feito) ? d.feito : [], proximos: Array.isArray(d.proximos) ? d.proximos : [], lacunas: Array.isArray(d.lacunas) ? d.lacunas.map((x: unknown) => String(x)) : [], source: String(d.source ?? ""), cached: Boolean(d.cached), generated_at: d.generated_at };
+  return { foco: String(d.foco ?? ""), feito: Array.isArray(d.feito) ? d.feito : [], proximos: Array.isArray(d.proximos) ? d.proximos : [], lacunas: Array.isArray(d.lacunas) ? d.lacunas.map((x: unknown) => String(x)) : [], source: String(d.source ?? ""), cached: Boolean(d.cached), generated_at: d.generated_at, modelo: typeof d.modelo === "string" ? d.modelo : null, reserva: typeof d.reserva === "string" ? d.reserva : null, removidos_por_ja_feito: Number(d.removidos_por_ja_feito) || 0 };
 }
 
 /** Item da esteira nascido do plano do dossie (chave estavel pelo titulo). */

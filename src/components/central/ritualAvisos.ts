@@ -69,6 +69,25 @@ export function tarefasSugeridas(data: Resposta): TarefaSugerida[] {
     .slice(0, 5);
 }
 
+export interface PromessaDoRitual {
+  texto: string;
+  situacao: "cumprida" | "em_andamento";
+  prova: string | null;
+}
+
+/** Promessas da última mensagem, conferidas contra o painel pelo servidor. */
+export function promessasDoRitual(data: Resposta): PromessaDoRitual[] {
+  return lista(data?.promessas)
+    .filter((p): p is Record<string, unknown> => !!p && typeof p === "object")
+    .map((p) => ({
+      texto: String(p.texto ?? "").slice(0, 240),
+      situacao: (p.situacao === "cumprida" ? "cumprida" : "em_andamento") as PromessaDoRitual["situacao"],
+      prova: typeof p.prova === "string" && p.prova ? p.prova.slice(0, 200) : null,
+    }))
+    .filter((p) => p.texto)
+    .slice(0, 8);
+}
+
 /** O que entra em reports.metrics além do que applyCentralAiDraft já grava. */
 export function extrasDoRitual(data: Resposta): Record<string, unknown> {
   const contexto = data && typeof data.contexto === "object" && data.contexto ? data.contexto as Record<string, unknown> : null;
@@ -77,5 +96,11 @@ export function extrasDoRitual(data: Resposta): Record<string, unknown> {
     tarefas_sugeridas: tarefasSugeridas(data),
     repeticao: resumoDaRepeticao(data),
     fase_acelera: typeof contexto?.fase === "string" ? contexto.fase : null,
+    // Frente CE (28/09): promessas conferidas, metas que esta mensagem
+    // comemora (depois do envio, não se comemora de novo) e o modelo usado.
+    promessas: promessasDoRitual(data),
+    metas_reconhecidas: lista(data?.metas_reconhecidas).filter((id): id is string => typeof id === "string").slice(0, 10),
+    raciocinio: typeof data?.raciocinio === "string" ? data.raciocinio : null,
+    custo_usd: typeof data?.custo_usd === "number" ? data.custo_usd : null,
   };
 }

@@ -1,5 +1,12 @@
 // Esteira: plano da semana lido do dossie e da historia do cliente.
 //
+// Frente CE (28/09): o plano le o ESTADO REAL do cliente (o mesmo leitor dos
+// rituais: organico e pago separados, com periodo, metas e o que o agente de
+// trafego fez), sabe o que JA FOI FEITO nas ultimas semanas (item marcado
+// feito na esteira, tarefa concluida) e nao propoe de novo; e escreve com o
+// GPT-6 Luna em raciocinio maximo (seletor na tela), com folego para nao
+// cair em 150 s. O que a gente finaliza nao volta.
+//
 // Entrada: { client_id, week_start, refresh? }. Saida: { feito, proximos,
 // foco, source, cached }. O plano e gravado em project_memory (kind
 // "esteira_plano", metadata.week_start) e reaproveitado na semana; "refresh"
@@ -10,13 +17,12 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
-import {
-  DEFAULT_LOVABLE_MODEL_CHAIN,
-  requestAiChatCompletion,
-  resolveAiProviderChain,
-} from "../_shared/ai-provider.ts";
-
-const PRIMARY_MODEL_CHAIN = ["gpt-4.1", "gpt-4o-mini"];
+import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { escolhaDoModelo, escreverComModeloDaCentral } from "../_shared/modelo-da-central.ts";
+import { estadoRealComoTexto, lerEstadoReal } from "../_shared/estado-real-do-cliente.ts";
+import { semTravessao } from "../_shared/comunicacao-com-cliente.ts";
+import { type FeitoAntes, feitosComoTexto, filtrarJaFeitos, lerFeitosAntes } from "./feitos.ts";
+import { jevPerguntar } from "../_shared/jev.ts";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -47,6 +53,8 @@ Regras duras:
 - LEIA OS NUMEROS: quando houver metricas (alcance, seguidores, interacoes, leads, gasto), o "foco" e pelo menos um dos "proximos" precisam partir deles e apontar direcao concreta (ex.: alcance caiu 30% em duas semanas com 5 posts agendados: revisar formato dos proximos 2 posts; gasto subiu e lead caiu: pausar a campanha X e testar criativo novo). Nunca so descreva o numero; diga o que fazer por causa dele.
 - VENDAS mandam na otimizacao de anuncio: quando houver linha de VENDAS, o proximo passo de trafego parte dela (campanha que vendeu recebe verba; campanha que gastou sem vender e pausada ou troca criativo; leads sem venda e problema de atendimento/oferta, nao de campanha). Cite a campanha e o numero. Venda registrada sem valor ainda conta como venda.
 - Progressao: compare o dossie (onde estava) com a historia (o que andou) e diga o proximo degrau, nao o mesmo passo de sempre.
+- JA FEITO: nunca proponha de novo um item que esta em JA FEITO NAS ULTIMAS SEMANAS (mesmo com outras palavras). O proximo degrau parte do que ja foi feito.
+- ESTADO REAL manda: numeros e o que esta no ar saem do bloco ESTADO REAL. "Campanha da Mesa" e tema de comunicacao, nao anuncio: passo de trafego so nasce de anuncio pago.
 - Maximo 6 proximos, maximo 6 feitos. Frases curtas.`;
 
 function mondayIso(d: Date): string {
@@ -93,6 +101,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    const escolha = escolhaDoModelo(body.modelo, body.raciocinio);
+    // Trabalho longo (raciocinio maximo): resposta com folego, sem cair em 150 s.
+    return respostaComFolego(async () => {
+    try {
     const semanaIni = new Date(`${weekStart}T00:00:00Z`);
     const semanaFim = new Date(semanaIni.getTime() + 7 * 86_400_000);
     const desde14 = new Date(semanaIni.getTime() - 14 * 86_400_000).toISOString();
@@ -110,6 +122,12 @@ Deno.serve(async (req) => {
       db.from("social_metrics_weekly").select("external_account_id, week_start, reach, followers, total_interactions").eq("client_id", clientId).gte("week_start", desde28).order("week_start", { ascending: false }),
       db.from("ads_campaign_daily").select("campaign_name, day, spend, actions, action_values").eq("client_id", clientId).gte("day", desde14dia),
       db.from("ads_sales").select("sold_at, platform, campaign_name, channel, quantity, value, source").eq("client_id", clientId).gte("sold_at", desde14dia).order("sold_at", { ascending: false }),
+    ]);
+
+    // O estado real (mesmo leitor dos rituais) e o que ja foi feito nas ultimas semanas.
+    const [estado, feitosAntes] = await Promise.all([
+      lerEstadoReal(db, clientId, {}).catch(() => null),
+      lerFeitosAntes(db, clientId).catch((): FeitoAntes[] => []),
     ]);
 
     // Numeros: alcance/seguidores/interacoes por semana (por conta) e
@@ -271,42 +289,40 @@ Deno.serve(async (req) => {
       `POSTS (o painel ja mostra os elos que faltam; nao repita):\n${postsLinhas.slice(0, 30).join("\n") || "(nenhum)"}`,
       `TAREFAS DO KANBAN (o painel ja mostra atrasadas e desta semana; nao repita):\n${tarefas.slice(0, 40).join("\n") || "(nenhuma)"}`,
       `MARCOS ABERTOS:\n${marcos.join("\n") || "(nenhum)"}`,
-      `NUMEROS (leia e direcione por eles):\n${metricasLinhas.join("\n") || "(sem metricas coletadas ainda)"}`,
+      estado ? estadoRealComoTexto(estado, { limite: 7000 }) : `NUMEROS (leia e direcione por eles):\n${metricasLinhas.join("\n") || "(sem metricas coletadas ainda)"}`,
+      feitosComoTexto(feitosAntes) || "JA FEITO NAS ULTIMAS SEMANAS: (nada registrado)",
       `RITUAIS JA FEITOS NESTA SEMANA: ${rit}`,
     ].join("\n\n");
 
     let plano: { foco: string; feito: string[]; proximos: Array<{ titulo: string; passo: string; motivo: string; frente: string }>; lacunas: string[] } | null = null;
     let source = "fallback";
+    let removidosPorJaFeito = 0;
+    let modeloUsado: string | null = null;
+    let reserva: string | null = null;
     try {
-      const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN });
-      const { response } = await requestAiChatCompletion(providers, {
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: fatos },
-        ],
-        temperature: 0.3,
-      });
-      if (response.ok) {
-        const completion = await response.json();
-        const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
-        if (parsed) {
-          const lim = (v: unknown, n: number) => (Array.isArray(v) ? v.slice(0, n) : []);
-          const frenteDe = (v: unknown): string => (v === "social" || v === "trafego" ? v : "geral");
-          const temTrafego = /trafego/.test(servicos);
-          const temSocial = /social/.test(servicos);
-          plano = {
-            foco: String(parsed.foco ?? "").slice(0, 240),
-            feito: lim(parsed.feito, 6).map((x) => String(x).slice(0, 200)),
-            proximos: lim(parsed.proximos, 8)
-              .map((x: any) => ({ titulo: String(x?.titulo ?? "").slice(0, 80), passo: String(x?.passo ?? "").slice(0, 200), motivo: String(x?.motivo ?? "").slice(0, 200), frente: frenteDe(x?.frente) }))
-              .filter((x: any) => x.titulo && x.passo)
-              // Frente nao contratada nao recebe passo, mesmo que o modelo invente.
-              .filter((x: any) => !(x.frente === "trafego" && !temTrafego) && !(x.frente === "social" && !temSocial))
-              .slice(0, 6),
-            lacunas: lim(parsed.lacunas, 4).map((x) => String(x).slice(0, 160)),
-          };
-          source = "ai";
-        }
+      const escrito = await escreverComModeloDaCentral({ clientId, sistema: SYSTEM_PROMPT, usuario: fatos, escolha, temperatura: 0.3, criadoPor: userData.user.id });
+      const parsed = escrito ? extractJson(escrito.texto) : null;
+      if (escrito) { modeloUsado = escrito.rotulo; reserva = escrito.reserva; }
+      if (parsed) {
+        const lim = (v: unknown, n: number) => (Array.isArray(v) ? v.slice(0, n) : []);
+        const frenteDe = (v: unknown): string => (v === "social" || v === "trafego" ? v : "geral");
+        const temTrafego = /trafego/.test(servicos);
+        const temSocial = /social/.test(servicos);
+        const propostos = lim(parsed.proximos, 8)
+          .map((x: any) => ({ titulo: semTravessao(String(x?.titulo ?? "")).slice(0, 80), passo: semTravessao(String(x?.passo ?? "")).slice(0, 200), motivo: semTravessao(String(x?.motivo ?? "")).slice(0, 200), frente: frenteDe(x?.frente) }))
+          .filter((x: any) => x.titulo && x.passo)
+          // Frente nao contratada nao recebe passo, mesmo que o modelo invente.
+          .filter((x: any) => !(x.frente === "trafego" && !temTrafego) && !(x.frente === "social" && !temSocial));
+        // O que ja foi feito nao volta, mesmo com outras palavras (regra; o Jev so na duvida).
+        const { novos } = await filtrarJaFeitos(propostos, feitosAntes, jevPerguntar);
+        removidosPorJaFeito = propostos.length - novos.length;
+        plano = {
+          foco: semTravessao(String(parsed.foco ?? "")).slice(0, 240),
+          feito: lim(parsed.feito, 6).map((x) => semTravessao(String(x)).slice(0, 200)),
+          proximos: novos.slice(0, 6),
+          lacunas: lim(parsed.lacunas, 4).map((x) => semTravessao(String(x)).slice(0, 160)),
+        };
+        source = "ai";
       }
     } catch (e) {
       console.warn(`[esteira-semana] IA falhou: ${e instanceof Error ? e.message : String(e)}`);
@@ -329,11 +345,15 @@ Deno.serve(async (req) => {
       title: `Plano da semana ${weekStart}`,
       content: [plano.foco, ...plano.proximos.map((p) => `- ${p.titulo}: ${p.passo}`)].filter(Boolean).join("\n").slice(0, 4000),
       source: "esteira",
-      metadata: { week_start: weekStart, foco: plano.foco, feito: plano.feito, proximos: plano.proximos, lacunas: plano.lacunas, source },
+      metadata: { week_start: weekStart, foco: plano.foco, feito: plano.feito, proximos: plano.proximos, lacunas: plano.lacunas, source, modelo: modeloUsado, removidos_por_ja_feito: removidosPorJaFeito },
       created_by: userData.user.id,
     });
 
-    return jsonResponse({ ...plano, source, cached: false, generated_at: new Date().toISOString() });
+    return jsonResponse({ ...plano, source, cached: false, generated_at: new Date().toISOString(), modelo: modeloUsado, reserva, removidos_por_ja_feito: removidosPorJaFeito });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : "Erro inesperado." }, 500);
+    }
+    }, corsHeaders);
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : "Erro inesperado." }, 500);
   }

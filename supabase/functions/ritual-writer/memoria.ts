@@ -287,6 +287,8 @@ export function verificarRepeticao(novo: string, anteriores: readonly RitualPara
 // ─── Bloco de continuidade para o escritor ───────────────────
 
 export interface RitualAnterior {
+  /** Id do relatório (reports) quando conhecido: amarra promessa e tarefa de reforço. */
+  id?: string | null;
   quando: string;
   /** Chave do ritual (rota_semana, meio_semana...) quando conhecida. */
   tipo: string | null;

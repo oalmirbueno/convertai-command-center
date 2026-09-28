@@ -155,12 +155,18 @@ describe("E. agente-central: 429 da OpenAI com contexto menor e rota de reserva"
 
   it("agente-central e o escritor do ritual pedem a reserva e o contexto encolheu", () => {
     const central = ler("supabase/functions/agente-central/index.ts");
-    expect(central).toContain("openRouterReserve: true");
+    // Frente CE (28/09): o modelo passou a ser o GPT-6 Luna pelo motor das
+    // mesas; a cadeia antiga com a reserva do OpenRouter mora agora no
+    // escritor compartilhado (_shared/modelo-da-central.ts), que o agente e o
+    // escritor do ritual usam.
+    const modelo = ler("supabase/functions/_shared/modelo-da-central.ts");
+    expect(modelo).toContain("openRouterReserve: true");
+    expect(central).toContain("escreverComModeloDaCentral");
     expect(central).toContain("export const LIMITE_DOSSIE_PREPARAR = 6000;");
     expect(central).toContain("export const LIMITE_FATOS = 9000;");
     expect(central).toContain("lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR })");
     expect(central).not.toContain("limite: 8000");
-    expect(ler("supabase/functions/ritual-writer/escritor.ts")).toContain("openRouterReserve: true");
+    expect(ler("supabase/functions/ritual-writer/escritor.ts")).toContain("escreverComModeloDaCentral");
   });
 });
 

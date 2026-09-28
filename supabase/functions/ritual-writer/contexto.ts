@@ -38,6 +38,8 @@ const STATUS_FECHADO = /^(done|closed|resolved|cancel|conclu|resolvid|cancelad|f
 export interface ContextoDoRitual {
   texto: string;
   anteriores: RitualAnterior[];
+  /** O que mudou desde o último ritual (evidência para conferir as promessas). */
+  movimentos: MovimentoResumido[];
   fase: FaseAcelera;
   motivoDaFase: string;
   desde: string | null;
@@ -106,7 +108,7 @@ export function juntarRituais(reports: Linha[], diario: Linha[], excluirReportId
     }
     idsLidos.add(id);
     saida.push({
-      quando, tipo, titulo: txt(r.title) || null, texto, proximo_passo: txt(r.next_steps) || null,
+      id, quando, tipo, titulo: txt(r.title) || null, texto, proximo_passo: txt(r.next_steps) || null,
       situacao: enviado ? "enviado" : "rascunho", memoria: memoriaGravada(metrics),
     });
   }
@@ -118,7 +120,7 @@ export function juntarRituais(reports: Linha[], diario: Linha[], excluirReportId
     // "Marcado no Ciclo." e "Gerado na Central." são marcas, não mensagem.
     if (texto.length < 80) continue;
     saida.push({
-      quando: txt(d.created_at), tipo: txt(meta.ritual_type) || null, titulo: txt(d.title) || null, texto,
+      id: reportId || null, quando: txt(d.created_at), tipo: txt(meta.ritual_type) || null, titulo: txt(d.title) || null, texto,
       proximo_passo: null, situacao: "enviado", memoria: memoriaGravada(meta),
     });
   }
@@ -303,6 +305,7 @@ export async function lerContextoDoRitual(db: BancoDoRitual, clientId: string, o
   return {
     texto,
     anteriores,
+    movimentos,
     fase,
     motivoDaFase: motivo,
     desde: ultimoEnviado ? desde : null,

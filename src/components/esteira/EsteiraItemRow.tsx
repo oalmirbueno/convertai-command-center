@@ -82,7 +82,8 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
         <button
           type="button"
           disabled={ocupado}
-          onClick={() => void agir(() => marcarItem({ item, weekStart, status: "done" }), `Feito: ${item.titulo}`)}
+          onClick={() => void agir(() => marcarItem({ item, weekStart, status: "done" }), item.fonte === "tarefa" ? `Feito: ${item.titulo}. Concluída também no Kanban.` : item.fonte === "marco" ? `Feito: ${item.titulo}. Concluído também na Timeline.` : `Feito: ${item.titulo}`)}
+          title={item.fonte === "tarefa" ? "Conclui a tarefa também no Kanban: ela não volta na semana que vem" : item.fonte === "marco" ? "Conclui o marco também na Timeline" : undefined}
           className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
         >
           <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Feito

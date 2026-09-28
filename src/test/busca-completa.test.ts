@@ -71,10 +71,27 @@ describe("buscar até acabar", () => {
       for (let i = de; i <= ate; i += 1) linhas.push({ i });
       return Promise.resolve({ data: linhas, error: null });
     };
-    const { linhas, truncado } = await buscarTodas(montar, { pagina: 100 });
+    const { linhas, truncado, erro } = await buscarTodas(montar, { pagina: 100 });
     expect(linhas.length).toBe(100);
-    // Meia lista sem aviso é exatamente o defeito que isto evita.
-    expect(truncado).toBe(true);
+    // Meia lista sem aviso é exatamente o defeito que isto evita. Frente CE
+    // (28/09): falha não é corte; o aviso "não coube" com 81 marcos no banco
+    // vinha de uma página que falhou.
+    expect(erro).toBe(true);
+    expect(truncado).toBe(false);
+  });
+
+  it("com lancarErro, a falha vira exceção (o React Query tenta de novo e guarda o dado anterior)", async () => {
+    const montar = () => Promise.resolve({ data: null, error: new Error("caiu") });
+    await expect(buscarTodas(montar, { lancarErro: true })).rejects.toThrow("Não foi possível ler");
+  });
+
+  it("sem teto, lê até o fim, uma página de cada vez", async () => {
+    const t = tabelaCom(12_345);
+    const { linhas, truncado, erro } = await buscarTodas(t.montar);
+    expect(linhas.length).toBe(12_345);
+    expect(truncado).toBe(false);
+    expect(erro).toBe(false);
+    expect(t.chamadas()).toBe(13);
   });
 
   it("tabela vazia não é considerada corte", async () => {
@@ -100,8 +117,14 @@ describe("a Central não tem mais teto escondido", () => {
     expect(paginadas.length).toBe(10);
   });
 
-  it("o corte, se houver, aparece na tela", () => {
+  it("falha de leitura aparece como falha (e o painel tenta de novo), nunca como corte", () => {
+    // Frente CE (28/09): "Parte dos dados não coube nesta leitura (marcos)"
+    // com 81 marcos no banco. Agora toda leitura paginada lança o erro e o
+    // aviso lê o estado de erro de cada consulta.
+    expect(central).toContain("const LER_TUDO = { lancarErro: true } as const;");
+    expect(central).not.toContain("não coube nesta leitura");
+    expect(central).toContain("Não foi possível ler agora:");
     expect(central).toContain("cortes.current");
-    expect(central).toContain("não coube nesta leitura");
+    expect((central.match(/LER_TUDO,/g) || []).length).toBe(10);
   });
 });

@@ -28,11 +28,8 @@
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import {
-  DEFAULT_LOVABLE_MODEL_CHAIN,
-  requestAiChatCompletion,
-  resolveAiProviderChain,
-} from "../_shared/ai-provider.ts";
+import { type EscolhaDoModelo, escolhaDoModelo, escreverComModeloDaCentral } from "../_shared/modelo-da-central.ts";
+import { estadoRealComoTexto, lerEstadoReal } from "../_shared/estado-real-do-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { AREAS_DO_CEREBRO, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
@@ -41,7 +38,7 @@ import { METODO_ACELERA } from "../_shared/metodo-acelera.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
-import { conferirRepeticao, escreverRitual, extractJson, PRIMARY_MODEL_CHAIN, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
+import { conferirRepeticao, escreverRitual, extractJson, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
 import { extrairMemoriaDoRitual } from "../ritual-writer/memoria.ts";
 import {
   clienteEntraNoAgente,
@@ -92,19 +89,16 @@ export const LIMITE_CONTEXTO_PREPARAR = 6000;
 export const LIMITE_DOSSIE_FATOS = 4500;
 export const LIMITE_FATOS = 9000;
 
-async function perguntarIA(sistema: string, usuario: string): Promise<{ dados: Record<string, unknown>; modelo: string } | null> {
-  const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN, openRouterReserve: true });
-  const { response, provider } = await requestAiChatCompletion(providers, {
-    messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }],
-    temperature: 0.3,
-  });
-  if (!response.ok) {
-    console.warn(`[agente-central] IA sem resposta: ${provider.label} HTTP ${response.status}`);
+// Frente CE (28/09): GPT-6 Luna (raciocínio escolhido na Central, máximo por
+// padrão) pelo motor das mesas; a cadeia antiga fica só de reserva, uma vez.
+async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo): Promise<{ dados: Record<string, unknown>; modelo: string } | null> {
+  const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid });
+  if (!r) {
+    console.warn("[agente-central] IA sem resposta");
     return null;
   }
-  const c = await response.json();
   try {
-    return { dados: extractJson(c?.choices?.[0]?.message?.content || ""), modelo: provider.model };
+    return { dados: extractJson(r.texto), modelo: r.rotulo };
   } catch {
     return null;
   }
@@ -180,11 +174,13 @@ async function acaoClientes(db: SupabaseClient) {
   return json({ clientes });
 }
 
-async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, ritual: string): Promise<Response> {
-  const [perfil, dossie, contexto] = await Promise.all([
+async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, ritual: string, escolha: EscolhaDoModelo): Promise<Response> {
+  const [perfil, dossie, contexto, estado] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
+    // O estado real (orgânico e pago separados, com período): o mesmo leitor dos rituais.
+    lerEstadoReal(db, clientId).catch(() => null),
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
@@ -193,8 +189,9 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     `SERVIÇOS CONTRATADOS: ${n.servicos.join(", ") || "não marcados no cadastro"}`,
     `FASE CALCULADA PELO PAINEL: ${fase.nome} (${contexto.motivoDaFase})`,
     `MEMÓRIA, MUDANÇAS, PENDÊNCIAS, NÚMEROS, CÉREBRO E MÉTODO:\n${contexto.texto}`,
+    estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "",
     dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
-  ].join("\n\n"));
+  ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
   if (!r) return json({ error: "A IA não respondeu agora. Tente este cliente de novo." }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);
   if (!leitura.fase.nome) leitura.fase = { nome: fase.nome, motivo: contexto.motivoDaFase, proximo_degrau: fase.sinalDeAvanco };
@@ -224,7 +221,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
   });
 }
 
-async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ritual: string, body: Record<string, unknown>): Promise<Response> {
+async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ritual: string, body: Record<string, unknown>, escolha: EscolhaDoModelo): Promise<Response> {
   const leituraAntes = normalizarLeitura(body.leitura);
   const perguntas = normalizarPerguntas(body.perguntas);
   const respostasBrutas = Array.isArray(body.respostas) ? body.respostas : [];
@@ -241,7 +238,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       `LEITURA DA SEMANA:\n${JSON.stringify(leituraAntes)}`,
       `PERGUNTAS E RESPOSTAS DO DONO:\n${respostas.map((x) => `- ${x.pergunta}\n  Resposta: ${x.resposta || "(sem resposta)"}`).join("\n")}`,
       contextoExtra ? `CONTEXTO EXTRA DO DONO:\n${contextoExtra}` : "",
-    ].filter(Boolean).join("\n\n"));
+    ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
     if (r) {
       const nova = normalizarLeitura(r.dados.leitura);
       if (nova.onde_estamos) leitura = nova;
@@ -312,10 +309,11 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   await db.rpc("dossie_registrar_avancos", { _client_id: clientId }).then(() => null, () => null);
 
   // 5) O ritual, com a memória do servidor e o dossiê novo.
-  const [perfil, dossieNovo, contexto] = await Promise.all([
+  const [perfil, dossieNovo, contexto, estadoAplicar] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
+    lerEstadoReal(db, clientId).catch(() => null),
   ]);
   const n = nomes(perfil);
   const fatos = fatosDoAgente({
@@ -326,7 +324,11 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   // O dossiê fica no FIM dos fatos: o corte preserva o fim (o mais recente), nunca só o começo.
   const fatosNoLimite = recortarDossie(fatos, LIMITE_FATOS);
   const escrito = RITUAL_BRIEF[ritual]
-    ? await escreverRitual({ ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto }).catch(() => null)
+    ? await escreverRitual({
+      ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto,
+      estado: estadoAplicar ? estadoRealComoTexto(estadoAplicar, { ritual }) : "",
+      clientId, criadoPor: uid, escolha,
+    }).catch(() => null)
     : null;
   const repeticao = escrito
     ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))
@@ -371,8 +373,9 @@ Deno.serve(async (req) => {
     const { data: pode } = await db.rpc("can_access_client", { _client_id: clientId });
     if (pode !== true) return json({ error: "Sem acesso a este cliente." }, 403);
 
-    if (acao === "preparar") return respostaComFolego(() => acaoPreparar(db, u.user.id, clientId, ritual), corsHeaders);
-    if (acao === "aplicar") return respostaComFolego(() => acaoAplicar(db, u.user.id, clientId, ritual, body), corsHeaders);
+    const escolha = escolhaDoModelo(body.modelo, body.raciocinio);
+    if (acao === "preparar") return respostaComFolego(() => acaoPreparar(db, u.user.id, clientId, ritual, escolha), corsHeaders);
+    if (acao === "aplicar") return respostaComFolego(() => acaoAplicar(db, u.user.id, clientId, ritual, body, escolha), corsHeaders);
     return json({ error: "Ação desconhecida." }, 400);
   } catch (e) {
     console.error(`[agente-central] falha: ${e instanceof Error ? e.message : String(e)}`);

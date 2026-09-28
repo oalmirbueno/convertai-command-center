@@ -15,6 +15,7 @@ import { itemDoPlano, lerPlanoDaSemana, marcarJaTem, marcarRitual, ocultarClient
 import { createChecklist, splitRequestIntoItems } from "@/lib/clientChecklist";
 import { MEMORY_LABELS, readMemory, type MemoryEntry } from "@/lib/clientMemory";
 import EsteiraItemRow from "./EsteiraItemRow";
+import MetasDeSeguidores from "./MetasDeSeguidores";
 import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
 import TrafegoVendas from "./TrafegoVendas";
 import { Carregando, EstadoVazio, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
@@ -167,9 +168,13 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
   // Proximos passos do dossie viram itens da esteira; feito/adiado/ignorado
   // valem por cima deles como em qualquer outro item.
+  // Passo do plano feito numa semana anterior continua feito (frente CE,
+  // 28/09): antes a marca valia só para a semana e o passo voltava.
   const itensDoPlano = (plano?.proximos ?? []).map((p) => itemDoPlano(cliente.id, p)).map((it) => {
     const est = cliente.fatos.estados[it.key];
-    return est ? { ...it, estado: { status: est.status, note: est.note, doneAt: est.doneAt } } : it;
+    if (est) return { ...it, estado: { status: est.status, note: est.note, doneAt: est.doneAt } };
+    const antes = cliente.fatos.estadosAnteriores?.[it.key];
+    return antes ? { ...it, estado: { status: "done" as const, note: null, doneAt: antes.doneAt } } : it;
   });
   // Cada aba ve os passos da sua frente (e os gerais); trafego nunca herda social.
   const planoAbertos = itensDoPlano.filter((it) => !it.estado && (it.frente === "geral" || it.frente === frente));
@@ -238,7 +243,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
               nivel={3}
               titulo={<span className="inline-flex items-center"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Pelo dossiê</span>}
               ajuda="Foco da semana, o que foi feito e os próximos passos, lidos do dossiê e da história dos últimos 14 dias. Reler força uma nova leitura."
-              descricao={plano ? `${plano.source === "ai" ? "Lido pela IA" : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}` : undefined}
+              descricao={plano ? `${plano.source === "ai" ? `Lido pela IA${plano.modelo ? ` (${plano.modelo})` : ""}` : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}${plano.removidos_por_ja_feito ? ` · ${plano.removidos_por_ja_feito} já feito(s) fora do plano` : ""}${plano.reserva ? ` · ${plano.reserva}` : ""}` : undefined}
               acao={
                 <button type="button" onClick={() => void relerDossie()} disabled={lendoPlano} className={juntar(botao.discreto, "h-8 text-[12px]")}>
                   <RefreshCw className={`mr-1 h-3.5 w-3.5 ${lendoPlano ? "animate-spin" : ""}`} aria-hidden="true" />Reler
@@ -291,6 +296,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
               </>
             )}
             {frente === "social" && leitura && <Numeros leitura={leitura} />}
+            {frente === "social" && <MetasDeSeguidores clientId={cliente.id} metricas={cliente.fatos.metricas} canWrite={canWrite} />}
 
             {insights.length > 0 && (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -19,6 +19,7 @@ import { recordMemory } from "@/lib/clientMemory";
 import { RITUAL_DA_CENTRAL, atualizarAvancosDoDossie, marcarRitual } from "@/lib/esteira/esteiraAcoes";
 import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import { avisosDoRitual, resumoDaRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
+import { corpoDoModelo, escolhaGuardada } from "./modeloDaCentral";
 
 export interface ClienteDoAgente {
   id: string;
@@ -77,7 +78,8 @@ export interface Aplicado {
 }
 
 async function chamar<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("agente-central", { body });
+  // O modelo escolhido na Central (GPT-6 Luna, raciocínio máximo, por padrão) vale também para o agente.
+  const { data, error } = await supabase.functions.invoke("agente-central", { body: { ...body, ...corpoDoModelo(escolhaGuardada()) } });
   if (error) throw new Error("O agente não respondeu agora. Tente de novo.");
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== "object") throw new Error("Resposta vazia do agente.");

@@ -45,6 +45,7 @@ function vazio(c: ClienteBasico): FatosDoCliente {
     dossieResumo: null,
     onboardingHas: {},
     estados: {},
+    estadosAnteriores: {},
     rituais: [],
     oculto: { areas: [], ate: null },
   };
@@ -96,7 +97,7 @@ export async function lerFatosDaEsteira(
   const desde5sem = new Date(Date.now() - 35 * 86_400_000).toISOString().slice(0, 10);
   const db = supabase as any;
 
-  const [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs, contasAds, vendas] = await Promise.all([
+  const [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, estadosAntes, rituais, prefs, contasAds, vendas] = await Promise.all([
     db.from("editorial_posts").select("id, client_id, title, production_status, primary_file_id, default_caption, created_at, editorial_publications(status, scheduled_at, published_at)").in("client_id", ids).is("archived_at", null),
     db.from("projects").select("id, client_id, tasks(id, status, due_date, assigned_to, title, source, updated_at)").in("client_id", ids).is("deleted_at", null).is("tasks.deleted_at", null),
     db.from("projects").select("id, client_id, milestones(id, title, status, target_date)").in("client_id", ids).is("deleted_at", null).is("milestones.deleted_at", null),
@@ -109,6 +110,8 @@ export async function lerFatosDaEsteira(
     db.from("client_dossiers").select("client_id, summary").in("client_id", ids).eq("is_current", true),
     db.from("project_memory").select("id, client_id, title, metadata").in("client_id", ids).eq("kind", "checklist").order("created_at", { ascending: false }),
     db.from("cycle_item_state").select("client_id, item_key, status, note, done_at").in("client_id", ids).eq("week_start", weekStart),
+    // O que foi finalizado nas 5 semanas anteriores: item feito nao volta como novo.
+    db.from("cycle_item_state").select("client_id, item_key, done_at, week_start").in("client_id", ids).eq("status", "done").lt("week_start", weekStart).gte("week_start", new Date(new Date(`${weekStart}T12:00:00Z`).getTime() - 35 * 86_400_000).toISOString().slice(0, 10)),
     db.from("cycle_rituals").select("client_id, ritual_key, source, done_at").in("client_id", ids).eq("week_start", weekStart),
     db.from("cycle_client_prefs").select("client_id, onboarding_has, hidden_areas, hidden_until").in("client_id", ids),
     db.from("external_accounts").select("id, client_id, platform, display_name, status").in("client_id", ids).in("platform", PLATAFORMAS_ADS),
@@ -118,7 +121,7 @@ export async function lerFatosDaEsteira(
   // Resposta com erro nao significa que o cliente nao tem posts, briefing
   // ou campanhas. Rejeitar o retrato incompleto preserva o ultimo sucesso
   // no cache e permite que a tela avise a falha, em vez de inventar faltas.
-  const leituras = [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs, contasAds, vendas];
+  const leituras = [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, estadosAntes, rituais, prefs, contasAds, vendas];
   if (leituras.some((leitura) => leitura.error)) {
     throw new Error("Não foi possível ler todos os dados da Esteira. Tente atualizar novamente.");
   }
@@ -235,6 +238,15 @@ export async function lerFatosDaEsteira(
   for (const e of (estados.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(e.client_id));
     if (s) s.estados[String(e.item_key)] = { status: e.status as EstadoHumano, note: e.note ?? null, doneAt: e.done_at ?? null };
+  }
+  for (const e of (estadosAntes.data ?? []) as Array<Record<string, any>>) {
+    const s = mapa.get(String(e.client_id));
+    if (!s) continue;
+    const chave = String(e.item_key);
+    if (!s.estadosAnteriores) s.estadosAnteriores = {};
+    const atual = s.estadosAnteriores[chave];
+    // Fica a marca mais recente.
+    if (!atual || String(e.week_start) > atual.weekStart) s.estadosAnteriores[chave] = { doneAt: e.done_at ?? null, weekStart: String(e.week_start) };
   }
   for (const r of (rituais.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(r.client_id));

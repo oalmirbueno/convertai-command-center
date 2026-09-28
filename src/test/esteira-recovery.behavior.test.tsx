@@ -25,6 +25,8 @@ function query(result: DbResult) {
   return Object.assign(promise, {
     select: () => promise, in: () => promise, eq: () => promise,
     is: () => promise, gte: () => promise, order: () => promise,
+    // Frente CE (28/09): a Esteira lê as marcas de feito das semanas anteriores (week_start < semana).
+    lt: () => promise,
   });
 }
 
@@ -63,7 +65,8 @@ describe("Esteira: falha de leitura e recuperacao", () => {
   it("rejeita consultas recusadas, sem fabricar fatos vazios", async () => {
     dbState.fail = "all";
     await expect(lerFatosDaEsteira([{ id: "client" }], "2026-09-07")).rejects.toThrow("Não foi possível ler todos os dados");
-    expect(dbState.from).toHaveBeenCalledTimes(16);
+    // 17 leituras: a 17a (frente CE, 28/09) são as marcas de feito das semanas anteriores.
+    expect(dbState.from).toHaveBeenCalledTimes(17);
   });
 
   it("rejeita falha ao conferir a aprovacao de um arquivo", async () => {

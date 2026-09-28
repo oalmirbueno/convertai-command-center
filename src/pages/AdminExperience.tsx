@@ -24,6 +24,9 @@ import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela, useRolagemDaTela } from "@/components/central/useEstadoDaTela";
+import SeletorDeModelo, { useModeloDaCentral } from "@/components/central/SeletorDeModelo";
+import { corpoDoModelo, rotuloDoModelo } from "@/components/central/modeloDaCentral";
+import PromessasDoRascunho from "@/components/central/PromessasDoRascunho";
 import { avisosDoRitual, extrasDoRitual } from "@/components/central/ritualAvisos";
 import { applyCentralAiDraft, assertCentralReviewSource, captureCentralGenerationContext, centralGenerationFacts, centralCachedPlanFacts, centralFactsProvenance, persistCentralReviewDraft, readCentralReportPage, type CentralGenerationContext, type CentralGenerationProject } from "@/lib/centralReviewSource";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
@@ -85,6 +88,13 @@ const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 
 /** Quanto para trás a Central lê material liberado (a maior conta olha 45 dias). */
 const JANELA_DE_ENTREGAS_DIAS = 60;
+
+/**
+ * Toda leitura paginada da Central: até o fim, sem teto que corte, e falha de
+ * página vira erro da consulta (o React Query tenta de novo e mantém o dado
+ * anterior), nunca "não coube" (frente CE, 28/09).
+ */
+const LER_TUDO = { lancarErro: true } as const;
 
 /**
  * O que a mensagem do grupo precisa da memória: avulsos da semana, plano da
@@ -174,11 +184,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const queryClient = useQueryClient();
 
   /**
-   * Quais consultas voltaram incompletas.
+   * Quais consultas bateram na guarda de páginas (200 mil linhas): defeito de
+   * consulta, não carteira. Sem teto, a leitura vai até o fim; falha de
+   * leitura não é corte e aparece pelo estado de erro de cada consulta.
    *
    * Fica em ref porque é efeito colateral da busca, não estado que comanda
-   * renderização: gravar em state dentro do queryFn provocaria laço. O aviso
-   * na tela lê isto na renderização seguinte, que é quando os dados chegam.
+   * renderização: gravar em state dentro do queryFn provocaria laço.
    */
   const cortes = useRef<Record<string, boolean>>({});
   const { user, profile } = useAuth();
@@ -214,7 +225,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   /** Mensagem do momento escrita pela IA, por cliente+momento (nesta sessão). */
   const [aiMoment, setAiMoment] = useEstadoDaTela<Record<string, { title: string | null; body: string; alertas: string[]; model: string | null }>>(guardar("momentos-ia"), {}, ehObjeto);
   const [aiMomentLoading, setAiMomentLoading] = useState<string | null>(null);
+  /** Modelo que escreve (GPT-6 Luna, raciocínio máximo, por padrão), lembrado neste navegador. */
+  const [escolhaDoModelo, setEscolhaDoModelo] = useModeloDaCentral();
   const [generating, setGenerating] = useState(false);
+  /** Progresso do gerador (frente CE): com raciocínio máximo cada cliente leva até 2 min, e a tela diz em que ponto está. */
+  const [progressoDaGeracao, setProgressoDaGeracao] = useState<{ feitos: number; total: number } | null>(null);
   const [expandedHealth, setExpandedHealth] = useEstadoDaTela<string | null>(guardar("carteira-aberto"), null, (v) => v === null || ehTexto(v));
   const [profileClientId, setProfileClientId] = useEstadoDaTela<string>(guardar("perfil-cliente"), "", ehTexto);
   // Link de pedido (?review=) sempre abre a fila: a aba guardada não passa na frente.
@@ -280,7 +295,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   });
 
 
-  const { data: pendingApprovalFiles = [] } = useQuery({
+  const { data: pendingApprovalFiles = [], isError: falhouAprovacoes } = useQuery({
     queryKey: ["exp-pending-approvals"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -294,6 +309,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .is("parent_file_id", null)
           .order("created_at", { ascending: true })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.aprovacoes = truncado;
       return linhas;
@@ -306,7 +322,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // liberado desde sempre. Toda conta que usa esta lista olha no máximo 45
   // dias (saúde: 14 e 45 dias; radar: 30; mensagem: 7), então a janela de 60
   // dias não muda nenhuma nota e corta metade das linhas.
-  const { data: releasedFiles = [] } = useQuery({
+  const { data: releasedFiles = [], isError: falhouArquivos } = useQuery({
     queryKey: ["exp-released-files"],
     queryFn: async () => {
       const desde = new Date(Date.now() - JANELA_DE_ENTREGAS_DIAS * 86_400_000).toISOString();
@@ -320,6 +336,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .gte("created_at", desde)
           .order("created_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.arquivos = truncado;
       return linhas;
@@ -350,6 +367,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .is("parent_file_id", null)
           .order("created_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       return linhas;
     },
@@ -357,7 +375,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     staleTime: 300_000,
   });
 
-  const { data: allMilestones = [], isFetched: marcosProntos } = useQuery({
+  const { data: allMilestones = [], isFetched: marcosProntos, isError: falhouMarcos } = useQuery({
     queryKey: ["exp-milestones"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -366,6 +384,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .is("deleted_at", null)
           .order("target_date", { ascending: true })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.marcos = truncado;
       return linhas;
@@ -466,6 +485,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .gte("created_at", desde)
           .order("created_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       return linhas;
     },
@@ -542,6 +562,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .gte("updated_at", desde.toISOString())
           .order("updated_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       return linhas;
     },
@@ -574,7 +595,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     () => ((clients ?? []) as any[]).map((c) => String(c.id)).sort(),
     [clients],
   );
-  const { data: expMemory = [], isFetched: memoriaPronta } = useQuery({
+  const { data: expMemory = [], isFetched: memoriaPronta, isError: falhouMemoria } = useQuery({
     queryKey: ["exp-memory"],
     queryFn: async () => {
       const desde = new Date(Date.now() - 60 * 86_400_000).toISOString();
@@ -587,6 +608,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .in("kind", KINDS_DA_MEMORIA_DA_CENTRAL)
           .order("created_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.memoria = truncado;
       return linhas;
@@ -604,7 +626,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // O calendário editorial de todos os clientes: peça pronta com nome. Sem
   // isto a mensagem dependia só de arquivo liberado nos últimos 7 dias, e
   // caía no genérico quando o material tinha sido aprovado antes disso.
-  const { data: expPautas = [], isFetched: pautasProntas } = useQuery({
+  const { data: expPautas = [], isFetched: pautasProntas, isError: falhouPautas } = useQuery({
     queryKey: ["exp-pautas"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -614,6 +636,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .in("production_status", ["ready", "production"])
           .order("updated_at", { ascending: false })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.pautas = truncado;
       return linhas;
@@ -623,7 +646,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     ...AO_VIVO_CALMO,
   });
 
-  const { data: allPublications = [] } = useQuery({
+  const { data: allPublications = [], isError: falhouPublicacoes } = useQuery({
     queryKey: ["exp-publications"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -634,6 +657,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .in("status", ["scheduled", "published"])
           .order("scheduled_at", { ascending: true })
           .range(de, ate),
+        LER_TUDO,
       );
       cortes.current.publicacoes = truncado;
       return linhas;
@@ -664,6 +688,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .select(`id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, ${withReviewVersion ? "review_version, " : ""}client:profiles!reports_client_id_fkey(full_name, company_name)`)
           .order("created_at", { ascending: false })
           .range(de, ate)),
+        LER_TUDO,
       );
       cortes.current.relatorios = truncado;
       return linhas;
@@ -1711,7 +1736,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       const ritual = String((report.metrics as any)?.ritual_type || "meio_semana");
       const { data, error } = await supabase.functions.invoke("ritual-writer", {
         // client_id e report_id: o servidor monta a memória dos rituais e não compara o rascunho com ele mesmo.
-        body: { ritual, client_id: report.client_id, report_id: report.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, improve: atual },
+        body: { ritual, client_id: report.client_id, report_id: report.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, improve: atual, ...corpoDoModelo(escolhaDoModelo) },
       });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto atual foi mantido."); return; }
       const novo = { summary: String(data.body), next_steps: completarProximoPasso(typeof data.next_steps === "string" ? data.next_steps : "", String(data.body)) };
@@ -1741,7 +1766,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     try {
       const { facts, context } = await fatosCompletos(client);
       const provenance = await centralFactsProvenance(facts);
-      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_id: client.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts } });
+      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_id: client.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, ...corpoDoModelo(escolhaDoModelo) } });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto do painel continua disponível."); return; }
       await assertCentralReviewSource(client.id, context.source);
       setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: avisosDoRitual(data), model: data.model ?? null } }));
@@ -1805,7 +1830,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           const provenance = await centralFactsProvenance(fatos);
           try {
             const { data, error } = await supabase.functions.invoke("ritual-writer", {
-              body: { ritual: genRitual, client_id: c.id, client_name: captured.client.company_name || captured.client.full_name, contact_name: nomeDoContato(captured.client), facts: provenance.facts },
+              body: { ritual: genRitual, client_id: c.id, client_name: captured.client.company_name || captured.client.full_name, contact_name: nomeDoContato(captured.client), facts: provenance.facts, ...corpoDoModelo(escolhaDoModelo) },
             });
             if (!error && data?.body) {
               draft = applyCentralAiDraft(draft, data);
@@ -1831,9 +1856,17 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     };
     const LOTE = 3;
     const results: Array<DraftPreview | null> = [];
+    let prontos = 0;
+    setProgressoDaGeracao({ feitos: 0, total: alvos.length });
     for (let i = 0; i < alvos.length; i += LOTE) {
-      results.push(...(await Promise.all(alvos.slice(i, i + LOTE).map(gerarPrevia))));
+      results.push(...(await Promise.all(alvos.slice(i, i + LOTE).map(async (c: any) => {
+        const r = await gerarPrevia(c);
+        prontos += 1;
+        setProgressoDaGeracao({ feitos: prontos, total: alvos.length });
+        return r;
+      }))));
     }
+    setProgressoDaGeracao(null);
     const previews = results.filter((preview): preview is DraftPreview => preview !== null);
     generatingDrafts.current = false;
     setGenerating(false);
@@ -2325,19 +2358,24 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           </>
         }
       />
-      {/* Se alguma consulta voltar cortada, a tela DIZ. Dado incompleto
-          apresentado como completo é o defeito que estamos matando; dado
-          incompleto que se anuncia é aceitável. */}
-      {Object.entries(cortes.current).some(([, cortado]) => cortado) && (
-        <p className="rounded-md bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning">
-          Parte dos dados não coube nesta leitura (
-          {Object.entries(cortes.current)
-            .filter(([, cortado]) => cortado)
-            .map(([nome]) => nome)
-            .join(", ")}
-          ). O que está abaixo pode estar incompleto. Recarregue ou avise o suporte.
-        </p>
-      )}
+      {/* Leitura sem teto que corte (frente CE, 28/09): a Central lê tudo em
+          páginas. O aviso só aparece quando uma leitura FALHOU agora (o
+          painel tenta de novo sozinho e mantém o que já tinha) ou quando a
+          guarda de páginas foi atingida, que é defeito de consulta. */}
+      {(() => {
+        const falhas = [
+          falhouAprovacoes && "aprovações", falhouArquivos && "entregas", falhouMarcos && "marcos",
+          falhouMemoria && "memória", falhouPautas && "pautas", falhouPublicacoes && "publicações",
+        ].filter(Boolean) as string[];
+        const cortadas = Object.entries(cortes.current).filter(([, cortado]) => cortado).map(([nome]) => nome);
+        if (!falhas.length && !cortadas.length) return null;
+        return (
+          <p className="rounded-md bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning" role="status">
+            {falhas.length > 0 && <>Não foi possível ler agora: {falhas.join(", ")}. O painel tenta de novo sozinho e mantém o que já tinha. </>}
+            {cortadas.length > 0 && <>Leitura interrompida pela guarda de segurança em {cortadas.join(", ")}: avise o suporte.</>}
+          </p>
+        );
+      })()}
 
       {/* Hoje, numa faixa só (dono, 26/09: "muito texto, muita coisa"): a
           saudação com o ritual do dia, o porquê no "?", e os números da
@@ -2645,6 +2683,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         )}
                         {p?.foco && <p className="mt-1 text-[12px] text-foreground/90"><span className="text-muted-foreground">Foco: </span>{p.foco}</p>}
                       </div>
+                      <div className="mt-3">
+                        <SeletorDeModelo escolha={escolhaDoModelo} onMudar={setEscolhaDoModelo} compacto />
+                      </div>
                       <ul className="mt-3 divide-y divide-border border-t border-border">
                         {[
                           { moment: "abertura" as const, label: "Abertura da semana (segunda)" },
@@ -2698,7 +2739,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                   )}
                                   {escrita && escrita.alertas.length > 0 && (
                                     <div className="mb-2">
-                                      <p className="text-[12px] font-medium text-warning">O que a IA não encontrou (só para a equipe)</p>
+                                      <p className="text-[12px] font-medium text-warning">Avisos para a equipe (não vão ao cliente)</p>
                                       <ul className="mt-0.5 space-y-0.5">{escrita.alertas.map((a, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                                     </div>
                                   )}
@@ -2999,18 +3040,19 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               <div className="space-y-3 pb-4 pl-1 pr-1 pt-1">
                                 {meta && (
                                   <div className="flex min-w-0 items-center">
-                                    <p className={juntar(texto.auxiliar, "min-w-0 truncate")}>{meta.label} · {meta.cadence}{modelo ? ` · IA (${modelo})` : ""}</p>
+                                    <p className={juntar(texto.auxiliar, "min-w-0 truncate")}>{meta.label} · {meta.cadence}{modelo ? ` · IA (${rotuloDoModelo(modelo)})` : ""}</p>
                                     <AjudaRecolhida className="ml-1.5" rotulo="Por que este rascunho existe">
-                                      Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente{modelo ? ` pela IA (${modelo})` : ""}.
+                                      Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente{modelo ? ` pela IA (${rotuloDoModelo(modelo)})` : ""}.
                                     </AjudaRecolhida>
                                   </div>
                                 )}
                                 {Array.isArray((r.metrics as any)?.alertas) && (r.metrics as any).alertas.length > 0 && (
                                   <div className="rounded-md bg-warning/10 px-3 py-2">
-                                    <p className="text-[12px] font-medium text-warning">O que a IA não encontrou (complete o painel ou o dossiê)</p>
+                                    <p className="text-[12px] font-medium text-warning">Avisos para a equipe (o que faltou no painel, reforços e modelo; nada disso vai ao cliente)</p>
                                     <ul className="mt-0.5 space-y-0.5">{(r.metrics as any).alertas.map((a: string, i: number) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                                   </div>
                                 )}
+                                <PromessasDoRascunho metricas={r.metrics} />
                                 <CampoDeFormulario rotulo="Mensagem ao cliente (resultado explicado)">
                                   <textarea
                                     value={edits.summary}
@@ -3296,13 +3338,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   ))}
                 </div>
               </div>
+              <SeletorDeModelo escolha={escolhaDoModelo} onMudar={setEscolhaDoModelo} />
               <button
                 type="button"
                 onClick={previewDrafts}
-                disabled={!contextoPronto}
+                disabled={!contextoPronto || progressoDaGeracao !== null}
                 className={juntar(botao.primario, "w-full disabled:cursor-wait")}
               >
-                {contextoPronto ? "Ver antes de criar" : "Carregando os dados dos clientes..."}
+                {progressoDaGeracao ? `Escrevendo ${progressoDaGeracao.feitos} de ${progressoDaGeracao.total}...` : contextoPronto ? "Ver antes de criar" : "Carregando os dados dos clientes..."}
               </button>
               <p className={texto.auxiliar}>Nada é criado nesta etapa: você lê cada mensagem antes de confirmar.</p>
             </div>
@@ -3324,13 +3367,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar para o grupo
                       </button>
                     </div>
-                    <p className="text-[12px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">IA · {preview.draft.metrics?.model || "modelo"}</span> : <span className="ml-1.5 text-[11px] font-normal text-warning">texto de reserva (IA não respondeu)</span>}</p>
+                    <p className="text-[12px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">IA · {rotuloDoModelo(preview.draft.metrics?.model) || "modelo"}</span> : <span className="ml-1.5 text-[11px] font-normal text-warning">texto de reserva (IA não respondeu)</span>}</p>
                     {Array.isArray(preview.draft.metrics?.alertas) && preview.draft.metrics.alertas.length > 0 && (
                       <div className="rounded-md bg-warning/10 px-3 py-2">
-                        <p className="text-[12px] font-medium text-warning">O que a IA não encontrou (só para a equipe)</p>
+                        <p className="text-[12px] font-medium text-warning">Avisos para a equipe (não vão ao cliente)</p>
                         <ul className="mt-0.5 space-y-0.5">{preview.draft.metrics.alertas.map((a: string, i: number) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                       </div>
                     )}
+                    <PromessasDoRascunho metricas={preview.draft.metrics} />
                     <CampoDeFormulario rotulo="Mensagem">
                       <textarea
                         value={preview.draft.summary}

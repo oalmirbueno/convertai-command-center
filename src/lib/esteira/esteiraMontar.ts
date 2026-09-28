@@ -636,6 +636,26 @@ export function montarEsteira(f: FatosDoCliente, hoje: Date = new Date(), weekSt
   for (const it of brutos) {
     if (jaFeito.has(it.key)) continue;
     const e = f.estados[it.key];
+    const antes = f.estadosAnteriores?.[it.key];
+    if (!e && antes) {
+      // Frente CE (28/09): "a gente finaliza, depois ele volta". Tarefa e marco
+      // finalizados na esteira fecham no Kanban e na Timeline; os marcados
+      // antes dessa correção continuam abertos lá e voltavam como atrasados.
+      // Agora ficam em feitos, com o lembrete de fechar na origem.
+      if (it.fonte === "tarefa" || it.fonte === "marco") {
+        feitos.push({
+          ...it,
+          passo: "Finalizado na esteira",
+          fatos: [`Em ${fmtDia(antes.doneAt ?? antes.weekStart)}`, it.fonte === "tarefa" ? "Ainda aberta no Kanban: conclua lá" : "Ainda aberto na Timeline: conclua lá"],
+          estado: { status: "done", doneAt: antes.doneAt, note: null },
+        });
+        continue;
+      }
+      // O resto nasce de um fato que continua no painel: volta, mas dizendo
+      // que já foi marcado, para ninguém achar que é item novo.
+      itens.push({ ...it, fatos: [...it.fatos, `Marcado como feito em ${fmtDia(antes.doneAt ?? antes.weekStart)}, e o painel ainda mostra isto`] });
+      continue;
+    }
     if (!e) { itens.push(it); continue; }
     const comEstado = { ...it, estado: { status: e.status, note: e.note, doneAt: e.doneAt } };
     if (e.status === "done") feitos.push(comEstado);
