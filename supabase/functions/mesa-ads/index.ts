@@ -253,6 +253,8 @@ import {
   type HojeDoNo,
   hojeDaMeta,
   linkDaCobranca,
+  dataCurtaDaMeta,
+  dataDaMeta,
   linkDoGerenciador,
   listaCortada,
   marcasDasAcoes,
@@ -6313,7 +6315,8 @@ async function itensCitadosNaMensagem(servico: SupabaseClient, clientId: string,
 }
 
 const STATUS_CURTO: Record<string, string> = { ACTIVE: "ativa", PAUSED: "pausada", ARCHIVED: "arquivada", CAMPAIGN_PAUSED: "pausada pela campanha", ADSET_PAUSED: "pausado pelo conjunto", DELETED: "excluída" };
-const dataBr = (iso: unknown) => (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split("-").reverse().join("/") : "");
+// Data vazia da Meta vem como o zero de 1970 ("31/12/1969" no fuso de Brasília): dataCurtaDaMeta devolve vazio.
+const dataBr = (iso: unknown) => dataCurtaDaMeta(iso);
 
 /** O que diferencia um item do outro de mesmo nome: id curto, status, início e fim, e o gasto total (lidos na Meta). */
 async function detalheParaEscolher(grafo: GrafoMeta | null, c: CandidatoDaOrdem): Promise<string> {
@@ -6327,7 +6330,7 @@ async function detalheParaEscolher(grafo: GrafoMeta | null, c: CandidatoDaOrdem)
   if (efetivo) partes.push(STATUS_CURTO[efetivo] ?? efetivo.toLowerCase());
   const inicio = info ? dataBr(info.start_time ?? info.created_time) : "";
   const fim = info ? dataBr(info.stop_time) : "";
-  if (inicio) partes.push(`início ${inicio}`);
+  partes.push(inicio ? `início ${inicio}` : "sem data de início");
   if (fim) partes.push(`fim ${fim}`);
   const linhas = ins && Array.isArray(ins.data) ? (ins.data as Record<string, unknown>[]) : null;
   if (linhas) partes.push(`${brlDaAcao(linhas.reduce((soma, l) => soma + (Number(l.spend) || 0), 0))} gastos no total`);
@@ -8254,7 +8257,7 @@ async function estruturaDaColeta(
     objetivo: typeof c.objective === "string" ? c.objective : null,
     orcamento_diario_brl: reais(c.daily_budget),
     orcamento_total_brl: reais(c.lifetime_budget),
-    fim: typeof c.stop_time === "string" ? c.stop_time : null,
+    fim: dataDaMeta(c.stop_time),
     problemas: [],
   }));
   const ads = ((adsQ.data as Record<string, unknown>[] | null) ?? []).filter((a) => ID.test(String(a.ad_id ?? "")));
@@ -8341,8 +8344,14 @@ async function metricasDoGerenciador(servico: SupabaseClient, clientId: string, 
 }
 
 /** A leitura inteira do gerenciador de um cliente (sem gravar). */
+/** Teto da leitura ao vivo de uma conta: passou, cai na coleta do painel (com o aviso) e responde. */
+const TETO_DA_LEITURA_AO_VIVO_MS = 20_000;
+
 async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string; dias: number }) {
   const agoraMs = Date.now();
+  // Frente AD (teste real 28/09): o tempo de cada etapa vai na resposta, para medir onde está a demora.
+  const tempos: Record<string, number> = {};
+  const marcar = (etapa: string, desde: number) => { tempos[etapa] = Date.now() - desde; };
   const [extQ, acesso, fotosQ, marcasQ] = await Promise.all([
     servico.from("external_accounts").select("id, platform, external_id, display_name, status").eq("client_id", clientId).in("platform", PLATAFORMAS_DE_ANUNCIO.map((p) => p.plataforma)),
     acessoDeGestao(servico, clientId).catch(() => null),
@@ -8365,10 +8374,18 @@ async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo
   const grafo = acesso ? acesso.grafo : null;
   const avisos: string[] = [];
 
+  marcar("banco_e_acesso", agoraMs);
+  const inicioMeta = Date.now();
   const estruturas = await Promise.all(metas.map(async (x) => {
     if (!grafo) return await estruturaDaColeta(servico, clientId, x, fotos.get(x.id) ?? null, (acesso && acesso.gestao.motivo) || "Sem acesso à Meta agora: mostrando a última coleta do painel.");
     try {
-      return await estruturaDaMeta(grafo, x.external_id, x.display_name);
+      let relogio: ReturnType<typeof setTimeout> | undefined;
+      const teto = new Promise<never>((_, falhar) => { relogio = setTimeout(() => falhar(new Error(`a Meta passou de ${TETO_DA_LEITURA_AO_VIVO_MS / 1000} s`)), TETO_DA_LEITURA_AO_VIVO_MS); });
+      try {
+        return await Promise.race([estruturaDaMeta(grafo, x.external_id, x.display_name), teto]);
+      } finally {
+        if (relogio !== undefined) clearTimeout(relogio);
+      }
     } catch (e) {
       const motivo = e instanceof Error ? e.message : "A Meta não respondeu.";
       return await estruturaDaColeta(servico, clientId, x, fotos.get(x.id) ?? null, `A leitura ao vivo falhou (${motivo}). Mostrando a última coleta do painel.`);
@@ -8376,7 +8393,10 @@ async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo
   }));
   const paisDoAnuncio = new Map<string, { campanha: string | null; conjunto: string | null }>();
   for (const e of estruturas) for (const a of e.anuncios) paisDoAnuncio.set(a.id, { campanha: a.campaign_id, conjunto: a.adset_id });
+  marcar("meta_ao_vivo", inicioMeta);
+  const inicioNumeros = Date.now();
   const m = await metricasDoGerenciador(servico, clientId, periodo, paisDoAnuncio);
+  marcar("numeros_do_periodo", inicioNumeros);
   if (!m.lidas) avisos.push("Os números do período não puderam ser lidos agora; o status e o gasto de hoje continuam valendo.");
 
   const contas: ContaNoGerenciador[] = [];
@@ -8402,6 +8422,7 @@ async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo
     sincronizado_em: m.sincronizadoEm,
     gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : null,
     avisos: [...new Set(avisos)].slice(0, 6),
+    tempos: { ...tempos, total: Date.now() - agoraMs },
   };
 }
 
@@ -8448,14 +8469,16 @@ async function gerenciadorLer(servico: SupabaseClient, chamador: Chamador, corpo
   const periodo = periodoDoPedido({ dias: corpo.dias }, DIAS_CONTA, 14, hojeSaoPaulo());
   const chave = `${clientId}:${periodo.dias}`;
   let forcada = false;
-  if (corpo.ao_vivo === true && Date.now() - (forcadasDoGerenciador.get(clientId) ?? 0) >= RELEITURA_FORCADA_MIN_MS) {
+  const inicioDoPedido = Date.now();
+  // "forcar" também vale (nome usado no teste real), igual a "ao_vivo".
+  if ((corpo.ao_vivo === true || corpo.forcar === true) && Date.now() - (forcadasDoGerenciador.get(clientId) ?? 0) >= RELEITURA_FORCADA_MIN_MS) {
     forcadasDoGerenciador.set(clientId, Date.now());
     leiturasDoGerenciador.esquecer(`${clientId}:`);
     forcada = true;
   }
   const leitura = (await leiturasDoGerenciador.obter(chave, () => lerGerenciador(servico, clientId, periodo))) as Awaited<ReturnType<typeof lerGerenciador>>;
   const gravadaEm = await gravarLeituraDoGerenciador(servico, clientId, chamador.userId, leitura, forcada);
-  return json({ ...leitura, gravada_em: gravadaEm, custo_usd: 0 });
+  return json({ ...leitura, forcada, gravada_em: gravadaEm, tempo_ms: Date.now() - inicioDoPedido, custo_usd: 0 });
 }
 
 const NOME_DO_NIVEL_COM_ARTIGO: Record<string, string> = { campanha: "a campanha", conjunto: "o conjunto", anuncio: "o anúncio" };
@@ -8731,8 +8754,9 @@ const ACOES_LONGAS = new Set([
   "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
   "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar", "conta_numeros",
   "conta_montagem_ativar", "rotina_regra", "rotina_rodar", "rotina_desfazer",
-  // Frente AD (28/09): o Gerenciador lê a Meta (5 chamadas por conta) e a ação da equipe relê antes e depois.
-  "gerenciador_ler", "gerenciador_acao",
+  // Frente AD (28/09): a ação da equipe relê antes e depois. gerenciador_ler NÃO entra: leva ~4 s (medido
+  // na Verzelo, 93 ms de CPU), tem teto de 20 s na Meta e responde com JSON direto, sem streaming.
+  "gerenciador_acao",
   "referencia_para_estudio",
 ]);
 

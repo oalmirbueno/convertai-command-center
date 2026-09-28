@@ -15,6 +15,8 @@ import {
   marcasDasAcoes,
   montarArvore,
   pedidoDaEquipeInvalido,
+  dataCurtaDaMeta,
+  dataDaMeta,
   resumoDaArvore,
   revisaoDe,
   situacaoDaConta,
@@ -84,6 +86,26 @@ describe("entrega como o dono entende", () => {
     expect(entregaDoNo({ ...base, efetivo: "ARCHIVED" }, null, AGORA).rotulo).toBe("Arquivado");
     expect(entregaDoNo({ ...base, nivel: "campanha", fim: "2026-09-20T23:59:00-0300" }, null, AGORA)).toMatchObject({ estado: "encerrado", rotulo: "Terminou" });
     expect(entregaDoNo({ ...base, nivel: "campanha", filhosAtivos: 0 }, null, AGORA).motivo).toBe("Nenhum conjunto ativo nesta campanha.");
+  });
+});
+
+describe("datas da Meta (teste real: início 31/12/1969)", () => {
+  it("data vazia da Meta (o zero de 1970 no fuso de Brasília) vira sem data, nunca 31/12/1969", () => {
+    expect(dataDaMeta("1969-12-31T21:00:00-0300")).toBeNull();
+    expect(dataDaMeta("1970-01-01T00:00:00+0000")).toBeNull();
+    expect(dataDaMeta("0")).toBeNull();
+    expect(dataDaMeta(null)).toBeNull();
+    expect(dataDaMeta("2026-09-15T10:00:00-0300")).toBe("2026-09-15T10:00:00-0300");
+    expect(dataCurtaDaMeta("1969-12-31T21:00:00-0300")).toBe("");
+    expect(dataCurtaDaMeta("2026-09-15T10:00:00-0300")).toBe("15/09/2026");
+    // O fim zerado não encerra a campanha ativa.
+    const [c] = campanhasDaMeta({ data: [{ id: "120000000000001", name: "X", status: "ACTIVE", effective_status: "ACTIVE", stop_time: "1969-12-31T21:00:00-0300" }] });
+    expect(c.fim).toBeNull();
+    expect(entregaDoNo({ nivel: "campanha", status: "ACTIVE", efetivo: "ACTIVE", hojeImpressoes: 10, filhosAtivos: null, fim: "1969-12-31T21:00:00-0300", problemas: [], revisao: [] }, null, AGORA).estado).toBe("entregando");
+    // A pergunta "Qual delas?" diz "sem data de início" em vez da data zerada.
+    const fonte = ler("supabase/functions/mesa-ads/index.ts");
+    expect(fonte).toContain('partes.push(inicio ? `início ${inicio}` : "sem data de início");');
+    expect(fonte).toContain("const dataBr = (iso: unknown) => dataCurtaDaMeta(iso);");
   });
 });
 
@@ -288,8 +310,14 @@ describe("fonte do servidor", () => {
     expect(fonte).toContain("gerenciador_ler: gerenciadorLer,");
     expect(fonte).toContain("gerenciador_acao: gerenciadorAcao,");
     const longas = fonte.slice(fonte.indexOf("const ACOES_LONGAS"), fonte.indexOf("]);", fonte.indexOf("const ACOES_LONGAS")));
-    expect(longas).toContain('"gerenciador_ler"');
+    // Teste real 28/09: gerenciador_ler leva ~4 s e responde com JSON direto (sem streaming); a ação segue longa.
+    expect(longas).not.toContain('"gerenciador_ler"');
     expect(longas).toContain('"gerenciador_acao"');
+    const ler = fonte.slice(fonte.indexOf("async function lerGerenciador("), fonte.indexOf("async function gravarLeituraDoGerenciador("));
+    expect(ler).toContain("Promise.race([estruturaDaMeta(");
+    expect(ler).toContain("tempos: { ...tempos, total:");
+    expect(fonte).toContain("const TETO_DA_LEITURA_AO_VIVO_MS = 20_000;");
+    expect(fonte).toContain("corpo.forcar === true");
     const acao = fonte.slice(fonte.indexOf("async function gerenciadorAcao("), fonte.indexOf("async function executarPedidoNaConta("));
     expect(acao).toContain("exigirAcessoAoCliente(chamador, clientId)");
     expect(acao).toContain("executarPedidoNaConta(");

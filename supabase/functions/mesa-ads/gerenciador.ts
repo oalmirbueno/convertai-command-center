@@ -145,6 +145,23 @@ const numero = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+/**
+ * Data da Meta que vale: texto ISO com ano de 2004 para cá. A Meta devolve data vazia como zero
+ * ("1969-12-31T21:00:00-0300", o zero de 1970 no fuso de Brasília): isso é "sem data", nunca 31/12/1969.
+ */
+export function dataDaMeta(v: unknown): string | null {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(v)) return null;
+  const t = Date.parse(v.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
+  const ano = Number(v.slice(0, 4));
+  return Number.isFinite(t) && ano >= 2004 ? v : null;
+}
+
+/** "15/09/2026" a partir da data da Meta; vazio quando não há data que valha. */
+export function dataCurtaDaMeta(v: unknown): string {
+  const d = dataDaMeta(v);
+  return d ? d.slice(0, 10).split("-").reverse().join("/") : "";
+}
+
 /** Valor em centavos da Meta (texto) em reais; zero continua zero (saldo zerado é informação). */
 export function centavosEmReais(v: unknown): number | null {
   const n = numero(v);
@@ -258,7 +275,7 @@ export function campanhasDaMeta(bruto: unknown): CampanhaLida[] {
     objetivo: texto(c.objective),
     orcamento_diario_brl: orcamentoEmReais(c.daily_budget),
     orcamento_total_brl: orcamentoEmReais(c.lifetime_budget),
-    fim: texto(c.stop_time),
+    fim: dataDaMeta(c.stop_time),
     problemas: problemasDe(c.issues_info),
   }));
 }
@@ -273,7 +290,7 @@ export function conjuntosDaMeta(bruto: unknown): ConjuntoLido[] {
     orcamento_diario_brl: orcamentoEmReais(c.daily_budget),
     orcamento_total_brl: orcamentoEmReais(c.lifetime_budget),
     otimizacao: texto(c.optimization_goal),
-    fim: texto(c.end_time),
+    fim: dataDaMeta(c.end_time),
     problemas: problemasDe(c.issues_info),
   }));
 }
@@ -341,7 +358,8 @@ export function entregaDoNo(
   if (efetivo === "PAUSED") return { estado: "pausado", rotulo: "Pausado", motivo: null };
   if (ATIVOS.indexOf(efetivo) < 0) return { estado: "pausado", rotulo: efetivo ? efetivo.toLowerCase().replace(/_/g, " ") : "Sem status", motivo: null };
   // Ativo daqui para baixo.
-  const fim = n.fim ? Date.parse(n.fim) : NaN;
+  const fimQueVale = dataDaMeta(n.fim);
+  const fim = fimQueVale ? Date.parse(fimQueVale.replace(/([+-]\d{2})(\d{2})$/, "$1:$2")) : NaN;
   if (Number.isFinite(fim) && fim < agoraMs) return { estado: "encerrado", rotulo: "Terminou", motivo: `A data final passou (${dataCurta(n.fim as string)}).` };
   if (conta && conta.travada) return { estado: "conta_travada", rotulo: "Não entrega", motivo: conta.motivo || "A conta de anúncios está travada na Meta." };
   if (n.filhosAtivos === 0) {
