@@ -142,3 +142,66 @@ export async function baixarZipDasCapas(capas: Array<{ nome: string; blob: Blob 
   const blob = await zip.generateAsync({ type: "blob" });
   salvarBlob(blob, nomeDoArquivo(cliente, "destaques").replace(".png", ".zip"));
 }
+
+// ------------------------------------------------------------------ estilos de conjunto (rodada 3, 28/09)
+
+/**
+ * Foto real do acervo como capa: recortada para cobrir a tela, centrada (o
+ * círculo do Instagram mostra o meio). A foto fica intacta: só o recorte,
+ * sem filtro, sem escurecer.
+ */
+export async function capaComFoto(foto: Blob): Promise<Blob> {
+  const img = await abrirImagem(foto);
+  const { canvas, ctx } = novaTela();
+  const escala = Math.max(canvas.width / img.width, canvas.height / img.height);
+  const w = Math.round(img.width * escala);
+  const h = Math.round(img.height * escala);
+  ctx.drawImage(img, Math.round((canvas.width - w) / 2), Math.round((canvas.height - h) / 2), w, h);
+  return paraPng(canvas);
+}
+
+/** Famílias já carregadas (caminho da fonte -> nome da família no documento). */
+const familias: Record<string, string> = {};
+
+/** Carrega a fonte do cliente (arquivo no bucket mesa) no documento e devolve a família. */
+export async function carregarFonteDaMarca(caminho: string): Promise<string> {
+  if (familias[caminho]) return familias[caminho];
+  const w = window as unknown as { FontFace?: new (familia: string, dados: ArrayBuffer) => { load: () => Promise<unknown> } };
+  const doc = document as unknown as { fonts?: { add: (f: unknown) => void } };
+  if (!w.FontFace || !doc.fonts) throw new Error("Este navegador não carrega a fonte da marca.");
+  const blob = await baixarDoStorage("mesa", caminho);
+  const dados = await new Promise<ArrayBuffer>((ok, erro) => {
+    const leitor = new FileReader();
+    leitor.onload = () => ok(leitor.result as ArrayBuffer);
+    leitor.onerror = () => erro(new Error("Não foi possível ler a fonte da marca."));
+    leitor.readAsArrayBuffer(blob);
+  });
+  const familia = `marca-${Math.random().toString(36).slice(2, 9)}`;
+  const face = new w.FontFace(familia, dados);
+  await face.load();
+  doc.fonts.add(face);
+  familias[caminho] = familia;
+  return familia;
+}
+
+/**
+ * Tipografia da marca: fundo sólido na cor do kit e o nome do destaque na
+ * fonte do cliente, na cor do kit, dentro do círculo. Nunca outra fonte.
+ */
+export async function capaTipografica(o: { texto: string; familia: string; fundo: string; cor: string }): Promise<Blob> {
+  const { canvas, ctx } = novaTela();
+  ctx.fillStyle = o.fundo;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const largura = Math.round(TAMANHO_DA_CAPA.circulo * 0.72);
+  let tamanho = 220;
+  ctx.font = `${tamanho}px "${o.familia}"`;
+  while (tamanho > 40 && ctx.measureText(o.texto).width > largura) {
+    tamanho -= 6;
+    ctx.font = `${tamanho}px "${o.familia}"`;
+  }
+  ctx.fillStyle = o.cor;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(o.texto, canvas.width / 2, canvas.height / 2);
+  return paraPng(canvas);
+}

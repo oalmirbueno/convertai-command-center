@@ -62,7 +62,8 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, type RespostaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
-import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
+import { lerDossie } from "../_shared/contexto-cliente.ts";
+import { kitComMarca, lerContextoDaMarca, marcasDoCliente, type MarcaDoCliente, type MarcaLeve, projetosDaMarca, resolverMarca } from "../_shared/marca.ts";
 import { anexoDoCaminho } from "../_shared/acoes-do-agente.ts";
 import { blocoDoMapaDoPainel, caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import {
@@ -73,8 +74,11 @@ import {
   escolherDestaques,
   ESQUEMA_DAS_SUGESTOES,
   ESQUEMA_DOS_DESTAQUES,
+  CANDIDATOS_A_DESTAQUE,
+  escolherDestaquesDaMarca,
   perguntasDosDestaques,
-  poolDeDestaques,
+  propostasDaMarca,
+  semNomesDeOutros,
   SISTEMA_DOS_DESTAQUES,
   type EstadoDaBio,
   type EstiloDaCapa,
@@ -94,6 +98,9 @@ import {
 } from "../_shared/conhecimento-perfil-instagram.ts";
 import {
   capaDoTrabalho,
+  contasDaMarca,
+  type LigacaoDaConta,
+  laminasDoTrabalho,
   caminhoDoAgente,
   type ContaDoInstagram,
   enderecoDaRede,
@@ -201,7 +208,8 @@ const arred = (v: number) => Math.round(v * 1e6) / 1e6;
 
 // ------------------------------------------------------------------ contas do cliente
 
-async function contasDoCliente(clientId: string): Promise<ContaDoInstagram[]> {
+/** Contas do Instagram do cliente e as linhas repetidas da mesma @ (id da linha -> id da conta que ficou). */
+async function contasDoCliente(clientId: string): Promise<{ contas: ContaDoInstagram[]; apelidos: Record<string, string> }> {
   const { data } = await servico()
     .from("external_accounts")
     .select("id, handle, external_id, display_name, updated_at")
@@ -211,17 +219,23 @@ async function contasDoCliente(clientId: string): Promise<ContaDoInstagram[]> {
     .order("updated_at", { ascending: false });
   const linhas = (data as Array<{ id: string; handle: string | null; external_id: string | null; display_name: string | null }> | null) ?? [];
   const porUsuario: Record<string, ContaDoInstagram> = {};
+  const apelidos: Record<string, string> = {};
   const saida: ContaDoInstagram[] = [];
   // Conta conectada (com id do Instagram) primeiro; a mesma @ cadastrada à mão não duplica.
   const ordenadas = linhas.slice().sort((a, b) => (a.external_id ? 0 : 1) - (b.external_id ? 0 : 1));
   for (const l of ordenadas) {
     const u = usernameDe(l.handle);
-    if (!u || porUsuario[u]) continue;
+    if (u && porUsuario[u]) {
+      // A mesma @ cadastrada duas vezes (uma sem id do Instagram): vira apelido da conta que ficou.
+      apelidos[l.id] = porUsuario[u].id;
+      continue;
+    }
+    if (!u) continue;
     const conta = { id: l.id, username: u, igUserId: l.external_id || null, nome: l.display_name || null };
     porUsuario[u] = conta;
     saida.push(conta);
   }
-  return saida;
+  return { contas: saida, apelidos };
 }
 
 const chaveDaConta = (c: ContaDoInstagram | null) => (c ? c.id : "sem_conta");
@@ -476,7 +490,10 @@ async function previaGuardada(clientId: string, conta: ContaDoInstagram | null, 
   };
 }
 
-async function previaDoPerfil(clientId: string, conta: ContaDoInstagram | null): Promise<PerfilNaPrevia> {
+async function previaDoPerfil(clientId: string, conta: ContaDoInstagram | null, comMarcas = false): Promise<PerfilNaPrevia> {
+  if (!conta && comMarcas) {
+    return { username: "", nome: "", bio: "", site: "", seguidores: null, seguindo: null, posts: null, foto_url: null, midias: [], fonte: "nenhuma", lido_em: null, aviso: "Esta marca ainda não tem Instagram ligado ao projeto dela. Ligue a conta ao projeto em Integrações." };
+  }
   if (!conta) return previaGuardada(clientId, null, "O cliente ainda não tem Instagram conectado. Conecte em Integrações.");
   const tokens = await tokensDoInstagram(clientId);
   if (!tokens.length) return previaGuardada(clientId, conta, "Sem conexão do Instagram para ler ao vivo: mostrando o que o robô de métricas guardou.");
@@ -492,17 +509,17 @@ async function previaDoPerfil(clientId: string, conta: ContaDoInstagram | null):
 
 type Negocio = EstadoDaBio["negocio"] & { cidade_texto: string; dossie: string };
 
-async function negocioDoCliente(clientId: string, comDossie: boolean): Promise<Negocio> {
+async function negocioDoCliente(clientId: string, comDossie: boolean, marca: MarcaDoCliente | null = null): Promise<Negocio> {
   const [perfil, ctx, dossie] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
-    lerContextoConsolidado(servico(), clientId).catch(() => ({})),
+    lerContextoDaMarca(servico(), clientId, marca).catch(() => ({})),
     comDossie ? lerDossie(servico(), clientId, 1800).catch(() => null) : Promise.resolve(null),
   ]);
   const p = (perfil.data || {}) as { company_name?: string | null; full_name?: string | null };
   const c = ctx as Record<string, unknown>;
   const diferenciais = Array.isArray(c.diferenciais) ? (c.diferenciais as unknown[]).map((d) => umaLinha(d, 120)).filter(Boolean).slice(0, 6) : [];
   return {
-    nome: umaLinha(p.company_name || p.full_name || "Cliente", 120),
+    nome: umaLinha((marca && !marca.principal ? marca.nome : "") || p.company_name || p.full_name || "Cliente", 120),
     o_que_faz: umaLinha(c.negocio, 600),
     publico: umaLinha(c.publico, 400),
     oferta: umaLinha(c.oferta, 400),
@@ -519,9 +536,10 @@ const temContexto = (n: Negocio) => !!(n.o_que_faz || n.oferta || n.publico);
 
 type KitDoCliente = { paleta: ReturnType<typeof coresDoKit>; estilo: string | null; logo: { bucket: string; caminho: string } | null };
 
-async function kitDoCliente(clientId: string): Promise<KitDoCliente> {
+async function kitDoCliente(clientId: string, marca: MarcaDoCliente | null = null): Promise<KitDoCliente> {
   const { data } = await servico().from("cliente_kit_marca").select("paleta, estilo, logo_path, logo_file_id").eq("client_id", clientId).maybeSingle();
-  const k = (data || {}) as { paleta?: unknown; estilo?: string | null; logo_path?: string | null; logo_file_id?: string | null };
+  // Outra marca: paleta e logo só dela (trava da marca); principal: o kit do cliente com a marca por cima.
+  const k = kitComMarca((data || {}) as Record<string, unknown>, marca) as { paleta?: unknown; estilo?: string | null; logo_path?: string | null; logo_file_id?: string | null };
   let logo: KitDoCliente["logo"] = k.logo_path ? { bucket: BUCKET, caminho: k.logo_path } : null;
   if (!logo && k.logo_file_id) {
     const { data: f } = await servico().from("files").select("storage_bucket, storage_path").eq("id", k.logo_file_id).eq("client_id", clientId).maybeSingle();
@@ -544,6 +562,9 @@ export type ItemDaGrade = {
   publicacao: Record<string, unknown> | null;
   dia_da_peca: string | null;
   task_id: string | null;
+  /** Rodada 3: o post inteiro no calendário (lâminas na ordem e a legenda). */
+  laminas: string[];
+  legenda: string;
 };
 
 const FORMATO_DO_POST: Record<string, string> = { carousel: "carrossel", static: "estatico", design: "estatico", reel: "reel", video: "reel", story: "outro" };
@@ -553,23 +574,26 @@ const FORMATO_DO_POST: Record<string, string> = { carousel: "carrossel", static:
  * publicados no Instagram), com o trabalho do Estúdio ou da Mesa Foto quando
  * há. Só entram os que têm arte ou foto (a grade é visual).
  */
-async function gradePlanejada(clientId: string): Promise<ItemDaGrade[]> {
-  const { data: postsData } = await servico()
+async function gradePlanejada(clientId: string, marca: MarcaLeve | null = null, marcas: MarcaLeve[] = []): Promise<ItemDaGrade[]> {
+  const { data: postsBrutos } = await servico()
     .from("editorial_posts")
-    .select("id, title, content_type, production_status, primary_file_id, updated_at")
+    .select("id, title, content_type, production_status, primary_file_id, default_caption, project_id, updated_at")
     .eq("client_id", clientId)
     .is("archived_at", null)
     .in("production_status", ["ready", "production"])
     .order("updated_at", { ascending: false })
     .limit(80);
-  const posts = (postsData as Array<{ id: string; title: string; content_type: string; production_status: string; primary_file_id: string | null }> | null) ?? [];
+  const todosOsPosts = (postsBrutos as Array<{ id: string; title: string; content_type: string; production_status: string; primary_file_id: string | null; default_caption: string | null; project_id: string | null }> | null) ?? [];
+  // Com marca, só os posts dos projetos dela (a outra marca nunca entra na grade desta).
+  const projetosPermitidos = marca ? projetosDaMarca(marca, marcas, Array.from(new Set(todosOsPosts.map((p) => p.project_id).filter((x): x is string => !!x)))) : null;
+  const posts = projetosPermitidos ? todosOsPosts.filter((p) => !!p.project_id && projetosPermitidos.indexOf(p.project_id) >= 0) : todosOsPosts;
   if (!posts.length) return [];
   const ids = posts.map((p) => p.id);
   const [pubs, trabs] = await Promise.all([
     servico().from("editorial_publications").select("id, post_id, status, platform, scheduled_at, published_at, permalink").in("post_id", ids).eq("platform", "instagram"),
     servico()
       .from("estudio_trabalhos")
-      .select("id, task_id, status, file_ids, entrega_status, entrega_aviso, post_id, aprovado_em, publicar_em, publicar_em_confirmado_em, publicar_ao_aprovar, agenda_aviso, ajustes_do_cliente, cards, direcao, atualizado_em")
+      .select("id, task_id, status, file_ids, entrega_status, entrega_aviso, post_id, aprovado_em, publicar_em, publicar_em_confirmado_em, publicar_ao_aprovar, agenda_aviso, ajustes_do_cliente, cards, direcao, legenda, atualizado_em")
       .eq("client_id", clientId)
       .in("post_id", ids),
   ]);
@@ -609,7 +633,7 @@ async function gradePlanejada(clientId: string): Promise<ItemDaGrade[]> {
     if (!imagem) continue;
     const soFotos = !!(t && t.direcao && typeof t.direcao === "object" && (t.direcao as Record<string, unknown>).so_fotos === true);
     const data = (pub && (pub.scheduled_at as string)) || (t && (t.publicar_em as string)) || null;
-    const { cards: _c, direcao: _d, atualizado_em: _a, ...peca } = t || ({} as Record<string, unknown>);
+    const { cards: _c, direcao: _d, atualizado_em: _a, legenda: _l, ...peca } = t || ({} as Record<string, unknown>);
     itens.push({
       id: p.id,
       titulo: umaLinha(p.title, 120) || "Post",
@@ -623,6 +647,8 @@ async function gradePlanejada(clientId: string): Promise<ItemDaGrade[]> {
       publicacao: pub,
       dia_da_peca: t && t.task_id ? dias[String(t.task_id)] || null : null,
       task_id: t && t.task_id ? String(t.task_id) : null,
+      laminas: t ? laminasDoTrabalho(t.cards) : [imagem.caminho],
+      legenda: limparTexto(String((t && t.legenda) || p.default_caption || ""), 2200),
     });
   }
   return itens.slice(0, 60);
@@ -737,38 +763,86 @@ const raciocinioBaixo = (m: ModeloIa) => ["low", "minimal", "medium"].find((r) =
 
 // ------------------------------------------------------------------ ações
 
-type Contexto = { clientId: string; contas: ContaDoInstagram[]; conta: ContaDoInstagram | null; nome: string };
+type OutraMarca = { id: string; nome: string; contas: Array<{ id: string; username: string }>; paginas: Array<{ id: string; nome: string }> };
+
+type Contexto = {
+  clientId: string;
+  contas: ContaDoInstagram[];
+  conta: ContaDoInstagram | null;
+  nome: string;
+  /** Rodada 3 (28/09): a marca aberta (Acerbi ou CME) e só as contas e páginas dela. */
+  marca: MarcaDoCliente | null;
+  marcas: MarcaLeve[];
+  paginas: PaginaDoCliente[];
+  outrasMarcas: OutraMarca[];
+};
+
+async function ligacoesDasContas(clientId: string): Promise<LigacaoDaConta[]> {
+  const { data, error } = await servico().from("project_external_accounts").select("external_account_id, project_id").eq("client_id", clientId);
+  if (error) return [];
+  return ((data as LigacaoDaConta[] | null) ?? []).filter((l) => !!l.external_account_id && !!l.project_id);
+}
 
 async function abrir(ch: Chamador, corpo: Record<string, unknown>): Promise<Contexto> {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
-  const [contas, perfil] = await Promise.all([
+  const [lidas, perfil, marcas, todasAsPaginas] = await Promise.all([
     contasDoCliente(clientId),
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
+    marcasDoCliente(servico(), clientId),
+    paginasDoCliente(clientId),
   ]);
+  const todasAsContas = lidas.contas;
+  const apelidos = lidas.apelidos;
   const p = (perfil.data || {}) as { company_name?: string | null; full_name?: string | null };
   const nome = String(p.company_name || p.full_name || "");
-  return { clientId, contas, conta: escolherConta(contas, corpo.conta_id, nome), nome };
+  if (!marcas.length) {
+    return { clientId, contas: todasAsContas, conta: escolherConta(todasAsContas, corpo.conta_id, nome), nome, marca: null, marcas, paginas: todasAsPaginas, outrasMarcas: [] };
+  }
+  const [marca, ligacoesBrutas] = await Promise.all([resolverMarca(servico(), clientId, { marca_id: corpo.marca_id }), ligacoesDasContas(clientId)]);
+  // A ligação da linha repetida vale para a conta que ficou (a Acerbi tem @cmeacerbi2025 duas vezes).
+  const ligacoes = ligacoesBrutas.map((l) => (apelidos[l.external_account_id] ? { ...l, external_account_id: apelidos[l.external_account_id] } : l));
+  const contas = contasDaMarca(todasAsContas, ligacoes, marca, marcas);
+  const paginas = contasDaMarca(todasAsPaginas, ligacoes, marca, marcas);
+  const pedida = typeof corpo.conta_id === "string" ? corpo.conta_id : "";
+  if (pedida && !contas.some((x) => x.id === pedida) && todasAsContas.some((x) => x.id === pedida)) {
+    throw new ErroHttp(403, "conta_de_outra_marca", "Esta conta é de outra marca do cliente. Troque a marca no topo para abrir.");
+  }
+  const pedidaPagina = typeof corpo.pagina_id === "string" ? corpo.pagina_id : "";
+  if (pedidaPagina && !paginas.some((x) => x.id === pedidaPagina) && todasAsPaginas.some((x) => x.id === pedidaPagina)) {
+    throw new ErroHttp(403, "conta_de_outra_marca", "Esta página é de outra marca do cliente. Troque a marca no topo para abrir.");
+  }
+  const outrasMarcas: OutraMarca[] = marcas
+    .filter((m) => !marca || m.id !== marca.id)
+    .map((m) => ({
+      id: m.id,
+      nome: m.nome,
+      contas: contasDaMarca(todasAsContas, ligacoes, m, marcas).map((x) => ({ id: x.id, username: x.username })),
+      paginas: contasDaMarca(todasAsPaginas, ligacoes, m, marcas).map((x) => ({ id: x.id, nome: x.nome })),
+    }));
+  return { clientId, contas, conta: escolherConta(contas, corpo.conta_id, marca && !marca.principal ? marca.nome : nome), nome, marca, marcas, paginas, outrasMarcas };
 }
 
 async function painel(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
   const chave = chaveDaConta(c.conta);
   const [perfil, grade, kit, negocio, plano, capas, redes, conversaId, paginas] = await Promise.all([
-    previaDoPerfil(c.clientId, c.conta),
-    gradePlanejada(c.clientId),
-    kitDoCliente(c.clientId),
-    negocioDoCliente(c.clientId, false),
+    previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
+    gradePlanejada(c.clientId, c.marca, c.marcas),
+    kitDoCliente(c.clientId, c.marca),
+    negocioDoCliente(c.clientId, false, c.marca),
     lerPlano(c.clientId, chave),
     capasDoCliente(c.clientId, chave),
     redesDoCliente(c.clientId),
     conversaDoCliente(c.clientId, ch.userId, false),
-    paginasDoCliente(c.clientId),
+    Promise.resolve(c.paginas),
   ]);
   const mensagens = await mensagensDaConversa(conversaId);
   return json({
     contas: c.contas.map((x) => ({ id: x.id, username: x.username, conectada: !!x.igUserId })),
     paginas: paginas.map((p) => ({ id: p.id, nome: p.nome, conectada: !!p.pageId })),
+    marca: c.marca ? { id: c.marca.id, nome: c.marca.nome, principal: c.marca.principal } : null,
+    outras_marcas: c.outrasMarcas,
     conta_id: c.conta ? c.conta.id : null,
     perfil,
     grade: { itens: grade, ordem: plano.ordem },
@@ -794,7 +868,7 @@ const extensao = (mime: string) => (mime === "image/png" ? "png" : mime === "ima
 
 async function fotoDoPerfil(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
-  const perfil = await previaDoPerfil(c.clientId, c.conta);
+  const perfil = await previaDoPerfil(c.clientId, c.conta, !!c.marcas.length);
   const url = perfil.foto_url;
   if (!url || !/^https:\/\//i.test(url)) throw new ErroHttp(404, "sem_foto", "Não achei a foto do perfil do Instagram deste cliente. Conecte a conta em Integrações.");
   let bytes: Uint8Array;
@@ -821,7 +895,7 @@ async function fotoDoPerfil(ch: Chamador, corpo: Record<string, unknown>): Promi
 async function bio(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
   const forcar = corpo.forcar === true;
-  const [perfil, negocio] = await Promise.all([previaDoPerfil(c.clientId, c.conta), negocioDoCliente(c.clientId, true)]);
+  const [perfil, negocio] = await Promise.all([previaDoPerfil(c.clientId, c.conta, !!c.marcas.length), negocioDoCliente(c.clientId, true, c.marca)]);
   const estado: EstadoDaBio = {
     negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
     perfil: { nome: perfil.nome, username: perfil.username, bio: perfil.bio, link: perfil.site },
@@ -925,12 +999,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   const mensagem = limparTexto(corpo.mensagem, 2000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
   const [perfil, negocio, kit, grade, conversaId, paginas] = await Promise.all([
-    previaDoPerfil(c.clientId, c.conta),
-    negocioDoCliente(c.clientId, true),
-    kitDoCliente(c.clientId),
-    gradePlanejada(c.clientId),
+    previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
+    negocioDoCliente(c.clientId, true, c.marca),
+    kitDoCliente(c.clientId, c.marca),
+    gradePlanejada(c.clientId, c.marca, c.marcas),
     conversaDoCliente(c.clientId, ch.userId, true),
-    paginasDoCliente(c.clientId),
+    Promise.resolve(c.paginas),
   ]);
   const capas = await capasDoCliente(c.clientId, chaveDaConta(c.conta));
   const historico = await mensagensDaConversa(conversaId, MAX_HISTORICO);
@@ -993,7 +1067,7 @@ async function gerarCapa(ch: Chamador, corpo: Record<string, unknown>): Promise<
   const c = await abrir(ch, corpo);
   const { nome } = nomeDoDestaque(corpo.nome);
   if (!nome) throw new ErroHttp(400, "nome_vazio", "Dê um nome ao destaque.");
-  const kit = await kitDoCliente(c.clientId);
+  const kit = await kitDoCliente(c.clientId, c.marca);
   if (!kit.paleta.length) {
     throw new ErroHttp(409, "sem_paleta", "O cliente ainda não tem cores no kit. Defina a paleta em Contexto, Marca, antes de gerar as capas (as capas usam só as cores da marca).", {
       caminho: caminhoNaArea("mesa", { clientId: c.clientId, etapa: "contexto", rotulo: "Ir para Contexto" }),
@@ -1012,7 +1086,7 @@ async function gerarCapa(ch: Chamador, corpo: Record<string, unknown>): Promise<
   const saida = await chamarImagem({
     clientId: c.clientId,
     modeloId: m.id,
-    prompt: promptDaCapa({ nome, icone }, estilo, kit.estilo),
+    prompt: promptDaCapa({ nome, icone, conceito: limparTexto(corpo.conceito, 200).replace(/\n/g, " ") || undefined }, estilo, kit.estilo),
     referencias: [],
     qualidade,
     tamanho: "1024x1024",
@@ -1095,13 +1169,13 @@ async function arquivarRede(ch: Chamador, corpo: Record<string, unknown>): Promi
 /** Só a prévia do perfil, lida de novo (a tela chama ao abrir e a cada 3 minutos). */
 async function perfilAoVivo(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
-  return json({ conta_id: c.conta ? c.conta.id : null, perfil: await previaDoPerfil(c.clientId, c.conta) });
+  return json({ conta_id: c.conta ? c.conta.id : null, perfil: await previaDoPerfil(c.clientId, c.conta, !!c.marcas.length) });
 }
 
 /** Página do Facebook do cliente (só as que estão ligadas a ele). */
 async function pagina(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
-  const paginas = await paginasDoCliente(c.clientId);
+  const paginas = c.paginas;
   const alvo = paginas.find((p) => p.id === String(corpo.pagina_id || "")) || paginas[0];
   if (!alvo) throw new ErroHttp(404, "sem_pagina", "O cliente não tem página do Facebook conectada. Conecte em Config, Integrações.");
   return json({ pagina_id: alvo.id, pagina: await lerPagina(c.clientId, alvo) });
@@ -1113,16 +1187,47 @@ async function pagina(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
  * IA, o modelo de texto propõe antes até 6 destaques próprios do cliente, que
  * entram no mesmo pool (gerar a mais e escolher; sem laço).
  */
+/** O que dá a cara da marca aos destaques: campanhas ativas, posts que mais funcionaram e nomes já usados em outros clientes. */
+async function materialDaMarca(clientId: string, conta: ContaDoInstagram | null): Promise<{ campanhas: string[]; melhores: string[]; nomesDeOutros: string[] }> {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [camps, posts, outros] = await Promise.all([
+    servico().from("mesa_campanhas").select("nome, objetivo, conceito, periodo_fim, status").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(6),
+    conta
+      ? servico().from("social_post_metrics").select("caption, total_interactions, reach").eq("client_id", clientId).eq("external_account_id", conta.id).order("total_interactions", { ascending: false, nullsFirst: false }).limit(5)
+      : Promise.resolve({ data: [] as unknown[] }),
+    servico().from("cliente_instagram_destaques").select("nome").neq("client_id", clientId).is("arquivado_em", null).limit(400),
+  ]);
+  const campanhas = (((camps as { data: unknown }).data as Array<Record<string, unknown>> | null) ?? [])
+    .filter((x) => !x.periodo_fim || String(x.periodo_fim) >= hoje)
+    .map((x) => umaLinha([x.nome, x.objetivo, x.conceito].filter(Boolean).join(": "), 200));
+  const melhores = (((posts as { data: unknown }).data as Array<Record<string, unknown>> | null) ?? []).map((x) => umaLinha(x.caption, 160)).filter(Boolean);
+  const contagem: Record<string, number> = {};
+  for (const x of (((outros as { data: unknown }).data as Array<{ nome: string }> | null) ?? [])) contagem[x.nome] = (contagem[x.nome] || 0) + 1;
+  return { campanhas, melhores, nomesDeOutros: Object.keys(contagem) };
+}
+
+/**
+ * Destaques da marca (rodada 3, 28/09: "muito genéricos; tem que ser com base
+ * na marca"). Com IA (custo antes, no botão), o modelo cria 8 destaques
+ * próprios do cliente a partir do contexto da marca, do dossiê, das
+ * campanhas ativas, dos posts que mais funcionaram, da bio e da cidade, cada
+ * um com o conceito visual da capa; tira os nomes já usados em outros
+ * clientes; e o Jev pontua os próprios e os típicos numa chamada só. Os
+ * próprios vêm primeiro; os típicos só completam (plano B). Sem IA: só a
+ * estrutura dos típicos (Jev), que a tela mostra como base.
+ */
 async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
   const comIa = corpo.com_ia === true;
-  const [perfil, negocio, capas] = await Promise.all([
-    previaDoPerfil(c.clientId, c.conta),
-    negocioDoCliente(c.clientId, comIa),
+  const [perfil, negocio, capas, kit] = await Promise.all([
+    previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
+    negocioDoCliente(c.clientId, comIa, c.marca),
     capasDoCliente(c.clientId, chaveDaConta(c.conta)),
+    kitDoCliente(c.clientId, c.marca),
   ]);
+  const material = comIa ? await materialDaMarca(c.clientId, c.conta) : { campanhas: [], melhores: [], nomesDeOutros: [] };
   const estado = {
-    negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, diferenciais: negocio.diferenciais },
+    negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
     perfil: {
       username: perfil.username,
       bio: perfil.bio,
@@ -1133,9 +1238,18 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
     },
   };
   let custo = 0;
-  let extras: unknown = [];
+  let proprios: ReturnType<typeof propostasDaMarca> = [];
   if (comIa) {
     const modelo = await modeloDeTexto(corpo.modelo_id);
+    const dados = [
+      `MARCA: ${JSON.stringify(estado.negocio)}`,
+      `PERFIL: ${JSON.stringify(estado.perfil)}`,
+      `KIT: cores ${kit.paleta.map((x) => `${x.nome || x.papel || ""} ${x.hex}`.trim()).join(", ") || "sem paleta"}; estilo ${kit.estilo || "-"}; logo ${kit.logo ? "sim" : "não"}.`,
+      material.campanhas.length ? `CAMPANHAS ATIVAS: ${material.campanhas.join(" | ")}` : "",
+      material.melhores.length ? `POSTS QUE MAIS FUNCIONARAM (legendas): ${material.melhores.join(" | ")}` : "",
+      negocio.dossie ? `DOSSIÊ (resumo): ${negocio.dossie}` : "",
+      material.nomesDeOutros.length ? `EVITE (já usados em outros clientes): ${material.nomesDeOutros.slice(0, 80).join(", ")}` : "",
+    ].filter(Boolean).join("\n\n");
     const r = await chamarTexto({
       clientId: c.clientId,
       tarefa: "contexto",
@@ -1143,19 +1257,19 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
       modeloId: modelo.id,
       raciocinio: raciocinioBaixo(modelo),
       sistema: SISTEMA_DOS_DESTAQUES,
-      mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(estado)}${negocio.dossie ? `\n\nDOSSIÊ (resumo): ${negocio.dossie}` : ""}` }],
+      mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${dados}` }],
       esquemaJson: ESQUEMA_DOS_DESTAQUES as unknown as Record<string, unknown>,
-      maxTokensSaida: 700,
+      maxTokensSaida: 1400,
       referencia: { tipo: REF_CONVERSA, id: c.clientId },
       criadoPor: ch.userId,
     });
     custo += r.custoUsd;
-    extras = ((r.json ?? {}) as { destaques?: unknown }).destaques;
+    proprios = semNomesDeOutros(propostasDaMarca(((r.json ?? {}) as { destaques?: unknown }).destaques), material.nomesDeOutros);
   }
-  const pool = poolDeDestaques(extras);
+  const tipicos = CANDIDATOS_A_DESTAQUE;
   let respostas: Record<string, RespostaJev> | null = null;
   try {
-    const r = await jevPerguntar({ state: estado, questions: perguntasDosDestaques(pool) });
+    const r = await jevPerguntar({ state: estado, questions: perguntasDosDestaques(proprios.concat(tipicos)) });
     respostas = r.answers;
     const cobranca = await cobrarJev(r, { clientId: c.clientId, tarefa: "contexto", referencia: { tipo: REF_CONVERSA, id: c.clientId }, criadoPor: ch.userId });
     custo += cobranca ? cobranca.custoUsd : 0;
@@ -1163,7 +1277,8 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
     if (!(e instanceof JevErro)) throw e;
     console.error("[mesa-instagram] Jev dos destaques", { codigo: e.codigo });
   }
-  return json({ destaques: escolherDestaques(pool, respostas), sem_jev: !respostas, com_ia: comIa, custo_usd: arred(custo) });
+  const destaques = comIa ? escolherDestaquesDaMarca(proprios, tipicos, respostas) : escolherDestaques(tipicos, respostas);
+  return json({ destaques, proprios: proprios.length, sem_jev: !respostas, com_ia: comIa, marca: c.marca ? c.marca.nome : null, custo_usd: arred(custo) });
 }
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {

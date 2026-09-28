@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bot, Download, Loader2, Plus, Square, X } from "lucide-react";
+import { Archive, Bot, Download, ImagePlus, Loader2, Plus, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
@@ -20,7 +20,10 @@ import {
   type EstiloDaCapa,
 } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import { chamarInstagram, type CapaGuardada } from "./instagramApi";
-import { baixarDoStorage, baixarZipDasCapas, capaComIcone, capaComLogo, nomeDoArquivo, salvarBlob } from "./capaDoDestaque";
+import { baixarDoStorage, baixarZipDasCapas, capaComFoto, capaComIcone, capaComLogo, capaTipografica, nomeDoArquivo, salvarBlob } from "./capaDoDestaque";
+import { useFonteDaMarca } from "./fonteDaMarca";
+import NavegadorDePastas, { type ImagemEscolhida } from "../NavegadorDePastas";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Gerador de destaques. A lista (nome e ícone) vem da equipe, das sugestões
@@ -33,7 +36,16 @@ import { baixarDoStorage, baixarZipDasCapas, capaComIcone, capaComLogo, nomeDoAr
  * baixar (PNG 1080 x 1920) e subir pelo app.
  */
 
-type Modo = "icone" | "logo";
+/**
+ * Estilos de conjunto (rodada 3, 28/09: o dono escolhe antes de gerar tudo),
+ * todos com a trava da marca: cores do kit, fonte do cliente, logo do cliente.
+ * - icone: ícone de linha na cor da marca, com o objeto do negócio (IA, custo antes);
+ * - foto: foto real do acervo, recortada no círculo (sem custo, foto intacta);
+ * - tipografia: o nome na fonte da marca sobre a cor do kit (sem custo);
+ * - logo: a logo do kit no centro (sem custo).
+ */
+type Modo = "icone" | "foto" | "tipografia" | "logo";
+const MODOS: Modo[] = ["icone", "foto", "tipografia", "logo"];
 
 const nomesIguais = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -71,7 +83,10 @@ export default function GeradorDeDestaques({
   onArquivada,
   onPedirAoAgente,
   nomeDoCliente,
+  escopo,
 }: {
+  /** Cliente, marca e conta: cada perfil tem o seu estilo de capa. */
+  escopo?: string;
   contaId: string | null;
   paleta: CorDaPaleta[];
   logo: { bucket: string; caminho: string } | null;
@@ -85,13 +100,15 @@ export default function GeradorDeDestaques({
 }) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const avisarErro = useAvisarErro();
-  const [modo, setModo] = useEstadoDaTela<Modo>(`mesa:instagram:capa-modo:${clientId}`, "icone", { validar: (v) => v === "icone" || v === "logo" });
-  const [estilo, setEstilo] = useEstadoDaTela<EstiloDaCapa | null>(`mesa:instagram:capa-estilo:${clientId}`, null);
+  const [modo, setModo] = useEstadoDaTela<Modo>(`mesa:instagram:capa-modo:${escopo || clientId}`, "icone", { validar: (v) => MODOS.indexOf(v as Modo) >= 0 });
+  const [estilo, setEstilo] = useEstadoDaTela<EstiloDaCapa | null>(`mesa:instagram:capa-estilo:${escopo || clientId}`, null);
   const [modeloId, setModeloId] = useEstadoDaTela<string>(`mesa:instagram:capa-modelo:${clientId}`, "");
   const [qualidade, setQualidade] = useEstadoDaTela<Qualidade>(`mesa:instagram:capa-qualidade:${clientId}`, "baixa", { validar: (v) => v === "baixa" || v === "media" || v === "alta" });
   const [novo, setNovo] = useState("");
   const [andamento, setAndamento] = useState<{ feitos: number; total: number; atual: string } | null>(null);
   const [baixando, setBaixando] = useState<string | null>(null);
+  const [fotoPara, setFotoPara] = useState<number | null>(null);
+  const fonte = useFonteDaMarca(clientId);
   const [listaRecolhida, setListaRecolhida] = useRecolhido(`mesa:instagram:destaques-lista:${clientId}`, false);
   const [estiloRecolhido, setEstiloRecolhido] = useRecolhido(`mesa:instagram:destaques-estilo:${clientId}`, false);
   const parar = useRef(false);
@@ -136,6 +153,7 @@ export default function GeradorDeDestaques({
           ...(contaId ? { conta_id: contaId } : {}),
           nome: alvo[i].nome,
           icone: alvo[i].icone,
+          ...(alvo[i].conceito ? { conceito: alvo[i].conceito } : {}),
           estilo: estiloAtual,
           modelo_id: modeloId || undefined,
           qualidade,
@@ -177,6 +195,18 @@ export default function GeradorDeDestaques({
         const logoBlob = await baixarDoStorage(logo.bucket, logo.caminho);
         const capa = await capaComLogo(logoBlob, fundo);
         await baixarZipDasCapas(lista.map((d) => ({ nome: d.nome, blob: capa })), nomeDoCliente);
+      } else if (modo === "foto") {
+        const comFoto = lista.filter((d) => !!d.foto);
+        if (!comFoto.length) throw new Error("Escolha a foto de cada destaque na lista.");
+        const montadas: Array<{ nome: string; blob: Blob }> = [];
+        for (const d of comFoto) montadas.push({ nome: d.nome, blob: await capaComFoto(await baixarDoStorage((d.foto as { bucket: string }).bucket, (d.foto as { caminho: string }).caminho)) });
+        await baixarZipDasCapas(montadas, nomeDoCliente);
+        if (comFoto.length < lista.length) toast.message(`${lista.length - comFoto.length} sem foto ficaram de fora.`);
+      } else if (modo === "tipografia") {
+        if (!fonte.familia) throw new Error(fonte.motivo || "A fonte da marca ainda não carregou.");
+        const montadas: Array<{ nome: string; blob: Blob }> = [];
+        for (const d of lista) montadas.push({ nome: d.nome, blob: await capaTipografica({ texto: d.nome, familia: fonte.familia, fundo, cor: desenho }) });
+        await baixarZipDasCapas(montadas, nomeDoCliente);
       } else {
         const montadas: Array<{ nome: string; blob: Blob }> = [];
         for (const c of capas) {
@@ -202,8 +232,41 @@ export default function GeradorDeDestaques({
     }
   };
 
+  const escolherFoto = async (e: ImagemEscolhida) => {
+    if (fotoPara === null) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      let onde: { bucket: string; caminho: string } | null = null;
+      if (e.origem === "acervo") {
+        const { data } = await db.from("cliente_imagens").select("client_id, storage_bucket, storage_path").eq("id", e.id).maybeSingle();
+        if (data && data.client_id === clientId && data.storage_path) onde = { bucket: String(data.storage_bucket || "mesa"), caminho: String(data.storage_path) };
+      } else if (e.origem === "workspace") {
+        const { data } = await db.from("workspace_nodes").select("client_id, storage_path").eq("id", e.id).maybeSingle();
+        if (data && data.client_id === clientId && data.storage_path) onde = { bucket: "workspace", caminho: String(data.storage_path) };
+      } else {
+        const { data } = await db.from("files").select("client_id, storage_bucket, storage_path").eq("id", e.id).maybeSingle();
+        if (data && data.client_id === clientId && data.storage_bucket && data.storage_path) onde = { bucket: String(data.storage_bucket), caminho: String(data.storage_path) };
+      }
+      if (!onde) throw new Error("Não achei a foto escolhida.");
+      const l = lista.slice();
+      l[fotoPara] = { ...l[fotoPara], foto: onde };
+      onLista(l);
+      setFotoPara(null);
+    } catch (err) {
+      toast.error("Não deu para usar a foto", { description: textoDoErro(err) });
+    }
+  };
+
   return (
     <div className="min-w-0 space-y-3" data-gerador-de-destaques="">
+      <NavegadorDePastas
+        aberto={fotoPara !== null}
+        onOpenChange={(v) => !v && setFotoPara(null)}
+        titulo={fotoPara !== null && lista[fotoPara] ? `Foto do destaque ${lista[fotoPara].nome}` : "Foto do destaque"}
+        descricao="Uma foto real do cliente. Ela entra inteira, só recortada para o círculo do destaque."
+        onEscolher={(e) => void escolherFoto(e)}
+      />
       <p className={juntar(texto.auxiliar, "leading-5")}>
         A API do Instagram não lê nem cria destaques: gere as capas aqui, baixe e suba pelo app (Novo destaque, Editar capa). Nome até {LIMITES_DO_PERFIL.destaqueVisivel} letras para não cortar.
       </p>
@@ -230,7 +293,13 @@ export default function GeradorDeDestaques({
                 <span className={juntar("ml-1 w-9 shrink-0 text-[11px] tabular-nums", n > LIMITES_DO_PERFIL.destaqueVisivel ? "text-warning" : "text-muted-foreground")} title={n > LIMITES_DO_PERFIL.destaqueVisivel ? "Passa de 10: o Instagram corta com reticências" : ""}>
                   {n}/{LIMITES_DO_PERFIL.destaqueVisivel}
                 </span>
-                <input className={juntar(campo, "ml-1 h-8 min-w-0 flex-1")} value={d.icone} onChange={(e) => mudarItem(i, "icone", e.target.value)} aria-label={`Ícone do destaque ${i + 1}`} placeholder="Ícone (ex.: alfinete de mapa)" />
+                <input className={juntar(campo, "ml-1 h-8 min-w-0 flex-1")} value={d.icone} onChange={(e) => mudarItem(i, "icone", e.target.value)} aria-label={`Ícone do destaque ${i + 1}`} placeholder="Objeto do negócio (ex.: armação de óculos)" title={d.conceito || undefined} />
+                {modo === "foto" && (
+                  <button type="button" className={juntar(botao.secundario, "ml-1 h-8 shrink-0 px-2 text-[11.5px]", d.foto ? "border-success/50" : "")} onClick={() => setFotoPara(i)} aria-label={`Escolher a foto de ${d.nome}`}>
+                    <ImagePlus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    {d.foto ? "Trocar" : "Foto"}
+                  </button>
+                )}
                 {feita && <span className={juntar(etiqueta, "ml-1.5 bg-success/15 text-success")}>capa</span>}
                 <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => onLista(lista.filter((_, k) => k !== i))} aria-label={`Tirar ${d.nome}`}>
                   <X className="h-3.5 w-3.5" />
@@ -279,7 +348,7 @@ export default function GeradorDeDestaques({
           titulo="Estilo e modelo"
           recolhido={estiloRecolhido}
           onAlternar={() => setEstiloRecolhido(!estiloRecolhido)}
-          resumo={modo === "logo" ? "logo da marca" : `ícone ${traco === "cheio" ? "cheio" : "de linha"}, qualidade ${qualidade === "baixa" ? "rascunho" : qualidade}`}
+          resumo={modo === "logo" ? "logo da marca" : modo === "foto" ? "foto real do acervo" : modo === "tipografia" ? `tipografia ${fonte.nome || "da marca"}` : `ícone ${traco === "cheio" ? "cheio" : "de linha"}, qualidade ${qualidade === "baixa" ? "rascunho" : qualidade}`}
         />
       )}
       {semPaleta ? (
@@ -293,19 +362,22 @@ export default function GeradorDeDestaques({
         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
           <div className="min-w-0 space-y-2">
             <SeletorCompacto
-              rotulo="Estilo da capa"
+              rotulo="Estilo do conjunto"
               valor={modo}
               onEscolher={(v) => setModo(v as Modo)}
+              listaQuandoNaoCabe
               opcoes={[
-                { valor: "icone", rotulo: "Ícone gerado" },
-                { valor: "logo", rotulo: "Logo da marca", desativada: !logo },
+                { valor: "icone", rotulo: "Ícone da marca", descricao: "Objeto do negócio em linha, na cor da marca (IA)" },
+                { valor: "foto", rotulo: "Foto real", descricao: "Foto do acervo recortada no círculo (sem custo)" },
+                { valor: "tipografia", rotulo: "Tipografia", descricao: "O nome na fonte da marca (sem custo)", desativada: !!fonte.motivo },
+                { valor: "logo", rotulo: "Logo", descricao: "A logo do kit no centro (sem custo)", desativada: !logo },
               ]}
             />
             <Cores paleta={paleta} valor={fundo} onEscolher={(hex) => mudarEstilo({ fundo: hex })} rotulo="Fundo (cor do kit)" />
-            {modo === "icone" && (
+            {(modo === "icone" || modo === "tipografia") && (
               <>
-                <Cores paleta={paleta} valor={desenho} onEscolher={(hex) => mudarEstilo({ desenho: hex })} rotulo="Desenho (cor do kit)" />
-                <SeletorCompacto
+                <Cores paleta={paleta} valor={desenho} onEscolher={(hex) => mudarEstilo({ desenho: hex })} rotulo={modo === "tipografia" ? "Letra (cor do kit)" : "Desenho (cor do kit)"} />
+                {modo === "icone" && <SeletorCompacto
                   rotulo="Traço"
                   valor={traco}
                   onEscolher={(v) => mudarEstilo({ traco: v === "cheio" ? "cheio" : "linha" })}
@@ -313,7 +385,7 @@ export default function GeradorDeDestaques({
                     { valor: "linha", rotulo: "Linha" },
                     { valor: "cheio", rotulo: "Cheio" },
                   ]}
-                />
+                />}
               </>
             )}
           </div>
@@ -324,7 +396,9 @@ export default function GeradorDeDestaques({
             </div>
           ) : (
             <div className="min-w-0 rounded-md bg-muted/50 px-3 py-2 text-[12.5px] leading-5 text-muted-foreground">
-              A logo do kit vai inteira no centro, sobre a cor escolhida. Montado no navegador, sem custo e sem redesenhar a logo.
+              {modo === "logo" && "A logo do kit vai inteira no centro, sobre a cor escolhida. Montado no navegador, sem custo e sem redesenhar a logo."}
+              {modo === "foto" && "Escolha uma foto do acervo em cada destaque. Ela entra inteira, só recortada para o círculo. Sem custo."}
+              {modo === "tipografia" && (fonte.motivo || `O nome de cada destaque na fonte ${fonte.nome || "da marca"}, na cor escolhida, sobre o fundo do kit. Sem custo.`)}
             </div>
           )}
         </div>
@@ -346,9 +420,14 @@ export default function GeradorDeDestaques({
               disabled={!pendentes.length || !!andamento || !modeloId}
             />
           ) : (
-            <button type="button" className={botao.primario} onClick={() => void baixarTodas()} disabled={!lista.length || !logo || !!baixando}>
+            <button
+              type="button"
+              className={botao.primario}
+              onClick={() => void baixarTodas()}
+              disabled={!lista.length || !!baixando || (modo === "logo" && !logo) || (modo === "tipografia" && !fonte.familia) || (modo === "foto" && !lista.some((d) => !!d.foto))}
+            >
               {baixando === "todas" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
-              Baixar {lista.length} capas com a logo
+              Baixar {modo === "foto" ? lista.filter((d) => !!d.foto).length : lista.length} capas ({modo === "logo" ? "logo" : modo === "foto" ? "foto" : "tipografia"})
             </button>
           )}
           {andamento && (

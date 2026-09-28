@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ExternalLink, Layers, Play } from "lucide-react";
+import { ExternalLink, Layers, Lock, Play } from "lucide-react";
 import { etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
 import { iniciaisDe } from "@/components/admin/LogoDoCliente";
@@ -57,13 +57,16 @@ function Numero({ valor, rotulo }: { valor: number | null; rotulo: string }) {
 
 const mesmoNome = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export type BolinhaDoDestaque = { chave: string; nome: string; caminho: string | null };
+export type BolinhaDoDestaque = { chave: string; nome: string; caminho: string | null; bucket?: string };
 
 /** Bolinhas da fileira: a lista na ordem (com a capa quando já existe) e depois as capas fora da lista. */
 export function bolinhasDosDestaques(capas: CapaGuardada[], lista: DestaqueProposto[]): BolinhaDoDestaque[] {
   const saida: BolinhaDoDestaque[] = lista.map((d, i) => {
     const capa = capas.find((c) => mesmoNome(c.nome, d.nome));
-    return { chave: capa ? capa.id : `plano-${i}`, nome: d.nome, caminho: capa ? capa.caminho : null };
+    // Capa gerada; sem ela, a foto do acervo escolhida (estilo foto); sem nada, a bolinha planejada.
+    if (capa) return { chave: capa.id, nome: d.nome, caminho: capa.caminho };
+    if (d.foto) return { chave: `foto-${i}`, nome: d.nome, caminho: d.foto.caminho, bucket: d.foto.bucket };
+    return { chave: `plano-${i}`, nome: d.nome, caminho: null };
   });
   for (const c of capas) if (!lista.some((d) => mesmoNome(d.nome, c.nome))) saida.push({ chave: c.id, nome: c.nome, caminho: c.caminho });
   return saida;
@@ -74,19 +77,30 @@ export default function PreviaDoPerfil({
   capas,
   lista = [],
   corDaMarca,
+  fonteDaMarca,
   planejados,
   simulando,
+  onMover,
+  onAbrir,
+  travado,
 }: {
+  /** Simulação: arrastar um post planejado para o lugar de outro (ids). */
+  onMover?: (id: string, paraId: string) => void;
+  onAbrir?: (item: ItemDaGradeNaAba) => void;
+  travado?: (item: ItemDaGradeNaAba) => string | null;
   perfil: PerfilDaAba;
   capas: CapaGuardada[];
   /** Destaques planejados (a lista do gerador). */
   lista?: DestaqueProposto[];
   /** Fundo das bolinhas ainda sem capa (a primeira cor do kit). */
   corDaMarca?: string | null;
+  /** Família da fonte da marca já carregada (a letra da bolinha planejada sai nela). */
+  fonteDaMarca?: string | null;
   /** Na ordem de ir ao ar (só os escolhidos para a simulação). */
   planejados: ItemDaGradeNaAba[];
   simulando: boolean;
 }) {
+  const [arrastado, setArrastado] = useState<string | null>(null);
   const nome = perfil.nome || perfil.username || "Perfil";
   const plano = simulando ? planejados.slice().reverse() : [];
   const semNada = perfil.fonte === "nenhuma" && !perfil.midias.length;
@@ -108,9 +122,9 @@ export default function PreviaDoPerfil({
               <li key={b.chave} className="mx-1 flex w-[46px] shrink-0 flex-col items-center" data-bolinha={b.caminho ? "capa" : "planejada"}>
                 <span className={juntar("block h-[40px] w-[40px] overflow-hidden rounded-full p-[2px]", b.caminho ? "border border-border" : "border border-dashed border-muted-foreground/50")}>
                   {b.caminho ? (
-                    <ImagemDaMesa caminho={b.caminho} alt={`Capa ${b.nome}`} className="h-full w-full rounded-full" />
+                    <ImagemDaMesa caminho={b.caminho} bucket={b.bucket || "mesa"} alt={`Capa ${b.nome}`} className="h-full w-full rounded-full" />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center rounded-full text-[12px] font-semibold text-white" style={{ backgroundColor: corDaMarca || "#9ca3af" }}>
+                    <span className="flex h-full w-full items-center justify-center rounded-full text-[12px] font-semibold text-white" style={{ backgroundColor: corDaMarca || "#9ca3af", fontFamily: fonteDaMarca ? `"${fonteDaMarca}"` : undefined }}>
                       {b.nome ? b.nome.charAt(0).toUpperCase() : "?"}
                     </span>
                   )}
@@ -122,14 +136,40 @@ export default function PreviaDoPerfil({
         )}
         {!planejados.length && <p className={juntar(texto.auxiliar, "mt-2 text-center")}>Nenhum post na simulação: escolha em Grade e simulador.</p>}
         <ul className="mt-2 grid grid-cols-3 gap-[2px]" aria-label="Grade do perfil">
-          {plano.map((p, i) => (
-            <Celula key={`p-${p.id}`} planejado>
-              <ImagemDaMesa caminho={p.imagem ? p.imagem.caminho : null} bucket={p.imagem ? p.imagem.bucket : "mesa"} alt={p.titulo} className="absolute inset-0 h-full w-full" />
-              <span className={juntar(etiqueta, "pointer-events-none absolute left-1 top-1 bg-primary text-primary-foreground")} title={p.titulo}>
-                {planejados.length - i}º
-              </span>
-            </Celula>
-          ))}
+          {plano.map((p, i) => {
+            const trava = travado ? travado(p) : null;
+            return (
+              <li
+                key={`p-${p.id}`}
+                className={juntar("relative min-w-0 overflow-hidden bg-muted outline outline-2 -outline-offset-2", arrastado === p.id ? "opacity-50 outline-primary" : "outline-primary/70")}
+                style={{ paddingBottom: "133.333%" }}
+                draggable={!!onMover && !trava}
+                onDragStart={(e) => {
+                  try {
+                    e.dataTransfer.setData("text/plain", p.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  } catch {
+                    /* sem dataTransfer: fica o id guardado */
+                  }
+                  setArrastado(p.id);
+                }}
+                onDragEnd={() => setArrastado(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (onMover && arrastado && arrastado !== p.id) onMover(arrastado, p.id);
+                  setArrastado(null);
+                }}
+                data-celula-planejada={p.id}
+              >
+                <button type="button" className="absolute inset-0 block h-full w-full" onClick={() => onAbrir && onAbrir(p)} aria-label={`Abrir ${p.titulo}`} title={trava || p.titulo}>
+                  <ImagemDaMesa caminho={p.imagem ? p.imagem.caminho : null} bucket={p.imagem ? p.imagem.bucket : "mesa"} alt={p.titulo} className="absolute inset-0 h-full w-full" />
+                </button>
+                <span className={juntar(etiqueta, "pointer-events-none absolute left-1 top-1 bg-primary text-primary-foreground")}>{planejados.length - i}º</span>
+                {trava && <Lock className="pointer-events-none absolute right-1 top-1 h-3.5 w-3.5 text-white drop-shadow" aria-hidden="true" />}
+              </li>
+            );
+          })}
           {perfil.midias.map((m) => (
             <Celula key={m.id}>
               {m.imagem ? <img src={m.imagem} alt={m.legenda || "Post"} loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" /> : null}
@@ -175,9 +215,9 @@ export default function PreviaDoPerfil({
               <li key={b.chave} className="mx-1 flex w-[60px] shrink-0 flex-col items-center" data-bolinha={b.caminho ? "capa" : "planejada"}>
                 <span className={juntar("block h-[56px] w-[56px] overflow-hidden rounded-full p-[2px]", b.caminho ? "border border-border" : "border border-dashed border-muted-foreground/50")}>
                   {b.caminho ? (
-                    <ImagemDaMesa caminho={b.caminho} alt={`Capa ${b.nome}`} className="h-full w-full rounded-full" />
+                    <ImagemDaMesa caminho={b.caminho} bucket={b.bucket || "mesa"} alt={`Capa ${b.nome}`} className="h-full w-full rounded-full" />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center rounded-full text-[15px] font-semibold text-white" style={{ backgroundColor: corDaMarca || "#9ca3af" }} title="Planejado: gere a capa em Destaques">
+                    <span className="flex h-full w-full items-center justify-center rounded-full text-[15px] font-semibold text-white" style={{ backgroundColor: corDaMarca || "#9ca3af", fontFamily: fonteDaMarca ? `"${fonteDaMarca}"` : undefined }} title="Planejado: gere a capa em Destaques">
                       {nome && b.nome ? b.nome.charAt(0).toUpperCase() : "?"}
                     </span>
                   )}
@@ -195,14 +235,6 @@ export default function PreviaDoPerfil({
         <p className={juntar(texto.auxiliar, "mt-4 text-center leading-5")}>Conecte o Instagram do cliente em Config, Integrações, para ver a grade.</p>
       ) : (
         <ul className="mt-2 grid grid-cols-3 gap-[2px]" aria-label="Grade do perfil">
-          {plano.map((p, i) => (
-            <Celula key={`p-${p.id}`} planejado>
-              <ImagemDaMesa caminho={p.imagem ? p.imagem.caminho : null} bucket={p.imagem ? p.imagem.bucket : "mesa"} alt={p.titulo} className="absolute inset-0 h-full w-full" />
-              <span className={juntar(etiqueta, "pointer-events-none absolute left-1 top-1 bg-primary text-primary-foreground")} title={p.titulo}>
-                {planejados.length - i}º
-              </span>
-            </Celula>
-          ))}
           {perfil.midias.map((m) => (
             <Celula key={m.id}>
               <a href={m.permalink || "#"} target="_blank" rel="noreferrer" title={m.legenda || "Abrir no Instagram"} className="absolute inset-0 block">

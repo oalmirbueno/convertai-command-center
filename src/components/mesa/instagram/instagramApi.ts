@@ -1,4 +1,5 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { marcaAtual } from "@/lib/mesa/marcas";
 import { chamarFuncao } from "@/lib/mesa/api";
 import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import type { ChaveDaRede, PaginaNaPrevia } from "../../../../supabase/functions/_shared/instagram-do-cliente";
@@ -45,7 +46,8 @@ export interface ItemDaGradeNaAba {
   id: string;
   titulo: string;
   formato: string;
-  origem: "arte" | "foto" | "agenda";
+  /** "simulado": arte do acervo ou dos arquivos posta só na simulação (não agenda). */
+  origem: "arte" | "foto" | "agenda" | "simulado";
   data: string | null;
   data_confirmada: boolean;
   imagem: { bucket: string; caminho: string } | null;
@@ -55,6 +57,9 @@ export interface ItemDaGradeNaAba {
   publicacao: Record<string, unknown> | null;
   dia_da_peca: string | null;
   task_id: string | null;
+  /** Lâminas na ordem (rodada 3; função antiga não manda: vale a capa). */
+  laminas?: string[];
+  legenda?: string;
 }
 
 export interface AnaliseDaBio {
@@ -94,9 +99,20 @@ export interface PaginaDaAba {
   conectada: boolean;
 }
 
+/** Outra marca do mesmo cliente (Acerbi e CME) com as contas dela, para agrupar no topo. */
+export interface OutraMarcaDaAba {
+  id: string;
+  nome: string;
+  contas: Array<{ id: string; username: string }>;
+  paginas: Array<{ id: string; nome: string }>;
+}
+
 export interface PainelDoInstagram {
   contas: ContaDaAba[];
   paginas: PaginaDaAba[];
+  /** A marca aberta (null: cliente sem marcas) e as outras, cada uma com as contas dela. */
+  marca: { id: string; nome: string; principal: boolean } | null;
+  outras_marcas: OutraMarcaDaAba[];
   conta_id: string | null;
   perfil: PerfilDaAba;
   grade: { itens: ItemDaGradeNaAba[]; ordem: string[] };
@@ -110,11 +126,22 @@ export interface PainelDoInstagram {
   aviso_sql: string | null;
 }
 
-export const chaveDoPainel = (clientId: string, contaId: string | null) => ["mesa", "instagram", clientId, contaId || "principal"];
+/** A marca aberta na casca da Mesa para este cliente ("-" sem marca): entra em toda chave e em todo pedido. */
+export function marcaDaAba(clientId: string): string {
+  const m = marcaAtual();
+  return m && m.clientId === clientId ? m.marcaId : "-";
+}
 
+export const chaveDoPainel = (clientId: string, contaId: string | null, marcaId = "-") => ["mesa", "instagram", clientId, marcaId, contaId || "principal"];
+
+/**
+ * Pedido à mesa-instagram com a marca aberta (Acerbi ou CME): o servidor só
+ * devolve as contas, a grade e o kit daquela marca e recusa conta de outra.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function chamarInstagram<T = any>(acao: string, clientId: string, extra: Record<string, unknown> = {}): Promise<T> {
-  return chamarFuncao<T>("mesa-instagram", { acao, client_id: clientId, ...extra });
+  const marca = marcaDaAba(clientId);
+  return chamarFuncao<T>("mesa-instagram", { acao, client_id: clientId, ...(marca !== "-" && extra.marca_id === undefined ? { marca_id: marca } : {}), ...extra });
 }
 
 const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -145,6 +172,8 @@ export function normalizarPainel(d: any): PainelDoInstagram {
   return {
     contas: lista<ContaDaAba>(d && d.contas),
     paginas: lista<PaginaDaAba>(d && d.paginas),
+    marca: d && d.marca && typeof d.marca.id === "string" ? { id: d.marca.id, nome: String(d.marca.nome || ""), principal: !!d.marca.principal } : null,
+    outras_marcas: lista<OutraMarcaDaAba>(d && d.outras_marcas),
     conta_id: d && typeof d.conta_id === "string" ? d.conta_id : null,
     perfil: normalizarPerfil(d && d.perfil),
     grade: { itens: lista<ItemDaGradeNaAba>(d && d.grade && d.grade.itens), ordem: lista<string>(d && d.grade && d.grade.ordem) },
@@ -173,16 +202,29 @@ export function normalizarPainel(d: any): PainelDoInstagram {
   };
 }
 
-/** Tudo da aba numa leitura (sem IA). Vale 2 minutos; cada ação atualiza na hora. */
+const lerPainel = async (clientId: string, contaId: string | null) => normalizarPainel(await chamarInstagram("painel", clientId, contaId ? { conta_id: contaId } : {}));
+
+/**
+ * Tudo da aba numa leitura (sem IA). Vale 2 minutos; cada ação atualiza na
+ * hora. Trocar de conta mantém a tela anterior até a nova chegar (sem
+ * esqueleto nem piscada): `placeholderData: keepPreviousData`.
+ */
 export function usePainelDoInstagram(clientId: string, contaId: string | null) {
+  const marca = marcaDaAba(clientId);
   return useQuery({
-    queryKey: chaveDoPainel(clientId, contaId),
+    queryKey: chaveDoPainel(clientId, contaId, marca),
     enabled: !!clientId,
     staleTime: 2 * 60_000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
     retry: 1,
-    queryFn: async () => normalizarPainel(await chamarInstagram("painel", clientId, contaId ? { conta_id: contaId } : {})),
+    queryFn: () => lerPainel(clientId, contaId),
   });
+}
+
+/** Pré-carrega o painel de outra conta (mouse em cima do chip): a troca já abre pronta. */
+export function preCarregarConta(queryClient: QueryClient, clientId: string, contaId: string | null) {
+  void queryClient.prefetchQuery({ queryKey: chaveDoPainel(clientId, contaId, marcaDaAba(clientId)), queryFn: () => lerPainel(clientId, contaId), staleTime: 2 * 60_000 });
 }
 
 /** Leitura de novo a cada 3 minutos com a aba visível (pedido do dono: prévia em tempo real). */
@@ -195,8 +237,9 @@ export const RELER_PERFIL_MS = 3 * 60_000;
  */
 export function usePerfilAoVivo(clientId: string, contaId: string | null, doPainel: PerfilDaAba | null, lidoEm: number) {
   return useQuery({
-    queryKey: ["mesa", "instagram-perfil", clientId, contaId || "principal"],
+    queryKey: ["mesa", "instagram-perfil", clientId, marcaDaAba(clientId), contaId || "principal"],
     enabled: !!clientId && !!doPainel,
+    placeholderData: keepPreviousData,
     initialData: doPainel || undefined,
     initialDataUpdatedAt: lidoEm,
     staleTime: 60_000,
@@ -209,10 +252,20 @@ export function usePerfilAoVivo(clientId: string, contaId: string | null, doPain
 }
 
 /** Página do Facebook (nome, sobre, seguidores, posts), relida a cada 3 minutos como o perfil. */
+/** Pré-carrega a página do Facebook (mouse em cima do chip). */
+export function preCarregarPagina(queryClient: QueryClient, clientId: string, paginaId: string) {
+  void queryClient.prefetchQuery({
+    queryKey: ["mesa", "facebook-pagina", clientId, marcaDaAba(clientId), paginaId],
+    queryFn: async () => (await chamarInstagram<{ pagina: PaginaNaPrevia }>("pagina", clientId, { pagina_id: paginaId })).pagina,
+    staleTime: 60_000,
+  });
+}
+
 export function usePaginaDoFacebook(clientId: string, paginaId: string | null) {
   return useQuery({
-    queryKey: ["mesa", "facebook-pagina", clientId, paginaId],
+    queryKey: ["mesa", "facebook-pagina", clientId, marcaDaAba(clientId), paginaId],
     enabled: !!clientId && !!paginaId,
+    placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchInterval: RELER_PERFIL_MS,
     refetchIntervalInBackground: false,
@@ -235,7 +288,7 @@ export function useAtualizarPainel(clientId: string, contaId: string | null) {
   const queryClient = useQueryClient();
   return {
     mudar: (fn: (p: PainelDoInstagram) => PainelDoInstagram) =>
-      queryClient.setQueryData<PainelDoInstagram>(chaveDoPainel(clientId, contaId), (p) => (p ? fn(p) : p)),
+      queryClient.setQueryData<PainelDoInstagram>(chaveDoPainel(clientId, contaId, marcaDaAba(clientId)), (p) => (p ? fn(p) : p)),
     reler: () => queryClient.invalidateQueries({ queryKey: ["mesa", "instagram", clientId] }),
   };
 }

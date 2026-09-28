@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Building2, CalendarDays, Facebook, FolderOpen, Instagram, ListChecks, Plus, RefreshCw } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Building2, CalendarDays, ChevronDown, Facebook, FolderOpen, Instagram, ListChecks, Plus, RefreshCw } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
-import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { useQueryClient } from "@tanstack/react-query";
 import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
@@ -16,20 +18,27 @@ import GeradorDeDestaques from "./instagram/GeradorDeDestaques";
 import SugestaoDeDestaques, { useSugestaoDeDestaques } from "./instagram/SugestaoDeDestaques";
 import PlanoDaGrade from "./instagram/PlanoDaGrade";
 import MetricasDoPerfil from "./instagram/MetricasDoPerfil";
-import PainelDoCliente, { proximosPosts, type ParteDoPainel } from "./instagram/ColunaDoCliente";
+import TelaDoCliente, { ehParte, proximosPosts, type ParteDoPainel } from "./instagram/ColunaDoCliente";
+import DetalheDoPost from "./instagram/DetalheDoPost";
+import { usePlanejamento } from "./instagram/usePlanejamento";
+import { useFonteDaMarca } from "./instagram/fonteDaMarca";
 import OutrasRedes from "./instagram/OutrasRedes";
 import AgenteDoInstagram from "./instagram/AgenteDoInstagram";
 import {
   horaDaLeitura,
+  marcaDaAba,
+  preCarregarConta,
+  preCarregarPagina,
   useAtualizarPainel,
   usePaginaDoFacebook,
   usePainelDoInstagram,
   usePerfilAoVivo,
   type AnaliseDaBio,
+  type ItemDaGradeNaAba,
   type PainelDoInstagram,
 } from "./instagram/instagramApi";
 import { destaquesLimpos, type DestaqueProposto } from "../../../supabase/functions/_shared/conhecimento-perfil-instagram";
-import { ehBloco, ehRede, ordemDoPlano, REDES_SOCIAIS, type ChaveDaRede } from "../../../supabase/functions/_shared/instagram-do-cliente";
+import { ehBloco, ehRede, REDES_SOCIAIS, type ChaveDaRede } from "../../../supabase/functions/_shared/instagram-do-cliente";
 
 /**
  * Aba Redes da Mesa (frente IG; rodada 2 em 28/09: nome "Redes", tudo a um
@@ -75,10 +84,11 @@ function Chip({ ativo, onClick, icone, children, rotulo }: { ativo: boolean; onC
       role="tab"
       aria-selected={ativo}
       aria-label={rotulo}
+      title={rotulo}
       onClick={onClick}
       className={juntar(
-        "toque-compacto mb-1 mr-1.5 inline-flex h-8 max-w-[220px] items-center rounded-full border px-3 text-[12.5px] transition-colors",
-        ativo ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+        "toque-compacto mr-1 inline-flex h-8 max-w-[168px] shrink-0 items-center rounded-full border px-2.5 text-[12.5px] transition-colors",
+        ativo ? "border-primary bg-primary/10 font-medium text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
       )}
     >
       {icone ? <span className="mr-1.5 shrink-0" aria-hidden="true">{icone}</span> : null}
@@ -87,74 +97,182 @@ function Chip({ ativo, onClick, icone, children, rotulo }: { ativo: boolean; onC
   );
 }
 
-function Contas({ painel, alvo, onAlvo }: { painel: PainelDoInstagram | null; alvo: Alvo; onAlvo: (a: string) => void }) {
+/** Rótulo pequeno do grupo (Instagram, Facebook, Outras): some no celular. */
+function Grupo({ rotulo, children, primeiro = false }: { rotulo: string; children: ReactNode; primeiro?: boolean }) {
+  return (
+    <div className={juntar("flex shrink-0 items-center", primeiro ? "" : "ml-1 border-l border-border pl-2")} role="group" aria-label={rotulo}>
+      <span className="mr-1.5 hidden text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground xl:inline">{rotulo}</span>
+      {children}
+    </div>
+  );
+}
+
+function Contas({
+  painel,
+  alvo,
+  onAlvo,
+  onOutraMarca,
+  onPreCarregar,
+}: {
+  painel: PainelDoInstagram | null;
+  alvo: Alvo;
+  onAlvo: (a: string) => void;
+  /** Conta de outra marca: troca a marca da Mesa e já abre aquela conta. */
+  onOutraMarca: (marcaId: string, alvo: string) => void;
+  onPreCarregar: (alvo: string) => void;
+}) {
   const contas = painel ? painel.contas : [];
   const paginas = painel ? painel.paginas : [];
   const idIg = alvo.tipo === "instagram" ? alvo.id || (painel ? painel.conta_id : null) : null;
   const guardadas = painel ? painel.redes.adicionadas : [];
   const redesExtras = REDES_SOCIAIS.filter((r) => r.valor !== "instagram" && r.valor !== "facebook" && (guardadas.some((g) => g.rede === r.valor) || (alvo.tipo === "rede" && alvo.rede === r.valor)));
   const outras = REDES_SOCIAIS.filter((r) => r.valor !== "instagram" && redesExtras.indexOf(r) < 0 && !(r.valor === "facebook" && paginas.length));
+  const marca = painel ? painel.marca : null;
+  const outrasMarcas = painel ? painel.outras_marcas : [];
   return (
-    <div className="flex min-w-0 flex-wrap items-center" role="tablist" aria-label="Contas e redes do cliente" data-contas-do-cliente="">
-      {contas.length === 0 && (
-        <Chip ativo={alvo.tipo === "instagram"} onClick={() => onAlvo("ig:")} icone={<Instagram className="h-3.5 w-3.5" />}>
-          Instagram
-        </Chip>
-      )}
-      {contas.map((c) => (
-        <Chip key={c.id} ativo={alvo.tipo === "instagram" && idIg === c.id} onClick={() => onAlvo(`ig:${c.id}`)} icone={<Instagram className="h-3.5 w-3.5" />} rotulo={`Instagram @${c.username}`}>
-          @{c.username}
-        </Chip>
-      ))}
-      {paginas.map((p) => (
-        <Chip key={p.id} ativo={alvo.tipo === "facebook" && alvo.id === p.id} onClick={() => onAlvo(`fb:${p.id}`)} icone={<Facebook className="h-3.5 w-3.5" />} rotulo={`Facebook ${p.nome}`}>
-          {p.nome}
-        </Chip>
-      ))}
-      {redesExtras.map((r) => (
-        <Chip key={r.valor} ativo={alvo.tipo === "rede" && alvo.rede === r.valor} onClick={() => onAlvo(`rede:${r.valor}`)}>
-          {r.rotulo}
-        </Chip>
-      ))}
-      {outras.length > 0 && (
-        <label className="mb-1 inline-flex items-center">
-          <span className="sr-only">Adicionar outra rede</span>
-          <Plus className="-mr-6 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <select
-            className="toque-compacto h-8 w-[104px] rounded-full border border-dashed border-border bg-background pl-7 pr-2 text-[12.5px] text-muted-foreground"
-            value=""
-            onChange={(e) => e.target.value && onAlvo(`rede:${e.target.value}`)}
-            aria-label="Adicionar outra rede"
-          >
-            <option value="">Rede</option>
-            {outras.map((r) => (
-              <option key={r.valor} value={r.valor}>
-                {r.rotulo}
-              </option>
+    <div className="flex min-w-0 flex-1 items-center">
+    <div
+      className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [-webkit-mask-image:linear-gradient(to_right,black_94%,transparent)] [mask-image:linear-gradient(to_right,black_94%,transparent)]"
+      data-contas-do-cliente=""
+    >
+      <div className="flex w-max items-center py-0.5 pr-4" role="tablist" aria-label="Contas e redes do cliente">
+        <Grupo rotulo={marca ? marca.nome : "Instagram"} primeiro>
+          {contas.length === 0 && (
+            <Chip ativo={alvo.tipo === "instagram"} onClick={() => onAlvo("ig:")} icone={<Instagram className="h-3.5 w-3.5" />} rotulo="Instagram">
+              {marca ? "Sem Instagram" : "Instagram"}
+            </Chip>
+          )}
+          {contas.map((c) => (
+            <span key={c.id} onMouseEnter={() => onPreCarregar(`ig:${c.id}`)} onFocus={() => onPreCarregar(`ig:${c.id}`)}>
+              <Chip ativo={alvo.tipo === "instagram" && idIg === c.id} onClick={() => onAlvo(`ig:${c.id}`)} icone={<Instagram className="h-3.5 w-3.5" />} rotulo={`Instagram @${c.username}`}>
+                @{c.username}
+              </Chip>
+            </span>
+          ))}
+          {paginas.map((p) => (
+            <span key={p.id} onMouseEnter={() => onPreCarregar(`fb:${p.id}`)} onFocus={() => onPreCarregar(`fb:${p.id}`)}>
+              <Chip ativo={alvo.tipo === "facebook" && alvo.id === p.id} onClick={() => onAlvo(`fb:${p.id}`)} icone={<Facebook className="h-3.5 w-3.5" />} rotulo={`Facebook ${p.nome}`}>
+                {p.nome}
+              </Chip>
+            </span>
+          ))}
+        </Grupo>
+        {outrasMarcas.map((m) => (
+          <Grupo key={m.id} rotulo={m.nome}>
+            {m.contas.map((c) => (
+              <Chip key={c.id} ativo={false} onClick={() => onOutraMarca(m.id, `ig:${c.id}`)} icone={<Instagram className="h-3.5 w-3.5" />} rotulo={`${m.nome}: Instagram @${c.username} (abre a marca ${m.nome})`}>
+                @{c.username}
+              </Chip>
             ))}
-          </select>
-        </label>
-      )}
+            {m.paginas.map((p) => (
+              <Chip key={p.id} ativo={false} onClick={() => onOutraMarca(m.id, `fb:${p.id}`)} icone={<Facebook className="h-3.5 w-3.5" />} rotulo={`${m.nome}: Facebook ${p.nome} (abre a marca ${m.nome})`}>
+                {p.nome}
+              </Chip>
+            ))}
+            {!m.contas.length && !m.paginas.length && <span className="px-2 text-[12px] text-muted-foreground">sem conta ligada</span>}
+          </Grupo>
+        ))}
+        <Grupo rotulo="Outras">
+          {redesExtras.map((r) => (
+            <Chip key={r.valor} ativo={alvo.tipo === "rede" && alvo.rede === r.valor} onClick={() => onAlvo(`rede:${r.valor}`)} rotulo={r.rotulo}>
+              {r.rotulo}
+            </Chip>
+          ))}
+          {outras.length > 0 && (
+            <label className="inline-flex shrink-0 items-center">
+              <span className="sr-only">Adicionar outra rede</span>
+              <Plus className="-mr-6 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              <select
+                className="toque-compacto h-8 w-[96px] rounded-full border border-dashed border-border bg-background pl-7 pr-2 text-[12.5px] text-muted-foreground"
+                value=""
+                onChange={(e) => e.target.value && onAlvo(`rede:${e.target.value}`)}
+                aria-label="Adicionar outra rede"
+              >
+                <option value="">Rede</option>
+                {outras.map((r) => (
+                  <option key={r.valor} value={r.valor}>
+                    {r.rotulo}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </Grupo>
+      </div>
+    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className={juntar(botao.barra, "ml-1 h-8 shrink-0 px-2")} aria-label="Todas as contas e redes" title="Todas as contas e redes">
+          <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="ml-1 hidden desk:inline">Todas</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[280px] p-2">
+        <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{marca ? marca.nome : "Contas"}</p>
+        {contas.map((c) => (
+          <button key={c.id} type="button" onClick={() => onAlvo(`ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+            <Instagram className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 truncate">@{c.username}</span>
+          </button>
+        ))}
+        {paginas.map((p) => (
+          <button key={p.id} type="button" onClick={() => onAlvo(`fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+            <Facebook className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 truncate">{p.nome}</span>
+          </button>
+        ))}
+        {outrasMarcas.map((m) => (
+          <div key={m.id} className="mt-1 border-t border-border pt-1">
+            <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{m.nome}</p>
+            {m.contas.map((c) => (
+              <button key={c.id} type="button" onClick={() => onOutraMarca(m.id, `ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+                <Instagram className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 truncate">@{c.username}</span>
+              </button>
+            ))}
+            {m.paginas.map((p) => (
+              <button key={p.id} type="button" onClick={() => onOutraMarca(m.id, `fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+                <Facebook className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 truncate">{p.nome}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
     </div>
   );
 }
 
-function AtalhosDoCliente({ painel, onAbrir }: { painel: PainelDoInstagram | null; onAbrir: (p: ParteDoPainel) => void }) {
+function AtalhosDoCliente({ painel, vista, onAbrir }: { painel: PainelDoInstagram | null; vista: ParteDoPainel | null; onAbrir: (p: ParteDoPainel) => void }) {
   const proximos = painel ? proximosPosts(painel.grade.itens, new Date(), 99).length : 0;
   const atalhos: Array<{ parte: ParteDoPainel; rotulo: string; icone: ReactNode }> = [
     { parte: "resumo", rotulo: "Resumo", icone: <Building2 className="h-3.5 w-3.5" /> },
-    { parte: "proximos", rotulo: proximos ? `Próximos (${proximos})` : "Próximos", icone: <ListChecks className="h-3.5 w-3.5" /> },
+    { parte: "proximos", rotulo: "Próximos", icone: <ListChecks className="h-3.5 w-3.5" /> },
     { parte: "agenda", rotulo: "Agenda", icone: <CalendarDays className="h-3.5 w-3.5" /> },
     { parte: "arquivos", rotulo: "Arquivos", icone: <FolderOpen className="h-3.5 w-3.5" /> },
   ];
   return (
-    <div className="mb-1 flex min-w-0 items-center" role="group" aria-label="Cliente">
+    <div className="ml-2 flex shrink-0 items-center border-l border-border pl-2" role="group" aria-label="Cliente">
       {atalhos.map((a) => (
-        <button key={a.parte} type="button" className={juntar(botao.barra, "mr-0.5 border border-transparent hover:border-border")} onClick={() => onAbrir(a.parte)} title={a.rotulo} aria-label={a.rotulo.replace(/ \(\d+\)$/, "")}>
+        <button
+          key={a.parte}
+          type="button"
+          className={juntar(botao.barra, "ml-0.5 h-8 px-2", vista === a.parte ? "bg-muted text-foreground" : "")}
+          onClick={() => onAbrir(a.parte)}
+          title={a.rotulo}
+          aria-label={a.rotulo}
+          aria-pressed={vista === a.parte}
+        >
           <span aria-hidden="true">{a.icone}</span>
-          <span className="ml-1 hidden desk:inline" aria-hidden="true">
+          <span className="ml-1 hidden whitespace-nowrap xl:inline" aria-hidden="true">
             {a.rotulo}
           </span>
+          {a.parte === "proximos" && proximos > 0 && (
+            <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10.5px] font-semibold tabular-nums text-primary" aria-hidden="true">
+              {proximos}
+            </span>
+          )}
         </button>
       ))}
     </div>
@@ -176,10 +294,14 @@ function Coluna({ cabecalho, children, rotulo, memoria }: { cabecalho: ReactNode
 export default function AbaInstagram() {
   const { clientId, clientName, podeRecarregar } = useMesa();
   const [params, setParams] = useSearchParams();
-  const [alvoBruto, setAlvoBruto] = useEstadoDaTela<string>(`mesa:instagram:alvo:${clientId}`, "ig:");
+  // Tudo que fica guardado no navegador é por cliente e marca (Acerbi e CME nunca se misturam).
+  const escopo = `${clientId}:${marcaDaAba(clientId)}`;
+  const queryClient = useQueryClient();
+  const fonteDaMarca = useFonteDaMarca(clientId);
+  const [alvoBruto, setAlvoBruto] = useEstadoDaTela<string>(`mesa:instagram:alvo:${escopo}`, "ig:");
   const alvo = lerAlvo(alvoBruto);
   const contaEscolhida = alvo.tipo === "instagram" ? alvo.id : null;
-  const [contaGuardada, setContaGuardada] = useEstadoDaTela<string | null>(`mesa:instagram:conta:${clientId}`, null);
+  const [contaGuardada, setContaGuardada] = useEstadoDaTela<string | null>(`mesa:instagram:conta:${escopo}`, null);
   const contaPedida = contaEscolhida || contaGuardada;
   const painel = usePainelDoInstagram(clientId, contaPedida);
   const atualizar = useAtualizarPainel(clientId, contaPedida);
@@ -192,19 +314,35 @@ export default function AbaInstagram() {
 
   const [ferramenta, setFerramenta] = useEstadoDaTela<Ferramenta>(`mesa:instagram:ferramenta:${clientId}`, "bio", { validar: ehFerramenta });
   const [modoDaPrevia, setModoDaPrevia] = useEstadoDaTela<"publicado" | "simulacao">(`mesa:instagram:previa:${clientId}`, "publicado", { validar: (v) => v === "publicado" || v === "simulacao" });
-  const [lista, setLista] = useEstadoDaTela<DestaqueProposto[]>(`mesa:instagram:destaques:${clientId}`, [], { validar: (v) => Array.isArray(v) });
-  const [fora, setFora] = useEstadoDaTela<string[]>(`mesa:instagram:fora-da-simulacao:${clientId}`, [], { validar: (v) => Array.isArray(v) });
-  const [ordemAgora, setOrdemAgora] = useState<string[] | null>(null);
+  const [lista, setLista] = useEstadoDaTela<DestaqueProposto[]>(`mesa:instagram:destaques:${escopo}:${contaPedida || "principal"}`, [], { validar: (v) => Array.isArray(v) });
   const [pedido, setPedido] = useState<{ texto: string; n: number } | null>(null);
-  const [gaveta, setGaveta] = useState<ParteDoPainel | null>(null);
+  const [postAberto, setPostAberto] = useState<ItemDaGradeNaAba | null>(null);
+  const local = useLocation();
+  const navigate = useNavigate();
+
+  // Tela cheia do cliente (Resumo, Próximos, Agenda, Arquivos): o estado mora no endereço (&vista=).
+  const vistaUrl = params.get("vista");
+  const vista: ParteDoPainel | null = ehParte(vistaUrl) ? vistaUrl : null;
+  const abrirVista = (v: ParteDoPainel) => {
+    const next = new URLSearchParams(params);
+    next.set("vista", v);
+    if (vista) setParams(next, { replace: true, state: local.state });
+    else setParams(next, { state: { vistaDaAbaRedes: true } });
+  };
+  const voltarDaVista = () => {
+    const st = local.state as { vistaDaAbaRedes?: boolean } | null;
+    if (st && st.vistaDaAbaRedes) navigate(-1);
+    else {
+      const next = new URLSearchParams(params);
+      next.delete("vista");
+      setParams(next, { replace: true });
+    }
+  };
 
   const escolherAlvo = (a: string) => {
     setAlvoBruto(a);
     const novo = lerAlvo(a);
-    if (novo.tipo === "instagram") {
-      setContaGuardada(novo.id);
-      setOrdemAgora(null);
-    }
+    if (novo.tipo === "instagram") setContaGuardada(novo.id);
   };
 
   // ?bloco= (o caminho do agente): abre a ferramenta certa; o parâmetro sai do endereço.
@@ -226,6 +364,7 @@ export default function AbaInstagram() {
   // A sugestão de destaques sai ao abrir a aba (qualquer ferramenta aberta) e vira bolinha na prévia.
   const sugestao = useSugestaoDeDestaques({
     clientId,
+    escopo: `${escopo}:${contaId || "principal"}`,
     contaId,
     lista,
     capas: dados ? dados.capas : [],
@@ -233,8 +372,10 @@ export default function AbaInstagram() {
     onUsar: (l) => setLista(destaquesLimpos(l)),
   });
 
-  const ordenados = useMemo(() => (dados ? ordemDoPlano(dados.grade.itens, ordemAgora || dados.grade.ordem) : []), [dados, ordemAgora]);
-  const naSimulacao = useMemo(() => ordenados.filter((i) => fora.indexOf(i.id) < 0), [ordenados, fora]);
+  // O planejamento da grade: um rascunho de datas só, que o simulador e a Agenda usam juntos.
+  const itensDaGrade = useMemo(() => (dados ? dados.grade.itens : []), [dados]);
+  const plano = usePlanejamento({ clientId, escopo, itens: itensDaGrade, onMudou: () => void atualizar.reler() });
+  const naSimulacao = plano.naSimulacao;
 
   const usarDestaques = (l: DestaqueProposto[]) => {
     setLista(destaquesLimpos(l));
@@ -294,9 +435,31 @@ export default function AbaInstagram() {
     <AreaDeTrabalho memoria="mesa-instagram" rotuloDaLateral="Agente das redes" rotuloDoPrincipal="Redes do cliente" principalRolavel={false} lateral={lateral}>
       <div className="flex min-w-0 flex-col pb-4 lg:h-full lg:min-h-0 lg:pb-0" data-aba-redes="">
         <div className="shrink-0">
-          <div className="flex min-w-0 flex-wrap items-center justify-between">
-            <Contas painel={dados} alvo={alvo} onAlvo={escolherAlvo} />
-            <AtalhosDoCliente painel={dados} onAbrir={setGaveta} />
+          <div className={juntar(superficie.painel, "mb-2 flex min-w-0 items-center px-2 py-1")} data-topo-da-aba="">
+            <Contas
+              painel={dados}
+              alvo={alvo}
+              onAlvo={(a) => {
+                escolherAlvo(a);
+                if (vista) voltarDaVista();
+              }}
+              onOutraMarca={(marcaId, a) => {
+                // A conta abre já na outra marca: o alvo fica guardado no escopo dela antes de trocar.
+                gravarEstadoDaTela(`mesa:instagram:alvo:${clientId}:${marcaId}`, a);
+                const next = new URLSearchParams(params);
+                next.set("marca", marcaId);
+                next.delete("vista");
+                next.delete("task");
+                next.delete("campanha");
+                setParams(next);
+              }}
+              onPreCarregar={(a) => {
+                const x = lerAlvo(a);
+                if (x.tipo === "instagram") preCarregarConta(queryClient, clientId, x.id);
+                else if (x.tipo === "facebook") preCarregarPagina(queryClient, clientId, x.id);
+              }}
+            />
+            <AtalhosDoCliente painel={dados} vista={vista} onAbrir={abrirVista} />
           </div>
           {dados && dados.aviso_sql && <p className="mb-2 rounded-md bg-warning/10 px-3 py-1.5 text-[12px] leading-5 text-foreground">{dados.aviso_sql}</p>}
         </div>
@@ -314,7 +477,28 @@ export default function AbaInstagram() {
           />
         )}
 
-        {dados && alvo.tipo === "rede" && (
+        {dados && vista && (
+          <div className="min-w-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+            <TelaDoCliente
+              clientId={clientId}
+              vista={vista}
+              onVista={abrirVista}
+              onVoltar={voltarDaVista}
+              painel={perfil ? { ...dados, perfil } : dados}
+              plano={plano}
+              podePublicar={podeRecarregar}
+              onMudou={() => void atualizar.reler()}
+              onSimular={(s2) => {
+                plano.adicionarSimulado(s2);
+                setModoDaPrevia("simulacao");
+                setFerramenta("grade");
+                voltarDaVista();
+              }}
+            />
+          </div>
+        )}
+
+        {dados && !vista && alvo.tipo === "rede" && (
           <div className="mt-1 min-h-0 lg:flex lg:flex-1 lg:flex-col">
             <Coluna rotulo="Outra rede" memoria={`mesa:instagram:rede:${clientId}`} cabecalho={<span className={texto.rotulo}>{(REDES_SOCIAIS.find((r) => r.valor === alvo.rede) || REDES_SOCIAIS[0]).rotulo}</span>}>
               <OutrasRedes rede={alvo.rede} painel={dados} onMudou={() => void atualizar.reler()} />
@@ -322,14 +506,25 @@ export default function AbaInstagram() {
           </div>
         )}
 
-        {dados && alvo.tipo !== "rede" && perfil && (
+        {dados && !vista && alvo.tipo !== "rede" && perfil && (
           <div className="mt-1 min-w-0 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
             <Coluna rotulo="Prévia" memoria={`mesa:instagram:previa:${clientId}:${alvoBruto}`} cabecalho={cabecalhoDaPrevia}>
               {alvo.tipo === "facebook" ? (
                 <PreviaDaPagina pagina={pagina.data} carregando={pagina.isLoading} />
               ) : (
                 <>
-                  <PreviaDoPerfil perfil={perfil} capas={dados.capas} lista={lista} corDaMarca={dados.kit.paleta[0] ? dados.kit.paleta[0].hex : null} planejados={naSimulacao} simulando={modoDaPrevia === "simulacao"} />
+                  <PreviaDoPerfil
+                    perfil={perfil}
+                    capas={dados.capas}
+                    lista={lista}
+                    corDaMarca={dados.kit.paleta[0] ? dados.kit.paleta[0].hex : null}
+                    fonteDaMarca={fonteDaMarca.familia}
+                    planejados={naSimulacao}
+                    simulando={modoDaPrevia === "simulacao"}
+                    onMover={plano.moverPorId}
+                    onAbrir={setPostAberto}
+                    travado={plano.travaDoItem}
+                  />
                   {perfil.aviso && <p className={juntar(texto.auxiliar, "mx-auto mt-2 max-w-[420px] leading-5")}>{perfil.aviso}</p>}
                 </>
               )}
@@ -352,7 +547,7 @@ export default function AbaInstagram() {
                     opcoes={FERRAMENTAS.map((f) => ({
                       valor: f.valor,
                       rotulo: f.rotulo,
-                      contador: f.valor === "grade" ? dados.grade.itens.length || null : f.valor === "destaques" ? dados.capas.length || null : null,
+                      contador: f.valor === "grade" ? plano.ordenados.length || null : f.valor === "destaques" ? dados.capas.length || null : null,
                     }))}
                   />
                 }
@@ -374,21 +569,12 @@ export default function AbaInstagram() {
                       onArquivada={(id) => atualizar.mudar((p) => ({ ...p, capas: p.capas.filter((x) => x.id !== id) }))}
                       onPedirAoAgente={() => pedirAoAgente("Proponha os destaques do perfil (nome curto e ícone de cada um), na ordem certa para quem chega.")}
                       nomeDoCliente={clientName}
+                      escopo={`${escopo}:${contaId || "principal"}`}
                     />
                   </div>
                 )}
                 {ferramenta === "grade" && (
-                  <PlanoDaGrade
-                    itens={dados.grade.itens}
-                    ordemSalva={ordemAgora || dados.grade.ordem}
-                    foraDaSimulacao={fora}
-                    onForaDaSimulacao={setFora}
-                    contaId={contaId}
-                    podePublicar={podeRecarregar}
-                    onOrdem={setOrdemAgora}
-                    onVerNaPrevia={() => setModoDaPrevia("simulacao")}
-                    onMudou={() => void atualizar.reler()}
-                  />
+                  <PlanoDaGrade plano={plano} podePublicar={podeRecarregar} onVerNaPrevia={() => setModoDaPrevia("simulacao")} onMudou={() => void atualizar.reler()} />
                 )}
                 {ferramenta === "metricas" && <MetricasDoPerfil clientId={clientId} contaId={contaId} />}
               </Coluna>
@@ -397,17 +583,7 @@ export default function AbaInstagram() {
         )}
       </div>
 
-      {dados && (
-        <PainelDoCliente
-          aberto={!!gaveta}
-          parte={gaveta || "resumo"}
-          onParte={setGaveta}
-          onFechar={() => setGaveta(null)}
-          painel={perfil ? { ...dados, perfil } : dados}
-          podePublicar={podeRecarregar}
-          onMudou={() => void atualizar.reler()}
-        />
-      )}
+      <DetalheDoPost item={postAberto} plano={plano} onFechar={() => setPostAberto(null)} podePublicar={podeRecarregar} onMudou={() => void atualizar.reler()} />
     </AreaDeTrabalho>
   );
 }

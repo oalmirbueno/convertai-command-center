@@ -19,7 +19,7 @@ import { chamarInstagram, type CapaGuardada, type DestaqueProposto } from "./ins
  * (custo antes, no botão). A equipe pode trocar tudo na lista embaixo.
  */
 
-export type SugestaoGuardada = { destaques: DestaqueSugerido[]; custo_usd: number; com_ia: boolean; sem_jev: boolean; em: string };
+export type SugestaoGuardada = { destaques: DestaqueSugerido[]; custo_usd: number; com_ia: boolean; sem_jev: boolean; em: string; proprios?: number; marca?: string | null };
 
 const ETAPA: Record<number, string> = { 1: "o que é", 2: "prova", 3: "oferta", 4: "dúvidas", 5: "onde e quem" };
 
@@ -30,6 +30,7 @@ const ETAPA: Record<number, string> = { 1: "o que é", 2: "prova", 3: "oferta", 
  */
 export function useSugestaoDeDestaques({
   clientId,
+  escopo,
   contaId,
   lista,
   capas,
@@ -37,6 +38,8 @@ export function useSugestaoDeDestaques({
   onUsar,
 }: {
   clientId: string;
+  /** Cliente, marca e conta: cada perfil tem a sua sugestão. */
+  escopo: string;
   contaId: string | null;
   lista: DestaqueProposto[];
   capas: CapaGuardada[];
@@ -47,7 +50,7 @@ export function useSugestaoDeDestaques({
   const { catalogo, atualizarCusto } = useMesa();
   const avisarErro = useAvisarErro();
   const modelo = useMemo(() => modeloDaAba(catalogo), [catalogo]);
-  const [guardada, setGuardada] = useEstadoDaTela<SugestaoGuardada | null>(`mesa:instagram:sugestao-destaques:${clientId}`, null);
+  const [guardada, setGuardada] = useEstadoDaTela<SugestaoGuardada | null>(`mesa:instagram:sugestao-destaques:${escopo}`, null);
   const [rodando, setRodando] = useState(false);
   const pediu = useRef(false);
 
@@ -55,10 +58,11 @@ export function useSugestaoDeDestaques({
     setRodando(true);
     try {
       const r = await chamarInstagram<SugestaoGuardada>("sugerir_destaques", clientId, { ...(contaId ? { conta_id: contaId } : {}), com_ia: comIa, ...(comIa && modelo ? { modelo_id: modelo.id } : {}) });
-      const g: SugestaoGuardada = { destaques: Array.isArray(r.destaques) ? r.destaques : [], custo_usd: Number(r.custo_usd || 0), com_ia: !!r.com_ia, sem_jev: !!r.sem_jev, em: new Date().toISOString() };
+      const g: SugestaoGuardada = { destaques: Array.isArray(r.destaques) ? r.destaques : [], custo_usd: Number(r.custo_usd || 0), com_ia: !!r.com_ia, sem_jev: !!r.sem_jev, em: new Date().toISOString(), proprios: Number(r.proprios || 0), marca: r.marca || null };
       setGuardada(g);
       atualizarCusto();
-      if (usarSeVazia && g.destaques.length) onUsar(g.destaques.map((d) => ({ nome: d.nome, icone: d.icone })));
+      // Os da marca (com IA) já vão para a lista e para as bolinhas; a estrutura base só enche a lista vazia.
+      if ((comIa || usarSeVazia) && g.destaques.length) onUsar(g.destaques.map((d) => ({ nome: d.nome, icone: d.icone, ...(d.conceito ? { conceito: d.conceito } : {}) })));
       return r;
     } catch (e) {
       // Pelo botão com custo, o erro volta para ele (que avisa e relê o saldo).
@@ -76,7 +80,7 @@ export function useSugestaoDeDestaques({
     pediu.current = true;
     void pedir(false, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, pronto]);
+  }, [escopo, pronto]);
 
   return { guardada, rodando, pedir, modelo };
 }
@@ -102,7 +106,8 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
       </div>
       {!recolhido && (
         <div className="mt-2 min-w-0 space-y-2">
-          {!guardada && !rodando && <p className={juntar(texto.auxiliar, "leading-5")}>O Jev escolhe os destaques certos para este cliente, na ordem de quem chega.</p>}
+          {!guardada && !rodando && <p className={juntar(texto.auxiliar, "leading-5")}>Crie os destaques da marca: nomes e capas a partir dos produtos, ofertas, campanhas e jeito de falar deste cliente. O Jev escolhe, na ordem de quem chega.</p>}
+          {guardada && !guardada.com_ia && <p className="rounded-md bg-muted px-2.5 py-1.5 text-[12px] leading-4 text-muted-foreground">Esta é só a estrutura base (típicos). Crie os da marca para nomes próprios do cliente.</p>}
           {rodando && !guardada && <p className={texto.auxiliar}>Escolhendo os destaques deste perfil...</p>}
           {guardada && (
             <>
@@ -110,8 +115,8 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
                 {guardada.destaques.map((d, i) => (
                   <li key={d.nome} className="flex min-w-0 items-center text-[12.5px]">
                     <span className="mr-2 w-4 shrink-0 text-right tabular-nums text-muted-foreground">{i + 1}</span>
-                    <span className="w-[86px] shrink-0 truncate font-medium text-foreground">{d.nome}</span>
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">{d.para || d.icone}</span>
+                    <span className="w-[104px] shrink-0 truncate font-medium text-foreground" title={d.nome}>{d.nome}</span>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground" title={d.conceito || d.para || d.icone}>{d.conceito || d.para || d.icone}</span>
                     <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{ETAPA[d.etapa] || ""}</span>
                     {d.nota !== null && (
                       <span className="ml-2 block h-1.5 w-10 shrink-0 overflow-hidden rounded bg-muted" title={`Nota do Jev ${String(d.nota).replace(".", ",")} de 3`}>
@@ -122,7 +127,11 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
                 ))}
               </ol>
               <p className={texto.auxiliar}>
-                {guardada.sem_jev ? "O Jev não respondeu: ordem padrão de negócio local." : `Escolha do Jev${guardada.com_ia ? " com destaques escritos pela IA" : ""}. Custo ${usd(guardada.custo_usd)}.`}
+                {guardada.sem_jev
+                  ? "O Jev não respondeu: ordem padrão de negócio local."
+                  : guardada.com_ia
+                    ? `Da marca${guardada.marca ? ` ${guardada.marca}` : ""}: ${guardada.proprios || 0} propostas próprias, escolhidas pelo Jev (típicos só completam). Custo ${usd(guardada.custo_usd)}.`
+                    : `Estrutura escolhida pelo Jev. Custo ${usd(guardada.custo_usd)}.`}
               </p>
             </>
           )}
@@ -134,20 +143,20 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
             )}
             <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={() => void pedir(false, false)} disabled={rodando}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-              Sugerir de novo
+              Estrutura base
             </button>
             <BotaoComCusto
               rotulo={
                 <span className="inline-flex items-center">
                   <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                  Com IA
+                  Criar os da marca
                 </span>
               }
               titulo="Destaques com IA"
-              descricao="O modelo escreve destaques próprios deste cliente e o Jev escolhe entre eles e os típicos."
-              partes={() => [{ modeloId: modelo ? modelo.id : null, tipo: "texto", tokensEntrada: 3000, tokensSaida: 700 }]}
+              descricao="O modelo cria 8 destaques com nome e conceito da marca; o Jev escolhe (os típicos só completam)."
+              partes={() => [{ modeloId: modelo ? modelo.id : null, tipo: "texto", tokensEntrada: 5000, tokensSaida: 1400 }]}
               executar={() => pedir(true, false, true)}
-              variant="outline"
+              variant={guardada && guardada.com_ia ? "outline" : "default"}
               className="h-8"
               disabled={rodando || !modelo}
             />

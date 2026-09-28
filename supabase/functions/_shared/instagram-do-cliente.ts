@@ -62,6 +62,56 @@ export function capaDoTrabalho(cards: unknown): string | null {
   return melhor ? melhor.caminho : null;
 }
 
+// ------------------------------------------------------------------ marcas (rodada 3, 28/09)
+
+export type MarcaDasContas = { id: string; project_id: string | null; principal: boolean; nome?: string };
+export type LigacaoDaConta = { external_account_id: string; project_id: string };
+
+/**
+ * Contas (Instagram e páginas) de cada marca, pelas ligações conta-projeto
+ * (project_external_accounts). Pedido do dono, 28/09: "na Acerbi não está
+ * separando os perfis". Regras:
+ * - cliente sem marca: todas as contas;
+ * - outra marca (não principal): só as ligadas ao projeto dela;
+ * - principal: as que não são de outra marca (ligadas a ela ou a nenhuma).
+ * Conta ligada a duas marcas vale para as duas.
+ */
+export function contasDaMarca<C extends { id: string }>(contas: C[], ligacoes: LigacaoDaConta[], marca: MarcaDasContas | null, marcas: MarcaDasContas[]): C[] {
+  if (!marca) return contas;
+  const projetosDe: Record<string, string[]> = {};
+  for (const l of ligacoes) (projetosDe[l.external_account_id] = projetosDe[l.external_account_id] || []).push(l.project_id);
+  if (!marca.principal) {
+    if (!marca.project_id) return [];
+    return contas.filter((c) => (projetosDe[c.id] || []).indexOf(marca.project_id as string) >= 0);
+  }
+  const deOutras = marcas.filter((m) => m.id !== marca.id && m.project_id).map((m) => m.project_id as string);
+  return contas.filter((c) => {
+    const ps = projetosDe[c.id] || [];
+    if (marca.project_id && ps.indexOf(marca.project_id) >= 0) return true;
+    return !ps.some((p) => deOutras.indexOf(p) >= 0);
+  });
+}
+
+/** A marca dona de uma conta (para agrupar na tela e recusar conta de outra marca). */
+export function marcaDaConta(contaId: string, ligacoes: LigacaoDaConta[], marcas: MarcaDasContas[]): MarcaDasContas | null {
+  const ps = ligacoes.filter((l) => l.external_account_id === contaId).map((l) => l.project_id);
+  const dela = marcas.find((m) => !m.principal && !!m.project_id && ps.indexOf(m.project_id) >= 0);
+  return dela || marcas.find((m) => m.principal) || null;
+}
+
+/** Lâminas do trabalho na ordem, cada uma na última versão (para ver o post inteiro). */
+export function laminasDoTrabalho(cards: unknown, maximo = 10): string[] {
+  const lista = Array.isArray(cards) ? (cards as Array<{ ordem?: number; versao?: number; storage_path?: string }>) : [];
+  const porOrdem: Record<string, { versao: number; caminho: string; ordem: number }> = {};
+  for (const c of lista) {
+    if (typeof c.ordem !== "number" || !c.storage_path) continue;
+    const v = Number(c.versao || 0);
+    const atual = porOrdem[String(c.ordem)];
+    if (!atual || v > atual.versao) porOrdem[String(c.ordem)] = { versao: v, caminho: c.storage_path, ordem: c.ordem };
+  }
+  return Object.keys(porOrdem).map((k) => porOrdem[k]).sort((a, b) => a.ordem - b.ordem).slice(0, maximo).map((x) => x.caminho);
+}
+
 // ------------------------------------------------------------------ caminho do agente
 
 /** Blocos da aba (o endereço leva ?bloco= e a aba abre e rola até ele). */
