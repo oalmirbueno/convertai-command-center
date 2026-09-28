@@ -279,7 +279,9 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
         {!planos.length ? (
           <EstadoVazio titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
         ) : (
-          <RegiaoRolavel rotulo="Planos do roteiro" memoria={`mesa-videos:roteiro:${clientId}`} className="lg:max-h-[calc(100vh-260px)]">
+          {/* 28/09: sem altura fixa. A principal da AreaDeTrabalho já rola; a caixa
+              de 100vh-260px criava rolagem dentro de rolagem e sobra ou corte na tela cheia. */}
+          <RegiaoRolavel rotulo="Planos do roteiro" memoria={`mesa-videos:roteiro:${clientId}`}>
             <ol className="divide-y divide-border" aria-label="Planos">
               {planos.map((p, i) => {
                 const m = motorPorId(p.motor, motores.motores);

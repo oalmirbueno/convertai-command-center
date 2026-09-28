@@ -163,6 +163,18 @@ const abridores: Array<() => void> = [];
  * no computador tira do recolhido, no celular abre a gaveta. Devolve false
  * quando não há área com lateral montada.
  */
+/**
+ * Altura que cabe da área até o fim da janela, para telas que não usam a
+ * AreaDeTrabalho mas têm colunas de altura da janela (28/09: nada de
+ * `calc(100vh-Npx)` fixo, que sobrava na tela cheia e cortava no normal).
+ * null abaixo de 1024 px ou com ativo=false. Uso:
+ * <div ref={ref} style={altura ? { height: `${altura}px` } : undefined}>.
+ */
+export function useAlturaQueCabe(ativo: boolean) {
+  const largo = useLargo();
+  return useAlturaDaArea(ativo && largo);
+}
+
 export function abrirLateralDaArea(): boolean {
   const abrir = abridores[abridores.length - 1];
   if (!abrir) return false;

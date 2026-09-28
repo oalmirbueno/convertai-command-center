@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { AvisoDeErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
@@ -323,6 +324,10 @@ export default function AbaCampanhas({
   const agenteAoLado = agenteFixo && !!agente;
   // Botão flutuante do agente (abaixo de 1280 px): o fim da página fica livre para rolar acima dele.
   useReservaFlutuante(!agenteFixo && !!agente, 64);
+  // 28/09 (dono: "sobra espaço embaixo na tela cheia" e "área cortada"): a altura
+  // é medida de onde a grade começa até o fim da janela, e não mais 100vh-260px
+  // fixo. Na tela cheia o cabeçalho do painel some e a grade cresce junto.
+  const { ref: refDaGrade, altura: alturaDaGrade } = useAlturaQueCabe(true);
   const grade = listaAoLado && agenteAoLado
     ? "lg:grid-cols-[250px_minmax(0,1fr)_360px]"
     : listaAoLado
@@ -335,7 +340,12 @@ export default function AbaCampanhas({
     <>
       {/* No computador, a mesa ocupa a altura da tela, abaixo do cabeçalho fixo
           da Mesa, e cada coluna rola sozinha. No celular, a página rola. */}
-      <div className={`grid min-w-0 grid-cols-1 gap-4 lg:h-[calc(100vh-260px)] lg:min-h-[520px] ${grade}`}>
+      <div
+        ref={refDaGrade}
+        className={`grid min-w-0 grid-cols-1 gap-4 ${grade}`}
+        style={alturaDaGrade ? { height: `${alturaDaGrade}px` } : undefined}
+        data-altura-que-cabe=""
+      >
         {listaAoLado && (
           <aside className="min-h-0 min-w-0 overflow-hidden rounded-xl border border-border bg-card">{listaLateral}</aside>
         )}
