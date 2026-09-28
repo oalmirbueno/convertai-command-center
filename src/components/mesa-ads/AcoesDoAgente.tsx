@@ -125,6 +125,39 @@ function AntesDepois({ i }: { i: ItemDaAcao }) {
   );
 }
 
+const pctCurto = (v: number | null) => (v === null ? "sem dado" : `${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`);
+const decimal = (v: number | null) => (v === null ? "?" : v.toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
+
+/**
+ * Frente AD4: a prova da troca do "otimizar" antes do Confirmar, em duas
+ * linhas: os números do anúncio contra a régua (com o Jev) e o que entra no
+ * lugar (o candidato do acervo e a copy que vai).
+ */
+function ResumoDaTroca({ i }: { i: ItemDaAcao }) {
+  const t = i.troca;
+  if (!t) return null;
+  const numeros = [
+    t.gasto !== null ? `${brl(t.gasto)} gastos` : null,
+    t.resultados !== null ? `${t.resultados.toLocaleString("pt-BR")} ${t.resultado_rotulo.toLowerCase()}${t.custo_por_resultado !== null ? ` a ${brl(t.custo_por_resultado)}` : ""}` : null,
+    t.ctr_link_pct !== null ? `CTR ${pctCurto(t.ctr_link_pct)}${t.ctr_minimo_pct !== null ? ` (mínimo ${pctCurto(t.ctr_minimo_pct)})` : ""}` : null,
+    t.cpc !== null ? `CPC ${brl(t.cpc)}` : null,
+    t.frequencia !== null ? `frequência ${decimal(t.frequencia)}` : null,
+  ].filter(Boolean);
+  return (
+    <span className="mt-0.5 block text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-troca="">
+      <span className="block text-muted-foreground">
+        Antes{t.periodo ? ` (${t.periodo.inicio.slice(8, 10)}/${t.periodo.inicio.slice(5, 7)} a ${t.periodo.fim.slice(8, 10)}/${t.periodo.fim.slice(5, 7)})` : ""}: {numeros.join(" · ")}
+        {t.saude !== null ? ` · Jev: saúde ${decimal(t.saude)} de 4` : ""}
+      </span>
+      <span className="block">
+        Entra: <span className="font-medium">{t.candidato.nome}</span>
+        {t.candidato.angulo ? <span className="text-muted-foreground">{` · ângulo ${t.candidato.angulo}`}</span> : null}
+        <span className="text-muted-foreground">{t.copy === "atual" ? " · só a arte muda, a copy atual fica" : " · com a copy do acervo"}</span>
+      </span>
+    </span>
+  );
+}
+
 /** Aviso de acesso só de leitura, com o caminho para conectar com gestão. */
 export function AvisoDeGestao({ motivo }: { motivo: string | null }) {
   const { isAdmin } = useMesa();
@@ -364,6 +397,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[10.5px] font-medium text-success">Já fiz</span>}
                 </span>
                 <AntesDepois i={i} />
+                {i.troca && <ResumoDaTroca i={i} />}
                 {i.montagem && <ResumoDaMontagem i={i} />}
                 {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">Seria feito assim</span>}
                 {i.motivo && <span className="mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]">{i.motivo}</span>}
@@ -371,6 +405,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                 {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && !r.desfeito && r.depois && <ProvaNaMeta i={i} />}
+                {r && r.ok && !r.desfeito && i.tipo === "trocar_anuncio" && (
+                  <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Anúncio novo no mesmo conjunto (mesmo público e verba), em análise na Meta; o antigo ficou pausado. O Desfazer pausa o novo e volta o antigo.</span>
+                )}
                 {r && r.ok && (i.tipo === "duplicar_anuncio" || i.tipo === "trocar_criativo") && (
                   <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Criado pausado na Meta. Nada entra no ar sem alguém ativar.</span>
                 )}
@@ -469,7 +506,11 @@ function ProvaNaMeta({ i }: { i: ItemDaAcao }) {
   const r = i.resultado;
   if (!r || !r.depois) return null;
   const d = r.depois;
-  const valor = i.tipo === "renomear" ? `nome "${d.nome || ""}"` : i.tipo === "orcamento" ? `${brl(d.orcamento_diario_brl)} por dia` : d.status === "PAUSED" ? "pausado" : d.status === "ACTIVE" ? "ativo" : d.status ? d.status.toLowerCase() : "sem status";
+  const st = (s: string | null) => (s === "PAUSED" ? "pausado" : s === "ACTIVE" ? "ativo" : s ? s.toLowerCase() : "sem status");
+  const valor =
+    i.tipo === "trocar_anuncio"
+      ? `anúncio novo ${r.depois_novo ? st(r.depois_novo.status) : "sem leitura"}, antigo ${st(d.status)}`
+      : i.tipo === "renomear" ? `nome "${d.nome || ""}"` : i.tipo === "orcamento" ? `${brl(d.orcamento_diario_brl)} por dia` : st(d.status);
   const quando = r.relido_em || r.feito_em;
   const hora = quando && isFinite(Date.parse(quando)) ? new Date(Date.parse(quando) - 3 * 3600_000).toISOString().slice(11, 16) : "";
   return (

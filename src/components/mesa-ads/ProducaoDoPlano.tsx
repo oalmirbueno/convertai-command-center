@@ -7,6 +7,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
 import { custoDaResposta, ErroDaMesa, usd } from "@/lib/mesa/api";
 import { foco, juntar } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import {
   caminhoDoEstudio,
   chamarAds,
@@ -218,13 +219,19 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
     setAndamento((x) => (x ? { ...x, parando: true } : x));
   };
 
+  // O resumo da produção numa frase (a linha trunca; o "?" e o title mostram inteiro).
+  const resumoDaProducao = `${angulos.length} ângulo${angulos.length === 1 ? "" : "s"} · ${pecas} criativo${pecas === 1 ? "" : "s"} · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`;
+
   return (
-    // No computador a barra gruda no pé da coluna que rola; no celular fica no fim (nada flutua sobre os campos).
-    <div className="border-t border-border bg-background/95 py-3 lg:sticky lg:bottom-0 lg:z-10" role="group" aria-label="Produzir criativos">
-      <div className="flex min-w-0 flex-wrap items-center">
+    // 28/09 (frente AD4, dono: "não no meio"): a barra é o rodapé da coluna principal, fora da
+    // região que rola (AbaPlano), colada embaixo e sem cobrir texto; antes era sticky dentro da
+    // região, e o respiro de baixo da região a deixava flutuando no meio, por cima do ângulo.
+    // Uma linha: o resumo trunca e o detalhe fica no "?". No celular fica no fim da página.
+    <div className="shrink-0 border-t border-border bg-background py-2" role="group" aria-label="Produzir criativos" data-barra-de-producao="">
+      <div className="flex min-w-0 items-center">
         {andamento ? (
           <ProgressoComParada
-            className="mb-1 mr-3 min-w-0 flex-1"
+            className="mr-3 min-w-0 flex-1"
             rotulo="Escrevendo a copy"
             unidade={andamento.total === 1 ? "ângulo" : "ângulos"}
             feitas={andamento.feitas}
@@ -235,25 +242,30 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             onParar={pedirParada}
           />
         ) : (
-          <p className="mb-1 mr-3 min-w-0 flex-1 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-resumo-da-producao="">
-            <span className="font-medium text-foreground">
-              {angulos.length} ângulo{angulos.length === 1 ? "" : "s"}
-            </span>
-            {` · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`}
-            <button type="button" onClick={() => setTrocando((v) => !v)} aria-expanded={trocando} className={juntar("ml-1.5 rounded font-medium text-primary hover:underline", foco)}>
+          <div className="mr-2 flex min-w-0 flex-1 items-center text-[12px] leading-5 text-muted-foreground" data-resumo-da-producao="">
+            <p className="min-w-0 truncate" title={resumoDaProducao}>
+              <span className="font-medium text-foreground">
+                {angulos.length} ângulo{angulos.length === 1 ? "" : "s"}
+              </span>
+              {` · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`}
+            </p>
+            <AjudaRecolhida className="ml-1 shrink-0" rotulo="O que vai ser produzido">
+              {resumoDaProducao}. Para cada ângulo marcado: a copy escrita a mais (o Jev escolhe a melhor), a direção de arte{comArte ? " e as artes no Estúdio Ads, com o andamento e o Parar" : ""}{comKit ? ", e o kit de recepção de quem ainda não tem" : ""}. Trocar muda formatos, tom, modelo da copy, artes e kit.
+            </AjudaRecolhida>
+            <button type="button" onClick={() => setTrocando((v) => !v)} aria-expanded={trocando} className={juntar("ml-1.5 shrink-0 rounded font-medium text-primary hover:underline", foco)}>
               {trocando ? "Pronto" : "Trocar"}
             </button>
-          </p>
+          </div>
         )}
-        <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
-          <span className="mr-2 text-[12px] tabular-nums text-muted-foreground">
+        <span className="ml-auto flex shrink-0 items-center">
+          <span className="mr-2 whitespace-nowrap text-[12px] tabular-nums text-muted-foreground">
             {pecas} criativo{pecas === 1 ? "" : "s"}
           </span>
           <BotaoComCusto
             rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Criar criativos</>}
             titulo="Criar criativos"
             descricao={`Para cada ângulo: a copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)} (escrita a mais, o Jev escolhe a melhor), a direção de arte${comArte ? " e as artes no Estúdio Ads" : ""}. Um ângulo por vez, com Parar.`}
-            className="h-9"
+            className="h-8"
             disabled={!angulos.length || pecas === 0 || andamento !== null}
             fecharAoConfirmar
             partes={() => partesDaCriacao(catalogo, modelo, angulos, formatosDo, comArte).concat(comKit && semKit.length ? partesDoKit(catalogo, semKit.length) : [])}

@@ -80,7 +80,7 @@ beforeEach(() => {
 });
 
 describe("modelo do agente sênior", () => {
-  it("padrão GPT-6 Luna no raciocínio máximo, com o preço na linha e no Otimizar agora (um clique, modo agir)", async () => {
+  it("padrão GPT-6 Luna no raciocínio máximo, com o preço na linha; Otimizar agora é um clique no modo otimizar (régua + Jev, sem pesquisa)", async () => {
     responder({ conta_conversa_ler: { conversa_id: "conv-1", mensagens: [] }, conta_conversar: { conversa_id: "conv-1", custo_usd: 0.03 } });
     montar(h(AgenteSenior, {}));
     await screen.findByText(/Peça o que fazer com a conta/);
@@ -88,7 +88,7 @@ describe("modelo do agente sênior", () => {
     expect(linha.textContent).toMatch(/GPT-6 Luna · raciocínio máximo · US\$ 0,10 \/ 0,50 por 1M · padrão/);
     fireEvent.click(screen.getByRole("button", { name: /Otimizar agora/ }));
     await waitFor(() => expect(chamadas("conta_conversar")).toHaveLength(1));
-    expect(chamadas("conta_conversar")[0]).toMatchObject({ mensagem: TEXTO_DE_OTIMIZAR, modo: "agir", modelo_id: "openrouter:openai/gpt-6-luna", raciocinio: "max" });
+    expect(chamadas("conta_conversar")[0]).toMatchObject({ mensagem: TEXTO_DE_OTIMIZAR, modo: "otimizar", pesquisar: false });
   });
 
   it("a escolha fica lembrada por cliente e vale na mensagem; voltar ao padrão", async () => {

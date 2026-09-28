@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Download, FileArchive, Loader2, Package, Send } from "lucide-react";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -230,28 +232,41 @@ export default function PacoteDaCopy({
   const alternar = (g: GrupoDoPacote) =>
     setAbertos((atual) => (atual.indexOf(g) >= 0 ? atual.filter((x) => x !== g) : atual.concat(g)));
   const tudoRecolhido = abertos.length === 0;
+  // Recolhido por padrão (lembrado por cliente): o pacote é consulta, não o foco da tela.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-ads:estudio:pacote:${clientId}`, true);
+  const resumoDoPacote = pacote
+    ? `${pacote.textos_principais.length} textos · ${pacote.titulos.length} títulos · ${pacote.descricoes.length} descrições · ${pacote.ctas.length} botões`
+    : "Ainda não gerado";
 
   return (
-    <section className="min-w-0 space-y-3 rounded-lg border border-border bg-card p-4" aria-label="Pacote de copy">
-      <div className="flex min-w-0 flex-wrap items-center">
-        <h3 className="mb-1 mr-2 flex min-w-0 flex-1 items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          <Package className="mr-1.5 h-3.5 w-3.5" /> Pacote completo de copy
-        </h3>
-        <BotaoComCusto
-          rotulo={pacote ? "Refazer pacote" : "Gerar pacote completo"}
-          titulo="Pacote de copy"
-          descricao="Textos principais em vários estilos, títulos, descrições, CTAs, ganchos e a orientação ao gestor. O Jev confere a política de todos os textos."
-          variant={pacote ? "outline" : "default"}
-          className="mb-1 h-8"
-          partes={() => [parteDeTexto(modelo, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida)]}
-          executar={() => rodar(() => chamarAds<any>("copy_pacote", { criativo_id: criativo.id, ...modelo.corpo }))}
-          aoConcluir={(data) => {
-            const p = pacoteDaResposta(data, criativo.id);
-            if (p) setPacote(p);
-            void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
-          }}
-        />
-      </div>
+    <section className="min-w-0 space-y-3" aria-label="Pacote de copy" data-recolhido={recolhido ? "sim" : "nao"}>
+      {/* 28/09 (frente AD4, dono): sem caixa em volta; recolhe pelo título e mostra o resumo numa linha. */}
+      <CabecalhoDeSecao
+        nivel={3}
+        titulo="Pacote completo de copy"
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: resumoDoPacote }}
+        acao={
+          <BotaoComCusto
+              rotulo={pacote ? "Refazer pacote" : "Gerar pacote completo"}
+              titulo="Pacote de copy"
+              descricao="Textos principais em vários estilos, títulos, descrições, CTAs, ganchos e a orientação ao gestor. O Jev confere a política de todos os textos."
+              variant={pacote ? "outline" : "default"}
+              className="mb-1 h-8"
+              partes={() => [parteDeTexto(modelo, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida)]}
+              executar={() => rodar(() => chamarAds<any>("copy_pacote", { criativo_id: criativo.id, ...modelo.corpo }))}
+              aoConcluir={(data) => {
+                const p = pacoteDaResposta(data, criativo.id);
+                if (p) {
+                  setPacote(p);
+                  setRecolhido(false);
+                }
+                void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
+              }}
+            />
+        }
+      />
+      {!recolhido && (
+      <>
       <Andamento desde={desde} rotulo="Escrevendo e conferindo o pacote" />
 
       {!pacote && desde === null && (
@@ -382,6 +397,8 @@ export default function PacoteDaCopy({
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Clapperboard, Filter, Link2, Loader2, PackageCheck, Sparkles, Star } from "lucide-react";
+import { ChevronDown, Clapperboard, Filter, Link2, Loader2, MoreHorizontal, PackageCheck, Send, Sparkles, Star, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -35,7 +35,10 @@ import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
 import { Andamento, useAndamento } from "./Comuns";
-import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { botao, juntar } from "@/components/sistema/estilos";
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -58,6 +61,7 @@ import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import type { CopyDoAnuncio } from "./adsApi";
 import { EnvioAoGestor } from "./PacoteDaCopy";
 import KitDeRecepcao from "./KitDeRecepcao";
+import AcervoDoEstudio, { estaNaConta, podeIrParaAConta } from "./AcervoDoEstudio";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 
 /**
@@ -76,9 +80,29 @@ import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
  * até agora) e tem Parar: o que já saiu fica, o resto não gera nem cobra.
  * "Criar criativos" do Plano de teste deixa o pedido de arte e o lote começa
  * sozinho ao abrir esta etapa.
+ *
+ * Frente AD4 (28/09, dono: "mais limpo, sem caixa, rolar menos"): o topo é
+ * uma seção aberta (título, uma linha de estado com o selo "todos entregues"
+ * quando é o caso, um primário e o "..."); o filtro só aparece quando há
+ * situações diferentes. Resultado, kit, configuração da arte, pacote de copy
+ * e prévias recolhem sem caixa, recolhidos por padrão, com uma linha de
+ * resumo. A vista "Acervo" organiza criativos e copies por ângulo e formato,
+ * com o kit de recepção e o "Enviar para a conta" (o agente sênior enxerga e
+ * o Otimizar troca o anúncio ruim pelo melhor daqui, com Confirmar).
  */
 
 export const AVISO_DA_ENTREGA = "O cliente vê em Documentos > Criativos de anúncio.";
+export const AVISO_DA_CONTA = "O agente sênior de tráfego enxerga: no Otimizar, ele troca o anúncio ruim pelo melhor candidato daqui, com o seu Confirmar.";
+
+/** O selo da linha de estado quando todos estão na mesma situação ("todos entregues"). */
+export const TODOS_NA_SITUACAO: Record<SituacaoDoCriativo, string> = {
+  sem_arte: "Todos sem arte",
+  gerando: "Todos gerando",
+  conferindo: "Todos conferindo",
+  corrigindo: "Todos corrigindo",
+  pronto: "Todos prontos",
+  entregue: "Todos entregues",
+};
 
 export function SeloDoStatus({ status }: { status: StatusDoCriativo }) {
   const s = STATUS_DO_CRIATIVO.find((x) => x.valor === status) || STATUS_DO_CRIATIVO[0];
@@ -140,6 +164,21 @@ export function agrupar(criativos: CriativoAds[], planos: PlanoAds[]): Grupo[] {
   return grupos.sort((a, b) => a.ordemDoPlano - b.ordemDoPlano || a.ordemDoAngulo - b.ordemDoAngulo);
 }
 
+/** Tela de 1800 px ou mais (a copy vira a terceira coluna). addListener: Safari 11 não tem addEventListener no MediaQueryList. */
+function useTelaGrande(): boolean {
+  const consulta = "(min-width: 1800px)";
+  const [grande, setGrande] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(consulta).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const m = window.matchMedia(consulta);
+    const mudou = () => setGrande(m.matches);
+    mudou();
+    m.addListener(mudou);
+    return () => m.removeListener(mudou);
+  }, []);
+  return grande;
+}
+
 export default function AbaEstudioAds({
   criativoId,
   onCriativo,
@@ -177,6 +216,15 @@ export default function AbaEstudioAds({
   // Grupos de ângulo com as outras variações abertas (a melhor fica sempre à vista).
   const [abertosOutros, setAbertosOutros] = useState<string[]>([]);
   const modeloDaCopy = useModeloDaCopy();
+  // Frente AD4: o que ver (criativos ou acervo) lembrado por cliente; os "..." e as prévias recolhidas.
+  const [vista, setVista] = useEstadoDaTela<"criativos" | "acervo">(`mesa-ads:estudio:vista:${clientId}`, "criativos", { validar: (v) => v === "criativos" || v === "acervo", esperaMs: 0 });
+  const [maisAberto, setMaisAberto] = useState(false);
+  const [maisDoCriativo, setMaisDoCriativo] = useState(false);
+  const [naConta, setNaConta] = useState<string[]>([]);
+  const [posicionamentosRecolhidos, setPosicionamentosRecolhidos] = useRecolhido(`mesa-ads:estudio:posicionamentos:${clientId}`, true);
+  // A grade ocupa a altura que cabe (de onde começa até o fim da janela); mede de novo quando o topo muda.
+  const { ref: refDaGrade, altura: alturaDaGrade, medir: medirAGrade } = useAlturaQueCabe(vista === "criativos");
+  const telaGrande = useTelaGrande();
   const listaDePlanos = planos.data || [];
   const todos = criativos.data || [];
   const doPlano = planoId ? todos.filter((c) => c.plano_id === planoId) : todos;
@@ -199,7 +247,12 @@ export default function AbaEstudioAds({
     c.trabalho_id ? (((trabalhos.data || []) as any[]).find((t) => t.id === c.trabalho_id) as Trabalho) || null : null;
   const situacao = (c: CriativoAds): SituacaoDoCriativo => situacaoDoTrabalho(trabalhoDe(c), c.trabalho_id ? etapas[c.trabalho_id] : null);
 
-  const filtrados = filtro ? visiveis.filter((c) => situacao(c) === filtro) : visiveis;
+  const contagem = (s: SituacaoDoCriativo) => visiveis.filter((c) => situacao(c) === s).length;
+  // Todos na mesma situação: o filtro some (vira o selo "todos entregues") e não esconde nada.
+  const presentes = SITUACOES.filter((s) => contagem(s.valor) > 0);
+  const unica = presentes.length === 1 ? presentes[0] : null;
+  const filtroEfetivo: SituacaoDoCriativo | "" = unica ? "" : filtro;
+  const filtrados = filtroEfetivo ? visiveis.filter((c) => situacao(c) === filtroEfetivo) : visiveis;
   const aberto = visiveis.find((c) => c.id === criativoId) || filtrados[0] || visiveis[0] || null;
   const trabalho = aberto ? trabalhoDe(aberto) : null;
   const grupos = agrupar(filtrados, listaDePlanos);
@@ -211,7 +264,6 @@ export default function AbaEstudioAds({
   });
   const laminasPendentes = semArte.reduce((n, c) => n + laminasSemArte(trabalhoDe(c)).length, 0);
   const prontos = visiveis.filter((c) => situacao(c) === "pronto" && !!c.trabalho_id);
-  const contagem = (s: SituacaoDoCriativo) => visiveis.filter((c) => situacao(c) === s).length;
   const primeiroDoLote = semArte.length ? trabalhoDe(semArte[0]) : null;
   const qualidadeDoLote = ((primeiroDoLote && primeiroDoLote.qualidade) as Qualidade) || "media";
   const modeloDoLote = primeiroDoLote ? primeiroDoLote.modelo_imagem_id : null;
@@ -274,6 +326,13 @@ export default function AbaEstudioAds({
   // "Criar criativos" do Plano de teste: as artes começam sozinhas quando os trabalhos chegam (custo já confirmado lá).
   const pedidoDeArte = arteDoPlanoPedida(planoId);
   const trabalhosProntos = !!trabalhos.data && !trabalhos.isFetching;
+  // O topo da grade desce quando o "..." abre, o andamento do lote aparece ou a linha de estado muda: mede de novo.
+  useEffect(() => {
+    const t = window.setTimeout(medirAGrade, 30);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maisAberto, !!lote, !!pedidoDeArte, vista, desdePacote !== null, criativos.isLoading]);
+
   useEffect(() => {
     if (!planoId || !pedidoDeArte || !trabalhosProntos || desdeLote !== null) return;
     const alvo = todos.filter((c) => pedidoDeArte.indexOf(c.id) >= 0);
@@ -328,6 +387,46 @@ export default function AbaEstudioAds({
     }
   };
 
+  // Frente AD4 (28/09): "enviar para a conta" = status "pronto" (na conta); o agente sênior enxerga e o
+  // Otimizar usa como candidato. Tirar da conta volta a rascunho (nada é apagado).
+  const mudarStatusEmLote = async (lista: CriativoAds[], status: StatusDoCriativo) => {
+    const ids = lista.map((c) => c.id);
+    const chave = chavesAds.criativos(clientId);
+    const antes = queryClient.getQueryData<CriativoAds[]>(chave);
+    setNaConta((o) => o.concat(ids));
+    queryClient.setQueryData<CriativoAds[]>(chave, (l) => (l || []).map((x) => (ids.indexOf(x.id) >= 0 ? { ...x, status } : x)));
+    let ok = 0;
+    const falhas: unknown[] = [];
+    for (const c of lista) {
+      try {
+        await mudarCriativo(c.id, { status });
+        ok += 1;
+      } catch (e) {
+        falhas.push(e);
+      }
+    }
+    setNaConta((o) => o.filter((x) => ids.indexOf(x) < 0));
+    if (falhas.length) {
+      queryClient.setQueryData(chave, antes);
+      void queryClient.invalidateQueries({ queryKey: chave });
+      avisarErro(falhas[0], status === "pronto" ? "Nem todos foram para a conta" : "Nem todos saíram da conta");
+    }
+    if (ok && status === "pronto") toast.success(ok === 1 ? "Criativo na conta" : `${ok} criativos na conta`, { description: AVISO_DA_CONTA });
+    if (ok && status === "rascunho") toast.info(ok === 1 ? "Criativo fora da conta" : `${ok} criativos fora da conta`, { description: "O agente sênior deixa de usar como candidato. Nada foi apagado." });
+  };
+  const enviarParaConta = (lista: CriativoAds[]) => mudarStatusEmLote(lista, "pronto");
+  const tirarDaConta = (lista: CriativoAds[]) => mudarStatusEmLote(lista, "rascunho");
+  /** Enviar para a conta pede um segundo clique, como o entregar. */
+  const armarOuEnviarConta = (chave: string, lista: CriativoAds[]) => {
+    if (armado !== chave) {
+      setArmado(chave);
+      window.setTimeout(() => setArmado((a) => (a === chave ? null : a)), 6000);
+      return;
+    }
+    setArmado(null);
+    void enviarParaConta(lista);
+  };
+
   if (criativos.isLoading) return <Carregando forma="aba" rotulo="Lendo os criativos" />;
   if (criativos.isError) return <AvisoDeErro erro={criativos.error} />;
   if (!todos.length) {
@@ -348,21 +447,93 @@ export default function AbaEstudioAds({
   const anuncioLigado = aberto && aberto.ad_id ? listaDeAnuncios.find((a) => a.ad_id === aberto.ad_id) : null;
   const situacaoAberta = aberto ? situacao(aberto) : "sem_arte";
 
+  // 28/09 (frente AD4, dono): "Todos entregues" vira um selo na linha de estado, sem o filtro gigante.
+  const naContaN = visiveis.filter(estaNaConta).length;
+  const aptosParaConta = visiveis.filter((c) => podeIrParaAConta(c, situacao(c)));
+  const porFocoParcial = planoId && doPlano.length > 0 && doPlano.length < todos.length;
+  const selo = unica ? (visiveis.length > 1 ? TODOS_NA_SITUACAO[unica.valor] : unica.rotulo) : null;
+
+  // Um primário por área: gerar o que falta, senão entregar o pronto, senão mandar o entregue para a conta.
+  const botaoGerar = (primario: boolean) => (
+    <BotaoComCusto
+      rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Gerar todos{laminasPendentes ? ` (${laminasPendentes})` : ""}</>}
+      titulo="Gerar todas as artes"
+      descricao="Gera cada lâmina sem arte e confere antes de dar como pronta (texto ou logo errados: uma correção só na área deles). Com andamento e Parar."
+      variant={primario ? "default" : "outline"}
+      className="h-8"
+      disabled={!laminasPendentes || desdeLote !== null}
+      partes={() => partesDaArte(catalogo, laminasPendentes, qualidadeDoLote, modeloDoLote)}
+      executar={() => rodarLote(gerarTodos)}
+    />
+  );
+  const botaoEntregar = (primario: boolean) => (
+    <Button
+      type="button"
+      size="sm"
+      variant={primario || armado === "lote" ? "default" : "outline"}
+      className="h-8"
+      disabled={!prontos.length || entregando.length > 0}
+      onClick={() => armarOuEntregar("lote", prontos)}
+      title={`Entrega os criativos prontos sem aprovação. ${AVISO_DA_ENTREGA}`}
+      aria-label={armado === "lote" ? `Confirmar entrega de ${prontos.length}` : `Entregar ao cliente${prontos.length ? ` (${prontos.length})` : ""}`}
+    >
+      {entregando.length > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
+      {armado === "lote" ? (
+        `Confirmar entrega de ${prontos.length}`
+      ) : (
+        <>
+          Entregar<span className="hidden sm:inline"> ao cliente</span>
+          {prontos.length ? ` (${prontos.length})` : ""}
+        </>
+      )}
+    </Button>
+  );
+  const botaoConta = (primario: boolean) => (
+    <Button
+      type="button"
+      size="sm"
+      variant={primario || armado === "conta" ? "default" : "outline"}
+      className="h-8"
+      disabled={!aptosParaConta.length || naConta.length > 0}
+      onClick={() => armarOuEnviarConta("conta", aptosParaConta)}
+      title={AVISO_DA_CONTA}
+      aria-label={armado === "conta" ? `Confirmar: ${aptosParaConta.length} para a conta` : `Enviar para a conta (${aptosParaConta.length})`}
+    >
+      {naConta.length > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+      {armado === "conta" ? (
+        `Confirmar: ${aptosParaConta.length} para a conta`
+      ) : (
+        <>
+          <span className="hidden sm:inline">Enviar para a conta</span>
+          <span className="sm:hidden">Conta</span>
+          {` (${aptosParaConta.length})`}
+        </>
+      )}
+    </Button>
+  );
+  const primario = laminasPendentes ? "gerar" : prontos.length ? "entregar" : aptosParaConta.length ? "conta" : null;
+  // A copy: terceira coluna (região própria) na tela grande; embaixo da arte no notebook e no celular.
+  const colunaDaCopy = aberto ? (
+    <div className={juntar("min-w-0", telaGrande && "h-full overflow-y-auto overscroll-contain")} data-coluna-da-copy="">
+      <PainelDaCopy key={aberto.id} criativo={aberto} caminhoDaArte={capaDoTrabalho(trabalho)} nome={nomeDoCriativo(aberto, listaDePlanos)} aoMudarCopy={(c) => setCopyAoVivo({ id: aberto.id, copy: c })} />
+    </div>
+  ) : null;
+
   return (
     <div className="min-w-0 space-y-4">
-      <section className="min-w-0 rounded-lg border border-border bg-card px-4 py-3" aria-label="Produção em lote">
-        <div className="flex min-w-0 flex-wrap items-center">
-          <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-            <div className="flex min-w-0 items-center">
-              <h2 className="truncate text-[15px] font-semibold">Estúdio Ads</h2>
-              <AjudaRecolhida className="ml-1.5" rotulo="Como o Estúdio Ads funciona">
-                A arte só aparece depois de conferida; texto ou logo errados são corrigidos uma vez, só na área deles. Gerar todos gera e confere cada lâmina sem arte, com o andamento e o Parar. Em cada ângulo a melhor variação vem primeiro, com o porquê. Entregar ao cliente pede um segundo clique: {AVISO_DA_ENTREGA}
-              </AjudaRecolhida>
-            </div>
-            <p className="text-[12px] text-muted-foreground">
+      <section className="min-w-0" aria-label="Produção em lote">
+        <CabecalhoDeSecao
+          titulo="Estúdio Ads"
+          ajuda={
+            <>
+              A arte só aparece depois de conferida; texto ou logo errados são corrigidos uma vez, só na área deles. Gerar todos gera e confere cada lâmina sem arte, com o andamento e o Parar. Em cada ângulo a melhor variação vem primeiro, com o porquê. Entregar ao cliente pede um segundo clique: {AVISO_DA_ENTREGA} Enviar para a conta deixa o criativo à mão do agente sênior de tráfego (no Otimizar, ele troca o anúncio ruim pelo melhor do acervo, com o seu Confirmar).
+            </>
+          }
+          descricao={
+            <span data-linha-de-estado="">
               {visiveis.length} criativo{visiveis.length === 1 ? "" : "s"}
-              {planoId && doPlano.length > 0 && doPlano.length < todos.length ? ` do plano em foco (de ${todos.length})` : ""}
-              {planoId && doPlano.length > 0 && doPlano.length < todos.length && onVerTodos && (
+              {porFocoParcial ? ` do plano em foco (de ${todos.length})` : ""}
+              {porFocoParcial && onVerTodos && (
                 <>
                   {" "}
                   <button type="button" className="text-primary hover:underline" onClick={onVerTodos}>
@@ -370,34 +541,92 @@ export default function AbaEstudioAds({
                   </button>
                 </>
               )}
-            </p>
-          </div>
-          <BotaoDoEstilo trabalhoIds={idsDosTrabalhos} modeloImagemId={modeloDoLote} className="mb-1 mr-2 mt-1" />
-          <span className="mb-1 mr-2 mt-1 inline-flex items-center">
-            <BotaoComCusto
-              rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Gerar todos{laminasPendentes ? ` (${laminasPendentes})` : ""}</>}
-              titulo="Gerar todas as artes"
-              descricao="Gera cada lâmina sem arte e confere antes de dar como pronta (texto ou logo errados: uma correção só na área deles). Com andamento e Parar."
-              className="h-9"
-              disabled={!laminasPendentes || desdeLote !== null}
-              partes={() => partesDaArte(catalogo, laminasPendentes, qualidadeDoLote, modeloDoLote)}
-              executar={() => rodarLote(gerarTodos)}
+              {selo && (
+                <span className={juntar("ml-1.5 inline-flex h-5 items-center rounded-full px-2 align-middle text-[10.5px] font-medium", unica ? unica.tom : "")} data-selo-da-situacao={unica ? unica.valor : ""}>
+                  {selo}
+                </span>
+              )}
+              {naContaN > 0 && <span className="ml-1.5">· {naContaN} na conta</span>}
+            </span>
+          }
+          acao={
+            <>
+              {primario === "gerar" && botaoGerar(true)}
+              {primario === "entregar" && botaoEntregar(true)}
+              {primario === "conta" && botaoConta(true)}
+              <button
+                type="button"
+                className={botao.icone}
+                aria-label="Mais ações do Estúdio Ads"
+                aria-expanded={maisAberto}
+                title="Mais ações"
+                onClick={() => setMaisAberto(!maisAberto)}
+                data-mais-do-estudio=""
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </>
+          }
+        />
+        {/* Linha 2: o que ver (criativos ou acervo) e, só quando há situações diferentes, o filtro. */}
+        <div className="mt-2 flex min-w-0 flex-wrap items-center" data-controles-do-estudio="">
+          <SeletorCompacto
+            rotulo="O que ver"
+            className="mb-1 mr-2"
+            opcoes={[
+              { valor: "criativos", rotulo: "Criativos" },
+              { valor: "acervo", rotulo: naContaN ? `Acervo · ${naContaN} na conta` : "Acervo" },
+            ]}
+            valor={vista}
+            onEscolher={(v) => setVista(v === "acervo" ? "acervo" : "criativos")}
+          />
+          {vista === "criativos" && !unica && (
+            <SeletorCompacto
+              rotulo="Filtrar por situação"
+              className="mb-1"
+              icone={<Filter className="h-3.5 w-3.5" />}
+              opcoes={[{ valor: "", rotulo: `Todos (${visiveis.length})` }].concat(
+                SITUACOES.filter((s) => contagem(s.valor) > 0 || filtro === s.valor).map((s) => ({ valor: s.valor, rotulo: `${s.rotulo} (${contagem(s.valor)})` })),
+              )}
+              valor={filtroEfetivo}
+              onEscolher={(v) => setFiltro(v as SituacaoDoCriativo | "")}
             />
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant={armado === "lote" ? "default" : "outline"}
-            className="mb-1 mt-1 h-9"
-            disabled={!prontos.length || entregando.length > 0}
-            onClick={() => armarOuEntregar("lote", prontos)}
-            title={`Entrega os criativos prontos sem aprovação. ${AVISO_DA_ENTREGA}`}
-          >
-            {entregando.length > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
-            {armado === "lote" ? `Confirmar entrega de ${prontos.length}` : `Entregar ao cliente${prontos.length ? ` (${prontos.length})` : ""}`}
-          </Button>
-          <ImportarPacote onImportado={onImportado} className="mb-1 ml-2 mt-1" />
+          )}
         </div>
+        {/* O "...": o secundário num lugar só (estilo, importar, copy do plano e o que não é o primário agora). */}
+        {maisAberto && (
+          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" aria-label="Mais ações do Estúdio Ads" role="group" data-menu-mais="">
+            {primario !== "gerar" && laminasPendentes > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoGerar(false)}</span>}
+            {primario !== "entregar" && prontos.length > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoEntregar(false)}</span>}
+            {primario !== "conta" && aptosParaConta.length > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoConta(false)}</span>}
+            <BotaoDoEstilo trabalhoIds={idsDosTrabalhos} modeloImagemId={modeloDoLote} className="mb-1 mr-2" />
+            <ImportarPacote onImportado={onImportado} className="mb-1 mr-2" />
+            {planoEmFoco && (
+              <span className="mb-1 flex min-w-0 flex-wrap items-center">
+                <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Copy do plano:</span>
+                <span className="mb-1 mr-2 inline-flex items-center">
+                  <BotaoComCusto
+                    rotulo="Pacote de copy de todos"
+                    titulo="Pacote de copy do plano"
+                    descricao="Gera o pacote completo de copy de cada criativo do plano (até o tempo da função acabar; o que faltar fica pendente)."
+                    variant="outline"
+                    className="h-8"
+                    disabled={desdePacote !== null}
+                    partes={() => [parteDeTexto(modeloDaCopy, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida, Math.max(1, doPlano.length || visiveis.length))]}
+                    executar={() => rodarPacote(() => chamarAds<any>("copy_pacote", { plano_id: planoEmFoco, ...modeloDaCopy.corpo }))}
+                    aoConcluir={(data) => {
+                      void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
+                      const pend = data && Array.isArray(data.pendentes) ? data.pendentes.length : 0;
+                      if (pend) toast.info("Parte do pacote ficou para depois", { description: `${pend} criativo(s) pendentes. Clique de novo para continuar.` });
+                    }}
+                  />
+                </span>
+                <EnvioAoGestor corpo={() => ({ plano_id: planoEmFoco })} rotulo="Enviar pacote do plano ao gestor" />
+              </span>
+            )}
+          </div>
+        )}
+        <Andamento desde={desdePacote} rotulo="Escrevendo os pacotes" />
         {lote ? (
           <ProgressoComParada
             className="mt-2"
@@ -416,57 +645,40 @@ export default function AbaEstudioAds({
         ) : pedidoDeArte && desdeLote === null ? (
           <p className="mt-2 text-[12px] text-muted-foreground" role="status">Preparando as artes dos criativos novos…</p>
         ) : null}
-        <div className="mt-2 min-w-0">
-          {/* Filtro por situação (sistema de design): até 4 opções, segmentado; mais, lista. */}
-          <SeletorCompacto
-            rotulo="Filtrar por situação"
-            icone={<Filter className="h-3.5 w-3.5" />}
-            opcoes={[{ valor: "", rotulo: `Todos (${visiveis.length})` }].concat(
-              SITUACOES.filter((s) => contagem(s.valor) > 0 || filtro === s.valor).map((s) => ({ valor: s.valor, rotulo: `${s.rotulo} (${contagem(s.valor)})` })),
-            )}
-            valor={filtro}
-            onEscolher={(v) => setFiltro(v as SituacaoDoCriativo | "")}
-          />
-        </div>
-        {planoEmFoco && (
-          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2">
-            <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Copy do plano:</span>
-            <span className="mb-1 mr-2 inline-flex items-center">
-              <BotaoComCusto
-                rotulo="Pacote de copy de todos"
-                titulo="Pacote de copy do plano"
-                descricao="Gera o pacote completo de copy de cada criativo do plano (até o tempo da função acabar; o que faltar fica pendente)."
-                variant="outline"
-                className="h-8"
-                disabled={desdePacote !== null}
-                partes={() => [parteDeTexto(modeloDaCopy, TAMANHOS_ADS.pacotePorCriativo.entrada + 2000, TAMANHOS_ADS.pacotePorCriativo.saida, Math.max(1, doPlano.length || visiveis.length))]}
-                executar={() => rodarPacote(() => chamarAds<any>("copy_pacote", { plano_id: planoEmFoco, ...modeloDaCopy.corpo }))}
-                aoConcluir={(data) => {
-                  void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
-                  const pend = data && Array.isArray(data.pendentes) ? data.pendentes.length : 0;
-                  if (pend) toast.info("Parte do pacote ficou para depois", { description: `${pend} criativo(s) pendentes. Clique de novo para continuar.` });
-                }}
-              />
-            </span>
-            <EnvioAoGestor corpo={() => ({ plano_id: planoEmFoco })} rotulo="Enviar pacote do plano ao gestor" />
-            <Andamento desde={desdePacote} rotulo="Escrevendo os pacotes" />
-          </div>
-        )}
       </section>
 
-      {/* Notebook (até 1799 px): lista ao lado e, na coluna larga, a arte, a copy e
+      {vista === "acervo" ? (
+        <AcervoDoEstudio
+          criativos={visiveis}
+          planos={listaDePlanos}
+          trabalhoDe={trabalhoDe}
+          situacao={situacao}
+          onAbrir={(id) => {
+            setVista("criativos");
+            onCriativo(id);
+          }}
+          onEnviar={enviarParaConta}
+          onTirar={tirarDaConta}
+          ocupados={naConta}
+        />
+      ) : (
+      /* Notebook (até 1799 px): lista ao lado e, na coluna larga, a arte, a copy e
           os posicionamentos um embaixo do outro. Tela grande (1800 px ou mais): a
-          copy vira terceira coluna, presa ao rolar, e os posicionamentos ficam logo
-          abaixo da arte. Antes a copy ia para a lateral já em 1536 px (o notebook
-          com zoom de 125%) e sobrava um buraco enorme embaixo da arte (dono, 25/09). */}
+          copy vira terceira coluna e os posicionamentos ficam logo abaixo da arte.
+          Antes a copy ia para a lateral já em 1536 px (o notebook com zoom de 125%)
+          e sobrava um buraco enorme embaixo da arte (dono, 25/09).
+          28/09 (frente AD4, dono: "nenhum espaço sobrando embaixo e nada cortado,
+          nem na tela cheia"): a grade ocupa a altura medida de onde ela começa até o
+          fim da janela (useAlturaQueCabe), e não mais 100vh menos um número fixo;
+          cada coluna é uma região com a própria rolagem, e a página não rola junto.
+          No celular a página rola e as colunas vão uma embaixo da outra. */
       <div
-        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px] min-[1800px]:grid-rows-[auto_1fr]"
+        ref={refDaGrade}
+        style={alturaDaGrade ? { height: `${alturaDaGrade}px` } : undefined}
+        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px]"
         data-estudio-ads-grade=""
       >
-        <aside
-          className="min-w-0 lg:sticky lg:top-[140px] lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:max-h-[calc(100vh-170px)] lg:self-start lg:overflow-y-auto lg:overscroll-contain min-[1800px]:row-span-2"
-          aria-label="Criativos"
-        >
+        <aside className="min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label="Criativos">
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => {
             // Frente CR: a melhor variação do ângulo à vista (marcada); as outras recolhidas.
@@ -497,6 +709,7 @@ export default function AbaEstudioAds({
                       </span>
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
                         <SeloDaSituacao situacao={situacao(c)} />
+                        {estaNaConta(c) && <span className="ml-1 text-[10.5px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
                         {c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
                       </span>
                     </span>
@@ -533,82 +746,123 @@ export default function AbaEstudioAds({
         </aside>
 
         {aberto && (
-          <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-1">
-            <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-border bg-card px-4 py-3">
-              <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
-                <div className="flex min-w-0 items-center">
-                  <h2 className="min-w-0 truncate text-[15px] font-semibold" title={nomeDoCriativo(aberto, listaDePlanos)}>
-                    {nomeDoCriativo(aberto, listaDePlanos)}
-                  </h2>
-                  <SeloDaSituacao situacao={situacaoAberta} />
-                </div>
-                <p className="text-[11.5px] text-muted-foreground">
-                  {formatoDe(aberto.formato).rotulo}
-                  {anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}
-                </p>
-                {/* Frente CR: por que este criativo, em uma linha (estilo com o dado real ou padrão do nicho, e o Jev). */}
-                {porqueDoCriativo(aberto, anguloAberto) && (
-                  <p className="mt-0.5 text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-porque-do-criativo="">
-                    <span className="font-medium">Por que este: </span>
-                    <span className="text-muted-foreground">{porqueDoCriativo(aberto, anguloAberto)}</span>
+          <div className="min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pr-1" data-coluna-principal="">
+            {/* 28/09 (frente AD4): o cabeçalho do criativo sem caixa; Status e Anúncio no "...". */}
+            <div className="min-w-0" data-cabecalho-do-criativo="">
+              <div className="flex min-w-0 flex-wrap items-start">
+                <div className="mb-1 mr-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center">
+                    <h2 className="min-w-0 truncate text-[15px] font-semibold" title={nomeDoCriativo(aberto, listaDePlanos)}>
+                      {nomeDoCriativo(aberto, listaDePlanos)}
+                    </h2>
+                    <span className="ml-2 inline-flex shrink-0" title={situacaoAberta === "entregue" ? AVISO_DA_ENTREGA : undefined}>
+                      <SeloDaSituacao situacao={situacaoAberta} />
+                    </span>
+                    {estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[10.5px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
+                  </div>
+                  <p className="truncate text-[12px] text-muted-foreground">
+                    {formatoDe(aberto.formato).rotulo}
+                    {anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}
                   </p>
-                )}
+                  {/* Frente CR: por que este criativo, em uma linha (estilo com o dado real ou padrão do nicho, e o Jev). */}
+                  {porqueDoCriativo(aberto, anguloAberto) && (
+                    <p className="truncate text-[12px] leading-snug" data-porque-do-criativo="" title={porqueDoCriativo(aberto, anguloAberto)}>
+                      <span className="font-medium">Por que este: </span>
+                      <span className="text-muted-foreground">{porqueDoCriativo(aberto, anguloAberto)}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="mb-1 flex shrink-0 items-center">
+                  {situacaoAberta === "pronto" && aberto.trabalho_id && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mr-1 h-8"
+                      disabled={entregando.indexOf(aberto.id) >= 0}
+                      onClick={() => armarOuEntregar(aberto.id, [aberto])}
+                      title={AVISO_DA_ENTREGA}
+                    >
+                      {entregando.indexOf(aberto.id) >= 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
+                      {armado === aberto.id ? "Confirmar entrega" : "Entregar ao cliente"}
+                    </Button>
+                  )}
+                  {situacaoAberta === "entregue" && !estaNaConta(aberto) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={armado === `conta:${aberto.id}` ? "default" : "outline"}
+                      className="mr-1 h-8"
+                      disabled={naConta.indexOf(aberto.id) >= 0}
+                      onClick={() => armarOuEnviarConta(`conta:${aberto.id}`, [aberto])}
+                      title={AVISO_DA_CONTA}
+                    >
+                      <Send className="mr-1 h-3.5 w-3.5" />
+                      {armado === `conta:${aberto.id}` ? "Confirmar: para a conta" : "Enviar para a conta"}
+                    </Button>
+                  )}
+                  <button
+                    type="button"
+                    className={botao.icone}
+                    aria-label="Mais do criativo"
+                    aria-expanded={maisDoCriativo}
+                    title="Status, anúncio ligado e conta"
+                    onClick={() => setMaisDoCriativo(!maisDoCriativo)}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <label className="mb-1 mr-2 mt-1 flex items-center text-[11.5px] text-muted-foreground">
-                <span className="mr-1.5">Status</span>
-                <select
-                  aria-label="Status do criativo"
-                  value={aberto.status}
-                  onChange={(e) => void mudar(aberto, { status: e.target.value as StatusDoCriativo }, "Status salvo")}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
-                >
-                  {STATUS_DO_CRIATIVO.map((s) => (
-                    <option key={s.valor} value={s.valor}>
-                      {s.rotulo}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mb-1 mr-2 mt-1 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
-                <span className="mr-1.5 shrink-0">Anúncio</span>
-                <select
-                  aria-label="Anúncio no Meta"
-                  value={aberto.ad_id || ""}
-                  disabled={anuncios.isLoading}
-                  onChange={(e) => void mudar(aberto, { ad_id: e.target.value || null }, e.target.value ? "Criativo ligado ao anúncio" : "Vínculo desfeito")}
-                  className="h-8 min-w-0 max-w-[200px] rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
-                >
-                  <option value="">{anuncios.isLoading ? "Carregando…" : listaDeAnuncios.length ? "Ligar a um anúncio" : "Sem anúncios importados"}</option>
-                  {listaDeAnuncios.map((a) => (
-                    <option key={a.ad_id} value={a.ad_id}>
-                      {nomeDoAnuncio(a)}
-                      {a.effective_status ? ` (${a.effective_status.toLowerCase()})` : ""}
-                    </option>
-                  ))}
-                  {aberto.ad_id && !anuncioLigado && <option value={aberto.ad_id}>{aberto.ad_id}</option>}
-                </select>
-              </label>
-              {situacaoAberta === "pronto" && aberto.trabalho_id && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={armado === aberto.id ? "default" : "outline"}
-                  className="mb-1 mt-1 h-8"
-                  disabled={entregando.indexOf(aberto.id) >= 0}
-                  onClick={() => armarOuEntregar(aberto.id, [aberto])}
-                  title={AVISO_DA_ENTREGA}
-                >
-                  {entregando.indexOf(aberto.id) >= 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
-                  {armado === aberto.id ? "Confirmar entrega" : "Entregar ao cliente"}
-                </Button>
+              {maisDoCriativo && (
+                <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group" aria-label="Mais do criativo">
+                  <label className="mb-1 mr-3 flex items-center text-[11.5px] text-muted-foreground">
+                    <span className="mr-1.5">Status</span>
+                    <select
+                      aria-label="Status do criativo"
+                      value={aberto.status}
+                      onChange={(e) => void mudar(aberto, { status: e.target.value as StatusDoCriativo }, "Status salvo")}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
+                    >
+                      {STATUS_DO_CRIATIVO.map((s) => (
+                        <option key={s.valor} value={s.valor}>
+                          {s.valor === "pronto" ? "Na conta (pronto para subir)" : s.rotulo}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="mb-1 mr-3 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+                    <span className="mr-1.5 shrink-0">Anúncio</span>
+                    <select
+                      aria-label="Anúncio no Meta"
+                      value={aberto.ad_id || ""}
+                      disabled={anuncios.isLoading}
+                      onChange={(e) => void mudar(aberto, { ad_id: e.target.value || null }, e.target.value ? "Criativo ligado ao anúncio" : "Vínculo desfeito")}
+                      className="h-8 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-[12px] text-foreground"
+                    >
+                      <option value="">{anuncios.isLoading ? "Carregando…" : listaDeAnuncios.length ? "Ligar a um anúncio" : "Sem anúncios importados"}</option>
+                      {listaDeAnuncios.map((a) => (
+                        <option key={a.ad_id} value={a.ad_id}>
+                          {nomeDoAnuncio(a)}
+                          {a.effective_status ? ` (${a.effective_status.toLowerCase()})` : ""}
+                        </option>
+                      ))}
+                      {aberto.ad_id && !anuncioLigado && <option value={aberto.ad_id}>{aberto.ad_id}</option>}
+                    </select>
+                  </label>
+                  {aberto.status === "pronto" && (
+                    <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" disabled={naConta.indexOf(aberto.id) >= 0} onClick={() => void tirarDaConta([aberto])}>
+                      <Undo2 className="mr-1 h-3.5 w-3.5" /> Tirar da conta
+                    </Button>
+                  )}
+                </div>
               )}
-              {situacaoAberta === "entregue" && <span className="mb-1 mt-1 text-[11.5px] text-primary">{AVISO_DA_ENTREGA}</span>}
             </div>
 
-            <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
-
-            {/* 25/09: o que recebe quem clica neste anúncio (post de recepção e roteiro de vendas do ângulo). */}
-            {planoAberto && anguloAberto && <KitDeRecepcao key={`${planoAberto.id}:${anguloAberto.id}`} plano={planoAberto} angulo={anguloAberto} compacto />}
+            {/* Resultado e kit recolhidos por padrão, sem caixa: uma linha de resumo cada. */}
+            <div className="min-w-0 divide-y divide-border border-y border-border [&>*]:py-3">
+              <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
+              {/* 25/09: o que recebe quem clica neste anúncio (post de recepção e roteiro de vendas do ângulo). */}
+              {planoAberto && anguloAberto && <KitDeRecepcao key={`${planoAberto.id}:${anguloAberto.id}`} plano={planoAberto} angulo={anguloAberto} compacto />}
+            </div>
 
             {trabalho ? (
               <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
@@ -620,27 +874,32 @@ export default function AbaEstudioAds({
                 <p className="mt-1 text-[12.5px] text-muted-foreground">Produza este ângulo de novo pelo Plano de teste para o diretor montar a direção.</p>
               </div>
             )}
+            {!telaGrande && colunaDaCopy}
+
+            {/* Posicionamentos na coluna da arte, lado a lado, em tamanho de celular. Recolhidos por padrão, sem caixa. */}
+            <div className="min-w-0" data-posicionamentos="">
+              <CabecalhoDeSecao
+                nivel={3}
+                titulo="Prévias nos posicionamentos"
+                recolher={{ recolhido: posicionamentosRecolhidos, onAlternar: () => setPosicionamentosRecolhidos(!posicionamentosRecolhidos), resumo: "Feed, Stories e Reels em tamanho de celular" }}
+              />
+              {!posicionamentosRecolhidos && (
+                <div className="mt-2 min-w-0">
+                  <PosicionamentosDoAnuncio
+                    copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
+                    caminho={capaDoTrabalho(trabalho)}
+                    formato={aberto.formato}
+                    nome={clientName}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {aberto && (
-          <div className="min-w-0 lg:col-start-2 lg:row-start-2 min-[1800px]:sticky min-[1800px]:top-[140px] min-[1800px]:col-start-3 min-[1800px]:row-span-2 min-[1800px]:row-start-1 min-[1800px]:max-h-[calc(100vh-170px)] min-[1800px]:self-start min-[1800px]:overflow-y-auto min-[1800px]:overscroll-contain" data-coluna-da-copy="">
-            <PainelDaCopy key={aberto.id} criativo={aberto} caminhoDaArte={capaDoTrabalho(trabalho)} nome={nomeDoCriativo(aberto, listaDePlanos)} aoMudarCopy={(c) => setCopyAoVivo({ id: aberto.id, copy: c })} />
-          </div>
-        )}
-
-        {aberto && (
-          // Posicionamentos na coluna da arte, lado a lado, em tamanho de celular.
-          <div className="min-w-0 rounded-lg border border-border bg-card p-3 lg:col-start-2 lg:row-start-3 min-[1800px]:row-start-2" data-posicionamentos="">
-            <PosicionamentosDoAnuncio
-              copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
-              caminho={capaDoTrabalho(trabalho)}
-              formato={aberto.formato}
-              nome={clientName}
-            />
-          </div>
-        )}
+        {aberto && telaGrande && colunaDaCopy}
       </div>
+      )}
     </div>
   );
 }

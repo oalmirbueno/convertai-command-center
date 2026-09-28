@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Check, ChevronDown, Copy, HandCoins, Loader2, MessageCircle, ShieldAlert, Undo2, X } from "lucide-react";
+import { CalendarPlus, Check, Copy, HandCoins, Loader2, MessageCircle, ShieldAlert, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { dataCurta } from "@/lib/mesa/api";
 import { chavesAds, normalizarPlano, type Angulo, type PlanoAds } from "./adsApi";
 import {
@@ -262,7 +264,10 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
 export default function KitDeRecepcao({ plano, angulo, compacto = false }: { plano: PlanoAds; angulo: Angulo; compacto?: boolean }) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
-  const [aberto, setAberto] = useState(!compacto);
+  // Aberto ou recolhido lembrado por cliente (sair e voltar mantém); compacto nasce recolhido.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-ads:kit:${compacto ? "compacto" : "inteiro"}:${clientId}`, compacto);
+  const aberto = !recolhido;
+  const setAberto = (v: boolean) => setRecolhido(!v);
   const kit = kitDoAngulo(angulo);
 
   const atualizarPlano = (p: PlanoAds) => {
@@ -287,23 +292,21 @@ export default function KitDeRecepcao({ plano, angulo, compacto = false }: { pla
     />
   );
 
+  // 28/09 (frente AD4, dono: "recolher, minimalista, sem caixa em volta"): seção aberta com o título
+  // que recolhe; recolhida, uma linha de resumo embaixo. O botão de criar ou refazer fica sempre à vista.
+  const resumo = kit ? `Post e roteiro de vendas prontos${kit.agenda ? `, na agenda em ${dataCurta(kit.agenda.data)}` : ""}` : "Post e atendimento de quem clica";
   return (
-    <section className="min-w-0 rounded-lg border border-border bg-card p-3" aria-label={`Kit de recepção: ${angulo.nome}`}>
-      <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" className="mb-1 mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
-          <HandCoins className="mr-1.5 h-4 w-4 shrink-0 text-primary" />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold">Kit de recepção{compacto ? "" : `: ${angulo.nome}`}</span>
-            <span className="block truncate text-[11.5px] text-muted-foreground" title="O post e o atendimento que recebem quem clica neste anúncio.">
-              {kit ? `Post e roteiro de vendas prontos${kit.agenda ? `, na agenda em ${dataCurta(kit.agenda.data)}` : ""}` : "Post e atendimento de quem clica"}
-            </span>
-          </span>
-          {kit && <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />}
-        </button>
-        <span className="mb-1">{botaoGerar}</span>
-      </div>
+    <section className="min-w-0" aria-label={`Kit de recepção: ${angulo.nome}`} data-kit-de-recepcao={kit ? "pronto" : "sem-kit"}>
+      <CabecalhoDeSecao
+        nivel={3}
+        titulo={`Kit de recepção${compacto ? "" : `: ${angulo.nome}`}`}
+        descricao={kit ? undefined : resumo}
+        truncar
+        recolher={kit ? { recolhido: !aberto, onAlternar: () => setAberto(!aberto), resumo } : undefined}
+        acao={botaoGerar}
+      />
       {kit && aberto && (
-        <div className="mt-2">
+        <div className="mt-2 min-w-0">
           <KitNaTela plano={plano} angulo={angulo} kit={kit} onPlano={atualizarPlano} />
           {compacto && (
             <button type="button" className="mt-1 inline-flex items-center text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAberto(false)}>

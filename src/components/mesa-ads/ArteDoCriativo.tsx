@@ -40,6 +40,8 @@ import {
   type Qualidade,
 } from "@/lib/mesa/api";
 import { formatoDe, instrucaoComTom, ZONA_SEGURA, type CriativoAds } from "./adsApi";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import ReferenciasDoCriativo from "./ReferenciasDoCriativo";
 
 /** Formato irmão (mesmo ângulo e variação, outro formato) com o trabalho de arte dele. */
@@ -249,6 +251,8 @@ export default function ArteDoCriativo({
   const [andamentoIrmaos, setAndamentoIrmaos] = useState<Record<string, EtapaDoIrmao>>({});
   // "Corrigir sozinho": desligado por padrão (24/09/2026), guardado por trabalho na sessão.
   const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho.id), false);
+  // 28/09 (frente AD4): configuração recolhida por padrão, lembrada por cliente.
+  const [configRecolhida, setConfigRecolhida] = useRecolhido(`mesa-ads:estudio:configuracao:${mesa.clientId}`, true);
 
   useEffect(() => {
     setModeloImagem(trabalho.modelo_imagem_id || (padraoPara(catalogo, "imagem") || { id: "" }).id);
@@ -500,6 +504,15 @@ export default function ArteDoCriativo({
   };
 
   const desenhandoAreas = ferramenta === "lamina" && painel === "areas" && !!ultimaDoCard;
+  const geradorAtual = opcoesDeImagem.find((m) => m.id === modeloImagem) || null;
+  const resumoDaConfiguracao = [
+    (QUALIDADES.find((q) => q.valor === qualidade) || QUALIDADES[1]).rotulo,
+    geradorAtual ? nomeDoModelo(geradorAtual) : "sem gerador",
+    irmaos.length ? (valerParaIrmaos ? `vale também para ${irmaos.map((i) => formatoDe(i.criativo.formato).curto).join(", ")}` : "só neste formato") : null,
+    corrigirSozinho ? "corrige sozinho" : "sem correção automática",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const noQuatroPorCinco = f.valor === "feed_4x5" || f.valor === "carrossel";
 
   if (!cards.length) {
@@ -515,102 +528,112 @@ export default function ArteDoCriativo({
 
   return (
     <div className="min-w-0 space-y-3">
-      <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-3 py-2">
-        <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da arte">
-          {QUALIDADES.map((q) => {
-            const ativa = qualidade === q.valor;
-            return (
-              <button
-                key={q.valor}
-                type="button"
-                role="radio"
-                aria-checked={ativa}
+      {/* 28/09 (frente AD4, dono): a configuração da arte recolhe, sem caixa; o Gerar fica sempre à vista. */}
+      <div className="min-w-0" data-configuracao-da-arte="">
+        <CabecalhoDeSecao
+          nivel={3}
+          titulo="Configuração"
+          recolher={{ recolhido: configRecolhida, onAlternar: () => setConfigRecolhida(!configRecolhida), resumo: resumoDaConfiguracao }}
+          acao={
+            <BotaoComCusto
+                rotulo={<>{semImagem.length ? <Wand2 className="mr-1 h-3.5 w-3.5" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}{semImagem.length ? (cards.length > 1 ? `Gerar (${semImagem.length})` : "Gerar arte") : cards.length > 1 ? "Refazer todas" : "Refazer arte"}</>}
+                titulo={semImagem.length ? "Gerar a arte" : "Refazer a arte"}
+                descricao={corrigirSozinho
+                  ? "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois e, se achar erro, o estúdio corrige sozinho (até 2 vezes) antes de mostrar. Cada correção custa um ajuste a mais."
+                  : "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois."}
+                variant={semImagem.length ? "default" : "outline"}
+                className="h-9"
                 disabled={algoGerando}
-                onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
-                className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                fecharAoConfirmar
+                partes={() => partesGerar(fila.length)}
+                executar={() => gerarVarias(fila.map((c) => c.ordem))}
+                aoConcluir={(data) => {
+                  if (data && typeof data.na_fila === "number") {
+                    toast.info(data.na_fila ? "Gerando no servidor" : "Essa arte já estava na fila", { description: "Pode trocar de tela ou de cliente: a geração continua." });
+                    return;
+                  }
+                  if (!data || !data.falhou) toast.success("Arte gerada", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
+                }}
+              />
+          }
+        />
+        {!configRecolhida && (
+          <div className="mt-2 flex min-w-0 flex-wrap items-center">
+            <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da arte">
+              {QUALIDADES.map((q) => {
+                const ativa = qualidade === q.valor;
+                return (
+                  <button
+                    key={q.valor}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativa}
+                    disabled={algoGerando}
+                    onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
+                    className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  >
+                    <span className="text-[11.5px]">{q.rotulo}</span>
+                    <span className={`text-[10px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mb-1 mr-2 mt-1 w-[150px] min-w-0 shrink-0">
+              <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={algoGerando || opcoesDeImagem.length === 0}>
+                <SelectTrigger className="h-9 text-[12px]" aria-label="Gerador de imagem">
+                  <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {opcoesDeImagem.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {f.valor === "stories_9x16" && (
+              <button
+                type="button"
+                aria-pressed={zonaSegura}
+                onClick={() => setZonaSegura((z) => !z)}
+                className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${zonaSegura ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+                title="Guia: nada importante nos 14% de cima e nos 20% de baixo"
               >
-                <span className="text-[11.5px]">{q.rotulo}</span>
-                <span className={`text-[10px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
+                <ScanLine className="mr-1 h-3.5 w-3.5" /> Zona segura
               </button>
-            );
-          })}
-        </div>
-        <div className="mb-1 mr-2 mt-1 w-[150px] min-w-0 shrink-0">
-          <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={algoGerando || opcoesDeImagem.length === 0}>
-            <SelectTrigger className="h-9 text-[12px]" aria-label="Gerador de imagem">
-              <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
-            </SelectTrigger>
-            <SelectContent>
-              {opcoesDeImagem.map((m) => (
-                <SelectItem key={m.id} value={m.id}>{nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span></SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {f.valor === "stories_9x16" && (
-          <button
-            type="button"
-            aria-pressed={zonaSegura}
-            onClick={() => setZonaSegura((z) => !z)}
-            className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${zonaSegura ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-            title="Guia: nada importante nos 14% de cima e nos 20% de baixo"
-          >
-            <ScanLine className="mr-1 h-3.5 w-3.5" /> Zona segura
-          </button>
+            )}
+            {irmaos.length > 0 && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={valerParaIrmaos}
+                onClick={() => setValerParaIrmaos((v) => !v)}
+                className={`mb-1 mr-2 mt-1 inline-flex h-9 min-w-0 items-center rounded-lg border px-2.5 text-[12px] ${valerParaIrmaos ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+                title="Pedido de ajuste, texto e referência deste formato vão também para os outros formatos do mesmo ângulo (uma chamada por formato; o custo aparece antes)."
+              >
+                <Copy className="mr-1 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {valerParaIrmaos ? "Aplicar também em " : "Só neste formato (irmãos: "}
+                  {irmaos.map((i) => formatoDe(i.criativo.formato).curto).join(", ")}
+                  {valerParaIrmaos ? "" : ")"}
+                </span>
+              </button>
+            )}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={corrigirSozinho}
+              onClick={() => setCorrigirSozinho((c) => !c)}
+              className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+              title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte."
+            >
+              <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
+            </button>
+          </div>
         )}
-        {irmaos.length > 0 && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={valerParaIrmaos}
-            onClick={() => setValerParaIrmaos((v) => !v)}
-            className={`mb-1 mr-2 mt-1 inline-flex h-9 min-w-0 items-center rounded-lg border px-2.5 text-[12px] ${valerParaIrmaos ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-            title="Pedido de ajuste, texto e referência deste formato vão também para os outros formatos do mesmo ângulo (uma chamada por formato; o custo aparece antes)."
-          >
-            <Copy className="mr-1 h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">
-              {valerParaIrmaos ? "Aplicar também em " : "Só neste formato (irmãos: "}
-              {irmaos.map((i) => formatoDe(i.criativo.formato).curto).join(", ")}
-              {valerParaIrmaos ? "" : ")"}
-            </span>
-          </button>
-        )}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={corrigirSozinho}
-          onClick={() => setCorrigirSozinho((c) => !c)}
-          className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-          title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte."
-        >
-          <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
-        </button>
-        <span className="mb-1 ml-auto mt-1">
-          <BotaoComCusto
-            rotulo={<>{semImagem.length ? <Wand2 className="mr-1 h-3.5 w-3.5" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}{semImagem.length ? (cards.length > 1 ? `Gerar (${semImagem.length})` : "Gerar arte") : cards.length > 1 ? "Refazer todas" : "Refazer arte"}</>}
-            titulo={semImagem.length ? "Gerar a arte" : "Refazer a arte"}
-            descricao={corrigirSozinho
-              ? "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois e, se achar erro, o estúdio corrige sozinho (até 2 vezes) antes de mostrar. Cada correção custa um ajuste a mais."
-              : "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois."}
-            variant={semImagem.length ? "default" : "outline"}
-            className="h-9"
-            disabled={algoGerando}
-            fecharAoConfirmar
-            partes={() => partesGerar(fila.length)}
-            executar={() => gerarVarias(fila.map((c) => c.ordem))}
-            aoConcluir={(data) => {
-              if (data && typeof data.na_fila === "number") {
-                toast.info(data.na_fila ? "Gerando no servidor" : "Essa arte já estava na fila", { description: "Pode trocar de tela ou de cliente: a geração continua." });
-                return;
-              }
-              if (!data || !data.falhou) toast.success("Arte gerada", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
-            }}
-          />
-        </span>
       </div>
 
       {Object.keys(andamentoIrmaos).length > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-3 py-2 text-[12px]" aria-label="Ajuste nos formatos irmãos" aria-live="polite">
+        <div className="flex min-w-0 flex-wrap items-center border-t border-border pt-2 text-[12px]" aria-label="Ajuste nos formatos irmãos" aria-live="polite">
           <span className="mb-1 mr-2 mt-1 font-medium">Mesmo ajuste nos irmãos:</span>
           {irmaos.filter((i) => !!andamentoIrmaos[i.criativo.id]).map((i) => {
             const e = andamentoIrmaos[i.criativo.id];

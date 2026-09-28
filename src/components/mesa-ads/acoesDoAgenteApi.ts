@@ -19,7 +19,8 @@ export type TipoDeAcao =
   | "plano_de_teste"
   | "tarefa_equipe"
   | "vincular_criativo"
-  | "montar_campanha_do_plano";
+  | "montar_campanha_do_plano"
+  | "trocar_anuncio";
 
 export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   pausar: "Pausar",
@@ -32,7 +33,30 @@ export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   tarefa_equipe: "Criar tarefa para a equipe",
   vincular_criativo: "Ligar anúncio ao criativo da Mesa",
   montar_campanha_do_plano: "Montar a campanha do plano na Meta (pausada)",
+  trocar_anuncio: "Trocar o criativo",
 };
+
+/** Frente AD4: a prova da troca do "otimizar" (números antes, régua, Jev e o candidato do acervo). */
+export interface ProvaDaTroca {
+  gasto: number | null;
+  impressoes: number | null;
+  resultados: number | null;
+  resultado_rotulo: string;
+  custo_por_resultado: number | null;
+  ctr_link_pct: number | null;
+  cpc: number | null;
+  frequencia: number | null;
+  periodo: { inicio: string; fim: string } | null;
+  ctr_minimo_pct: number | null;
+  ctr_mediana_pct: number | null;
+  custo_alvo_brl: number | null;
+  fonte_do_alvo: string;
+  saude: number | null;
+  prob_candidato: number | null;
+  nota_copy_atual: number | null;
+  candidato: { nome: string; angulo: string | null; formato: string };
+  copy: "candidato" | "atual";
+}
 
 /** A campanha do plano de teste que o agente monta (tudo pausado). */
 export interface MontagemNaTela {
@@ -81,6 +105,8 @@ export interface ItemDaAcao {
   montagem: MontagemNaTela | null;
   /** Frente AD: o que diferencia itens de mesmo nome (id curto, status, datas, gasto). */
   detalhe: string | null;
+  /** Frente AD4: a prova da troca (só em trocar_anuncio). */
+  troca: ProvaDaTroca | null;
   resultado: {
     ok: boolean;
     motivo: string;
@@ -89,6 +115,8 @@ export interface ItemDaAcao {
     motivo_desfazer: string;
     /** Estado relido na Meta logo depois (prova). */
     depois: EstadoNaMeta | null;
+    /** Frente AD4 (trocar_anuncio): o anúncio novo relido na Meta logo depois. */
+    depois_novo: EstadoNaMeta | null;
     ativada_em: string | null;
     /** Frente AD: hora da escrita, hora da releitura na Meta e o que a Meta respondeu. */
     feito_em: string | null;
@@ -132,7 +160,38 @@ const obj = (v: unknown): Record<string, any> => (v && typeof v === "object" && 
 const lista = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 const txt = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" || !isFinite(Number(v)) ? null : Number(v));
-const TIPOS: TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "plano_de_teste", "tarefa_equipe", "vincular_criativo", "montar_campanha_do_plano"];
+const TIPOS: TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "plano_de_teste", "tarefa_equipe", "vincular_criativo", "montar_campanha_do_plano", "trocar_anuncio"];
+
+/** A prova da troca, tolerante (anexo antigo ou campo faltando): null sem candidato. */
+function provaDaTroca(v: unknown): ProvaDaTroca | null {
+  const o = obj(v);
+  const c = obj(o.candidato);
+  if (!txt(c.nome)) return null;
+  const n = obj(o.numeros);
+  const r = obj(o.regua);
+  const j = obj(o.jev);
+  const p = obj(n.periodo);
+  return {
+    gasto: num(n.gasto),
+    impressoes: num(n.impressoes),
+    resultados: num(n.resultados),
+    resultado_rotulo: txt(n.resultado_rotulo) || "resultados",
+    custo_por_resultado: num(n.custo_por_resultado),
+    ctr_link_pct: num(n.ctr_link_pct),
+    cpc: num(n.cpc),
+    frequencia: num(n.frequencia),
+    periodo: txt(p.inicio) ? { inicio: txt(p.inicio), fim: txt(p.fim) } : null,
+    ctr_minimo_pct: num(r.ctr_minimo_pct),
+    ctr_mediana_pct: num(r.ctr_mediana_pct),
+    custo_alvo_brl: num(r.custo_alvo_brl),
+    fonte_do_alvo: txt(r.fonte_do_alvo),
+    saude: num(j.saude),
+    prob_candidato: num(j.prob_candidato),
+    nota_copy_atual: num(j.nota_copy_atual),
+    candidato: { nome: txt(c.nome), angulo: txt(c.angulo) || null, formato: txt(c.formato) },
+    copy: o.copy === "atual" ? "atual" : "candidato",
+  };
+}
 
 function estado(v: unknown): EstadoNaMeta | null {
   const o = obj(v);
@@ -192,6 +251,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
         auto: !!i.auto,
         montagem: montagem(i.montagem),
         detalhe: txt(i.detalhe) || null,
+        troca: tipo === "trocar_anuncio" ? provaDaTroca(i.troca) : null,
         resultado: r
           ? {
               ok: !!r.ok,
@@ -200,6 +260,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
               desfeito: !!r.desfeito,
               motivo_desfazer: txt(r.motivo_desfazer),
               depois: estado(r.depois),
+              depois_novo: estado(r.depois_novo),
               ativada_em: txt(r.ativada_em) || null,
               feito_em: txt(r.feito_em) || null,
               relido_em: txt(r.relido_em) || null,
@@ -257,11 +318,12 @@ export function estadoDasAcoes(a: AcoesDaConta): "aberta" | "feita" | "descartad
 export const itensDisponiveis = (a: AcoesDaConta) => a.itens.filter((i) => !i.indisponivel && !i.ensaio && !(i.auto && i.resultado));
 
 /** Tipos que voltam pelo Desfazer (a montagem volta arquivando o que criou). */
-const COM_VOLTA = ["pausar", "ativar", "orcamento", "renomear", "vincular_criativo", "montar_campanha_do_plano"];
+const COM_VOLTA = ["pausar", "ativar", "orcamento", "renomear", "vincular_criativo", "montar_campanha_do_plano", "trocar_anuncio"];
 
 /** O item feito tem Desfazer? (feito, não desfeito, de um tipo com volta) */
 export const itemTemDesfazer = (i: ItemDaAcao) =>
-  !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) && COM_VOLTA.indexOf(i.tipo) >= 0 && (i.tipo !== "montar_campanha_do_plano" || !!i.resultado.criado.campanha_id);
+  !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) && COM_VOLTA.indexOf(i.tipo) >= 0 && (i.tipo !== "montar_campanha_do_plano" || !!i.resultado.criado.campanha_id) &&
+  (i.tipo !== "trocar_anuncio" || !!i.resultado.criado.anuncio_id);
 
 /** Desfazer só este item (o que o agente fez sozinho). */
 export async function desfazerItemDaConta(mensagemId: string, itemId: string) {

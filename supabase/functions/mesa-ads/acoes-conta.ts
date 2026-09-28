@@ -34,11 +34,13 @@ export const TIPOS_DE_ACAO = [
   "vincular_criativo",
   // 27/09 (frente TR): o plano de teste vira campanha na Meta, tudo PAUSADO; ativar é outro Confirmar.
   "montar_campanha_do_plano",
+  // 28/09 (frente AD4, "otimizar"): anúncio novo no mesmo conjunto com o criativo do acervo e o antigo pausado.
+  "trocar_anuncio",
 ] as const;
 export type TipoDeAcao = (typeof TIPOS_DE_ACAO)[number];
 
 /** Tipos que escrevem na Meta (precisam de ads_management). */
-export const TIPOS_NA_META: readonly TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "montar_campanha_do_plano"];
+export const TIPOS_NA_META: readonly TipoDeAcao[] = ["pausar", "ativar", "orcamento", "renomear", "duplicar_anuncio", "trocar_criativo", "montar_campanha_do_plano", "trocar_anuncio"];
 export const naMeta = (t: TipoDeAcao) => TIPOS_NA_META.indexOf(t) >= 0;
 
 /**
@@ -78,6 +80,7 @@ export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   tarefa_equipe: "Criar tarefa para a equipe",
   vincular_criativo: "Ligar anúncio ao criativo da Mesa",
   montar_campanha_do_plano: "Montar a campanha do plano na Meta (pausada)",
+  trocar_anuncio: "Trocar o criativo: anúncio novo no mesmo conjunto e o antigo pausado",
 };
 
 export type Nivel = "campanha" | "conjunto" | "anuncio";
@@ -160,6 +163,8 @@ export type ResultadoDoItem = {
   relido_em?: string;
   /** O que a Meta respondeu à escrita, só os campos sem segredo (ex.: { success: true }). */
   resposta?: Record<string, unknown> | null;
+  /** Frente AD4 (trocar_anuncio): o anúncio novo relido na Meta logo depois (o antigo vai em `depois`). */
+  depois_novo?: Estado | null;
   /** Campanha montada e depois ativada pelo Confirmar da equipe. */
   ativada_em?: string;
   motivo_ativar?: string;
@@ -208,7 +213,21 @@ export type ItemDaAcaoNaConta = {
   montagem?: Montagem | null;
   /** Frente AD: o que diferencia itens de mesmo nome na pergunta "qual?" (id curto, status, datas, gasto). */
   detalhe?: string | null;
+  /** Frente AD4: a prova da troca do "otimizar" (números antes, régua, Jev, candidato e a copy que vai). */
+  troca?: ProvaDaTroca | null;
   resultado?: ResultadoDoItem;
+};
+
+/** A prova da troca proposta pelo "otimizar" (otimizar-conta.ts): tudo o que o cartão mostra antes do Confirmar. */
+export type ProvaDaTroca = {
+  numeros: { periodo: { inicio: string; fim: string; dias: number } | null; gasto: number; impressoes: number; resultados: number; resultado_rotulo: string; custo_por_resultado: number | null; ctr_link_pct: number | null; cpc: number | null; frequencia: number | null };
+  regua: { ctr_minimo_pct: number; ctr_mediana_pct: number | null; custo_alvo_brl: number | null; fonte_do_alvo: string };
+  problemas: string[];
+  jev: { saude: number; prob_candidato: number; nota_copy_atual: number | null };
+  candidato: { id: string; nome: string; angulo: string | null; formato: string };
+  /** "candidato": sobe a copy do acervo; "atual": só a arte muda, a copy do anúncio fica. */
+  copy: "candidato" | "atual";
+  sincronizado_em: string | null;
 };
 
 export type AcoesDaConta = {
@@ -347,13 +366,13 @@ export function normalizarAcoesDaConta(bruto: unknown, alvos: Alvo[], criativos:
       itens.push({ ...comAlvo });
       continue;
     }
-    // trocar_criativo e vincular_criativo: anúncio + criativo da Mesa
+    // trocar_criativo, trocar_anuncio e vincular_criativo: anúncio + criativo da Mesa
     const c = criativoPorRef.get(cref);
     if (alvo.nivel !== "anuncio" || !c) {
       recusar(alvo.nivel !== "anuncio" ? "precisa ser um anúncio" : "criativo da Mesa fora da lista");
       continue;
     }
-    if (tipo === "trocar_criativo" && !c.tem_arte) {
+    if ((tipo === "trocar_criativo" || tipo === "trocar_anuncio") && !c.tem_arte) {
       recusar("criativo da Mesa ainda sem arte pronta");
       continue;
     }
@@ -683,7 +702,7 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
   if (item.indisponivel) return { ok: false, motivo: item.indisponivel };
   const alvo = item.alvo;
   try {
-    const extra = item.tipo === "duplicar_anuncio" ? ",adset_id" : item.tipo === "trocar_criativo" ? ",adset_id,creative{id,object_story_spec}" : "";
+    const extra = item.tipo === "duplicar_anuncio" ? ",adset_id" : item.tipo === "trocar_criativo" || item.tipo === "trocar_anuncio" ? ",adset_id,creative{id,object_story_spec}" : "";
     const bruto = await grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO(alvo.nivel) + extra);
     const fora = foraDasContas(bruto, contas);
     if (fora) return { ok: false, motivo: fora };
@@ -726,28 +745,53 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
         return { ok: false, motivo: `O conjunto novo foi criado pausado (${novoConjunto}), mas o anúncio não foi copiado: ${e instanceof Error ? e.message : "erro da Meta"}`, criado: { conjunto_id: novoConjunto } };
       }
     }
-    if (item.tipo === "trocar_criativo") {
+    if (item.tipo === "trocar_criativo" || item.tipo === "trocar_anuncio") {
       if (!apoio) return { ok: false, motivo: "O criativo da Mesa não foi encontrado." };
-      const conjunto = bruto && typeof bruto.adset_id === "string" ? bruto.adset_id : null;
-      const conta = bruto && typeof bruto.account_id === "string" ? bruto.account_id.replace(/^act_/, "") : null;
-      const criativo = bruto && bruto.creative && typeof bruto.creative === "object" ? bruto.creative as Record<string, unknown> : null;
-      const spec = criativo && criativo.object_story_spec && typeof criativo.object_story_spec === "object" ? criativo.object_story_spec as Record<string, unknown> : null;
-      const link = spec && spec.link_data && typeof spec.link_data === "object" ? spec.link_data as Record<string, unknown> : null;
-      if (!conjunto || !conta) return { ok: false, motivo: "Não achei o conjunto ou a conta deste anúncio na Meta." };
-      if (!spec || !link || Array.isArray(link.child_attachments)) return { ok: false, motivo: "Só anúncio de imagem única com link pode trocar o criativo por aqui. Vídeo e carrossel: troque pela Meta." };
-      const bytes = await apoio.imagemBase64();
-      if (!bytes) return { ok: false, motivo: "A arte do criativo da Mesa não pôde ser lida." };
-      const up = await grafo.escrever(`act_${conta}/adimages`, { bytes });
-      const hash = hashDaImagem(up);
-      if (!hash) return { ok: false, motivo: "A Meta não devolveu a imagem enviada." };
-      const novoSpec = specComNovaArte(spec, hash, apoio.copy);
-      const cr = await grafo.escrever(`act_${conta}/adcreatives`, { name: `${apoio.nome} (Mesa Ads)`.slice(0, 100), object_story_spec: JSON.stringify(novoSpec) });
-      const creativeId = String(cr.id ?? "");
-      if (!ID_META.test(creativeId)) return { ok: false, motivo: "A Meta não devolveu o criativo novo." };
-      const ad = await grafo.escrever(`act_${conta}/ads`, { name: `${alvo.nome} (criativo da Mesa)`.slice(0, 200), adset_id: conjunto, creative: JSON.stringify({ creative_id: creativeId }), status: "PAUSED" });
+      if (item.tipo === "trocar_anuncio") {
+        // Troca de verdade: o anúncio precisa estar entregando (nunca ativa campanha ou conjunto parado).
+        const lido = estadoLido(bruto);
+        if (!lido || lido.status !== "ACTIVE" || (lido.efetivo && lido.efetivo !== "ACTIVE")) {
+          return { ok: false, motivo: "O anúncio não está entregando agora (ele, o conjunto ou a campanha está pausado). Não subi nada e não ativei nada parado." };
+        }
+      }
+      const subido = await subirCriativoNovo(bruto, grafo, apoio, item.tipo === "trocar_anuncio" && !!item.troca && item.troca.copy === "atual");
+      if ("motivo" in subido) return { ok: false, motivo: subido.motivo };
+      const { conjunto, conta, creativeId } = subido;
+      if (item.tipo === "trocar_criativo") {
+        const ad = await grafo.escrever(`act_${conta}/ads`, { name: `${alvo.nome} (criativo da Mesa)`.slice(0, 200), adset_id: conjunto, creative: JSON.stringify({ creative_id: creativeId }), status: "PAUSED" });
+        const adId = String(ad.id ?? "");
+        if (!ID_META.test(adId)) return { ok: false, motivo: "O criativo subiu, mas o anúncio novo não foi criado.", criado: { creative_id: creativeId } };
+        return { ok: true, feito_em: agoraIso(), criado: { anuncio_id: adId, creative_id: creativeId } };
+      }
+      // trocar_anuncio: o novo entra no mesmo conjunto (mesmo público e verba) e o antigo pausa.
+      const ad = await grafo.escrever(`act_${conta}/ads`, { name: `${apoio.nome} | Mesa Ads (no lugar de ${alvo.nome})`.slice(0, 200), adset_id: conjunto, creative: JSON.stringify({ creative_id: creativeId }), status: "ACTIVE" });
       const adId = String(ad.id ?? "");
-      if (!ID_META.test(adId)) return { ok: false, motivo: "O criativo subiu, mas o anúncio novo não foi criado.", criado: { creative_id: creativeId } };
-      return { ok: true, feito_em: agoraIso(), criado: { anuncio_id: adId, creative_id: creativeId } };
+      if (!ID_META.test(adId)) return { ok: false, motivo: "O criativo subiu, mas o anúncio novo não foi criado. O antigo segue como estava.", criado: { creative_id: creativeId } };
+      try {
+        await grafo.escrever(alvo.meta_id, { status: "PAUSED" });
+      } catch (e) {
+        // Não deixa os dois rodando: o novo volta a pausado e a equipe decide.
+        const voltou = await grafo.escrever(adId, { status: "PAUSED" }).then(() => true, () => false);
+        return {
+          ok: false,
+          motivo: `O anúncio novo foi criado, mas o antigo não pausou (${e instanceof Error ? e.message : "erro da Meta"}). ${voltou ? "Pausei o novo para não rodarem os dois." : "O novo também não pausou: confira na Meta."}`,
+          criado: { anuncio_id: adId, creative_id: creativeId },
+        };
+      }
+      const feito = agoraIso();
+      const [antigo, novo] = await Promise.all([
+        grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO("anuncio")).catch(() => null),
+        grafo.ler(adId, CAMPOS_DO_ESTADO("anuncio")).catch(() => null),
+      ]);
+      return {
+        ok: true,
+        feito_em: feito,
+        criado: { anuncio_id: adId, creative_id: creativeId, anuncio_antigo_id: alvo.meta_id },
+        depois: estadoLido(antigo),
+        depois_novo: estadoLido(novo),
+        relido_em: agoraIso(),
+        resposta: respostaCurta(ad),
+      };
     }
     return { ok: false, motivo: "Ação desconhecida." };
   } catch (e) {
@@ -759,6 +803,8 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
 export const temReverso = (i: ItemDaAcaoNaConta) =>
   !!(i.resultado && i.resultado.ok && !i.resultado.desfeito) &&
   (i.tipo === "pausar" || i.tipo === "ativar" || i.tipo === "orcamento" || i.tipo === "renomear" || i.tipo === "vincular_criativo" ||
+    // Troca: o Desfazer pausa o novo e volta o antigo (só se ninguém mexeu depois).
+    (i.tipo === "trocar_anuncio" && !!(i.resultado.criado && i.resultado.criado.anuncio_id)) ||
     // Montagem: o Desfazer arquiva o que foi criado (deletar = arquivar).
     (i.tipo === "montar_campanha_do_plano" && !!(i.resultado.criado && i.resultado.criado.campanha_id)));
 
@@ -768,6 +814,7 @@ export const temReverso = (i: ItemDaAcaoNaConta) =>
  */
 export async function desfazerNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, contas?: Set<string> | null): Promise<{ ok: boolean; motivo?: string }> {
   if (item.tipo === "montar_campanha_do_plano" && temReverso(item)) return await arquivarMontagem(item, grafo, contas);
+  if (item.tipo === "trocar_anuncio" && temReverso(item)) return await desfazerTroca(item, grafo, contas);
   if (!item.alvo || !item.de || !temReverso(item)) return { ok: false, motivo: "Este item não tem como desfazer." };
   try {
     const bruto = await grafo.ler(item.alvo.meta_id, CAMPOS_DO_ESTADO(item.alvo.nivel));
@@ -793,6 +840,63 @@ export async function desfazerNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
       return { ok: true };
     }
     return { ok: false, motivo: "Este item não tem como desfazer na Meta." };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível desfazer." };
+  }
+}
+
+/**
+ * Sobe a arte do criativo da Mesa como criativo novo na conta do anúncio lido
+ * (mesma página, link, botão e Instagram). `manterCopy`: a copy do anúncio
+ * fica (só a arte muda). Nunca devolve id sem conferir; o motivo vem em texto.
+ */
+async function subirCriativoNovo(bruto: Record<string, unknown> | null, grafo: GrafoMeta, apoio: ApoioDoCriativo, manterCopy: boolean): Promise<{ conjunto: string; conta: string; creativeId: string } | { motivo: string }> {
+  const conjunto = bruto && typeof bruto.adset_id === "string" ? bruto.adset_id : null;
+  const conta = bruto && typeof bruto.account_id === "string" ? bruto.account_id.replace(/^act_/, "") : null;
+  const criativo = bruto && bruto.creative && typeof bruto.creative === "object" ? bruto.creative as Record<string, unknown> : null;
+  const spec = criativo && criativo.object_story_spec && typeof criativo.object_story_spec === "object" ? criativo.object_story_spec as Record<string, unknown> : null;
+  const link = spec && spec.link_data && typeof spec.link_data === "object" ? spec.link_data as Record<string, unknown> : null;
+  if (!conjunto || !conta) return { motivo: "Não achei o conjunto ou a conta deste anúncio na Meta." };
+  if (!spec || !link || Array.isArray(link.child_attachments)) return { motivo: "Só anúncio de imagem única com link pode trocar o criativo por aqui. Vídeo e carrossel: troque pela Meta." };
+  const bytes = await apoio.imagemBase64();
+  if (!bytes) return { motivo: "A arte do criativo da Mesa não pôde ser lida." };
+  const up = await grafo.escrever(`act_${conta}/adimages`, { bytes });
+  const hash = hashDaImagem(up);
+  if (!hash) return { motivo: "A Meta não devolveu a imagem enviada." };
+  const novoSpec = specComNovaArte(spec, hash, manterCopy ? {} : apoio.copy);
+  const cr = await grafo.escrever(`act_${conta}/adcreatives`, { name: `${apoio.nome} (Mesa Ads)`.slice(0, 100), object_story_spec: JSON.stringify(novoSpec) });
+  const creativeId = String(cr.id ?? "");
+  if (!ID_META.test(creativeId)) return { motivo: "A Meta não devolveu o criativo novo." };
+  return { conjunto, conta, creativeId };
+}
+
+/**
+ * Desfaz a troca: só se o novo segue ativo e o antigo segue pausado como o
+ * painel deixou. Pausa o novo e volta o antigo; se o antigo não voltar,
+ * reativa o novo (a conta não fica sem nenhum dos dois). Nunca lança.
+ */
+async function desfazerTroca(item: ItemDaAcaoNaConta, grafo: GrafoMeta, contas?: Set<string> | null): Promise<{ ok: boolean; motivo?: string }> {
+  const novoId = item.resultado && item.resultado.criado ? item.resultado.criado.anuncio_id : null;
+  if (!item.alvo || !novoId || !ID_META.test(novoId)) return { ok: false, motivo: "Este item não tem como desfazer." };
+  try {
+    const [antigoBruto, novoBruto] = await Promise.all([
+      grafo.ler(item.alvo.meta_id, CAMPOS_DO_ESTADO("anuncio")),
+      grafo.ler(novoId, CAMPOS_DO_ESTADO("anuncio")),
+    ]);
+    const fora = foraDasContas(antigoBruto, contas) || foraDasContas(novoBruto, contas);
+    if (fora) return { ok: false, motivo: fora };
+    const antigo = estadoLido(antigoBruto);
+    const novo = estadoLido(novoBruto);
+    if (!antigo || !novo) return { ok: false, motivo: "Não foi possível reler os dois anúncios na Meta." };
+    if (antigo.status !== "PAUSED" || novo.status !== "ACTIVE") return { ok: false, motivo: "Mudou na Meta depois da troca: não mexi." };
+    await grafo.escrever(novoId, { status: "PAUSED" });
+    try {
+      await grafo.escrever(item.alvo.meta_id, { status: "ACTIVE" });
+    } catch (e) {
+      const voltou = await grafo.escrever(novoId, { status: "ACTIVE" }).then(() => true, () => false);
+      return { ok: false, motivo: `O antigo não voltou (${e instanceof Error ? e.message : "erro da Meta"}). ${voltou ? "Deixei o novo rodando como estava." : "O novo ficou pausado: confira na Meta."}` };
+    }
+    return { ok: true };
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível desfazer." };
   }

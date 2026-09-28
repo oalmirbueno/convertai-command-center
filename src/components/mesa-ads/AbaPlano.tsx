@@ -8,6 +8,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { Ditado } from "@/components/mesa/Ditado";
 import { custoDaResposta, dataCurta, textoDoErro, usd } from "@/lib/mesa/api";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
@@ -482,9 +483,12 @@ export default function AbaPlano({
       rotuloDaLateral="Estrategista"
       iconeDaLateral={<Sparkles className="h-4 w-4" />}
       rotuloDoPrincipal="Plano de teste"
-      memoriaDaRolagem={`mesa-ads:plano:${clientId}`}
+      principalRolavel={false}
       lateral={plano ? <ConversaDoPlano plano={plano} /> : undefined}
     >
+      {/* 28/09 (frente AD4): o plano rola numa região e a barra "Produzir criativos" é o rodapé
+          da coluna, fora da rolagem (antes, sticky dentro dela, flutuava no meio por cima do texto). */}
+      <RegiaoRolavel modo="lg" rotulo="Plano de teste" memoria={`mesa-ads:plano:${clientId}`} className="lg:pr-1">
       <div className="min-w-0 space-y-5 pb-6">
         <section className="min-w-0" aria-label="Gerar plano">
           <CabecalhoDaParte
@@ -657,12 +661,12 @@ export default function AbaPlano({
             </div>
 
             <Descartados angulos={qualidade.descartados} />
-
-            {/* Frente CR (27/09): criar em um clique; formatos, tom, kit e modelo da copy no "Trocar", andamento com Parar. */}
-            <ProducaoDoPlano plano={plano} marcados={marcados} onProduzido={onProduzido} />
           </section>
         )}
       </div>
+      </RegiaoRolavel>
+      {/* Frente CR (27/09): criar em um clique; formatos, tom, kit e modelo da copy no "Trocar", andamento com Parar. */}
+      {plano && qualidade && <ProducaoDoPlano plano={plano} marcados={marcados} onProduzido={onProduzido} />}
     </AreaDeTrabalho>
   );
 }

@@ -249,6 +249,9 @@ export default function MesaAds() {
     <CascaDaMesa
       mesa="ads"
       titulo="Mesa Ads"
+      // 28/09 (AD4): seis etapas com nomes longos cortavam "Resultados" em 1280 px; até 1535 px
+      // elas ficam na segunda linha do cabeçalho (como a Mesa Foto), sem corte.
+      etapasEmLinhaPropriaAte="2xl"
       clientId={clientId}
       marcaId={marca ? marca.id : null}
       telaCheia={telaCheia}

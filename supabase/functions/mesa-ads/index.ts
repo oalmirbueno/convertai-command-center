@@ -71,6 +71,14 @@
  * - plano: ordem de teste, porquê e regra de corte por ângulo (números do
  *   briefing e da conta, calculados em código).
  *
+ * Frente AD4 (28/09/2026, otimizar-conta.ts):
+ * - conta_conversar com modo "otimizar" (ou mensagem curta com "otimize"):
+ *   régua em código (janela mínima, CTR, CPC, custo por resultado,
+ *   frequência contra o nicho, a conta e o dono) + Jev (saúde, substituto do
+ *   acervo, copy atual), sem o modelo pesado. Bom não mexe; ruim vira item
+ *   trocar_anuncio (anúncio novo no mesmo conjunto com o criativo do acervo e
+ *   o antigo pausado) que só roda no Confirmar, com Desfazer e prova.
+ *
  * Mesa Ads v5 (pedido do dono em 26/09/2026; docs/mesa-ads/v5/CONTRATO-V5.md,
  * SQL em docs/mesa-ads/v5/01_vinculos_e_biblioteca.sql, sem aplicar):
  * - conta_ao_vivo devolve também, por anúncio, a peça (mesma arte), o grupo do
@@ -275,6 +283,20 @@ import { montarRelatorioDeAnuncios, type MetricasParaRelatorio } from "./relator
 import { type CandidatoDaOrdem, candidatosDaOrdem, citadosNaMensagem, decidirOrdem, type EscolhaDeAlvo, pareceOrdemDireta, perguntasDaOrdem, trechoParaBuscarNaMeta } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
 import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
+// Frente AD4 (28/09): "otimizar" = régua em código + Jev, troca pelo acervo com Confirmar.
+import {
+  type AnuncioDaConta,
+  candidatosDoAcervo,
+  type CriativoDoAcervo,
+  decidirOtimizacao,
+  DIAS_DO_OTIMIZAR,
+  fonteDoAlvoEmTexto,
+  julgarConta,
+  pareceOtimizar,
+  perguntasDoOtimizar,
+  reguaDaConta,
+  textoDoOtimizar,
+} from "./otimizar-conta.ts";
 import { caminhoSeguro } from "../_shared/acoes-do-agente.ts";
 import { TIPOS_DE_RESULTADO } from "../_shared/evolucao.ts";
 import { createEditorialItem, createEditorialItemSchema, WriteError, type WriteCtx } from "../_shared/mcp-write-services.ts";
@@ -6100,6 +6122,10 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   await registrarMensagens(servico, conversaId, clientId, [{ id: pedidoId, papel: "usuario", conteudo: mensagem, anexos: [andamento.primeiro()] }]);
   const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
   try {
+  // Frente AD4: "otimizar" (o botão ou a mensagem curta) = régua + Jev + acervo, sem o modelo pesado; troca só com Confirmar.
+  if (!modoAssumir && (corpo.modo === "otimizar" || pareceOtimizar(mensagem))) {
+    return await otimizarNaConversa(servico, { clientId, conversaId, andamento, cobranca, inicioDoPedido, nichoPedido: corpo.nicho });
+  }
   // Ordem direta e única (pausar, ativar, renomear, verba com valor): sem o modelo pesado, em segundos.
   if (!modoAssumir && pareceOrdemDireta(mensagem)) {
     const direta = await tentarOrdemDireta(servico, chamador, { clientId, conversaId, mensagem, andamento, cobranca, inicioDoPedido });
@@ -6659,6 +6685,197 @@ async function tokenDeGestao(servico: SupabaseClient, clientId: string | null): 
  * min), para a tela não perguntar à Meta a cada abertura; com `conferir`,
  * pergunta a /me/permissions e guarda o resultado.
  */
+// ---- "otimizar" na conta (frente AD4, 28/09): régua em código + Jev, troca pelo acervo com Confirmar
+
+/**
+ * O acervo da Mesa Ads que o agente da conta enxerga: cada criativo com arte,
+ * status (enviado para a conta = pronto, no ar ou pausado), ângulo do plano,
+ * copy e a nota do Jev da produção. Só leitura.
+ */
+async function acervoDaConta(servico: SupabaseClient, clientId: string): Promise<CriativoDoAcervo[]> {
+  const { data } = await servico.from("ads_criativos").select("id, nome, formato, status, ad_id, trabalho_id, plano_id, angulo_id, copy").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(120);
+  const lista = (data as { id: string; nome: string | null; formato: string; status: string | null; ad_id: string | null; trabalho_id: string | null; plano_id: string | null; angulo_id: string | null; copy: Record<string, unknown> | null }[] | null) ?? [];
+  if (!lista.length) return [];
+  const idsT = [...new Set(lista.map((c) => c.trabalho_id).filter((x): x is string => !!x))];
+  const idsP = [...new Set(lista.map((c) => c.plano_id).filter((x): x is string => !!x))];
+  const [ts, ps] = await Promise.all([
+    idsT.length ? servico.from("estudio_trabalhos").select("id, cards, direcao").eq("client_id", clientId).in("id", idsT) : Promise.resolve({ data: [] as unknown[] }),
+    idsP.length ? servico.from("ads_planos").select("id, nome, angulos").eq("client_id", clientId).in("id", idsP) : Promise.resolve({ data: [] as unknown[] }),
+  ]);
+  const arte = new Map(((ts.data as { id: string; cards: unknown; direcao: unknown }[] | null) ?? []).map((t) => [t.id, arteDoTrabalho(t)]));
+  const planos = new Map(((ps.data as { id: string; nome: string; angulos: Angulo[] | null }[] | null) ?? []).map((p) => [p.id, p]));
+  return lista.map((c, k) => {
+    const plano = c.plano_id ? planos.get(c.plano_id) ?? null : null;
+    const angulo = plano && Array.isArray(plano.angulos) ? plano.angulos.find((a) => a && a.id === c.angulo_id) ?? null : null;
+    const copy = (c.copy && typeof c.copy === "object" ? c.copy : {}) as Record<string, unknown>;
+    const escolha = (copy.escolha && typeof copy.escolha === "object" ? copy.escolha : {}) as Record<string, unknown>;
+    const nota = numeroOuNulo(escolha.nota);
+    const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    return {
+      id: c.id,
+      nome: semTravessao(c.nome || (angulo ? `${angulo.nome} · ${c.formato}` : `Criativo ${k + 1}`)).slice(0, 160),
+      formato: c.formato,
+      status: String(c.status ?? "rascunho"),
+      ad_id: c.ad_id,
+      tem_arte: !!(c.trabalho_id && arte.get(c.trabalho_id)),
+      angulo: angulo ? { nome: angulo.nome, hipotese: angulo.hipotese || null, promessa: angulo.gancho_verbal || null } : null,
+      plano: plano ? plano.nome : null,
+      copy: { texto_principal: texto(copy.texto_principal), titulo: texto(copy.titulo), descricao: texto(copy.descricao) },
+      nota_copy: nota,
+      melhor: numeroOuNulo(escolha.posicao) === 1 && (numeroOuNulo(escolha.de) ?? 0) > 1,
+    };
+  });
+}
+
+/**
+ * O "otimizar" pedido na conversa do agente sênior: lê a conta (7 dias), a
+ * régua (rotina: dono, plano, briefing, conta, nicho), julga cada anúncio
+ * ativo em código, pergunta ao Jev (uma chamada) e devolve o plano de trocas
+ * como cartão com Confirmar (nada é escrito aqui). Sem o modelo pesado: rápido
+ * e barato (só o Jev).
+ */
+async function otimizarNaConversa(
+  servico: SupabaseClient,
+  e: { clientId: string; conversaId: string; andamento: Andamento; cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string }; inicioDoPedido: number; nichoPedido?: unknown },
+): Promise<Response> {
+  await e.andamento.passo("lendo", `Lendo os anúncios ativos (${DIAS_DO_OTIMIZAR} dias), a régua e o acervo`);
+  const [conta, acervo, briefing, rotina, planosQ, ctx] = await Promise.all([
+    lerContaAoVivo(servico, e.clientId, DIAS_DO_OTIMIZAR),
+    acervoDaConta(servico, e.clientId),
+    carregarBriefing(servico, e.clientId).catch(() => null),
+    lerLinhaDaRotina(servico, e.clientId),
+    servico.from("ads_planos").select("*").eq("client_id", e.clientId).in("status", ["em_teste", "aprovado"]).order("atualizado_em", { ascending: false }).limit(1),
+    montarContextoAds(servico, e.clientId, null),
+  ]);
+  const achado = await nichoDoCliente(ctx, briefing, e.cobranca, e.nichoPedido);
+  const plano = (((planosQ.data as Plano[] | null) ?? [])[0]) ?? null;
+  const retrato = retratoDaContaAoVivo(conta);
+  const referencia = referenciaDoNicho(achado.nicho ? achado.nicho.id : null, retrato.objetivo_tipo);
+  const { limites, fontes } = limitesEfetivos({
+    dono: configDaLinha(rotina).limites,
+    custoDoPlano: custoDoPlanoDeTeste(plano ? { ...plano, angulos: Array.isArray(plano.angulos) ? plano.angulos : [] } : null),
+    custoDoBriefing: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+    custoMedioDaConta: retrato.totais.custo_por_resultado,
+    resultadosDaConta: retrato.totais.resultados,
+    referencia,
+  });
+  const anuncios: AnuncioDaConta[] = conta.anuncios.map((a) => ({
+    ad_id: a.ad_id, nome: a.nome, status: a.status, campanha: a.campanha, conjunto: a.conjunto, conjunto_id: a.conjunto_id ?? null, formato: a.formato,
+    metricas: {
+      gasto: a.metricas.gasto, impressoes: a.metricas.impressoes, resultados: a.metricas.resultados, custo_por_resultado: a.metricas.custo_por_resultado,
+      ctr_saida_pct: a.metricas.ctr_saida_pct, cpc: a.metricas.cpc, cpm: a.metricas.cpm, frequencia_media: a.metricas.frequencia_media, dias: a.metricas.dias,
+      resultado_rotulo: (a.metricas as { resultado_rotulo?: string | null }).resultado_rotulo ?? null,
+    },
+    tendencia: a.tendencia ?? null,
+    titulo: a.titulo ?? null,
+    corpo: a.corpo ?? null,
+    criativo: a.criativo ? { id: a.criativo.id, nome: a.criativo.nome } : null,
+  }));
+  const regua = reguaDaConta(anuncios, limites, fontes);
+  const julgados = julgarConta(anuncios, regua);
+  const adsAtivos = new Set(anuncios.filter((a) => String(a.status).toUpperCase() === "ACTIVE").map((a) => a.ad_id));
+  const candidatos = candidatosDoAcervo(acervo, adsAtivos);
+  const regras = regrasQueValem(configDaLinha(rotina).regras, hojeSaoPaulo());
+  const barrado = (a: AnuncioDaConta) => {
+    const r = regraQueBarra("trocar_criativo", { meta_id: a.ad_id, campanha_id: (conta.anuncios.find((x) => x.ad_id === a.ad_id) || { campaign_id: null }).campaign_id ?? null, conjunto_id: a.conjunto_id }, regras);
+    return r ? r.texto : null;
+  };
+
+  let answers: Record<string, RespostaJev> | null = null;
+  let custo = achado.custo;
+  const perguntas = perguntasDoOtimizar(julgados, candidatos, regua, { nicho: achado.nicho ? achado.nicho.nome : null, objetivo: typeof (briefing?.objetivo ?? {}).acao === "string" ? String((briefing?.objetivo ?? {}).acao) : null, resultado_principal: retrato.resultado_rotulo });
+  if (Object.keys(perguntas.questions).length) {
+    await e.andamento.passo("pensando", `O Jev julga ${perguntas.julgados.length} ${perguntas.julgados.length === 1 ? "anúncio" : "anúncios"} e escolhe no acervo (${candidatos.length} ${candidatos.length === 1 ? "candidato" : "candidatos"})`);
+    try {
+      const r = await jevPerguntar({ state: perguntas.state, questions: perguntas.questions });
+      const cobrado = await cobrarJev(r, { clientId: e.clientId, tarefa: TAREFA, referencia: e.cobranca.referencia, criadoPor: e.cobranca.criadoPor });
+      custo = arred6(custo + (cobrado ? cobrado.custoUsd : 0));
+      answers = r.answers;
+    } catch (err) {
+      console.error("[mesa-ads] otimizar: Jev falhou", { erro: err instanceof JevErro ? err.codigo : "desconhecido" });
+      answers = null;
+    }
+  } else {
+    // Nada com janela para julgar: sem Jev e sem troca (o texto diz o porquê).
+    answers = {};
+  }
+  const plano2 = decidirOtimizacao(julgados, candidatos, answers, barrado);
+  const texto = textoDoOtimizar(plano2, conta.periodo, regua);
+
+  let acoes: AcoesDaConta | null = null;
+  if (plano2.trocas.length) {
+    const brutas: AcoesDaConta = {
+      tipo: "acoes_conta",
+      resumo: `${plano2.trocas.length} ${plano2.trocas.length === 1 ? "troca pronta" : "trocas prontas"} para você confirmar: anúncio novo no mesmo conjunto com o criativo do acervo e o antigo pausado. Nada muda antes do Confirmar.`,
+      itens: plano2.trocas.map((t, k) => ({
+        id: `i${k + 1}`,
+        tipo: "trocar_anuncio" as const,
+        na_meta: true,
+        alvo: { ref: `n${k + 1}`, nivel: "anuncio" as const, meta_id: t.anuncio.ad_id, nome: semTravessao(t.anuncio.nome || `Anúncio ${t.anuncio.ad_id}`).slice(0, 160) },
+        criativo: { ref: `a${k + 1}`, id: t.candidato.id, nome: t.candidato.nome },
+        texto: null,
+        variacao_pct: null,
+        motivo: semTravessao(t.motivo).slice(0, 900),
+        de: null,
+        para: { status: "PAUSED" as const },
+        limitado: false,
+        indisponivel: null,
+        troca: {
+          numeros: {
+            periodo: conta.periodo ?? null,
+            gasto: t.anuncio.metricas.gasto,
+            impressoes: t.anuncio.metricas.impressoes,
+            resultados: t.anuncio.metricas.resultados,
+            resultado_rotulo: t.anuncio.metricas.resultado_rotulo || retrato.resultado_rotulo,
+            custo_por_resultado: t.anuncio.metricas.custo_por_resultado,
+            ctr_link_pct: t.anuncio.metricas.ctr_saida_pct,
+            cpc: t.anuncio.metricas.cpc,
+            frequencia: (t.anuncio.tendencia && t.anuncio.tendencia.frequencia) ?? t.anuncio.metricas.frequencia_media,
+          },
+          regua: { ctr_minimo_pct: regua.ctr_minimo_pct, ctr_mediana_pct: regua.ctr_mediana_pct, custo_alvo_brl: regua.custo_alvo_brl, fonte_do_alvo: fonteDoAlvoEmTexto(regua.fonte_do_alvo) },
+          problemas: t.problemas,
+          jev: { saude: t.saude, prob_candidato: t.prob, nota_copy_atual: t.nota_copy_atual },
+          candidato: { id: t.candidato.id, nome: t.candidato.nome, angulo: t.candidato.angulo ? t.candidato.angulo.nome : null, formato: t.candidato.formato },
+          copy: t.copy,
+          sincronizado_em: conta.atualizado_em ?? null,
+        },
+      })),
+      ignorados: [],
+      gestao: null,
+    };
+    await e.andamento.passo("executando", "Lendo cada anúncio na Meta para a prova do antes (nada é escrito)");
+    acoes = await prepararAcoesDaConta(servico, e.clientId, brutas, { conta, teto: configDaLinha(rotina).teto_diario_brl });
+  }
+  const mensagemId = crypto.randomUUID();
+  const resumoDaOtimizacao = {
+    tipo: "otimizacao",
+    periodo: conta.periodo,
+    sincronizado_em: conta.atualizado_em ?? null,
+    regua,
+    avaliados: plano2.avaliados,
+    jev_ok: plano2.jev_ok,
+    candidatos: candidatos.length,
+  };
+  await registrarMensagens(servico, e.conversaId, e.clientId, [{ id: mensagemId, papel: "agente", conteudo: texto, anexos: [resumoDaOtimizacao, ...(acoes ? [acoes] : [])] }]);
+  await e.andamento.passo("pronto", plano2.trocas.length ? `Pronto: ${plano2.trocas.length} ${plano2.trocas.length === 1 ? "troca espera" : "trocas esperam"} o seu Confirmar` : "Pronto: nada a trocar", { fim: true });
+  return json({
+    conversa_id: e.conversaId,
+    mensagem_id: mensagemId,
+    resposta: texto,
+    estrategia: null,
+    markdown: texto,
+    acoes,
+    otimizacao: resumoDaOtimizacao,
+    feitas_sozinho: 0,
+    pediu_para_fazer: false,
+    numeros: numerosVistos(conta),
+    nicho: achado.nicho ? { id: achado.nicho.id, nome: achado.nicho.nome } : null,
+    tempo_ms: Date.now() - e.inicioDoPedido,
+    custo_usd: custo,
+    jev_erro: plano2.jev_ok ? achado.jev_erro : "jev_indisponivel",
+  });
+}
+
 async function acessoDeGestao(servico: SupabaseClient, clientId: string | null, opcoes: { conferir?: boolean } = {}): Promise<AcessoDeGestao> {
   const t = await tokenDeGestao(servico, clientId);
   if (!t.token) {
@@ -6976,10 +7193,14 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
       } else if (i.tipo === "montar_campanha_do_plano") {
         resultado = await montarComApoios(servico, m.client_id, i, acesso.grafo, contas);
       } else {
-        const apoio = i.tipo === "trocar_criativo" && i.criativo ? await apoioDoCriativo(servico, m.client_id, i.criativo.id) : null;
+        const apoio = (i.tipo === "trocar_criativo" || i.tipo === "trocar_anuncio") && i.criativo ? await apoioDoCriativo(servico, m.client_id, i.criativo.id) : null;
         resultado = await executarNaMeta(i, acesso.grafo, apoio, contas);
         if (resultado.ok && i.tipo === "trocar_criativo" && i.criativo && resultado.criado && resultado.criado.anuncio_id) {
           await servico.from("ads_criativos").update({ ad_id: resultado.criado.anuncio_id }).eq("id", i.criativo.id).eq("client_id", m.client_id).is("ad_id", null);
+        }
+        // Frente AD4: o criativo do acervo passa a estar no ar, ligado ao anúncio novo (a conta ao vivo já mostra o vínculo).
+        if (resultado.ok && i.tipo === "trocar_anuncio" && i.criativo && resultado.criado && resultado.criado.anuncio_id) {
+          await servico.from("ads_criativos").update({ ad_id: resultado.criado.anuncio_id, status: "no_ar" }).eq("id", i.criativo.id).eq("client_id", m.client_id);
         }
       }
     } else {
@@ -7056,6 +7277,11 @@ async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, co
     if (r.ok) {
       voltaram++;
       voltaramIds.push(i.id);
+      // Frente AD4: desfeita a troca, o criativo do acervo volta a "na conta" (pronto), sem o anúncio novo.
+      const novoAd = i.tipo === "trocar_anuncio" && i.criativo && i.resultado && i.resultado.criado ? i.resultado.criado.anuncio_id : null;
+      if (novoAd && i.criativo) {
+        await servico.from("ads_criativos").update({ ad_id: null, status: "pronto" }).eq("id", i.criativo.id).eq("client_id", m.client_id).eq("ad_id", novoAd);
+      }
     }
     itens.push({ ...i, resultado: { ...(i.resultado as NonNullable<ItemDaAcaoNaConta["resultado"]>), desfeito: r.ok, motivo_desfazer: r.ok ? undefined : r.motivo } });
     await auditLog({
@@ -7667,6 +7893,8 @@ type RegraDoDonoTR = ReturnType<typeof normalizarRegras>[number];
 const TIPO_NO_REGISTRO: Partial<Record<ItemDaAcaoNaConta["tipo"], string>> = {
   pausar: "pausar", ativar: "ativar", orcamento: "orcamento", renomear: "renomear", duplicar_anuncio: "duplicar_anuncio",
   trocar_criativo: "trocar_criativo", vincular_criativo: "vincular_criativo", montar_campanha_do_plano: "montar_campanha",
+  // Frente AD4: a troca do "otimizar" entra como troca de criativo (mesma coluna, sem SQL novo).
+  trocar_anuncio: "trocar_criativo",
 };
 
 /** Uma linha de "O que foi feito" (sem a tabela aplicada, não grava e segue). */
@@ -7736,6 +7964,7 @@ function resumoDoItemFeito(i: ItemDaAcaoNaConta): string {
     case "trocar_criativo": return `Subi o criativo ${i.criativo ? i.criativo.nome : ""} como anúncio novo pausado.`;
     case "vincular_criativo": return `Liguei ${alvo} ao criativo ${i.criativo ? i.criativo.nome : ""}.`;
     case "montar_campanha_do_plano": return `Montei a campanha do plano ${i.montagem ? i.montagem.plano_nome : ""} na Meta, pausada.`;
+    case "trocar_anuncio": return `Troquei o criativo de ${alvo}: anúncio novo com ${i.criativo ? i.criativo.nome : "o criativo do acervo"} no mesmo conjunto e o antigo pausado.`;
     default: return `${i.tipo}: feito.`;
   }
 }
@@ -7746,6 +7975,7 @@ function resumoDaTentativa(i: ItemDaAcaoNaConta): string {
   const verbo: Partial<Record<ItemDaAcaoNaConta["tipo"], string>> = {
     pausar: "pausar", ativar: "ativar", orcamento: "mudar a verba diária de", renomear: "renomear", duplicar_anuncio: "duplicar",
     trocar_criativo: "subir o criativo novo em", vincular_criativo: "ligar ao criativo da Mesa", montar_campanha_do_plano: "montar a campanha do plano",
+    trocar_anuncio: "trocar o criativo de",
   };
   return `Tentei ${verbo[i.tipo] ?? i.tipo} ${alvo}`.replace(/\s+/g, " ").trim() + ", mas não deu.";
 }

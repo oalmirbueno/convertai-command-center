@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { SeletorDeModelo, SeletorDeRaciocinio } from "@/components/mesa/Seletores";
@@ -64,7 +65,12 @@ import { chavesRotina } from "./rotinaApi";
  */
 
 /** O clique único: analisa e já faz o seguro; o que aumenta gasto ou cria coisa fica para confirmar. */
-export const TEXTO_DE_OTIMIZAR = "Otimize a conta agora: faça o que for seguro (pausar o que gasta sem resultado, baixar verba do que está caro) e deixe pronto para eu confirmar o que aumenta gasto ou cria coisa nova. Diga o que fez e por quê, com os números.";
+/**
+ * Frente AD4 (28/09, dono): "otimizar" compara cada anúncio ativo com os números reais e a régua do
+ * nicho e da conta; o que está bom fica, o que está ruim ganha a troca pelo melhor do acervo, que só
+ * roda no Confirmar. No servidor é régua em código + Jev (sem o modelo pesado): rápido e barato.
+ */
+export const TEXTO_DE_OTIMIZAR = "Otimize a conta: compare cada anúncio ativo com a régua; o que está bom fica, o que está ruim troca pelo melhor criativo do acervo, com os números. Eu confirmo a troca.";
 
 const ATALHOS = [
   { rotulo: "Foco em mensagem", texto: "Analise a conta inteira com foco em mensagem e vendas. O que está só gerando engajamento e como transformar isso em conversa e venda?" },
@@ -516,7 +522,7 @@ export default function AgenteSenior({
   };
 
   /** Uma mensagem ao agente (com o modelo escolhido). `agirAgora`: ele já faz o seguro. */
-  const enviarMensagem = async (mensagem: string, opcoes: { agirAgora?: boolean; assumirPlano?: { plano_id: string; nome: string } | null; limparCampo?: boolean } = {}) => {
+  const enviarMensagem = async (mensagem: string, opcoes: { agirAgora?: boolean; otimizar?: boolean; assumirPlano?: { plano_id: string; nome: string } | null; limparCampo?: boolean } = {}) => {
     const assumindo = !!opcoes.assumirPlano;
     setEnvio({ mensagem: assumindo ? `Assuma o plano ${opcoes.assumirPlano!.nome} e monte a campanha.` : mensagem, desde: Date.now(), assumindo });
     setEsperando(true);
@@ -535,12 +541,13 @@ export default function AgenteSenior({
         conversa_id: conversa.data && conversa.data.conversa_id ? conversa.data.conversa_id : undefined,
         plano_id: (opcoes.assumirPlano ? opcoes.assumirPlano.plano_id : planoId) || undefined,
         dias,
-        // Assumir o plano não pesquisa na web (o custo mostrado no botão do plano é sem pesquisa).
-        pesquisar: assumindo ? false : pesquisar,
+        // Assumir o plano e otimizar não pesquisam na web (o custo mostrado é sem pesquisa).
+        pesquisar: assumindo || opcoes.otimizar ? false : pesquisar,
       };
       if (efetivo.modelo) corpo.modelo_id = efetivo.modelo.id;
       if (efetivo.raciocinio) corpo.raciocinio = efetivo.raciocinio;
       if (assumindo) corpo.modo = "assumir_plano";
+      else if (opcoes.otimizar) corpo.modo = "otimizar";
       else if (opcoes.agirAgora) corpo.modo = "agir";
       const data = await chamarAds<any>("conta_conversar", corpo);
       const b = data && data.pesquisa && data.pesquisa.biblioteca;
@@ -565,7 +572,9 @@ export default function AgenteSenior({
   };
 
   const enviar = () => enviarMensagem(texto.trim(), { agirAgora: agir, limparCampo: true });
-  const otimizar = () => enviarMensagem(TEXTO_DE_OTIMIZAR, { agirAgora: true });
+  const otimizar = () => {
+    void enviarMensagem(TEXTO_DE_OTIMIZAR, { otimizar: true }).catch((e) => setAviso(`O otimizar não terminou: ${e instanceof Error ? e.message : "tente de novo."}`));
+  };
   const podeEnviar = !!texto.trim() && !envio;
 
   // O plano mandado pelo "Enviar ao agente sênior": ele assume sozinho, uma vez (o custo apareceu no botão do plano).
@@ -626,15 +635,16 @@ export default function AgenteSenior({
           <LinhaDoModelo escolha={escolha} onEscolher={setEscolha} />
           <div className="mb-1.5 flex min-w-0 flex-wrap items-center">
             <span className="mb-1 mr-1.5">
-              <BotaoComCusto
-                rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Otimizar agora</>}
-                titulo="Otimizar a conta agora"
-                descricao="Um clique: o agente lê a conta inteira, já faz o que é seguro (pausar o que gasta sem resultado, baixar verba do que está caro) com Desfazer, e deixa para você confirmar o que aumenta gasto ou cria coisa nova."
-                partes={() => partesDoAgenteSenior(catalogo, pesquisar, efetivo)}
-                executar={otimizar}
-                disabled={!!envio}
+              <Button
+                type="button"
+                size="sm"
                 className="h-8"
-              />
+                onClick={otimizar}
+                disabled={!!envio}
+                title="Um clique: compara cada anúncio ativo com a régua do nicho e da conta (7 dias). Bom fica; ruim ganha a troca pelo melhor do acervo, que só roda no seu Confirmar. Só o Jev (centavos), sem o modelo pesado."
+              >
+                <Sparkles className="mr-1 h-3.5 w-3.5" /> Otimizar agora
+              </Button>
             </span>
             <div className="mb-1 flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
               {ATALHOS.map((a) => (

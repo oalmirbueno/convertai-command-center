@@ -27,7 +27,10 @@ export function useContagemDeNaoLidas() {
         .eq("user_id", user!.id)
         .eq("read", false);
       if (error) throw error;
-      return count ?? 0;
+      // 28/09 (AD4): contagem que não é número vira 0. Com NaN (Content-Range sem o total), o
+      // resultado da consulta nunca era "igual" ao anterior (NaN !== NaN), o sino re-renderizava
+      // o painel inteiro milhares de vezes por segundo e a mesa podia não passar do esqueleto.
+      return typeof count === "number" && Number.isFinite(count) ? count : 0;
     },
     enabled: !!user,
     refetchInterval: 30000,
