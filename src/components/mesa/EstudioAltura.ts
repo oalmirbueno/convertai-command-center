@@ -45,6 +45,8 @@ export function useFaixa(): Faixa {
 /** Espaço entre o cabeçalho fixo da Mesa e o conteúdo da aba (space-y-5 da página). */
 const ESPACO_ABAIXO_DO_CABECALHO = 20;
 const MARGEM_DE_BAIXO = 12;
+/** O respiro de baixo da casca das mesas (pb-10) mais uma folga: com ele, a tela inteira cabe sem a página rolar. */
+const MARGEM_DA_CASCA = 44;
 // O estúdio (sem a faixa de pautas) tem sempre a altura de uma tela: abaixo
 // disso a lâmina grande ficava pequena e cortada (dono, 23/09 noite).
 const ALTURA_MINIMA = 620;
@@ -73,22 +75,25 @@ export function fimDoCabecalhoFixo(): number {
 }
 
 /** Altura da esteira para a janela e o cabeçalho medidos. */
-export function alturaDaEsteira(alturaDaJanela: number, fimDoCabecalho: number): number {
-  return Math.max(ALTURA_MINIMA, Math.round(alturaDaJanela - fimDoCabecalho - ESPACO_ABAIXO_DO_CABECALHO - MARGEM_DE_BAIXO));
+export function alturaDaEsteira(alturaDaJanela: number, fimDoCabecalho: number, minimo: number = ALTURA_MINIMA): number {
+  // Com mínimo próprio (a tela inteira do Estúdio, frente AE-2), desconta também o respiro de baixo da casca
+  // da Mesa (pb-10): a página não rola no computador.
+  const embaixo = minimo === ALTURA_MINIMA ? MARGEM_DE_BAIXO : MARGEM_DA_CASCA;
+  return Math.max(minimo, Math.round(alturaDaJanela - fimDoCabecalho - ESPACO_ABAIXO_DO_CABECALHO - embaixo));
 }
 
 /** Altura (px) da esteira no computador; null quando a página rola normalmente. */
-export function useAlturaDaEsteira(ativo: boolean): number | null {
+export function useAlturaDaEsteira(ativo: boolean, minimo: number = ALTURA_MINIMA): number | null {
   // Já nasce com uma conta (sem o pulo de altura no primeiro desenho); o efeito corrige.
   const [altura, setAltura] = useState<number | null>(() =>
-    ativo && typeof window !== "undefined" ? alturaDaEsteira(window.innerHeight || 800, fimDoCabecalhoFixo()) : null,
+    ativo && typeof window !== "undefined" ? alturaDaEsteira(window.innerHeight || 800, fimDoCabecalhoFixo(), minimo) : null,
   );
   useEffect(() => {
     if (!ativo) {
       setAltura(null);
       return;
     }
-    const medir = () => setAltura(alturaDaEsteira(window.innerHeight || 800, fimDoCabecalhoFixo()));
+    const medir = () => setAltura(alturaDaEsteira(window.innerHeight || 800, fimDoCabecalhoFixo(), minimo));
     medir();
     window.addEventListener("resize", medir);
     // A barra de custo termina de carregar depois e pode mudar de altura.
@@ -108,7 +113,7 @@ export function useAlturaDaEsteira(ativo: boolean): number | null {
       window.clearTimeout(depois);
       if (observador) observador.disconnect();
     };
-  }, [ativo]);
+  }, [ativo, minimo]);
   return altura;
 }
 

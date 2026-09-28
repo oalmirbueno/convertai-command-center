@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Archive, Check, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Star } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Archive, Check, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
 import { dataCurta, rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
@@ -95,7 +95,6 @@ export interface ArquivarNaFaixa {
   onArquivar: (ids: string[]) => void;
   /** id -> ids das pautas parecidas no mesmo dia (pautasParecidas em arquivarDaFaixa.ts). */
   parecidas?: Record<string, string[]>;
-  arquivando?: boolean;
 }
 
 function CartaoDoItem({
@@ -172,11 +171,17 @@ function CartaoDoItem({
           )}
         </span>
         <span className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-[1.3] text-foreground [overflow-wrap:anywhere]">{item.title}</span>
-        <span className="mt-1 flex min-w-0 flex-wrap">
+        <span className="mt-1 flex min-w-0 items-center">
           <SeloDoItem tom={situacao.tom}>{situacao.rotulo}</SeloDoItem>
+          {/* Frente AE-2: a pauta parecida é um ícone (o texto fica no título), não mais um selo a mais. */}
           {parecidaCom.length > 0 && (
-            <span title={`Parecida com: ${parecidaCom.join("; ")}. Veja se é duplicada e arquive a que não quer.`} className="ml-1">
-              <SeloDoItem tom="alerta">parecida com outra</SeloDoItem>
+            <span
+              title={`Parecida com outra no mesmo dia: ${parecidaCom.join("; ")}. Veja se é duplicada e arquive a que não quer.`}
+              aria-label="Parecida com outra no mesmo dia"
+              className="ml-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+              data-parecida=""
+            >
+              <Copy className="h-3 w-3" />
             </span>
           )}
         </span>
@@ -215,6 +220,8 @@ export default function EstudioLista({
   recolhida = false,
   onRecolher,
   arquivar,
+  inicio,
+  extra,
 }: {
   janela: string;
   meses: string[];
@@ -236,6 +243,10 @@ export default function EstudioLista({
   onRecolher?: (recolher: boolean) => void;
   /** Frente AE: arquivar pela faixa (sem ele, a faixa fica como antes). */
   arquivar?: ArquivarNaFaixa;
+  /** Frente AE-2: o que vem antes do período na barra (Pautas | Arte rápida), sem linha nova. */
+  inicio?: ReactNode;
+  /** Frente AE-2: ação compacta à direita da barra (Arquivados). */
+  extra?: ReactNode;
 }) {
   const proximos = janela === PROXIMOS_DIAS;
   const [selecionando, setSelecionando] = useState(false);
@@ -289,10 +300,11 @@ export default function EstudioLista({
   }, [tarefaId, filtrados.length, recolhida, filtro, janela, semanaDeHoje]);
 
   const topo = (
-    <div className="flex min-w-0 flex-wrap items-center px-3 py-2">
+    <div className="flex min-w-0 flex-wrap items-center px-3 py-1.5">
+      {inicio}
       <div className="mb-1 mr-2 mt-1 w-[168px] shrink-0">
         <Select value={janela} onValueChange={onJanela}>
-          <SelectTrigger className="h-8 min-w-0 text-[12.5px] font-medium capitalize" aria-label="Período da lista">
+          <SelectTrigger className="h-8 min-w-0 text-[12.5px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -321,7 +333,26 @@ export default function EstudioLista({
           </button>
         ))}
       </div>
+      {/* Faixa recolhida: a pauta troca por um seletor na própria barra (o que não cabe vira seletor, pedido do dono). */}
+      {recolhida && filtrados.length > 0 && (
+        <div className="mb-1 mr-2 mt-1 w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
+          <Select value={tarefaId && filtrados.some((i) => i.id === tarefaId) ? tarefaId : ""} onValueChange={onEscolher}>
+            <SelectTrigger className="h-8 min-w-0 text-[12.5px]" aria-label="Pauta aberta">
+              <SelectValue placeholder="Escolha a pauta" />
+            </SelectTrigger>
+            <SelectContent>
+              {filtrados.map((i) => (
+                <SelectItem key={i.id} value={i.id}>
+                  {dataCurta(i.due_date)} · {i.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {atualizando && <Loader2 className="mb-1 mt-1 h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Atualizando" />}
+      {/* À direita, alinhadas: selecionar para arquivar, Arquivados e recolher (quebra para a 2ª linha só se não couber). */}
+      <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end">
       {arquivar && !recolhida && !selecionando && itens.length > 0 && (
         <button
           type="button"
@@ -341,10 +372,10 @@ export default function EstudioLista({
               arquivar.onArquivar(marcados.slice());
               sairDaSelecao();
             }}
-            disabled={!marcados.length || !!arquivar.arquivando}
+            disabled={!marcados.length}
             className="flex h-8 items-center rounded-md bg-destructive px-2.5 text-[11.5px] font-medium text-destructive-foreground disabled:opacity-50"
           >
-            {arquivar.arquivando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1 h-3.5 w-3.5" />}
+            <Archive className="mr-1 h-3.5 w-3.5" />
             Arquivar {marcados.length ? `(${marcados.length})` : ""}
           </button>
           <button type="button" onClick={sairDaSelecao} className="ml-1 h-8 rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
@@ -352,16 +383,12 @@ export default function EstudioLista({
           </button>
         </span>
       )}
-      {proximos && !recolhida && (
-        <span className="mb-1 ml-1 mt-1 hidden min-w-0 truncate text-[11px] text-muted-foreground lg:inline" title="Com a arte que já está na Agenda das últimas semanas">
-          com as artes já na Agenda
-        </span>
-      )}
+      {extra}
       {onRecolher && (
         <button
           type="button"
           onClick={() => onRecolher(!recolhida)}
-          className="mb-1 ml-auto mt-1 flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="mb-1 mt-1 flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
           aria-expanded={!recolhida}
           title={recolhida ? "Mostrar as pautas" : "Recolher as pautas e dar mais altura ao estúdio"}
         >
@@ -369,6 +396,7 @@ export default function EstudioLista({
           {recolhida ? "Mostrar pautas" : "Recolher"}
         </button>
       )}
+      </div>
     </div>
   );
 

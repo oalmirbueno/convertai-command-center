@@ -70,7 +70,9 @@ import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
 import EstudioAvisoDoRosto from "./EstudioAvisoDoRosto";
 import EstudioEntrega from "./EstudioEntrega";
 // Frente AE (28/09): arte rápida, fora do plano do mês, no mesmo Estúdio.
-import EstudioArteRapida, { EscolhaDoModo, type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
+import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
+import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA } from "../../../supabase/functions/_shared/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
@@ -89,6 +91,7 @@ import {
 import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
+import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
 import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
@@ -1157,37 +1160,23 @@ function DetalheDoItem({
 
   // ---------------------------------------------------------------- barra do item
 
+  // Frente AE-2 (dono, 28/09: "menos poluição"): a qualidade num seletor compacto, com o preço de cada uma.
   const seletorDeQualidade = (
-    <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da lâmina">
-      {QUALIDADES_DO_ESTUDIO.map((q) => {
-        const ativa = qualidade === q.valor;
-        return (
-          <button
-            key={q.valor}
-            type="button"
-            role="radio"
-            aria-checked={ativa}
-            disabled={emLote}
-            title={`${q.rotulo}: ${q.dica}${precos[q.valor] ? `, cerca de ${precos[q.valor].slice(1)} por lâmina${filaComFundo ? ` (${NOTA_DO_FUNDO_CONTINUO.toLowerCase()})` : ""}` : ""}`}
-            onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
-            className={`flex h-10 min-w-[72px] flex-col items-center justify-center rounded-md px-2 leading-tight transition-colors ${
-              ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-            }`}
-          >
-            <span className={`text-[11.5px] ${ativa ? "font-medium" : ""}`}>{q.rotulo}</span>
-            <span className={`text-[10px] tabular-nums ${ativa ? "text-primary-foreground/80" : "text-muted-foreground"}`} data-preco-da-qualidade={q.valor}>
-              {precos[q.valor] || "sem preço"}
-            </span>
-          </button>
-        );
-      })}
+    <div className="mb-1 mr-2 mt-1 shrink-0" title={filaComFundo ? NOTA_DO_FUNDO_CONTINUO : undefined}>
+      <SeletorDeQualidadeCompacto
+        valor={qualidade}
+        precos={precos}
+        nota={filaComFundo ? NOTA_DO_FUNDO_CONTINUO.toLowerCase() : undefined}
+        disabled={emLote}
+        onMudar={(q) => { setQualidade(q); void guardarEscolha({ qualidade: q }); }}
+      />
     </div>
   );
 
   const seletorDeGerador = (
-    <div className="mb-1 mr-2 mt-1 w-[150px] min-w-0 shrink-0">
+    <div className="mb-1 mr-2 mt-1 w-[168px] min-w-0 shrink-0">
       <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
-        <SelectTrigger className="h-10 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
+        <SelectTrigger className="h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
           <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
         </SelectTrigger>
         <SelectContent>
@@ -1207,10 +1196,10 @@ function DetalheDoItem({
       role="switch"
       aria-checked={corrigirSozinho}
       onClick={() => setCorrigirSozinho((c) => !c)}
-      className={`mb-1 mr-2 mt-1 inline-flex h-10 shrink-0 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-      title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo ou identidade, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a lâmina."
+      className={`mb-1 mr-2 mt-1 inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}
+      title={`Corrigir sozinho (${corrigirSozinho ? "ligado" : "desligado"}): depois de gerar ou ajustar, se a conferência achar erro de texto, logo ou identidade, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a lâmina.`}
     >
-      <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
+      <ShieldCheck className={`mr-1 h-3.5 w-3.5 ${corrigirSozinho ? "text-primary" : ""}`} /> Corrigir sozinho
     </button>
   );
 
@@ -1220,19 +1209,20 @@ function DetalheDoItem({
       type="button"
       size="sm"
       variant={ferramenta === "diretor" ? "default" : "outline"}
-      className="mb-1 mr-2 mt-1 h-10 shrink-0 gap-1 px-3 text-[12.5px]"
+      className="mb-1 mr-2 mt-1 h-8 shrink-0 gap-1 px-2.5 text-[12px]"
       onClick={() => abrirFerramenta("diretor")}
       aria-pressed={ferramenta === "diretor"}
+      aria-label="Conversar com o diretor"
       title="Converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
     >
-      <MessageSquare className="h-3.5 w-3.5" /> Conversar com o diretor
+      <MessageSquare className="h-3.5 w-3.5" /> Diretor
     </Button>
   );
 
   const acaoPrincipal = (
     <div className="mb-1 mt-1 flex shrink-0 items-center">
       {emLote || fila.ativos.length > 0 ? (
-        <Button type="button" size="sm" variant="outline" className="h-10" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Para depois das lâminas que já estão gerando">
+        <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Para depois das lâminas que já estão gerando">
           <Square className="mr-1 h-3.5 w-3.5" /> Parar
         </Button>
       ) : (
@@ -1255,7 +1245,7 @@ function DetalheDoItem({
               : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "outline"}
-          className="h-10 gap-1 px-3 text-[12.5px]"
+          className="h-8 gap-1 px-3 text-[12.5px]"
           disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
@@ -1271,7 +1261,7 @@ function DetalheDoItem({
         />
       )}
       {prontoParaEntregar && !emLote && (
-        <Button type="button" size="sm" className="ml-2 h-10 gap-1 px-3 text-[12.5px]" onClick={() => abrirFerramenta("entrega", false)} title="Abre a ferramenta Entrega">
+        <Button type="button" size="sm" className="ml-2 h-8 gap-1 px-3 text-[12.5px]" onClick={() => abrirFerramenta("entrega", false)} title="Abre a ferramenta Entrega">
           <Send className="h-3.5 w-3.5" /> Entregar
         </Button>
       )}
@@ -1298,25 +1288,14 @@ function DetalheDoItem({
             </p>
           </div>
         </div>
-        {estado === "producao" && (
-          <>
-            <div className="mb-1 mr-2 mt-1 shrink-0" title="Formato do post (vale para todas as lâminas)">
-              <SeletorDeFormato valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} compacto />
-            </div>
-            {seletorDeQualidade}
-            {seletorDeGerador}
-            {chaveCorrigirSozinho}
-            {botaoDoDiretor}
-            {trabalho && <BotaoDoEstilo trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="mb-1 mr-2 mt-1 shrink-0" />}
-            {acaoPrincipal}
-          </>
-        )}
+        {/* Frente AE-2 (dono: "no máximo duas linhas organizadas"): na 1ª linha o item, a ação principal e a tela cheia. */}
+        {estado === "producao" && acaoPrincipal}
         {colunas && onFoco && (
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="mb-1 ml-2 mt-1 h-10 shrink-0 gap-1 px-2.5 text-[12px]"
+            className="mb-1 ml-1 mt-1 h-8 shrink-0 gap-1 px-2.5 text-[12px]"
             aria-pressed={foco}
             onClick={() => onFoco(!foco)}
             title={foco ? "Voltar ao painel (Esc)" : "Tela cheia: esconde o topo do painel, as pautas e os botões flutuantes; volta pelo botão ou Esc"}
@@ -1326,6 +1305,19 @@ function DetalheDoItem({
           </Button>
         )}
       </div>
+      {/* 2ª linha: os ajustes da geração, alinhados e do mesmo tamanho. */}
+      {estado === "producao" && (
+        <div className="flex min-w-0 flex-wrap items-center border-t border-border/60 px-3 py-1" data-ajustes-da-geracao="">
+          <div className="mb-1 mr-2 mt-1 shrink-0" title="Formato do post (vale para todas as lâminas)">
+            <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
+          </div>
+          {seletorDeQualidade}
+          {seletorDeGerador}
+          {chaveCorrigirSozinho}
+          {botaoDoDiretor}
+          {trabalho && <BotaoDoEstilo trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="mb-1 mr-2 mt-1 shrink-0" />}
+        </div>
+      )}
       {estado === "producao" && (
         <div className="h-0.5 w-full bg-secondary" aria-hidden="true">
           <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progresso}%` }} />
@@ -1524,11 +1516,11 @@ function DetalheDoItem({
   const centroDaProducao = colunas ? (
     <>
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
-        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title={ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}>
-          Prancheta
+        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title={`${trabalho?.direcao?.origem === "roteiro" ? "Direção do roteiro" : "Direção do diretor"}${infinito ? ", carrossel contínuo" : ""}. ${ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}`}>
+          <span className="min-w-0 flex-1 truncate">Prancheta</span>
+          <span className="ml-1 shrink-0 normal-case tracking-normal tabular-nums" data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
-          <p className="mb-2 text-[11px] leading-snug text-muted-foreground">{resumoDaPrancheta}</p>
           {prancheta(true)}
         </div>
       </div>
@@ -1693,14 +1685,17 @@ function DetalheDoItem({
   const referenciasDaLamina = (cardSelecionado?.referencias_ids || []).length;
   const ferramentaReferencias = trabalho ? (
     <div className="min-w-0 space-y-3">
-      <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
-        <p className="text-[12.5px] font-medium leading-snug">Escolha 1 ou 2: o gerador replica o layout delas</p>
-        <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
-          Estrutura, posição dos blocos, escala do texto, recorte e tratamento da imagem saem da referência; as cores, as fontes e a logo são da marca, o
-          texto é o da lâmina e a foto da lâmina vira o assunto. As da lâmina valem no lugar das do conjunto.
-          {comFundoContinuo ? " No carrossel contínuo o panorama manda na cena e a referência não é replicada." : ""}
+      {/* Frente AE-2 (padrão do painel): a explicação fica no "?", à vista só o título e a contagem. */}
+      <div className="min-w-0">
+        <p className="flex min-w-0 items-center text-[12.5px] font-medium leading-snug">
+          <span className="min-w-0">Escolha 1 ou 2: o gerador replica o layout delas</span>
+          <AjudaRecolhida className="ml-1.5" rotulo="Como a referência entra na lâmina">
+            Estrutura, posição dos blocos, escala do texto, recorte e tratamento da imagem saem da referência; as cores, as fontes e a logo são da marca, o
+            texto é o da lâmina e a foto da lâmina vira o assunto. As da lâmina valem no lugar das do conjunto.
+            {comFundoContinuo ? " No carrossel contínuo o panorama manda na cena e a referência não é replicada." : ""}
+          </AjudaRecolhida>
         </p>
-        <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
+        <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
           Conjunto: {referenciasDoConjunto} escolhida{referenciasDoConjunto === 1 ? "" : "s"}
           {cardSelecionado ? ` · Lâmina ${cardSelecionado.ordem}: ${referenciasDaLamina} escolhida${referenciasDaLamina === 1 ? "" : "s"}` : ""}
         </p>
@@ -1751,11 +1746,19 @@ function DetalheDoItem({
 
       <section>
         <Rotulo>Formato do post</Rotulo>
-        <SeletorDeFormato valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
+        <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
       </section>
 
       <section>
-        <Rotulo>Logo do kit</Rotulo>
+        <Rotulo
+          acao={
+            <AjudaRecolhida rotulo="Onde a logo do conjunto vale">
+              Vale na capa e no fechamento. O gerador desenha a logo junto com a arte, num tamanho que se lê de longe; a lâmina pode ter a própria (na base da lâmina, em cima dela).
+            </AjudaRecolhida>
+          }
+        >
+          Logo do kit
+        </Rotulo>
         <EstudioLogoDaLamina
           trabalhoId={trabalho.id}
           alvo="conjunto"
@@ -1763,9 +1766,6 @@ function DetalheDoItem({
           bloqueado={entregue || algoGerando}
           onSalvar={configurar}
         />
-        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-          Vale na capa e no fechamento. O gerador desenha a logo junto com a arte, num tamanho que se lê de longe; a lâmina pode ter a própria (na faixa em cima dela).
-        </p>
       </section>
 
       {cardsDaDirecao.length > 1 && (
@@ -2106,7 +2106,8 @@ export default function AbaEstudio({
   };
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
-  const altura = useAlturaDaEsteira(colunas);
+  // A altura da tela abaixo da barra da Mesa (faixa + estúdio juntos; mínimo menor que o do estúdio sozinho).
+  const altura = useAlturaDaEsteira(colunas, 480);
   // Tela cheia do Estúdio (dono, 26/09): só no computador (colunas).
   const [foco, setFoco] = useState(false);
   const focoLigado = foco && colunas;
@@ -2128,7 +2129,8 @@ export default function AbaEstudio({
   // A lista abre nos próximos 60 dias; escolher um mês muda para aquele mês (e a URL acompanha).
   const [modoDaLista, setModoDaLista] = useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos");
   const [filtroGuardado, setFiltro] = useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer");
-  const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas", false);
+  // Frente AE-2: em tela baixa (menos de 760 px de altura), a faixa já abre recolhida (a pauta troca pelo seletor da barra).
+  const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas", typeof window !== "undefined" && (window.innerHeight || 900) < 760);
   const filtro = filtroValido(filtroGuardado);
   const janela = modoDaLista === "proximos" ? PROXIMOS_DIAS : mes;
   const dados = useItensDoMes(clientId, janela);
@@ -2185,7 +2187,6 @@ export default function AbaEstudio({
   const queryClientDaFaixa = useQueryClient();
   const confirmarDaFaixa = useConfirm();
   const avisarDaFaixa = useAvisarErro();
-  const [arquivando, setArquivando] = useState(false);
   const parecidas = useMemo(() => pautasParecidas(itens), [itens]);
   const relerDepoisDeArquivar = () => {
     void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
@@ -2194,66 +2195,92 @@ export default function AbaEstudio({
     void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
     void queryClientDaFaixa.invalidateQueries({ queryKey: ["editorial-calendar"] });
   };
+  /**
+   * Arquivar é otimista (dono, 28/09: "demora para responder; tem que ser
+   * instantâneo"): o cartão sai do cache na hora, o servidor confirma em
+   * segundo plano e, se recusar, o cartão volta com o motivo. O "Desfazer"
+   * devolve o cartão na hora e restaura quando o arquivar terminar.
+   */
+  const tirarDoCache = (ids: string[]) => {
+    const tira = (d: any) => (d && Array.isArray(d.itens) ? { ...d, itens: d.itens.filter((i: ItemDoMes) => ids.indexOf(i.id) < 0) } : d);
+    queryClientDaFaixa.setQueriesData({ queryKey: ["mesa", "itens-do-mes", clientId] }, tira);
+    queryClientDaFaixa.setQueriesData({ queryKey: ["mesa", "item-avulso", clientId] }, tira);
+  };
+  const devolverAoCache = (volta: ItemDoMes[]) => {
+    const junta = (d: any) => {
+      if (!d || !Array.isArray(d.itens)) return d;
+      const faltam = volta.filter((v) => !d.itens.some((i: ItemDoMes) => i.id === v.id));
+      if (!faltam.length) return d;
+      return { ...d, itens: d.itens.concat(faltam).sort((x: ItemDoMes, y: ItemDoMes) => String(x.due_date || "").localeCompare(String(y.due_date || ""))) };
+    };
+    queryClientDaFaixa.setQueriesData({ queryKey: ["mesa", "itens-do-mes", clientId] }, junta);
+  };
   const arquivarPautas = async (ids: string[]) => {
     const alvos = ids.map((id) => itens.filter((i) => i.id === id)[0] || (itemFora && itemFora.id === id ? itemFora : null)).filter(Boolean) as ItemDoMes[];
     if (!alvos.length) return;
     const comArte = alvos.filter((i) => !!fontes.trabalhoDe(i)).length;
     const ok = await confirmarDaFaixa({
       title: alvos.length === 1 ? `Arquivar "${alvos[0].title}"?` : `Arquivar ${alvos.length} pautas?`,
-      description: `Sai da faixa, do mês e da fila de geração. ${comArte ? "A arte feita fica guardada no Estúdio. " : ""}O post da Agenda só planejado sai junto; agendado ou publicado não sai. Dá para desfazer.`,
+      description: `Sai da faixa, do mês e da fila de geração. ${comArte ? "A arte feita fica guardada no Estúdio. " : ""}O post da Agenda só planejado sai junto; agendado ou publicado não sai. Dá para desfazer e fica em Arquivados.`,
       confirmLabel: "Arquivar",
       destructive: true,
     });
     if (!ok) return;
-    setArquivando(true);
+    const trabalhosDosAlvos = alvos.map((i) => fontes.trabalhoDe(i)).filter(Boolean) as Trabalho[];
+    // Na hora: o cartão sai (sem esperar o servidor nem reler a lista).
+    void queryClientDaFaixa.cancelQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
+    tirarDoCache(alvos.map((i) => i.id));
+    if (tarefaId && alvos.some((i) => i.id === tarefaId)) onTarefa(null);
+    // No fundo: o servidor arquiva uma a uma (as travas de sempre); o que ele recusa volta com o motivo.
     const feitas: ArquivadaDaFaixa[] = [];
     const recusadas: RecusadaDaFaixa[] = [];
-    try {
-      for (const i of alvos) {
-        try {
-          const r = await arquivarDaFaixa(clientId, i.id);
-          feitas.push({ taskId: i.id, titulo: i.title, memoriaId: (r && r.memoria_id) || null, postId: (r && r.post_arquivado) || null });
-          const t = fontes.trabalhoDe(i);
-          if (t) await tirarDaFila(t.id).catch(() => null);
-        } catch (e) {
-          recusadas.push({ taskId: i.id, titulo: i.title, motivo: textoDoErro(e) });
-        }
+    const noServidor = (async () => {
+      await Promise.all(
+        alvos.map(async (i) => {
+          try {
+            const r = await arquivarDaFaixa(clientId, i.id);
+            feitas.push({ taskId: i.id, titulo: i.title, memoriaId: (r && r.memoria_id) || null, postId: (r && r.post_arquivado) || null });
+          } catch (e) {
+            recusadas.push({ taskId: i.id, titulo: i.title, motivo: textoDoErro(e) });
+          }
+        }),
+      );
+      for (const t of trabalhosDosAlvos) if (feitas.some((f) => f.taskId === t.task_id)) void tirarDaFila(t.id).catch(() => null);
+      if (recusadas.length) {
+        devolverAoCache(alvos.filter((i) => recusadas.some((r) => r.taskId === i.id)));
+        toast.warning(recusadas.length === 1 ? `"${recusadas[0].titulo}" voltou para a faixa` : `${recusadas.length} pautas voltaram para a faixa`, {
+          description: recusadas.map((r) => r.motivo).filter((m, k, l) => l.indexOf(m) === k).join(" ").slice(0, 400),
+          duration: 12000,
+        });
       }
-    } finally {
-      setArquivando(false);
       relerDepoisDeArquivar();
-    }
-    if (tarefaId && feitas.some((f) => f.taskId === tarefaId)) onTarefa(null);
-    if (feitas.length) {
-      toast.success(feitas.length === 1 ? `Arquivada: ${feitas[0].titulo}` : `${feitas.length} pautas arquivadas`, {
-        description: "Saíram da faixa, do mês e da fila.",
-        duration: 10000,
-        action: {
-          label: "Desfazer",
-          onClick: () => {
-            void (async () => {
-              const avisos: string[] = [];
-              for (const f of feitas) {
-                try {
-                  const r = await restaurarDaFaixa(clientId, f);
-                  if (r && r.aviso) avisos.push(r.aviso);
-                } catch (e) {
-                  avisarDaFaixa(e, `"${f.titulo}" não voltou`);
-                }
+      void queryClientDaFaixa.invalidateQueries({ queryKey: chaveDosArquivados(clientId) });
+    })();
+    toast.success(alvos.length === 1 ? `Arquivada: ${alvos[0].title}` : `${alvos.length} pautas arquivadas`, {
+      description: "Saíram da faixa, do mês e da fila. Ficam em Arquivados.",
+      duration: 10000,
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          devolverAoCache(alvos);
+          void (async () => {
+            await noServidor;
+            const avisos: string[] = [];
+            for (const f of feitas) {
+              try {
+                const r = await restaurarDaFaixa(clientId, f);
+                if (r && r.aviso) avisos.push(r.aviso);
+              } catch (e) {
+                avisarDaFaixa(e, `"${f.titulo}" não voltou`);
               }
-              relerDepoisDeArquivar();
-              toast.success(feitas.length === 1 ? "Pauta de volta" : "Pautas de volta", { description: avisos.length ? avisos.join(" ") : undefined });
-            })();
-          },
+            }
+            relerDepoisDeArquivar();
+            void queryClientDaFaixa.invalidateQueries({ queryKey: chaveDosArquivados(clientId) });
+            if (avisos.length) toast.info("Pautas de volta", { description: avisos.join(" ") });
+          })();
         },
-      });
-    }
-    if (recusadas.length) {
-      toast.warning(recusadas.length === 1 ? `"${recusadas[0].titulo}" não foi arquivada` : `${recusadas.length} pautas não foram arquivadas`, {
-        description: recusadas.map((r) => r.motivo).filter((m, k, l) => l.indexOf(m) === k).join(" ").slice(0, 400),
-        duration: 12000,
-      });
-    }
+      },
+    });
   };
 
   const escolher = (id: string) => {
@@ -2262,6 +2289,9 @@ export default function AbaEstudio({
     // No computador, a página desce até o estúdio ocupar a tela abaixo da barra da Mesa.
     if (colunas) encaixarNaJanela(areaDoEstudio.current);
   };
+
+  // Frente AE-2 (dono: "sem linha nova"): Pautas | Arte rápida entra na barra da faixa e na do histórico.
+  const modoDoEstudio = <ModoDoEstudio modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} className="mb-1 mr-2 mt-1" />;
 
   const faixaDasPautas = (
     <EstudioLista
@@ -2280,7 +2310,9 @@ export default function AbaEstudio({
       onEscolher={escolher}
       recolhida={recolhida}
       onRecolher={setRecolhida}
-      arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas, arquivando }}
+      arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas }}
+      inicio={modoDoEstudio}
+      extra={<ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} />}
     />
   );
 
@@ -2309,8 +2341,6 @@ export default function AbaEstudio({
     <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />
   );
 
-  // Frente AE: a troca entre as pautas do mês e a arte rápida (pedido avulso), no topo do Estúdio.
-  const escolhaDoModo = <EscolhaDoModo modo={alvoRapido ? "rapida" : "pautas"} onModo={(m) => irParaRapida(m === "rapida" ? NOVA_ARTE_RAPIDA : null, ["fotos"])} />;
 
   if (alvoRapido) {
     return (
@@ -2321,7 +2351,7 @@ export default function AbaEstudio({
         altura={altura}
         foco={focoLigado}
         alturaDaJanela={alturaDaJanela}
-        topo={escolhaDoModo}
+        topo={modoDoEstudio}
         onAbrirItem={(taskId) => {
           const p = new URLSearchParams(parametrosDoModo.toString());
           p.delete(PARAMETRO_DA_ARTE_RAPIDA);
@@ -2361,15 +2391,12 @@ export default function AbaEstudio({
 
   if (colunas) {
     return (
-      <div ref={raiz} className="flex min-w-0 flex-col">
-        {/* A faixa de pautas fica fora da conta de altura: o estúdio sozinho
-            ocupa uma tela inteira abaixo da barra da Mesa e a página rola
-            entre os dois (antes os dois dividiam uma tela e a lâmina cortava). */}
-        <div className="shrink-0">
-          {escolhaDoModo}
-          {faixaDasPautas}
-        </div>
-        <div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined}>
+      // Frente AE-2 (dono, 28/09: "rolagem certinha, sem quebrar"): no computador o Estúdio inteiro
+      // (faixa + estúdio) ocupa a altura da tela abaixo da barra da Mesa e a página não rola; cada
+      // região rola por dentro (a tira da faixa para o lado, a prancheta, a lâmina e o painel).
+      <div ref={raiz} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">
+        <div className="shrink-0">{faixaDasPautas}</div>
+        <div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">
           {detalhe || vazio}
         </div>
       </div>
@@ -2379,7 +2406,6 @@ export default function AbaEstudio({
   // Celular e tablet em pé: uma coluna; a faixa em cima e o estúdio embaixo, a página rola.
   return (
     <div ref={raiz} className="min-w-0 space-y-3">
-      {escolhaDoModo}
       {faixaDasPautas}
       {detalhe || vazio}
     </div>

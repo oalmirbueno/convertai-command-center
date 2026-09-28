@@ -350,12 +350,13 @@ describe("o preço de cada qualidade aparece no seletor", () => {
     mock.from.mockImplementation(bancoFalso(tabelasDaAba));
     await comLargura(1440, async () => {
       montarAba("i-3");
-      const grupo = await screen.findByRole("radiogroup", { name: "Qualidade da lâmina" });
-      const botoes = grupo.querySelectorAll("[role=radio]");
-      expect(botoes.length).toBe(3);
-      expect(botoes[0].textContent).toMatch(/Rascunho~US\$ /);
-      expect(botoes[1].textContent).toMatch(/Padrão~US\$ /);
-      expect(botoes[2].textContent).toMatch(/Final~US\$ /);
+      // Frente AE-2 (dono: "controles compactos"): a qualidade é um seletor compacto com o preço em cada opção.
+      fireEvent.click(await screen.findByRole("button", { name: /Qualidade da lâmina: Padrão ~US\$ / }));
+      const opcoes = await screen.findAllByRole("option");
+      expect(opcoes.length).toBe(3);
+      expect(opcoes[0].textContent).toMatch(/Rascunho ~US\$ /);
+      expect(opcoes[1].textContent).toMatch(/Padrão ~US\$ /);
+      expect(opcoes[2].textContent).toMatch(/Final ~US\$ /);
     });
   });
 });

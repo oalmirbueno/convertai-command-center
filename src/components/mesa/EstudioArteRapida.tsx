@@ -11,6 +11,7 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { chamarFuncao, confirmarPublicacao, dataCurta, lerMelhoresHorarios, padraoPara, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import { useCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
@@ -20,11 +21,12 @@ import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { Ditado } from "./Ditado";
-import { SeletorDeFormato } from "./EstudioPreparar";
 import { SeloDoItem } from "./EstudioLista";
 import { lerArquivosDoAgente } from "./leituraDeArquivos";
-import { chaves, lerCampanhas, periodoCurto, type Campanha } from "./mesaV4Api";
-import { enviarUmParaAprovacao, type FormatoDoPost } from "./estudioUtil";
+import { chaves, lerCampanhas, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
+import { SeletorDeFormatoCompacto } from "./EstudioControles";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
+import { enviarUmParaAprovacao, FORMATOS_DO_POST, type FormatoDoPost } from "./estudioUtil";
 import { ultimasVersoes, type ItemDoMes, type Trabalho } from "./useItensDoMes";
 import {
   arquivarArteRapida,
@@ -86,34 +88,6 @@ import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_share
 export interface ModoRapidoDoDetalhe {
   subtitulo: ReactNode;
   entrega: ReactNode;
-}
-
-// ------------------------------------------------------------------ troca de modo
-
-export function EscolhaDoModo({ modo, onModo }: { modo: "pautas" | "rapida"; onModo: (m: "pautas" | "rapida") => void }) {
-  const opcao = (valor: "pautas" | "rapida", rotulo: string, icone: ReactNode, dica: string) => (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={modo === valor}
-      title={dica}
-      onClick={() => modo !== valor && onModo(valor)}
-      className={`inline-flex h-9 min-w-0 flex-1 items-center justify-center rounded-md px-3 text-[12.5px] font-medium transition-colors sm:flex-none ${
-        modo === valor ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {icone}
-      <span className="truncate">{rotulo}</span>
-    </button>
-  );
-  return (
-    <div className="mb-3 flex min-w-0 items-center">
-      <div role="radiogroup" aria-label="Modo do Estúdio" className="flex w-full min-w-0 rounded-lg bg-muted p-1 sm:w-auto" data-modo-do-estudio={modo}>
-        {opcao("pautas", "Pautas do mês", <ListChecks className="mr-1.5 h-3.5 w-3.5 shrink-0" />, "As artes do plano do mês, pela faixa das pautas")}
-        {opcao("rapida", "Arte rápida", <Zap className="mr-1.5 h-3.5 w-3.5 shrink-0" />, "Arte avulsa, fora do plano do mês: pedido, fotos e arquivos")}
-      </div>
-    </div>
-  );
 }
 
 // ------------------------------------------------------------------ campanha
@@ -229,7 +203,21 @@ function SeletorDoPapel({ valor, onValor, rotulo }: { valor: PapelPedido; onValo
   );
 }
 
-function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada: (t: Trabalho) => void; fotosDaUrl: string[]; campanhaDaUrl: string | null }) {
+function PedidoDaArteRapida({
+  onCriada,
+  fotosDaUrl,
+  campanhaDaUrl,
+  colunas,
+  largo,
+}: {
+  onCriada: (t: Trabalho) => void;
+  fotosDaUrl: string[];
+  campanhaDaUrl: string | null;
+  /** Computador: formulário com rolagem própria e o botão fixo embaixo. */
+  colunas: boolean;
+  /** Tela larga: a prévia "Como vai sair" ao lado. */
+  largo: boolean;
+}) {
   const { clientId, catalogo } = useMesa();
   const { marca } = useMarcaDaMesa();
   const queryClient = useQueryClient();
@@ -376,43 +364,42 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
     onCriada(t);
   };
 
-  return (
-    <ZonaDeAnexos anexos={anexos} className="mx-auto w-full min-w-0 max-w-2xl" rotulo="Solte fotos, logos ou a arte do cliente">
-      <section className="min-w-0 rounded-xl border border-border bg-card p-3.5 sm:p-5" aria-label="Pedido da arte rápida">
-        <div className="flex min-w-0 items-center">
-          <span className="mr-2.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Zap className="h-4 w-4 text-primary" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-[15.5px] font-semibold leading-tight">Arte rápida</h2>
-            <p className="text-[12px] text-muted-foreground">Fora do plano do mês. Com a marca, a campanha e o diretor de arte de sempre.</p>
-          </div>
-        </div>
+  const rotuloDoFormato = formato === "feed_4x5" ? "4:5" : formato === "quadrado_1x1" ? "1:1" : formato === "retrato_3x4" ? "3:4" : "9:16";
+  const escolhida = campanha && campanha !== "auto" ? lista.filter((c) => c.id === campanha)[0] || null : null;
+  const primeiraImagem: { src?: string; caminho?: string; bucket?: string } | null = fotosDoAcervo.length
+    ? { caminho: fotosDoAcervo[0].caminho, bucket: fotosDoAcervo[0].bucket }
+    : anexos.lista.length
+      ? anexos.lista[0].previa
+        ? { src: anexos.lista[0].previa as string }
+        : { caminho: anexos.lista[0].caminho || undefined }
+      : null;
 
-        <div className="mt-4">
-          <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
-        </div>
+  // Frente AE-2 (dono, 28/09: "apertado, sem contraste, mal alinhado"): blocos com o mesmo respiro,
+  // controles do sistema com contraste, o segmentado com o ativo bem visível e o botão sempre à vista.
+  const corpo = (
+    <div className="min-w-0 space-y-5">
+      <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
 
-        {/* O campo grande: texto, microfone, fotos e arquivos. */}
-        <div className="mt-3 rounded-xl border border-border bg-background p-2.5 focus-within:border-primary/60">
-          <label htmlFor="pedido-da-arte-rapida" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
-            O que você precisa?
-          </label>
+      {/* O campo grande: texto, microfone, fotos e arquivos. */}
+      <div className="min-w-0">
+        <label htmlFor="pedido-da-arte-rapida" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">
+          O que você precisa?
+        </label>
+        <div className="rounded-xl border border-border bg-background focus-within:border-primary/60">
           <Textarea
             id="pedido-da-arte-rapida"
             value={pedido}
             onChange={(e) => setPedido(e.target.value)}
             rows={4}
             placeholder={PLACEHOLDER}
-            className="min-h-[104px] resize-y border-0 bg-transparent px-1 py-1 text-[14px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="min-h-[112px] resize-y border-0 bg-transparent px-3 py-2.5 text-[14px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
-
           {(fotosDoAcervo.length > 0 || anexos.lista.length > 0) && (
-            <ul className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label="Imagens do pedido">
+            <ul className="grid grid-cols-3 gap-2 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
               {fotosDoAcervo.map((f) => (
                 <li key={f.id} className="min-w-0">
-                  <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-muted">
-                    <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="h-full w-full object-cover" />
+                  <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                    <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="absolute inset-0 h-full w-full object-cover" />
                     <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -422,8 +409,8 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
               ))}
               {anexos.lista.map((a) => (
                 <li key={a.id} className="min-w-0">
-                  <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-muted">
-                    {a.previa ? <img src={a.previa} alt={a.nome} className="h-full w-full object-cover" /> : <ImagemDaMesa caminho={a.caminho} alt={a.nome} className="h-full w-full object-cover" />}
+                  <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                    {a.previa ? <img src={a.previa} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" /> : <ImagemDaMesa caminho={a.caminho} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" />}
                     {a.estado === "subindo" && (
                       <span className="absolute inset-0 flex items-center justify-center bg-background/60"><Loader2 className="h-4 w-4 animate-spin" /></span>
                     )}
@@ -436,9 +423,8 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
               ))}
             </ul>
           )}
-
           {documentos.length > 0 && (
-            <ul className="mt-2 space-y-1" aria-label="Arquivos lidos">
+            <ul className="space-y-1 px-3 pb-2" aria-label="Arquivos lidos">
               {documentos.map((d, i) => (
                 <li key={`${d.nome}-${i}`} className="flex min-w-0 items-center rounded-md bg-muted px-2 py-1.5 text-[12px]">
                   <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -451,11 +437,16 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
               ))}
             </ul>
           )}
-
-          <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <Button type="button" variant="outline" className="mb-1 mr-1.5 h-10 px-3 text-[12.5px]" onClick={() => entrada.current && entrada.current.click()} disabled={cheio && documentos.length >= MAX_DOCUMENTOS_DA_ARTE_RAPIDA}>
+          {/* Barra do campo: anexar e microfone com contraste (fundo cheio), a dica à direita. */}
+          <div className="flex min-w-0 flex-wrap items-center border-t border-border/70 px-2 py-1.5">
+            <button
+              type="button"
+              onClick={() => entrada.current && entrada.current.click()}
+              disabled={cheio && documentos.length >= MAX_DOCUMENTOS_DA_ARTE_RAPIDA}
+              className={juntar(botao.primario, "my-0.5 mr-2 h-9 bg-secondary px-3 text-[12.5px] text-foreground hover:bg-secondary/80")}
+            >
               {lendo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-1.5 h-4 w-4" />} Fotos e arquivos
-            </Button>
+            </button>
             <input
               ref={entrada}
               type="file"
@@ -464,21 +455,24 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
               className="hidden"
               aria-label="Enviar fotos, logos, a arte do cliente ou arquivos"
               onChange={(e) => {
-                const lista = Array.prototype.slice.call(e.target.files || []) as File[];
+                const escolhidos = Array.prototype.slice.call(e.target.files || []) as File[];
                 if (entrada.current) entrada.current.value = "";
-                void adicionarArquivos(lista);
+                void adicionarArquivos(escolhidos);
               }}
             />
-            <Ditado valor={pedido} onChange={setPedido} className="mb-1 min-w-0" />
-            <span className="mb-1 ml-auto hidden truncate pl-2 text-[11px] text-muted-foreground sm:inline">
+            <Ditado valor={pedido} onChange={setPedido} className="my-0.5 min-w-0 [&_button]:h-9 [&_button]:w-9 [&_button]:border-transparent [&_button]:bg-secondary [&_button]:text-foreground" />
+            <span className="ml-auto hidden truncate pl-2 text-[11.5px] text-muted-foreground md:inline">
               <Paperclip className="mr-0.5 inline h-3 w-3" /> Arraste, cole ou envie (até {MAX_IMAGENS_DA_ARTE_RAPIDA} imagens)
             </span>
           </div>
         </div>
+      </div>
 
-        {/* A peça: o agente reconhece sozinho; a equipe pode decidir antes. */}
-        <div className="mt-3 flex min-w-0 flex-wrap items-center">
-          <div role="radiogroup" aria-label="Peça" className="mb-1.5 mr-2 flex min-w-0 rounded-lg bg-muted p-1">
+      {/* A peça: o agente reconhece sozinho; a equipe pode decidir antes. */}
+      <div className="min-w-0">
+        <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Peça</p>
+        <div className="flex min-w-0 flex-wrap items-center">
+          <div role="radiogroup" aria-label="Peça" className="mb-1 mr-3 inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
             {(["auto", "unica", "carrossel"] as PecaPedida[]).map((v) => (
               <button
                 key={v}
@@ -486,7 +480,10 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
                 role="radio"
                 aria-checked={peca === v}
                 onClick={() => setPeca(v)}
-                className={`h-8 min-w-0 rounded-md px-2.5 text-[12.5px] font-medium ${peca === v ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+                className={juntar(
+                  "toque-compacto h-8 min-w-0 rounded-md px-3 text-[12.5px] font-medium transition-colors",
+                  peca === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                )}
                 title={v === "auto" ? "O agente decide pelo pedido: arte única ou carrossel" : undefined}
               >
                 {v === "auto" ? "Automático" : ROTULO_DA_PECA[v]}
@@ -494,58 +491,144 @@ function PedidoDaArteRapida({ onCriada, fotosDaUrl, campanhaDaUrl }: { onCriada:
             ))}
           </div>
           {peca === "carrossel" && (
-            <label className="mb-1.5 inline-flex items-center text-[12px] text-muted-foreground">
+            <label className="mb-1 inline-flex items-center text-[12px] text-muted-foreground">
               Lâminas
-              <select value={laminas} onChange={(e) => setLaminas(e.target.value)} className="ml-1.5 h-9 rounded-md border border-border bg-background px-2 text-[12.5px] text-foreground" aria-label="Quantidade de lâminas">
+              <select value={laminas} onChange={(e) => setLaminas(e.target.value)} className="ml-1.5 h-8 rounded-md border border-border bg-background px-2 text-[12.5px] text-foreground" aria-label="Quantidade de lâminas">
                 <option value="auto">Pelo conteúdo</option>
                 {["2", "3", "4", "5", "6", "7", "8"].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
           )}
         </div>
+      </div>
 
-        <div className="mt-2 border-t border-border pt-2">
-          <TituloRecolhivel
-            titulo="Mais opções"
-            recolhido={maisRecolhido}
-            onAlternar={() => setMaisRecolhido(!maisRecolhido)}
-            resumo={`${formato === "feed_4x5" ? "4:5" : formato === "quadrado_1x1" ? "1:1" : formato === "retrato_3x4" ? "3:4" : "9:16"}${geraJunto ? ", já gera" : ""}`}
-          />
-          {!maisRecolhido && (
-            <div className="mt-2 space-y-3">
-              <div className="min-w-0">
-                <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formato</p>
-                <SeletorDeFormato valor={formato} onMudar={setFormato} />
-              </div>
-              <label className="flex min-w-0 items-start text-[12.5px]">
-                <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
-                <span className="min-w-0">
-                  Gerar a arte logo em seguida
-                  <span className="block text-[11.5px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
-                </span>
-              </label>
+      <div className="min-w-0 border-t border-border pt-3">
+        <TituloRecolhivel titulo="Mais opções" recolhido={maisRecolhido} onAlternar={() => setMaisRecolhido(!maisRecolhido)} resumo={`${rotuloDoFormato}${geraJunto ? ", já gera" : ""}`} />
+        {!maisRecolhido && (
+          <div className="mt-3 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
+            <div className="min-w-0">
+              <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Formato</p>
+              <SeletorDeFormatoCompacto valor={formato} onMudar={setFormato} />
             </div>
-          )}
-        </div>
+            <label className="flex min-w-0 items-start text-[12.5px]">
+              <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
+              <span className="min-w-0">
+                Gerar a arte logo em seguida
+                <span className="block text-[11.5px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
+              </span>
+            </label>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-        <div className="mt-4 flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center sm:justify-end">
-          <p className="mt-2 text-[11.5px] leading-snug text-muted-foreground sm:mr-3 sm:mt-0">
-            {geraJunto ? "Direção e arte em seguida." : "Direção pronta para você conferir e gerar."} Foto real entra como está.
-          </p>
-          <BotaoComCusto
-            rotulo={<><Wand2 className="mr-1.5 h-4 w-4" />Criar arte</>}
-            titulo="Arte rápida criada"
-            descricao="O diretor de arte lê o pedido, as imagens e os arquivos, com a marca e a campanha, e escreve a direção."
-            partes={partes}
-            executar={criar}
-            aoConcluir={concluir}
-            disabled={!pronto}
-            size="default"
-            className="h-11 w-full sm:w-auto"
-          />
+  const acao = (
+    <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center sm:justify-end">
+      <p className="mt-2 text-[11.5px] leading-snug text-muted-foreground sm:mr-3 sm:mt-0">
+        {geraJunto ? "Direção e arte em seguida." : "Direção pronta para você conferir e gerar."} Foto real entra como está.
+      </p>
+      <BotaoComCusto
+        rotulo={<><Wand2 className="mr-1.5 h-4 w-4" />Criar arte</>}
+        titulo="Arte rápida criada"
+        descricao="O diretor de arte lê o pedido, as imagens e os arquivos, com a marca e a campanha, e escreve a direção."
+        partes={partes}
+        executar={criar}
+        aoConcluir={concluir}
+        disabled={!pronto}
+        size="default"
+        className="h-10 w-full sm:w-auto"
+      />
+    </div>
+  );
+
+  const cabecalho = (
+    <div className="flex min-w-0 items-baseline">
+      <h2 className="mr-2 shrink-0 text-[15.5px] font-semibold leading-tight">Arte rápida</h2>
+      <p className="min-w-0 truncate text-[12px] text-muted-foreground">Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre.</p>
+    </div>
+  );
+
+  // Prévia à direita (tela larga): como a peça vai sair, com o que já foi escolhido.
+  const previa = (
+    <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Como vai sair" data-previa-da-arte-rapida="">
+      <div className="shrink-0 border-b border-border px-4 py-3">
+        <p className="text-[13px] font-semibold">Como vai sair</p>
+      </div>
+      <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="space-y-4 p-4" sobre="cartao">
+        <div className="mx-auto w-full max-w-[220px]">
+          <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
+            {primeiraImagem ? (
+              primeiraImagem.src ? (
+                <img src={primeiraImagem.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <ImagemDaMesa caminho={primeiraImagem.caminho} bucket={primeiraImagem.bucket} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center p-4 text-center text-[12px] leading-snug text-muted-foreground">{pedido.trim() ? pedido.trim().slice(0, 90) : "A foto e o texto do pedido aparecem aqui."}</span>
+            )}
+            {escolhida && (
+              <span className="absolute left-2 top-2">
+                <SeloDaCampanha campanha={escolhida} tamanho="h-8 w-8" />
+              </span>
+            )}
+            <span className="absolute bottom-2 right-2 rounded bg-background/90 px-1.5 text-[10.5px] font-medium tabular-nums">{rotuloDoFormato}</span>
+          </div>
         </div>
-      </section>
-    </ZonaDeAnexos>
+        <dl className="space-y-2.5 text-[12.5px]">
+          <div className="flex min-w-0 justify-between">
+            <dt className="text-muted-foreground">Peça</dt>
+            <dd className="ml-3 min-w-0 truncate text-right font-medium">{peca === "auto" ? "o agente decide" : ROTULO_DA_PECA[peca]}</dd>
+          </div>
+          <div className="flex min-w-0 justify-between">
+            <dt className="text-muted-foreground">Campanha</dt>
+            <dd className="ml-3 min-w-0 truncate text-right font-medium">{escolhida ? escolhida.nome : campanha === "auto" ? "se o pedido citar" : "só a marca"}</dd>
+          </div>
+          {escolhida && resumoDaBaseDaCampanha(escolhida) && <p className="text-[11.5px] leading-snug text-muted-foreground">{resumoDaBaseDaCampanha(escolhida)}</p>}
+          <div className="flex min-w-0 justify-between">
+            <dt className="text-muted-foreground">Imagens</dt>
+            <dd className="ml-3 text-right font-medium tabular-nums">{arquivos.length}</dd>
+          </div>
+          <div className="flex min-w-0 justify-between">
+            <dt className="text-muted-foreground">Arquivos lidos</dt>
+            <dd className="ml-3 text-right font-medium tabular-nums">{documentos.length}</dd>
+          </div>
+        </dl>
+        <ol className="space-y-1.5 border-t border-border pt-3 text-[11.5px] leading-snug text-muted-foreground">
+          <li>1. O diretor lê o pedido com a marca{escolhida ? " e a campanha" : ""}.</li>
+          <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
+          <li>3. Depois: ajustar no Estúdio e levar para a Agenda com a data.</li>
+        </ol>
+      </RegiaoRolavel>
+    </aside>
+  );
+
+  if (!colunas) {
+    return (
+      <ZonaDeAnexos anexos={anexos} className="w-full min-w-0" rotulo="Solte fotos, logos ou a arte do cliente">
+        <section className={juntar(superficie.painel, "min-w-0 space-y-5 p-4")} aria-label="Pedido da arte rápida">
+          {cabecalho}
+          {corpo}
+          <div className="border-t border-border pt-4">{acao}</div>
+        </section>
+      </ZonaDeAnexos>
+    );
+  }
+
+  // Computador: o formulário ocupa a coluna (rolagem própria) com o botão sempre à vista; a prévia ao lado na tela larga.
+  return (
+    <div className={juntar("grid h-full min-h-0 min-w-0 gap-3", largo ? "grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1")}>
+      <ZonaDeAnexos anexos={anexos} className="flex h-full min-h-0 min-w-0 flex-col" rotulo="Solte fotos, logos ou a arte do cliente">
+        <section className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Pedido da arte rápida">
+          <div className="shrink-0 border-b border-border px-5 py-3">{cabecalho}</div>
+          <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="px-5 py-4" sobre="cartao" memoria={`mesa:arte-rapida:pedido:${clientId}`} rotulo="Pedido">
+            <div className="max-w-[860px]">{corpo}</div>
+          </RegiaoRolavel>
+          <div className="shrink-0 border-t border-border px-5 py-3">{acao}</div>
+        </section>
+      </ZonaDeAnexos>
+      {largo && previa}
+    </div>
   );
 }
 
@@ -694,9 +777,11 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
 
       {taskFeito ? (
         <div className="space-y-2 rounded-lg border border-success/40 bg-success/5 px-3 py-3" role="status">
-          <p className="text-[13px] font-semibold">Na Agenda{dataFeita ? ` em ${dataCurta(dataFeita)}` : ""}</p>
-          <p className="text-[12px] leading-snug text-muted-foreground">
-            A peça segue pelo fluxo da Agenda: aprovação do cliente e publicação só com a data confirmada. Ajustes, reenvio e a data ficam no item.
+          <p className="flex items-center text-[13px] font-semibold">
+            Na Agenda{dataFeita ? ` em ${dataCurta(dataFeita)}` : ""}
+            <AjudaRecolhida className="ml-1.5" rotulo="O que acontece agora">
+              A peça segue pelo fluxo da Agenda: aprovação do cliente e publicação só com a data confirmada. Ajustes, reenvio e a data ficam no item.
+            </AjudaRecolhida>
           </p>
           {fim && fim.avisos.length > 0 && <p className="text-[12px] text-warning">{fim.avisos.join(" ")}</p>}
           <div className="flex min-w-0 flex-wrap items-center">
@@ -711,12 +796,12 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
         </div>
       ) : (
         <div className="space-y-3">
-          <div>
-            <p className="text-[13px] font-semibold">Levar para a Agenda</p>
-            <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+          <p className="flex items-center text-[13px] font-semibold">
+            Levar para a Agenda
+            <AjudaRecolhida className="ml-1.5" rotulo="O que o botão faz">
               Escolha a data e confirme: o item nasce na Agenda, a arte vai para Arquivos e para o post, a data fica confirmada e o cliente recebe para aprovar.
-            </p>
-          </div>
+            </AjudaRecolhida>
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <label className="min-w-0 text-[12px] text-muted-foreground">
               Data
@@ -787,6 +872,7 @@ export default function EstudioArteRapida({
 }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
+  const largo = useMidia("(min-width: 1440px)");
   const [params] = useSearchParams();
   const nova = alvo === NOVA_ARTE_RAPIDA;
   const lista = useQuery({ queryKey: chavesDaArteRapida.lista(clientId), queryFn: () => lerArtesRapidas(clientId) });
@@ -832,7 +918,14 @@ export default function EstudioArteRapida({
   const carregandoPeca = !nova && !trabalho && (lista.isLoading || um.isLoading || um.isFetching);
 
   const conteudo = nova ? (
-    <PedidoDaArteRapida key={`${fotosDaUrl.join(",")}|${campanhaDaUrl || ""}`} fotosDaUrl={fotosDaUrl} campanhaDaUrl={campanhaDaUrl} onCriada={(t) => onAlvo(t.id, ["fotos", "campanha"])} />
+    <PedidoDaArteRapida
+      key={`${fotosDaUrl.join(",")}|${campanhaDaUrl || ""}`}
+      fotosDaUrl={fotosDaUrl}
+      campanhaDaUrl={campanhaDaUrl}
+      colunas={colunas}
+      largo={largo}
+      onCriada={(t) => onAlvo(t.id, ["fotos", "campanha"])}
+    />
   ) : peca ? (
     peca
   ) : daOutraMarca ? (
@@ -844,11 +937,11 @@ export default function EstudioArteRapida({
       </Button>
     </div>
   ) : carregandoPeca ? (
-    <div className="flex min-h-[280px] flex-1 items-center justify-center rounded-xl border border-border bg-card text-[12.5px] text-muted-foreground">
+    <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 items-center justify-center text-[12.5px] text-muted-foreground")}>
       <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a arte…
     </div>
   ) : (
-    <div className="flex min-h-[280px] flex-1 flex-col items-center justify-center rounded-xl border border-border bg-card p-6 text-center">
+    <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 flex-col items-center justify-center p-6 text-center")}>
       <p className="text-[14px] font-semibold">Esta arte rápida não está mais aqui</p>
       <p className="mt-1 text-[12.5px] text-muted-foreground">Ela pode ter sido arquivada. Comece outra ou escolha no histórico.</p>
       <Button type="button" className="mt-4 h-10" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)}>
@@ -886,36 +979,37 @@ export default function EstudioArteRapida({
     </>
   );
 
+  // Nunca esmaecido: na arte nova ele fica marcado (secundário), senão é a ação principal da coluna.
   const botaoNova = (
-    <Button type="button" size="sm" className="h-9 shrink-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} disabled={nova}>
+    <button
+      type="button"
+      className={juntar(nova ? botao.secundario : botao.primario, "h-8 px-2.5 text-[12.5px]")}
+      onClick={() => !nova && onAlvo(NOVA_ARTE_RAPIDA)}
+      aria-current={nova ? "page" : undefined}
+      title={nova ? "Você está numa arte nova" : "Começar uma arte nova"}
+    >
       <Plus className="mr-1 h-3.5 w-3.5" /> Nova arte
-    </Button>
+    </button>
   );
 
   if (colunas) {
+    // Frente AE-2 (dono, 28/09: "apertado, o scroll não funciona"): a tela inteira cabe na altura abaixo da
+    // barra da Mesa; o histórico, o formulário e a prévia rolam cada um por dentro; a página não rola.
     return (
-      <div className="flex min-w-0 flex-col">
-        <div className="shrink-0">{topo}</div>
-        <div className="grid min-h-0 min-w-0 grid-cols-[260px_minmax(0,1fr)] gap-3" style={altura ? { height: altura } : undefined} data-arte-rapida-tela="colunas">
-          <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card" aria-label="Histórico da arte rápida">
-            <div className="flex shrink-0 items-center border-b border-border px-3 py-2.5">
-              <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold">Histórico</h2>
+      <div className="grid min-h-0 min-w-0 grid-cols-[260px_minmax(0,1fr)] gap-3" style={altura ? { height: altura } : undefined} data-arte-rapida-tela="colunas">
+        <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Histórico da arte rápida">
+          <div className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
+            {topo}
+            <div className="flex min-w-0 items-center">
+              <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold">Histórico{historico.length ? ` (${historico.length})` : ""}</h2>
               {botaoNova}
             </div>
-            <RegiaoRolavel modo="sempre" className="p-1.5" classeDeFora="min-h-0 flex-1" sobre="cartao" memoria={`mesa:arte-rapida:${clientId}`} rotulo="Artes rápidas">
-              {listaDoHistorico}
-            </RegiaoRolavel>
-          </aside>
-          <div className="flex min-h-0 min-w-0 flex-col">
-            {nova ? (
-              <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="pb-4 pr-1">
-                {conteudo}
-              </RegiaoRolavel>
-            ) : (
-              conteudo
-            )}
           </div>
-        </div>
+          <RegiaoRolavel modo="sempre" className="p-1.5" classeDeFora="min-h-0 flex-1" sobre="cartao" memoria={`mesa:arte-rapida:${clientId}`} rotulo="Artes rápidas">
+            {listaDoHistorico}
+          </RegiaoRolavel>
+        </aside>
+        <div className="flex min-h-0 min-w-0 flex-col">{conteudo}</div>
       </div>
     );
   }
@@ -923,8 +1017,8 @@ export default function EstudioArteRapida({
   // Celular e tablet em pé: uma coluna; o histórico recolhe em cima, o pedido ou a peça embaixo.
   return (
     <div className="min-w-0 space-y-3" data-arte-rapida-tela="pilha">
-      {topo}
-      <div className="rounded-xl border border-border bg-card p-2.5">
+      <div className={juntar(superficie.painel, "p-2.5")}>
+        <div className="mb-2 flex min-w-0">{topo}</div>
         <div className="flex min-w-0 items-center">
           <div className="min-w-0 flex-1">
             <TituloRecolhivel
@@ -936,7 +1030,7 @@ export default function EstudioArteRapida({
           </div>
           {botaoNova}
         </div>
-        {!historicoRecolhido && <div className="mt-2 max-h-[45vh] overflow-y-auto overscroll-contain">{listaDoHistorico}</div>}
+        {!historicoRecolhido && <div className="mt-2">{listaDoHistorico}</div>}
       </div>
       {conteudo}
     </div>

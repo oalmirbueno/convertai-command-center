@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -327,8 +327,10 @@ describe("a estimativa do contínuo conta o panorama", () => {
       const esperado = estimarLocal(partesDaLamina(imagem.id, leitor.id, "media", 3).concat(partesDoPanorama([1, 2, 3], 3, {}, imagem.id, "media")), catalogo);
       expect(botao.textContent).toContain(`~${usd(esperado)}`);
       expect(botao.getAttribute("title")).toContain(NOTA_DO_FUNDO_CONTINUO);
-      const padrao = screen.getByRole("radio", { name: /Padrão/ });
-      expect(padrao.getAttribute("title")).toContain("inclui o fundo contínuo");
+      // Frente AE-2: a qualidade virou um seletor compacto; a nota do fundo contínuo vem em cada opção.
+      fireEvent.click(screen.getByRole("button", { name: /Qualidade da lâmina: Padrão/ }));
+      const padrao = await screen.findByRole("option", { name: /Padrão/ });
+      expect(padrao.textContent).toContain("inclui o fundo contínuo");
     });
   });
 

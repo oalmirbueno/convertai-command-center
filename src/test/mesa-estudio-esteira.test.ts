@@ -547,9 +547,14 @@ describe("a esteira cabe na janela", () => {
 
 describe("estúdio com a altura de uma tela (dono, 23/09 noite)", () => {
   const aba = readFileSync(resolve(process.cwd(), "src/components/mesa/AbaEstudio.tsx"), "utf8");
-  it("a altura fixa vale só para o estúdio; a faixa de pautas fica fora e a página rola", () => {
-    expect(aba).toContain('<div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined}>');
-    expect(aba).not.toContain('<div ref={raiz} className="flex min-w-0 flex-col" style={altura ? { height: altura } : undefined}>');
+  // Frente AE-2 (dono, 28/09: "rolagem certinha, sem quebrar"; "a página não rola no computador"): a faixa e o
+  // estúdio dividem a altura da tela abaixo da barra da Mesa; cada região rola por dentro. Em tela baixa, a
+  // faixa abre recolhida (a pauta troca pelo seletor da barra) para a lâmina ter altura.
+  it("faixa e estúdio na altura da tela; cada região rola por dentro; tela baixa abre com a faixa recolhida", () => {
+    expect(aba).toContain('<div ref={raiz} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">');
+    expect(aba).toContain('<div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">');
+    expect(aba).toContain("const altura = useAlturaDaEsteira(colunas, 480);");
+    expect(aba).toContain('(window.innerHeight || 900) < 760');
     expect(aba).toContain("encaixarNaJanela(areaDoEstudio.current)");
   });
 });

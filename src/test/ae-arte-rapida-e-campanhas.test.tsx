@@ -537,11 +537,77 @@ describe("faixa das pautas: arquivar", () => {
     montar(`/mesa?client=${CLIENTE}&aba=estudio`);
     const botoes = await screen.findAllByRole("button", { name: /^Arquivar Carrossel/ });
     expect(botoes.length).toBe(2);
-    expect(screen.getAllByText("parecida com outra").length).toBe(2);
+    // Frente AE-2: a pauta parecida virou um ícone (o texto fica no título).
+    expect(document.querySelectorAll("[data-parecida]").length).toBe(2);
     fireEvent.click(botoes[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
     await waitFor(() => expect(mock.invoke.mock.calls.some((c) => (c[1] as any).body.acao === "arquivar_item_agenda")).toBe(true));
     const corpo = (mock.invoke.mock.calls.filter((c) => (c[1] as any).body.acao === "arquivar_item_agenda")[0][1] as any).body;
     expect(corpo).toMatchObject({ client_id: CLIENTE, task_id: "i-1", confirmar_arte: true, arquivar_post: true });
+  });
+
+  it("AE-2: o cartão sai na hora (otimista), antes de o servidor responder; recusado, volta com o motivo", async () => {
+    const hoje = new Date();
+    const dia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    mock.from.mockImplementation(
+      bancoFalso({
+        projects: [{ id: "p1", client_id: CLIENTE, deleted_at: null }],
+        tasks: [
+          { id: "i-1", title: "Post A", due_date: dia, delivery_type: "static", status: "todo", project_id: "p1", deleted_at: null },
+          { id: "i-2", title: "Post B", due_date: dia, delivery_type: "static", status: "todo", project_id: "p1", deleted_at: null },
+        ],
+        estudio_trabalhos: [],
+        editorial_post_internal: [],
+        editorial_posts: [],
+        editorial_publications: [],
+        staff_files_secure: [],
+        calendario_propostas: [],
+        task_attachments: [],
+      }),
+    );
+    let responder: (v: unknown) => void = () => undefined;
+    mock.invoke.mockImplementation((_f: string, { body }: { body: Record<string, unknown> }) => {
+      if (body.acao === "arquivar_item_agenda") return new Promise((r) => { responder = r; });
+      return Promise.resolve({ data: {}, error: null });
+    });
+    montar(`/mesa?client=${CLIENTE}&aba=estudio`);
+    const botao = await screen.findByRole("button", { name: "Arquivar Post B" });
+    fireEvent.click(botao);
+    fireEvent.click(await screen.findByRole("button", { name: "Arquivar" }));
+    // O servidor ainda não respondeu e o cartão já saiu.
+    await waitFor(() => expect(document.querySelector('[data-item-id="i-2"]')).toBeNull());
+    expect(document.querySelector('[data-item-id="i-1"]')).toBeTruthy();
+    // O servidor recusa: o cartão volta.
+    responder({ data: { error: "item_agendado", mensagem: "A publicação deste conteúdo está agendada." }, error: null });
+    await waitFor(() => expect(document.querySelector('[data-item-id="i-2"]')).toBeTruthy());
+  });
+
+  it("AE-2: Arquivados lista o que foi arquivado, restaura pelo caminho do Mês e apaga de vez com confirmação", async () => {
+    const tabelas: Record<string, any[]> = {
+      projects: [{ id: "p1", client_id: CLIENTE, deleted_at: null }],
+      tasks: [{ id: "i-9", title: "Post arquivado", due_date: "2026-09-20", delivery_type: "static", status: "todo", project_id: "p1", deleted_at: "2026-09-27T10:00:00Z", source: null }],
+      estudio_trabalhos: [],
+      editorial_post_internal: [],
+      editorial_posts: [],
+      editorial_publications: [],
+      staff_files_secure: [],
+      calendario_propostas: [],
+      task_attachments: [],
+    };
+    const base = bancoFalso(tabelas);
+    const apagadas: string[] = [];
+    mock.from.mockImplementation((nome: string) => {
+      const b = base(nome);
+      b.delete = () => ({ eq: (_c: string, v: string) => { apagadas.push(v); return Promise.resolve({ error: null }); } });
+      return b;
+    });
+    mock.invoke.mockImplementation(async () => ({ data: { task_id: "i-9" }, error: null }));
+    montar(`/mesa?client=${CLIENTE}&aba=estudio`);
+    fireEvent.click(await screen.findByRole("button", { name: /Arquivados/ }));
+    expect(await screen.findByText("Post arquivado")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Restaurar/ }));
+    await waitFor(() => expect(mock.invoke.mock.calls.some((c) => (c[1] as any).body.acao === "restaurar_item_agenda" && (c[1] as any).body.task_id === "i-9")).toBe(true));
+    // Some da lista depois de restaurar.
+    await waitFor(() => expect(screen.queryByText("Post arquivado")).toBeNull());
   });
 });

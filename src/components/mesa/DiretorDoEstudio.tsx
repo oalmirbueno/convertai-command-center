@@ -12,6 +12,7 @@ import { Cronometro } from "./Cronometro";
 import type { Trabalho } from "./useItensDoMes";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
@@ -414,10 +415,12 @@ export default function DiretorDoEstudio({
         {conversa.data && mensagens.length === 0 && !envio && (
           <div className="px-1 py-6 text-center">
             <MessageSquare className="mx-auto h-5 w-5 text-primary" />
-            <p className="mt-2 text-[12.5px] font-medium">Converse com o diretor de arte</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              Peça outro cenário, outro estilo, outra luz ou a opinião dele. Ele lê o texto de cada lâmina, a marca e as fotos e propõe mudanças que você
-              aplica com um clique.
+            <p className="mt-2 inline-flex items-center text-[12.5px] font-medium">
+              Converse com o diretor de arte
+              <AjudaRecolhida className="ml-1.5" rotulo="O que o diretor faz">
+                Peça outro cenário, outro estilo, outra luz ou a opinião dele. Ele lê o texto de cada lâmina, a marca e as fotos e propõe mudanças que você
+                aplica com um clique.
+              </AjudaRecolhida>
             </p>
           </div>
         )}

@@ -174,7 +174,7 @@ export default function ReferenciasDoEstudio({
           type="button"
           onClick={() => onAlvo("conjunto")}
           aria-pressed={alvoReal === "conjunto"}
-          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors ${alvoReal === "conjunto" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors ${alvoReal === "conjunto" ? "bg-secondary font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}
         >
           Conjunto ({doConjunto.length})
         </button>
@@ -183,7 +183,7 @@ export default function ReferenciasDoEstudio({
           onClick={() => onAlvo("lamina")}
           disabled={!cardSelecionado}
           aria-pressed={alvoReal === "lamina"}
-          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors disabled:opacity-50 ${alvoReal === "lamina" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors disabled:opacity-50 ${alvoReal === "lamina" ? "bg-secondary font-medium text-foreground ring-1 ring-border" : "text-muted-foreground hover:text-foreground"}`}
         >
           {cardSelecionado ? `Só a lâmina ${cardSelecionado.ordem} (${daLamina.length})` : "Só uma lâmina"}
         </button>
