@@ -1449,6 +1449,14 @@
       "remote_name": "token_da_pagina",
       "remote_statements_sha256": "d4d52ecedb3aec096bbaf9e2044b6b8639d19845c73bf766cf0cedaa26ac9f69",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928050000",
+      "path": "supabase/migrations/20260928050000_fila_da_mesa.sql",
+      "local_sha256": "a52b1ca03ea20f90ff3e4e6af552ba1a1e94529c2af3432f814851e6e45067a3",
+      "remote_name": "fila_da_mesa",
+      "remote_statements_sha256": "708f5ec5ec258e2be546b1feff691112251828fff6688fd07e0a325400f577e1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
