@@ -147,7 +147,7 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm sm:px-5 sm:py-4">
       <div className="flex items-center gap-2">
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
           Dossiê de contexto

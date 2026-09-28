@@ -37,7 +37,7 @@ describe("o perfil do cliente desenha inteiro no celular", () => {
 
   it("as duas colunas do perfil podem encolher até a largura da tela", () => {
     expect(central).toContain('<div className="min-w-0" data-coluna="rituais">');
-    expect(central).toContain('<div className="min-w-0 space-y-6" data-coluna="mensagens">');
+    expect(central).toContain('<div className="min-w-0 space-y-4" data-coluna="mensagens">');
   });
 });
 

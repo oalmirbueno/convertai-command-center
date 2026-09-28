@@ -39,7 +39,8 @@ export default function TituloRecolhivel({
       data-titulo-recolhivel=""
     >
       <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
-      <span className="min-w-0 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">{titulo}</span>
+      {/* 28/09: título numa linha só; quem encolhe primeiro é o resumo. */}
+      <span className="min-w-0 max-w-full shrink-0 truncate text-[13px] font-semibold leading-5 text-foreground">{titulo}</span>
       {recolhido && resumo ? <span className="ml-2 min-w-0 truncate text-[12px] font-normal text-muted-foreground">{resumo}</span> : null}
     </button>
   );

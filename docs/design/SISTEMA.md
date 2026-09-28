@@ -72,6 +72,33 @@ Sem CAIXA ALTA em subtítulo novo. Números com `tabular-nums`.
   calendário, cartão de mídia). Dentro do painel: divisória ou poço (`superficie.poco`), nunca outro painel.
 - Grupos recolhíveis viram lista com divisória (ver `Hub` em `ContextoHub.tsx`).
 
+### 4.1 Fundo e cartões (28/09, pedido do dono)
+
+- **Fundo liso** nos dois temas. Nada de grade, manchas ou gradiente atrás do conteúdo: no claro deixava
+  a tela com cara de suja e, no escuro, as seções pareciam transparentes. Claro: `--background` cinza-gelo
+  (96,5%) com cartão branco por cima; escuro: 5% com cartão a 10%.
+- **Cartão é sempre sólido** (`bg-card`). Nada de `bg-card/40`, `/50` ou `/60` em bloco de conteúdo;
+  translúcido só em estado de passar o mouse ou vazio tracejado.
+- Tela com duas ou mais colunas de seções (Central, perfis, painéis de cliente): cada seção num cartão,
+  `<Secao cartao>` (canto 12 px, borda, `shadow-sm`, 16/20 px de respiro), com 16 px entre cartões.
+  Dentro do cartão continua valendo: divisória ou poço, nunca outro cartão.
+- Lista dentro de cartão vai de borda a borda (`-mx-4 sm:-mx-5`), para as divisórias tocarem o cartão.
+
+### 4.2 Organização e respiro (28/09, pedido do dono)
+
+- **Título de seção numa linha só.** Nunca quebra; se faltar espaço, reticências. O resumo do bloco
+  recolhido vai na linha **de baixo**, não ao lado espremendo o título.
+- **Nada espremido numa linha só.** Uma barra de controles tem no máximo **duas linhas organizadas**; se
+  ainda não couber, o resto vai para um **seletor lateral ou menu "..."**. Nunca uma terceira fileira.
+- **Nada de linha nova para um seletor pequeno** (ex.: "Pautas do mês | Arte rápida"): ele entra numa
+  barra que já existe.
+- **Agrupar antes de empilhar.** Área com muitas funções (ex.: direção do Estúdio: foto, referência, link,
+  arquivo, logo, gerador) vira grupos com título curto, em grade alinhada, com espaço entre os grupos e
+  controles do mesmo tamanho; o secundário de cada grupo vai num "...".
+- **Escolha entre poucas opções de tamanho/formato**: seletor compacto, não fileira de botões grandes.
+- **Tirar poluição nunca é tirar função.** Toda função continua lá, só mais organizada.
+- **Rolagem**: uma por região, nunca rolagem dentro de rolagem, nada cortado sem poder rolar.
+
 ## 5. Texto: menos, sempre
 
 - Página, seção e cartão mostram **só o título curto**. A explicação vai num **"?"** ao lado do título
@@ -256,6 +283,10 @@ Rodar em **375, 768, 1280x720, 1366x768, 1440 e 1920**:
 14. Carregando mostra esqueleto na região; o resto da tela continua usável; erro com "Tentar de novo".
 15. Foco visível no teclado em tudo que clica; ícone sozinho com `aria-label`.
 16. Tela cheia da mesa (e Esc) funcionando; seletor de mesa leva o cliente junto.
+17. Claro e escuro: fundo liso, cartões sólidos, nada transparente sobre o fundo.
+18. Nenhum título de seção quebrado em duas linhas; resumo recolhido embaixo do título.
+19. Nenhuma barra com mais de duas linhas de controles; o que sobra está num seletor ou menu.
+20. Áreas com muitas funções agrupadas com título curto e respiro entre os grupos (ver 4.2).
 
 Como conferir sem o Supabase real (harness da D1, fora do repositório):
 1. Subir o Vite pela API (`createServer`, `configFile: false`, `root` no repositório, `process.chdir` para

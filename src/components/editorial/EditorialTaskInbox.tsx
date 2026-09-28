@@ -297,7 +297,7 @@ export default function EditorialTaskInbox({
 
   return (
     <section
-      className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm"
+      className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
       aria-labelledby={titleId}
       aria-busy={loading}
     >

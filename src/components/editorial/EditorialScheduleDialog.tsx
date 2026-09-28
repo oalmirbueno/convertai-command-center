@@ -665,7 +665,7 @@ export default function EditorialScheduleDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
-          <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 sm:grid-cols-2">
+          <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="schedule-client">Cliente</Label>
               <Select
@@ -771,7 +771,7 @@ export default function EditorialScheduleDialog({
             </div>
           ) : (
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)]">
-              <section className="min-w-0 rounded-xl border border-border bg-card/50 p-4">
+              <section className="min-w-0 rounded-xl border border-border bg-card p-4">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">
@@ -929,7 +929,7 @@ export default function EditorialScheduleDialog({
               </section>
 
               <div className="min-w-0 space-y-4">
-                <section className="rounded-xl border border-border bg-card/50 p-4">
+                <section className="rounded-xl border border-border bg-card p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">
@@ -1080,7 +1080,7 @@ export default function EditorialScheduleDialog({
                   )}
                 </section>
 
-                <section className="rounded-xl border border-border bg-card/50 p-4">
+                <section className="rounded-xl border border-border bg-card p-4">
                   <div className="space-y-2">
                     <Label htmlFor="schedule-date-time">Data e horário</Label>
                     <Input

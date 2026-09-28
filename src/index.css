@@ -53,7 +53,10 @@
   }
 
   .light {
-    --background: 0 0% 98%;
+    /* 28/09 (dono: "muito branco, parece sujo"): fundo cinza-gelo liso e
+       cartão branco por cima. Antes era 98% com grade e manchas verdes, e o
+       cartão branco quase não se separava do fundo. */
+    --background: 0 0% 96.5%;
     --foreground: 0 0% 8%;
 
     --card: 0 0% 100%;
@@ -81,8 +84,8 @@
     --warning: 38 92% 48%;
     --info: 210 90% 48%;
 
-    --border: 0 0% 88%;
-    --input: 0 0% 90%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
     --ring: 145 80% 38%;
 
     --sidebar-background: 0 0% 100%;
@@ -276,17 +279,12 @@
   z-index: 0;
 }
 
-/* Tech grid background for app layout */
+/* Fundo do app: liso nos dois temas (28/09, dono: "minimalista, mais
+   elegante"). A grade verde de 60 px aparecia através das seções sem cartão
+   e deixava o claro com cara de sujo e o escuro com cara de transparente.
+   A classe fica no AppLayout; só não desenha mais nada. */
 .tech-grid-bg::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(hsl(var(--primary) / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--primary) / 0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-  pointer-events: none;
-  z-index: 0;
+  content: none;
 }
 
 /* Pulse dot for active status */
@@ -531,13 +529,10 @@
   color: hsl(0 0% 100%);
 }
 
-/* Fundo do app no claro: leve gradiente para nao ficar tudo branco. */
+/* Fundo do app no claro: liso (28/09). As manchas verdes em gradiente
+   sujavam o fundo; o contraste agora vem do cinza-gelo contra o cartão branco. */
 .light body {
-  background:
-    radial-gradient(1200px 500px at 85% -10%, hsl(var(--primary) / 0.06), transparent 60%),
-    radial-gradient(900px 400px at -10% 110%, hsl(var(--primary) / 0.05), transparent 55%),
-    hsl(var(--background));
-  background-attachment: fixed;
+  background: hsl(var(--background));
 }
 
 /* ── Modo foco (Canvas da Mesa Foto) ──
