@@ -6,6 +6,7 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import {
@@ -108,18 +109,21 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
     void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
     if (ids[0]) escolherKit(ids[0]);
   };
+  // 28/09 (dono: "recolher ali no Produto"): o bloco recolhe e mostra só o produto escolhido.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:acervo:produto-recolhido:${clientId}`);
+  const resumo = kit ? kit.nome || "produto escolhido" : kits.length ? `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` : "nenhum ainda";
 
   return (
-    <section className="min-w-0 border-t border-border pt-4" aria-label="O produto" data-produto-das-fotos="">
-      <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between">
+    <section className="min-w-0 border-t border-border pt-4" aria-label="O produto" data-produto-das-fotos="" data-recolhido={recolhido ? "sim" : "nao"}>
+      <div className={recolhido ? "flex min-w-0 flex-wrap items-center justify-between" : "mb-2.5 flex min-w-0 flex-wrap items-center justify-between"}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
-          <h3 className="text-[13px] font-semibold leading-5">O produto</h3>
-          <AjudaRecolhida className="ml-1.5" rotulo="Como o produto é identificado">
+          <TituloRecolhivel titulo="O produto" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
+          {!recolhido && <AjudaRecolhida className="ml-1.5" rotulo="Como o produto é identificado">
             {kits.length
               ? "Escolha o produto das fotos e confirme. A identificação já montou tudo: fotos, referências e o que não pode mudar."
               : "Toque em Identificar: a leitura acha marca, modelo e variante pela embalagem ou pela foto, busca as fotos oficiais e monta o produto sozinha."}
-          </AjudaRecolhida>
-          {kits.length > 0 && <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">{kits.length}</span>}
+          </AjudaRecolhida>}
+          {!recolhido && kits.length > 0 && <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">{kits.length}</span>}
         </div>
         <BotaoComCusto
           rotulo={
@@ -141,6 +145,8 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
           }}
         />
       </div>
+      {!recolhido && (
+      <>
       {!selecionadas.length && paraLer.length > 0 && !kits.length && (
         <p className="mb-2 truncate text-[12px] text-muted-foreground" title="Marque as fotos da embalagem para escolher quais ler.">Sem foto marcada, lê as {paraLer.length} originais mais recentes.</p>
       )}
@@ -188,6 +194,8 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
             Detalhes do produto
           </button>
         </div>
+      )}
+      </>
       )}
     </section>
   );

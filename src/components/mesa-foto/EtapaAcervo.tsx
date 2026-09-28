@@ -624,6 +624,8 @@ export default function EtapaAcervo() {
           titulo="Fotos do produto"
           dica="Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Quantas quiser de uma vez; o produto é identificado logo abaixo. É o mesmo acervo da Mesa e da Mesa Ads."
           acao={todas.length > 0 ? zona : undefined}
+          recolher={todas.length > 0 ? `mesa-foto:acervo:envio-recolhido:${clientId}` : undefined}
+          resumo={`${todas.length} ${todas.length === 1 ? "foto no acervo" : "fotos no acervo"}`}
         >
           {todas.length > 0 ? (
             <p className="text-[12px] tabular-nums text-muted-foreground">
@@ -726,51 +728,63 @@ export default function EtapaAcervo() {
                 className="pointer-events-none fixed inset-x-0 bottom-[132px] z-30 flex justify-center px-3 md:bottom-[84px] lg:pointer-events-auto lg:static lg:z-auto lg:block lg:shrink-0 lg:border-t lg:border-border lg:px-2 lg:pt-1.5"
                 data-barra-de-selecao=""
               >
-                <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-center rounded-lg border border-border bg-card px-3 pt-1.5 shadow-xl lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none">
-                  <span className="mb-1.5 mr-2 text-[12.5px] font-semibold tabular-nums">
-                    {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
+                {/*
+                  28/09 (dono: "a barra de selecionar está toda bagunçada, não consigo ver as fotos"):
+                  uma linha só. As ações de produção com texto curto (o nome inteiro fica no leitor de
+                  tela e na dica); as saídas só com ícone. Se não couber, a linha rola de lado e nunca
+                  cresce para cima das fotos.
+                */}
+                <div
+                  className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain rounded-lg border border-border bg-card px-2 py-1.5 shadow-xl lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
+                  data-linha-da-selecao=""
+                >
+                  <span className="mr-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-primary" title={`${escolhidas.length} ${escolhidas.length === 1 ? "foto marcada" : "fotos marcadas"}`}>
+                    {escolhidas.length} {escolhidas.length === 1 ? "marcada" : "marcadas"}
                   </span>
-                  {/* Frente MF (27/09): o caminho principal da seleção é o post na Agenda e o Estúdio de fotos. */}
                   {prepararNaAgenda && (
                     <Button
                       type="button"
                       size="sm"
-                      className="mb-1.5 mr-1.5 h-8 text-[12px]"
+                      className="h-8 shrink-0 px-2.5 text-[12px]"
                       onClick={() => prepararNaAgenda(escolhidas.filter((f) => !f.referencia_web).map((f) => f.id))}
-                      title="Foto única ou carrossel na Agenda: legenda, data e aprovação do cliente"
+                      aria-label="Preparar na Agenda"
+                      title="Preparar na Agenda: foto única ou carrossel, com legenda, data e aprovação do cliente"
                     >
-                      <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Preparar na Agenda
+                      <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Agenda
                     </Button>
                   )}
                   {abrirNoEstudio && (
-                    <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(escolhidas[0].id)} title="Abre a primeira marcada no Estúdio de fotos">
+                    <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => abrirNoEstudio(escolhidas[0].id)} aria-label="Estúdio" title="Abre a primeira marcada no Estúdio de fotos">
                       <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Estúdio
                     </Button>
                   )}
-                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("mesa")} title="Abre o Estúdio da Mesa com estas fotos, sem subir de novo">
-                    <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa
+                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => usarNasMesas("mesa")} aria-label="Usar na Mesa" title="Usar na Mesa: abre o Estúdio da Mesa com estas fotos, sem subir de novo">
+                    <PenTool className="mr-1.5 h-3.5 w-3.5" /> Mesa
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => usarNasMesas("ads")} title="Abre o Estúdio da Mesa Ads com estas fotos">
-                    <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Mesa Ads
+                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => usarNasMesas("ads")} aria-label="Mesa Ads" title="Usar na Mesa Ads: abre o Estúdio da Mesa Ads com estas fotos">
+                    <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Ads
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={montarKit} title="Abre um kit novo em Produto com estas fotos, sem gastar IA">
-                    <PackagePlus className="mr-1.5 h-3.5 w-3.5" /> Montar kit
+                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={montarKit} aria-label="Montar kit" title="Montar kit: abre um kit novo em Produto com estas fotos, sem gastar IA">
+                    <PackagePlus className="mr-1.5 h-3.5 w-3.5" /> Kit
                   </Button>
+                  <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="mb-1.5 mr-1.5 h-8 text-[12px]"
+                    className="h-8 w-8 shrink-0 p-0"
+                    aria-label="Identificar o produto"
+                    title="Identificar o produto pelas fotos marcadas (abre o bloco O produto)"
                     onClick={() => {
                       const alvo = document.querySelector("[data-produto-das-fotos]");
                       if (alvo && typeof (alvo as HTMLElement).scrollIntoView === "function") (alvo as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
                     }}
                   >
-                    <PackageSearch className="mr-1.5 h-3.5 w-3.5" /> Identificar o produto
+                    <PackageSearch className="h-4 w-4" />
                   </Button>
-                  <BotoesDeUso fotos={escolhidas} compacto />
-                  <button type="button" className={juntar("mb-1.5 h-8 rounded-md px-2 text-[12px] text-muted-foreground hover:bg-muted", foco)} onClick={() => setSelecionadas([])}>
-                    Limpar
+                  <BotoesDeUso fotos={escolhidas} icones />
+                  <button type="button" className={juntar("ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted", foco)} onClick={() => setSelecionadas([])} aria-label="Limpar" title="Desmarcar todas">
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>

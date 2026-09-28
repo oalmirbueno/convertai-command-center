@@ -2316,3 +2316,35 @@ describe("27/09: usar e montar kit direto da seleção em Fotos", () => {
     expect(onde).not.toContain(G);
   });
 });
+
+describe("28/09: Fotos organizada (barra numa linha e blocos que recolhem)", () => {
+  it("a barra da seleção fica numa linha só, com os mesmos nomes para quem usa leitor de tela", async () => {
+    montar(h(EtapaAcervo), { selecionadas: [F1, F2] });
+    await screen.findByText("mouse-frente.jpg");
+    const barra = document.querySelector("[data-barra-de-selecao]") as HTMLElement;
+    const linha = barra.querySelector("[data-linha-da-selecao]") as HTMLElement;
+    expect(linha.className).toContain("flex-nowrap");
+    expect(linha.className).toContain("overflow-x-auto");
+    expect(linha.className).not.toContain("flex-wrap ");
+    for (const nome of ["Usar na Mesa", "Mesa Ads", "Montar kit", "Identificar o produto", "Baixar", "ZIP", "Arquivos", "Aprovação", "Limpar"]) {
+      expect(within(barra).getByRole("button", { name: nome })).toBeTruthy();
+    }
+    expect(barra.textContent).toContain("2 marcadas");
+  });
+
+  it("Fotos do produto e O produto recolhem, mostram o resumo e lembram a escolha", async () => {
+    window.localStorage.clear();
+    montar(h(EtapaAcervo));
+    await screen.findByText("mouse-frente.jpg");
+    const produto = document.querySelector("[data-produto-das-fotos]") as HTMLElement;
+    fireEvent.click(within(produto).getByRole("button", { name: /O produto/ }));
+    await waitFor(() => expect(produto.getAttribute("data-recolhido")).toBe("sim"));
+    expect(within(produto).getByRole("button", { name: /O produto/ }).getAttribute("aria-expanded")).toBe("false");
+    // O botão Identificar continua à vista com o bloco recolhido.
+    expect(within(produto).getByRole("button", { name: /Identificar o produto/ })).toBeTruthy();
+    const envio = screen.getByRole("button", { name: /Fotos do produto/ });
+    fireEvent.click(envio);
+    await waitFor(() => expect(envio.getAttribute("aria-expanded")).toBe("false"));
+    expect(envio.textContent).toMatch(/fotos no acervo/);
+  });
+});

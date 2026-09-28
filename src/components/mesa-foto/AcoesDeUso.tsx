@@ -149,10 +149,30 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
   );
 }
 
-export function BotoesDeUso({ fotos, compacto = false }: { fotos: FotoDoAcervo[]; compacto?: boolean }) {
+export function BotoesDeUso({ fotos, compacto = false, icones = false }: { fotos: FotoDoAcervo[]; compacto?: boolean; icones?: boolean }) {
   const { baixar, baixarEmZip, enviar, baixando, enviando } = useAcoesDeUso();
   const vazio = fotos.length === 0;
   const tamanho = "mb-1.5 mr-1.5 h-8 text-[12px]";
+  // 28/09 (barra da seleção numa linha só): só o ícone, com o nome no leitor de tela e na dica.
+  if (icones) {
+    const icone = "h-8 w-8 shrink-0 p-0";
+    return (
+      <div className="flex shrink-0 items-center gap-0.5" data-botoes-de-uso="icones">
+        <Button type="button" size="sm" variant="ghost" className={icone} disabled={vazio || !!baixando} onClick={() => void baixar(fotos)} aria-label="Baixar" title={baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : "Baixar uma a uma, no tamanho original"}>
+          {baixando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className={icone} disabled={vazio || !!baixando} onClick={() => void baixarEmZip(fotos)} aria-label="ZIP" title="Baixar tudo num ZIP, com LEIA-ME">
+          <Archive className="h-4 w-4" />
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className={icone} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "arquivos")} aria-label="Arquivos" title="Enviar para Arquivos (pasta de fotos do cliente)">
+          {enviando === "arquivos" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderInput className="h-4 w-4" />}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className={icone} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "aprovacao")} aria-label="Aprovação" title="Enviar para a aprovação do cliente">
+          {enviando === "aprovacao" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 flex-wrap items-center">
       <Button type="button" size="sm" variant="outline" className={tamanho} disabled={vazio || !!baixando} onClick={() => void baixar(fotos)} title="Uma a uma, sem ZIP, no tamanho original">

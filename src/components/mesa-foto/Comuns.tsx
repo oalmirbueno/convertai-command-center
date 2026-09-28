@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { Check, Globe, Sparkles } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
@@ -154,6 +155,8 @@ export function Cartao({
   acao,
   children,
   className = "",
+  recolher,
+  resumo,
 }: {
   titulo: ReactNode;
   /** Explicação longa: vai para o "?" ao lado do título. */
@@ -161,7 +164,18 @@ export function Cartao({
   acao?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Chave para lembrar se o bloco está recolhido (28/09: todo bloco grande pode recolher). */
+  recolher?: string;
+  /** Linha curta que fica à vista com o bloco recolhido. */
+  resumo?: ReactNode;
 }) {
+  if (recolher) {
+    return (
+      <CartaoRecolhivel titulo={titulo} dica={dica} acao={acao} className={className} chave={recolher} resumo={resumo}>
+        {children}
+      </CartaoRecolhivel>
+    );
+  }
   return (
     <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="">
       <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between">
@@ -172,6 +186,22 @@ export function Cartao({
         {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end">{acao}</div>}
       </div>
       {children}
+    </section>
+  );
+}
+
+function CartaoRecolhivel({ titulo, dica, acao, children, className, chave, resumo }: { titulo: ReactNode; dica?: ReactNode; acao?: ReactNode; children: ReactNode; className: string; chave: string; resumo?: ReactNode }) {
+  const [recolhido, setRecolhido] = useRecolhido(chave);
+  return (
+    <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="" data-recolhido={recolhido ? "sim" : "nao"}>
+      <div className={juntar("flex min-w-0 flex-wrap items-center justify-between", recolhido ? "" : "mb-2.5")}>
+        <div className="mr-2 flex min-w-0 flex-1 items-center">
+          <TituloRecolhivel titulo={titulo} recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
+          {dica && !recolhido && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
+        </div>
+        {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end">{acao}</div>}
+      </div>
+      {!recolhido && children}
     </section>
   );
 }
