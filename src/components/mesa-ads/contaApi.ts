@@ -8,6 +8,7 @@
  * velha (sem os campos novos) vira lista vazia ou null, nunca erro.
  */
 import { chamarAds } from "./adsApi";
+import { chaveDoPeriodo, corpoDoPeriodo, type PeriodoDaConsulta } from "./periodoDaConta";
 
 export const PERIODOS_DA_CONTA_V4 = [7, 14, 30, 60, 90] as const;
 export type PeriodoDaConta = (typeof PERIODOS_DA_CONTA_V4)[number];
@@ -275,8 +276,8 @@ export function normalizarEvolucao(bruto: unknown): LeituraDaEvolucao {
 export const evolucaoVazia = (l: LeituraDaEvolucao) =>
   !l.vencedores.length && !l.manter.length && !l.descartar.length && !l.observar.length && !l.destaques.length && !l.abaixo.length && !l.sinais.length;
 
-export async function lerEvolucao(clientId: string, dias: number, explicar = false): Promise<LeituraDaEvolucao> {
-  return normalizarEvolucao(await chamarAds("evolucao", { client_id: clientId, dias, explicar }));
+export async function lerEvolucao(clientId: string, periodo: PeriodoDaConsulta, explicar = false): Promise<LeituraDaEvolucao> {
+  return normalizarEvolucao(await chamarAds("evolucao", { client_id: clientId, ...corpoDoPeriodo(periodo), explicar }));
 }
 
 // ------------------------------------------------------------------ desempenho do cliente
@@ -359,11 +360,11 @@ export function normalizarDesempenho(bruto: unknown): DesempenhoDoCliente | null
   };
 }
 
-export async function lerDesempenho(clientId: string, dias: number): Promise<DesempenhoDoCliente | null> {
-  return normalizarDesempenho(await chamarAds("desempenho_cliente", { client_id: clientId, dias }));
+export async function lerDesempenho(clientId: string, periodo: PeriodoDaConsulta): Promise<DesempenhoDoCliente | null> {
+  return normalizarDesempenho(await chamarAds("desempenho_cliente", { client_id: clientId, ...corpoDoPeriodo(periodo) }));
 }
 
 export const chavesConta = {
-  evolucao: (clientId: string, dias: number) => ["mesa", "urls", "ads-evolucao", clientId, dias] as const,
-  desempenho: (clientId: string, dias: number) => ["mesa", "urls", "ads-desempenho", clientId, dias] as const,
+  evolucao: (clientId: string, periodo: PeriodoDaConsulta) => ["mesa", "urls", "ads-evolucao", clientId, chaveDoPeriodo(periodo)] as const,
+  desempenho: (clientId: string, periodo: PeriodoDaConsulta) => ["mesa", "urls", "ads-desempenho", clientId, chaveDoPeriodo(periodo)] as const,
 };

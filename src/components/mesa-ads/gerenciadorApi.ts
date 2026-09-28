@@ -6,6 +6,7 @@
  * renomear), que passam pelo mesmo caminho do agente (relê, faz, relê de novo).
  */
 import { chamarAds } from "./adsApi";
+import { chaveDoPeriodo, corpoDoPeriodo, type PeriodoDaConsulta } from "./periodoDaConta";
 
 export type NivelNoGerenciador = "campanha" | "conjunto" | "anuncio";
 export type EstadoDaEntrega = "entregando" | "ativo_sem_entrega" | "ativo" | "pausado" | "em_analise" | "reprovado" | "com_problema" | "encerrado" | "conta_travada";
@@ -20,6 +21,9 @@ export interface MetricasNoGerenciador {
   ctr_link: number | null;
   cpm: number | null;
   frequencia: number | null;
+  /** Frente AD3: alcance aproximado e cliques no link (para as colunas e a linha de total). */
+  alcance: number | null;
+  cliques_link: number | null;
 }
 
 export interface MarcaNoGerenciador {
@@ -125,6 +129,8 @@ function metricas(v: unknown): MetricasNoGerenciador | null {
     ctr_link: num(m.ctr_link),
     cpm: num(m.cpm),
     frequencia: num(m.frequencia),
+    alcance: num(m.alcance),
+    cliques_link: num(m.cliques_link),
   };
 }
 
@@ -247,10 +253,10 @@ export function contagemDoFiltro(campanhas: NoNoGerenciador[], filtro: FiltroDoG
   return filtrarArvore(campanhas, filtro).length;
 }
 
-export const chaveDoGerenciador = (clientId: string, dias: number) => ["mesa", "ads", "gerenciador", clientId, dias] as const;
+export const chaveDoGerenciador = (clientId: string, periodo: PeriodoDaConsulta) => ["mesa", "ads", "gerenciador", clientId, chaveDoPeriodo(periodo)] as const;
 
-export async function lerGerenciador(clientId: string, dias: number, aoVivo = false): Promise<LeituraDoGerenciador> {
-  const corpo: Record<string, unknown> = { client_id: clientId, dias };
+export async function lerGerenciador(clientId: string, periodo: PeriodoDaConsulta, aoVivo = false): Promise<LeituraDoGerenciador> {
+  const corpo: Record<string, unknown> = { client_id: clientId, ...corpoDoPeriodo(periodo) };
   if (aoVivo) corpo.ao_vivo = true;
   return normalizarGerenciador(await chamarAds<any>("gerenciador_ler", corpo));
 }
@@ -310,4 +316,236 @@ export function horaDeBrasilia(iso: string | null | undefined): string {
   const t = iso ? Date.parse(iso) : NaN;
   if (!isFinite(t)) return "";
   return new Date(t - 3 * 3600_000).toISOString().slice(11, 16);
+}
+
+// ------------------------------------------------------------------ frente AD3 (28/09)
+//
+// Pedido do dono: "igual ao Gerenciador de Anúncios da Meta, organizadinho: campanha, conjunto e anúncio
+// com cores diferentes, sem muito texto; clicar e abrir, ver o criativo, avaliar e analisar; na linha,
+// Pausar, Retomar e Otimizar; gerar o relatório ali e ele já aparecer em Relatórios".
+
+/** Todos os itens de um nível (o que a aba Campanhas, Conjuntos ou Anúncios mostra), dentro da campanha ou do conjunto escolhido. */
+export function nosDoNivel(campanhas: NoNoGerenciador[], nivel: NivelNoGerenciador, dentroDe: string | null = null): NoNoGerenciador[] {
+  const campanhaEscolhida = dentroDe ? campanhas.filter((c) => c.id === dentroDe) : [];
+  const conjuntoEscolhido = dentroDe && !campanhaEscolhida.length ? ([] as NoNoGerenciador[]).concat(...campanhas.map((c) => c.filhos.filter((g) => g.id === dentroDe))) : [];
+  const base = campanhaEscolhida.length ? campanhaEscolhida : campanhas;
+  if (nivel === "campanha") return base;
+  const conjuntos = conjuntoEscolhido.length ? conjuntoEscolhido : ([] as NoNoGerenciador[]).concat(...base.map((c) => c.filhos));
+  if (nivel === "conjunto") return conjuntos;
+  return ([] as NoNoGerenciador[]).concat(...conjuntos.map((g) => g.filhos));
+}
+
+/** Acha um item em qualquer nível da árvore. */
+export function acharNo(campanhas: NoNoGerenciador[], id: string): NoNoGerenciador | null {
+  for (const c of campanhas) {
+    if (c.id === id) return c;
+    for (const g of c.filhos) {
+      if (g.id === id) return g;
+      for (const a of g.filhos) if (a.id === id) return a;
+    }
+  }
+  return null;
+}
+
+export interface TotalDaLista {
+  quantos: number;
+  gasto: number;
+  impressoes: number;
+  resultados: number | null;
+  resultado_rotulo: string | null;
+  custo_por_resultado: number | null;
+  ctr_link: number | null;
+  cpm: number | null;
+  verba_diaria: number | null;
+  hoje: number | null;
+}
+
+/**
+ * A linha de total da tabela (como a da Meta): gasto e impressões somados; resultados só quando todos
+ * medem a mesma coisa (conversa com clique não soma); CTR e CPM recalculados sobre a soma; verba diária
+ * somada dos itens ativos com verba própria. Alcance não soma (a mesma pessoa aparece em vários).
+ */
+export function totalDaLista(nos: NoNoGerenciador[]): TotalDaLista {
+  const ms = nos.map((n) => n.metricas).filter((m): m is MetricasNoGerenciador => !!m);
+  const gasto = Math.round(ms.reduce((s, m) => s + m.gasto, 0) * 100) / 100;
+  const impressoes = ms.reduce((s, m) => s + m.impressoes, 0);
+  const rotulos = ms.filter((m) => m.resultados > 0).map((m) => m.resultado_rotulo);
+  const unico = rotulos.length && rotulos.every((r) => r === rotulos[0]) ? rotulos[0] : null;
+  const resultados = !rotulos.length ? 0 : unico ? ms.reduce((s, m) => s + m.resultados, 0) : null;
+  const comCliques = ms.filter((m) => m.cliques_link !== null);
+  const cliques = comCliques.reduce((s, m) => s + (m.cliques_link || 0), 0);
+  const impComCliques = comCliques.reduce((s, m) => s + m.impressoes, 0);
+  const ativos = nos.filter((n) => (n.efetivo || n.status || "").toUpperCase() === "ACTIVE" && n.orcamento_diario_brl !== null);
+  const comHoje = nos.filter((n) => n.hoje);
+  return {
+    quantos: nos.length,
+    gasto,
+    impressoes,
+    resultados,
+    resultado_rotulo: unico,
+    custo_por_resultado: resultados && resultados > 0 ? Math.round((gasto / resultados) * 100) / 100 : null,
+    ctr_link: impComCliques > 0 ? Math.round((cliques / impComCliques) * 10000) / 100 : null,
+    cpm: impressoes > 0 ? Math.round((gasto / impressoes) * 100000) / 100 : null,
+    verba_diaria: ativos.length ? Math.round(ativos.reduce((s, n) => s + (n.orcamento_diario_brl || 0), 0) * 100) / 100 : null,
+    hoje: comHoje.length ? Math.round(comHoje.reduce((s, n) => s + (n.hoje ? n.hoje.gasto : 0), 0) * 100) / 100 : null,
+  };
+}
+
+const NOME_DO_NIVEL: Record<NivelNoGerenciador, string> = { campanha: "a campanha", conjunto: "o conjunto", anuncio: "o anúncio" };
+const virgula = (v: number) => String(v).replace(".", ",");
+
+function brlCurto(v: number): string {
+  const partes = Math.abs(v).toFixed(2).split(".");
+  return `${v < 0 ? "-" : ""}R$ ${partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${partes[1]}`;
+}
+
+/**
+ * O pedido que o "Otimizar" leva ao agente (entra no campo; nada roda sem o clique): parte do que já
+ * roda neste item, sem criar do zero; reforçar o que funciona e um experimento por vez.
+ */
+export function pedidoDeOtimizar(n: NoNoGerenciador, periodo: string): string {
+  const m = n.metricas;
+  const numeros = m
+    ? ` Números ${periodo}: ${brlCurto(m.gasto)} gastos, ${m.resultados} ${m.resultado_rotulo.toLowerCase()}${m.custo_por_resultado !== null ? ` a ${brlCurto(m.custo_por_resultado)} cada` : ""}${m.ctr_link !== null ? `, CTR ${virgula(m.ctr_link)}%` : ""}${m.frequencia !== null ? `, frequência ${virgula(m.frequencia)}` : ""}.`
+    : "";
+  return `Otimizar ${NOME_DO_NIVEL[n.nivel]} "${n.nome}" (id ${n.id}) sem criar nada do zero: parta do que já roda, reforce o que está funcionando e proponha um experimento por vez.${numeros}`;
+}
+
+// ---- o anúncio aberto (gerenciador_anuncio)
+
+export interface RankingNaTela {
+  valor: string;
+  rotulo: string;
+  tom: "bom" | "medio" | "ruim";
+}
+
+export interface AnuncioAberto {
+  ad_id: string;
+  nome: string;
+  criativo: {
+    titulo: string | null;
+    corpo: string | null;
+    descricao: string | null;
+    cta: string | null;
+    destino: string | null;
+    imagem_url: string | null;
+    video: { fonte: string | null; capa: string | null; duracao_s: number | null; link: string | null } | null;
+  };
+  links: { previa: string | null; instagram: string | null; meta: string | null };
+  qualidade: { qualidade: RankingNaTela | null; engajamento: RankingNaTela | null; conversao: RankingNaTela | null };
+  aprendizado: { estado: "aprendendo" | "concluido" | "limitado"; rotulo: string; motivo: string | null } | null;
+  fonte: "meta_ao_vivo" | "coleta";
+  aviso: string | null;
+  lido_em: string | null;
+}
+
+const https = (v: unknown) => (typeof v === "string" && /^https:\/\//.test(v) ? v : null);
+const TONS = ["bom", "medio", "ruim"];
+function ranking(v: unknown): RankingNaTela | null {
+  const o = obj(v);
+  if (!txt(o.rotulo)) return null;
+  return { valor: txt(o.valor), rotulo: txt(o.rotulo), tom: (TONS.indexOf(o.tom) >= 0 ? o.tom : "medio") as RankingNaTela["tom"] };
+}
+
+export function normalizarAnuncioAberto(bruto: unknown): AnuncioAberto | null {
+  const r = obj(obj(bruto).anuncio);
+  if (!txt(r.ad_id)) return null;
+  const c = obj(r.criativo);
+  const v = c.video ? obj(c.video) : null;
+  const l = obj(r.links);
+  const q = obj(r.qualidade);
+  const a = r.aprendizado ? obj(r.aprendizado) : null;
+  const estado = a && (a.estado === "aprendendo" || a.estado === "concluido" || a.estado === "limitado") ? (a.estado as "aprendendo" | "concluido" | "limitado") : null;
+  return {
+    ad_id: txt(r.ad_id),
+    nome: txt(r.nome) || txt(r.ad_id),
+    criativo: {
+      titulo: txt(c.titulo) || null,
+      corpo: txt(c.corpo) || null,
+      descricao: txt(c.descricao) || null,
+      cta: txt(c.cta) || null,
+      destino: txt(c.destino) || null,
+      imagem_url: https(c.imagem_url),
+      video: v && (https(v.fonte) || https(v.capa)) ? { fonte: https(v.fonte), capa: https(v.capa), duracao_s: num(v.duracao_s), link: https(v.link) } : null,
+    },
+    links: { previa: https(l.previa), instagram: https(l.instagram), meta: /^https:\/\/(business|www)\.facebook\.com\//.test(txt(l.meta)) ? txt(l.meta) : null },
+    qualidade: { qualidade: ranking(q.qualidade), engajamento: ranking(q.engajamento), conversao: ranking(q.conversao) },
+    aprendizado: a && estado ? { estado, rotulo: txt(a.rotulo), motivo: txt(a.motivo) || null } : null,
+    fonte: r.fonte === "coleta" ? "coleta" : "meta_ao_vivo",
+    aviso: txt(r.aviso) || null,
+    lido_em: txt(r.lido_em) || null,
+  };
+}
+
+export const chaveDoAnuncioAberto = (clientId: string, adId: string, periodo: PeriodoDaConsulta) => ["mesa", "ads", "anuncio-aberto", clientId, adId, chaveDoPeriodo(periodo)] as const;
+
+export async function lerAnuncioAberto(clientId: string, adId: string, periodo: PeriodoDaConsulta): Promise<AnuncioAberto | null> {
+  return normalizarAnuncioAberto(await chamarAds<any>("gerenciador_anuncio", { client_id: clientId, ad_id: adId, ...corpoDoPeriodo(periodo) }));
+}
+
+export interface ItemDoDiagnostico {
+  chave: "qualidade" | "fadiga" | "aprendizado";
+  rotulo: string;
+  valor: string;
+  tom: "bom" | "medio" | "ruim" | "neutro";
+  dica: string | null;
+}
+
+/**
+ * O diagnóstico curto do anúncio aberto, em regra fixa: qualidade (ranking da Meta), fadiga (frequência
+ * e o CTR da segunda metade do período contra a primeira) e aprendizado do conjunto. Sem dado, diz que
+ * não há leitura em vez de adivinhar.
+ */
+export function diagnosticoCurto(e: {
+  qualidade: AnuncioAberto["qualidade"] | null;
+  aprendizado: AnuncioAberto["aprendizado"] | null;
+  frequencia: number | null;
+  ctr_var_pct: number | null;
+  impressoes: number;
+}): ItemDoDiagnostico[] {
+  const q = e.qualidade ? e.qualidade.qualidade || e.qualidade.engajamento || e.qualidade.conversao : null;
+  const itens: ItemDoDiagnostico[] = [];
+  itens.push(
+    q
+      ? { chave: "qualidade", rotulo: "Qualidade", valor: q.rotulo, tom: q.tom, dica: "Ranking da Meta contra anúncios que disputam o mesmo público no período." }
+      : { chave: "qualidade", rotulo: "Qualidade", valor: e.impressoes < 500 ? "Pouca entrega para avaliar" : "Sem ranking da Meta", tom: "neutro", dica: "A Meta só dá o ranking com volume (cerca de 500 impressões no período)." },
+  );
+  const f = e.frequencia;
+  const caiu = e.ctr_var_pct !== null && e.ctr_var_pct <= -20;
+  if (f === null && e.ctr_var_pct === null) itens.push({ chave: "fadiga", rotulo: "Fadiga", valor: "Sem leitura", tom: "neutro", dica: null });
+  else if (f !== null && ((f >= 3 && caiu) || f >= 4)) itens.push({ chave: "fadiga", rotulo: "Fadiga", valor: "Cansando o público", tom: "ruim", dica: `Frequência ${virgula(f)}${caiu ? " e o clique caindo" : ""}: hora de variar o criativo.` });
+  else if ((f !== null && f >= 2.5) || caiu) itens.push({ chave: "fadiga", rotulo: "Fadiga", valor: "Atenção", tom: "medio", dica: caiu ? "O clique caiu na segunda metade do período." : `Frequência ${virgula(f as number)}: o público já viu algumas vezes.` });
+  else itens.push({ chave: "fadiga", rotulo: "Fadiga", valor: "Sem sinal", tom: "bom", dica: f !== null ? `Frequência ${virgula(f)}.` : null });
+  const a = e.aprendizado;
+  itens.push(
+    a
+      ? { chave: "aprendizado", rotulo: "Aprendizado", valor: a.rotulo, tom: a.estado === "concluido" ? "bom" : a.estado === "aprendendo" ? "medio" : "ruim", dica: a.motivo }
+      : { chave: "aprendizado", rotulo: "Aprendizado", valor: "Sem leitura", tom: "neutro", dica: null },
+  );
+  return itens;
+}
+
+// ---- relatório de anúncios do período (relatorio_ads_gerar)
+
+export interface RelatorioGerado {
+  id: string;
+  titulo: string;
+  link: string;
+  projeto: string;
+  atualizado: boolean;
+  resumo: string;
+}
+
+export async function gerarRelatorioDeAnuncios(clientId: string, periodo: PeriodoDaConsulta): Promise<RelatorioGerado | null> {
+  const r = obj(obj(await chamarAds<any>("relatorio_ads_gerar", { client_id: clientId, ...corpoDoPeriodo(periodo) })).relatorio);
+  if (!txt(r.id)) return null;
+  const link = txt(r.link);
+  return {
+    id: txt(r.id),
+    titulo: txt(r.titulo),
+    link: /^\/relatorios\/[0-9a-f-]{36}$/.test(link) ? link : `/relatorios/${txt(r.id)}`,
+    projeto: txt(obj(r.projeto).nome),
+    atualizado: !!r.atualizado,
+    resumo: txt(r.resumo),
+  };
 }

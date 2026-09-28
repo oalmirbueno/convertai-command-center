@@ -14,6 +14,7 @@
  */
 import { chamarAds, normalizarConta, type AnuncioAoVivo, type CampanhaAoVivo, type ContaAoVivo } from "./adsApi";
 import { extrasDaConta, type ExtrasDaConta } from "./contaApi";
+import { chaveDoPeriodo, corpoDoPeriodo, type PeriodoDaConsulta } from "./periodoDaConta";
 
 export type GrupoDeObjetivo = "mensagem" | "vendas" | "cadastro" | "trafego" | "engajamento" | "alcance";
 
@@ -354,12 +355,12 @@ export function resumoDoTopo(dados: ResultadosDaConta, grupo: GrupoDeObjetivo | 
 // ------------------------------------------------------------------ leitura
 
 /** Chave própria (o formato é outro que o da chave "ads-conta"); traz links que vencem: fora do cache do navegador. */
-export const chaveDosResultados = (clientId: string, dias: number) => ["mesa", "urls", "ads-resultados", clientId, dias] as const;
+export const chaveDosResultados = (clientId: string, periodo: PeriodoDaConsulta) => ["mesa", "urls", "ads-resultados", clientId, chaveDoPeriodo(periodo)] as const;
 
 export type ContaComResultados = ResultadosDaConta & { extras: ExtrasDaConta };
 
 /** conta_ao_vivo lida uma vez para as abas Conta e Resultados (só JSON: vai para o cache). */
-export async function lerContaComResultados(clientId: string, dias: number): Promise<ContaComResultados> {
-  const bruto = await chamarAds("conta_ao_vivo", { client_id: clientId, dias });
+export async function lerContaComResultados(clientId: string, periodo: PeriodoDaConsulta): Promise<ContaComResultados> {
+  const bruto = await chamarAds("conta_ao_vivo", { client_id: clientId, ...corpoDoPeriodo(periodo) });
   return { ...lerResultadosDaConta(bruto), extras: extrasDaConta(bruto) };
 }

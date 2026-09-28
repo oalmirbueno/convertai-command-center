@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useInRouterContext, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Briefcase, CalendarDays, ExternalLink, FileSearch, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Briefcase, ExternalLink, FileSearch, FileText, Loader2, Sparkles, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, dataEHora, textoDoErro } from "@/lib/mesa/api";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
-import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -47,6 +46,9 @@ import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
 import GerenciadorAoVivo, { BotaoAtualizarAgora, SituacaoDaConta, useAtualizarGerenciador, useGerenciador } from "./GerenciadorAoVivo";
+import { gerarRelatorioDeAnuncios, pedidoDeOtimizar, type NoNoGerenciador, type RelatorioGerado } from "./gerenciadorApi";
+import SeletorDePeriodo from "./SeletorDePeriodo";
+import { corpoDoPeriodo, ehEscolhaDoPeriodo, PERIODO_PADRAO, resolverPeriodo, trechoDoPeriodo, type EscolhaDoPeriodo } from "./periodoDaConta";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
 /**
@@ -88,6 +90,15 @@ import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecol
  * o que o agente faz e fez, e os resultados e criativos. Um só "Atualizar
  * agora" (lê a Meta e pede a coleta); a tabela de campanhas saiu (o
  * Gerenciador é a tabela).
+ *
+ * 28/09 (frente AD3, "o topo é um card gigante; o gerenciador igual ao da Meta;
+ * filtros por data; gerar o relatório ali"): o período (hoje, ontem, 7, 14, 30 e
+ * 90 dias, este mês, mês passado e livre) vale para a aba toda; o topo virou uma
+ * linha alinhada por conta (a ligação da gestão só aparece quando falta
+ * permissão); o Gerenciador tem abas por nível com cor, colunas e total, o
+ * painel do anúncio e Pausar, Retomar e Otimizar na linha (Otimizar põe o
+ * pedido no campo do agente sênior); "Relatório" grava o relatório de anúncios
+ * do período como rascunho na área de Relatórios.
  */
 
 /** Lê campanha e ver do endereço quando há roteador (os testes montam a aba sem ele). */
@@ -360,9 +371,10 @@ export default function AbaConta({
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   // Período e objetivo lembrados por cliente (sair e voltar mantém).
-  const [dias, setDias] = useEstadoDaTela<PeriodoDaConta>(`mesa-ads:conta:dias:${clientId}`, 14, {
-    validar: (v) => typeof v === "number" && PERIODOS_DA_CONTA.indexOf(v as PeriodoDaConta) >= 0,
-  });
+  // Frente AD3: hoje, ontem, 7, 14, 30 e 90 dias, este mês, mês passado e período livre, para tudo da aba.
+  const [escolhaDoPeriodo, setEscolhaDoPeriodo] = useEstadoDaTela<EscolhaDoPeriodo>(`mesa-ads:conta:periodo:${clientId}`, PERIODO_PADRAO, { validar: ehEscolhaDoPeriodo });
+  const periodo = resolverPeriodo(escolhaDoPeriodo);
+  const dias = periodo.dias;
   const [grupo, setGrupo] = useEstadoDaTela<GrupoDeObjetivo | "">(`mesa-ads:conta:objetivo:${clientId}`, "", { validar: (v) => typeof v === "string", esperaMs: 0 });
   const [campanha, setCampanha] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
@@ -392,8 +404,8 @@ export default function AbaConta({
   };
 
   const conta = useQuery({
-    queryKey: chaveDosResultados(clientId, dias),
-    queryFn: () => lerContaComResultados(clientId, dias),
+    queryKey: chaveDosResultados(clientId, periodo),
+    queryFn: () => lerContaComResultados(clientId, periodo),
     staleTime: 2 * 60_000,
     placeholderData: keepPreviousData,
     refetchInterval: RELEITURA_DA_CONTA_MS,
@@ -425,8 +437,8 @@ export default function AbaConta({
   const diasDoAgente = dias < 30 ? 30 : dias;
 
   // Um botão só: lê a Meta agora (Gerenciador) e pede a coleta dos números (conta_sincronizar).
-  const gerenciador = useGerenciador(clientId, dias);
-  const { atualizando, atualizar: atualizarGerenciador } = useAtualizarGerenciador(clientId, dias);
+  const gerenciador = useGerenciador(clientId, periodo);
+  const { atualizando, atualizar: atualizarGerenciador } = useAtualizarGerenciador(clientId, periodo);
   const [gerRecolhido, setGerRecolhido] = useRecolhido("mesa-ads:conta:bloco:gerenciador", false);
   const [feitoRecolhido, setFeitoRecolhido] = useRecolhido("mesa-ads:conta:bloco:agente", false);
   const [resultadosRecolhido, setResultadosRecolhido] = useRecolhido("mesa-ads:conta:bloco:resultados", false);
@@ -499,6 +511,30 @@ export default function AbaConta({
 
   const custoRef = dados && dados.conta.custo_referencia ? dados.conta.custo_referencia : null;
 
+  // Frente AD3: "Otimizar" na linha leva o item ao agente sênior (no campo, nada roda sem o clique).
+  const otimizar = (n: NoNoGerenciador) => levarAoAgente(pedidoDeOtimizar(n, trechoDoPeriodo(periodo)));
+
+  // Frente AD3: o relatório de anúncios do período, gravado como rascunho na área de Relatórios.
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  const [relatorio, setRelatorio] = useState<RelatorioGerado | null>(null);
+  const gerarRelatorio = async () => {
+    setGerandoRelatorio(true);
+    try {
+      const r = await gerarRelatorioDeAnuncios(clientId, periodo);
+      if (!r) throw new Error("O relatório não voltou do servidor.");
+      setRelatorio(r);
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast.success(r.atualizado ? "Relatório atualizado em Relatórios" : "Relatório criado em Relatórios", { description: "Ficou como rascunho: revise e envie ao cliente por lá." });
+    } catch (e) {
+      avisarErro(e, "Não foi possível gerar o relatório");
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
+  const leituraDaConta = gerenciador.data || null;
+  const mostrarAtivarGestao = !!leituraDaConta && (!leituraDaConta.gestao || (!leituraDaConta.gestao.disponivel && !leituraDaConta.contas.some((c) => c.situacao.travada)));
+
   return (
     // Área de trabalho (src/components/sistema/AreaDeTrabalho.tsx): no computador
     // os painéis da conta rolam por dentro e o agente sênior fica parado ao lado,
@@ -549,13 +585,17 @@ export default function AbaConta({
             }
             acoes={
               <>
-                <SeletorCompacto
-                  rotulo="Período"
-                  icone={<CalendarDays className="h-3.5 w-3.5" />}
-                  opcoes={PERIODOS_DA_CONTA.map((d) => ({ valor: String(d), rotulo: `${d} dias` }))}
-                  valor={String(dias)}
-                  onEscolher={(v) => setDias(Number(v) as PeriodoDaConta)}
-                />
+                <SeletorDePeriodo valor={escolhaDoPeriodo} onMudar={setEscolhaDoPeriodo} />
+                <button
+                  type="button"
+                  className={juntar(botao.secundario, "h-9")}
+                  disabled={gerandoRelatorio || !dados || !dados.conta.conectada}
+                  onClick={() => void gerarRelatorio()}
+                  title="Monta o relatório de anúncios do período (números da conta e a análise) e grava em Relatórios como rascunho"
+                >
+                  {gerandoRelatorio ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1 h-3.5 w-3.5" />}
+                  Relatório
+                </button>
                 <BotaoAtualizarAgora atualizando={sincronizando || atualizando} onAtualizar={() => void sincronizar()} />
                 {gerenciador.data && gerenciador.data.contas[0] && gerenciador.data.contas[0].link_meta && (
                   <a href={gerenciador.data.contas[0].link_meta} target="_blank" rel="noopener noreferrer" className={juntar(botao.discreto, "h-9")}>
@@ -566,8 +606,23 @@ export default function AbaConta({
               </>
             }
           />
+          {relatorio && (
+            <p className="flex min-w-0 flex-wrap items-center rounded-md bg-success/10 px-3 py-2 text-[12.5px] leading-snug" role="status" data-relatorio={relatorio.id}>
+              <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" />
+              <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">
+                {relatorio.atualizado ? "Relatório atualizado" : "Relatório criado"} em Relatórios, como rascunho{relatorio.projeto ? ` (projeto ${relatorio.projeto})` : ""}: {relatorio.titulo}
+              </span>
+              <a href={relatorio.link} className={juntar("mr-2 font-medium text-primary hover:underline", foco)}>
+                Abrir o relatório
+              </a>
+              <button type="button" className={juntar(botao.icone, "ml-auto h-6 w-6")} onClick={() => setRelatorio(null)} aria-label="Fechar o aviso do relatório">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </p>
+          )}
           <SituacaoDaConta leitura={gerenciador.data || null} carregando={gerenciador.isLoading} erro={gerenciador.isError ? textoDoErro(gerenciador.error) : null} />
-          <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
+          {/* A ligação da gestão só aparece quando falta permissão (conta travada já diz o motivo acima). */}
+          {mostrarAtivarGestao && <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />}
         </div>
 
         {conta.isError && (
@@ -601,7 +656,17 @@ export default function AbaConta({
               resumo={gerenciador.data ? `${gerenciador.data.resumo.campanhas_entregando} de ${gerenciador.data.resumo.campanhas_ativas} campanhas ativas entregando` : undefined}
               className="mb-2"
             />
-            {!gerRecolhido && <GerenciadorAoVivo dias={dias} onVerCriativos={verCriativosDaCampanha} />}
+            {!gerRecolhido && (
+              <GerenciadorAoVivo
+                dias={periodo}
+                rotuloDoPeriodo={`números ${trechoDoPeriodo(periodo)}`}
+                anuncios={anuncios}
+                onVerCriativos={verCriativosDaCampanha}
+                onOtimizar={otimizar}
+                onVariar={onCriarPlano ? (adId) => { const a = anuncios.filter((x) => x.ad_id === adId)[0]; if (a) variar(a); else variar({ ad_id: adId, nome: nomeDe(adId), referencia_id: null } as AnuncioAoVivo); } : undefined}
+                onFicha={(adId) => { const a = anuncios.filter((x) => x.ad_id === adId)[0]; if (a) void abrirFicha(a); else toast.info("Ficha ainda não criada", { description: "Este anúncio não teve números no período; ele entra em Referências na próxima coleta." }); }}
+              />
+            )}
           </section>
         )}
 
@@ -625,7 +690,7 @@ export default function AbaConta({
                     className="h-9"
                     disabled={!dados || !anuncios.length || desdeAnalise !== null}
                     partes={() => partesDaAnaliseDaConta(catalogo)}
-                    executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, dias }))}
+                    executar={() => rodarAnalise(() => chamarAds<any>("conta_analisar", { client_id: clientId, ...corpoDoPeriodo(periodo) }))}
                     aoConcluir={(data) => {
                       const a = normalizarAnalise(data && data.analise);
                       if (a) setAnaliseNova({ analise: a, criado_em: new Date().toISOString() });
@@ -694,8 +759,8 @@ export default function AbaConta({
                   </div>
                 </section>
 
-                <PainelDaEvolucao dias={dias} />
-                <PainelDoDesempenho dias={dias} />
+                <PainelDaEvolucao dias={periodo} />
+                <PainelDoDesempenho dias={periodo} />
               </>
             )}
           </section>

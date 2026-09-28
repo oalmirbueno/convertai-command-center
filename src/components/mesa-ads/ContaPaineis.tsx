@@ -7,6 +7,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, dataEHora } from "@/lib/mesa/api";
 import { brl, decimal, humanizar, inteiro, partesDaAnaliseDaConta, porcento, type CampanhaAoVivo, type MetricasDaConta } from "./adsApi";
 import { Foto } from "./Comuns";
+import type { PeriodoDaConsulta } from "./periodoDaConta";
 import {
   chavesConta,
   evolucaoVazia,
@@ -246,7 +247,7 @@ export function TabelaDeCampanhas({
 // ------------------------------------------------------------------ desempenho do cliente
 
 /** Orgânico + anúncios no mesmo período, carregado só quando a equipe abre. */
-export function PainelDoDesempenho({ dias }: { dias: number }) {
+export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
   const { clientId } = useMesa();
   const [aberto, setAberto] = useState(false);
   const q = useQuery({ queryKey: chavesConta.desempenho(clientId, dias), queryFn: () => lerDesempenho(clientId, dias), enabled: aberto, staleTime: 5 * 60_000, retry: false });
@@ -361,7 +362,7 @@ function ListaDeItens({ titulo, tom, itens, porItem, vazio }: { titulo: string; 
  * número), o que o conteúdo orgânico ensina, os próximos testes e os
  * aprendizados que ficam gravados na memória dos agentes.
  */
-export function PainelDaEvolucao({ dias }: { dias: number }) {
+export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [aberto, setAberto] = useState(false);

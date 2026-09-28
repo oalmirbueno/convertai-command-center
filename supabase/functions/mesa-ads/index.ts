@@ -264,7 +264,14 @@ import {
   pedidoDaEquipeInvalido,
   resumoDaArvore,
   situacaoDaConta,
+  aprendizadoDaMeta,
+  escolherProjetoDoRelatorio,
+  linksDoAnuncio,
+  type ProjetoParaRelatorio,
+  qualidadeDaMeta,
+  videoDaMeta,
 } from "./gerenciador.ts";
+import { montarRelatorioDeAnuncios, type MetricasParaRelatorio } from "./relatorio-ads.ts";
 import { type CandidatoDaOrdem, candidatosDaOrdem, citadosNaMensagem, decidirOrdem, type EscolhaDeAlvo, pareceOrdemDireta, perguntasDaOrdem, trechoParaBuscarNaMeta } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
 import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
@@ -4608,7 +4615,8 @@ async function contaSincronizar(_servico: SupabaseClient, chamador: Chamador, co
 async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const conta = await lerContaAoVivo(servico, clientId, corpo.dias);
+  // Frente AD3: o período da aba (inicio e fim quando não é "últimos N dias").
+  const conta = await lerContaAoVivo(servico, clientId, corpo.dias, { inicio: corpo.inicio, fim: corpo.fim });
   const comDados = conta.anuncios.filter((a) => a.metricas.impressoes > 0).slice(0, 40);
   if (!comDados.length) throw new ErroHttp(409, "sem_dados_de_conta", "Nenhum anúncio com entrega no período. Sincronize a conta ou escolha um período maior.");
   const briefing = await carregarBriefing(servico, clientId).catch(() => null);
@@ -8336,7 +8344,7 @@ async function metricasDoGerenciador(servico: SupabaseClient, clientId: string, 
     const saida = new Map<string, MetricasDoNo>();
     for (const [k, ls] of m) {
       const x = metricasCompletas(ls, tipos, objetivos);
-      saida.set(k, { gasto: x.gasto, impressoes: x.impressoes, resultados: x.resultados, resultado_rotulo: x.resultado_rotulo, custo_por_resultado: x.custo_por_resultado, ctr_link: x.ctr_link, cpm: x.cpm, frequencia: x.frequencia, cliques_link: x.cliques_link });
+      saida.set(k, { gasto: x.gasto, impressoes: x.impressoes, resultados: x.resultados, resultado_rotulo: x.resultado_rotulo, custo_por_resultado: x.custo_por_resultado, ctr_link: x.ctr_link, cpm: x.cpm, frequencia: x.frequencia, cliques_link: x.cliques_link, alcance: x.alcance_aprox });
     }
     return saida;
   };
@@ -8466,8 +8474,9 @@ async function gravarLeituraDoGerenciador(servico: SupabaseClient, clientId: str
 async function gerenciadorLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const periodo = periodoDoPedido({ dias: corpo.dias }, DIAS_CONTA, 14, hojeSaoPaulo());
-  const chave = `${clientId}:${periodo.dias}`;
+  // Frente AD3: o período da aba vale aqui também (hoje, ontem, este mês, mês passado e livre vêm com inicio e fim).
+  const periodo = periodoDoPedido({ dias: corpo.dias, inicio: corpo.inicio, fim: corpo.fim }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const chave = `${clientId}:${periodo.inicio}:${periodo.fim}`;
   let forcada = false;
   const inicioDoPedido = Date.now();
   // "forcar" também vale (nome usado no teste real), igual a "ao_vivo".
@@ -8657,6 +8666,212 @@ async function executarPedidoNaConta(
   return { item: { ...item, resultado: resultado as NonNullable<ItemDaAcaoNaConta["resultado"]> }, gestao, duracaoMs: Date.now() - inicio, preparado: false };
 }
 
+// ---- Frente AD3 (28/09): o anúncio aberto no Gerenciador e o relatório de anúncios do período
+
+/** O anúncio aberto: 60 s na memória da função por cliente e anúncio (abrir e fechar não relê a Meta). */
+const anunciosAbertos = new CacheCurto<Record<string, unknown>>(60_000, 60);
+/** Teto da leitura do anúncio na Meta: passou, responde com o que a coleta tem. */
+const TETO_DO_ANUNCIO_MS = 15_000;
+
+/** Promessa com teto: passou do prazo, vira null (a leitura do anúncio nunca trava a tela). */
+async function comTeto<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const teto = new Promise<null>((ok) => { relogio = setTimeout(() => ok(null), ms); });
+  try {
+    return await Promise.race([p.catch(() => null), teto]);
+  } finally {
+    if (relogio !== undefined) clearTimeout(relogio);
+  }
+}
+
+const CAMPOS_DO_ANUNCIO_ABERTO = "id,name,account_id,adset_id,campaign_id,preview_shareable_link,creative{id,title,body,image_url,thumbnail_url,video_id,object_story_spec,asset_feed_spec,instagram_permalink_url,call_to_action_type}";
+
+/**
+ * gerenciador_anuncio { client_id, ad_id, dias?, inicio?, fim? } -> { anuncio: { ad_id, nome, criativo: { titulo, corpo,
+ *   descricao, cta, destino, imagem_url, video }, links: { previa, instagram, meta }, qualidade, aprendizado, fonte, lido_em }, custo_usd: 0 }
+ * O criativo lido na Meta agora (imagem ou vídeo, título, texto), a qualidade do período (rankings) e o aprendizado
+ * do conjunto. Recusa anúncio de conta que não é deste cliente. Sem acesso à Meta, o que a coleta guardou. Grátis.
+ */
+async function gerenciadorAnuncio(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const adId = String(corpo.ad_id ?? "");
+  if (!/^[0-9]{3,30}$/.test(adId)) throw new ErroHttp(400, "anuncio_invalido", "Anúncio da Meta inválido.");
+  const periodo = periodoDoPedido({ dias: corpo.dias, inicio: corpo.inicio, fim: corpo.fim }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const inicioDoPedido = Date.now();
+  const anuncio = await anunciosAbertos.obter(`${clientId}:${adId}:${periodo.inicio}:${periodo.fim}`, async () => {
+    const [acesso, contas, coletaQ] = await Promise.all([
+      acessoDeGestao(servico, clientId).catch(() => null),
+      contasMetaDoCliente(servico, clientId),
+      servico.from("ads_creatives").select("ad_id, ad_name, raw, titulo, corpo, destino, image_url, thumbnail_url, video_id").eq("client_id", clientId).eq("ad_id", adId)
+        .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    const coleta = (coletaQ.data ?? null) as Record<string, unknown> | null;
+    const grafo = acesso ? acesso.grafo : null;
+    let bruto: Record<string, unknown> | null = null;
+    let insights: Record<string, unknown> | null = null;
+    let aviso: string | null = null;
+    if (grafo) {
+      const faixa = encodeURIComponent(JSON.stringify({ since: periodo.inicio, until: periodo.fim }));
+      [bruto, insights] = await Promise.all([
+        comTeto(grafo.ler(adId, CAMPOS_DO_ANUNCIO_ABERTO), TETO_DO_ANUNCIO_MS),
+        comTeto(grafo.ler(`${adId}/insights?time_range=${faixa}`, "quality_ranking,engagement_rate_ranking,conversion_rate_ranking"), TETO_DO_ANUNCIO_MS),
+      ]);
+      if (!bruto) aviso = "A Meta não devolveu o anúncio agora: mostrando o que a última coleta guardou.";
+    } else {
+      aviso = (acesso && acesso.gestao.motivo) || "Sem acesso à Meta agora: mostrando o que a última coleta guardou.";
+    }
+    // O id vem da tela: só mostra anúncio de conta ligada a este cliente.
+    if (bruto) {
+      const fora = foraDasContas(bruto, contas);
+      if (fora) throw new ErroHttp(403, "anuncio_de_outra_conta", fora.replace(" Nada foi feito.", ""));
+    } else if (!coleta) {
+      throw new ErroHttp(404, "anuncio_nao_encontrado", "Não achei este anúncio na Meta nem na coleta do painel. Clique em Atualizar agora.");
+    }
+    const criativoBruto = bruto && bruto.creative && typeof bruto.creative === "object" ? bruto.creative as Record<string, unknown> : null;
+    const copy = criativoBruto
+      ? extrairCopyDoRaw({ creative: criativoBruto })
+      : extrairCopyDoRaw(coleta ? coleta.raw ?? null : null, {
+        titulo: coleta ? (coleta.titulo as string | null) : null,
+        corpo: coleta ? (coleta.corpo as string | null) : null,
+        destino: coleta ? (coleta.destino as string | null) : null,
+        image_url: coleta ? (coleta.image_url as string | null) : null,
+        thumbnail_url: coleta ? (coleta.thumbnail_url as string | null) : null,
+        video_id: coleta ? (coleta.video_id as string | null) : null,
+      });
+    const adsetId = bruto && typeof bruto.adset_id === "string" ? bruto.adset_id : null;
+    const [videoBruto, conjuntoBruto] = grafo && bruto
+      ? await Promise.all([
+        copy.video_id && /^[0-9]{3,30}$/.test(copy.video_id) ? comTeto(grafo.ler(copy.video_id, "source,picture,length,permalink_url,thumbnails{uri,width,is_preferred}"), TETO_DO_ANUNCIO_MS) : Promise.resolve(null),
+        adsetId && /^[0-9]{3,30}$/.test(adsetId) ? comTeto(grafo.ler(adsetId, "learning_stage_info"), TETO_DO_ANUNCIO_MS) : Promise.resolve(null),
+      ])
+      : [null, null];
+    const links = linksDoAnuncio(bruto);
+    const conta = bruto ? String(bruto.account_id ?? "").replace(/^act_/, "") : [...contas][0] ?? "";
+    return {
+      ad_id: adId,
+      nome: semTravessao(String((bruto && bruto.name) || (coleta && coleta.ad_name) || `Anúncio ${adId}`)).slice(0, 200),
+      criativo: {
+        titulo: copy.titulo,
+        corpo: copy.corpo,
+        descricao: copy.descricao,
+        cta: copy.cta,
+        destino: copy.destino,
+        imagem_url: copy.imagem_url || copy.miniatura_url,
+        video: videoDaMeta(videoBruto),
+        video_id: copy.video_id,
+      },
+      links: { previa: links.previa, instagram: links.instagram, meta: conta ? linkDoGerenciador(conta, "anuncio", { anuncio: adId }) : null },
+      qualidade: qualidadeDaMeta(insights),
+      aprendizado: aprendizadoDaMeta(conjuntoBruto),
+      periodo,
+      fonte: bruto ? "meta_ao_vivo" : "coleta",
+      aviso,
+      lido_em: new Date().toISOString(),
+    };
+  });
+  return json({ anuncio, tempo_ms: Date.now() - inicioDoPedido, custo_usd: 0 });
+}
+
+/** Métricas da conta (lerContaAoVivo) no formato do relatório. */
+function paraRelatorio(m: MetricasDaConta): MetricasParaRelatorio {
+  const acoes = (m.acoes ?? {}) as Record<string, number>;
+  return {
+    gasto: m.gasto,
+    impressoes: m.impressoes,
+    alcance: m.alcance,
+    cliques_link: typeof acoes.cliques_link === "number" ? acoes.cliques_link : null,
+    resultados: m.resultados,
+    resultado_rotulo: m.resultado_rotulo,
+    resultado_tipo: m.resultado_tipo,
+    custo_por_resultado: m.custo_por_resultado,
+    cpm: m.cpm,
+    frequencia: m.frequencia_media,
+    valor_conversao: m.valor_conversao,
+    roas: m.roas,
+    acoes,
+  };
+}
+
+/**
+ * relatorio_ads_gerar { client_id, dias?, inicio?, fim?, project_id? } -> { relatorio: { id, titulo, status: "draft",
+ *   periodo, projeto: { id, nome }, atualizado: boolean, link }, custo_usd: 0 }
+ * O relatório de anúncios do período, montado em código com os números da conta (relatorio-ads.ts), gravado como
+ * RASCUNHO em reports: aparece na área de Relatórios do painel e só vai ao cliente quando a equipe publicar. Gerar de
+ * novo no mesmo período regrava o mesmo rascunho (não empilha cópias). Grátis.
+ */
+async function relatorioAdsGerar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const pedidoDeProjeto = typeof corpo.project_id === "string" && UUID.test(corpo.project_id) ? corpo.project_id : null;
+  const [conta, perfilQ, projetosQ] = await Promise.all([
+    lerContaAoVivo(servico, clientId, corpo.dias, { inicio: corpo.inicio, fim: corpo.fim }),
+    servico.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
+    servico.from("projects").select("id, name, project_type, status, deleted_at, updated_at").eq("client_id", clientId).limit(100),
+  ]);
+  if (!conta.conectada) throw new ErroHttp(409, "conta_nao_conectada", "A conta de anúncios deste cliente não está conectada: não há o que relatar.");
+  const projeto = escolherProjetoDoRelatorio(((projetosQ.data as ProjetoParaRelatorio[] | null) ?? []), pedidoDeProjeto);
+  if (!projeto) throw new ErroHttp(409, "sem_projeto", "Este cliente não tem projeto no painel, e todo relatório fica num projeto. Crie o projeto de tráfego do cliente e gere de novo.");
+  const perfil = (perfilQ.data ?? {}) as { company_name?: string | null; full_name?: string | null };
+  const cliente = semTravessao(String(perfil.company_name || perfil.full_name || "Cliente")).slice(0, 80);
+  const montado = montarRelatorioDeAnuncios({
+    cliente,
+    periodo: conta.periodo,
+    totais: paraRelatorio(conta.totais),
+    comparacao: conta.comparacao,
+    serie: conta.serie.map((d) => ({ dia: d.dia, gasto: d.gasto, resultados: d.resultados })),
+    campanhas: conta.campanhas.map((c) => ({ nome: semTravessao(String(c.nome || `Campanha ${c.campaign_id}`)).slice(0, 200), status: c.status, metricas: paraRelatorio(c.metricas) })),
+    anuncios: conta.anuncios.map((a) => ({
+      nome: semTravessao(String(a.nome || `Anúncio ${a.ad_id}`)).slice(0, 200),
+      status: a.status,
+      sinal: String(a.sinal),
+      metricas: paraRelatorio(a.metricas),
+      frequencia: a.tendencia ? a.tendencia.frequencia : null,
+      ctr_var_pct: a.tendencia ? a.tendencia.ctr_var_pct : null,
+    })),
+    contas: conta.contas.map((c) => ({ nome: String(c.nome || c.numero || "de anúncios"), saldo_a_pagar: c.saldo_a_pagar })),
+    gerado_em: new Date().toISOString(),
+  });
+  const linha = {
+    project_id: projeto.id,
+    title: montado.title,
+    period_start: conta.periodo.inicio,
+    period_end: conta.periodo.fim,
+    summary: montado.summary,
+    highlights: montado.highlights || null,
+    next_steps: montado.next_steps || null,
+    metrics: montado.metrics,
+    chart_type: montado.chart_type,
+    chart_data: montado.chart_data,
+  };
+  // O mesmo período já tem rascunho da Mesa Ads? Regrava (a área de Relatórios mostra o número novo).
+  const { data: existente } = await servico.from("reports").select("id").eq("client_id", clientId).eq("status", "draft")
+    .eq("period_start", conta.periodo.inicio).eq("period_end", conta.periodo.fim).contains("metrics", { source: "mesa_ads" })
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const idExistente = existente ? (existente as { id: string }).id : null;
+  const gravado = idExistente
+    ? await servico.from("reports").update(linha).eq("id", idExistente).eq("status", "draft").select("id").maybeSingle()
+    : await servico.from("reports").insert({ ...linha, client_id: clientId, status: "draft", created_by: chamador.userId }).select("id").maybeSingle();
+  if (gravado.error || !gravado.data) {
+    console.error("[mesa-ads] relatorio de anuncios nao gravado", { code: gravado.error ? gravado.error.code : "sem_linha" });
+    throw new ErroHttp(503, "relatorio_nao_gravado", "Não foi possível gravar o relatório agora. Tente de novo.");
+  }
+  const id = (gravado.data as { id: string }).id;
+  return json({
+    relatorio: {
+      id,
+      titulo: montado.title,
+      status: "draft",
+      periodo: conta.periodo,
+      projeto: { id: projeto.id, nome: projeto.name || "Projeto" },
+      atualizado: !!idExistente,
+      link: `/relatorios/${id}`,
+      resumo: montado.summary.split("\n\n")[0] || "",
+    },
+    custo_usd: 0,
+  });
+}
+
 /** Clientes por chamada do cron (a função tem 2 s de CPU por chamada e o relógio de 400 s). */
 const CLIENTES_POR_RODADA_DO_CRON = 2;
 
@@ -8740,6 +8955,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // Frente AD (28/09): o Gerenciador ao vivo dentro do painel e as ações da equipe por ele.
   gerenciador_ler: gerenciadorLer,
   gerenciador_acao: gerenciadorAcao,
+  // Frente AD3 (28/09): o anúncio aberto (criativo, qualidade e aprendizado lidos na Meta) e o relatório do período.
+  gerenciador_anuncio: gerenciadorAnuncio,
+  relatorio_ads_gerar: relatorioAdsGerar,
 };
 
 /**

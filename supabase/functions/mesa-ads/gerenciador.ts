@@ -40,6 +40,8 @@ export type MetricasDoNo = {
   cpm: number | null;
   frequencia: number | null;
   cliques_link: number;
+  /** Frente AD3: alcance aproximado (impressões / frequência média; a Meta não soma alcance entre dias). */
+  alcance?: number | null;
 };
 
 export type HojeDoNo = { gasto: number; impressoes: number };
@@ -623,4 +625,103 @@ export function pedidoDaEquipeInvalido(p: Record<string, unknown>): string | nul
     if (v === null || !(v > 0)) return "Informe a verba diária nova em reais.";
   }
   return null;
+}
+
+// ------------------------------------------------------------------ o anúncio aberto (frente AD3)
+//
+// Pedido do dono (28/09): "clicar e abrir, já poder ver o criativo, o que está rodando, avaliar e
+// analisar". O painel do anúncio lê na Meta na hora: o criativo (imagem ou vídeo, título e texto),
+// a prévia da Meta, a qualidade (rankings do período) e o aprendizado do conjunto.
+
+export type Ranking = { valor: string; rotulo: string; tom: "bom" | "medio" | "ruim" };
+
+/** quality_ranking, engagement_rate_ranking e conversion_rate_ranking da Meta em palavras. */
+export function rotuloDoRanking(v: unknown): Ranking | null {
+  const t = typeof v === "string" ? v.toUpperCase() : "";
+  if (t === "ABOVE_AVERAGE") return { valor: t, rotulo: "Acima da média", tom: "bom" };
+  if (t === "AVERAGE") return { valor: t, rotulo: "Na média", tom: "medio" };
+  if (t === "BELOW_AVERAGE_35") return { valor: t, rotulo: "Abaixo da média (35% piores)", tom: "ruim" };
+  if (t === "BELOW_AVERAGE_20") return { valor: t, rotulo: "Abaixo da média (20% piores)", tom: "ruim" };
+  if (t === "BELOW_AVERAGE_10") return { valor: t, rotulo: "Abaixo da média (10% piores)", tom: "ruim" };
+  return null;
+}
+
+export type QualidadeDoAnuncio = { qualidade: Ranking | null; engajamento: Ranking | null; conversao: Ranking | null };
+
+/** Rankings da primeira linha dos insights do anúncio (a Meta só dá com volume; sem volume, tudo null). */
+export function qualidadeDaMeta(bruto: unknown): QualidadeDoAnuncio {
+  const l = dadosDaLista(bruto)[0] ?? {};
+  return { qualidade: rotuloDoRanking(l.quality_ranking), engajamento: rotuloDoRanking(l.engagement_rate_ranking), conversao: rotuloDoRanking(l.conversion_rate_ranking) };
+}
+
+export type AprendizadoDoConjunto = { estado: "aprendendo" | "concluido" | "limitado"; rotulo: string; motivo: string | null };
+
+/** learning_stage_info do conjunto: em aprendizado, concluído ou limitado. */
+export function aprendizadoDaMeta(bruto: unknown): AprendizadoDoConjunto | null {
+  const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>).learning_stage_info : null;
+  const info = o && typeof o === "object" ? (o as Record<string, unknown>) : null;
+  const status = info ? String(info.status ?? "").toUpperCase() : "";
+  const conv = info ? numero(info.conversions) : null;
+  if (status === "LEARNING") {
+    return { estado: "aprendendo", rotulo: "Em aprendizado", motivo: `A Meta ainda está aprendendo a entregar este conjunto${conv !== null ? ` (${conv} de cerca de 50 resultados na semana)` : ""}. Evite mexer em verba e público agora.` };
+  }
+  if (status === "SUCCESS") return { estado: "concluido", rotulo: "Aprendizado concluído", motivo: null };
+  if (status === "FAIL") return { estado: "limitado", rotulo: "Aprendizado limitado", motivo: "O conjunto não junta resultados suficientes para a Meta estabilizar a entrega. Juntar conjuntos ou subir o evento de otimização costuma ajudar." };
+  return null;
+}
+
+const httpsOuNada = (v: unknown): string | null => (typeof v === "string" && /^https:\/\//.test(v) ? v : null);
+
+export type VideoDoAnuncio = { fonte: string | null; capa: string | null; duracao_s: number | null; link: string | null };
+
+/** O vídeo do anúncio (source só quando a Meta devolve; sem ele, a capa e o link). */
+export function videoDaMeta(bruto: unknown): VideoDoAnuncio | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const v = bruto as Record<string, unknown>;
+  const miniaturas = dadosDaLista(v.thumbnails).sort((a, b) => Number(b.is_preferred === true) - Number(a.is_preferred === true) || (numero(b.width) ?? 0) - (numero(a.width) ?? 0));
+  const capa = httpsOuNada(miniaturas[0] ? miniaturas[0].uri : null) ?? httpsOuNada(v.picture);
+  const link = typeof v.permalink_url === "string" ? (v.permalink_url.indexOf("http") === 0 ? v.permalink_url : `https://www.facebook.com${v.permalink_url}`) : null;
+  const fonte = httpsOuNada(v.source);
+  if (!fonte && !capa) return null;
+  return { fonte, capa, duracao_s: numero(v.length), link: httpsOuNada(link) };
+}
+
+/** Os links do anúncio que a tela pode abrir: prévia compartilhável e o post do Instagram. */
+export function linksDoAnuncio(bruto: unknown): { previa: string | null; instagram: string | null } {
+  const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
+  const c = o.creative && typeof o.creative === "object" ? (o.creative as Record<string, unknown>) : {};
+  return { previa: httpsOuNada(o.preview_shareable_link), instagram: httpsOuNada(c.instagram_permalink_url) };
+}
+
+// ------------------------------------------------------------------ projeto do relatório (frente AD3)
+
+export type ProjetoParaRelatorio = { id: string; name: string | null; project_type: string | null; status: string | null; deleted_at?: string | null; updated_at?: string | null };
+
+const TIPOS_DE_ANUNCIO = ["traffic", "trafego", "tráfego", "ads", "paid_media", "midia_paga", "marketing_digital", "marketing", "social_media"];
+const ORDEM_DO_STATUS = ["active", "in_progress", "planning", "standby", "paused", "done"];
+
+/**
+ * Em que projeto o relatório de anúncios entra (a tabela reports exige um projeto do mesmo cliente).
+ * Regra fixa: o pedido explícito, se for deste cliente; senão o projeto vivo de tráfego ou marketing,
+ * o mais recente primeiro. Sem projeto, null (a tela diz para criar um).
+ */
+export function escolherProjetoDoRelatorio(projetos: ProjetoParaRelatorio[], pedido?: string | null): ProjetoParaRelatorio | null {
+  const vivos = projetos.filter((p) => !p.deleted_at);
+  if (pedido) {
+    const achado = vivos.filter((p) => p.id === pedido)[0];
+    if (achado) return achado;
+  }
+  const pesoDoTipo = (p: ProjetoParaRelatorio) => {
+    const i = TIPOS_DE_ANUNCIO.indexOf(String(p.project_type ?? "").toLowerCase());
+    return i < 0 ? TIPOS_DE_ANUNCIO.length : i;
+  };
+  const pesoDoStatus = (p: ProjetoParaRelatorio) => {
+    const i = ORDEM_DO_STATUS.indexOf(String(p.status ?? "").toLowerCase());
+    return i < 0 ? ORDEM_DO_STATUS.length - 1 : i;
+  };
+  // Projeto encerrado só entra se não houver outro; entre os vivos, o de tráfego vem antes do de marketing.
+  const encerrado = (p: ProjetoParaRelatorio) => (["done", "cancelled", "canceled", "archived"].indexOf(String(p.status ?? "").toLowerCase()) >= 0 ? 1 : 0);
+  const ordenados = vivos.slice().sort((a, b) =>
+    encerrado(a) - encerrado(b) || pesoDoTipo(a) - pesoDoTipo(b) || pesoDoStatus(a) - pesoDoStatus(b) || String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+  return ordenados[0] ?? null;
 }

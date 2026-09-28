@@ -121,9 +121,13 @@ describe("situação da conta (topo enxuto)", () => {
     const s = screen.getByRole("region", { name: "Situação da conta" });
     expect(within(s).getByText("Saldo em aberto")).toBeTruthy();
     expect(within(s).getByText(/nada entrega e a Meta recusa mudanças/)).toBeTruthy();
-    expect(within(s).getByText(/A pagar: R\$\s?14,86/)).toBeTruthy();
+    // Frente AD3 ("card gigante; minimalista e alinhado"): os fatos viram colunas com rótulo em cima
+    // (A pagar | R$ 14,86); com a conta travada, a gestão diz "Só leitura" e o motivo fica só na faixa da conta.
+    const fato = (rotulo: string) => within(s).getByText(rotulo).parentElement as HTMLElement;
+    expect(within(fato("A pagar")).getByText(/R\$\s?14,86/)).toBeTruthy();
+    expect(within(fato("Gestão")).getByText("Só leitura").getAttribute("title")).toMatch(/Conta 01 Aceleriq está com pagamento pendente/);
     expect(within(s).getByRole("link", { name: /Cobrança e pagamentos na Meta/ }).getAttribute("href")).toBe("https://business.facebook.com/billing_hub/accounts/details?asset_id=1871637719955892");
-    expect(within(s).getByText(/Só leitura agora: A conta de anúncios Conta 01 Aceleriq/)).toBeTruthy();
+    expect(within(s).queryByText(/Só leitura agora/)).toBeNull();
     expect(within(s).getByText(/Google Ads: não conectado/)).toBeTruthy();
     expect(s.querySelector("[data-travada='sim']")).toBeTruthy();
   });
