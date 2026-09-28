@@ -8,7 +8,7 @@ import { getProjectBrand, matchesBrandFilter, BrandFilter, BRAND_FILTERS } from 
 import { useMemo } from "react";
 import { Briefcase, TrendingUp, Users, Zap, Target, BarChart3 } from "lucide-react";
 import {
-  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela,
+  CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, Painel, RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela,
   botao, etiqueta, juntar, superficie, texto,
 } from "@/components/sistema";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
@@ -256,18 +256,9 @@ export default function AdminProjection() {
             valor={brandFilter}
             onEscolher={(v) => setBrandFilter(v as BrandFilter)}
             rotulo="Marca"
-            className="hidden sm:inline-flex"
+            listaQuandoNaoCabe
           />
         }
-      />
-      {/* Celular: o filtro de marca desce para a linha de baixo (o título não é cortado). */}
-      <SeletorCompacto
-        opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
-        valor={brandFilter}
-        onEscolher={(v) => setBrandFilter(v as BrandFilter)}
-        rotulo="Marca"
-        larguraTotal
-        className="sm:hidden"
       />
 
       {erroAoLer && (
@@ -286,18 +277,12 @@ export default function AdminProjection() {
         <Carregando forma="aba" rotulo="Carregando projeção" />
       ) : (
         <>
-          <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
-            {numeros.map((n) => (
-              <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4")}>
-                <div className="flex min-w-0 items-center">
-                  <span className={juntar("mr-1.5 inline-flex shrink-0", n.corIcone)} aria-hidden="true">{n.icone}</span>
-                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{n.rotulo}</span>
-                </div>
-                <p className={juntar("mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums sm:text-[18px]", n.cor)}>{n.valor}</p>
-                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={n.sub}>{n.sub}</p>
-              </div>
-            ))}
-          </div>
+          {/* Os quatro números numa faixa só (antes, um cartão por número). */}
+          <FaixaDeNumeros
+            rotulo="Números da projeção"
+            colunas={4}
+            itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: n.valor, apoio: n.sub, corDoValor: n.cor }))}
+          />
 
           <Secao titulo="Receita" divisoria>
             <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">

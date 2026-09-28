@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { AjudaRecolhida, foco, juntar, superficie, texto } from "@/components/sistema";
 
@@ -41,11 +41,41 @@ export const botaoDeLinha = juntar(
   foco,
 );
 
-/** Grade de indicadores: um nível só, sem caixa em volta. */
-export function GradeDeKpis({ colunas = 4, className = "", children }: { colunas?: 3 | 4 | 5; className?: string; children: ReactNode }) {
+/** O Kpi sabe quando mora numa GradeDeKpis (vira célula da faixa, sem caixa própria). */
+const DentroDaGrade = createContext(false);
+
+/**
+ * Grade de indicadores como a FaixaDeNumeros do sistema (28/09, "não
+ * encaixotar"): uma superfície só, números separados por linhas finas, no
+ * lugar de um cartão por número. `semMoldura` quando a grade já mora dentro
+ * de um Painel (nunca cartão dentro de cartão).
+ */
+export function GradeDeKpis({
+  colunas = 4,
+  semMoldura = false,
+  className = "",
+  children,
+}: {
+  colunas?: 2 | 3 | 4 | 5;
+  semMoldura?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
   const grade =
-    colunas === 3 ? "grid-cols-1 sm:grid-cols-3" : colunas === 5 ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2 lg:grid-cols-4";
-  return <div className={juntar("grid min-w-0 gap-3", grade, className)}>{children}</div>;
+    colunas === 2
+      ? "grid-cols-2"
+      : colunas === 3
+        ? "grid-cols-1 sm:grid-cols-3"
+        : colunas === 5
+          ? "grid-cols-2 lg:grid-cols-5"
+          : "grid-cols-2 lg:grid-cols-4";
+  return (
+    <div className={juntar("min-w-0 overflow-hidden", !semMoldura && superficie.painel, className)}>
+      <div className={juntar("-ml-px -mt-px grid min-w-0", grade)}>
+        <DentroDaGrade.Provider value={true}>{children}</DentroDaGrade.Provider>
+      </div>
+    </div>
+  );
 }
 
 /** Indicador: rótulo, número (tabular) e uma linha de estado. Explicação vai no "?". */
@@ -69,13 +99,16 @@ export function Kpi({
   className?: string;
   children?: ReactNode;
 }) {
+  const naGrade = useContext(DentroDaGrade);
+  // Na grade: célula com traço fino (a grade é a superfície). Sozinho: poço ou cartão.
+  const casca = naGrade ? "border-l border-t border-border px-4 py-3" : juntar(emPoco ? superficie.poco : superficie.painel, "px-3.5 py-3");
   return (
-    <div className={juntar(emPoco ? superficie.poco : superficie.painel, "flex min-w-0 flex-col px-3.5 py-3", className)}>
+    <div className={juntar(casca, "flex min-w-0 flex-col", className)}>
       <div className="flex min-w-0 items-center">
         <p className={juntar(texto.rotulo, "min-w-0 truncate")}>{rotulo}</p>
         {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
       </div>
-      <div className={juntar("mt-1 min-w-0 truncate text-[18px] font-semibold leading-6 tabular-nums", corDoTom[tom])}>{valor}</div>
+      <div className={juntar("mt-1 min-w-0 truncate text-[20px] font-semibold leading-7 tabular-nums", corDoTom[tom])}>{valor}</div>
       {apoio && (
         <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={typeof apoio === "string" ? apoio : undefined}>
           {apoio}

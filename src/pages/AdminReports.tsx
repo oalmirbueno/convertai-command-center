@@ -3,18 +3,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Folder, ChevronRight, Megaphone, Search, X } from "lucide-react";
+import { Plus, FileText, Eye, Send, Folder, ChevronRight, Megaphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
+  CampoDeBusca,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
   Painel,
   SeletorCompacto,
   botao,
-  campo,
   etiqueta,
   foco,
   juntar,
@@ -166,21 +166,13 @@ export default function AdminReports() {
 
       {lista.length > 0 && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-          <div className="relative min-w-0 flex-1 basis-full sm:basis-[240px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por cliente, título ou projeto"
-              aria-label="Buscar relatório"
-              className={juntar(campo, "pl-9 pr-9 text-[16px] sm:text-[13px]")}
-            />
-            {busca && (
-              <button type="button" onClick={() => setBusca("")} aria-label="Limpar busca" className={juntar(botao.icone, "absolute right-0.5 top-1/2 -translate-y-1/2")}>
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+          <CampoDeBusca
+            valor={busca}
+            onMudar={setBusca}
+            placeholder="Buscar por cliente, título ou projeto"
+            rotulo="Buscar relatório"
+            className="flex-1 basis-full sm:basis-[240px]"
+          />
           <SeletorCompacto
             rotulo="Situação do relatório"
             opcoes={[
@@ -267,7 +259,7 @@ function GroupedReports({ reports, abrirTudo, metricLabels, formatNumber, format
               >
                 <ChevronRight className={`mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} aria-hidden="true" />
                 <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">{client}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{client}</span>
                 <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{totalCount}</span>
               </button>
               {isOpen && (

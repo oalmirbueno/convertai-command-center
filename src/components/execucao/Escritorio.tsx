@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { Bot, ChevronDown, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
+import { Bot, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
 import { etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 
 /**
  * O escritório: cada agente como uma pessoa, e o que ela está fazendo agora.
@@ -221,10 +222,10 @@ export default function Escritorio({
             <>
               <strong className="font-semibold tabular-nums">{totalEsperandoVoce}</strong>{" "}
               {totalEsperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
-              decisão sua. Eles aparecem primeiro na lista.
+              decisão sua
             </>
           ) : (
-            <>Nada está parado esperando você. O que estiver em andamento segue sozinho.</>
+            <>Nada está parado esperando você</>
           )}
         </span>
       </p>
@@ -233,24 +234,21 @@ export default function Escritorio({
         const aberta = estaAberta(area, urgencia);
         return (
         <section key={area} aria-label={area} className="min-w-0">
-          {/* O nome da área, discreto: separa sem competir com a lista. */}
-          <button
-            type="button"
-            onClick={() => alternar(area, urgencia)}
-            aria-expanded={aberta}
-            className={juntar("flex w-full min-w-0 items-center rounded-md py-1 text-left", foco)}
-          >
-            <ChevronDown className={juntar(
-              "mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
-              !aberta && "-rotate-90",
-            )} aria-hidden="true" />
-            <span className="mr-2 h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-            <span className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">{area}</span>
+          {/* O nome da área, discreto: separa sem competir com a lista. O
+              título recolhe pelo componente do sistema (setinha + título); a
+              contagem fica à vista nos dois estados. */}
+          <div className="flex min-w-0 items-center">
+            <TituloRecolhivel
+              titulo={area}
+              recolhido={!aberta}
+              onAlternar={() => alternar(area, urgencia)}
+              className="mr-2 shrink"
+            />
             <span className={juntar(texto.auxiliar, "shrink-0")}>
               {doGrupo.length} {doGrupo.length === 1 ? "agente" : "agentes"}
               {!aberta && urgencia >= 90 && " · sem trabalho agora"}
             </span>
-          </button>
+          </div>
           {aberta && (
             <ul className={juntar(superficie.painel, "mt-2 divide-y divide-border overflow-hidden")}>
               {doGrupo.map((a) => {
@@ -331,7 +329,7 @@ export default function Escritorio({
                         onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
                         className={juntar(superficie.poco, "mt-2 block w-full min-w-0 px-2.5 py-1.5 text-left transition-colors hover:bg-muted", foco)}
                       >
-                        <span className="block truncate text-[12.5px] text-foreground">{tarefa.title}</span>
+                        <span className="block truncate text-[13px] text-foreground">{tarefa.title}</span>
                         <span className="-mx-1 mt-0.5 flex flex-wrap items-center text-[11px] text-muted-foreground [&>*]:mx-1">
                           {cliente && (
                             <span className="font-medium text-foreground/80">
@@ -353,7 +351,7 @@ export default function Escritorio({
                     )}
 
                     {(emFoco?.next_step || meus.length > 1) && (
-                      <p className="mt-1.5 flex min-w-0 text-[11.5px] text-muted-foreground">
+                      <p className="mt-1.5 flex min-w-0 text-[12px] text-muted-foreground">
                         {emFoco?.next_step && <span className="mr-2 min-w-0 flex-1 truncate">próximo: {emFoco.next_step}</span>}
                         {meus.length > 1 && (
                           <span className="ml-auto shrink-0">

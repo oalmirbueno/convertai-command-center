@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Check, ExternalLink, ImagePlus, Instagram, Link2, Loader2, MoreHorizontal, RefreshCw, ScanEye } from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, ExternalLink, ImagePlus, Instagram, Link2, Loader2, MoreHorizontal, RefreshCw, ScanEye } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -10,7 +10,7 @@ import { useLargo } from "@/components/sistema/AreaDeTrabalho";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, etiqueta, foco, juntar, texto } from "@/components/sistema/estilos";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { avisarCustoReal, useAvisarErro } from "@/components/mesa/Custo";
 import { supabase } from "@/integrations/supabase/client";
@@ -83,7 +83,7 @@ function CartaoDoPost({ post, url, escolhido, onEscolher }: { post: PostDoPerfil
             <Check className="h-3 w-3" />
           </span>
         )}
-        <span className="pointer-events-none absolute bottom-1 right-1 rounded bg-background/80 px-1 text-[10px] tabular-nums text-foreground">{post.ref}</span>
+        <span className="pointer-events-none absolute bottom-1 right-1 rounded bg-background/80 px-1 text-[11px] tabular-nums text-foreground">{post.ref}</span>
       </div>
       <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{linha || "sem leitura"}</p>
     </li>
@@ -187,6 +187,11 @@ export default function PerfilAberto({
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [agenteAberto, setAgenteAberto] = useState(false);
+  // A lateral do agente recolhe para o lado (28/09, dono: "laterais recolhem
+  // para o lado"), numa tirinha fina, como a da AreaDeTrabalho. Aqui não dá
+  // para usar a AreaDeTrabalho: o perfil mora dentro do Contexto da Mesa, que
+  // já é uma. A escolha fica guardada (vale para todos os perfis).
+  const [agenteRecolhido, setAgenteRecolhido] = useEstadoDaTela<boolean>("mesa:perfis:agente-recolhido", false, { validar: (v) => typeof v === "boolean" });
 
   const consulta = useQuery({
     queryKey: chaveDoPerfil(clientId, perfil.id),
@@ -322,7 +327,7 @@ export default function PerfilAberto({
         </DropdownMenu>
       </div>
 
-      <div className={juntar("mt-3 min-w-0", largo ? "grid grid-cols-[minmax(0,1fr)_340px] gap-5 xl:grid-cols-[minmax(0,1fr)_380px]" : "")}>
+      <div className={juntar("mt-3 min-w-0", largo ? (agenteRecolhido ? "grid grid-cols-[minmax(0,1fr)_32px] gap-3" : "grid grid-cols-[minmax(0,1fr)_340px] gap-5 xl:grid-cols-[minmax(0,1fr)_380px]") : "")}>
         <div className="min-w-0">
           {consulta.isLoading && !dados ? (
             <Carregando forma="grade" linhas={2} rotulo="Carregando os posts" />
@@ -335,7 +340,7 @@ export default function PerfilAberto({
                   {ROTULOS_DO_RESUMO.filter(([k]) => resumo[k]).map(([k, rotulo]) => (
                     <div key={k} className="min-w-0">
                       <dt className={texto.rotulo}>{rotulo}</dt>
-                      <dd className="mt-0.5 text-[12.5px] leading-5 text-foreground [overflow-wrap:anywhere]">{String(resumo[k])}</dd>
+                      <dd className="mt-0.5 text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{String(resumo[k])}</dd>
                     </div>
                   ))}
                 </dl>
@@ -386,7 +391,7 @@ export default function PerfilAberto({
                       type="button"
                       aria-pressed={filtros.fora}
                       onClick={() => setFiltros({ ...filtros, fora: !filtros.fora })}
-                      className={juntar(filtros.fora ? botao.primario : botao.secundario, "mb-2 h-9")}
+                      className={juntar(botao.secundario, "mb-2 h-9", filtros.fora && "border-primary bg-primary/10 text-primary hover:bg-primary/15")}
                     >
                       Fora da curva
                     </button>
@@ -413,7 +418,34 @@ export default function PerfilAberto({
             </>
           )}
         </div>
-        {largo && <div className="h-[500px] min-w-0 lg:sticky lg:top-0 desk:h-[640px]">{agente}</div>}
+        {largo && (agenteRecolhido ? (
+          <aside aria-label="Agente do perfil" className="h-[500px] min-w-0 lg:sticky lg:top-0 desk:h-[640px]" data-lateral-recolhida="">
+            <button
+              type="button"
+              onClick={() => setAgenteRecolhido(false)}
+              aria-label="Abrir agente do perfil"
+              title="Abrir agente do perfil"
+              className={juntar("toque-compacto flex h-full w-8 flex-col items-center rounded-md border-l border-border/60 pt-2 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground", foco)}
+            >
+              <Bot className="h-4 w-4" aria-hidden="true" />
+              <span className="mt-3 text-[11px] font-medium" style={{ writingMode: "vertical-rl" }}>Agente do perfil</span>
+            </button>
+          </aside>
+        ) : (
+          <div className="relative h-[500px] min-w-0 lg:sticky lg:top-0 desk:h-[640px]">
+            {/* No vão entre as colunas (20 px), nunca por cima do agente. */}
+            <button
+              type="button"
+              onClick={() => setAgenteRecolhido(true)}
+              aria-label="Recolher agente do perfil"
+              title="Recolher agente do perfil"
+              className={juntar(botao.icone, "absolute -left-5 top-0 h-8 w-5")}
+            >
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            {agente}
+          </div>
+        ))}
       </div>
 
       {!largo && (

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
+import { useArquivosAoVivo } from "@/hooks/useArquivosAoVivo";
 
 const CLIENT_SAFE_FILE_SELECT = `
   id,
@@ -293,6 +294,8 @@ export function useMilestones(projectId?: string) {
 
 export function useFiles(projectId?: string, clientId?: string) {
   const { user } = useAuth();
+  // Frente AP: o que a equipe envia (aprovação ou Arquivos) aparece na hora; os 20 s ficam como rede.
+  useArquivosAoVivo(clientId, projectId, !!user);
   return useQuery({
     queryKey: ["files", user?.id, projectId, clientId],
     queryFn: async () => {

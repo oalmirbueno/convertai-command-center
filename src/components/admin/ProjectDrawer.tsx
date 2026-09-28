@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit3, Trash2, ExternalLink, Eye, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
-import { SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
+import { Secao, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { ProjectPipelineChecklist } from "./ProjectPipeline";
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
@@ -155,8 +155,8 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-5">
           {/* Header */}
           <DialogHeader className="space-y-0.5 text-left">
-            <DialogTitle className={juntar(texto.tituloPagina, "pr-8 text-[18px]")}>{project.name}</DialogTitle>
-            <p className={texto.auxiliar}>
+            <DialogTitle className={juntar(texto.tituloPagina, "truncate pr-8")} title={project.name}>{project.name}</DialogTitle>
+            <p className={juntar(texto.auxiliar, "truncate")}>
               {[project.client?.company_name || project.client?.full_name, project.project_type?.replace("_", " ")].filter(Boolean).join(" · ")}
             </p>
           </DialogHeader>
@@ -250,8 +250,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
           )}
 
           {/* Milestones */}
-          <div className="mt-5 border-t border-border pt-4">
-            <p className={juntar(texto.rotulo, "mb-2")}>Marcos</p>
+          <Secao titulo="Marcos" nivel={3} divisoria className="mt-5" descricao={milestones && milestones.length > 0 ? `${milestones.length} ${milestones.length === 1 ? "marco" : "marcos"}` : undefined}>
             {(!milestones || milestones.length === 0) ? (
               <p className={texto.auxiliar}>Nenhum milestone cadastrado</p>
             ) : (
@@ -275,7 +274,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
                 ))}
               </ul>
             )}
-          </div>
+          </Secao>
         </div>
 
         {/* Ações no pé: nenhuma ocupa uma linha sozinha. */}

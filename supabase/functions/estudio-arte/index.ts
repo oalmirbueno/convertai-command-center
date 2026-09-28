@@ -416,6 +416,7 @@ import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../
 // Frente MF (27/09): post de fotos da Mesa Foto no fluxo das artes (entrega, Agenda, aprovação).
 import { ehPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts";
+import { acoesDaPublicacaoDaPeca, dataDoConteudo, type TrabalhoDaPublicacao } from "./publicacao-da-peca.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
 import {
   aplicarArquivosNasLaminas,
@@ -6760,7 +6761,10 @@ async function levarParaAgenda(ch: Chamador, t: Trabalho): Promise<ResumoDaAgend
   let r: ResultadoDaSincronizacao | null = null;
   let aviso: string | null = null;
   try {
-    r = await sincronizarPecaNaAgenda(contextoDaAgenda(ch), t);
+    // Frente AP (28/09): a publicação nasce na data do conteúdo (dia da pauta + melhor horário),
+    // planejada até a aprovação; a data confirmada pelo dono vale mais. Pauta passada: sem data.
+    const naData = t.publicar_em_confirmado_em && t.publicar_em ? t.publicar_em : await dataDoConteudo(servico(), t, agora).catch(() => null);
+    r = await sincronizarPecaNaAgenda(contextoDaAgenda(ch), t, { quando: naData });
     aviso = r.aviso;
   } catch (e) {
     aviso = e instanceof ErroDaAgenda ? e.message : "A Agenda não respondeu. Use Levar para a Agenda.";
@@ -6854,7 +6858,9 @@ async function publicacaoConfirmar(ch: Chamador, corpo: Record<string, unknown>,
   const ferramenta = agoraMesmo ? "estudio_publicar_agora" : "estudio_confirmar_publicacao";
   let r;
   try {
-    r = await confirmarDataDaPeca(contextoDaAgenda(ch), t, { quando: agoraMesmo ? null : texto(corpo.publicar_em, 40) || null, agoraMesmo, mutationId: crypto.randomUUID() }, agora);
+    // Frente AP: `perfis` (ids das contas) deixa o post com exatamente esses perfis na data.
+    const perfis = Array.isArray(corpo.perfis) ? corpo.perfis.map((x) => texto(x, 64)).slice(0, 10) : null;
+    r = await confirmarDataDaPeca(contextoDaAgenda(ch), t, { quando: agoraMesmo ? null : texto(corpo.publicar_em, 40) || null, agoraMesmo, mutationId: crypto.randomUUID(), perfis }, agora);
   } catch (e) {
     await auditarPublicacao(ch, ferramenta, t, { publicar_em: texto(corpo.publicar_em, 40) || null, erro: e instanceof Error ? e.message : "erro" }, false);
     comoErroDaAgenda(e);
@@ -6866,6 +6872,8 @@ async function publicacaoConfirmar(ch: Chamador, corpo: Record<string, unknown>,
     publicar_em_confirmado_por: ch.userId,
     publicar_em_desfeito_em: null,
     publicar_ao_aprovar: publicarAoAprovar,
+    // Frente AP: confirmar a data desfaz o "não vai postar" (coluna do SQL AP-01, quando existe).
+    ...("publicacao_dispensada_em" in (a as unknown as Record<string, unknown>) ? { publicacao_dispensada_em: null, publicacao_dispensada_por: null } : {}),
     agendado_para: r.quando,
     entrega_status: a.entrega_status === "aprovado" && r.status === "scheduled" ? "agendado" : a.entrega_status,
     entrega_aviso: a.entrega_status === "aprovado" || a.entrega_status === "agendado" ? null : a.entrega_aviso,
@@ -8563,6 +8571,16 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   rapida_arquivar: rapidaArquivar,
   // Frente MF: fotos_preparar (post de fotos da Mesa Foto, sem gerar arte).
   ...acoesDasFotosNaAgenda({ servico, garantirAcesso, json, erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem) }).acoes,
+  // Frente AP: perfis da peça, "não vai postar" e o pedido do cliente entendido (Jev, sem gerar).
+  ...acoesDaPublicacaoDaPeca({
+    json,
+    servico,
+    erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem),
+    trabalhoComAcesso: (ch, id) => trabalhoComAcesso(ch, id) as Promise<TrabalhoDaPublicacao>,
+    mutarTrabalho: (id, mudar) => mutarTrabalho(id, (t) => mudar(t as TrabalhoDaPublicacao)) as Promise<TrabalhoDaPublicacao>,
+    exigirQuemPublica,
+    contextoDaAgenda,
+  }).acoes,
 };
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */

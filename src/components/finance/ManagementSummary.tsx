@@ -225,7 +225,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
               </ul>
               <div className="mt-2 flex min-w-0 items-center border-t border-border pt-2.5">
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 font-medium")}>Lucro do mês</span>
-                <span className={juntar("shrink-0 text-[16px] font-semibold tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
+                <span className={juntar("shrink-0 text-[15px] font-semibold tabular-nums", result >= 0 ? "text-success" : "text-destructive")}>{fmt(result)}</span>
               </div>
 
               {grossReceived > 0 ? (
@@ -283,7 +283,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 {monthlyGoal && monthlyGoal > 0 ? (
                   <>
                     <div className="mt-1 flex min-w-0 items-baseline">
-                      <span className="text-[17px] font-semibold tabular-nums text-foreground">{fmt(operationalReceived)}</span>
+                      <span className="text-[15px] font-semibold tabular-nums text-foreground">{fmt(operationalReceived)}</span>
                       <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>de {fmt(monthlyGoal)}</span>
                       <span className={juntar("ml-auto shrink-0 pl-2 text-[12px] tabular-nums", goalProgress! >= 1 ? "text-success" : "text-muted-foreground")}>
                         {Math.round(goalProgress! * 100)}%
@@ -307,7 +307,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                   <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Ponto de equilíbrio</span>
                 </div>
                 <div className="mt-1 flex min-w-0 items-baseline">
-                  <span className="shrink-0 text-[17px] font-semibold tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
+                  <span className="shrink-0 text-[15px] font-semibold tabular-nums text-foreground">{fmt(breakEvenOperational)}</span>
                   <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>por mês · {fmt(breakEvenGross)} brutos</span>
                 </div>
                 <p className={juntar("mt-1 text-[12px] leading-4", operationalReceived >= breakEvenOperational ? "text-success" : "text-warning")}>
@@ -326,7 +326,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                   </AjudaRecolhida>
                 </div>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center">
-                  <span className="mr-2 text-[17px] font-semibold tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
+                  <span className="mr-2 text-[15px] font-semibold tabular-nums text-foreground">{fmt(proLaboreProp)}</span>
                   <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Oficial {fmt(proLabore)}</span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-1 truncate")}>
@@ -384,7 +384,7 @@ function Linha({ icone, rotulo, apoio, ajuda, valor, corDoValor = "text-muted-fo
           <span className={juntar("min-w-0 text-[13px] leading-5", forte ? "font-medium text-foreground" : "text-muted-foreground")}>{rotulo}</span>
           {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
         </div>
-        {apoio && <p className="truncate text-[11.5px] leading-4 text-muted-foreground">{apoio}</p>}
+        {apoio && <p className="truncate text-[12px] leading-4 text-muted-foreground">{apoio}</p>}
       </div>
       <span className={juntar("shrink-0 text-[13px] leading-5 tabular-nums", forte && !corDoValor.includes("success") ? "text-foreground" : corDoValor)}>{valor}</span>
     </li>

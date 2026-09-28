@@ -170,7 +170,7 @@ function CartaoDoPost({ post, posicao }: { post: SocialPostMetric; posicao: numb
             }}
           />
         ) : null}
-        <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
+        <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
           {posicao}º · {formatoDoPost(post.media_type)}
         </span>
       </div>
@@ -380,8 +380,8 @@ function ClientMetricsDetail({
               descricao={
                 <span className="block truncate">
                   {evolucao
-                    ? `Leitura da Mesa de ${new Date(evolucao.criadoEm).toLocaleDateString("pt-BR")}.`
-                    : "A Mesa ainda não leu este cliente."}
+                    ? `Leitura da Mesa de ${new Date(evolucao.criadoEm).toLocaleDateString("pt-BR")}`
+                    : "A Mesa ainda não leu este cliente"}
                 </span>
               }
               ajuda="Os números da semana, a leitura de evolução da Mesa e os anúncios, cada linha com o número que a gerou. Com duas semanas coletadas ou uma leitura da Mesa, o conselho aparece."
@@ -496,7 +496,7 @@ function ClientMetricsDetail({
                 </>
               )}
               {daMesa && daMesa.somado.explicacao && (
-                <p className={juntar(superficie.poco, "mt-3 px-3 py-2 text-[12.5px] leading-5 text-foreground")}>
+                <p className={juntar(superficie.poco, "mt-3 px-3 py-2 text-[13px] leading-5 text-foreground")}>
                   <span className="font-semibold">Somado pela Mesa: </span>
                   {daMesa.somado.alcance_aprox != null ? `alcance aproximado ${formatMetricNumber(daMesa.somado.alcance_aprox)} · ` : ""}
                   {`${formatMetricNumber(daMesa.somado.interacoes)} interações · ${dinheiro(daMesa.somado.investimento)} investidos. `}
@@ -555,7 +555,7 @@ function ClientMetricsDetail({
                               />
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[12.5px] text-foreground">{post.caption?.trim() || "(sem legenda)"}</p>
+                              <p className="truncate text-[13px] text-foreground">{post.caption?.trim() || "(sem legenda)"}</p>
                               <p className={juntar(texto.auxiliar, "truncate")}>
                                 {formatoDoPost(post.media_type)}
                                 {post.posted_at ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}` : ""}
@@ -740,18 +740,16 @@ export default function AdminMetricas() {
               : `${plural(byAccount.length, "conta", "contas")} de Instagram · coleta semanal`
         }
         ajuda="O Instagram de cada cliente, os anúncios somados e o conselho da Mesa. Toque numa conta para abrir o dossiê. O robô coleta sozinho toda semana; Atualizar agora apressa."
-        acoes={botaoAtualizar}
+        acoes={
+          <>
+            {/* A busca mora na linha do título (nada de linha própria). */}
+            {byAccount.length > 6 && (
+              <CampoDeBusca valor={search} onMudar={setSearch} placeholder="Buscar cliente ou @perfil" rotulo="Buscar cliente" className="w-40 sm:w-60" />
+            )}
+            {botaoAtualizar}
+          </>
+        }
       />
-
-      {byAccount.length > 6 && (
-        <CampoDeBusca
-          valor={search}
-          onMudar={setSearch}
-          placeholder="Buscar cliente ou @perfil"
-          rotulo="Buscar cliente"
-          className="w-full sm:w-72"
-        />
-      )}
 
       <AreaDeTrabalho key="lista" memoriaDaRolagem="metricas:lista" rotuloDoPrincipal="Métricas por conta">
         <div className="min-w-0 space-y-5">
@@ -764,7 +762,7 @@ export default function AdminMetricas() {
               <EstadoVazio
                 icone={<TrendingUp className="h-5 w-5" />}
                 titulo="Nenhuma métrica coletada ainda."
-                descricao="Atualizar agora pede a coleta das contas de Instagram conectadas; depois o robô coleta sozinho toda semana."
+                descricao="Atualizar agora pede a coleta; depois o robô coleta toda semana."
               />
             )
           ) : (

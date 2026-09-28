@@ -13,6 +13,7 @@ import {
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AjudaRecolhida } from "@/components/sistema";
 import ApprovedMediaPicker, { AssetPreview } from "@/components/editorial/ApprovedMediaPicker";
 import { EditorialFileThumbnail } from "@/components/editorial/EditorialCalendarViews";
 import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
@@ -113,6 +114,8 @@ interface SelectedExistingPlanSnapshot {
   postVersion: number;
   planFingerprint: string;
   accountIds: string[];
+  /** Frente AP: só as contas já agendadas ou publicadas ficam presas; a planejada (post do Estúdio) troca. */
+  lockedAccountIds?: string[];
 }
 
 const EMPTY_IDS: readonly string[] = [];
@@ -152,8 +155,9 @@ function isSchedulablePost(bundle: EditorialPostBundle) {
     bundle.publicationSetComplete &&
     activePlans.every(
       ({ publication, internal, file }) =>
+        // Frente AP: planejada COM data (post do Estúdio na data do conteúdo)
+        // também é livre para agendar; só agendada/publicada não é.
         publication.status === "planned" &&
-        !publication.scheduled_at &&
         Boolean(internal?.idempotency_key) &&
         isFilePublishable(publication.file_id ? file : bundle.primaryFile),
     )
@@ -292,8 +296,8 @@ export default function EditorialScheduleDialog({
     [options?.files],
   );
   const lockedAccountIds = useMemo(
-    () => new Set(selectedExistingPlan?.accountIds || []),
-    [selectedExistingPlan?.accountIds],
+    () => new Set(selectedExistingPlan?.lockedAccountIds || selectedExistingPlan?.accountIds || []),
+    [selectedExistingPlan?.lockedAccountIds, selectedExistingPlan?.accountIds],
   );
   const unavailableAccountIds = useMemo(
     () =>
@@ -341,6 +345,15 @@ export default function EditorialScheduleDialog({
     const accountIds = activePlans.map(
       ({ publication }) => publication.external_account_id,
     );
+    const lockedIds = activePlans
+      .filter(({ publication }) => publication.status !== "planned")
+      .map(({ publication }) => publication.external_account_id);
+    // Frente AP: o post do Estúdio já tem a data do conteúdo: o horário abre nela.
+    const dataDoPlano = activePlans.find(({ publication }) => publication.status === "planned" && publication.scheduled_at);
+    if (dataDoPlano) {
+      const local = isoUtcToZonedDateTimeLocal(dataDoPlano.publication.scheduled_at as string, EDITORIAL_DEFAULT_TIME_ZONE);
+      if (local && Date.parse(dataDoPlano.publication.scheduled_at as string) > Date.now()) setScheduledAt(local);
+    }
     setSelectedExistingPlan(
       existing
         ? {
@@ -350,6 +363,7 @@ export default function EditorialScheduleDialog({
               existing.publications,
             ),
             accountIds,
+            lockedAccountIds: lockedIds,
           }
         : null,
     );
@@ -501,9 +515,13 @@ export default function EditorialScheduleDialog({
           completePost?.publications || [],
         ).map((bundle) => [bundle.publication.external_account_id, bundle]),
       );
+      // Frente AP: a conta planejada que a pessoa desmarcou sai (o save da
+      // Agenda cancela a planejada que não vem); agendada ou publicada fica.
       const completeAccountIds = new Set([
         ...selectedAccountIds,
-        ...existingPublicationByAccountId.keys(),
+        ...[...existingPublicationByAccountId.entries()]
+          .filter(([, bundle]) => bundle.publication.status !== "planned")
+          .map(([accountId]) => accountId),
       ]);
       // A conta tem conexão oficial com automação LIGADA? Sem isto o payload
       // declarava "automatic" olhando só a quantidade de arquivos, e o banco
@@ -632,13 +650,19 @@ export default function EditorialScheduleDialog({
       <Dialog open={open} onOpenChange={requestOpenChange}>
       <DialogContent className="bottom-[max(0.5rem,env(safe-area-inset-bottom))] top-[max(0.5rem,env(safe-area-inset-top))] flex w-[calc(100vw-1rem)] max-w-5xl translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:bottom-auto sm:top-1/2 sm:max-h-[calc(100dvh-3rem)] sm:translate-y-[-50%]">
         <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-4 pr-12 text-left sm:px-6 sm:py-5">
-          <DialogTitle className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <CalendarCheck2 className="h-4 w-4" aria-hidden="true" />
-            </span>
-            Agendar publicação
-          </DialogTitle>
-          <DialogDescription>
+          <div className="flex items-center">
+            <DialogTitle className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <CalendarCheck2 className="h-4 w-4" aria-hidden="true" />
+              </span>
+              Agendar publicação
+            </DialogTitle>
+            <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
+              Escolha o conteúdo. Conta e horário são registrados
+              juntos, sem misturar com a criação editorial.
+            </AjudaRecolhida>
+          </div>
+          <DialogDescription className="sr-only">
             Escolha o conteúdo. Conta e horário são registrados
             juntos, sem misturar com a criação editorial.
           </DialogDescription>
@@ -647,7 +671,7 @@ export default function EditorialScheduleDialog({
               <div
                 key={step.label}
                 className={cn(
-                  "flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-2 text-[10px] font-medium sm:justify-start sm:px-2.5",
+                  "flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-2 text-[11px] font-medium sm:justify-start sm:px-2.5",
                   readySteps[index]
                     ? "border-primary/25 bg-primary/[0.06] text-foreground"
                     : "border-border bg-muted/20 text-muted-foreground",
@@ -665,7 +689,7 @@ export default function EditorialScheduleDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
-          <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+          <section className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="schedule-client">Cliente</Label>
               <Select
@@ -727,12 +751,12 @@ export default function EditorialScheduleDialog({
           </section>
 
           {!clientId || !projectId ? (
-            <div className="mt-4 rounded-xl border border-dashed border-border px-4 py-10 text-center">
+            <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-10 text-center">
               <Settings2 className="mx-auto h-6 w-6 text-muted-foreground" />
-              <p className="mt-2 text-sm font-medium text-foreground">
+              <p className="mt-2 text-[13px] font-medium text-foreground">
                 Comece pelo cliente e projeto
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-[12px] text-muted-foreground">
                 Assim o painel busca apenas conteúdos e contas do lugar certo.
               </p>
             </div>
@@ -744,13 +768,13 @@ export default function EditorialScheduleDialog({
           ) : optionsFailed || schedulingPosts.isError ? (
             <div
               role="alert"
-              className="mt-4 flex flex-col items-center rounded-xl border border-destructive/25 bg-destructive/5 px-5 py-10 text-center"
+              className="mt-4 flex flex-col items-center rounded-lg border border-destructive/25 bg-destructive/5 px-5 py-10 text-center"
             >
               <AlertCircle className="h-6 w-6 text-destructive" />
-              <p className="mt-2 text-sm font-medium text-foreground">
+              <p className="mt-2 text-[13px] font-medium text-foreground">
                 Não foi possível carregar o material para agendamento
               </p>
-              <p className="mt-1 max-w-lg text-xs text-muted-foreground">
+              <p className="mt-1 max-w-lg text-[12px] text-muted-foreground">
                 {optionsError instanceof Error
                   ? optionsError.message
                   : "Atualize os conteúdos e tente novamente."}
@@ -770,11 +794,11 @@ export default function EditorialScheduleDialog({
               </Button>
             </div>
           ) : (
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)]">
-              <section className="min-w-0 rounded-xl border border-border bg-card p-4">
+            <div className="mt-5 grid gap-x-8 gap-y-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)]">
+              <section className="min-w-0">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">
+                  <div className="flex min-w-0 items-center">
+                    <h3 className="min-w-0 truncate text-[15px] font-semibold text-foreground">
                       Conteúdo
                     </h3>
                     {/* O título dizia "Conteúdo aprovado" e a lista sempre
@@ -782,16 +806,16 @@ export default function EditorialScheduleDialog({
                         agendamento, não da seleção. Do jeito antigo, quem
                         procurava uma arte em revisão concluía que ela não
                         estava lá. */}
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <AjudaRecolhida className="ml-1.5" rotulo="O que aparece aqui">
                       Aprovados e em produção. A busca considera título, legenda e todos os slides.
-                    </p>
+                    </AjudaRecolhida>
                   </div>
                   <Badge variant="secondary">
                     {libraryAssets.length} disponíve{libraryAssets.length === 1 ? "l" : "is"}
                   </Badge>
                 </div>
                 {selectedAsset && !showLibrary ? (
-                  <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-3">
+                  <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
                     <div className="flex min-w-0 items-start gap-3">
                       {/* A ARTE, não um ícone genérico. O card é a confirmação
                           visual de que a peça certa foi escolhida — com um
@@ -801,7 +825,7 @@ export default function EditorialScheduleDialog({
                         <AssetPreview asset={selectedAsset} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        <span className="block text-[11px] font-semibold text-primary">
                           Conteúdo escolhido
                         </span>
                         {/* Duas linhas em vez de corte: no celular o nome
@@ -860,7 +884,7 @@ export default function EditorialScheduleDialog({
                         título e plano de contas: escolher ele é escolher tudo. */}
                     {schedulablePosts.length > 0 && (
                       <div className="mb-3">
-                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="mb-2 text-[12px] font-medium text-muted-foreground">
                           Prontos no calendário — um clique
                         </p>
                         {/* Rolagem própria: com dezenas de prontos, a lista
@@ -877,17 +901,17 @@ export default function EditorialScheduleDialog({
                                 key={bundle.post.id}
                                 type="button"
                                 onClick={() => selectAsset(asset)}
-                                className="flex min-h-[60px] items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
+                                className="flex min-h-[60px] items-center gap-2.5 rounded-lg border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
                               >
                                 <EditorialFileThumbnail
                                   post={bundle}
                                   className="h-12 w-12 shrink-0"
                                 />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block line-clamp-2 text-[12.5px] font-medium leading-snug text-foreground">
+                                  <span className="block line-clamp-2 text-[13px] font-medium leading-snug text-foreground">
                                     {bundle.post.title}
                                   </span>
-                                  <span className="block truncate text-[10.5px] text-muted-foreground">
+                                  <span className="block truncate text-[11px] text-muted-foreground">
                                     Arte e contas já definidas · só falta a data
                                   </span>
                                 </span>
@@ -928,14 +952,14 @@ export default function EditorialScheduleDialog({
                 )}
               </section>
 
-              <div className="min-w-0 space-y-4">
-                <section className="rounded-xl border border-border bg-card p-4">
+              <div className="min-w-0 space-y-5">
+                <section className="min-w-0">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[15px] font-semibold text-foreground">
                         Contas deste projeto
                       </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 truncate text-[12px] text-muted-foreground">
                         {selectedClientName} · {selectedProjectName}
                       </p>
                     </div>
@@ -1080,7 +1104,7 @@ export default function EditorialScheduleDialog({
                   )}
                 </section>
 
-                <section className="rounded-xl border border-border bg-card p-4">
+                <section className="border-t border-border pt-5">
                   <div className="space-y-2">
                     <Label htmlFor="schedule-date-time">Data e horário</Label>
                     <Input
@@ -1095,7 +1119,7 @@ export default function EditorialScheduleDialog({
                       }}
                       className="h-11"
                     />
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[11px] text-muted-foreground">
                       Fuso: Brasília · o status será registrado como agendado.
                     </p>
                   </div>

@@ -238,7 +238,7 @@ export default function AgendaComercial({
                       <span
                         aria-hidden="true"
                         className={juntar(
-                          "mt-0.5 w-full truncate rounded px-1 text-[10px] font-medium leading-4 tabular-nums",
+                          "mt-0.5 w-full truncate rounded px-1 text-[11px] font-medium leading-4 tabular-nums",
                           temAtraso ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
                         )}
                       >

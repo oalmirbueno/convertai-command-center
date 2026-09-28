@@ -477,7 +477,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
                 <article key={plan.id} className={juntar(superficie.painel, "flex min-w-0 flex-col")}>
                   <div className="flex min-w-0 items-start px-4 pt-4">
                     <div className="mr-2 min-w-0 flex-1">
-                      <h3 className="truncate text-[14px] font-semibold text-foreground">{plan.name}</h3>
+                      <h3 className="truncate text-[13px] font-semibold text-foreground">{plan.name}</h3>
                       {plan.description && <p className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2 leading-4")}>{plan.description}</p>}
                     </div>
                     {needsReview && (

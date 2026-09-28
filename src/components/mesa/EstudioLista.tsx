@@ -46,8 +46,9 @@ export interface FontesDaLista {
 }
 
 /** Largura do cartão na faixa (px). A capa é 4:5, com altura pela largura. */
-export const LARGURA_DO_CARTAO = 212;
-const LARGURA_DA_CAPA = 44;
+// Frente AE-3 (dono, 28/09: "faixa de pautas mais baixa, sem cartão alto"): cartão de uma linha de título e capa pequena.
+export const LARGURA_DO_CARTAO = 200;
+const LARGURA_DA_CAPA = 28;
 
 const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
 
@@ -135,7 +136,7 @@ function CartaoDoItem({
       title={item.title}
       data-item-id={item.id}
       style={{ width: LARGURA_DO_CARTAO }}
-      className={`flex min-w-0 items-center rounded-lg border px-2 py-1.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`flex min-w-0 items-center rounded-lg border px-1.5 py-1 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         selecionando && marcado
           ? "border-destructive bg-destructive/5 ring-1 ring-destructive"
           : ativo
@@ -162,26 +163,24 @@ function CartaoDoItem({
         </span>
       )}
       <span className="ml-2 min-w-0 flex-1">
-        <span className="flex min-w-0 items-center text-[10.5px] leading-4 text-muted-foreground">
-          <span className="min-w-0 flex-1 truncate">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
+        <span className="block truncate text-[12px] font-medium leading-4 text-foreground">{item.title}</span>
+        <span className="mt-0.5 flex min-w-0 items-center text-[10.5px] leading-4 text-muted-foreground">
+          <span className="min-w-0 truncate">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
           {roteiro && (
             <span title={DICA_DO_ROTEIRO} className="ml-1 shrink-0">
               <Star className="h-3 w-3 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />
             </span>
           )}
-        </span>
-        <span className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-[1.3] text-foreground [overflow-wrap:anywhere]">{item.title}</span>
-        <span className="mt-1 flex min-w-0 items-center">
-          <SeloDoItem tom={situacao.tom}>{situacao.rotulo}</SeloDoItem>
+          <SeloDoItem tom={situacao.tom} className="ml-1.5 shrink-0">{situacao.rotulo}</SeloDoItem>
           {/* Frente AE-2: a pauta parecida é um ícone (o texto fica no título), não mais um selo a mais. */}
           {parecidaCom.length > 0 && (
             <span
               title={`Parecida com outra no mesmo dia: ${parecidaCom.join("; ")}. Veja se é duplicada e arquive a que não quer.`}
               aria-label="Parecida com outra no mesmo dia"
-              className="ml-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+              className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
               data-parecida=""
             >
-              <Copy className="h-3 w-3" />
+              <Copy className="h-2.5 w-2.5" />
             </span>
           )}
         </span>
@@ -193,7 +192,7 @@ function CartaoDoItem({
         onClick={() => onArquivar(item.id)}
         aria-label={`Arquivar ${item.title}`}
         title="Arquivar: sai da faixa, do mês e da fila (dá para desfazer)"
-        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         data-arquivar-pauta={item.id}
       >
         <Archive className="h-3.5 w-3.5" />
@@ -300,9 +299,9 @@ export default function EstudioLista({
   }, [tarefaId, filtrados.length, recolhida, filtro, janela, semanaDeHoje]);
 
   const topo = (
-    <div className="flex min-w-0 flex-wrap items-center px-3 py-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-1">
       {inicio}
-      <div className="mb-1 mr-2 mt-1 w-[168px] shrink-0">
+      <div className="w-[160px] shrink-0">
         <Select value={janela} onValueChange={onJanela}>
           <SelectTrigger className="h-8 min-w-0 text-[12.5px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
@@ -315,7 +314,7 @@ export default function EstudioLista({
           </SelectContent>
         </Select>
       </div>
-      <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="tablist" aria-label="Filtro das pautas">
+      <div className="grid h-8 shrink-0 grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5" role="tablist" aria-label="Filtro das pautas">
         {FILTROS_DO_ESTUDIO.map((f) => (
           <button
             key={f.valor}
@@ -324,18 +323,18 @@ export default function EstudioLista({
             onClick={() => onFiltro(f.valor)}
             aria-selected={filtro === f.valor}
             title={f.dica}
-            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-[11.5px] transition-colors ${
-              filtro === f.valor ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[11.5px] transition-colors ${
+              filtro === f.valor ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <span>{f.rotulo}</span>
-            <span className={`ml-1 tabular-nums ${filtro === f.valor ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{contagem[f.valor]}</span>
+            <span className="ml-1 tabular-nums text-muted-foreground">{contagem[f.valor]}</span>
           </button>
         ))}
       </div>
       {/* Faixa recolhida: a pauta troca por um seletor na própria barra (o que não cabe vira seletor, pedido do dono). */}
       {recolhida && filtrados.length > 0 && (
-        <div className="mb-1 mr-2 mt-1 w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
+        <div className="w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
           <Select value={tarefaId && filtrados.some((i) => i.id === tarefaId) ? tarefaId : ""} onValueChange={onEscolher}>
             <SelectTrigger className="h-8 min-w-0 text-[12.5px]" aria-label="Pauta aberta">
               <SelectValue placeholder="Escolha a pauta" />
@@ -350,21 +349,21 @@ export default function EstudioLista({
           </Select>
         </div>
       )}
-      {atualizando && <Loader2 className="mb-1 mt-1 h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Atualizando" />}
+      {atualizando && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Atualizando" />}
       {/* À direita, alinhadas: selecionar para arquivar, Arquivados e recolher (quebra para a 2ª linha só se não couber). */}
       <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end">
       {arquivar && !recolhida && !selecionando && itens.length > 0 && (
         <button
           type="button"
           onClick={() => setSelecionando(true)}
-          className="mb-1 mt-1 flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
           title="Marcar várias pautas para arquivar de uma vez"
         >
           <ListChecks className="mr-1 h-4 w-4" /> Selecionar
         </button>
       )}
       {arquivar && selecionando && (
-        <span className="mb-1 mt-1 flex shrink-0 items-center" role="group" aria-label="Arquivar as marcadas">
+        <span className="flex shrink-0 items-center" role="group" aria-label="Arquivar as marcadas">
           <button
             type="button"
             onClick={() => {
@@ -388,12 +387,13 @@ export default function EstudioLista({
         <button
           type="button"
           onClick={() => onRecolher(!recolhida)}
-          className="mb-1 mt-1 flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
           aria-expanded={!recolhida}
+          aria-label={recolhida ? "Mostrar pautas" : "Recolher pautas"}
           title={recolhida ? "Mostrar as pautas" : "Recolher as pautas e dar mais altura ao estúdio"}
+          data-recolher-pautas=""
         >
-          {recolhida ? <PanelTopOpen className="mr-1 h-4 w-4" /> : <PanelTopClose className="mr-1 h-4 w-4" />}
-          {recolhida ? "Mostrar pautas" : "Recolher"}
+          {recolhida ? <PanelTopOpen className="h-4 w-4" /> : <PanelTopClose className="h-4 w-4" />}
         </button>
       )}
       </div>
@@ -402,32 +402,32 @@ export default function EstudioLista({
 
   const avisos = (
     <>
-      {carregando && <p className="px-3 pb-3 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda…</p>}
-      {!!erro && <p className="mx-3 mb-3 rounded-lg bg-destructive/10 p-3 text-[12.5px] [overflow-wrap:anywhere]">{textoDoErro(erro)}</p>}
+      {carregando && <p className="pb-2 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda…</p>}
+      {!!erro && <p className="mb-2 rounded-lg bg-destructive/10 p-3 text-[12.5px] [overflow-wrap:anywhere]">{textoDoErro(erro)}</p>}
       {!carregando && !erro && itens.length === 0 && !itemFora && (
-        <p className="px-3 pb-3 text-[12.5px] leading-relaxed text-muted-foreground">
+        <p className="pb-2 text-[12.5px] leading-relaxed text-muted-foreground">
           {proximos ? "Nenhum carrossel ou post estático na agenda dos próximos 60 dias." : "Nenhum carrossel ou post estático na agenda deste mês."}{" "}
           Complete a agenda pela aba Mês.
         </p>
       )}
       {!carregando && itens.length > 0 && filtrados.length === 0 && !itemFora && (
-        <p className="px-3 pb-3 text-[12.5px] leading-relaxed text-muted-foreground">Nada neste filtro.</p>
+        <p className="pb-2 text-[12.5px] leading-relaxed text-muted-foreground">Nada neste filtro.</p>
       )}
     </>
   );
 
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card" aria-label="Pautas">
+    <section className="min-w-0" aria-label="Pautas" data-faixa-de-pautas={recolhida ? "recolhida" : "aberta"}>
       {topo}
       {!recolhida && (
         <>
           {avisos}
           {(semanas.length > 0 || itemFora) && (
-            <div ref={faixa} className="relative min-w-0 overflow-x-auto border-t border-border" aria-label="Pautas por semana">
-              <div className="inline-flex items-start px-3 pb-3 pt-2">
+            <div ref={faixa} className="relative min-w-0 overflow-x-auto" aria-label="Pautas por semana">
+              <div className="inline-flex items-start pb-1 pt-0.5">
                 {itemFora && (
-                  <div className="mr-4 flex shrink-0 flex-col">
-                    <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Aberto, fora do período</p>
+                  <div className="mr-3 flex shrink-0 flex-col">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Aberto, fora do período</p>
                     <CartaoDoItem item={itemFora} ativo={itemFora.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(itemFora)} />
                   </div>
                 )}
@@ -435,13 +435,13 @@ export default function EstudioLista({
                   const atual = s.semana === semanaDeHoje;
                   const passada = !!s.semana && s.semana < semanaDeHoje;
                   return (
-                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-4 border-r border-border pr-4" : ""}`}>
-                      <p className={`mb-1.5 whitespace-nowrap text-[10.5px] font-semibold uppercase tracking-wider ${atual ? "text-primary" : "text-muted-foreground"}`}>
+                    <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-3 border-r border-border pr-3" : ""}`}>
+                      <p className={`mb-1 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider ${atual ? "text-primary" : "text-muted-foreground"}`}>
                         {s.semana ? `${atual ? "Esta semana · " : passada ? "Já passou · " : ""}${rotuloDaSemana(s.semana)}` : "Sem data"}
                       </p>
                       <ul className="flex">
                         {s.itens.map((item, j) => (
-                          <li key={item.id} className={j < s.itens.length - 1 ? "mr-2" : ""}>
+                          <li key={item.id} className={j < s.itens.length - 1 ? "mr-1.5" : ""}>
                             <CartaoDoItem item={item} ativo={item.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(item)} />
                           </li>
                         ))}

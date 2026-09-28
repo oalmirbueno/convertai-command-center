@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
-import { X, Loader2, CalendarIcon } from "lucide-react";
+import { Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyOpsTaskCreated, notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
@@ -11,7 +11,8 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CampoDeEscolha, CampoDeFormulario, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import {
   TASK_WORKSTREAM_OPTIONS,
   type TaskWorkstream,
@@ -190,68 +191,46 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl w-full max-w-[480px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">{isEdit ? "Editar Tarefa" : "Nova Tarefa"}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    // Janela do sistema (Dialog): foco preso, Esc fecha, rola por dentro e as
+    // ações ficam presas no pé (SISTEMA.md seção 10).
+    // A confirmação de excluir abre no lugar da janela (a janela volta ao cancelar).
+    <>
+    <Dialog open={open && !confirmDelete} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="flex max-h-[88vh] max-w-[480px] flex-col overflow-hidden border-border bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 text-left">
+          <DialogTitle className={juntar(texto.tituloSecao, "truncate pr-8")}>{isEdit ? "Editar Tarefa" : "Nova Tarefa"}</DialogTitle>
+        </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              {isContentTask ? "Tema do conteúdo *" : "Título *"}
-            </label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={isContentTask ? "Tema que será desenvolvido" : "Nome da tarefa"}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5">
+          <CampoDeFormulario rotulo={isContentTask ? "Tema do conteúdo" : "Título"} obrigatorio>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={isContentTask ? "Tema que será desenvolvido" : "Nome da tarefa"} className={campo} />
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Projeto *</label>
-            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+          <CampoDeFormulario rotulo="Projeto" obrigatorio>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={campo}>
               <option value="">Selecionar projeto...</option>
               {activeProjects.map((p: any) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
           {projectId && (projectMilestones || []).length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestone</label>
-              <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+            <CampoDeFormulario rotulo="Milestone">
+              <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)} className={campo}>
                 <option value="">Sem milestone</option>
                 {(projectMilestones || []).map((m: any) => (
                   <option key={m.id} value={m.id}>{m.title}</option>
                 ))}
               </select>
-            </div>
+            </CampoDeFormulario>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              {isContentTask && !isEdit
-                ? "Contexto do conteúdo *"
-                : isContentTask
-                  ? "Contexto do conteúdo"
-                  : "Descrição"}
-            </label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={isContentTask ? "Explique o ângulo, objetivo e direção do conteúdo" : "Detalhes da tarefa..."}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-          </div>
+          <CampoDeFormulario rotulo={isContentTask ? "Contexto do conteúdo" : "Descrição"} obrigatorio={isContentTask && !isEdit}>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={isContentTask ? "Explique o ângulo, objetivo e direção do conteúdo" : "Detalhes da tarefa..."} className={juntar(campoTexto, "resize-none")} />
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label
-              htmlFor="task-delivery-type"
-              className="text-[11px] uppercase tracking-wider text-muted-foreground"
-            >
-              Tipo de entrega {!isEdit && "*"}
-            </label>
+          <CampoDeFormulario rotulo="Tipo de entrega" obrigatorio={!isEdit}>
             <select
               id="task-delivery-type"
               value={deliveryType}
@@ -262,7 +241,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
                   suggestedWorkstreamForDeliveryType(nextType),
                 );
               }}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+              className={campo}
             >
               {!deliveryType && (
                 <option value="">Selecionar tipo...</option>
@@ -278,54 +257,44 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
                   </option>
                 ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Prioridade</label>
-              <select value={priority} onChange={(e) => setPriority(e.target.value)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+            <CampoDeFormulario rotulo="Prioridade">
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} className={campo}>
                 {PRIORITIES.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
-            </div>
-            <div className="space-y-1.5">
-              <label
-                htmlFor="task-workstream"
-                className="text-[11px] uppercase tracking-wider text-muted-foreground"
-              >
-                Área
-              </label>
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Área">
               <select
                 id="task-workstream"
                 value={workstream}
                 onChange={(e) => setWorkstream(e.target.value as TaskWorkstream)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+                className={campo}
+              >
                 {TASK_WORKSTREAM_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-            </div>
+            </CampoDeFormulario>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Responsável</label>
-            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+          <CampoDeFormulario rotulo="Responsável">
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={campo}>
               <option value="">Nenhum</option>
               {teamMembers.map((m: any) => (
                 <option key={m.id} value={m.id}>{m.full_name}</option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Prazo</label>
+          <CampoDeEscolha rotulo="Prazo">
             <Popover>
               <PopoverTrigger asChild>
-                <button className={cn("w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-left flex items-center gap-2 hover:border-primary/50 transition-colors cursor-pointer", !dueDate && "text-muted-foreground")}>
-                  <CalendarIcon className="w-3.5 h-3.5" />
+                <button type="button" className={juntar(campo, "flex items-center text-left hover:border-primary/50", !dueDate && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {dueDate ? format(dueDate, "dd/MM/yyyy") : "Selecionar prazo"}
                 </button>
               </PopoverTrigger>
@@ -333,34 +302,35 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
                 <Calendar mode="single" selected={dueDate} onSelect={setDueDate} className="p-3 pointer-events-auto" />
               </PopoverContent>
             </Popover>
-          </div>
+          </CampoDeEscolha>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex justify-between">
+        <div className="flex shrink-0 items-center border-t border-border px-5 py-3">
           {isEdit && (
-            <button onClick={() => setConfirmDelete(true)} className="px-4 py-2 rounded-[10px] text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
+            <button type="button" onClick={() => setConfirmDelete(true)} className={botao.perigo}>
               Excluir
             </button>
           )}
-          <div className={`flex gap-3 ${isEdit ? "" : "ml-auto"}`}>
-            <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border">
+          <div className="ml-auto flex items-center [&>*+*]:ml-2">
+            <button type="button" onClick={onClose} disabled={saving} className={botao.secundario}>
               Cancelar
             </button>
-            <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-2">
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
+              {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
               {saving ? "Salvando..." : isEdit ? "Salvar" : "Criar Tarefa"}
             </button>
           </div>
         </div>
-      </div>
 
-      <ConfirmModal
-        open={confirmDelete}
-        title="Excluir tarefa"
-        description="Esta tarefa será removida permanentemente."
-        onConfirm={handleDelete}
-        onCancel={() => setConfirmDelete(false)}
-      />
-    </div>
+      </DialogContent>
+    </Dialog>
+    <ConfirmModal
+      open={confirmDelete}
+      title="Excluir tarefa"
+      description="Esta tarefa será removida permanentemente."
+      onConfirm={handleDelete}
+      onCancel={() => setConfirmDelete(false)}
+    />
+    </>
   );
 }

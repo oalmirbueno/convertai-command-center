@@ -64,22 +64,22 @@ type Metrica =
  * O que cada número conta está em `medir` abaixo e em src/components/sistema/regras.ts.
  */
 const TETO: Record<Metrica, number> = {
-  fonteForaDaEscala: 1980,
-  fonteComNomeDoTailwind: 483,
-  translucidoEmBloco: 27,
-  rolagemPresaNoCelular: 30,
-  rolagemDentroDeRolagem: 5,
+  fonteForaDaEscala: 1789, // L2 (Execução, Aprovações, Pedidos, Briefings): -6; L1: -49; L9: -47; L7 (Projetos, Kanban, Agenda, Timeline): -89
+  fonteComNomeDoTailwind: 353, // L2: -2; L1: -3; L9: -1; L7 (Projetos, Kanban, Agenda, Timeline): -124
+  translucidoEmBloco: 23, // L7 (Projetos, Kanban, Agenda, Timeline): -4
+  rolagemPresaNoCelular: 23, // L7 (Projetos, Kanban, Agenda, Timeline): -7
+  rolagemDentroDeRolagem: 4, // L7 (Projetos, Kanban, Agenda, Timeline): -1
   alturaFixaDaJanela: 2,
-  cartaoFeitoAMao: 196,
+  cartaoFeitoAMao: 172, // L2: -1; L1: -3; L9: -5; L7 (Projetos, Kanban, Agenda, Timeline): -15
   secaoEmCartao: 0,
-  cartaoDentroDeCartao: 128,
-  paragrafoFixo: 130,
-  descricaoExplicativa: 4,
-  cantoForaDoToken: 57,
+  cartaoDentroDeCartao: 69, // L1: -2; L9: -6; L7 (Projetos, Kanban, Agenda, Timeline): -51
+  paragrafoFixo: 101, // L2: -3; L1: -14; L9: -9; L7 (Projetos, Kanban, Agenda, Timeline): -3
+  descricaoExplicativa: 2, // L9: -2
+  cantoForaDoToken: 41, // L1: -3; L9: -2; L7 (Projetos, Kanban, Agenda, Timeline): -11
   tituloQueQuebra: 11,
-  sombraForte: 49,
-  caixaAlta: 251,
-  h1FeitoAMao: 15,
+  sombraForte: 42, // L7 (Projetos, Kanban, Agenda, Timeline): -7
+  caixaAlta: 165, // L1: -4; L9: -2; L7 (Projetos, Kanban, Agenda, Timeline): -80
+  h1FeitoAMao: 14, // L7 (Projetos, Kanban, Agenda, Timeline): -1
 };
 
 const METRICAS = Object.keys(TETO) as Metrica[];

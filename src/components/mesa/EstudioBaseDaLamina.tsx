@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Bookmark, ImagePlus, Link2, MoreHorizontal, Scissors, TriangleAlert, X } from "lucide-react";
 import { MenuDeContexto } from "@/components/ui/menu-de-contexto";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { fonteDaGlobal, fonteDaReferencia, PREFIXO_GLOBAL, useGlobaisPorIds, useReferenciasComDestaque } from "@/lib/mesa/referencias";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ImagemDeReferencia } from "./SeletorDeReferencias";
@@ -93,7 +94,7 @@ export function versaoRecompos(v: Pick<CardGerado, "modo" | "foto_recomposta"> |
   return !!v && v.modo === "replicar_referencia" && v.foto_recomposta === true;
 }
 
-const LARGURA = 36;
+const LARGURA = 28;
 
 /**
  * Miniatura com o X de tirar (pedido do dono em 25/09: "tirar imagem da
@@ -261,11 +262,11 @@ export default function EstudioBaseDaLamina({
   const doAcervo = card.imagens_ids || [];
   const acervo = useAcervo(doAcervo.length > 0);
   const fotoDoAcervo = doAcervo.length ? (acervo.data || []).find((i) => i.id === doAcervo[0]) || null : null;
-  // Frente AE-2 (dono, 28/09: "está tudo amontoado"): grupos com título, em grade; o painel recolhe.
-  // Recolhido por padrão quando a lâmina ainda não usa foto nem referência (a lâmina fica à vista; o resumo diz o que ela usa);
-  // com foto ou referência escolhida, abre para mostrar. A escolha da pessoa fica guardada.
+  // Frente AE-3 (dono, 28/09: "mais minimalista, moderno e compacto, sem tirar função"): uma linha só,
+  // sem caixas. Foto e referência viram ícones com dica; o link e o Arquivo ficam na mesma linha; a logo
+  // num seletor pequeno; a explicação do modo vai para o "?". Os avisos continuam à vista.
+  // Recolhido por padrão quando a lâmina ainda não usa foto nem referência; a escolha da pessoa fica guardada.
   const [recolhido, setRecolhido] = useRecolhido("mesa:estudio:base-da-lamina", !base.temFoto && !base.referencias.length);
-  const [comLink, setComLink] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const abrirMenu = (e: { currentTarget: EventTarget }) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -275,147 +276,126 @@ export default function EstudioBaseDaLamina({
     continuoSemModelo || (continuo && base.temFoto) || foraDoFundo || foraDaEmenda || base.fotoRecomposta || (versaoRecompos(versao) && !base.fotoRecomposta);
   const resumo = `${base.temFoto ? "com foto" : "sem foto"} · ${base.referencias.length ? `${base.referencias.length} referência(s)` : "sem referência"}`;
 
-  const titulo = (texto: string, acao?: ReactNode) => (
-    <div className="mb-2 flex h-6 min-w-0 items-center">
-      <p className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{texto}</p>
-      {acao}
-    </div>
-  );
-  const botaoEscolher = (onClick: () => void, icone: ReactNode, dica: string) => (
-    <button type="button" onClick={onClick} title={dica} className="inline-flex h-8 items-center rounded-md border border-dashed border-border px-2 text-[12px] text-muted-foreground hover:border-primary/50 hover:text-foreground">
-      {icone} escolher
+  // Ícone que abre a ferramenta (a dica diz o quê); com foto ou referência, as miniaturas vêm logo depois.
+  const botaoIcone = (onClick: () => void, icone: ReactNode, dica: string, dado: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={dica}
+      aria-label={dica}
+      className="mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+      data-abrir={dado}
+    >
+      {icone}
     </button>
   );
+  const separador = <span className="mx-1 hidden h-5 w-px shrink-0 bg-border sm:block" aria-hidden="true" />;
 
   return (
-    <div className="mb-2 min-w-0 shrink-0 rounded-lg border border-border bg-background px-3 py-2" aria-label="Base da próxima geração" data-base-da-lamina="">
-      <div className="flex min-w-0 items-center">
-        <div className="min-w-0 flex-1">
-          <TituloRecolhivel titulo="Base da lâmina" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
+    <div className="mb-2 min-w-0 shrink-0 border-b border-border/60 pb-1.5" aria-label="Base da próxima geração" data-base-da-lamina="">
+      <div className="flex min-w-0 flex-wrap items-center gap-y-1">
+        <div className="mr-2 min-w-0 shrink-0">
+          <TituloRecolhivel titulo="Base da lâmina" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={recolhido ? resumo : undefined} />
         </div>
+        {!recolhido && (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-y-1" data-grupos-da-base="">
+            {/* Foto: o ícone abre a ferramenta Fotos; cada miniatura tem o X de tirar. */}
+            <div className="flex min-w-0 items-center" aria-label="Foto da lâmina" data-grupo="foto">
+              {botaoIcone(onAbrirFotos, <ImagePlus className="h-4 w-4" />, "Foto desta lâmina (acervo, Mesa Foto, enviar)", "fotos")}
+              {fotoDoAcervo && (
+                <Removivel titulo={fotoDoAcervo.nome} onTirar={!bloqueado && onTirarFotoDoAcervo ? onTirarFotoDoAcervo : undefined} rotulo="Tirar a foto do acervo desta lâmina">
+                  <ImagemDaMesa caminho={fotoDoAcervo.storage_path} bucket={fotoDoAcervo.storage_bucket || "mesa"} alt={fotoDoAcervo.nome} className="h-full w-full" />
+                </Removivel>
+              )}
+              {livres.map((f) => {
+                const recortada = (f as { recortada?: boolean }).recortada === true;
+                const tituloDaFoto = f.papel === "fundo" ? "Fundo" : recortada ? "Elemento sem fundo" : "Elemento";
+                return (
+                  <Removivel
+                    key={f.caminho}
+                    titulo={tituloDaFoto}
+                    onTirar={!bloqueado && onTirarFoto ? () => onTirarFoto(f.caminho) : undefined}
+                    rotulo={`Tirar da lâmina: ${tituloDaFoto.toLowerCase()}`}
+                    marca={recortada ? <Scissors className="h-2.5 w-2.5" /> : null}
+                    xadrez={recortada}
+                  >
+                    <ImagemDaMesa caminho={f.caminho} alt={tituloDaFoto} className="h-full w-full" />
+                  </Removivel>
+                );
+              })}
+            </div>
+            {separador}
+            {/* Referência: o ícone abre a ferramenta Referências (cliente, banco, Pinterest). */}
+            <div className="flex min-w-0 items-center" aria-label="Referência da lâmina" data-grupo="referencia">
+              {botaoIcone(onAbrirReferencias, <Bookmark className="h-4 w-4" />, "Referência desta lâmina: 1 ou 2 (cliente, banco, Pinterest)", "referencias")}
+              {base.referencias.map((id) => (
+                <MiniDaReferencia key={id} id={id} onTirar={!bloqueado && base.daLamina && onTirarReferencia ? () => onTirarReferencia(id) : undefined} />
+              ))}
+              {base.referencias.length > 0 && !base.daLamina && <span className="mr-1 text-[11px] text-muted-foreground">(do conjunto)</span>}
+            </div>
+            {/* Link colado ou arquivo, na mesma linha (o campo e o botão Arquivo lado a lado). */}
+            {referenciaNaHora && (
+              <div className="mr-2 min-w-[200px] max-w-[300px] flex-1 [&>[data-referencia-na-hora]]:mt-0" data-grupo="link">
+                {referenciaNaHora}
+              </div>
+            )}
+            {separador}
+            {/* Marca: a logo do kit que o gerador desenha junto. */}
+            <div className="flex min-w-0 items-center" aria-label="Logo da lâmina" data-grupo="logo" title="Logo do kit que o gerador desenha junto com a arte">
+              <span className="mr-1.5 text-[11.5px] text-muted-foreground">Logo</span>
+              {logo ? logo : <span className="text-[11.5px] text-muted-foreground" title="A logo vai na capa e no fechamento">nesta não</span>}
+            </div>
+            <div className="ml-auto flex shrink-0 items-center pl-1">
+              <AjudaRecolhida rotulo="Como esta lâmina vai ser gerada" titulo="Como vai ser gerada" lado="bottom">
+                {DESCRICAO_DO_MODO[base.modo]}
+              </AjudaRecolhida>
+              <button type="button" onClick={abrirMenu} aria-haspopup="menu" aria-expanded={!!menu} aria-label="Mais opções de fotos e referências" className="ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground">
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
         {total ? <SeloDaSerie card={card} total={total} refsDoConjunto={refsDoConjunto} /> : null}
       </div>
-      {!recolhido && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]" data-grupos-da-base="">
-          {/* Fotos e referências: o que a lâmina usa, com o X para tirar; o link ou arquivo recolhe. */}
-          <section className="min-w-0 rounded-md bg-muted/40 p-2.5 md:col-span-2 2xl:col-span-1" aria-label="Fotos e referências">
-            {titulo(
-              "Fotos e referências",
-              <button type="button" onClick={abrirMenu} aria-haspopup="menu" aria-expanded={!!menu} aria-label="Mais opções de fotos e referências" className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground">
-                <MoreHorizontal className="h-4 w-4" />
-              </button>,
-            )}
-            <div className="grid min-w-0 grid-cols-2 gap-2">
-              <div className="min-w-0">
-                <button type="button" onClick={onAbrirFotos} className="mb-1 block text-[11.5px] font-medium text-foreground hover:text-primary" title="Escolher a foto desta lâmina">
-                  Foto
-                </button>
-                <div className="flex min-h-[46px] min-w-0 flex-wrap items-center">
-                  {fotoDoAcervo && (
-                    <Removivel titulo={fotoDoAcervo.nome} onTirar={!bloqueado && onTirarFotoDoAcervo ? onTirarFotoDoAcervo : undefined} rotulo="Tirar a foto do acervo desta lâmina">
-                      <ImagemDaMesa caminho={fotoDoAcervo.storage_path} bucket={fotoDoAcervo.storage_bucket || "mesa"} alt={fotoDoAcervo.nome} className="h-full w-full" />
-                    </Removivel>
-                  )}
-                  {livres.map((f) => {
-                    const recortada = (f as { recortada?: boolean }).recortada === true;
-                    const tituloDaFoto = f.papel === "fundo" ? "Fundo" : recortada ? "Elemento sem fundo" : "Elemento";
-                    return (
-                      <Removivel
-                        key={f.caminho}
-                        titulo={tituloDaFoto}
-                        onTirar={!bloqueado && onTirarFoto ? () => onTirarFoto(f.caminho) : undefined}
-                        rotulo={`Tirar da lâmina: ${tituloDaFoto.toLowerCase()}`}
-                        marca={recortada ? <Scissors className="h-2.5 w-2.5" /> : null}
-                        xadrez={recortada}
-                      >
-                        <ImagemDaMesa caminho={f.caminho} alt={tituloDaFoto} className="h-full w-full" />
-                      </Removivel>
-                    );
-                  })}
-                  {!base.temFoto && botaoEscolher(onAbrirFotos, <ImagePlus className="mr-1 h-3.5 w-3.5" />, "Escolher a foto desta lâmina")}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <button type="button" onClick={onAbrirReferencias} className="mb-1 block text-[11.5px] font-medium text-foreground hover:text-primary" title="Escolher 1 ou 2 referências para esta lâmina">
-                  Referência
-                </button>
-                <div className="flex min-h-[46px] min-w-0 flex-wrap items-center">
-                  {base.referencias.map((id) => (
-                    <MiniDaReferencia key={id} id={id} onTirar={!bloqueado && base.daLamina && onTirarReferencia ? () => onTirarReferencia(id) : undefined} />
-                  ))}
-                  {base.referencias.length > 0 && !base.daLamina && <span className="mr-1 text-[11px] text-muted-foreground">(do conjunto)</span>}
-                  {!base.referencias.length && botaoEscolher(onAbrirReferencias, <Bookmark className="mr-1 h-3.5 w-3.5" />, "Escolher 1 ou 2 referências para esta lâmina")}
-                </div>
-              </div>
+      {!recolhido && fidelidade && base.modo === "replicar_referencia" && (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center" data-faixa="fidelidade">
+          <span className="mb-1 mr-1.5 mt-1 text-[11.5px] text-muted-foreground" title="Quanto a lâmina segue a referência: da cópia mais fiel à mais livre">
+            Fidelidade
+          </span>
+          <div className="min-w-0 flex-1">{fidelidade}</div>
+        </div>
+      )}
+      {/* Os avisos da geração ficam à vista mesmo com a base recolhida. */}
+      {temAvisos && (
+        <div className="mt-1 space-y-1">
+          {continuoSemModelo && (
+            <p className="flex items-start text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
+              <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_CONTINUO_SEM_MODELO}
+            </p>
+          )}
+          {continuo && base.temFoto && (
+            <p className="flex items-start text-[11.5px] leading-snug text-muted-foreground" data-aviso="foto-no-continuo">
+              <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_NO_CONTINUO}
+            </p>
+          )}
+          {(foraDoFundo || foraDaEmenda) && (
+            <div className="flex min-w-0 flex-wrap items-center" data-aviso="fora-do-fundo">
+              <p className="mr-2 flex min-w-0 flex-1 items-start text-[11.5px] leading-snug text-warning">
+                <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {foraDoFundo ? AVISO_FORA_DO_FUNDO : AVISO_FORA_DA_EMENDA}
+              </p>
+              {acaoDoFundo}
             </div>
-            {referenciaNaHora && (
-              <div className="mt-2">
-                {comLink ? (
-                  referenciaNaHora
-                ) : (
-                  <button type="button" onClick={() => setComLink(true)} className="inline-flex h-7 items-center rounded-md px-1.5 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground" data-abrir-link="">
-                    <Link2 className="mr-1 h-3.5 w-3.5" /> Colar link ou subir arquivo
-                  </button>
-                )}
-              </div>
-            )}
-            {fidelidade && base.modo === "replicar_referencia" && (
-              <div className="mt-2 flex min-w-0 flex-wrap items-start" data-faixa="fidelidade">
-                <span className="mb-1 mr-1.5 mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Quanto a lâmina segue a referência: da cópia mais fiel à mais livre">
-                  Fidelidade
-                </span>
-                <div className="min-w-0 flex-1">{fidelidade}</div>
-              </div>
-            )}
-          </section>
-
-          {/* Marca: a logo do kit que o gerador desenha junto. */}
-          <section className="min-w-0 rounded-md bg-muted/40 p-2.5" aria-label="Marca">
-            {titulo("Marca")}
-            {logo ? (
-              <div className="flex min-w-0 flex-wrap items-center" title="Logo do kit que o gerador desenha junto com a arte">{logo}</div>
-            ) : (
-              <p className="text-[11.5px] leading-snug text-muted-foreground">Esta lâmina não leva logo (vai na capa e no fechamento).</p>
-            )}
-          </section>
-
-          {/* Geração: como o gerador vai trabalhar e os avisos da lâmina. */}
-          <section className="min-w-0 rounded-md bg-muted/40 p-2.5" aria-label="Geração">
-            {titulo("Geração")}
-            <p className="text-[11.5px] leading-snug text-foreground/80">{DESCRICAO_DO_MODO[base.modo]}</p>
-            {temAvisos && (
-              <div className="mt-1.5 space-y-1">
-                {continuoSemModelo && (
-                  <p className="flex items-start text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
-                    <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_CONTINUO_SEM_MODELO}
-                  </p>
-                )}
-                {continuo && base.temFoto && (
-                  <p className="flex items-start text-[11.5px] leading-snug text-muted-foreground" data-aviso="foto-no-continuo">
-                    <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_NO_CONTINUO}
-                  </p>
-                )}
-                {(foraDoFundo || foraDaEmenda) && (
-                  <div className="flex min-w-0 flex-wrap items-center" data-aviso="fora-do-fundo">
-                    <p className="mr-2 flex min-w-0 flex-1 items-start text-[11.5px] leading-snug text-warning">
-                      <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {foraDoFundo ? AVISO_FORA_DO_FUNDO : AVISO_FORA_DA_EMENDA}
-                    </p>
-                    {acaoDoFundo}
-                  </div>
-                )}
-                {base.fotoRecomposta && (
-                  <p className="flex items-start text-[11.5px] leading-snug text-warning">
-                    <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_RECOMPOSTA}
-                  </p>
-                )}
-                {versaoRecompos(versao) && !base.fotoRecomposta && (
-                  <p className="flex items-start text-[11.5px] leading-snug text-warning">
-                    <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> Esta versão recompôs a foto pela referência; confira o rosto.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
+          )}
+          {base.fotoRecomposta && (
+            <p className="flex items-start text-[11.5px] leading-snug text-warning">
+              <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_RECOMPOSTA}
+            </p>
+          )}
+          {versaoRecompos(versao) && !base.fotoRecomposta && (
+            <p className="flex items-start text-[11.5px] leading-snug text-warning">
+              <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> Esta versão recompôs a foto pela referência; confira o rosto.
+            </p>
+          )}
         </div>
       )}
       {/* O aviso do rosto fica à vista mesmo com o painel recolhido. */}
@@ -428,7 +408,6 @@ export default function EstudioBaseDaLamina({
           itens={[
             { rotulo: "Escolher a foto (acervo, Mesa Foto, enviar)", acao: onAbrirFotos },
             { rotulo: "Escolher referência (cliente, banco, Pinterest)", acao: onAbrirReferencias },
-            ...(referenciaNaHora ? [{ rotulo: comLink ? "Esconder o link ou arquivo" : "Colar link ou subir arquivo", acao: () => setComLink(!comLink) }] : []),
           ]}
         />
       )}

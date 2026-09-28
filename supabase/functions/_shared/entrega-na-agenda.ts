@@ -207,7 +207,17 @@ function jaNoFluxoDePublicacao(post: PostExistente): boolean {
 export async function planoDaSincronizacao(
   peca: PecaEntregue,
   existente: PostExistente | null,
-  opcoes: { conta: ContaDoProjeto | null; arquivoAtualEditavel: boolean },
+  opcoes: {
+    conta: ContaDoProjeto | null;
+    arquivoAtualEditavel: boolean;
+    /**
+     * Frente AP (28/09): data do conteúdo (dia da pauta + melhor horário), já
+     * conferida no futuro. A publicação nova (e a planejada ainda sem data)
+     * nasce nela, planejada: só agenda depois da aprovação do cliente. Sem
+     * isto a peça ficava sem data e a Agenda a punha no dia da criação.
+     */
+    quando?: string | null;
+  },
 ): Promise<PlanoDaSincronizacao> {
   const fileIds = peca.fileIds.filter(Boolean);
   if (!fileIds.length) return { acao: "bloqueado", motivo: "A entrega não tem arquivos." };
@@ -230,7 +240,7 @@ export async function planoDaSincronizacao(
     caption: legenda,
     first_comment: null,
     alt_text: null,
-    scheduled_at: null,
+    scheduled_at: opcoes.quando ?? null,
     scheduled_timezone: FUSO_PADRAO,
   });
 
@@ -289,7 +299,7 @@ export async function planoDaSincronizacao(
     caption: legenda,
     first_comment: p.first_comment,
     alt_text: p.alt_text,
-    scheduled_at: p.scheduled_at,
+    scheduled_at: p.scheduled_at ?? opcoes.quando ?? null,
     scheduled_timezone: p.scheduled_timezone || FUSO_PADRAO,
   }));
 
@@ -326,7 +336,7 @@ export async function planoDaSincronizacao(
   if (contaDaRevisao) {
     const p = await novaPublicacao(contaDaRevisao);
     if (anterior && anterior.external_account_id === contaDaRevisao.id) {
-      p.scheduled_at = anterior.scheduled_at;
+      p.scheduled_at = anterior.scheduled_at ?? p.scheduled_at;
       p.scheduled_timezone = anterior.scheduled_timezone || FUSO_PADRAO;
     }
     publicacoes.push(p);
@@ -670,6 +680,12 @@ export interface AjusteDoCliente {
   atendido_em?: string | null;
   atendido_por?: string | null;
   atendido_na_rodada?: number | null;
+  /** Frente AP: "ajuste" (pedido de ajuste) ou "aprovado" (comentário junto da aprovação). */
+  decisao?: "ajuste" | "aprovado";
+  /** Frente AP: o pedido entendido pelo Jev (_shared/pedido-do-cliente.ts), gravado pela estudio-arte. */
+  entendido?: Record<string, unknown> | null;
+  /** Frente AP: o comentário da aprovação foi visto pela equipe (sai da pendência). */
+  visto_em?: string | null;
 }
 
 const PADRAO_DA_LAMINA = /(?:l[aâ]mina|slide|card|imagem|tela|p[aá]gina)\s*(?:n[ºo°]?\.?\s*)?(\d{1,2})/;
@@ -704,12 +720,21 @@ export function ajustesDoCliente(bruto: unknown): AjusteDoCliente[] {
       atendido_em: typeof x.atendido_em === "string" ? x.atendido_em : null,
       atendido_por: typeof x.atendido_por === "string" ? x.atendido_por : null,
       atendido_na_rodada: typeof x.atendido_na_rodada === "number" ? x.atendido_na_rodada : null,
+      decisao: x.decisao === "aprovado" ? "aprovado" as const : "ajuste" as const,
+      entendido: x.entendido && typeof x.entendido === "object" ? (x.entendido as Record<string, unknown>) : null,
+      visto_em: typeof x.visto_em === "string" ? x.visto_em : null,
     }));
 }
 
-/** O pedido do cliente que ainda não foi atendido (o mais recente). */
+/** O pedido de ajuste do cliente que ainda não foi atendido (o mais recente). Comentário de aprovação não conta. */
 export function pedidoDeAjustePendente(bruto: unknown): AjusteDoCliente | null {
-  const lista = ajustesDoCliente(bruto).filter((a) => !a.atendido_em);
+  const lista = ajustesDoCliente(bruto).filter((a) => !a.atendido_em && a.decisao !== "aprovado");
+  return lista.length ? lista[lista.length - 1] : null;
+}
+
+/** Frente AP: o comentário que o cliente deixou ao aprovar e a equipe ainda não viu (o mais recente). */
+export function comentarioDaAprovacaoPendente(bruto: unknown): AjusteDoCliente | null {
+  const lista = ajustesDoCliente(bruto).filter((a) => a.decisao === "aprovado" && !a.visto_em && !a.atendido_em && !!a.texto);
   return lista.length ? lista[lista.length - 1] : null;
 }
 
@@ -731,4 +756,123 @@ export function marcarAjustesAtendidos(bruto: unknown, a: { em: string; por: str
  */
 export function linkDoAjusteNoEstudio(clientId: string, taskId: string, lamina: number | null | undefined): string {
   return `/mesa?client=${clientId}&aba=estudio&task=${taskId}&ajuste=cliente${lamina ? `&lamina=${lamina}` : ""}`;
+}
+
+// ------------------------------------------------------------------ perfis da publicação (frente AP)
+
+/** Um perfil onde a peça pode sair: Instagram (o motor publica) ou página do Facebook (a equipe posta). */
+export interface PerfilDaPeca {
+  id: string;
+  platform: "instagram" | "facebook";
+  nome: string;
+  handle: string | null;
+  /** Instagram ligado com automação: o painel publica sozinho. */
+  automatico: boolean;
+  /** Já tem publicação planejada, agendada ou publicada no post da peça. */
+  escolhido: boolean;
+}
+
+/** Nome do perfil para a tela: "@handle" quando há, senão o nome. */
+export function rotuloDoPerfil(p: Pick<PerfilDaPeca, "nome" | "handle" | "platform">): string {
+  const h = (p.handle || "").trim().replace(/^@+/, "");
+  const base = h ? `@${h}` : (p.nome || "").trim() || "Perfil";
+  return p.platform === "facebook" ? `${base} (Facebook)` : base;
+}
+
+/**
+ * Perfis escolhidos que valem: só os da lista do projeto (a marca da peça),
+ * sem repetir. Vazio = recusa (a tela usa "Não postar" para isso).
+ */
+export function perfisValidos(pedidos: unknown, disponiveis: Pick<PerfilDaPeca, "id">[]): string[] {
+  const ids = Array.isArray(pedidos) ? pedidos.map((x) => String(x || "").trim()) : [];
+  const ok = new Set(disponiveis.map((d) => d.id));
+  const saida: string[] = [];
+  for (const id of ids) if (ok.has(id) && saida.indexOf(id) < 0) saida.push(id);
+  return saida;
+}
+
+/**
+ * Payload que deixa o post da peça com exatamente os perfis escolhidos, todos
+ * na mesma data: a publicação planejada de um perfil escolhido continua (mesmo
+ * id e chave), a de um perfil que saiu não vai (o save da Agenda cancela a
+ * planejada que não vem), e o perfil novo nasce com chave estável da peça.
+ * `entrega` (arte aprovada): cada publicação leva as lâminas na ordem e o modo
+ * (automático só no Instagram com automação), para o caminho aprovado congelar
+ * e agendar. Só mexe em publicações planejadas: agendada ou publicada recusa antes.
+ */
+export async function payloadComPerfis(
+  post: PostExistente,
+  a: {
+    trabalhoId: string;
+    rodada: number;
+    perfis: Pick<PerfilDaPeca, "id" | "platform" | "automatico">[];
+    quando: string | null;
+    mutationId: string;
+    assetFileIds?: string[] | null;
+  },
+): Promise<Record<string, unknown>> {
+  const sementes = sementesDaPeca(a.trabalhoId, a.rodada);
+  const planejadas = post.publications.filter((p) => p.status === "planned");
+  const publicacoes: Record<string, unknown>[] = [];
+  for (const perfil of a.perfis) {
+    const existente = planejadas.find((p) => p.external_account_id === perfil.id && !!p.idempotency_key);
+    const entrega = a.assetFileIds && a.assetFileIds.length && a.quando
+      ? {
+        delivery_mode: perfil.platform === "instagram" && perfil.automatico ? "automatic" : "manual",
+        asset_file_ids: a.assetFileIds.slice(0, MAX_MIDIAS_DO_CARROSSEL),
+      }
+      : {};
+    publicacoes.push({
+      ...entrega,
+      id: existente ? existente.id : null,
+      idempotency_key: existente ? existente.idempotency_key : await uuidEstavel(sementes.publicacao(perfil.id)),
+      external_account_id: perfil.id,
+      file_id: existente ? existente.file_id : null,
+      caption: existente ? existente.caption : post.default_caption,
+      first_comment: existente ? existente.first_comment : null,
+      alt_text: existente ? existente.alt_text : null,
+      scheduled_at: a.quando,
+      scheduled_timezone: (existente && existente.scheduled_timezone) || FUSO_PADRAO,
+    });
+  }
+  return {
+    id: post.id,
+    idempotency_key: post.internal?.idempotency_key || null,
+    mutation_id: a.mutationId,
+    client_id: post.client_id,
+    project_id: post.project_id,
+    primary_file_id: post.primary_file_id,
+    title: post.title,
+    content_type: post.content_type,
+    objective: post.objective,
+    default_caption: post.default_caption,
+    production_status: post.production_status,
+    task_id: post.internal?.task_id || null,
+    responsible_id: post.internal?.responsible_id || null,
+    internal_notes: post.internal?.internal_notes || null,
+    revision_of_post_id: post.internal?.revision_of_post_id || null,
+    publications: publicacoes,
+  };
+}
+
+// ------------------------------------------------------------------ data do conteúdo (frente AP)
+
+/**
+ * Dia e hora do conteúdo para a publicação nascer na Agenda: o dia da pauta
+ * com o melhor horário (ou o fixo, ou 09:00). Diferente de horarioSugerido,
+ * NUNCA empurra para hoje: pauta que já passou, ou de hoje com o horário já
+ * passado, volta null (a peça fica sem data e o Estúdio pergunta).
+ */
+export function horarioDoConteudo(a: {
+  diaDaPeca: string | null | undefined;
+  hoje: string;
+  agoraHHMM: string;
+  melhorHora?: string | null;
+  horaFixa?: string | null;
+}): { dia: string; hora: string } | null {
+  const dia = a.diaDaPeca && ISO_LOCAL.test(a.diaDaPeca.slice(0, 10)) ? a.diaDaPeca.slice(0, 10) : null;
+  if (!dia || dia < a.hoje) return null;
+  const hora = [a.melhorHora, a.horaFixa, "09:00"].map((h) => (h && HORA.test(h) ? h.slice(0, 5) : null)).filter(Boolean)[0] as string;
+  if (dia === a.hoje && minutosDoDia(hora) < minutosDoDia(a.agoraHHMM) + 15) return null;
+  return { dia, hora };
 }

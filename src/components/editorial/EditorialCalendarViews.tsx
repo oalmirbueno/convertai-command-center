@@ -39,6 +39,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { Secao, juntar, lista, superficie } from "@/components/sistema";
 import type {
   ArteDoEstudioNaAgenda,
   EditorialFileRow,
@@ -977,16 +978,17 @@ function TaskSchedulePill({
 }
 
 function EmptyState({ canCreate }: { canCreate: boolean }) {
+  // Vazio tracejado e sólido (sem translúcido), com o estado em uma linha.
   return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/40 px-6 text-center">
+    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card px-6 text-center">
       <CalendarClock className="mb-3 h-9 w-9 text-muted-foreground/50" />
-      <p className="text-sm font-medium text-foreground">
+      <p className="text-[13px] font-medium text-foreground">
         Nenhum conteúdo neste recorte
       </p>
-      <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+      <p className="mt-1 max-w-sm text-[12px] leading-5 text-muted-foreground">
         {canCreate
-          ? "Ajuste os filtros, crie um conteúdo ou arraste uma tarefa do Kanban para começar."
-          : "Ajuste os filtros ou aguarde a equipe liberar os próximos conteúdos."}
+          ? "Ajuste os filtros, crie um conteúdo ou arraste uma tarefa do Kanban."
+          : "Ajuste os filtros ou aguarde os próximos conteúdos."}
       </p>
     </div>
   );
@@ -1062,7 +1064,7 @@ function MobileAgenda({
   ) => void;
 }) {
   return (
-    <div className="space-y-2 md:hidden">
+    <div className="-mx-2 divide-y divide-border/50 md:hidden">
       {days.map((day) => {
         const key = localDateKey(day);
         const dayItems = itemsByDate.get(key) || [];
@@ -1075,14 +1077,14 @@ function MobileAgenda({
             key={key}
             dateKey={key}
             canDrop={canCreate || canEdit || canPublish}
-            className="rounded-xl border border-border bg-card p-3"
+            className="rounded-lg px-2 py-3"
           >
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-[11px] font-medium text-muted-foreground first-letter:uppercase">
                   {format(day, "EEEE", { locale: ptBR })}
                 </p>
-                <p className="mt-0.5 text-sm font-semibold text-foreground">
+                <p className="mt-0.5 text-[13px] font-semibold text-foreground">
                   {format(day, "dd 'de' MMMM", { locale: ptBR })}
                 </p>
               </div>
@@ -1127,7 +1129,7 @@ function MobileAgenda({
                 />
               ))}
               {dayItems.length === 0 && dayTasks.length === 0 && (
-                <p className="rounded-lg border border-dashed border-border/75 py-3 text-center text-[10px] text-muted-foreground/65">
+                <p className="rounded-lg border border-dashed border-border/75 py-3 text-center text-[11px] text-muted-foreground/65">
                   Solte uma tarefa ou publicação aqui
                 </p>
               )}
@@ -1190,7 +1192,7 @@ function MonthView({
         onSelectPost={onSelectPost}
         onCreateFromTask={onCreateFromTask}
       />
-      <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card md:block">
+      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
         <div className="min-w-[840px]">
           <div
             className="grid grid-cols-7 border-b border-border bg-secondary/25"
@@ -1201,7 +1203,7 @@ function MonthView({
                 <div
                   key={day}
                   role="columnheader"
-                  className="px-3 py-2.5 text-center text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                  className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
                 >
                   {day}
                 </div>
@@ -1419,7 +1421,7 @@ function WeekView({
         onSelectPost={onSelectPost}
         onCreateFromTask={onCreateFromTask}
       />
-      <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card md:block">
+      <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
         <div className="grid min-w-[920px] grid-cols-7">
           {days.map((day) => {
             const key = localDateKey(day);
@@ -1441,7 +1443,7 @@ function WeekView({
                     key === todayKey && "bg-primary/5",
                   )}
                 >
-                  <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                  <p className="text-[11px] font-medium uppercase text-muted-foreground">
                     {format(day, "EEE", { locale: ptBR })}
                   </p>
                   <div className="mt-1 flex items-center justify-center gap-1">
@@ -1565,7 +1567,7 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-xl border border-border bg-background/90 p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow-md motion-reduce:transition-none",
+        "group rounded-lg border border-border bg-card p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow motion-reduce:transition-none",
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1706,7 +1708,7 @@ function BoardTaskCard({
       // Arrasta pelo cartão inteiro; clique nos botões continua normal.
       {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-xl border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-md motion-reduce:transition-none",
+        "group rounded-lg border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow motion-reduce:transition-none",
         draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1831,7 +1833,10 @@ function BoardColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[160px] min-w-0 flex-col rounded-lg p-1.5 transition-colors lg:h-[540px] desk:h-[640px]",
+        // 28/09: sem altura fixa. De 1280 px para cima a coluna ocupa a altura
+        // da área (AreaDeTrabalho) e rola sozinha; abaixo disso a grade tem duas
+        // colunas e quem rola é o quadro inteiro (uma rolagem por região).
+        "flex min-h-[160px] min-w-0 flex-col rounded-lg p-1.5 transition-colors xl:h-full xl:min-h-0",
         isOver &&
           acceptsActive &&
           "bg-primary/[0.06] ring-1 ring-primary/40",
@@ -1840,18 +1845,18 @@ function BoardColumn({
       <header className="mb-2 px-1 pt-0.5" title={column.description}>
         <div className="flex items-center gap-2">
           <span className={cn("h-2 w-2 rounded-full", column.dot)} />
-          <h2 className="text-[12px] font-semibold text-foreground">
+          <h2 className="min-w-0 truncate text-[12px] font-semibold text-foreground">
             {column.label}
           </h2>
           <Badge
             variant="secondary"
-            className="ml-auto h-5 rounded-md px-1.5 font-mono text-[9px]"
+            className="ml-auto h-5 rounded-md px-1.5 font-mono text-[11px]"
           >
             {posts.length + tasks.length}
           </Badge>
         </div>
       </header>
-      <div className="space-y-2.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5 lg:[scrollbar-gutter:stable]">
+      <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:pr-0.5 xl:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}
@@ -1884,8 +1889,8 @@ function BoardColumn({
           />
         ))}
         {posts.length === 0 && tasks.length === 0 && (
-          <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-border/80 px-4 text-center">
-            <p className="text-[10px] leading-4 text-muted-foreground/70">
+          <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-4 text-center">
+            <p className="text-[11px] leading-4 text-muted-foreground/70">
               {isWritable
                 ? "Arraste uma tarefa ou conteúdo para cá"
                 : "Nenhum conteúdo finalizado"}
@@ -1947,7 +1952,9 @@ function BoardView({
   }, [tasks]);
 
   return (
-    <div className="pb-2">
+    // A principal não rola na visão Conteúdos (EditorialCalendar): de 1024 a
+    // 1279 px o quadro rola aqui; de 1280 px para cima cada coluna rola sozinha.
+    <div className="min-w-0 pb-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain xl:overflow-visible xl:pb-0 xl:[&>.grid]:h-full xl:[&>.grid]:grid-rows-[minmax(0,1fr)]">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {boardColumns.map((column) => (
           <BoardColumn
@@ -2060,16 +2067,15 @@ function ListView({
   ].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
+      {/* Seções abertas (sem caixa) que recolhem; linhas com divisória leve. */}
       {timelineItems.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <CalendarClock className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-medium text-foreground">
-              Agenda cronológica
-            </h3>
-            <Badge variant="secondary">{timelineItems.length}</Badge>
-          </div>
+        <Secao
+          titulo="Agenda cronológica"
+          nivel={3}
+          descricao={`${timelineItems.length} ${timelineItems.length === 1 ? "item" : "itens"}`}
+          corpoClassName={juntar(lista.aberta, lista.divisoria)}
+        >
           {timelineItems.map((timelineItem) => {
             if (timelineItem.kind === "task") {
               const { task, dateKey } = timelineItem;
@@ -2079,16 +2085,16 @@ function ListView({
                   key={`task:${task.id}`}
                   type="button"
                   onClick={() => onCreateFromTask(task, dateKey)}
-                  className="flex w-full flex-col gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-4 text-left transition-colors hover:border-violet-500/45 sm:flex-row sm:items-center"
+                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-violet-500/[0.06] sm:flex-row sm:items-center"
                 >
                   <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-[13px] font-semibold text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         day: "2-digit",
                         month: "short",
                       }).format(new Date(`${dateKey}T12:00:00`))}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[12px] text-muted-foreground">
                       Prazo editorial
                     </p>
                   </div>
@@ -2103,10 +2109,10 @@ function ListView({
                     <ContentDirection
                       theme={task.title}
                       context={taskContentContext(task)}
-                      className="text-sm text-foreground"
+                      className="text-[13px] text-foreground"
                     />
                     {arte && <SeloDaArteDoEstudio arte={arte} />}
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                    <p className="mt-1 truncate text-[12px] text-muted-foreground">
                       {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                       {taskDeliveryTypeLabel(task)}
                       {task.assigned_to
@@ -2134,7 +2140,7 @@ function ListView({
             return (
               <article
                 key={`publication:${publication.id}`}
-                className="flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/35 sm:flex-row sm:items-center"
+                className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
               >
                 <button
                   type="button"
@@ -2147,14 +2153,14 @@ function ListView({
                     className="h-14 w-14"
                   />
                   <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-[13px] font-semibold text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
                         timeZone: "America/Sao_Paulo",
                         day: "2-digit",
                         month: "short",
                       }).format(new Date(publication.scheduled_at!))}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[12px] text-muted-foreground">
                       {timeFormatter.format(
                         new Date(publication.scheduled_at!),
                       )}
@@ -2174,9 +2180,9 @@ function ListView({
                         item.post,
                         item.publication,
                       )}
-                      className="text-sm text-foreground"
+                      className="text-[13px] text-foreground"
                     />
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                    <p className="mt-1 truncate text-[12px] text-muted-foreground">
                       {clientNames.get(item.post.post.client_id) || "Cliente"} ·{" "}
                       {projectNames.get(item.post.post.project_id) || "Projeto"} ·{" "}
                       {item.publication.account?.display_name ||
@@ -2207,7 +2213,7 @@ function ListView({
                 <div className="flex shrink-0 items-center gap-1">
                   {draggable && !moving && (
                     <span
-                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-[10px] text-muted-foreground"
+                      className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground"
                       title="Use a visualização de calendário para arrastar"
                     >
                       <GripVertical className="h-3 w-3" />
@@ -2236,20 +2242,15 @@ function ListView({
               </article>
             );
           })}
-        </section>
+        </Secao>
       )}
 
       {(backlogItems.length > 0 || undatedTasks.length > 0) && (
-        <section className="rounded-2xl border border-dashed border-border bg-card/40 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <CircleDashed className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium text-foreground">
-              Sem prazo ou agendamento
-            </h3>
-            <Badge variant="secondary">
-              {backlogItems.length + undatedTasks.length}
-            </Badge>
-          </div>
+        <Secao
+          titulo="Sem prazo ou agendamento"
+          nivel={3}
+          descricao={`${backlogItems.length + undatedTasks.length} ${backlogItems.length + undatedTasks.length === 1 ? "item" : "itens"}`}
+        >
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {undatedTasks.map((task) => {
               const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
@@ -2259,7 +2260,7 @@ function ListView({
                 type="button"
                 onClick={() => onCreateFromTask(task)}
                 aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
-                className="flex items-start gap-2.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
+                className="flex items-start gap-2.5 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
               >
                 {arte && (
                   <MiniaturaDaArteDoEstudio
@@ -2274,7 +2275,7 @@ function ListView({
                   compact
                   className="text-foreground"
                 />
-                <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                <p className="mt-1 truncate text-[11px] text-muted-foreground">
                   {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                   {taskDeliveryTypeLabel(task)}
                 </p>
@@ -2304,7 +2305,7 @@ function ListView({
                 type="button"
                 onClick={() => onSelectPost(post)}
                 className={cn(
-                  "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors hover:border-primary/45",
+                  "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors hover:border-primary/45",
                   cor.borda,
                   cor.fundo,
                 )}
@@ -2317,7 +2318,7 @@ function ListView({
                 <span className="min-w-0 flex-1">
                 <span className="mb-1 flex items-center gap-1.5">
                   <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
-                  <span className={cn("text-[9.5px] font-semibold uppercase tracking-wide", cor.texto)}>
+                  <span className={cn("text-[11px] font-semibold", cor.texto)}>
                     {EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa}
                   </span>
                 </span>
@@ -2327,7 +2328,7 @@ function ListView({
                   compact
                   className="text-foreground"
                 />
-                <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                <p className="mt-1 truncate text-[11px] text-muted-foreground">
                   {projectNames.get(post.post.project_id) || "Projeto"} ·{" "}
                   {publication
                     ? `${platformLabels[publication.publication.platform] || publication.publication.platform}${publication.account?.handle ? ` · ${publication.account.handle}` : ""}`
@@ -2338,7 +2339,7 @@ function ListView({
               );
             })}
           </div>
-        </section>
+        </Secao>
       )}
     </div>
   );
@@ -2430,7 +2431,7 @@ function VistasDoCalendario({
       <button
         type="button"
         onClick={onShowBacklog}
-        className="mb-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-left text-xs text-foreground transition-colors hover:border-violet-500/40"
+        className="mb-3 flex min-h-11 w-full items-center justify-between rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-left text-[12px] text-foreground transition-colors hover:border-violet-500/40"
       >
         <span>
           {[

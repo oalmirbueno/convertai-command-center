@@ -73,7 +73,7 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
               type="button"
               disabled={ocupado || !nota.trim()}
               onClick={() => void agir(async () => { const r = await anotarNoDiario(item, nota); if (r) { setNota(""); setAnotando(false); } return r; }, "Anotado no diário.")}
-              className={botao.primario}
+              className={botao.secundario}
             >Salvar</button>
           </div>
         )}

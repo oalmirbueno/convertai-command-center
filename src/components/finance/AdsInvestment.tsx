@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, Megaphone, Wallet, Target } from "lucide-react";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { Carregando, EstadoDeErro, Painel, Secao, botao, juntar, superficie, texto } from "@/components/sistema";
+import { GradeDeKpis, Kpi, type Tom } from "@/components/finance/pecasDoFinanceiro";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -101,10 +101,10 @@ export default function AdsInvestment({ billing, projectPayments }: Props) {
   const roiTotal = totalInvested > 0 ? totalReceived / totalInvested : null;
 
   const numeros = [
-    { label: "Investido no mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", icon: Megaphone, color: "text-warning" },
-    { label: "Recebido no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", icon: TrendingUp, color: "text-success" },
-    { label: "Retorno no mês", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento no mês" : "Receita ÷ investimento", icon: Target, color: "text-info" },
-    { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre marketing ou tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, icon: Wallet, color: "text-foreground" },
+    { label: "Investido no mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", tom: "aviso" as Tom },
+    { label: "Recebido no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", tom: "sucesso" as Tom },
+    { label: "Retorno no mês", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento no mês" : "Receita ÷ investimento", tom: "info" as Tom },
+    { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre marketing ou tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, tom: "neutro" as Tom },
   ];
 
   return (
@@ -122,18 +122,12 @@ export default function AdsInvestment({ billing, projectPayments }: Props) {
         <Carregando forma="lista" linhas={3} rotulo="Carregando investimento em anúncios" />
       ) : (
         <div className="space-y-4">
-          <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* Os quatro números numa faixa só (antes, um cartão por número). */}
+          <GradeDeKpis>
             {numeros.map((s) => (
-              <div key={s.label} className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4")}>
-                <div className="flex min-w-0 items-center">
-                  <s.icon className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0", s.color)} aria-hidden="true" />
-                  <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{s.label}</span>
-                </div>
-                <p className={juntar("mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums sm:text-[18px]", s.color)}>{s.value}</p>
-                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={s.sub}>{s.sub}</p>
-              </div>
+              <Kpi key={s.label} rotulo={s.label} valor={s.value} apoio={s.sub} tom={s.tom} />
             ))}
-          </div>
+          </GradeDeKpis>
 
           <Painel titulo="Investido e receita" descricao="Últimos 6 meses">
             <div className="h-[200px] min-w-0">

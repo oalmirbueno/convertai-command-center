@@ -215,12 +215,12 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
   return <article className="min-w-0 space-y-4 py-5" aria-label={`Revisão de ${client?.company_name || client?.full_name || report.client_id}`}>
     <header className="min-w-0">
       <p className={juntar(texto.auxiliar, "truncate")}>{client?.company_name || client?.full_name || report.client_id} · {text(frozen.metrics?.ritual_type)} · versão {showingSnapshot ? approval?.payload_version : report.review_version ?? "não carregada"}</p>
-      <h3 className={juntar(texto.tituloSecao, "mt-1")}>{frozen.title}</h3>
+      <h3 className={juntar(texto.tituloSecao, "mt-1 min-w-0 truncate")} title={frozen.title ?? undefined}>{frozen.title}</h3>
       <p className={juntar("mt-0.5 text-[12px] font-medium", tomDoStatus)}>{approval ? statusLabel(approval) : "Rascunho · pedido ainda não preparado"}{approval && viaHermes(approval.decision_note) ? " · decidido pelo Hermes" : ""}</p>
     </header>
     {approval?.executed_at && <p className="rounded-md bg-success/10 px-3 py-2 text-[13px] text-foreground"><strong className="text-success">Enviado.</strong> {approval.execution_evidence || "Sem detalhe do envio."}</p>}
     {approval && !sameVersion && <p role="note" className="text-[13px] text-warning">Este pedido corresponde a outra versão. {currentReport ? `A versão atual é ${currentReport.review_version}. Prepare um novo pedido após conferir a edição.` : "A versão atual não está disponível; atualize a fila antes de decidir."}</p>}
-    {expired && <p role="note" className="text-[13px] text-warning">O prazo deste pedido venceu. Prepare uma nova revisão para conferir a fonte e o destinatário novamente.</p>}
+    {expired && <p role="note" className="flex items-center text-[13px] text-warning">O prazo deste pedido venceu. Prepare uma nova revisão.<AjudaRecolhida className="ml-1.5" rotulo="Por que preparar de novo">A nova revisão confere a fonte e o destinatário outra vez antes de decidir.</AjudaRecolhida></p>}
     <div className="min-w-0"><h4 className={rotuloDeBloco}>{scope ? "Plano e frentes deste pedido" : "Plano e frentes no cadastro atual"}</h4><p className={juntar(texto.corpo, "mt-1")}>{planName || "Plano não registrado"} · {services.length ? services.map(key => SERVICE_LABELS[key] ?? key).join(" · ") : "Frentes não registradas"}</p></div>
     {alerts.length > 0 && <div role="note" className="rounded-md bg-warning/10 px-3 py-2.5 text-[13px]"><strong className="font-medium text-warning">Pontos que precisam de decisão</strong><ul className="mt-1 list-disc pl-5">{alerts.map((alert, index) => <li key={index}>{alert}</li>)}</ul></div>}
     <div className="min-w-0"><h4 className={rotuloDeBloco}>Mensagem preparada</h4><p className={juntar(texto.corpo, "mt-1 whitespace-pre-wrap")}>{frozen.summary || "Mensagem ausente: volte ao rascunho antes de aprovar."}</p></div>
@@ -231,8 +231,8 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
     </div>
     {editable && !editing && <button type="button" disabled={disabled} onClick={() => { setEdits({ summary: currentReport!.summary ?? "", next_steps: currentReport!.next_steps ?? "" }); setReviewedIdentity(null); setEditingReport(currentReport!); }} className={botao.secundario}>Editar rascunho atual</button>}
     {editing && <div className={juntar(superficie.poco, "space-y-3 p-3 sm:p-4")}>
-      <p className={texto.corpo}>Editando a versão {editingReport.review_version}. Salvar invalida a aprovação deste item; depois prepare uma nova revisão.</p>
-      {editingReport.review_version !== currentReport?.review_version && <p role="note" className="text-[13px] text-warning">Outra versão chegou durante a edição. Seu texto foi preservado, mas não pode sobrescrever a versão nova.</p>}
+      <p className={juntar(texto.corpo, "flex items-center")}>Editando a versão {editingReport.review_version}.<AjudaRecolhida className="ml-1.5" rotulo="O que acontece ao salvar">Salvar invalida a aprovação deste item; depois prepare uma nova revisão.</AjudaRecolhida></p>
+      {editingReport.review_version !== currentReport?.review_version && <p role="note" className="text-[13px] text-warning">Outra versão chegou durante a edição. Seu texto ficou aqui, mas não sobrescreve a nova.</p>}
       <label className={rotuloDeBloco}>Mensagem do rascunho<textarea value={edits.summary} onChange={event => setEdits(previous => ({ ...previous, summary: event.target.value }))} rows={5} className={juntar(campoTexto, "mt-1.5")} /></label>
       <label className={rotuloDeBloco}>Próximo passo do rascunho<textarea value={edits.next_steps} onChange={event => setEdits(previous => ({ ...previous, next_steps: event.target.value }))} rows={3} className={juntar(campoTexto, "mt-1.5")} /></label>
       <div className="flex flex-wrap items-center justify-end [&>*+*]:ml-2">
@@ -274,7 +274,7 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
       <label className={rotuloDeBloco}>Comentário<textarea value={comment} onChange={event => setComment(event.target.value)} rows={2} maxLength={4000} className={juntar(campoTexto, "mt-1.5 min-h-[60px]")} /></label>
       {decidable && <label className="flex items-start text-[13px]"><input type="checkbox" checked={reviewed} onChange={event => setReviewedIdentity(event.target.checked ? reviewIdentity : null)} className="mr-2 mt-0.5 h-4 w-4 shrink-0 accent-primary" />Conferi esta versão, as fontes, os alertas e o destinatário.</label>}
       <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-        {decidable && <><button type="button" disabled={disabled || editing || !reviewed || !reviewContentComplete(frozen)} onClick={() => void onDecide(approval, "aprovado", comment)} className={botao.primario}>Aprovar esta versão</button>
+        {decidable && <><button type="button" disabled={disabled || editing || !reviewed || !reviewContentComplete(frozen)} onClick={() => void onDecide(approval, "aprovado", comment)} className={editing ? botao.secundario : botao.primario}>Aprovar esta versão</button>
           <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "alteracoes_pedidas", comment)} className={botao.secundario}>Pedir ajuste</button>
           <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "rejeitado", comment)} className={botao.secundario}>Rejeitar</button></>}
         <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "comentario", comment)} className={botao.secundario}>Comentar</button>

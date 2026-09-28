@@ -45,7 +45,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
-import { AjudaRecolhida, Carregando, EstadoVazio, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoVazio, Secao, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 import {
   CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
 } from "@/lib/cycleDefs";
@@ -1659,13 +1659,13 @@ export default function AdminCiclo() {
             <Menu className="h-5 w-5" />
           </button>
           <div className="min-w-0 text-center">
-            <h1 className="flex items-center justify-center text-[16px] font-semibold leading-tight text-foreground">
+            <h1 className="flex items-center justify-center text-[15px] font-semibold leading-tight text-foreground">
               <ListChecks className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Ciclo da Semana
               <AjudaRecolhida className="ml-1 min-h-0" titulo="Ciclo da Semana">
                 Seis etapas por cliente em cada frente, em três filas. Marque Feito na etapa da vez; toque no nome do cliente para ver a evolução e num dia da semana para ver o que foi feito nele.
               </AjudaRecolhida>
             </h1>
-            <p className="truncate text-[10px] leading-tight text-muted-foreground">{avulsosAbertos ? "Clientes avulsos" : cycle.label}</p>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">{avulsosAbertos ? "Clientes avulsos" : cycle.label}</p>
           </div>
           <button
             type="button"
@@ -1855,10 +1855,14 @@ export default function AdminCiclo() {
             );
             if (acoes.length === 0) return null;
             return (
-              <div className="rounded-lg border border-border bg-card p-3">
-                <p className={juntar(texto.tituloSecao, "mb-1.5 text-[14px]")}>
-                  O que pede ação hoje
-                </p>
+              // Seção aberta que recolhe (28/09): sem cartão em volta.
+              <Secao
+                nivel={3}
+                titulo="O que pede ação hoje"
+                recolher="ciclo-antigo:acoes-do-dia"
+                resumo={`${acoes.length} ${acoes.length === 1 ? "ação" : "ações"}`}
+                className="border-b border-border pb-3"
+              >
                 <div className="space-y-1.5">
                   {acoes.map((acao, indice) => (
                     <div
@@ -1883,7 +1887,7 @@ export default function AdminCiclo() {
                         <span className="min-w-0 flex-1 text-[12px] text-foreground">
                           {acao.acao}
                         </span>
-                        <span className="shrink-0 text-[10.5px] text-muted-foreground">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {acao.nome}
                         </span>
                       </button>
@@ -1913,7 +1917,7 @@ export default function AdminCiclo() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </Secao>
             );
           })()}
 
@@ -1988,9 +1992,11 @@ export default function AdminCiclo() {
                   que aquele cliente já está na frente. */}
               {abrirInclusao && (
                 <>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                Marca o serviço no cadastro do cliente, então ele passa a
-                aparecer aqui e na ficha dele. Não mexe em cobrança nem no plano.
+              <p className="mt-1.5 flex items-center text-[11px] text-muted-foreground">
+                Não mexe em cobrança nem no plano.
+                <AjudaRecolhida className="ml-1 min-h-0" rotulo="O que incluir faz">
+                  Marca o serviço no cadastro do cliente, então ele passa a aparecer aqui e na ficha dele.
+                </AjudaRecolhida>
               </p>
               <div className="mt-2 space-y-1">
                 {clientesDeFora.map(({ client, nota }) => (
@@ -2137,7 +2143,7 @@ export default function AdminCiclo() {
       <Sheet open={!!dayKey} onOpenChange={(open) => !open && setDayKey(null)}>
         <SheetContent
           side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
         >
           <SheetHeader className="px-4">
             <SheetTitle className="pr-8 text-left text-base capitalize">
@@ -2256,7 +2262,7 @@ export default function AdminCiclo() {
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
         >
           <SheetHeader className="px-4">
             <SheetTitle className="pr-8 text-left text-base">Histórico · {cycle.label}</SheetTitle>
@@ -2326,7 +2332,7 @@ export default function AdminCiclo() {
       <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
         >
           <SheetHeader className="px-4">
             <SheetTitle className="pr-8 text-left text-base">O ciclo · {cycle.label}</SheetTitle>

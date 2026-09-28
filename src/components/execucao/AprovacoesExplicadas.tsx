@@ -159,8 +159,11 @@ export default function AprovacoesExplicadas({
       ajuda="Cada pedido chega com o que vai acontecer, o porquê, os dados, o destino, o risco e o custo. O que for executado depois do sim é exatamente o que está aqui; mudou o plano, nasce outra versão."
     >
       <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
-        {aprovacoes.map((a) => {
+        {aprovacoes.map((a, i) => {
           const destacada = a.id === destaqueId;
+          // Um primário por área (SISTEMA.md seção 6): o pedido em destaque
+          // (ou o primeiro, sem destaque) leva o verde; os outros, borda.
+          const principal = destacada || (!aprovacoes.some((x) => x.id === destaqueId) && i === 0);
           const temPayload = a.payload && Object.keys(a.payload).length > 0;
           return (
             <li
@@ -259,7 +262,7 @@ export default function AprovacoesExplicadas({
                     type="button"
                     disabled={decidir.isPending}
                     onClick={() => decidir.mutate({ id: a.id, decisao: "aprovado" })}
-                    className={botao.primario}
+                    className={principal ? botao.primario : juntar(botao.secundario, "text-success")}
                   >
                     {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
                     Aprovar

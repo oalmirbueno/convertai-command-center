@@ -16,6 +16,7 @@ export default function InterruptorDoEstilo({
   marcaId,
   trabalhoIds,
   estiloAtivo,
+  rotulo = "Usar estilo do cliente",
   className = "",
 }: {
   clientId: string;
@@ -23,6 +24,8 @@ export default function InterruptorDoEstilo({
   trabalhoIds: string[];
   /** O estilo do cliente está ativo (sem ele o interruptor não liga). */
   estiloAtivo: boolean;
+  /** Texto ao lado da chave (frente AE-3: o Estúdio usa o curto "Estilo do cliente"). */
+  rotulo?: string;
   className?: string;
 }) {
   const avisarErro = useAvisarErro();
@@ -67,9 +70,10 @@ export default function InterruptorDoEstilo({
         disabled={desativado}
         onCheckedChange={(v) => void mudar(v === true)}
         aria-label="Usar estilo do cliente nesta geração"
+        data-compacto=""
       />
       <label htmlFor={`estilo-${ids[0]}`} className="ml-2 mr-1 truncate text-[12px] text-muted-foreground">
-        Usar estilo do cliente
+        {rotulo}
       </label>
       <AjudaRecolhida rotulo="O que faz o estilo do cliente">
         {estiloAtivo

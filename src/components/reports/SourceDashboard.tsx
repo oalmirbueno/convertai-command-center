@@ -289,7 +289,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
                         <span className={juntar(etiqueta, "bg-muted text-foreground")}>{i > 0 ? rate.toFixed(1) + "%" : "100%"}</span>
                       </div>
                       <div className="ml-8 mt-1 flex min-w-0 items-baseline justify-between">
-                        <span className="text-[16px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</span>
+                        <span className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</span>
                         {dropOff > 0 && (
                           <span className={juntar(texto.auxiliar, "ml-2 inline-flex items-center tabular-nums")}>
                             <ArrowDownRight className="mr-0.5 h-3 w-3 text-destructive" aria-hidden="true" />

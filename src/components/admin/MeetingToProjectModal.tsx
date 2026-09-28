@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
-import { X, Loader2, Sparkles, Upload, FileText, Trash2 } from "lucide-react";
+import { Loader2, Sparkles, Upload, FileText, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AjudaRecolhida, CampoDeEscolha, CampoDeFormulario, botao, campo, campoTexto, foco, juntar, texto } from "@/components/sistema";
 import { useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
@@ -125,36 +127,22 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-      <div
-        className="relative bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-[520px] sm:mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-hidden"
-        style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Gerar Projeto com IA</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+    // Janela do sistema (Dialog): foco preso, Esc fecha, rola por dentro e as
+    // ações ficam presas no pé. A explicação fica no "?" do título.
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="flex max-h-[88vh] max-w-[520px] flex-col overflow-hidden border-border bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 text-left">
+          <div className="flex min-w-0 items-center pr-8">
+            <DialogTitle className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Gerar Projeto com IA</DialogTitle>
+            <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
               Cole anotações ou envie documentos e a IA cria o projeto completo.
-            </p>
+            </AjudaRecolhida>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Client select */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente *</label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
-            >
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5">
+          <CampoDeFormulario rotulo="Cliente" obrigatorio>
+            <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={campo}>
               <option value="">Selecione o cliente</option>
               {(clients || []).map((c: any) => (
                 <option key={c.id} value={c.id}>
@@ -162,26 +150,19 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
                 </option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
-          {/* Project type select */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Tipo de projeto *</label>
-            <select
-              value={projectType}
-              onChange={(e) => setProjectType(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
-            >
+          <CampoDeFormulario rotulo="Tipo de projeto" obrigatorio>
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={campo}>
               <option value="">Tipo de projeto</option>
               {PROJECT_TYPES.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
-          {/* File upload */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Documentos</label>
+          {/* Documentos: lista com divisória, sem caixa por arquivo. */}
+          <CampoDeEscolha rotulo="Documentos">
             <input
               ref={fileInputRef}
               type="file"
@@ -193,81 +174,67 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 bg-secondary border border-dashed border-border rounded-[10px] px-3.5 py-3 text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors cursor-pointer"
+              className={juntar("flex w-full items-center justify-center rounded-md border border-dashed border-border px-3.5 py-3 text-[13px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground", foco)}
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
               Enviar PDF, DOC, TXT ou MD
             </button>
 
             {files.length > 0 && (
-              <div className="space-y-1.5 mt-2">
+              <ul className="mt-2 divide-y divide-border">
                 {files.map((f, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg px-3 py-2"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-foreground truncate flex-1">{f.name}</span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{formatFileSize(f.size)}</span>
+                  <li key={i} className="flex min-w-0 items-center py-1.5">
+                    <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{f.name}</span>
+                    <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{formatFileSize(f.size)}</span>
                     <button
+                      type="button"
                       onClick={() => removeFile(i)}
-                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-0.5"
+                      className={juntar(botao.icone, "ml-1 h-7 w-7 hover:text-destructive")}
+                      aria-label={`Remover ${f.name}`}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-          </div>
+          </CampoDeEscolha>
 
-          {/* Meeting notes textarea */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Anotações da reunião {files.length === 0 ? "*" : "(opcional)"}
-            </label>
-            <div className="relative">
-              <textarea
-                value={meetingNotes}
-                onChange={(e) => setMeetingNotes(e.target.value)}
-                placeholder="Cole aqui as anotações, transcrição ou resumo da reunião com o cliente..."
-                rows={6}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none min-h-[150px]"
-              />
-              <span className="absolute bottom-2 right-3 text-[10px] text-muted-foreground/50">
-                {meetingNotes.length} caracteres
-              </span>
-            </div>
-          </div>
+          <CampoDeFormulario
+            rotulo={files.length === 0 ? "Anotações da reunião" : "Anotações da reunião (opcional)"}
+            obrigatorio={files.length === 0}
+            apoio={`${meetingNotes.length} caracteres`}
+          >
+            <textarea
+              value={meetingNotes}
+              onChange={(e) => setMeetingNotes(e.target.value)}
+              placeholder="Cole aqui as anotações, transcrição ou resumo da reunião com o cliente..."
+              rows={6}
+              className={juntar(campoTexto, "min-h-[150px] resize-none")}
+            />
+          </CampoDeFormulario>
         </div>
 
-        <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-          <button
-            onClick={handleClose}
-            disabled={loading}
-            className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border"
-          >
+        <div className="flex shrink-0 items-center justify-end border-t border-border px-5 py-3 [&>*+*]:ml-2">
+          <button type="button" onClick={handleClose} disabled={loading} className={botao.secundario}>
             Cancelar
           </button>
-          <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="w-full sm:w-auto px-5 py-2 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-          >
+          <button type="button" onClick={handleGenerate} disabled={loading} className={botao.primario}>
             {loading ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                 {files.length > 0 ? "Enviando..." : "IA analisando..."}
               </>
             ) : (
               <>
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 Gerar Plano com IA
               </>
             )}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

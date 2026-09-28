@@ -17,6 +17,7 @@ import AtivarGestao from "@/components/mesa-ads/AtivarGestao";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService } from "@/lib/clientFlags";
 import {
+  AjudaRecolhida,
   AreaDeTrabalho,
   CabecalhoDePagina,
   CampoDeFormulario,
@@ -325,7 +326,7 @@ function ClientAdsDetail({
                           {/* A leitura do cliente, exatamente como sai no relatório dele. */}
                           <div className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
                             <p className={texto.rotulo}>Como o cliente lê</p>
-                            <p className="mt-0.5 text-[12.5px] leading-5 text-foreground">{clientCampaignSentence(resumo)}</p>
+                            <p className="mt-0.5 text-[13px] leading-5 text-foreground">{clientCampaignSentence(resumo)}</p>
                           </div>
                           {/* E os números de operar. */}
                           <div className="min-w-0 px-1 py-2 md:px-0">
@@ -611,7 +612,8 @@ function ContasEConexao({
           <BotaoDaPagina
             icone={<Link2 className="h-4 w-4" aria-hidden="true" />}
             rotulo={rotuloConectar}
-            classe={precisaReconectar || (!isLoading && ativas.length === 0) ? botao.primario : botao.secundario}
+            // Na ficha do cliente o primário é "Gerar relatório" (um primário por área).
+            classe={!clienteId && (precisaReconectar || (!isLoading && ativas.length === 0)) ? botao.primario : botao.secundario}
             onClick={conectarPelaMeta}
             disabled={salvando}
           />
@@ -768,8 +770,11 @@ function ContasEConexao({
             </ul>
 
             {comTrafego.length === 0 && (
-              <p className="border-t border-border px-4 py-2 text-[12px] leading-4 text-warning">
-                Nenhum cliente do painel está marcado com o serviço de tráfego. Marque no cadastro do cliente para ele aparecer aqui.
+              <p className="flex min-w-0 items-center border-t border-border px-4 py-2 text-[12px] leading-4 text-warning">
+                <span className="min-w-0 truncate">Nenhum cliente do painel está marcado com o serviço de tráfego</span>
+                <AjudaRecolhida className="ml-1.5" rotulo="Como marcar o serviço de tráfego">
+                  Marque o serviço de tráfego no cadastro do cliente para ele aparecer aqui.
+                </AjudaRecolhida>
               </p>
             )}
           </div>
@@ -939,7 +944,7 @@ export default function AdminAds() {
   if (!isStaff) {
     return (
       <div className="min-w-0 space-y-4">
-        <CabecalhoDePagina titulo="Anúncios" descricao="Esta área é da equipe." />
+        <CabecalhoDePagina titulo="Anúncios" descricao="Área da equipe" />
       </div>
     );
   }
@@ -1035,16 +1040,12 @@ export default function AdminAds() {
               titulo="Desempenho por cliente"
               descricao={busca.trim() ? `${filtrados.length} de ${porCliente.length}` : plural(porCliente.length, "cliente", "clientes")}
               ajuda="Resultado pelo objetivo de cada campanha: conversa não soma com venda. Toque num cliente para abrir."
+              acao={
+                porCliente.length > 6 ? (
+                  <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar cliente" rotulo="Buscar cliente" className="w-40 sm:w-64" />
+                ) : undefined
+              }
             >
-              {porCliente.length > 6 && (
-                <CampoDeBusca
-                  valor={busca}
-                  onMudar={setBusca}
-                  placeholder="Buscar cliente"
-                  rotulo="Buscar cliente"
-                  className="mb-3 w-full sm:w-64"
-                />
-              )}
               {isLoading && !rows ? (
                 <Carregando rotulo="Carregando campanhas" linhas={3} />
               ) : porCliente.length === 0 ? (

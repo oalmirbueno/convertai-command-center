@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CircleCheckBig, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { etapasDoServico, resumoDoTime, servicosDoCliente } from "@/lib/servicosCliente";
 import {
@@ -121,9 +122,11 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
       {etapas.length === 0 ? (
         // Serviço sem trilho próprio ainda aparece com nome e história; só não
         // inventa etapas que ninguém combinou.
-        <p className="mt-2 rounded-md border border-dashed border-border px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
-          {nomeDoServico} ainda não tem etapas próprias desenhadas. O histórico e os
-          trabalhos avulsos abaixo continuam registrando o que foi feito.
+        <p className="mt-2 flex items-center rounded-md border border-dashed border-border px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
+          {nomeDoServico} ainda não tem etapas próprias desenhadas.
+          <AjudaRecolhida className="ml-1 min-h-0" rotulo="Onde fica o registro">
+            O histórico e os trabalhos avulsos abaixo continuam registrando o que foi feito.
+          </AjudaRecolhida>
         </p>
       ) : (
         <div className="mt-2 space-y-1.5">
@@ -166,10 +169,12 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
       )}
 
       {outros.length > 0 && (
-        <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 flex items-center text-[11px] leading-relaxed text-muted-foreground">
           Este cliente também tem{" "}
-          {outros.map((s) => SERVICE_LABELS[s] || s).join(", ")}. Troque o serviço na
-          fila de cima para ver a entrega de cada um.
+          {outros.map((s) => SERVICE_LABELS[s] || s).join(", ")}.
+          <AjudaRecolhida className="ml-1 min-h-0" rotulo="Ver a entrega de outro serviço">
+            Troque o serviço na fila de cima para ver a entrega de cada um.
+          </AjudaRecolhida>
         </p>
       )}
 

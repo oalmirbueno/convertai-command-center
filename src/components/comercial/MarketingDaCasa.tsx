@@ -112,7 +112,7 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Marketing da casa" memoriaDaRolagem="comercial:marketing">
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-5">
         <FaixaDeNumeros
           tamanho="compacto"
           apoioAoLado

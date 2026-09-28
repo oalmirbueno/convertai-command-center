@@ -153,7 +153,11 @@ export default function ClientApprovals() {
   const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
 
-  const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
+  const [confirmApprove, setConfirmApproveRaw] = useState<string | null>(null);
+  // Frente AP: comentário opcional junto da aprovação ("aprovado, mas posta de manhã").
+  // Vai para a equipe e a Mesa entende o pedido (Jev); não muda a aprovação.
+  const [approveNote, setApproveNote] = useState("");
+  const setConfirmApprove = (id: string | null) => { setConfirmApproveRaw(id); setApproveNote(""); };
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   // Frente EA: no carrossel o cliente pode dizer qual lâmina (0 = o post todo).
@@ -225,6 +229,7 @@ export default function ClientApprovals() {
         fileId: file.id,
         expectedVersion: file.version,
         decision: "approved",
+        feedback: approveNote.trim() ? approveNote.trim().slice(0, 1000) : null,
       });
       toast({ title: "Aprovado" });
       // O aviso da equipe nasce no banco (gatilho de file_approval_events):
@@ -608,6 +613,14 @@ export default function ClientApprovals() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar aprovação?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
+          <Textarea
+            placeholder="Algum comentário? (opcional)"
+            aria-label="Comentário da aprovação (opcional)"
+            value={approveNote}
+            onChange={(e) => setApproveNote(e.target.value)}
+            rows={2}
+            maxLength={1000}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
             <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>

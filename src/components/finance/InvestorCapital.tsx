@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { Plus, Briefcase, Edit3, Trash2 } from "lucide-react";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, RegiaoRolavel, Secao, SeletorCompacto,
+  AjudaRecolhida, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, RegiaoRolavel, Secao, SeletorCompacto,
   botao, campo, campoTexto, juntar, superficie, texto,
 } from "@/components/sistema";
 import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi } from "@/components/finance/pecasDoFinanceiro";
@@ -297,7 +297,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
           <EstadoVazio
             icone={<Briefcase className="h-5 w-5" />}
             titulo="Nenhum capital registrado"
-            descricao="Quando um sócio investir, registre aqui. O valor fica fora do DRE e serve de base para medir o retorno."
+            descricao="Registre aqui quando um sócio investir: fica fora do DRE."
             acao={
               <button type="button" onClick={() => setModal({ data: {} })} className={botao.primario}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Registrar primeiro aporte
@@ -540,8 +540,11 @@ function InvestorForm({ initial, onSave, onCancel }: any) {
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   return (
     <div className="space-y-4">
-      <p className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
-        <span className="font-semibold text-primary">Capital de investidor.</span> Não conta como receita nem como despesa. É a base do ROI bruto a partir da data do aporte.
+      <p className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
+        <span className="min-w-0 truncate"><span className="font-semibold text-primary">Capital de investidor</span> fora do DRE</span>
+        <AjudaRecolhida className="ml-1" rotulo="Sobre capital de investidor">
+          Não conta como receita nem como despesa. É a base do ROI bruto a partir da data do aporte.
+        </AjudaRecolhida>
       </p>
       <GrupoDeCampos>
         <CampoDeFormulario rotulo="Descrição" obrigatorio largo>

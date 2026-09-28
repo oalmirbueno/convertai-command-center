@@ -158,7 +158,7 @@ export default function AdminEsteira() {
   const detalhe = clientes.find((c) => c.id === detalheId) ?? null;
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
-    return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
+    return <div className="p-6 text-[13px] text-muted-foreground">Esta área é da equipe.</div>;
   }
 
   // Resumo da frente para o topo: o que a semana pede, de relance.
@@ -188,7 +188,7 @@ export default function AdminEsteira() {
           {/* Linha 1: voltar, título, semana (do tablet para cima) e ações */}
           <div className="flex h-10 min-w-0 items-center">
             <Link to="/dashboard" aria-label="Voltar ao painel" className={juntar(botao.icone, "mr-1")}><ArrowLeft className="h-4 w-4" /></Link>
-            <h1 className={juntar(texto.tituloPagina, "shrink-0 text-[18px]")}>Ciclo</h1>
+            <h1 className={juntar(texto.tituloPagina, "shrink-0")}>Ciclo</h1>
             <AjudaRecolhida className="ml-1.5 min-h-0" titulo="Ciclo da semana">
               Cada bloco é um cliente e cada linha é algo que existe de verdade: post no seu elo, campanha, tarefa, passo de entrada. Toque no cliente para ver o dossiê, os números, os rituais e marcar o que foi feito. As frentes Social, Tráfego e Avulso ficam nas abas.
             </AjudaRecolhida>
@@ -439,7 +439,7 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
       )}
       <span className="mt-2 flex min-w-0 items-center pl-[46px]">
         {r.map((x) => (
-          <span key={x.key} title={x.rotulo} className={`mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${x.feito ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
+          <span key={x.key} title={x.rotulo} className={`mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${x.feito ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
             {x.key === "segunda" ? "S" : x.key === "quarta" ? "Q" : "S"}
           </span>
         ))}

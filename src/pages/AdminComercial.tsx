@@ -674,7 +674,7 @@ function VisaoGeral({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Visão geral do Comercial" memoriaDaRolagem="comercial:visao">
-      <div className="min-w-0 space-y-4">
+      <div className="min-w-0 space-y-5">
         {/* Os quatro números que resumem o mês do departamento. */}
         <FaixaDeNumeros
           tamanho="compacto"
@@ -766,7 +766,7 @@ function VisaoGeral({
               </Bloco>
 
               <Bloco titulo="Marketing" icone={Sparkles} onClick={() => onIr("marketing")}>
-                <span className={juntar(texto.auxiliar, "block truncate")}>O que está no ar, o que vem por aí e de onde as pessoas chegam.</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>No ar, próximos e origem dos leads</span>
               </Bloco>
             </ul>
           </Painel>
@@ -977,7 +977,7 @@ function Marketing({
           titulo="Nenhuma campanha registrada"
           descricao="O que a casa investe para aparecer, e quantos leads e contratos aquilo virou."
           acao={
-            <button type="button" onClick={onNova} className={botao.primario}>
+            <button type="button" onClick={onNova} className={botao.secundario}>
               Nova campanha
             </button>
           }
@@ -1375,7 +1375,7 @@ function EditorDeLead({
           {lead && (
             <>
               <section className="border-t border-border pt-4" aria-label="Mover de etapa">
-                <h3 className={juntar(texto.tituloSecao, "mb-2 text-[14px]")}>Mover para</h3>
+                <h3 className={juntar(texto.tituloSecao, "mb-2")}>Mover para</h3>
                 <div className="-m-1 flex flex-wrap [&>*]:m-1">
                   {ESTAGIOS.filter((e) => e.id !== lead.stage).map((estagio) => (
                     <button
@@ -1415,7 +1415,7 @@ function EditorDeLead({
               />
 
               <section className="border-t border-border pt-4" aria-label="História do lead">
-                <h3 className={juntar(texto.tituloSecao, "mb-2 text-[14px]")}>História</h3>
+                <h3 className={juntar(texto.tituloSecao, "mb-2")}>História</h3>
                 <form
                   className="flex min-w-0 items-center"
                   onSubmit={async (e) => {

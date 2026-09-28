@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { ExternalLink, PackageCheck, Sparkles, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { comoAbrir } from "@/components/execucao/OQueFoiFeito";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { etiqueta, juntar, texto } from "@/components/sistema/estilos";
 
 /**
  * O que já foi entregue para este cliente — dentro do dossiê.
@@ -52,24 +54,31 @@ export default function EntregasNoDossie({ clientId }: { clientId: string }) {
     enabled: Boolean(clientId),
   });
 
+  // Bloco aberto dentro da seção do dossiê (28/09): sem cartão, sem cartão por
+  // item e sem rolagem própria (a região da Central já rola; a leitura para
+  // nas 12 mais recentes).
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[12px] text-destructive">
+      <p role="status" className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
         Não consegui ler as entregas: {error instanceof Error ? error.message : String(error)}.
-        Isso não significa que nada foi entregue — a leitura é que falhou.
-      </div>
+        Isso não significa que nada foi entregue.
+      </p>
     );
   }
   if (isLoading || data.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        <PackageCheck className="h-3.5 w-3.5 text-success" /> O que já foi entregue
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">{data.length}</span>
-      </p>
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="flex min-w-0 items-center">
+        <PackageCheck className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+        <p className={juntar(texto.rotulo, "min-w-0 truncate")}>O que já foi entregue</p>
+        <span className={juntar(etiqueta, "ml-1.5 bg-muted text-muted-foreground")}>{data.length}</span>
+        <AjudaRecolhida className="ml-1" rotulo="De onde vêm as entregas">
+          Vem da mesma memória que o Ciclo e a Central leem; por isso aparece aqui sem ninguém copiar nada.
+        </AjudaRecolhida>
+      </div>
 
-      <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+      <ul className="mt-1.5 divide-y divide-border">
         {data.map((e) => {
           // O metadata é a fonte boa; o texto é o resgate para as entregas
           // antigas, gravadas antes dos campos existirem.
@@ -80,26 +89,26 @@ export default function EntregasNoDossie({ clientId }: { clientId: string }) {
           const temMarca = typeof e.metadata?.autonoma === "boolean";
 
           return (
-            <div key={e.id} className="rounded-lg border border-border bg-secondary/40 px-2.5 py-2">
-              <div className="flex flex-wrap items-center gap-1.5">
+            <li key={e.id} className="min-w-0 py-2">
+              <div className="flex min-w-0 items-baseline">
+                <p className="mr-2 min-w-0 flex-1 text-[13px] text-foreground">
+                  {e.title || primeiraLinha(e.content)}
+                </p>
                 {temMarca && (
                   <span className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                    etiqueta,
+                    "mr-2",
                     autonoma ? "bg-info/15 text-info" : "bg-success/15 text-success",
                   )}>
-                    {autonoma ? <Sparkles className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
+                    {autonoma ? <Sparkles className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> : <ShieldCheck className="mr-1 h-2.5 w-2.5" aria-hidden="true" />}
                     {autonoma ? "por conta" : "autorizado"}
                   </span>
                 )}
-                <span className="ml-auto text-[10px] text-muted-foreground">{quando(e.created_at)}</span>
+                <span className={juntar(texto.auxiliar, "shrink-0 tabular-nums")}>{quando(e.created_at)}</span>
               </div>
 
-              <p className="mt-0.5 text-[12.5px] text-foreground">
-                {e.title || primeiraLinha(e.content)}
-              </p>
-
               {acesso && (
-                <p className="mt-1 break-all text-[11px]">
+                <p className="mt-0.5 break-all text-[12px]">
                   {acesso.tipo === "texto" ? (
                     <span className="text-muted-foreground">{acesso.valor}</span>
                   ) : (
@@ -108,22 +117,17 @@ export default function EntregasNoDossie({ clientId }: { clientId: string }) {
                       {...(acesso.tipo === "url"
                         ? { target: "_blank", rel: "noopener noreferrer" }
                         : {})}
-                      className="inline-flex items-center gap-1 text-primary underline"
+                      className="inline-flex items-center text-primary underline"
                     >
-                      <ExternalLink className="h-2.5 w-2.5 shrink-0" />{acesso.valor}
+                      <ExternalLink className="mr-1 h-2.5 w-2.5 shrink-0" aria-hidden="true" />{acesso.valor}
                     </a>
                   )}
                 </p>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
-
-      <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-        Vem da mesma memória que o Ciclo e a Central leem — por isso aparece aqui
-        sem ninguém copiar nada.
-      </p>
+      </ul>
     </div>
   );
 }

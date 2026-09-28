@@ -11,8 +11,6 @@ import {
   CalendarClock,
   AlertTriangle,
   Eye,
-  Search,
-  X,
   ChevronRight,
   MoreHorizontal,
   Users,
@@ -22,14 +20,15 @@ import {
   AjudaRecolhida,
   AreaDeTrabalho,
   CabecalhoDePagina,
+  CampoDeBusca,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
+  FaixaDeNumeros,
   Painel,
   Secao,
   SeletorCompacto,
   botao,
-  campo,
   etiqueta,
   juntar,
   texto,
@@ -650,7 +649,6 @@ export default function Clients() {
   // Filtros, busca e o grupo de avulsos concluídos ficam lembrados ao sair e voltar.
   const [tab, setTab] = useEstadoDaTela("filtro:status", "all", { validar: validarOpcao(STATUS_TABS) });
   const [typeFilter, setTypeFilter] = useEstadoDaTela("filtro:tipo", "all", { validar: validarOpcao(TYPE_TABS) });
-  const [showDoneOneOffs, setShowDoneOneOffs] = useEstadoDaTela("avulsos-concluidos", false, { validar: (v) => typeof v === "boolean" });
   const [serviceFilter, setServiceFilter] = useEstadoDaTela("filtro:servico", "all", { validar: validarOpcao(SERVICE_FILTERS) });
   const [search, setSearch] = useEstadoDaTela("busca", "", { validar: (v) => typeof v === "string" });
 
@@ -1151,7 +1149,7 @@ export default function Clients() {
             <FotoDoCliente nome={nome || ""} foto={fotoDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
             <span className="ml-3 block min-w-0 flex-1">
               <span className="flex min-w-0 items-center">
-                <span className="min-w-0 truncate text-[14px] font-semibold leading-5 text-foreground">{nome}</span>
+                <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{nome}</span>
                 {(searching || tab === "all") && (
                   <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground sm:inline-flex")}>
                     {statusLabel[c.plan_status || "active"] || "Sem status"}
@@ -1187,7 +1185,7 @@ export default function Clients() {
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p className="text-xs">{status?.label || "Renovação"}</p>
+                  <p className="text-[12px]">{status?.label || "Renovação"}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1323,26 +1321,13 @@ export default function Clients() {
 
       {/* Filtros: status, tipo e serviço contratado, e a busca na mesma linha */}
       <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-        <div className="relative min-w-0 flex-1 basis-full sm:basis-[240px]" data-tour="clients-search">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        <div className="min-w-0 flex-1 basis-full sm:basis-[240px]" data-tour="clients-search">
+          <CampoDeBusca
+            valor={search}
+            onMudar={setSearch}
             placeholder="Buscar por empresa, contato, e-mail ou telefone"
-            aria-label="Buscar cliente existente"
-            className={juntar(campo, "pl-9 pr-9 text-[16px] sm:text-[13px]")}
+            rotulo="Buscar cliente existente"
           />
-          {searching && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              aria-label="Limpar busca"
-              title="Limpar busca"
-              className={juntar(botao.icone, "absolute right-0.5 top-1/2 -translate-y-1/2")}
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
         </div>
         <SeletorCompacto
           rotulo="Status"
@@ -1386,27 +1371,21 @@ export default function Clients() {
         {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados. */}
         {isAdmin && (
           <section aria-label="Resumo financeiro dos clientes" className="mb-5">
-            <Painel semEspaco className="overflow-hidden">
-              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-5">
-                {kpiCards.map((card, i) => (
-                  <div key={card.label} className={juntar("min-w-0 bg-card px-4 py-3", i === kpiCards.length - 1 && "col-span-2 sm:col-span-1")}>
-                    <p className={juntar(texto.rotulo, "truncate")}>{card.label}</p>
-                    {card.loading ? (
-                      <div className="mt-1.5 h-5 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} />
-                    ) : (
-                      <p className={juntar("mt-1 truncate text-[17px] font-semibold leading-6 tabular-nums", card.tone)}>{card.value}</p>
-                    )}
-                    <p className={juntar(texto.auxiliar, "mt-0.5 hidden truncate sm:block")} title={card.helper}>
-                      {card.helper}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Painel>
+            <FaixaDeNumeros
+              tamanho="compacto"
+              colunas={5}
+              rotulo="Números dos clientes"
+              itens={kpiCards.map((card) => ({
+                rotulo: card.label,
+                valor: card.loading ? <span className="block h-5 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${card.label}`} /> : card.value,
+                corDoValor: card.tone,
+                apoio: card.helper,
+              }))}
+            />
             {financialError && (
               <p className={juntar(texto.auxiliar, "mt-1.5 flex items-center text-warning")} role="status">
                 <AlertTriangle className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Resumo financeiro indisponível agora. Os clientes seguem acessíveis.
+                Resumo financeiro indisponível agora
               </p>
             )}
           </section>
@@ -1492,28 +1471,22 @@ export default function Clients() {
               <Secao
                 titulo="Avulsos concluídos"
                 descricao={`${avulsosDone.length} ${avulsosDone.length === 1 ? "concluído" : "concluídos"}`}
-                acao={
-                  <button type="button" onClick={() => setShowDoneOneOffs((v) => !v)} aria-expanded={showDoneOneOffs} className={botao.discreto}>
-                    {showDoneOneOffs ? "Recolher" : "Mostrar"}
-                  </button>
-                }
+                recolhidaDeInicio
               >
-                {showDoneOneOffs && (
-                  <Painel semEspaco>
-                    <ul className="divide-y divide-border">
-                      {avulsosDone.map((c) =>
-                        renderClientRow(c, {
-                          apagado: true,
-                          acao: (
-                            <button type="button" onClick={() => toggleOneOffDone(c, false)} className={juntar(botao.discreto, "h-8 text-[12px] text-primary")}>
-                              Retomar cliente
-                            </button>
-                          ),
-                        }),
-                      )}
-                    </ul>
-                  </Painel>
-                )}
+                <Painel semEspaco>
+                  <ul className="divide-y divide-border">
+                    {avulsosDone.map((c) =>
+                      renderClientRow(c, {
+                        apagado: true,
+                        acao: (
+                          <button type="button" onClick={() => toggleOneOffDone(c, false)} className={juntar(botao.discreto, "h-8 text-[12px] text-primary")}>
+                            Retomar cliente
+                          </button>
+                        ),
+                      }),
+                    )}
+                  </ul>
+                </Painel>
               </Secao>
             )}
 

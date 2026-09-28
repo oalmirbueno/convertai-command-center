@@ -1,5 +1,6 @@
 import { Bot, Crown, Network } from "lucide-react";
-import { AjudaRecolhida } from "@/components/sistema";
+import { Secao, juntar, superficie, useEstadoDaTela } from "@/components/sistema";
+import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -87,6 +88,12 @@ export default function OrganogramaAgentes({
   const ativos = [...operadores, ...coordenadores].filter((o) => o.ativo !== false).length;
   const trabalhando = operadores.reduce((s, o) => s + (o.emAndamento ?? 0), 0);
 
+  // Tudo recolhe (SISTEMA.md 4.3): cada função recolhe e volta; a escolha
+  // fica guardada (sair e voltar mantém).
+  const [fechadas, setFechadas] = useEstadoDaTela<Record<string, boolean>>("execucao:organograma:fechadas", {}, {
+    validar: (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v),
+  });
+
   const Caixa = ({
     no,
     destaque,
@@ -107,14 +114,13 @@ export default function OrganogramaAgentes({
         type="button"
         onClick={() => aoAbrir(no)}
         title={no.papel}
-        className={cn(
-          "group relative w-full overflow-hidden rounded-lg border text-left transition-colors",
+        /* Cartão com função (item do organograma): a superfície do sistema,
+           com a borda tingida só no dono e no Hermes. */
+        className={juntar(
+          superficie.painel,
+          "group relative w-full overflow-hidden text-left transition-colors",
           "hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          destaque === "dono"
-            ? "border-primary/50 bg-card"
-            : destaque === "gateway"
-              ? "border-info/50 bg-card"
-              : "border-border bg-card",
+          destaque === "dono" ? "border-primary/50" : destaque === "gateway" ? "border-info/50" : "",
         )}
       >
         {/* A barra de acento à esquerda: é ela que agrupa visualmente sem
@@ -166,7 +172,7 @@ export default function OrganogramaAgentes({
                 {no.nome}
               </p>
               {no.nivel === "coordenador" && (
-                <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[10.5px] font-medium text-primary">
+                <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[11px] font-medium text-primary">
                   coordena
                 </span>
               )}
@@ -216,27 +222,30 @@ export default function OrganogramaAgentes({
    * título, não por outra caixa.
    */
   return (
-    <section aria-label="Hierarquia da operação" className="min-w-0">
-      <header className="mb-4 flex min-w-0 flex-wrap items-center justify-between">
-        <div className="mr-4 flex min-w-0 items-center">
-          <Network className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <h2 className="min-w-0 truncate text-[15px] font-semibold text-foreground">Hierarquia da operação</h2>
-          <AjudaRecolhida className="ml-1.5">
-            Toque em qualquer um para ver o contexto e copiar o comando de acionamento.
-            Quem organiza esta hierarquia é o Hermes, pelo próprio MCP, e o painel
-            redesenha na hora. O painel não dispara o agente sozinho: quem conversa
-            com ele é o grupo.
-          </AjudaRecolhida>
-        </div>
-        <p className="-mx-1.5 flex flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mx-1.5">
+    /* A seção do sistema (recolhe sozinha): título, o resumo em números como
+       linha de estado e a explicação no "?". */
+    <Secao
+      titulo="Hierarquia da operação"
+      data-organograma=""
+      descricao={
+        <span className="-mx-1 inline-flex flex-wrap items-center [&>*]:mx-1">
           <span><strong className="tabular-nums text-foreground">{total}</strong> {total === 1 ? "agente" : "agentes"}</span>
           <span><strong className="tabular-nums text-foreground">{areas.length}</strong> {areas.length === 1 ? "função" : "funções"}</span>
           <span><strong className="tabular-nums text-success">{ativos}</strong> ativos</span>
           {trabalhando > 0 && (
             <span><strong className="tabular-nums text-info">{trabalhando}</strong> em andamento</span>
           )}
-        </p>
-      </header>
+        </span>
+      }
+      ajuda={
+        <>
+          Toque em qualquer um para ver o contexto e copiar o comando de acionamento.
+          Quem organiza esta hierarquia é o Hermes, pelo próprio MCP, e o painel
+          redesenha na hora. O painel não dispara o agente sozinho: quem conversa
+          com ele é o grupo.
+        </>
+      }
+    >
 
       <div className="flex flex-col items-center">
         <div className="w-full max-w-[16rem]">
@@ -276,13 +285,17 @@ export default function OrganogramaAgentes({
           {areas.map(([area, doGrupo]) => {
             const acento = acentoDaArea(area);
             const emAndamento = doGrupo.reduce((s, o) => s + (o.emAndamento ?? 0), 0);
+            const fechada = Boolean(fechadas[area]);
             return (
               <section key={area} aria-label={area} className="min-w-0">
-                <div className="mb-2 flex min-w-0 items-center">
+                <div className={cn("flex min-w-0 items-center", !fechada && "mb-2")}>
                   <span className={cn("mr-2 h-3.5 w-1 shrink-0 rounded-full", acento)} aria-hidden />
-                  <h3 className="mr-2 min-w-0 truncate text-[13px] font-semibold text-foreground">
-                    {area}
-                  </h3>
+                  <TituloRecolhivel
+                    titulo={area}
+                    recolhido={fechada}
+                    onAlternar={() => setFechadas((atual) => ({ ...atual, [area]: !fechada }))}
+                    className="mr-2 shrink"
+                  />
                   <span className="mr-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">
                     {doGrupo.length}
                   </span>
@@ -292,14 +305,16 @@ export default function OrganogramaAgentes({
                     </span>
                   )}
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {doGrupo.map((o) => <Caixa key={o.id} no={o} acento={acento} />)}
-                </div>
+                {!fechada && (
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {doGrupo.map((o) => <Caixa key={o.id} no={o} acento={acento} />)}
+                  </div>
+                )}
               </section>
             );
           })}
         </div>
       </div>
-    </section>
+    </Secao>
   );
 }

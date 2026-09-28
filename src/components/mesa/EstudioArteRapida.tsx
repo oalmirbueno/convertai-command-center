@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Archive, CalendarPlus, FileText, ImagePlus, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
@@ -854,6 +854,7 @@ export default function EstudioArteRapida({
   onAlvo,
   colunas,
   altura,
+  refDaAltura,
   foco,
   alturaDaJanela,
   topo,
@@ -864,6 +865,8 @@ export default function EstudioArteRapida({
   onAlvo: (alvo: string, limpar?: string[]) => void;
   colunas: boolean;
   altura?: number | null;
+  /** Frente AE-3: o elemento que a altura mede (useAlturaQueCabe da AbaEstudio): a tela começa nele. */
+  refDaAltura?: Ref<HTMLDivElement>;
   foco: boolean;
   alturaDaJanela: number;
   topo: ReactNode;
@@ -996,7 +999,7 @@ export default function EstudioArteRapida({
     // Frente AE-2 (dono, 28/09: "apertado, o scroll não funciona"): a tela inteira cabe na altura abaixo da
     // barra da Mesa; o histórico, o formulário e a prévia rolam cada um por dentro; a página não rola.
     return (
-      <div className="grid min-h-0 min-w-0 grid-cols-[260px_minmax(0,1fr)] gap-3" style={altura ? { height: altura } : undefined} data-arte-rapida-tela="colunas">
+      <div ref={refDaAltura} className="grid min-h-0 min-w-0 grid-cols-[260px_minmax(0,1fr)] gap-3" style={altura ? { height: altura } : undefined} data-arte-rapida-tela="colunas">
         <aside className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Histórico da arte rápida">
           <div className="shrink-0 space-y-2 border-b border-border px-3 py-2.5">
             {topo}

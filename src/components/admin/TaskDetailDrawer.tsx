@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
+import { Secao, botao, campo, campoTexto, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,8 +13,8 @@ import { toast } from "sonner";
 import JSZip from "jszip";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
-  FileText, Image, Film, Download, ChevronDown, ChevronUp,
-  Clock, Flag, User, Folder, Calendar, MessageSquare,
+  FileText, Image, Film, Download,
+  Clock, Flag, User, Folder, Calendar,
   CheckSquare, Square, Plus, Send, Archive,
 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -59,7 +60,7 @@ function SectionLoadError({
   onRetry: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 text-center">
+    <div className="rounded-md bg-destructive/5 px-3 py-3 text-center">
       <p className="text-[12px] text-destructive">
         Não foi possível carregar {label}.
       </p>
@@ -109,10 +110,6 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [assignedTo, setAssignedTo] = useState(task.assigned_to || "");
   const [dueDate, setDueDate] = useState(task.due_date || "");
   const [saving, setSaving] = useState(false);
-  const [descExpanded, setDescExpanded] = useState(true);
-  const [attachExpanded, setAttachExpanded] = useState(true);
-  const [checklistExpanded, setChecklistExpanded] = useState(true);
-  const [commentsExpanded, setCommentsExpanded] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const savedTaskValuesRef = useRef({
@@ -661,6 +658,14 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const checkedCount = (checklistItems || []).filter((i: any) => i.checked).length;
   const totalCheck = (checklistItems || []).length;
   const checkPercent = totalCheck > 0 ? Math.round((checkedCount / totalCheck) * 100) : 0;
+  // Rótulo de campo com ícone pequeno (sem caixa alta: texto.rotulo).
+  const rotuloDoCampo = (icone: ReactNode, nome: string) => (
+    <p className={juntar(texto.rotulo, "flex items-center")}>
+      <span className="mr-1 inline-flex" aria-hidden="true">{icone}</span>
+      {nome}
+    </p>
+  );
+  const pilula = "inline-block rounded-full px-2 py-0.5 text-[12px]";
 
   return (
     /* CENTRAL, e não lateral.
@@ -671,78 +676,73 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
-        className="relative flex w-full max-w-2xl flex-col rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        className={juntar(superficie.painel, "relative flex w-full max-w-2xl flex-col animate-in fade-in zoom-in-95 duration-150")}
         style={{ maxHeight: "min(88dvh, 900px)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-3">
-            <div className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${priorityColors[priority]}`}>
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center">
+            <span className={juntar(etiqueta, "mr-2 rounded-full", priorityColors[priority])}>
               {priorityLabels[priority]}
-            </div>
-            <span className="text-[11px] text-muted-foreground">{project?.name}</span>
+            </span>
+            <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>{project?.name}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="ml-3 flex shrink-0 items-center [&>*+*]:ml-1">
             {!readOnly && !editing && (
-              <button onClick={() => setEditing(true)}
-                className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-                <Pencil className="w-4 h-4" />
+              <button type="button" onClick={() => setEditing(true)} className={botao.icone} aria-label="Editar tarefa" title="Editar tarefa">
+                <Pencil className="h-4 w-4" />
               </button>
             )}
             {/* Excluir daqui: é o detalhe que a Execução e o Kanban abrem, e
                 era a única tela sem saída para a tarefa que perdeu o sentido. */}
             {!readOnly && !editing && canManageLinkedAssignment && (
-              <button onClick={() => setConfirmarExclusao(true)} title="Excluir tarefa"
-                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none">
-                <Trash2 className="w-4 h-4" />
+              <button type="button" onClick={() => setConfirmarExclusao(true)} title="Excluir tarefa" aria-label="Excluir tarefa" className={juntar(botao.icone, "hover:bg-destructive/10 hover:text-destructive")}>
+                <Trash2 className="h-4 w-4" />
               </button>
             )}
-            <button onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-              <X className="w-4 h-4" />
+            <button type="button" onClick={onClose} className={botao.icone} aria-label="Fechar" title="Fechar">
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-6" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
+        {/* Body: a única região que rola (nada de rolagem dentro dela). */}
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-6" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
           {/* Title */}
           {editing ? (
-            <input value={title} onChange={e => setTitle(e.target.value)}
-              className="w-full text-lg font-semibold bg-secondary border border-border rounded-xl px-4 py-2.5 text-foreground focus:outline-none focus:border-primary/50" />
+            <input value={title} onChange={e => setTitle(e.target.value)} aria-label="Título da tarefa" className={juntar(campo, "text-[15px] font-semibold")} />
           ) : (
-            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+            <h2 className={juntar(texto.tituloPagina, "min-w-0 truncate")} title={title}>{title}</h2>
           )}
 
           {/* Meta grid */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Flag className="w-3 h-3" /> Status</p>
+            <div className="min-w-0 space-y-1">
+              {rotuloDoCampo(<Flag className="h-3 w-3" />, "Status")}
               {editing ? (
-                <select value={status} onChange={e => setStatus(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
+                <select value={status} onChange={e => setStatus(e.target.value)} aria-label="Status" className={juntar(campo, "cursor-pointer")}>
                   {statusOrder.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}
                 </select>
               ) : (
-                <span className="text-[12px] px-2 py-0.5 rounded-full bg-secondary text-foreground inline-block">{statusLabels[status]}</span>
+                <span className={juntar(pilula, "bg-muted text-foreground")}>{statusLabels[status]}</span>
               )}
             </div>
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Prioridade</p>
+            <div className="min-w-0 space-y-1">
+              {rotuloDoCampo(<Clock className="h-3 w-3" />, "Prioridade")}
               {editing ? (
-                <select value={priority} onChange={e => setPriority(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
+                <select value={priority} onChange={e => setPriority(e.target.value)} aria-label="Prioridade" className={juntar(campo, "cursor-pointer")}>
                   <option value="low">Baixa</option><option value="medium">Média</option>
                   <option value="high">Alta</option><option value="urgent">Urgente</option>
                 </select>
               ) : (
-                <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[priority]}`}>{priorityLabels[priority]}</span>
+                <span className={juntar(pilula, priorityColors[priority])}>{priorityLabels[priority]}</span>
               )}
             </div>
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" /> Responsável</p>
+            <div className="min-w-0 space-y-1">
+              {rotuloDoCampo(<User className="h-3 w-3" />, "Responsável")}
               {editing ? (
                 <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
+                  aria-label="Responsável"
                   disabled={
                     !!linkedRequestId
                     && (
@@ -751,31 +751,30 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                       || linkedAssigneesReadFailed
                     )
                   }
-                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
+                  className={juntar(campo, "cursor-pointer")}>
                   <option value="">Sem responsável</option>
                   {assignmentOptions.map((m: any) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
                 </select>
               ) : (
-                <p className="text-[13px] text-foreground">{assignee?.full_name || "-"}</p>
+                <p className={juntar(texto.corpo, "truncate")}>{assignee?.full_name || "-"}</p>
               )}
             </div>
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Prazo</p>
+            <div className="min-w-0 space-y-1">
+              {rotuloDoCampo(<Calendar className="h-3 w-3" />, "Prazo")}
               {editing ? (
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} aria-label="Prazo" className={campo} />
               ) : (
-                <p className="text-[13px] text-foreground">
+                <p className={juntar(texto.corpo, "truncate")}>
                   {dueDate ? new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "-"}
                 </p>
               )}
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="col-span-2 min-w-0 space-y-1">
               {editing ? (
                 <>
                   <label
                     htmlFor="task-detail-delivery-type"
-                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                    className={juntar(texto.rotulo, "block")}
                   >
                     Tipo de entrega
                   </label>
@@ -790,7 +789,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                         suggestedWorkstreamForDeliveryType(nextType),
                       );
                     }}
-                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                    className={juntar(campo, "cursor-pointer")}
                   >
                     {TASK_DELIVERY_TYPE_OPTIONS.map(option => (
                       <option key={option.value} value={option.value}>
@@ -801,21 +800,21 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                 </>
               ) : (
                 <>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <p className={texto.rotulo}>
                     Tipo de entrega
                   </p>
-                  <span className="text-[12px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-500 inline-block">
+                  <span className={juntar(pilula, "bg-violet-500/10 text-violet-500")}>
                     {TASK_DELIVERY_TYPE_LABELS[deliveryType]}
                   </span>
                 </>
               )}
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="col-span-2 min-w-0 space-y-1">
               {editing ? (
                 <>
                   <label
                     htmlFor="task-detail-workstream"
-                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                    className={juntar(texto.rotulo, "block")}
                   >
                     Área
                   </label>
@@ -823,7 +822,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                     id="task-detail-workstream"
                     value={workstream}
                     onChange={e => setWorkstream(e.target.value as TaskWorkstream)}
-                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                    className={juntar(campo, "cursor-pointer")}
                   >
                     {TASK_WORKSTREAM_OPTIONS.map(option => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -832,8 +831,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                 </>
               ) : (
                 <>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Área</p>
-                  <span className="text-[12px] px-2 py-0.5 rounded-full bg-primary/10 text-primary inline-block">
+                  <p className={texto.rotulo}>Área</p>
+                  <span className={juntar(pilula, "bg-primary/10 text-primary")}>
                     {TASK_WORKSTREAM_LABELS[workstream]}
                   </span>
                 </>
@@ -842,228 +841,204 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
           </div>
 
           {task.milestone?.title && (
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Folder className="w-3 h-3" /> Milestone</p>
-              <span className="text-[12px] px-2.5 py-1 rounded-full bg-primary/10 text-primary inline-block">{task.milestone.title}</span>
+            <div className="min-w-0 space-y-1">
+              {rotuloDoCampo(<Folder className="h-3 w-3" />, "Milestone")}
+              <span className={juntar(pilula, "bg-primary/10 text-primary")}>{task.milestone.title}</span>
             </div>
           )}
 
-          {/* Description section */}
-          <div className="space-y-2">
-            <button onClick={() => setDescExpanded(!descExpanded)}
-              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Descrição / Instruções</p>
-              {descExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
-            {descExpanded && (
-              editing ? (
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={6}
-                  className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                  placeholder="Descreva as instruções detalhadas da tarefa..." />
-              ) : (
-                <div className="bg-secondary/30 rounded-xl p-4 min-h-[80px]">
-                  {description ? (
-                    <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed">{description}</p>
-                  ) : (
-                    <p className="text-[13px] text-muted-foreground italic">Sem descrição ou instruções adicionadas.</p>
-                  )}
-                </div>
-              )
+          {/* Tudo recolhe (SISTEMA.md 4.3): as quatro partes são Secao; a
+              escolha de recolher fica guardada por pessoa e tela. */}
+          <Secao titulo="Descrição / Instruções" nivel={3}>
+            {editing ? (
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={6}
+                aria-label="Descrição / Instruções"
+                className={juntar(campoTexto, "resize-none")}
+                placeholder="Descreva as instruções detalhadas da tarefa..." />
+            ) : description ? (
+              <p className={juntar(texto.corpo, "whitespace-pre-wrap leading-relaxed")}>{description}</p>
+            ) : (
+              <p className={texto.auxiliar}>Sem descrição ou instruções.</p>
             )}
-          </div>
+          </Secao>
 
           {/* ═══ Checklist section ═══ */}
-          <div className="space-y-3">
-            <button onClick={() => setChecklistExpanded(!checklistExpanded)}
-              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                <CheckSquare className="w-3.5 h-3.5" /> Checklist
-                {totalCheck > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
-                    {checkedCount}/{totalCheck}
-                  </span>
-                )}
-              </p>
-              {checklistExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
+          <Secao titulo="Checklist" nivel={3} descricao={totalCheck > 0 ? `${checkedCount} de ${totalCheck}` : undefined}>
+            <div className="space-y-2">
+              {/* Progress bar */}
+              {totalCheck > 0 && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${checkPercent}%` }} />
+                </div>
+              )}
 
-            {checklistExpanded && (
-              <div className="space-y-2">
-                {/* Progress bar */}
-                {totalCheck > 0 && (
-                  <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${checkPercent}%` }} />
-                  </div>
-                )}
-
-                {loadingChecklist ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-2">Carregando...</p>
-                ) : checklistReadFailed ? (
-                  <SectionLoadError
-                    label="o checklist"
-                    onRetry={() => void refetchChecklist()}
-                  />
-                ) : (
-                  <div className="space-y-1">
-                    {(checklistItems || []).map((item: any) => (
-                      <div key={item.id} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors">
-                        <button onClick={() => handleToggleCheck(item)}
-                          className="shrink-0 cursor-pointer bg-transparent border-none p-0 text-foreground">
-                          {item.checked
-                            ? <CheckSquare className="w-4 h-4 text-primary" />
-                            : <Square className="w-4 h-4 text-muted-foreground" />
-                          }
-                        </button>
-                        <span className={`text-[13px] flex-1 ${item.checked ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                          {item.title}
-                        </span>
-                        {!readOnly && (
-                          <button onClick={() => handleDeleteCheckItem(item.id)}
-                            className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all cursor-pointer bg-transparent border-none">
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add checklist item */}
-                {!readOnly && !checklistReadFailed && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={newCheckItem}
-                        onChange={e => setNewCheckItem(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && handleAddCheckItem()}
-                        placeholder="Adicionar item..."
-                        className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
-                      />
-                      <button onClick={handleAddCheckItem} disabled={addingCheck || !newCheckItem.trim()}
-                        className="p-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
-                        {addingCheck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              {loadingChecklist ? (
+                <p className={juntar(texto.auxiliar, "py-2 text-center")}>Carregando...</p>
+              ) : checklistReadFailed ? (
+                <SectionLoadError
+                  label="o checklist"
+                  onRetry={() => void refetchChecklist()}
+                />
+              ) : (
+                <ul className={lista.aberta}>
+                  {(checklistItems || []).map((item: any) => (
+                    <li key={item.id} className="group flex min-w-0 items-center rounded-md px-2 py-1.5 transition-colors hover:bg-muted/40">
+                      <button type="button" onClick={() => handleToggleCheck(item)}
+                        aria-label={item.checked ? `Desmarcar ${item.title}` : `Marcar ${item.title}`}
+                        className="mr-2 shrink-0 cursor-pointer border-none bg-transparent p-0 text-foreground">
+                        {item.checked
+                          ? <CheckSquare className="h-4 w-4 text-primary" />
+                          : <Square className="h-4 w-4 text-muted-foreground" />
+                        }
                       </button>
-                    </div>
-                    <TaskChecklistTemplatePicker
-                      taskId={task.id}
-                      currentCount={(checklistItems || []).length}
+                      <span className={juntar(texto.corpo, "min-w-0 flex-1", item.checked && "text-muted-foreground line-through")}>
+                        {item.title}
+                      </span>
+                      {!readOnly && (
+                        <button type="button" onClick={() => handleDeleteCheckItem(item.id)}
+                          aria-label={`Remover ${item.title}`}
+                          className="ml-2 cursor-pointer rounded border-none bg-transparent p-0.5 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100">
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Add checklist item */}
+              {!readOnly && !checklistReadFailed && (
+                <>
+                  <div className="flex items-center">
+                    <input
+                      value={newCheckItem}
+                      onChange={e => setNewCheckItem(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleAddCheckItem()}
+                      placeholder="Adicionar item..."
+                      aria-label="Novo item do checklist"
+                      className={juntar(campo, "mr-2 flex-1")}
                     />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Attachments section */}
-          <div className="space-y-3">
-            <button onClick={() => setAttachExpanded(!attachExpanded)}
-              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5" /> Anexos
-                {(attachments || []).length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
-                    {(attachments || []).length}
-                  </span>
-                )}
-              </p>
-              {attachExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
-
-            {attachExpanded && (
-              <div className="space-y-2">
-                {!readOnly && (
-                  <div>
-                    <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} className="hidden"
-                      accept="image/*,video/*,.pdf,.doc,.docx,.pptx,.xlsx,.zip,.md,.txt" />
-                    <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all cursor-pointer bg-transparent disabled:opacity-50">
-                      {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      <span className="text-[12px] font-medium">{uploading ? "Enviando..." : "Anexar arquivos"}</span>
+                    <button type="button" onClick={handleAddCheckItem} disabled={addingCheck || !newCheckItem.trim()}
+                      aria-label="Adicionar item"
+                      className={juntar(botao.secundario, "w-9 px-0")}>
+                      {addingCheck ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                     </button>
                   </div>
-                )}
-
-                {loadingAttachments ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4">Carregando anexos...</p>
-                ) : attachmentsReadFailed ? (
-                  <SectionLoadError
-                    label="os anexos"
-                    onRetry={() => void refetchAttachments()}
+                  <TaskChecklistTemplatePicker
+                    taskId={task.id}
+                    currentCount={(checklistItems || []).length}
                   />
-                ) : (attachments || []).length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum anexo</p>
-                ) : (
-                  <div className="space-y-2">
-                    {/* Carousel download button */}
-                    {isCarousel && (
-                      <button
-                        onClick={handleDownloadZip}
-                        disabled={downloadingZip}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[12px] font-medium transition-colors cursor-pointer border border-primary/20 disabled:opacity-50"
-                      >
-                        {downloadingZip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
-                        Baixar carrossel em ZIP ({imageAttachments.length} imagens)
-                      </button>
-                    )}
+                </>
+              )}
+            </div>
+          </Secao>
 
-                    {imageAttachments.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {imageAttachments.map((a: any) => (
-                          <div key={a.id} className="relative group rounded-lg overflow-hidden border border-border aspect-square">
-                            <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer">
-                              <img src={a.resolved_url || undefined} alt={a.file_name} className="w-full h-full object-cover" />
-                            </a>
-                            <div className="absolute bottom-0 inset-x-0 flex items-center justify-end gap-0.5 p-1 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                              {!isCarousel && (
-                                <button onClick={() => handleDownloadSingle(a.file_url, a.file_name)}
-                                  className="p-1 rounded bg-black/40 text-white hover:bg-black/60 cursor-pointer border-none">
-                                  <Download className="w-3 h-3" />
-                                </button>
-                              )}
-                              {!readOnly && (
-                                <button onClick={() => setConfirmDelete(a.id)}
-                                  className="p-1 rounded bg-black/40 text-white hover:bg-destructive cursor-pointer border-none">
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          {/* Attachments section */}
+          <Secao titulo="Anexos" nivel={3} descricao={(attachments || []).length > 0 ? `${(attachments || []).length} ${(attachments || []).length === 1 ? "arquivo" : "arquivos"}` : undefined}>
+            <div className="space-y-2">
+              {!readOnly && (
+                <div>
+                  <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} className="hidden"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.pptx,.xlsx,.zip,.md,.txt" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                    className={juntar("flex w-full cursor-pointer items-center justify-center rounded-md border border-dashed border-border bg-transparent py-3 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-50", foco)}>
+                    {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    <span className="text-[12px] font-medium">{uploading ? "Enviando..." : "Anexar arquivos"}</span>
+                  </button>
+                </div>
+              )}
 
-                    {(attachments || []).filter((a: any) => !a.file_type?.startsWith("image/")).map((a: any) => (
-                      <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors group">
-                        {a.file_type?.startsWith("video/") ? (
-                          <div className="w-16 h-10 rounded-lg overflow-hidden bg-secondary shrink-0">
-                            <video src={a.resolved_url || undefined} className="w-full h-full object-cover" muted />
-                          </div>
-                        ) : getFileIcon(a.file_type)}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] text-foreground truncate">{a.file_name}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {formatSize(a.file_size)} • {a.uploader?.full_name} • {new Date(a.created_at).toLocaleDateString("pt-BR")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer"
-                            className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-                            <Download className="w-3.5 h-3.5" />
+              {loadingAttachments ? (
+                <p className={juntar(texto.auxiliar, "py-4 text-center")}>Carregando anexos...</p>
+              ) : attachmentsReadFailed ? (
+                <SectionLoadError
+                  label="os anexos"
+                  onRetry={() => void refetchAttachments()}
+                />
+              ) : (attachments || []).length === 0 ? (
+                <p className={juntar(texto.auxiliar, "py-4 text-center")}>Nenhum anexo</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Carousel download button */}
+                  {isCarousel && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadZip}
+                      disabled={downloadingZip}
+                      className={juntar(botao.secundario, "w-full")}
+                    >
+                      {downloadingZip ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                      Baixar carrossel em ZIP ({imageAttachments.length} imagens)
+                    </button>
+                  )}
+
+                  {imageAttachments.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {imageAttachments.map((a: any) => (
+                        <div key={a.id} className="group relative aspect-square overflow-hidden rounded-md border border-border">
+                          <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer">
+                            <img src={a.resolved_url || undefined} alt={a.file_name} className="h-full w-full object-cover" />
                           </a>
-                          {!readOnly && (
-                            <button onClick={() => setConfirmDelete(a.id)}
-                              className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <div className="absolute inset-x-0 bottom-0 flex items-center justify-end bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 transition-opacity group-hover:opacity-100 [&>*+*]:ml-0.5">
+                            {!isCarousel && (
+                              <button type="button" onClick={() => handleDownloadSingle(a.file_url, a.file_name)}
+                                aria-label={`Baixar ${a.file_name}`}
+                                className="cursor-pointer rounded border-none bg-black/40 p-1 text-white hover:bg-black/60">
+                                <Download className="h-3 w-3" />
+                              </button>
+                            )}
+                            {!readOnly && (
+                              <button type="button" onClick={() => setConfirmDelete(a.id)}
+                                aria-label={`Remover ${a.file_name}`}
+                                className="cursor-pointer rounded border-none bg-black/40 p-1 text-white hover:bg-destructive">
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(attachments || []).filter((a: any) => !a.file_type?.startsWith("image/")).length > 0 && (
+                    <ul className={juntar(lista.aberta, lista.divisoria)}>
+                      {(attachments || []).filter((a: any) => !a.file_type?.startsWith("image/")).map((a: any) => (
+                        <li key={a.id} className="group flex min-w-0 items-center rounded-md px-2 py-2 transition-colors hover:bg-muted/40">
+                          <span className="mr-3 inline-flex shrink-0">
+                            {a.file_type?.startsWith("video/") ? (
+                              <span className="block h-10 w-16 overflow-hidden rounded-md bg-muted">
+                                <video src={a.resolved_url || undefined} className="h-full w-full object-cover" muted />
+                              </span>
+                            ) : getFileIcon(a.file_type)}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12px] text-foreground">{a.file_name}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              {formatSize(a.file_size)} • {a.uploader?.full_name} • {new Date(a.created_at).toLocaleDateString("pt-BR")}
+                            </p>
+                          </div>
+                          <div className="ml-2 flex shrink-0 items-center [&>*+*]:ml-1">
+                            <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer"
+                              aria-label={`Baixar ${a.file_name}`}
+                              className={juntar(botao.icone, "h-7 w-7")}>
+                              <Download className="h-3.5 w-3.5" />
+                            </a>
+                            {!readOnly && (
+                              <button type="button" onClick={() => setConfirmDelete(a.id)}
+                                aria-label={`Remover ${a.file_name}`}
+                                className={juntar(botao.icone, "h-7 w-7 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100")}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </Secao>
 
           {/* ═══ O trabalho do agente nesta tarefa ═══
               Antes o card mostrava título, prazo e responsável, e nada
@@ -1072,124 +1047,114 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               agente pegou a tarefa. */}
           <ContextoDoAgente taskId={task.id} />
 
-          {/* ═══ Comments / Activity section ═══ */}
-          <div className="space-y-3">
-            <button onClick={() => setCommentsExpanded(!commentsExpanded)}
-              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5" /> Comentários
-                {(comments || []).length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
-                    {(comments || []).length}
-                  </span>
-                )}
-              </p>
-              {commentsExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-            </button>
+          {/* ═══ Comments / Activity section ═══
+              Sem rolagem própria: o corpo da janela já rola (uma por região). */}
+          <Secao titulo="Comentários" nivel={3} descricao={(comments || []).length > 0 ? `${(comments || []).length} ${(comments || []).length === 1 ? "comentário" : "comentários"}` : undefined}>
+            <div className="space-y-3">
+              {loadingComments ? (
+                <p className={juntar(texto.auxiliar, "py-4 text-center")}>Carregando...</p>
+              ) : commentsReadFailed ? (
+                <SectionLoadError
+                  label="os comentários"
+                  onRetry={() => void refetchComments()}
+                />
+              ) : (comments || []).length === 0 ? (
+                <p className={juntar(texto.auxiliar, "py-4 text-center")}>Nenhum comentário ainda.</p>
+              ) : (
+                <div className="space-y-3">
+                  {(comments || []).map((c: any) => (
+                    <div key={c.id} className="group flex">
+                      <Avatar className="mr-2.5 mt-0.5 h-7 w-7 shrink-0">
+                        <AvatarFallback className="bg-muted text-[11px] font-medium text-muted-foreground">
+                          {c.author?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center">
+                          <span className="min-w-0 truncate text-[12px] font-semibold text-foreground">{c.author?.full_name}</span>
+                          <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                            {new Date(c.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                            {" "}
+                            {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          {(c.author_id === profile?.id || profile?.role === "admin") && (
+                            <button type="button" onClick={() => handleDeleteComment(c.id)}
+                              aria-label="Excluir comentário"
+                              className="ml-auto cursor-pointer rounded border-none bg-transparent p-0.5 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                        <p className={juntar(texto.corpo, "mt-0.5 whitespace-pre-wrap leading-relaxed")}>
+                          <TaskCommentContent
+                            text={c.content}
+                            memberNames={teamMembers.map(
+                              (member: any) => member.full_name,
+                            )}
+                          />
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-            {commentsExpanded && (
-              <div className="space-y-3">
-                {loadingComments ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4">Carregando...</p>
-                ) : commentsReadFailed ? (
-                  <SectionLoadError
-                    label="os comentários"
-                    onRetry={() => void refetchComments()}
-                  />
-                ) : (comments || []).length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum comentário ainda.</p>
-                ) : (
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-                    {(comments || []).map((c: any) => (
-                      <div key={c.id} className="flex gap-2.5 group">
-                        <Avatar className="w-7 h-7 shrink-0 mt-0.5">
-                          <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                            {c.author?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+              {/* Comment input with @mention */}
+              <div className="relative">
+                {mentionQuery !== null && filteredMentions.length > 0 && (
+                  <div ref={mentionDropdownRef}
+                    className="absolute bottom-full left-0 z-10 mb-1 max-h-[160px] w-full overflow-y-auto rounded-md border border-border bg-card py-1 shadow-sm">
+                    {filteredMentions.map((m: any, i: number) => (
+                      <button type="button" key={m.id}
+                        onClick={() => insertMention(m)}
+                        className={juntar(
+                          "flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-[12px] transition-colors",
+                          i === mentionIndex ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted",
+                        )}>
+                        <Avatar className="mr-2 h-5 w-5">
+                          <AvatarFallback className="bg-muted text-[11px] text-muted-foreground">
+                            {m.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[12px] font-semibold text-foreground">{c.author?.full_name}</span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {new Date(c.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                              {" "}
-                              {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            {(c.author_id === profile?.id || profile?.role === "admin") && (
-                              <button onClick={() => handleDeleteComment(c.id)}
-                                className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all cursor-pointer bg-transparent border-none ml-auto">
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                          <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed mt-0.5">
-                            <TaskCommentContent
-                              text={c.content}
-                              memberNames={teamMembers.map(
-                                (member: any) => member.full_name,
-                              )}
-                            />
-                          </p>
-                        </div>
-                      </div>
+                        <span className="font-medium">{m.full_name}</span>
+                      </button>
                     ))}
                   </div>
                 )}
-
-                {/* Comment input with @mention */}
-                <div className="relative">
-                  {mentionQuery !== null && filteredMentions.length > 0 && (
-                    <div ref={mentionDropdownRef}
-                      className="absolute bottom-full mb-1 left-0 w-full bg-card border border-border rounded-xl shadow-lg z-10 max-h-[160px] overflow-y-auto py-1">
-                      {filteredMentions.map((m: any, i: number) => (
-                        <button key={m.id}
-                          onClick={() => insertMention(m)}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] cursor-pointer border-none transition-colors ${
-                            i === mentionIndex ? "bg-primary/10 text-primary" : "text-foreground hover:bg-secondary"
-                          } bg-transparent`}>
-                          <Avatar className="w-5 h-5">
-                            <AvatarFallback className="text-[8px] bg-secondary text-muted-foreground">
-                              {m.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium">{m.full_name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex items-end gap-2">
-                    <textarea
-                      ref={commentRef}
-                      value={commentText}
-                      onChange={handleCommentChange}
-                      onKeyDown={e => {
-                        if (mentionQuery !== null && filteredMentions.length > 0) {
-                          if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1)); return; }
-                          if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
-                          if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(filteredMentions[mentionIndex]); return; }
-                          if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
-                        }
-                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
-                      }}
-                      placeholder="Escreva um comentário... use @ para mencionar"
-                      rows={2}
-                      className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                    />
-                    <button onClick={handleSendComment} disabled={sendingComment || !commentText.trim()}
-                      className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 shrink-0">
-                      {sendingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </button>
-                  </div>
+                <div className="flex items-end">
+                  <textarea
+                    ref={commentRef}
+                    value={commentText}
+                    onChange={handleCommentChange}
+                    onKeyDown={e => {
+                      if (mentionQuery !== null && filteredMentions.length > 0) {
+                        if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1)); return; }
+                        if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+                        if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(filteredMentions[mentionIndex]); return; }
+                        if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
+                      }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
+                    }}
+                    placeholder="Escreva um comentário... use @ para mencionar"
+                    aria-label="Novo comentário"
+                    rows={2}
+                    className={juntar(campoTexto, "mr-2 min-h-0 flex-1 resize-none")}
+                  />
+                  <button type="button" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()}
+                    aria-label="Enviar comentário"
+                    className={juntar(botao.secundario, "w-9 px-0 text-primary")}>
+                    {sendingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          </Secao>
         </div>
 
-        {/* Footer actions */}
+        {/* Footer actions: um primário (Salvar). */}
         {editing && (
-          <div className="px-6 py-4 border-t border-border flex gap-3 shrink-0">
-            <button onClick={() => {
+          <div className="flex shrink-0 items-center justify-end border-t border-border px-5 py-3 sm:px-6 [&>*+*]:ml-2">
+            <button type="button" onClick={() => {
               const saved = savedTaskValuesRef.current;
               setEditing(false);
               setTitle(saved.title);
@@ -1202,12 +1167,12 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               setDueDate(saved.dueDate);
             }}
               disabled={saving}
-              className="flex-1 py-2.5 rounded-xl text-[13px] text-muted-foreground border border-border hover:text-foreground transition-colors cursor-pointer bg-transparent">
+              className={botao.secundario}>
               Cancelar
             </button>
-            <button onClick={handleSave} disabled={saving || !title.trim()}
-              className="flex-1 py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            <button type="button" onClick={handleSave} disabled={saving || !title.trim()}
+              className={botao.primario}>
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
               {saving ? "Salvando..." : "Salvar"}
             </button>
           </div>

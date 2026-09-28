@@ -20,13 +20,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
-  AjudaRecolhida, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel,
+  AjudaRecolhida, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, GrupoDeCampos, Painel,
   RegiaoRolavel, Secao, SeletorCompacto, useEstadoDaTela, botao, campo, campoTexto, etiqueta, foco, juntar, superficie, texto,
   type OpcaoCompacta,
 } from "@/components/sistema";
 import CashFlow from "@/components/finance/CashFlow";
 import InvestorCapital from "@/components/finance/InvestorCapital";
 import FixedCosts from "@/components/finance/FixedCosts";
+import { ABAS_DOS_CUSTOS, CHAVE_DA_ABA_DOS_CUSTOS, validarAbaDosCustos, type AbaDosCustos } from "@/components/finance/abasDosCustos";
 import PlansPricing from "@/components/finance/PlansPricing";
 import ManagementSummary from "@/components/finance/ManagementSummary";
 import AdsInvestment from "@/components/finance/AdsInvestment";
@@ -106,7 +107,6 @@ const ABAS_DO_FINANCEIRO: { valor: string; rotulo: string; papeis: PapelDaAba; i
   { valor: "audit", rotulo: "Histórico", papeis: "admin", icone: <History className="h-3.5 w-3.5" /> },
 ];
 
-const ehBooleano = (v: unknown) => typeof v === "boolean";
 
 /** Mês guardado válido: não pode passar do mês corrente (a seta de avançar para nele). */
 const mesValido = (v: unknown) => {
@@ -126,32 +126,13 @@ const acaoDaLinha = `inline-flex h-8 shrink-0 items-center justify-center whites
 /** Rodapé de diálogo: ações à direita, o primário por último. */
 const rodapeDoDialogo = "flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-4 [&>*+*]:ml-2";
 
-/** Cartão de número (KPI): grade simples de um nível, sem nada dentro. */
-function Numero({ rotulo, valor, sub, icone, cor = "text-muted-foreground", ajuda, carregando = false, className = "" }: {
-  rotulo: ReactNode;
-  valor: ReactNode;
-  sub?: ReactNode;
-  icone?: ReactNode;
-  cor?: string;
-  ajuda?: ReactNode;
-  carregando?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={juntar(superficie.painel, "min-w-0 p-3 sm:p-4", className)}>
-      <div className="flex min-w-0 items-center">
-        {icone && <span className={juntar("mr-1.5 inline-flex shrink-0", cor)} aria-hidden="true">{icone}</span>}
-        <span className={juntar(texto.rotulo, "min-w-0 truncate")}>{rotulo}</span>
-        {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
-      </div>
-      {carregando ? (
-        <div className="mt-2 h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${typeof rotulo === "string" ? rotulo : "valor"}`} />
-      ) : (
-        <p className="mt-1.5 truncate text-[17px] font-semibold leading-6 tabular-nums text-foreground sm:text-[18px]">{valor}</p>
-      )}
-      {sub && !carregando && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={typeof sub === "string" ? sub : undefined}>{sub}</p>}
-    </div>
-  );
+/** Cor do número (classe de texto) no pontinho da FaixaDeNumeros. */
+function pontoDaCor(cor: string): "verde" | "info" | "alerta" | "perigo" | "neutro" {
+  if (cor.indexOf("destructive") >= 0) return "perigo";
+  if (cor.indexOf("warning") >= 0) return "alerta";
+  if (cor.indexOf("info") >= 0) return "info";
+  if (cor.indexOf("success") >= 0 || cor.indexOf("primary") >= 0) return "verde";
+  return "neutro";
 }
 
 /** Número sem caixa (resumo de uma seção). */
@@ -165,16 +146,6 @@ function Resumo({ itens }: { itens: { rotulo: string; valor: string; cor?: strin
         </div>
       ))}
     </dl>
-  );
-}
-
-/** Recolher/mostrar uma seção (o estado fica guardado pela tela). */
-function BotaoRecolher({ aberto, onAlternar, rotulo }: { aberto: boolean; onAlternar: () => void; rotulo: string }) {
-  return (
-    <button type="button" onClick={onAlternar} aria-expanded={aberto} aria-label={`${aberto ? "Recolher" : "Mostrar"} ${rotulo}`} className={botao.discreto}>
-      <span className="hidden sm:inline">{aberto ? "Recolher" : "Mostrar"}</span>
-      <ChevronDown className={juntar("h-4 w-4 transition-transform sm:ml-1", aberto && "rotate-180")} aria-hidden="true" />
-    </button>
   );
 }
 
@@ -302,12 +273,11 @@ function LegacyFinanceiro() {
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string; paidSoFar?: number; totalAmount?: number } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
-  const [receivedCollapsed, setReceivedCollapsed] = useEstadoDaTela("financeiro:recebidos-recolhido", false, { validar: ehBooleano });
-  const [indivCollapsed, setIndivCollapsed] = useEstadoDaTela("financeiro:projetos-recolhido", true, { validar: ehBooleano });
+  // Leitura dos Custos fixos: o seletor mora no título da página (mesma chave que o FixedCosts usava).
+  const [abaDosCustos, setAbaDosCustos] = useEstadoDaTela<AbaDosCustos>(CHAVE_DA_ABA_DOS_CUSTOS, "custos", { validar: validarAbaDosCustos });
   const [renewalsView, setRenewalsView] = useEstadoDaTela<"mensalistas" | "avulsos">("financeiro:mensalidades-visao", "mensalistas", {
     validar: (v) => v === "mensalistas" || v === "avulsos",
   });
-  const [walletsOpen, setWalletsOpen] = useEstadoDaTela("financeiro:wallets-aberto", false, { validar: ehBooleano });
   const [mesEscolhido, setMesEscolhido] = useEstadoDaTela<{ m: number; y: number }>(
     "financeiro:mes",
     { m: new Date().getMonth(), y: new Date().getFullYear() },
@@ -1093,8 +1063,55 @@ function LegacyFinanceiro() {
         titulo="Financeiro"
         ajuda="Cobranças, recebimentos, mensalidades, wallets de anúncios e histórico de pagamentos. A visão geral segue o mês e a marca escolhidos."
         acoes={
-          (mostrarMes || isAdmin) ? (
+          (mostrarMes || isAdmin || opcoesDasAbas.length > 1) ? (
             <>
+              {/* Seletores pequenos moram na linha do título (nada de linha própria). */}
+              {opcoesDasAbas.length > 1 && (
+                <SeletorCompacto
+                  opcoes={opcoesDasAbas}
+                  valor={aba}
+                  onEscolher={setAba}
+                  rotulo="Área do financeiro"
+                  icone={<LayoutList className="h-3.5 w-3.5" />}
+                />
+              )}
+              {isAdmin && aba === "overview" && (
+                <>
+                  <SeletorCompacto
+                    opcoes={[{ valor: "month", rotulo: "Mês" }, { valor: "all", rotulo: "Geral" }]}
+                    valor={periodFilter}
+                    onEscolher={(v) => setPeriodFilter(v === "all" ? "all" : "month")}
+                    rotulo="Período"
+                  />
+                  <SeletorCompacto
+                    opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
+                    valor={brandFilter}
+                    onEscolher={(v) => setBrandFilter(v as BrandFilter)}
+                    rotulo="Marca"
+                    modo="lista"
+                  />
+                </>
+              )}
+              {isAdmin && aba === "fixedcosts" && (
+                <SeletorCompacto
+                  opcoes={ABAS_DOS_CUSTOS.map((x) => ({ valor: x.id, rotulo: x.rotulo, icone: <x.icone className="h-3.5 w-3.5" /> }))}
+                  valor={abaDosCustos}
+                  onEscolher={(v) => setAbaDosCustos(v as AbaDosCustos)}
+                  rotulo="Leitura dos custos"
+                  listaQuandoNaoCabe
+                />
+              )}
+              {isAdmin && aba === "renewals" && (
+                <SeletorCompacto
+                  opcoes={[
+                    { valor: "mensalistas", rotulo: "Mensalistas" },
+                    { valor: "avulsos", rotulo: "Avulsos e histórico" },
+                  ]}
+                  valor={renewalsView}
+                  onEscolher={(v) => setRenewalsView(v === "avulsos" ? "avulsos" : "mensalistas")}
+                  rotulo="Tipo de cliente"
+                />
+              )}
               {mostrarMes && (
                 <SeletorDeMes
                   mes={selMonth}
@@ -1105,7 +1122,8 @@ function LegacyFinanceiro() {
                 />
               )}
               {isAdmin && (
-                <button type="button" onClick={abrirNovaCobranca} className={botao.primario} aria-label="Nova cobrança">
+                // Primário só na visão geral; nas outras áreas cada uma tem o seu (um primário por área).
+                <button type="button" onClick={abrirNovaCobranca} className={aba === "overview" ? botao.primario : botao.secundario} aria-label="Nova cobrança">
                   <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                   <span className="hidden sm:inline">Nova cobrança</span>
                 </button>
@@ -1114,36 +1132,6 @@ function LegacyFinanceiro() {
           ) : undefined
         }
       />
-
-      {(opcoesDasAbas.length > 1 || (isAdmin && aba === "overview")) && (
-        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-          {opcoesDasAbas.length > 1 && (
-            <SeletorCompacto
-              opcoes={opcoesDasAbas}
-              valor={aba}
-              onEscolher={setAba}
-              rotulo="Área do financeiro"
-              icone={<LayoutList className="h-3.5 w-3.5" />}
-            />
-          )}
-          {isAdmin && aba === "overview" && (
-            <>
-              <SeletorCompacto
-                opcoes={[{ valor: "month", rotulo: "Mês" }, { valor: "all", rotulo: "Geral" }]}
-                valor={periodFilter}
-                onEscolher={(v) => setPeriodFilter(v === "all" ? "all" : "month")}
-                rotulo="Período"
-              />
-              <SeletorCompacto
-                opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
-                valor={brandFilter}
-                onEscolher={(v) => setBrandFilter(v as BrandFilter)}
-                rotulo="Marca"
-              />
-            </>
-          )}
-        </div>
-      )}
 
       <Tabs value={aba} onValueChange={setAba} className="min-w-0">
         {(isAdmin || isManager) && (
@@ -1170,7 +1158,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="fixedcosts" className="mt-0 space-y-6">
-            <FixedCosts monthlyOperationalRevenue={ladderRevenue} grossReceivedThisMonth={monthGrossReceived} />
+            <FixedCosts monthlyOperationalRevenue={ladderRevenue} grossReceivedThisMonth={monthGrossReceived} aba={abaDosCustos} onAba={setAbaDosCustos} />
           </TabsContent>
         )}
 
@@ -1182,7 +1170,7 @@ function LegacyFinanceiro() {
 
         {/* Visão geral (só admin, como antes) */}
         {isAdmin && (
-          <TabsContent value="overview" className="mt-0 space-y-8">
+          <TabsContent value="overview" className="mt-0 space-y-6">
             {erroAoLer && (
               <EstadoDeErro
                 titulo="Não foi possível carregar o financeiro."
@@ -1191,24 +1179,29 @@ function LegacyFinanceiro() {
               />
             )}
 
-            <div className={juntar("grid min-w-0 grid-cols-2 gap-3", totalDeNumeros === 6 ? "lg:grid-cols-3 desk:grid-cols-6" : "lg:grid-cols-5")}>
-              {numeros.map((n) => (
-                <Numero key={n.rotulo} rotulo={n.rotulo} valor={n.valor} sub={n.sub} icone={n.icone} cor={n.cor} ajuda={n.ajuda} carregando={billingLoading} />
-              ))}
-              <Link
-                to="/financeiro/projecao"
-                className={juntar(superficie.painel, "group min-w-0 p-3 transition-colors hover:border-info/50 sm:p-4", totalDeNumeros % 2 === 1 && "col-span-2 lg:col-span-1", foco)}
-                aria-label={`Projeção de ${nextMonthFull}: ${fmt(nextMonthTotal)}. Ver projeção`}
-              >
-                <span className="flex min-w-0 items-center">
-                  <Briefcase className="mr-1.5 h-3.5 w-3.5 shrink-0 text-info" aria-hidden="true" />
-                  <span className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>Próximo mês</span>
-                  <ChevronRight className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden="true" />
-                </span>
-                <span className="mt-1.5 block truncate text-[17px] font-semibold leading-6 tabular-nums text-foreground sm:text-[18px]">{fmt(nextMonthTotal)}</span>
-                <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")} title={`${nextMonthFull} ${nextYear}: ${nextMonthSub}`}>{nextMonthFull} {nextYear}: {nextMonthSub}</span>
-              </Link>
-            </div>
+            {/* Os números numa faixa só (antes, um cartão por número); o último leva à projeção. */}
+            <FaixaDeNumeros
+              rotulo="Números do financeiro"
+              colunas={totalDeNumeros === 6 ? 6 : 5}
+              itens={[
+                ...numeros.map((n) => ({
+                  rotulo: n.rotulo,
+                  valor: billingLoading ? <span className="block h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${n.rotulo}`} /> : n.valor,
+                  apoio: billingLoading ? undefined : n.sub,
+                  ponto: pontoDaCor(n.cor),
+                  lado: n.ajuda ? <AjudaRecolhida>{n.ajuda}</AjudaRecolhida> : undefined,
+                })),
+                {
+                  rotulo: "Próximo mês",
+                  valor: fmt(nextMonthTotal),
+                  apoio: `${nextMonthFull} ${nextYear}: ${nextMonthSub}`,
+                  ponto: "info" as const,
+                  lado: <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />,
+                  para: "/financeiro/projecao",
+                  dica: `Projeção de ${nextMonthFull}: ${fmt(nextMonthTotal)}. Ver projeção`,
+                },
+              ]}
+            />
 
             <ManagementSummary
               monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}
@@ -1305,10 +1298,8 @@ function LegacyFinanceiro() {
                 <Secao
                   titulo="Já recebido"
                   descricao={`${allReceived.length} ${allReceived.length === 1 ? "pagamento" : "pagamentos"} · ${fmt(receivedGrandTotal)}`}
-                  acao={<BotaoRecolher aberto={!receivedCollapsed} onAlternar={() => setReceivedCollapsed((v) => !v)} rotulo="já recebido" />}
                   divisoria
                 >
-                  {!receivedCollapsed && (
                     <div className="space-y-3">
                       <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
                         <SeletorCompacto
@@ -1346,7 +1337,6 @@ function LegacyFinanceiro() {
                         </ListaDoFinanceiro>
                       )}
                     </div>
-                  )}
                 </Secao>
 
                 {/* Projetos individuais (SiteBolt / avulsos) */}
@@ -1358,7 +1348,7 @@ function LegacyFinanceiro() {
                       andamento.length > 0 ? `${andamento.length} em andamento` : "",
                       atrasados.length > 0 ? `${atrasados.length} ${atrasados.length === 1 ? "atrasado" : "atrasados"}` : "",
                     ].filter(Boolean).join(" · ")}
-                    acao={<BotaoRecolher aberto={!indivCollapsed} onAlternar={() => setIndivCollapsed((v) => !v)} rotulo="projetos individuais" />}
+                    recolhidaDeInicio
                     divisoria
                   >
                     <div className="space-y-4">
@@ -1370,7 +1360,6 @@ function LegacyFinanceiro() {
                           { rotulo: "Atrasado", valor: fmt(indivOverdue), cor: "text-destructive" },
                         ]}
                       />
-                      {!indivCollapsed && (
                         <ListaDoFinanceiro memoria="financeiro:projetos" rotulo="Projetos individuais">
                           {([
                             { chave: "atrasado", rotulo: "Atrasados", cor: "text-destructive", itens: atrasados },
@@ -1407,7 +1396,6 @@ function LegacyFinanceiro() {
                             </li>
                           ))}
                         </ListaDoFinanceiro>
-                      )}
                     </div>
                   </Secao>
                 )}
@@ -1476,11 +1464,14 @@ function LegacyFinanceiro() {
         )}
 
         {/* Ads Wallet: investimento da Aceleriq, wallets dos clientes e recargas */}
-        <TabsContent value="ads" className="mt-0 space-y-8">
+        <TabsContent value="ads" className="mt-0 space-y-6">
           {!isAdmin && (
-            <div className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
-              <Numero rotulo="Investimento Ads total" valor={fmt(totalAds)} icone={<DollarSign className="h-3.5 w-3.5" />} cor="text-info" />
-            </div>
+            <FaixaDeNumeros
+              rotulo="Investimento em anúncios"
+              colunas={1}
+              className="max-w-xs"
+              itens={[{ rotulo: "Investimento Ads total", valor: fmt(totalAds), ponto: "info" }]}
+            />
           )}
 
           {isAdmin && <AdsInvestment billing={billing || []} projectPayments={projectPayments || []} />}
@@ -1490,18 +1481,18 @@ function LegacyFinanceiro() {
             descricao={`${Object.entries(walletsByClient).length} ${Object.entries(walletsByClient).length === 1 ? "cliente" : "clientes"} · ${(wallets || []).length} ${(wallets || []).length === 1 ? "carteira" : "carteiras"} · ${fmt(totalAds)}`}
             acao={
               <>
-                {(!isAdmin || walletsOpen) && (
-                  <button type="button" onClick={() => setAddWalletModal(true)} className={botao.secundario} aria-label="Adicionar wallet">
-                    <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">Adicionar wallet</span>
-                  </button>
-                )}
-                {isAdmin && <BotaoRecolher aberto={walletsOpen} onAlternar={() => setWalletsOpen((v) => !v)} rotulo="wallets de clientes" />}
+                <button type="button" onClick={() => setAddWalletModal(true)} className={botao.secundario} aria-label="Adicionar wallet">
+                  <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Adicionar wallet</span>
+                </button>
               </>
             }
             divisoria={isAdmin}
+            // Admin: nasce recolhida (como antes); a setinha do título abre. Sem admin, sempre aberta.
+            recolher={isAdmin ? undefined : false}
+            recolhidaDeInicio={isAdmin}
           >
-            {(!isAdmin || walletsOpen) && (
+            {(
               walletsQuery.isError && !wallets ? (
                 <EstadoDeErro
                   titulo="Não foi possível carregar as wallets."
@@ -1553,7 +1544,7 @@ function LegacyFinanceiro() {
             )}
           </Secao>
 
-          {(!isAdmin || walletsOpen) && (recharges || []).length > 0 && (
+          {(recharges || []).length > 0 && (
             <Secao titulo="Solicitações de recarga" descricao={`${(recharges || []).length} ${(recharges || []).length === 1 ? "solicitação" : "solicitações"}`} divisoria>
               <ListaDoFinanceiro memoria="financeiro:recargas" rotulo="Solicitações de recarga">
                 {(recharges || []).map((r: any) => (
@@ -1582,15 +1573,6 @@ function LegacyFinanceiro() {
         {/* Mensalidades: mensalistas e avulsos (só admin, como antes) */}
         {isAdmin && (
           <TabsContent value="renewals" className="mt-0 space-y-6">
-            <SeletorCompacto
-              opcoes={[
-                { valor: "mensalistas", rotulo: "Mensalistas" },
-                { valor: "avulsos", rotulo: "Avulsos e histórico" },
-              ]}
-              valor={renewalsView}
-              onEscolher={(v) => setRenewalsView(v === "avulsos" ? "avulsos" : "mensalistas")}
-              rotulo="Tipo de cliente"
-            />
 
             {renewalsView === "mensalistas" && (() => {
               const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0 && !isInternalClient(c));

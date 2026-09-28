@@ -25,6 +25,7 @@ import ReportComparison from "@/components/reports/ReportComparison";
 import MetricsAudit from "@/components/reports/MetricsAudit";
 import { CelulaDeNumero, FaixaDeNumeros } from "@/components/sistema";
 import {
+  AjudaRecolhida,
   CabecalhoDePagina,
   Carregando,
   EstadoDeErro,
@@ -925,7 +926,7 @@ export default function ReportDetail() {
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="text-[16px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</p>
+                            <p className="text-[15px] font-semibold leading-5 tabular-nums text-foreground">{stage.value.toLocaleString("pt-BR")}</p>
                             <p className={juntar(texto.auxiliar, "mt-0.5")}>{i === 0 ? "entrada" : "permaneceram"}</p>
                           </div>
                         </div>
@@ -937,12 +938,15 @@ export default function ReportDetail() {
                   })}
                 </ol>
                 {bottleneckIdx > 0 && (
-                  <p className="flex items-start border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
-                    <AlertTriangle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
-                    <span className="min-w-0">
-                      <span className="font-medium text-warning">Gargalo:</span> maior perda relativa na etapa{" "}
-                      <span className="font-medium">{funnelData[bottleneckIdx].name}</span> ({(bottleneckRate * 100).toFixed(1)}% de aproveitamento). Otimize esse ponto para destravar o resto do funil.
+                  <p className="flex min-w-0 items-center border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
+                    <AlertTriangle className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium text-warning">Gargalo:</span>{" "}
+                      <span className="font-medium">{funnelData[bottleneckIdx].name}</span> ({(bottleneckRate * 100).toFixed(1)}% de aproveitamento)
                     </span>
+                    <AjudaRecolhida className="ml-1" rotulo="O que é o gargalo">
+                      A etapa com a maior perda relativa do funil. Otimize esse ponto para destravar o resto do funil.
+                    </AjudaRecolhida>
                   </p>
                 )}
               </Painel>

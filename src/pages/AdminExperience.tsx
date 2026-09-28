@@ -59,9 +59,9 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, ChevronDown, HeartPulse, Loader2, MoreHorizontal, Radar, RefreshCw, Send, Sparkles, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, ChevronDown, HeartPulse, Loader2, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
@@ -70,12 +70,14 @@ import {
   EstadoDeErro,
   EstadoVazio,
   Etapas,
+  MenuMais,
   RegiaoRolavel,
   Secao,
   SeletorCompacto,
   botao,
   campo,
   campoTexto,
+  espaco,
   etiqueta,
   foco,
   juntar,
@@ -2303,12 +2305,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           seta a esquerda. Antes era um link solto a 20px do topo. */}
       {cycleReview && (
         <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background/95 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur">
-          <nav aria-label="Navegação da revisão do Ciclo" className="flex min-w-0 items-center text-sm">
+          <nav aria-label="Navegação da revisão do Ciclo" className="flex min-w-0 items-center text-[13px]">
             <Link to="/ciclo" aria-label="Voltar ao Ciclo" className={juntar(botao.discreto, "-ml-2.5")}><ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" /> Voltar ao Ciclo</Link>
             {reviewClientId && (
               <span className="ml-auto flex min-w-0 items-center">
                 <span className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate")}>{clients?.find(client => client.id === reviewClientId)?.company_name || clients?.find(client => client.id === reviewClientId)?.full_name || "não encontrado nesta carteira"}</span>
-                <Link to="/ciclo/revisao" className={juntar("shrink-0 rounded text-[12.5px] text-primary hover:underline", foco)}>Ver todos os clientes</Link>
+                <Link to="/ciclo/revisao" className={juntar("shrink-0 rounded text-[12px] text-primary hover:underline", foco)}>Ver todos os clientes</Link>
               </span>
             )}
           </nav>
@@ -2327,8 +2329,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       {/* Cabeçalho enxuto (dono, 26/09): título, "?" com o que a tela faz, a
           hora dos dados e as duas ações. A explicação longa mora no "?". */}
       <CabecalhoDePagina
-        // O título quebra linha no celular em vez de cortar ("Ciclo · Revisão por clie...").
-        titulo={<span className="whitespace-normal">{cycleReview ? "Ciclo · Revisão por cliente" : "Central"}</span>}
+        // Título numa linha (28/09): se faltar espaço, reticências do próprio cabeçalho.
+        titulo={cycleReview ? "Ciclo · Revisão por cliente" : "Central"}
         ajuda={cycleReview ? "Esta área é a aprovação: o rascunho vira pedido, você decide (aqui ou pelo Hermes no WhatsApp) e quem envia registra o envio. O Hermes lê e escreve nesta mesma fila pelo MCP." : "Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."}
         descricao={
           // Sinal de vida: quando os números foram lidos por último, e ler de novo.
@@ -2445,7 +2447,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
         {/* ── Carteira recorrente ── */}
         {activeTab === "carteira" && (
-          <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-16 lg:pr-1">
+          <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
             <Secao
               titulo="Saúde da carteira"
               descricao={`${healthRows.length} ${healthRows.length === 1 ? "cliente recorrente" : "clientes recorrentes"}`}
@@ -2471,7 +2473,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {row.alerts.slice(0, 1).map((a) => (
                             <span key={a.label} className={juntar(etiqueta, "ml-2 hidden bg-destructive/10 text-destructive sm:inline-flex")}>{a.label}</span>
                           ))}
-                          <span className={`ml-3 w-10 shrink-0 text-right text-sm font-semibold tabular-nums ${meta.cls}`}>
+                          <span className={`ml-3 w-10 shrink-0 text-right text-[13px] font-semibold tabular-nums ${meta.cls}`}>
                             {row.score === null ? "s/ dado" : row.score}
                           </span>
                           <ChevronDown className={`ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
@@ -2560,7 +2562,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             (r: any) => r.client_id === client.id && r.status === "published" && (r.metrics as any)?.ritual_type
           );
           return (
-            <RegiaoRolavel modo="lg" rotulo="Perfil do cliente" memoria={`central:perfis:${client.id}`} className="lg:pb-16 lg:pr-1">
+            <RegiaoRolavel modo="lg" rotulo="Perfil do cliente" memoria={`central:perfis:${client.id}`} className="lg:pb-4 lg:pr-1">
               <div className="space-y-4">
                 {/* Quem é o cliente, sem caixa: foto, o seletor com o nome, o
                     estado numa linha e os atalhos à direita ("..." no celular). */}
@@ -2597,19 +2599,16 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     )}
                     <button type="button" onClick={() => openClientProfile(client.id)} className={botao.secundario}>Abrir cadastro</button>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button type="button" aria-label="Atalhos do cliente" className={juntar(botao.icone, "ml-1 md:hidden")}>
-                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {podeAbrirMesas && <DropdownMenuItem onSelect={() => navigate(`/mesa?client=${client.id}&aba=estudio`)}>Mesa</DropdownMenuItem>}
-                      {podeAbrirMesas && <DropdownMenuItem onSelect={() => navigate(`/mesa-ads?client=${client.id}`)}>Mesa Ads</DropdownMenuItem>}
-                      {podeAbrirMesas && <DropdownMenuItem onSelect={() => navigate(`/mesa-foto?client=${client.id}`)}>Mesa Foto</DropdownMenuItem>}
-                      <DropdownMenuItem onSelect={() => openClientProfile(client.id)}>Abrir cadastro</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <MenuMais
+                    rotulo="Atalhos do cliente"
+                    className="ml-1 md:hidden"
+                    itens={[
+                      podeAbrirMesas && { rotulo: "Mesa", aoEscolher: () => navigate(`/mesa?client=${client.id}&aba=estudio`) },
+                      podeAbrirMesas && { rotulo: "Mesa Ads", aoEscolher: () => navigate(`/mesa-ads?client=${client.id}`) },
+                      podeAbrirMesas && { rotulo: "Mesa Foto", aoEscolher: () => navigate(`/mesa-foto?client=${client.id}`) },
+                      { rotulo: "Abrir cadastro", aoEscolher: () => openClientProfile(client.id) },
+                    ]}
+                  />
                 </div>
 
                 {/* Duas colunas no computador, uma no celular. Seções ABERTAS, sem
@@ -2641,7 +2640,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                             >
                               <div className="w-full min-w-0 sm:mr-3 sm:w-auto sm:flex-1">
                                 <div className="flex min-w-0 flex-wrap items-center">
-                                  <p className="text-[13.5px] font-medium leading-tight text-foreground">{r.label}</p>
+                                  <p className="text-[13px] font-medium leading-tight text-foreground">{r.label}</p>
                                   {quando.etiqueta && <span className={juntar(etiqueta, "ml-2", quando.cls)}>{quando.etiqueta}</span>}
                                 </div>
                                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={`${r.cadence} · ${r.why}`}>{r.cadence} · {r.why}</p>
@@ -2675,24 +2674,41 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       titulo="Mensagem do grupo"
                       ajuda="Escolha o momento da semana. A mensagem é montada na hora com entregas, frentes e pendências reais, seguindo a linha da semana (abertura, meio e fechamento). O texto varia a cada semana para nunca soar repetido."
                       acao={
-                        <button type="button" onClick={() => void atualizarMensagens()} disabled={atualizandoMensagens} className={botao.discreto} title="Ler de novo o que a mensagem usa">
-                          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${atualizandoMensagens ? "animate-spin" : ""}`} aria-hidden="true" />
-                          {atualizandoMensagens ? "Atualizando..." : "Atualizar"}
-                        </button>
+                        <>
+                          <button type="button" onClick={() => void atualizarMensagens()} disabled={atualizandoMensagens} className={botao.discreto} title="Ler de novo o que a mensagem usa">
+                            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${atualizandoMensagens ? "animate-spin" : ""}`} aria-hidden="true" />
+                            {atualizandoMensagens ? "Atualizando..." : "Atualizar"}
+                          </button>
+                          {/* O modelo que escreve (28/09): seletor pequeno não ganha linha
+                              própria; abre de um botão na linha do título. */}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button type="button" className={botao.discreto} aria-label={`Modelo que escreve: ${rotuloDoModelo(escolhaDoModelo.modelo) || "padrão"}`} title="Modelo que escreve">
+                                <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                                <span className="hidden max-w-[140px] truncate sm:inline">{rotuloDoModelo(escolhaDoModelo.modelo) || "Modelo"}</span>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-24px)] p-3">
+                              <SeletorDeModelo escolha={escolhaDoModelo} onMudar={setEscolhaDoModelo} compacto />
+                            </PopoverContent>
+                          </Popover>
+                        </>
                       }
                     >
                       <div className={juntar(superficie.poco, "px-3 py-2")}>
                         <p className="text-[12px] text-primary">{rotuloDoDossie(d, nowTick)}{p?.foco ? ` · plano da semana lido` : " · sem plano da semana ainda"}</p>
-                        {d?.substituto && <p className="mt-0.5 text-[12px] text-warning">Este cliente não tem dossiê geral; a leitura está usando o de projeto. Escreva o geral para a mensagem ficar certa.</p>}
+                        {d?.substituto && (
+                          <p className="mt-0.5 flex items-center text-[12px] text-warning">
+                            Sem dossiê geral: a leitura usa o de projeto.
+                            <AjudaRecolhida className="ml-1" rotulo="Sobre o dossiê geral">Escreva o dossiê geral deste cliente para a mensagem ficar certa.</AjudaRecolhida>
+                          </p>
+                        )}
                         {d && d.mudancas.length > 0 && (
                           <ul className="mt-1 space-y-0.5">
                             {d.mudancas.slice(0, 4).map((m, i) => <li key={i} className="text-[12px] leading-snug text-foreground/90">• {m}</li>)}
                           </ul>
                         )}
                         {p?.foco && <p className="mt-1 text-[12px] text-foreground/90"><span className="text-muted-foreground">Foco: </span>{p.foco}</p>}
-                      </div>
-                      <div className="mt-3">
-                        <SeletorDeModelo escolha={escolhaDoModelo} onMudar={setEscolhaDoModelo} compacto />
                       </div>
                       <ul className="mt-3 divide-y divide-border border-t border-border">
                         {[
@@ -2743,15 +2759,21 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               {isPreviewOpen && (
                                 <div className={juntar(superficie.poco, "mb-3 px-3 py-3")}>
                                   {escrita && (
-                                    <p className="mb-1.5 text-[12px] text-primary">Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""} com o dossiê, a esteira, os números e as vendas de agora. O texto do painel fica abaixo como reserva.</p>
+                                    <p className="mb-1.5 flex items-center text-[12px] text-primary">
+                                      Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""}
+                                      <AjudaRecolhida className="ml-1" rotulo="Como a IA escreveu">Com o dossiê, a esteira, os números e as vendas de agora. O texto do painel fica abaixo como reserva.</AjudaRecolhida>
+                                    </p>
                                   )}
                                   {escrita && escrita.alertas.length > 0 && (
                                     <div className="mb-2">
-                                      <p className="text-[12px] font-medium text-warning">Avisos para a equipe (não vão ao cliente)</p>
+                                      <p className="flex items-center text-[12px] font-medium text-warning">
+                                        Avisos para a equipe
+                                        <AjudaRecolhida className="ml-1" rotulo="Sobre os avisos">Nada destes avisos vai ao cliente.</AjudaRecolhida>
+                                      </p>
                                       <ul className="mt-0.5 space-y-0.5">{escrita.alertas.map((a, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                                     </div>
                                   )}
-                                  <p className="whitespace-pre-line text-[12.5px] leading-relaxed text-foreground">
+                                  <p className="whitespace-pre-line text-[13px] leading-relaxed text-foreground">
                                     {escrita ? escrita.body : buildGroupMessage(client, m.moment)}
                                   </p>
                                   {escrita && (
@@ -2789,7 +2811,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       {lastRitual ? (
                         <>
                           <p className="text-[13px] font-medium text-foreground">{lastRitual.title}</p>
-                          <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">{resumoDoRitual(lastRitual.summary, 420)}</p>
+                          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{resumoDoRitual(lastRitual.summary, 420)}</p>
                         </>
                       ) : (
                         <EstadoVazio compacto titulo="Nenhuma atualização publicada ainda." descricao="Gere a Rota da Semana para abrir o primeiro ciclo." />
@@ -2805,9 +2827,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       clientName={nomeDoCliente(client)}
                     />
 
-                    <div className="min-w-0 border-t border-border pt-5">
-                      <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite />
-                    </div>
+                    <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite divisoria recolher={`central:perfis:diario:${client.id}`} />
 
                     <Secao
                       divisoria
@@ -2815,7 +2835,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       resumo={[client.plan_name || "Sem plano", `${clientProjs.length} ${clientProjs.length === 1 ? "frente ativa" : "frentes ativas"}`].join(" · ")}
                       titulo="Contexto agora"
                     >
-                      <dl className="space-y-1 text-[12.5px]">
+                      <dl className="space-y-1 text-[13px]">
                         <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Plano:</dt><dd className="min-w-0 text-foreground">{client.plan_name || "Sem plano"}{client.plan_value ? ` · ${fmt(Number(client.plan_value))}/mês` : ""}</dd></div>
                         <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Frentes ativas:</dt><dd className="min-w-0 text-foreground">{clientProjs.length > 0 ? clientProjs.map((p: any) => p.name).join(", ") : "nenhuma"}</dd></div>
                         {selected.factors.map((f) => (
@@ -2832,7 +2852,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
         {/* ── Avulsos: experiência e reativação ── */}
         {activeTab === "avulsos" && (
-          <RegiaoRolavel modo="lg" rotulo="Clientes avulsos" memoria="central:avulsos" className="lg:pb-16 lg:pr-1">
+          <RegiaoRolavel modo="lg" rotulo="Clientes avulsos" memoria="central:avulsos" className="lg:pb-4 lg:pr-1">
             <Secao
               titulo="Clientes avulsos"
               descricao={`${oneOffClients.length} ${oneOffClients.length === 1 ? "cliente" : "clientes"}`}
@@ -2900,21 +2920,20 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
         {/* ── Radar do mês ── */}
         {activeTab === "radar" && (
-          <RegiaoRolavel modo="lg" rotulo="Radar de ideias" memoria="central:radar" className="lg:pb-16 lg:pr-1">
+          <RegiaoRolavel modo="lg" rotulo="Radar de ideias" memoria="central:radar" className="lg:pb-4 lg:pr-1">
             <Secao
               titulo="Radar de ideias"
-              descricao={opportunities.length > 0 ? "Valor e serviço avulso aparecem só para a equipe." : undefined}
-              ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais recentes, publicações, Pulso, crescimento medido). A faixa de valor e o serviço avulso nunca entram na mensagem que o cliente recebe: para ele é ideia, não proposta comercial. A IA lê o contexto real do cliente e busca tendências do nicho antes de propor."
-              // Gerador com IA (ideias do nicho, com busca na web): na linha do
-              // título no computador; no celular numa linha própria, logo abaixo.
-              acao={opportunities.length > 0 ? <div className="hidden items-center sm:flex [&>*+*]:ml-2">{controlesDoRadar("max-w-[240px]")}</div> : undefined}
+              descricao={opportunities.length > 0 ? `${allRadarIdeas.length} ${allRadarIdeas.length === 1 ? "ideia" : "ideias"}` : undefined}
+              ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais recentes, publicações, Pulso, crescimento medido). A faixa de valor e o serviço avulso aparecem só para a equipe e nunca entram na mensagem que o cliente recebe: para ele é ideia, não proposta comercial. A IA lê o contexto real do cliente e busca tendências do nicho antes de propor."
+              // Gerador com IA (ideias do nicho, com busca na web) na linha do
+              // título em toda largura (28/09: nada de linha própria para seletor).
+              acao={opportunities.length > 0 ? controlesDoRadar("max-w-[180px] sm:max-w-[240px]") : undefined}
             >
-              {opportunities.length > 0 && <div className="mb-3 flex min-w-0 items-center sm:hidden [&>*+*]:ml-2">{controlesDoRadar("min-w-0 flex-1")}</div>}
               {opportunities.length === 0 ? (
                 <EstadoVazio
                   icone={<Radar className="h-5 w-5" />}
                   titulo="Nenhuma ideia no radar agora."
-                  descricao="Assim que houver material produzido, publicações no ar ou Pulso respondido, as ideias do mês aparecem aqui por cliente."
+                  descricao="As ideias do mês aparecem aqui por cliente."
                 />
               ) : (
                 <ul className="lista-longa divide-y divide-border border-y border-border">
@@ -2931,11 +2950,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                             <span className={juntar(etiqueta, "mr-2 bg-primary/10 text-primary")}>
                               {idea.source === "ia" ? "IA + busca na web" : lens.label}
                             </span>
-                            <p className="min-w-0 text-[13.5px] font-medium text-foreground">{idea.title}</p>
+                            <p className="min-w-0 text-[13px] font-medium text-foreground">{idea.title}</p>
                           </div>
 
                           {/* A IDEIA, descrita por completo. */}
-                          <p className="mt-1.5 text-[12.5px] leading-relaxed text-foreground/85">{idea.pitch}</p>
+                          <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{idea.pitch}</p>
 
                           {/* O retrato real do cliente: é ele que faz a ideia deixar
                               de parecer genérica. A IA já embute o contexto no motivo. */}
@@ -3006,8 +3025,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           const comPedido = cycleReview || new URLSearchParams(location.search).has("review");
           const rascunhosVisiveis = draftReports.filter((r) => !reviewClientId || r.client_id === reviewClientId);
           return (
-            <RegiaoRolavel modo="lg" rotulo="Fila de revisão" memoria={cycleReview ? `ciclo-revisao:${reviewClientId || "todos"}` : "central:fila"} className="lg:pb-16 lg:pr-1">
-              <div className="space-y-8">
+            <RegiaoRolavel modo="lg" rotulo="Fila de revisão" memoria={cycleReview ? `ciclo-revisao:${reviewClientId || "todos"}` : "central:fila"} className="lg:pb-4 lg:pr-1">
+              <div className={espaco.pagina}>
                 {/* A revisao formal (preparar, decidir, registrar envio) e a area do
                     Hermes em Ciclo > Revisao. Na Central ela so aparece quando um
                     link de pedido chega (?review=...). O resto e caminho curto:
@@ -3065,7 +3084,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                 )}
                                 {Array.isArray((r.metrics as any)?.alertas) && (r.metrics as any).alertas.length > 0 && (
                                   <div className="rounded-md bg-warning/10 px-3 py-2">
-                                    <p className="text-[12px] font-medium text-warning">Avisos para a equipe (o que faltou no painel, reforços e modelo; nada disso vai ao cliente)</p>
+                                    <p className="flex items-center text-[12px] font-medium text-warning">
+                                      Avisos para a equipe
+                                      <AjudaRecolhida className="ml-1" rotulo="Sobre os avisos">O que faltou no painel, reforços e modelo. Nada disso vai ao cliente.</AjudaRecolhida>
+                                    </p>
                                     <ul className="mt-0.5 space-y-0.5">{(r.metrics as any).alertas.map((a: string, i: number) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                                   </div>
                                 )}
@@ -3114,29 +3136,18 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                   >
                                     <Sparkles className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${aprimorando === r.id ? "animate-pulse" : ""}`} aria-hidden="true" /> {aprimorando === r.id ? "Aprimorando…" : "Aprimorar com IA"}
                                   </button>
-                                  {isAdmin && (
-                                    <button type="button" onClick={() => publishDraft(r)} disabled={rascunhoEmVoo !== null} className={botao.secundario}>
-                                      Publicar no portal
-                                    </button>
-                                  )}
                                   <button type="button" onClick={() => saveDraftEdits(r)} className={botao.discreto}>
                                     Salvar edição
                                   </button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <button type="button" aria-label="Mais ações do rascunho" className={botao.icone}>
-                                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                                      </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onSelect={() => navigate(`/relatorios/${r.id}`)}>Abrir completo</DropdownMenuItem>
-                                      {isAdmin && (
-                                        <DropdownMenuItem disabled={rascunhoEmVoo !== null} onSelect={() => deleteDraft(r)} className="text-destructive focus:text-destructive">
-                                          <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" /> Descartar
-                                        </DropdownMenuItem>
-                                      )}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                                  {/* O que é raro fica no "..." (28/09: barra de no máximo duas linhas). */}
+                                  <MenuMais
+                                    rotulo="Mais ações do rascunho"
+                                    itens={[
+                                      isAdmin && { rotulo: "Publicar no portal", icone: <ArrowUpRight className="h-3.5 w-3.5" />, aoEscolher: () => publishDraft(r), desativado: rascunhoEmVoo !== null },
+                                      { rotulo: "Abrir completo", aoEscolher: () => navigate(`/relatorios/${r.id}`) },
+                                      isAdmin && { rotulo: "Descartar", icone: <Trash2 className="h-3.5 w-3.5" />, aoEscolher: () => deleteDraft(r), perigo: true, desativado: rascunhoEmVoo !== null },
+                                    ]}
+                                  />
                                 </div>
                               </div>
                             )}
@@ -3221,8 +3232,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2, dossie: BookOpen, plano: Sparkles, venda: BadgeDollarSign } as const;
           const corDoEvento = { report: "text-success", publication: "text-muted-foreground", approval: "text-warning", file: "text-muted-foreground", dossie: "text-primary", plano: "text-primary", venda: "text-success" } as const;
           return (
-            <RegiaoRolavel modo="lg" rotulo="Histórico" memoria="central:historico" className="lg:pb-16 lg:pr-1">
-              <div className="space-y-8">
+            <RegiaoRolavel modo="lg" rotulo="Histórico" memoria="central:historico" className="lg:pb-4 lg:pr-1">
+              <div className={espaco.pagina}>
                 <Secao
                   recolher="central:historico:linha-do-tempo"
                   resumo={`${timeline.length} ${timeline.length === 1 ? "movimento" : "movimentos"}`}
@@ -3251,7 +3262,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           <li key={`${event.at}-${index}`} className="flex min-w-0 items-center px-1 py-2">
                             <EventIcon className={`mr-3 h-3.5 w-3.5 shrink-0 ${corDoEvento[event.icon]}`} aria-hidden="true" />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[12.5px] text-foreground">{event.text}</p>
+                              <p className="truncate text-[13px] text-foreground">{event.text}</p>
                               <p className={juntar(texto.auxiliar, "truncate")}>
                                 {nameOf(event.clientId)} · {new Date(event.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                               </p>
@@ -3281,7 +3292,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                             <button type="button" onClick={() => navigate(`/relatorios/${r.id}`)} className={linhaDeLista}>
                               <span className="mr-3 min-w-0 flex-1">
                                 <span className="flex min-w-0 items-center">
-                                  <span className="min-w-0 truncate text-[12.5px] text-foreground">{r.title}</span>
+                                  <span className="min-w-0 truncate text-[13px] text-foreground">{r.title}</span>
                                   {meta && <span className={juntar(etiqueta, "ml-2 hidden bg-success/10 text-success sm:inline-flex")}>{meta.label}</span>}
                                 </span>
                                 <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
@@ -3354,7 +3365,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <span className={`mr-2.5 h-3.5 w-3.5 shrink-0 rounded-full border ${genRitual === r.value ? "border-[4px] border-primary" : "border-border"}`} aria-hidden="true" />
                         <span className="min-w-0 truncate">{r.label}</span>
                       </span>
-                      <span className="ml-3 shrink-0 text-[11.5px]">{r.cadence}</span>
+                      <span className="ml-3 shrink-0 text-[12px]">{r.cadence}</span>
                     </button>
                   ))}
                 </div>
@@ -3391,7 +3402,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     <p className="text-[12px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">IA · {rotuloDoModelo(preview.draft.metrics?.model) || "modelo"}</span> : <span className="ml-1.5 text-[11px] font-normal text-warning">texto de reserva (IA não respondeu)</span>}</p>
                     {Array.isArray(preview.draft.metrics?.alertas) && preview.draft.metrics.alertas.length > 0 && (
                       <div className="rounded-md bg-warning/10 px-3 py-2">
-                        <p className="text-[12px] font-medium text-warning">Avisos para a equipe (não vão ao cliente)</p>
+                        <p className="flex items-center text-[12px] font-medium text-warning">
+                          Avisos para a equipe
+                          <AjudaRecolhida className="ml-1" rotulo="Sobre os avisos">Nada destes avisos vai ao cliente.</AjudaRecolhida>
+                        </p>
                         <ul className="mt-0.5 space-y-0.5">{preview.draft.metrics.alertas.map((a: string, i: number) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
                       </div>
                     )}

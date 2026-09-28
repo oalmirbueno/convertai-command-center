@@ -383,7 +383,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       />
 
       <AreaDeTrabalho memoriaDaRolagem="relatorio:novo" rotuloDoPrincipal="Formulário do relatório">
-        <div className="max-w-4xl space-y-8 pb-4">
+        <div className="max-w-4xl space-y-6 pb-4">
           {/* INFORMAÇÕES BÁSICAS */}
           <GrupoDeCampos titulo="Informações básicas">
             <CampoDeFormulario rotulo="Cliente" obrigatorio>

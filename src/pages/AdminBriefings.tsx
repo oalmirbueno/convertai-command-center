@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { Eye, FolderPlus, Loader2, FileText } from "lucide-react";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, RegiaoRolavel, botao, campo, etiqueta, juntar, superficie, texto } from "@/components/sistema";
+import { AreaDeTrabalho, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, RegiaoRolavel, botao, campo, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
 const typeLabels: Record<string, string> = {
   social_media: "Social Media", trafego: "Tráfego Pago", automacao: "Automação",
@@ -82,34 +82,6 @@ export default function AdminBriefings() {
     setGenerating(false);
   };
 
-  const renderResponses = (r: any) => {
-    if (!r) return <p className="text-sm text-muted-foreground">Sem respostas</p>;
-    const fields = [
-      { label: "Objetivo", value: r.objetivo },
-      { label: "Público-alvo", value: r.publicoAlvo },
-      { label: "Tipos de Projeto", value: Array.isArray(r.tiposProjeto) ? r.tiposProjeto.map((t: string) => typeLabels[t] || t).join(", ") : r.tiposProjeto },
-      { label: "Referências", value: r.referencias },
-      { label: "Prazo", value: r.prazo },
-      { label: "Orçamento", value: r.orcamento },
-      { label: "Observações", value: r.observacoes },
-      ...(r.contato ? [
-        { label: "Contato · Nome", value: r.contato.nome },
-        { label: "Contato · WhatsApp", value: r.contato.whatsapp },
-        { label: "Contato · Email", value: r.contato.email },
-      ] : []),
-    ];
-    return (
-      <div className="space-y-3">
-        {fields.filter(f => f.value).map(f => (
-          <div key={f.label}>
-            <p className={texto.rotulo}>{f.label}</p>
-            <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{f.value}</p>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   const lista = (briefings || []) as any[];
   const nomeDo = (b: any) => b?.client?.company_name || b?.client?.full_name || (b?.responses as any)?.contato?.nome || "Sem vínculo";
   const tiposDo = (b: any) => {
@@ -119,14 +91,17 @@ export default function AdminBriefings() {
 
   // Sistema de design: cabeçalho curto com o "?", a lista numa superfície só
   // com divisória (sem caixa por linha) e as ações à direita de cada linha.
+  // A lista mora numa AreaDeTrabalho: no computador vai até o fim da janela e
+  // rola por dentro (sem altura fixa); no celular a página rola normal.
   return (
-    <div className="min-w-0 space-y-5 animate-fade-in">
+    <div className="min-w-0 animate-fade-in">
       <CabecalhoDePagina
         titulo="Briefings"
         descricao={isLoading ? undefined : `${lista.length} ${lista.length === 1 ? "recebido" : "recebidos"}`}
         ajuda="Diagnósticos que os clientes enviaram pelo link público. Ver abre as respostas e o PDF; Gerar projeto cria o projeto do cliente a partir do briefing."
       />
 
+      <AreaDeTrabalho principalRolavel={false} className="mt-5">
       {isLoading ? (
         <Carregando linhas={4} rotulo="Carregando briefings" />
       ) : isError ? (
@@ -137,7 +112,7 @@ export default function AdminBriefings() {
       ) : lista.length === 0 ? (
         <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Nenhum briefing recebido ainda." descricao="Eles aparecem aqui quando o cliente envia o diagnóstico." />
       ) : (
-        <RegiaoRolavel rotulo="Briefings recebidos" memoria="briefings:lista" className="lg:max-h-[70vh]">
+        <RegiaoRolavel rotulo="Briefings recebidos" memoria="briefings:lista">
           <ul className={juntar(superficie.painel, "divide-y divide-border")}>
             {lista.map((b: any) => {
               const tipos = tiposDo(b);
@@ -169,6 +144,7 @@ export default function AdminBriefings() {
           </ul>
         </RegiaoRolavel>
       )}
+      </AreaDeTrabalho>
 
       {/* Ver o briefing, com PDF */}
       <BriefingPdfModal
@@ -195,7 +171,7 @@ export default function AdminBriefings() {
             {(generateBriefing?.responses as any)?.objetivo && (
               <div className={juntar(superficie.poco, "px-3 py-2.5")}>
                 <p className={texto.rotulo}>Resumo</p>
-                <p className="mt-1 text-[12.5px] leading-5 text-foreground">{(generateBriefing.responses as any).objetivo.slice(0, 200)}</p>
+                <p className="mt-1 text-[13px] leading-5 text-foreground">{(generateBriefing.responses as any).objetivo.slice(0, 200)}</p>
               </div>
             )}
           </div>

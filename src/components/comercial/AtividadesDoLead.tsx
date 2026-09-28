@@ -118,7 +118,7 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
   return (
     <section className="border-t border-border pt-4" aria-label="Atividades do lead">
       <div className="mb-2 flex min-w-0 items-baseline">
-        <h3 className={juntar(texto.tituloSecao, "text-[14px]")}>Atividades</h3>
+        <h3 className={texto.tituloSecao}>Atividades</h3>
         {doLead.length > 0 && <span className={juntar(texto.auxiliar, "ml-2")}>{abertas} em aberto</span>}
       </div>
 

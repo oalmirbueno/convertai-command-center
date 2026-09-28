@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AjudaRecolhida, MenuMais, Secao, campo, juntar, superficie, texto } from "@/components/sistema";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/editorialDate";
 import { cn } from "@/lib/utils";
 import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
+import { entregaDaArteAprovada } from "@/lib/editorialEntregaAprovada";
 import {
   AUTOPUBLISH_STAGE_LABELS,
   retryAutopublish,
@@ -260,8 +262,8 @@ function PublicationProgress({
   ];
 
   return (
-    <div className="rounded-lg border border-border bg-muted/20 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className={juntar(superficie.poco, "p-3")}>
+      <p className={texto.rotulo}>
         Rastreio do processo
       </p>
       <ol className="mt-3 grid grid-cols-3 gap-2" aria-label="Etapas da publicação">
@@ -292,7 +294,7 @@ function PublicationProgress({
             </span>
             <span
               className={cn(
-                "mt-1.5 block text-[9px] leading-3",
+                "mt-1.5 block text-[11px] leading-4",
                 step.complete ? "text-foreground" : "text-muted-foreground",
               )}
             >
@@ -304,7 +306,7 @@ function PublicationProgress({
       {["failed", "cancelled"].includes(publication.status) && (
         <p
           className={cn(
-            "mt-2 text-center text-[10px] font-medium",
+            "mt-2 text-center text-[11px] font-medium",
             publication.status === "failed"
               ? "text-destructive"
               : "text-muted-foreground",
@@ -348,6 +350,22 @@ export default function EditorialDetailSheet({
       ) || null,
     [post],
   );
+  /**
+   * Frente AP (28/09, bug do dono: "não deixa selecionar o Instagram, a conta
+   * correta, nem a data"): o post que veio do Estúdio nasce com publicação
+   * PLANEJADA, e o "Programar publicação" só aparecia sem publicação nenhuma.
+   * Agora aparece também quando o plano todo ainda é só planejado (nada
+   * agendado, publicado ou em falha), com a conta e a data dela.
+   */
+  const planejadaDoPlano = useMemo(
+    () => post?.publications.find(({ publication }) => publication.status === "planned") || null,
+    [post],
+  );
+  const podeProgramarInline =
+    !!post &&
+    !post.publicadoGlobal &&
+    (post.publications.length === 0 ||
+      post.publications.every(({ publication }) => publication.status === "planned" || publication.status === "cancelled"));
 
   // Remarcar começa do estado REAL: conta e horário atuais preenchidos.
   // Campos vazios num card já agendado davam a impressão de agendar do zero
@@ -362,16 +380,25 @@ export default function EditorialDetailSheet({
           EDITORIAL_DEFAULT_TIME_ZONE,
         ) || "",
       );
+    } else if (planejadaDoPlano) {
+      // Frente AP (28/09): post que veio do Estúdio já nasce com a publicação
+      // planejada. Abre com a conta e a data dela, e dá para trocar as duas.
+      setInlineAccountId(planejadaDoPlano.publication.external_account_id || "");
+      setInlineWhen(
+        planejadaDoPlano.publication.scheduled_at
+          ? isoUtcToZonedDateTimeLocal(planejadaDoPlano.publication.scheduled_at, EDITORIAL_DEFAULT_TIME_ZONE) || ""
+          : "",
+      );
     } else {
       setInlineAccountId("");
       setInlineWhen("");
     }
-  }, [open, agendadaAtual]);
+  }, [open, agendadaAtual, planejadaDoPlano]);
   const [inlineSaving, setInlineSaving] = useState(false);
   const editorOptions = useEditorialEditorOptions(
     post?.post.client_id || null,
     post?.post.project_id || null,
-    open && post !== null && post.publications.length === 0,
+    open && post !== null && podeProgramarInline,
   );
   const inlineAccounts = (editorOptions.data?.accounts || []).filter(
     (account: any) => (account.status || "active") === "active",
@@ -487,11 +514,18 @@ export default function EditorialDetailSheet({
         // Só publicações planejadas (ou nenhuma): salva o plano COMPLETO,
         // atualizando a existente em vez de cancelar e criar outra - assim a
         // arte e a legenda do plano nunca se perdem.
+        // Frente AP: arte já aprovada + data = vai com as lâminas na ordem e
+        // o modo de entrega, e o caminho aprovado agenda na hora (sem isto o
+        // post do Estúdio ia "manual", sem lâminas, e o motor não publicava).
+        const entregaAprovada = scheduledAtIso
+          ? await entregaDaArteAprovada(fresh, inlineAccountId, editorOptions.data?.accounts || [])
+          : null;
         const publications: Record<string, unknown>[] = fresh.publications
           .filter(({ publication }) => publication.status === "planned")
           .map(({ publication, internal }) => {
             const isTarget = active?.publication.id === publication.id;
             return {
+              ...(isTarget && entregaAprovada ? entregaAprovada : {}),
               id: publication.id,
               idempotency_key: internal?.idempotency_key || crypto.randomUUID(),
               external_account_id: isTarget
@@ -1003,13 +1037,13 @@ export default function EditorialDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-4xl flex-col gap-0 overflow-hidden rounded-t-2xl border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:h-[88dvh] sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl data-[state=open]:animate-in data-[state=closed]:animate-out"
+          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-4xl flex-col gap-0 overflow-hidden rounded-t-lg border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:h-[88dvh] sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg data-[state=open]:animate-in data-[state=closed]:animate-out"
         >
           <SheetHeader className="shrink-0 border-b border-border bg-card px-5 py-4 text-left sm:px-7 sm:py-5">
             <div className="flex items-start justify-between gap-4 pr-8">
               <div className="min-w-0">
-                <SheetTitle className="truncate text-base sm:text-lg">{post.post.title}</SheetTitle>
-                <SheetDescription className="mt-1 text-xs">
+                <SheetTitle className="truncate text-[15px] sm:text-[20px]" title={post.post.title}>{post.post.title}</SheetTitle>
+                <SheetDescription className="mt-1 truncate text-[12px]">
                   {clientName} · {projectName}
                 </SheetDescription>
               </div>
@@ -1046,21 +1080,21 @@ export default function EditorialDetailSheet({
                 podePublicar={canPublish}
               />
             )}
-            <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+            <section className="grid gap-3 sm:grid-cols-2">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className={texto.rotulo}>
                   Formato
                 </p>
-                <p className="mt-1 text-sm text-foreground">
+                <p className="mt-1 text-[13px] text-foreground">
                   {post.post.content_type}
                 </p>
               </div>
               {isStaff && post.internal?.responsible_id && (
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className={texto.rotulo}>
                     Responsável
                   </p>
-                  <p className="mt-1 text-sm text-foreground">
+                  <p className="mt-1 text-[13px] text-foreground">
                     {responsibleName ||
                       `Usuário ${post.internal.responsible_id.slice(0, 8)}`}
                   </p>
@@ -1068,13 +1102,13 @@ export default function EditorialDetailSheet({
               )}
               {isStaff && post.internal?.task_id && (
                 <div>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className={texto.rotulo}>
                     Tarefa vinculada
                   </p>
                   <Button
                     type="button"
                     variant="link"
-                    className="mt-1 h-auto p-0 text-sm"
+                    className="mt-1 h-auto p-0 text-[13px]"
                     asChild
                   >
                     <Link to={`/kanban?task=${post.internal.task_id}`}>
@@ -1085,7 +1119,7 @@ export default function EditorialDetailSheet({
                     <Button
                       type="button"
                       variant="link"
-                      className="ml-3 mt-1 h-auto p-0 text-sm"
+                      className="ml-3 mt-1 h-auto p-0 text-[13px]"
                       asChild
                     >
                       <Link to={mesaHref}>Mesa</Link>
@@ -1094,10 +1128,10 @@ export default function EditorialDetailSheet({
                 </div>
               )}
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className={texto.rotulo}>
                   Produção
                 </p>
-                <p className="mt-1 text-sm text-foreground">
+                <p className="mt-1 text-[13px] text-foreground">
                   {PRODUCTION_STATUS_LABELS[
                     post.post
                       .production_status as EditorialProductionStatus
@@ -1106,20 +1140,20 @@ export default function EditorialDetailSheet({
               </div>
               {post.post.objective && (
                 <div className="sm:col-span-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className={texto.rotulo}>
                     Objetivo
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
                     {post.post.objective}
                   </p>
                 </div>
               )}
               {post.post.default_caption && (
                 <div className="sm:col-span-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className={texto.rotulo}>
                     Legenda base
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
                     {post.post.default_caption}
                   </p>
                 </div>
@@ -1129,7 +1163,7 @@ export default function EditorialDetailSheet({
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto p-0 text-xs"
+                    className="h-auto p-0 text-[12px]"
                     asChild
                   >
                     <Link
@@ -1141,28 +1175,23 @@ export default function EditorialDetailSheet({
                 </div>
               )}
               {isStaff && post.internal?.internal_notes && (
-                <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 sm:col-span-2">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-warning">
+                <div className="rounded-md bg-warning/5 p-3 sm:col-span-2">
+                  <p className="text-[12px] font-medium text-warning">
                     Nota interna
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] text-foreground">
                     {post.internal.internal_notes}
                   </p>
                 </div>
               )}
             </section>
 
-            <section className="rounded-xl border border-border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Arquivo principal e aprovação
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {post.primaryFile?.file_name ||
-                      "Nenhum arquivo principal vinculado"}
-                  </p>
-                </div>
+            <Secao
+              titulo="Arquivo principal e aprovação"
+              nivel={3}
+              divisoria
+              descricao={post.primaryFile?.file_name || "Nenhum arquivo principal vinculado"}
+              acao={
                 <Badge
                   variant="outline"
                   className={
@@ -1176,12 +1205,13 @@ export default function EditorialDetailSheet({
                     ? "Principal aprovado"
                     : "Aprovação pendente"}
                 </Badge>
-              </div>
+              }
+            >
               {isStaff && !isFilePublishable(post.primaryFile) && (
                 <Button
                   type="button"
                   variant="link"
-                  className="mt-2 h-auto p-0 text-xs"
+                  className="h-auto p-0 text-[12px]"
                   asChild
                 >
                   <Link
@@ -1193,8 +1223,8 @@ export default function EditorialDetailSheet({
                 </Button>
               )}
               {post.primaryFile && (
-                <div className="mt-4 overflow-hidden rounded-xl border border-border bg-muted/20 p-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="mt-3 overflow-hidden">
+                  <p className={juntar(texto.rotulo, "mb-2")}>
                     Conteúdo principal aprovado
                   </p>
                   <CarouselSlider
@@ -1222,22 +1252,25 @@ export default function EditorialDetailSheet({
                     )}
                   />
                   {(post.primaryFileChildren?.length || 0) > 0 && (
-                    <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                    <p className="mt-2 text-center text-[11px] text-muted-foreground">
                       Carrossel completo · {1 + post.primaryFileChildren!.length} arquivos na ordem do plano
                     </p>
                   )}
                 </div>
               )}
-            </section>
+            </Secao>
 
             {/* Barra de poder do admin: funciona SEMPRE, inclusive quando o
                 conteúdo ainda não tem nenhuma publicação criada (antes, nesse
                 caso, o card abria sem botão nenhum). */}
             {canPublish && !isImpersonating && (
-              <section className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/25 bg-primary/[0.04] p-3">
-                <p className="mr-auto text-[11px] leading-relaxed text-muted-foreground">
-                  Ações rápidas do admin, valem para este conteúdo inteiro.
-                </p>
+              <section className="flex flex-wrap items-center gap-2 border-t border-border pt-5">
+                <div className="mr-auto flex min-w-0 items-center">
+                  <p className={juntar(texto.rotulo, "truncate")}>Ações do admin</p>
+                  <AjudaRecolhida className="ml-1.5" rotulo="Sobre as ações do admin">
+                    Ações rápidas do admin, valem para este conteúdo inteiro.
+                  </AjudaRecolhida>
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -1256,6 +1289,7 @@ export default function EditorialDetailSheet({
                 <Button
                   type="button"
                   size="sm"
+                  variant="outline"
                   disabled={adminActing}
                   onClick={() => void adminConcludePost()}
                   title="Marca como publicado para o painel somar. O link pode ser ajustado depois."
@@ -1266,13 +1300,13 @@ export default function EditorialDetailSheet({
               </section>
             )}
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Publicações
-                </h3>
-                <Badge variant="secondary">{post.publications.length}</Badge>
-              </div>
+            <Secao
+              titulo="Publicações"
+              nivel={3}
+              divisoria
+              descricao={`${post.publications.length} ${post.publications.length === 1 ? "publicação" : "publicações"}`}
+              corpoClassName="divide-y divide-border"
+            >
 
               {post.publications.map((bundle) => {
                 const publication = bundle.publication;
@@ -1283,16 +1317,16 @@ export default function EditorialDetailSheet({
                 return (
                   <article
                     key={publication.id}
-                    className="space-y-3 rounded-xl border border-border bg-card p-4"
+                    className="space-y-3 py-4 first:pt-0"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-medium text-foreground">
+                        <p className="text-[13px] font-medium text-foreground">
                           {PLATFORM_LABELS[
                             publication.platform as EditorialPlatform
                           ] || publication.platform}
                         </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
                           {bundle.account?.handle ||
                             bundle.account?.display_name ||
                             "Conta vinculada"}
@@ -1310,7 +1344,7 @@ export default function EditorialDetailSheet({
                       </Badge>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
                       <Clock3 className="h-3.5 w-3.5" />
                       {formatDateTime(
                         publication.scheduled_at,
@@ -1320,14 +1354,14 @@ export default function EditorialDetailSheet({
 
                     <PublicationProgress post={post} bundle={bundle} />
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-3">
+                    <div className={juntar(superficie.poco, "flex flex-wrap items-center justify-between gap-2 p-3")}>
                       <div>
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <p className={texto.rotulo}>
                           {publication.file_id
                             ? "Arquivo específico"
                             : "Arquivo principal usado"}
                         </p>
-                        <p className="mt-1 text-xs text-foreground">
+                        <p className="mt-1 text-[12px] text-foreground">
                           {effectiveFile?.file_name ||
                             "Arquivo indisponível"}
                         </p>
@@ -1347,8 +1381,8 @@ export default function EditorialDetailSheet({
                     </div>
 
                     {publication.file_id && effectiveFile && (
-                      <div className="overflow-hidden rounded-xl border border-border bg-muted/20 p-3">
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="overflow-hidden">
+                        <p className={juntar(texto.rotulo, "mb-2")}>
                           Arquivo usado nesta publicação
                         </p>
                         <CarouselSlider
@@ -1376,7 +1410,7 @@ export default function EditorialDetailSheet({
                           )}
                         />
                         {(bundle.fileChildren?.length || 0) > 0 && (
-                          <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                          <p className="mt-2 text-center text-[11px] text-muted-foreground">
                             Carrossel completo · {1 + bundle.fileChildren!.length} arquivos na ordem agendada
                           </p>
                         )}
@@ -1384,26 +1418,26 @@ export default function EditorialDetailSheet({
                     )}
 
                     {publication.caption && (
-                      <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-xs text-foreground">
+                      <p className={juntar(superficie.poco, "whitespace-pre-wrap p-3 text-[12px] text-foreground")}>
                         {publication.caption}
                       </p>
                     )}
                     {publication.first_comment && (
-                      <div className="rounded-lg bg-muted/40 p-3">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <div className={juntar(superficie.poco, "p-3")}>
+                        <p className={texto.rotulo}>
                           Primeiro comentário
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                        <p className="mt-1 whitespace-pre-wrap text-[12px] text-foreground">
                           {publication.first_comment}
                         </p>
                       </div>
                     )}
                     {publication.alt_text && (
-                      <div className="rounded-lg bg-muted/40 p-3">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <div className={juntar(superficie.poco, "p-3")}>
+                        <p className={texto.rotulo}>
                           Texto alternativo
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                        <p className="mt-1 whitespace-pre-wrap text-[12px] text-foreground">
                           {publication.alt_text}
                         </p>
                       </div>
@@ -1448,125 +1482,134 @@ export default function EditorialDetailSheet({
                       </Button>
                     )}
 
-                    {canPublish && !isImpersonating && (
-                      <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-                        {/* Poder total do admin, sem sair da agenda. */}
-                        {!ready && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={adminActing}
-                            onClick={() =>
-                              adminApproveNow(
-                                publication.file_id || post.post.primary_file_id,
-                              )
-                            }
-                          >
-                            {adminActing ? (
-                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <FileCheck2 className="mr-1.5 h-3.5 w-3.5" />
-                            )}
-                            Aprovar tudo agora
-                          </Button>
-                        )}
-                        {["planned", "scheduled", "failed"].includes(publication.status) && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={ready ? "default" : "outline"}
-                            disabled={adminActing}
-                            onClick={() => void adminConcludeNow(bundle)}
-                            title="Marca como publicado para o painel somar. O link pode ser ajustado depois."
-                          >
-                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                            Concluir agora
-                          </Button>
-                        )}
-                        {["planned", "scheduled"].includes(
-                          publication.status,
-                        ) && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!ready}
-                            onClick={() => openAction(bundle, "schedule")}
-                            title={
-                              ready
-                                ? "Agendar publicação"
-                                : "Finalize produção e aprovações primeiro"
-                            }
-                          >
-                            <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
-                            {publication.status === "scheduled"
-                              ? "Reagendar"
-                              : "Agendar"}
-                          </Button>
-                        )}
-                        {publication.status === "scheduled" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={!ready}
-                            onClick={() => openAction(bundle, "publish")}
-                          >
-                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                            Confirmar publicação
-                          </Button>
-                        )}
-                        {publication.status === "scheduled" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openAction(bundle, "fail")}
-                          >
-                            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
-                            Registrar falha
-                          </Button>
-                        )}
-                        {publication.status !== "published" &&
-                          publication.status !== "cancelled" && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openAction(bundle, "cancel")}
-                            >
-                              <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                              Cancelar
+                    {canPublish && !isImpersonating && (() => {
+                      // Um primário por estado (SISTEMA.md seção 6): a ação que
+                      // anda com a publicação fica à vista, a segunda ao lado e
+                      // o resto no "...". Nenhuma função saiu.
+                      const status = publication.status;
+                      const acoes: Array<{
+                        chave: string;
+                        rotulo: string;
+                        icone: ReactNode;
+                        aoEscolher: () => void;
+                        desativado?: boolean;
+                        dica?: string;
+                        perigo?: boolean;
+                      }> = [];
+                      if (!ready) {
+                        acoes.push({
+                          chave: "aprovar",
+                          rotulo: "Aprovar tudo agora",
+                          icone: adminActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />,
+                          desativado: adminActing,
+                          aoEscolher: () => adminApproveNow(publication.file_id || post.post.primary_file_id),
+                        });
+                      }
+                      if (status === "scheduled") {
+                        acoes.push({
+                          chave: "publicar",
+                          rotulo: "Confirmar publicação",
+                          icone: <CheckCircle2 className="h-3.5 w-3.5" />,
+                          desativado: !ready,
+                          dica: ready ? undefined : "Finalize produção e aprovações primeiro",
+                          aoEscolher: () => openAction(bundle, "publish"),
+                        });
+                      }
+                      if (["planned", "scheduled"].includes(status)) {
+                        acoes.push({
+                          chave: "agendar",
+                          rotulo: status === "scheduled" ? "Reagendar" : "Agendar",
+                          icone: <CalendarCheck2 className="h-3.5 w-3.5" />,
+                          desativado: !ready,
+                          dica: ready ? "Agendar publicação" : "Finalize produção e aprovações primeiro",
+                          aoEscolher: () => openAction(bundle, "schedule"),
+                        });
+                      }
+                      if (["planned", "scheduled", "failed"].includes(status)) {
+                        acoes.push({
+                          chave: "concluir",
+                          rotulo: "Concluir agora",
+                          icone: <CheckCircle2 className="h-3.5 w-3.5" />,
+                          desativado: adminActing,
+                          dica: "Marca como publicado para o painel somar. O link pode ser ajustado depois.",
+                          aoEscolher: () => void adminConcludeNow(bundle),
+                        });
+                      }
+                      if (["failed", "cancelled"].includes(status)) {
+                        acoes.push({
+                          chave: "reabrir",
+                          rotulo: "Reabrir",
+                          icone: <RotateCcw className="h-3.5 w-3.5" />,
+                          aoEscolher: () => openAction(bundle, "reopen"),
+                        });
+                      }
+                      if (status === "scheduled") {
+                        acoes.push({
+                          chave: "falha",
+                          rotulo: "Registrar falha",
+                          icone: <AlertTriangle className="h-3.5 w-3.5" />,
+                          aoEscolher: () => openAction(bundle, "fail"),
+                        });
+                      }
+                      if (status !== "published" && status !== "cancelled") {
+                        acoes.push({
+                          chave: "cancelar",
+                          rotulo: "Cancelar",
+                          icone: <XCircle className="h-3.5 w-3.5" />,
+                          perigo: true,
+                          aoEscolher: () => openAction(bundle, "cancel"),
+                        });
+                      }
+                      if (acoes.length === 0) return null;
+                      const indicePrimario = acoes.findIndex((a) => !a.desativado && !a.perigo);
+                      const primaria = indicePrimario >= 0 ? acoes[indicePrimario] : null;
+                      const restantes = acoes.filter((_, i) => i !== indicePrimario);
+                      const segunda = restantes.find((a) => !a.perigo) || null;
+                      const noMenu = restantes.filter((a) => a !== segunda);
+                      return (
+                        <div className="flex items-center border-t border-border pt-3 [&>*+*]:ml-2">
+                          {primaria && (
+                            <Button type="button" size="sm" disabled={primaria.desativado} onClick={primaria.aoEscolher} title={primaria.dica}>
+                              <span className="mr-1.5 inline-flex">{primaria.icone}</span>
+                              {primaria.rotulo}
                             </Button>
                           )}
-                        {["failed", "cancelled"].includes(
-                          publication.status,
-                        ) && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openAction(bundle, "reopen")}
-                          >
-                            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                            Reabrir
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                          {segunda && (
+                            <Button type="button" size="sm" variant="outline" disabled={segunda.desativado} onClick={segunda.aoEscolher} title={segunda.dica}>
+                              <span className="mr-1.5 inline-flex">{segunda.icone}</span>
+                              {segunda.rotulo}
+                            </Button>
+                          )}
+                          <MenuMais
+                            rotulo="Mais ações da publicação"
+                            itens={noMenu.map((a) => ({
+                              rotulo: a.rotulo,
+                              icone: a.icone,
+                              aoEscolher: a.aoEscolher,
+                              desativado: a.desativado,
+                              dica: a.dica,
+                              perigo: a.perigo,
+                            }))}
+                          />
+                        </div>
+                      );
+                    })()}
                   </article>
                 );
               })}
 
-              {post.publications.length === 0 && (
-                <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] p-4 sm:p-5">
-                  <p className="text-[13px] font-medium text-foreground">
-                    {agendadaAtual ? "Remarcar publicação" : "Programar publicação"}
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {agendadaAtual
-                      ? "Já agendada — mude a conta ou o horário e confirme: atualiza no mesmo card, sem duplicar."
-                      : "Escolha a conta e o horário aqui mesmo. Se o material já estiver aprovado, sai no horário marcado; se ainda não estiver, sai até 1 hora depois da aprovação."}
-                  </p>
+              {podeProgramarInline && (
+                <div className="rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] p-4 sm:p-5">
+                  <div className="flex min-w-0 items-center">
+                    <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                      {agendadaAtual ? "Remarcar publicação" : "Programar publicação"}
+                    </p>
+                    <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
+                      {agendadaAtual
+                        ? "Já agendada: mude a conta ou o horário e confirme. Atualiza no mesmo card, sem duplicar."
+                        : "Escolha a conta e o horário aqui mesmo. Se o material já estiver aprovado, sai no horário marcado; se ainda não estiver, sai até 1 hora depois da aprovação."}
+                    </AjudaRecolhida>
+                  </div>
                   {canEdit && !isImpersonating && (
                     <div className="mt-3 space-y-2.5">
                       <div>
@@ -1574,7 +1617,7 @@ export default function EditorialDetailSheet({
                         <select
                           value={inlineAccountId}
                           onChange={(event) => setInlineAccountId(event.target.value)}
-                          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:border-primary/50 focus:outline-none"
+                          className={juntar(campo, "mt-1")}
                         >
                           <option value="">
                             {editorOptions.isLoading
@@ -1618,16 +1661,10 @@ export default function EditorialDetailSheet({
                   )}
                 </div>
               )}
-            </section>
+            </Secao>
 
             {isStaff && !isImpersonating && (
-              <section className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Histórico
-                  </h3>
-                </div>
+              <Secao titulo="Histórico" nivel={3} divisoria>
                 {loadingEvents ? (
                   <div className="flex h-20 items-center justify-center">
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -1637,7 +1674,7 @@ export default function EditorialDetailSheet({
                     role="alert"
                     className="rounded-lg border border-destructive/20 bg-destructive/5 p-3"
                   >
-                    <p className="text-xs font-medium text-destructive">
+                    <p className="text-[12px] font-medium text-destructive">
                       Não foi possível carregar o histórico.
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1656,19 +1693,19 @@ export default function EditorialDetailSheet({
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="divide-y divide-border/50">
                     {(events || []).map((event) => (
                       <div
                         key={event.id}
-                        className="flex gap-3 rounded-lg border border-border p-3"
+                        className="flex gap-3 py-2.5"
                       >
                         <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-foreground">
+                          <p className="text-[12px] font-medium text-foreground">
                             {eventLabels[event.event_type] ||
                               event.event_type}
                           </p>
-                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {new Intl.DateTimeFormat("pt-BR", {
                               dateStyle: "short",
                               timeStyle: "short",
@@ -1680,7 +1717,7 @@ export default function EditorialDetailSheet({
                               ? ` · ${event.from_status || "-"} → ${event.to_status || "-"}`
                               : ""}
                           </p>
-                          <p className="mt-1 text-[10px] text-muted-foreground">
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
                             Por{" "}
                             {event.actor_name ||
                               (event.actor_id
@@ -1691,13 +1728,13 @@ export default function EditorialDetailSheet({
                       </div>
                     ))}
                     {(events || []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[12px] text-muted-foreground">
                         Nenhum evento registrado.
                       </p>
                     )}
                   </div>
                 )}
-              </section>
+              </Secao>
             )}
           </div>
 

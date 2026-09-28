@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { EstadoVazio } from "@/components/sistema/Estados";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, campoTexto, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import {
   aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, salvarEPublicarRitual,
@@ -132,7 +133,7 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
             <div className="mr-2 min-w-0 flex-1">
               <p className="text-[13px] font-medium text-foreground">{t.titulo}</p>
               {t.passo && <p className="text-[12px] leading-snug text-muted-foreground">{t.passo}</p>}
-              <p className="text-[11.5px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
+              <p className="text-[12px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
             </div>
             {criadas.includes(i) ? (
               <span className="inline-flex shrink-0 items-center text-[12px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
@@ -175,23 +176,25 @@ function SugestoesRecentes() {
   });
   return (
     <div className="border-t border-border pt-3">
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        aria-expanded={aberto}
-        className="inline-flex cursor-pointer items-center border-none bg-transparent p-0 text-[13px] font-medium text-primary hover:opacity-80"
-      >
-        <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", aberto ? "rotate-180" : "")} />
-        Tarefas sugeridas pelos rituais dos últimos 10 dias
-      </button>
+      <div className="flex min-w-0 items-center">
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          aria-expanded={aberto}
+          className="inline-flex min-w-0 cursor-pointer items-center border-none bg-transparent p-0 text-left text-[13px] font-medium text-primary hover:opacity-80"
+        >
+          <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 shrink-0 transition-transform", aberto ? "rotate-180" : "")} />
+          <span className="min-w-0 truncate">Tarefas sugeridas pelos rituais dos últimos 10 dias</span>
+        </button>
+        <AjudaRecolhida className="ml-1.5" rotulo="Sobre as tarefas sugeridas">Cada sugestão nasce de uma promessa do ritual. Vira tarefa só quando alguém da equipe cria.</AjudaRecolhida>
+        {aberto && (
+          <button type="button" onClick={() => void refetch()} className={juntar(botao.icone, "ml-auto")} aria-label="Recarregar">
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </button>
+        )}
+      </div>
       {aberto && (
         <div className="mt-2 space-y-2">
-          <div className="flex items-center text-[12px] text-muted-foreground">
-            <span className="mr-2 min-w-0 flex-1">Cada sugestão nasce de uma promessa do ritual. Vira tarefa só quando alguém da equipe cria.</span>
-            <button type="button" onClick={() => void refetch()} className={botao.icone} aria-label="Recarregar">
-              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            </button>
-          </div>
           {!isFetching && data.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma sugestão nos rituais recentes.</p>}
           {data.map((r) => (
             <div key={r.id} className="rounded-md border border-border p-2.5">
@@ -442,7 +445,10 @@ export default function AgenteDaCentral() {
     <EstadoVazio compacto titulo="Nenhum cliente lido ainda." descricao="Leia os clientes no passo 1 e as perguntas aparecem aqui." />
   ) : (
     <div className="space-y-3">
-      <p className={texto.auxiliar}>Responda o que souber. Pode colar contexto. Sua resposta é a aprovação para atualizar o dossiê e publicar.</p>
+      <p className={juntar(texto.auxiliar, "flex items-center")}>
+        Responda o que souber.
+        <AjudaRecolhida className="ml-1.5" rotulo="Como responder">Pode colar contexto. Sua resposta é a aprovação para atualizar o dossiê e publicar.</AjudaRecolhida>
+      </p>
       <textarea
         value={rodada?.contextoGeral ?? ""}
         onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
@@ -534,8 +540,9 @@ export default function AgenteDaCentral() {
     <EstadoVazio compacto titulo="Nada para aplicar ainda." descricao="Leia os clientes e responda as perguntas primeiro." />
   ) : (
     <div className="space-y-3">
-      <p className={texto.auxiliar}>
-        O agente incorpora as respostas no dossiê, escreve o ritual de cada cliente e publica no portal. Pergunta sem resposta fica de fora.
+      <p className={juntar(texto.auxiliar, "flex items-center")}>
+        Pergunta sem resposta fica de fora.
+        <AjudaRecolhida className="ml-1.5" rotulo="O que o agente faz ao aplicar">O agente incorpora as respostas no dossiê, escreve o ritual de cada cliente e publica no portal.</AjudaRecolhida>
       </p>
       {semResposta > 0 && (
         <p className="rounded-md bg-warning/10 px-3 py-2 text-[13px] text-warning">
@@ -591,7 +598,7 @@ export default function AgenteDaCentral() {
                 {r.title && <p className="mt-1.5 text-[13px] font-medium text-foreground">{r.title}</p>}
                 {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">{aviso}</p>}
                 {i.aplicado?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.aplicado.dossie_aviso}</p>}
-                <p className="mt-1.5 whitespace-pre-line text-[13.5px] leading-relaxed text-foreground/90">{r.body}</p>
+                <p className="mt-1.5 whitespace-pre-line text-[14px] leading-relaxed text-foreground/90">{r.body}</p>
                 {i.reportId && (
                   <TarefasDoRitual
                     clientId={i.cliente.id}
@@ -649,7 +656,7 @@ export default function AgenteDaCentral() {
       )}
       {etapa === "aplicar" && (
         <>
-          <label className="mr-auto flex cursor-pointer items-center py-1 text-[13.5px] text-foreground">
+          <label className="mr-auto flex cursor-pointer items-center py-1 text-[14px] text-foreground">
             <input
               type="checkbox"
               className="mr-2 h-4 w-4 accent-primary"
@@ -748,13 +755,13 @@ export default function AgenteDaCentral() {
             {!rodada ? (
               erroLista && !carregandoLista ? (
                 <div className="space-y-2">
-                  <p className="text-[13.5px] text-destructive">{erroLista}</p>
+                  <p className="text-[14px] text-destructive">{erroLista}</p>
                   <button type="button" onClick={() => void abrir(true)} className={botao.primario}>
                     <RefreshCw className="mr-1.5 h-4 w-4" /> Tentar de novo
                   </button>
                 </div>
               ) : (
-                <p className="flex items-center text-[13.5px] text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lendo a carteira...</p>
+                <p className="flex items-center text-[14px] text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lendo a carteira...</p>
               )
             ) : etapa === "ler" ? conteudoLer : etapa === "responder" ? conteudoResponder : etapa === "aplicar" ? conteudoAplicar : conteudoCopiar}
           </PainelDoAgente>

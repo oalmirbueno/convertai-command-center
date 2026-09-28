@@ -16,6 +16,7 @@ import {
   botao, campo, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
 import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, botaoDeLinha } from "@/components/finance/pecasDoFinanceiro";
+import { ABAS_DOS_CUSTOS, CHAVE_DA_ABA_DOS_CUSTOS, validarAbaDosCustos, type AbaDosCustos } from "@/components/finance/abasDosCustos";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -48,23 +49,24 @@ interface Props {
   monthlyOperationalRevenue: number;
   /** Bruto recebido no mês: é sobre ele que a alíquota incide. */
   grossReceivedThisMonth?: number;
+  /**
+   * Leitura escolhida por fora (o seletor mora na linha do título da página,
+   * AdminFinanceiro). Sem estas props, o seletor aparece aqui, como antes.
+   */
+  aba?: AbaDosCustos;
+  onAba?: (aba: AbaDosCustos) => void;
 }
 
-/* As três leituras desta área. Separadas porque respondem a perguntas
-   diferentes: quanto a estrutura custa, quanto eu posso retirar, e quanto
-   fica reservado para o governo. Juntas numa página só, nenhuma era
-   legível. */
-const ABAS = [
-  { id: "custos", rotulo: "Custos fixos", icone: Scale },
-  { id: "prolabore", rotulo: "Pró-labore", icone: PiggyBank },
-  { id: "tributaria", rotulo: "Tributária", icone: Landmark },
-] as const;
-type AbaDosCustos = (typeof ABAS)[number]["id"];
+/* As três leituras desta área (abasDosCustos.ts). */
+const ABAS = ABAS_DOS_CUSTOS;
 
-export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThisMonth = 0 }: Props) {
-  const [aba, setAba] = useEstadoDaTela<AbaDosCustos>("financeiro:custos:aba", "custos", {
-    validar: (v) => ABAS.some((x) => x.id === v),
+export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThisMonth = 0, aba: abaDeFora, onAba }: Props) {
+  const [abaPropria, setAbaPropria] = useEstadoDaTela<AbaDosCustos>(CHAVE_DA_ABA_DOS_CUSTOS, "custos", {
+    validar: validarAbaDosCustos,
   });
+  const seletorDeFora = abaDeFora !== undefined && !!onAba;
+  const aba = seletorDeFora ? abaDeFora : abaPropria;
+  const setAba = seletorDeFora ? onAba : setAbaPropria;
   const [pagando, setPagando] = useState<string | null>(null);
   const [vencModal, setVencModal] = useState<any | null>(null);
   const qc = useQueryClient();
@@ -294,16 +296,18 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* As três leituras: três opções, controle segmentado (lembra ao voltar). */}
-      <SeletorCompacto
-        opcoes={ABAS.map((x) => ({ valor: x.id, rotulo: x.rotulo, icone: <x.icone className="h-3.5 w-3.5" /> }))}
-        valor={aba}
-        onEscolher={(v) => setAba(v as AbaDosCustos)}
-        rotulo="Leitura dos custos"
-        modo="segmentado"
-        className="w-full sm:w-[420px]"
-        larguraTotal
-      />
+      {/* As três leituras: três opções, controle segmentado (lembra ao voltar). Com o seletor por fora, ele mora no título da página. */}
+      {!seletorDeFora && (
+        <SeletorCompacto
+          opcoes={ABAS.map((x) => ({ valor: x.id, rotulo: x.rotulo, icone: <x.icone className="h-3.5 w-3.5" /> }))}
+          valor={aba}
+          onEscolher={(v) => setAba(v as AbaDosCustos)}
+          rotulo="Leitura dos custos"
+          modo="segmentado"
+          className="w-full sm:w-[420px]"
+          larguraTotal
+        />
+      )}
 
       {aba === "tributaria" && <AreaTributaria brutoRecebidoNoMes={grossReceivedThisMonth} />}
 
@@ -391,7 +395,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
             }
           >
             <div className="-mb-1 flex min-w-0 flex-wrap items-center [&>*]:mb-1">
-              <span className="mr-3 text-[22px] font-semibold leading-8 tabular-nums text-foreground">{fmt(proLabore)}</span>
+              <span className="mr-3 text-[24px] font-semibold leading-8 tabular-nums text-foreground">{fmt(proLabore)}</span>
               {suggested !== proLabore && (
                 <Etiqueta tom={suggested > proLabore ? "sucesso" : "aviso"}>Proporcional à receita: {fmt(suggested)}</Etiqueta>
               )}

@@ -10,7 +10,7 @@ import {
   AjudaRecolhida, CampoDeFormulario, PainelDoAgente, Secao, SeletorCompacto,
   botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
-import { Etiqueta, Kpi, corDoTom } from "@/components/finance/pecasDoFinanceiro";
+import { Etiqueta, GradeDeKpis, Kpi, corDoTom } from "@/components/finance/pecasDoFinanceiro";
 import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hooks/useFinanceV2";
 import {
   DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier, ONE_OFF_CATALOG,
@@ -493,12 +493,12 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
             </button>
           }
         >
-          <div className="grid min-w-0 grid-cols-2 gap-3">
+          <GradeDeKpis colunas={2}>
             <Kpi rotulo="Operacional no mês" valor={fmt(analysis.operational)} />
             <Kpi rotulo="Projeção (ritmo)" valor={fmt(analysis.projectedOperational)} tom="info" />
             <Kpi rotulo="Lucro do mês" valor={fmt(analysis.profit)} tom={analysis.profit >= 0 ? "sucesso" : "perigo"} />
             <Kpi rotulo="Atrasados" valor={fmt(analysis.overdueTotal)} tom={analysis.overdueTotal > 0 ? "perigo" : "sucesso"} />
-          </div>
+          </GradeDeKpis>
         </Secao>
 
         {/* Meta sugerida */}

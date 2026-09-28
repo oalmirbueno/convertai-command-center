@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { X, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate, notifyOpsProject } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,8 @@ import { format, addDays } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AjudaRecolhida, CampoDeEscolha, CampoDeFormulario, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { projectTemplates } from "@/lib/projectTemplates";
 
 const PROJECT_TYPES = [
@@ -384,170 +385,142 @@ export default function CreateProjectModal({ open, onClose, editProject, default
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl w-full max-w-[520px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-foreground">{isEdit ? "Editar Projeto" : "Novo Projeto"}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+  const valorTotal = parseFloat(totalValue);
+  const entrada = parseFloat(entryPct || "0");
+  const parcelas = Math.max(parseInt(installmentsCount) || 1, 1);
+  const reais = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  const botaoDeData = (vazio: boolean) => juntar(campo, "flex items-center text-left hover:border-primary/50", vazio && "text-muted-foreground");
 
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente *</label>
-            <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+  return (
+    // Janela do sistema (Dialog): foco preso, Esc fecha, rola por dentro e as
+    // ações ficam presas no pé. Explicações no "?" (SISTEMA.md seção 5).
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="flex max-h-[88vh] max-w-[520px] flex-col overflow-hidden border-border bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 text-left">
+          <DialogTitle className={juntar(texto.tituloSecao, "truncate pr-8")}>{isEdit ? "Editar Projeto" : "Novo Projeto"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-5">
+          <CampoDeFormulario rotulo="Cliente" obrigatorio>
+            <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={campo}>
               <option value="">Selecionar cliente...</option>
               {(clients || []).map((c: any) => (
                 <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Projeto *</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Social Media 2026"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-          </div>
+          <CampoDeFormulario rotulo="Nome do projeto" obrigatorio>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Social Media 2026" className={campo} />
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Descrição breve do projeto"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-          </div>
+          <CampoDeFormulario rotulo="Descrição">
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Descrição breve do projeto" className={juntar(campoTexto, "resize-none")} />
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Tipo</label>
-            <select value={projectType} onChange={(e) => setProjectType(e.target.value)}
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+          <CampoDeFormulario rotulo="Tipo">
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={campo}>
               {PROJECT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-          </div>
+          </CampoDeFormulario>
 
-          {/* Tipo de Cobrança + Brand */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Cobrança</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { v: "included", label: "Plano" },
-                  { v: "one_off", label: "Avulso" },
-                ].map((opt) => (
-                  <button key={opt.v} type="button" onClick={() => setBillingMode(opt.v as any)}
-                    className={`px-2.5 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
-                      billingMode === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
-                    }`}>{opt.label}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
-              <select value={brand} onChange={(e) => setBrand(e.target.value as any)}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50">
+          {/* Cobrança + Brand */}
+          <div className="grid grid-cols-2 gap-4">
+            <CampoDeEscolha rotulo="Cobrança">
+              <SeletorCompacto
+                rotulo="Cobrança"
+                modo="segmentado"
+                larguraTotal
+                opcoes={[
+                  { valor: "included", rotulo: "Plano" },
+                  { valor: "one_off", rotulo: "Avulso" },
+                ]}
+                valor={billingMode}
+                onEscolher={(v) => setBillingMode(v as "included" | "one_off")}
+              />
+            </CampoDeEscolha>
+            <CampoDeFormulario rotulo="Brand">
+              <select value={brand} onChange={(e) => setBrand(e.target.value as any)} className={campo}>
                 <option value="">- Definir depois -</option>
                 <option value="aceleriq">AcelerIQ</option>
                 <option value="sitebolt">SiteBolt</option>
               </select>
-            </div>
+            </CampoDeFormulario>
           </div>
 
-          {/* Financeiro do projeto avulso */}
+          {/* Financeiro do projeto avulso: grupo aberto (sem caixa), separado por uma linha fina. */}
           {billingMode === "one_off" && (
-            <div className="rounded-[12px] border border-primary/30 bg-primary/5 p-3.5 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro do Projeto</p>
-                <span className="text-[10px] text-muted-foreground">Evita duplicar lançamento</span>
+            <div className="space-y-3 border-t border-border pt-4">
+              <div className="flex min-w-0 items-center">
+                <p className={juntar(texto.rotulo, "min-w-0 truncate text-foreground")}>Financeiro do projeto</p>
+                <AjudaRecolhida className="ml-1.5" rotulo="Sobre o financeiro do projeto">
+                  Evita duplicar lançamento. Gerar plano cria a entrada e as parcelas. Já cobrado guarda o valor só como
+                  referência, sem fatura nova: use quando a cobrança já foi lançada no cadastro do cliente ou fora do
+                  sistema. Sem cobrança é para cortesia, bônus ou trabalho interno.
+                </AjudaRecolhida>
               </div>
 
-              {/* Seletor de modo financeiro · evita duplicidade quando já cobrado no cadastro do cliente */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { v: "create", label: "Gerar plano", hint: "Entrada + parcelas" },
-                  { v: "already", label: "Já cobrado", hint: "Sem faturas novas" },
-                  { v: "none", label: "Sem cobrança", hint: "Cortesia/interno" },
-                ].map((opt) => (
-                  <button
-                    key={opt.v}
-                    type="button"
-                    onClick={() => setFinancialMode(opt.v as any)}
-                    className={`px-2 py-2 rounded-[10px] text-[11px] border transition-all cursor-pointer text-left ${
-                      financialMode === opt.v
-                        ? "border-primary bg-primary/10 text-foreground font-semibold"
-                        : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    <div>{opt.label}</div>
-                    <div className="text-[9px] opacity-70 font-normal">{opt.hint}</div>
-                  </button>
-                ))}
-              </div>
+              <SeletorCompacto
+                rotulo="Modo financeiro"
+                modo="segmentado"
+                larguraTotal
+                opcoes={[
+                  { valor: "create", rotulo: "Gerar plano" },
+                  { valor: "already", rotulo: "Já cobrado" },
+                  { valor: "none", rotulo: "Sem cobrança" },
+                ]}
+                valor={financialMode}
+                onEscolher={(v) => setFinancialMode(v as "create" | "already" | "none")}
+              />
 
               {financialMode !== "none" && (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
-                    <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00"
-                      className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                  </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <CampoDeFormulario rotulo="Valor total" obrigatorio>
+                    <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00" className={campo} />
+                  </CampoDeFormulario>
                   {financialMode === "create" && (
                     <>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada %</label>
-                        <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100"
-                          className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas</label>
-                        <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1"
-                          className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                      </div>
+                      <CampoDeFormulario rotulo="Entrada %">
+                        <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100" className={campo} />
+                      </CampoDeFormulario>
+                      <CampoDeFormulario rotulo="Parcelas">
+                        <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1" className={campo} />
+                      </CampoDeFormulario>
                     </>
                   )}
                 </div>
               )}
 
-              {financialMode === "create" && totalValue && parseFloat(totalValue) > 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  Entrada: <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * parseFloat(entryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+              {financialMode === "create" && totalValue && valorTotal > 0 && (
+                <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>
+                  Entrada: <span className="text-foreground">R$ {reais((valorTotal * entrada) / 100)}</span>
                   {" · "}
-                  {installmentsCount}× de <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * (100 - parseFloat(entryPct || "0"))) / 100 / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  {installmentsCount}× de <span className="text-foreground">R$ {reais((valorTotal * (100 - entrada)) / 100 / parcelas)}</span>
                 </p>
-              )}
-              {financialMode === "already" && (
-                <p className="text-[11px] text-muted-foreground">Valor apenas para referência do projeto. Nenhuma fatura será criada aqui · use quando a cobrança já foi lançada no cadastro do cliente ou fora do sistema.</p>
-              )}
-              {financialMode === "none" && (
-                <p className="text-[11px] text-muted-foreground">Projeto sem cobrança associada (cortesia, bônus ou trabalho interno).</p>
               )}
             </div>
           )}
 
-
           {!isEdit && projectTemplates[projectType] && (
-            <label className="flex items-center gap-2.5 p-3 rounded-[10px] bg-primary/5 border border-primary/20 cursor-pointer">
-              <input type="checkbox" checked={useTemplates} onChange={(e) => setUseTemplates(e.target.checked)}
-                className="accent-primary w-4 h-4" />
-              <div>
-                <p className="text-[13px] font-medium text-foreground">Gerar milestones e tarefas automaticamente</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {projectTemplates[projectType].length} milestones · {projectTemplates[projectType].reduce((sum, m) => sum + m.tasks.length, 0)} tarefas com atribuição automática por função
-                </p>
-              </div>
+            <label className="flex min-w-0 cursor-pointer items-start">
+              <input type="checkbox" checked={useTemplates} onChange={(e) => setUseTemplates(e.target.checked)} className="mr-2.5 mt-0.5 h-4 w-4 shrink-0 accent-primary" />
+              <span className="min-w-0">
+                <span className={juntar(texto.corpo, "block font-medium")}>Gerar milestones e tarefas automaticamente</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>
+                  {projectTemplates[projectType].length} milestones · {projectTemplates[projectType].reduce((sum, m) => sum + m.tasks.length, 0)} tarefas, atribuídas por função
+                </span>
+              </span>
             </label>
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Data Início</label>
+            <CampoDeEscolha rotulo="Data início">
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className={cn("w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-left flex items-center gap-2 hover:border-primary/50 transition-colors cursor-pointer", !startDate && "text-muted-foreground")}>
-                    <CalendarIcon className="w-3.5 h-3.5" />
+                  <button type="button" className={botaoDeData(!startDate)}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     {startDate ? format(startDate, "dd/MM/yyyy") : "Selecionar"}
                   </button>
                 </PopoverTrigger>
@@ -555,13 +528,12 @@ export default function CreateProjectModal({ open, onClose, editProject, default
                   <Calendar mode="single" selected={startDate} onSelect={setStartDate} className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Prazo Final</label>
+            </CampoDeEscolha>
+            <CampoDeEscolha rotulo="Prazo final">
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className={cn("w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-left flex items-center gap-2 hover:border-primary/50 transition-colors cursor-pointer", !deadline && "text-muted-foreground")}>
-                    <CalendarIcon className="w-3.5 h-3.5" />
+                  <button type="button" className={botaoDeData(!deadline)}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     {deadline ? format(deadline, "dd/MM/yyyy") : "Selecionar"}
                   </button>
                 </PopoverTrigger>
@@ -569,32 +541,28 @@ export default function CreateProjectModal({ open, onClose, editProject, default
                   <Calendar mode="single" selected={deadline} onSelect={setDeadline} className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
-            </div>
+            </CampoDeEscolha>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Escopo</label>
-            <textarea value={scope} onChange={(e) => setScope(e.target.value)} rows={2} placeholder="Detalhes do escopo..."
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-          </div>
+          <CampoDeFormulario rotulo="Escopo">
+            <textarea value={scope} onChange={(e) => setScope(e.target.value)} rows={2} placeholder="Detalhes do escopo..." className={juntar(campoTexto, "resize-none")} />
+          </CampoDeFormulario>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Objetivos <span className="text-muted-foreground/40">(um por linha)</span></label>
-            <textarea value={objectives} onChange={(e) => setObjectives(e.target.value)} rows={3} placeholder="Objetivo 1&#10;Objetivo 2"
-              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-          </div>
+          <CampoDeFormulario rotulo="Objetivos" apoio="Um por linha">
+            <textarea value={objectives} onChange={(e) => setObjectives(e.target.value)} rows={3} placeholder={"Objetivo 1\nObjetivo 2"} className={juntar(campoTexto, "resize-none")} />
+          </CampoDeFormulario>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-          <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border border-border">
+        <div className="flex shrink-0 items-center justify-end border-t border-border px-5 py-3 [&>*+*]:ml-2">
+          <button type="button" onClick={onClose} disabled={saving} className={botao.secundario}>
             Cancelar
           </button>
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          <button type="button" onClick={handleSave} disabled={saving} className={botao.primario}>
+            {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
             {saving ? "Salvando..." : isEdit ? "Salvar" : "Criar Projeto"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

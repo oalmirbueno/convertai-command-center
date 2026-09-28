@@ -50,7 +50,9 @@ export function QuadroQueCabe({
   const teto = soPelaLargura ? Math.min(maximo, Math.round(650 * r)) : maximo;
   const largura = Math.max(0, Math.floor(Math.min(area.largura, pelaAltura, teto)));
   return (
-    <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 items-start justify-center ${soPelaLargura ? "" : "min-h-[320px]"}`}>
+    // Frente AE-3 (dono, 28/09: "nada cortado"): o piso caiu de 320 para 200 px; em janela baixa a lâmina
+    // encolhe para caber inteira em vez de pedir rolagem.
+    <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 items-start justify-center ${soPelaLargura ? "" : "min-h-[200px]"}`}>
       {largura > 0 && (
         <div className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm" style={{ width: largura, height: Math.round(largura / r) }}>
           {children(largura)}
@@ -123,19 +125,21 @@ export default function EstudioLaminaGrande({
           )}
         </p>
         {ordenadas.length > 1 && !desenhandoAreas && (
-          <div className="ml-2 flex shrink-0 items-center rounded-md border border-border bg-background">
-            <button type="button" className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => irPara(-1)} disabled={posicao <= 0} aria-label="Versão anterior">
+          // Frente AE-3: versões compactas, sem caixa (setas finas e "v3/3").
+          <div className="ml-2 flex shrink-0 items-center" title={`Versão ${vista?.versao} de ${ordenadas.length}`}>
+            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(-1)} disabled={posicao <= 0} aria-label="Versão anterior">
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="px-1 text-[11.5px] tabular-nums text-muted-foreground">v{vista?.versao} de {ordenadas.length}</span>
-            <button type="button" className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => irPara(1)} disabled={posicao >= ordenadas.length - 1} aria-label="Próxima versão">
+            <span className="px-0.5 text-[11.5px] tabular-nums text-muted-foreground" data-versao-na-tela="">v{vista?.versao}/{ordenadas.length}</span>
+            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(1)} disabled={posicao >= ordenadas.length - 1} aria-label="Próxima versão">
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
         {vista && !desenhandoAreas && (
-          <Button type="button" size="sm" variant="ghost" className="ml-1 h-8 shrink-0 px-2 text-[12px]" onClick={onAmpliar} title="Ver grande (setas passam entre as lâminas)">
-            <Maximize2 className="mr-1 h-3.5 w-3.5" /> Ver grande
+          // Frente AE-3: só o ícone (o nome fica para o leitor de tela e a dica).
+          <Button type="button" size="sm" variant="ghost" className="ml-1 h-8 w-8 shrink-0 p-0" onClick={onAmpliar} aria-label="Ver grande" title="Ver grande (setas passam entre as lâminas)">
+            <Maximize2 className="h-4 w-4" />
           </Button>
         )}
       </div>

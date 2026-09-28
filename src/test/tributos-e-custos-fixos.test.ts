@@ -160,8 +160,13 @@ describe("a tela financeira", () => {
   const tributaria = ler("src/components/finance/AreaTributaria.tsx");
 
   it("as três abas existem", () => {
+    // 28/09 (L9): as três leituras moram em abasDosCustos.ts, porque o seletor
+    // subiu para a linha do título da página (seletor pequeno não ganha linha
+    // própria); o FixedCosts usa a mesma lista.
+    const abas = ler("src/components/finance/abasDosCustos.ts");
+    expect(custos).toContain("ABAS_DOS_CUSTOS");
     for (const r of ["Custos fixos", "Pró-labore", "Tributária"]) {
-      expect(custos).toContain(r);
+      expect(abas).toContain(r);
     }
   });
 

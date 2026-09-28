@@ -64,7 +64,8 @@ import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
 import DiretorDoEstudio from "./DiretorDoEstudio";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
-import { emColunas, encaixarNaJanela, rolarAte, useAlturaDaEsteira, useFaixa } from "./EstudioAltura";
+import { emColunas, encaixarNaJanela, rolarAte, useFaixa } from "./EstudioAltura";
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
 import EstudioAvisoDoRosto from "./EstudioAvisoDoRosto";
@@ -92,6 +93,9 @@ import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
+import AprovadasSemData from "./AprovadasSemData";
+import AgendarDoEstudio from "./AgendarDoEstudio";
+import PedidoDoCliente from "./PedidoDoCliente";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
 import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
@@ -1162,7 +1166,7 @@ function DetalheDoItem({
 
   // Frente AE-2 (dono, 28/09: "menos poluição"): a qualidade num seletor compacto, com o preço de cada uma.
   const seletorDeQualidade = (
-    <div className="mb-1 mr-2 mt-1 shrink-0" title={filaComFundo ? NOTA_DO_FUNDO_CONTINUO : undefined}>
+    <div className="shrink-0" title={filaComFundo ? NOTA_DO_FUNDO_CONTINUO : undefined}>
       <SeletorDeQualidadeCompacto
         valor={qualidade}
         precos={precos}
@@ -1174,7 +1178,7 @@ function DetalheDoItem({
   );
 
   const seletorDeGerador = (
-    <div className="mb-1 mr-2 mt-1 w-[168px] min-w-0 shrink-0">
+    <div className="w-[128px] min-w-0 shrink-0">
       <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
         <SelectTrigger className="h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
           <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
@@ -1190,17 +1194,24 @@ function DetalheDoItem({
     </div>
   );
 
+  // Frente AE-3 (dono, 28/09): "Corrigir sozinho" vira uma chave pequena com ícone; a explicação vai para o "?".
   const chaveCorrigirSozinho = (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={corrigirSozinho}
-      onClick={() => setCorrigirSozinho((c) => !c)}
-      className={`mb-1 mr-2 mt-1 inline-flex h-8 shrink-0 items-center rounded-md border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}
-      title={`Corrigir sozinho (${corrigirSozinho ? "ligado" : "desligado"}): depois de gerar ou ajustar, se a conferência achar erro de texto, logo ou identidade, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a lâmina.`}
-    >
-      <ShieldCheck className={`mr-1 h-3.5 w-3.5 ${corrigirSozinho ? "text-primary" : ""}`} /> Corrigir sozinho
-    </button>
+    <div className="inline-flex h-8 shrink-0 items-center" data-corrigir-sozinho={corrigirSozinho ? "ligado" : "desligado"}>
+      <ShieldCheck className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${corrigirSozinho ? "text-primary" : "text-muted-foreground"}`} aria-hidden="true" />
+      <Switch
+        id={`corrigir-sozinho-${item.id}`}
+        checked={corrigirSozinho}
+        onCheckedChange={(v) => setCorrigirSozinho(v === true)}
+        aria-label="Corrigir sozinho"
+        data-compacto=""
+      />
+      <label htmlFor={`corrigir-sozinho-${item.id}`} className="ml-1.5 cursor-pointer whitespace-nowrap text-[12px] text-muted-foreground">
+        Corrigir sozinho
+      </label>
+      <AjudaRecolhida className="ml-0.5" rotulo="O que faz o Corrigir sozinho">
+        Depois de gerar ou ajustar, se a conferência achar erro de texto, logo ou identidade, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a lâmina. Cada correção custa um ajuste a mais. Desligado é o padrão.
+      </AjudaRecolhida>
+    </div>
   );
 
   /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz. */
@@ -1208,8 +1219,8 @@ function DetalheDoItem({
     <Button
       type="button"
       size="sm"
-      variant={ferramenta === "diretor" ? "default" : "outline"}
-      className="mb-1 mr-2 mt-1 h-8 shrink-0 gap-1 px-2.5 text-[12px]"
+      variant={ferramenta === "diretor" ? "secondary" : "ghost"}
+      className="h-8 shrink-0 gap-1 px-2 text-[12px]"
       onClick={() => abrirFerramenta("diretor")}
       aria-pressed={ferramenta === "diretor"}
       aria-label="Conversar com o diretor"
@@ -1220,7 +1231,7 @@ function DetalheDoItem({
   );
 
   const acaoPrincipal = (
-    <div className="mb-1 mt-1 flex shrink-0 items-center">
+    <div className="flex shrink-0 items-center">
       {emLote || fila.ativos.length > 0 ? (
         <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Para depois das lâminas que já estão gerando">
           <Square className="mr-1 h-3.5 w-3.5" /> Parar
@@ -1233,11 +1244,11 @@ function DetalheDoItem({
               {semImagem.length
                 ? semImagem.length === cardsDaDirecao.length
                   ? `Gerar todas (${semImagem.length})`
-                  : `Gerar as que faltam (${semImagem.length})`
+                  : `Gerar ${semImagem.length}`
                 : "Refazer todas"}
             </>
           }
-          titulo={`Gerar ${filaDeGeracao.length} lâmina(s)`}
+          titulo={semImagem.length && semImagem.length < cardsDaDirecao.length ? `Gerar as ${semImagem.length} lâmina(s) que faltam` : `Gerar ${filaDeGeracao.length} lâmina(s)`}
           descricao={infinito
             ? comNotaDoFundo("Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma.", ordensDaFila)
             : corrigirSozinho
@@ -1268,18 +1279,21 @@ function DetalheDoItem({
     </div>
   );
 
+  // Frente AE-3 (dono, 28/09: "uma linha no computador, duas no máximo em telas menores, sem cartão em volta"):
+  // o item, os ajustes da geração, a ação principal e a tela cheia (só o ícone) numa faixa só, que quebra
+  // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
   const barraDoItem = (
     <div className="shrink-0 border-b border-border">
-      <div className="flex min-w-0 flex-wrap items-center px-3 py-1.5">
-        <div className="mb-1 mr-3 mt-1 flex min-w-[200px] flex-1 items-center">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-1.5" data-barra-do-item="">
+        <div className="flex min-w-[140px] flex-1 basis-[150px] items-center">
           {temRoteiro && (
             <span title={DICA_DO_ROTEIRO} className="mr-1.5 shrink-0">
               <Star className="h-4 w-4 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[15px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
-            <p className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+            <h2 className="truncate text-[14px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
+            <p className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
               <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
               {trabalho && trabalho.custo_usd > 0 && (
@@ -1288,36 +1302,39 @@ function DetalheDoItem({
             </p>
           </div>
         </div>
-        {/* Frente AE-2 (dono: "no máximo duas linhas organizadas"): na 1ª linha o item, a ação principal e a tela cheia. */}
+        {/* Os ajustes da geração, do mesmo tamanho (h-8), lado a lado. */}
+        {estado === "producao" && (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1" data-ajustes-da-geracao="">
+            <div className="shrink-0" title="Formato do post (vale para todas as lâminas)">
+              <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
+            </div>
+            {seletorDeQualidade}
+            {seletorDeGerador}
+            {chaveCorrigirSozinho}
+            {botaoDoDiretor}
+            {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
+          </div>
+        )}
         {estado === "producao" && acaoPrincipal}
+        {/* Frente AP: arte entregue → Agendar (data do conteúdo, perfil e se vai postar), só admin e gestor. */}
+        {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0 px-2.5" />}
         {colunas && onFoco && (
           <Button
             type="button"
             size="sm"
-            variant="outline"
-            className="mb-1 ml-1 mt-1 h-8 shrink-0 gap-1 px-2.5 text-[12px]"
+            variant="ghost"
+            className="h-8 w-8 shrink-0 p-0"
             aria-pressed={foco}
+            aria-label={foco ? "Voltar (Esc)" : "Tela cheia"}
+            data-tela-cheia-do-estudio=""
             onClick={() => onFoco(!foco)}
             title={foco ? "Voltar ao painel (Esc)" : "Tela cheia: esconde o topo do painel, as pautas e os botões flutuantes; volta pelo botão ou Esc"}
           >
-            {foco ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            {foco ? "Voltar (Esc)" : "Tela cheia"}
+            {foco ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="sr-only">{foco ? "Voltar (Esc)" : "Tela cheia"}</span>
           </Button>
         )}
       </div>
-      {/* 2ª linha: os ajustes da geração, alinhados e do mesmo tamanho. */}
-      {estado === "producao" && (
-        <div className="flex min-w-0 flex-wrap items-center border-t border-border/60 px-3 py-1" data-ajustes-da-geracao="">
-          <div className="mb-1 mr-2 mt-1 shrink-0" title="Formato do post (vale para todas as lâminas)">
-            <SeletorDeFormatoCompacto valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
-          </div>
-          {seletorDeQualidade}
-          {seletorDeGerador}
-          {chaveCorrigirSozinho}
-          {botaoDoDiretor}
-          {trabalho && <BotaoDoEstilo trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="mb-1 mr-2 mt-1 shrink-0" />}
-        </div>
-      )}
       {estado === "producao" && (
         <div className="h-0.5 w-full bg-secondary" aria-hidden="true">
           <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progresso}%` }} />
@@ -1328,19 +1345,19 @@ function DetalheDoItem({
 
   // ---------------------------------------------------------------- centro
 
-  const avisoDeAjuste =
-    trabalho?.entrega_status === "reprovado" && trabalho.status !== "entregue" ? (
-      <button
-        type="button"
-        onClick={() => abrirFerramenta("entrega", false)}
-        className="mb-3 w-full rounded-lg border border-warning/50 bg-background px-3 py-2 text-left text-[12px] leading-snug [overflow-wrap:anywhere]"
-      >
-        <span className="font-semibold text-warning">
-          Ajuste pedido pelo cliente{laminaDoPedido ? ` (lâmina ${laminaDoPedido})` : ""}
-        </span>
-        {pedidoDoCliente?.texto ? `: “${pedidoDoCliente.texto}”` : trabalho.entrega_aviso ? `: “${trabalho.entrega_aviso}”` : ". Ajuste as lâminas e entregue de novo."}
-      </button>
-    ) : null;
+  // Frente AP: o pedido do cliente entendido (Jev), com Aplicar e Pedir ao diretor; nada gera sozinho.
+  const avisoDeAjuste = trabalho ? (
+    <PedidoDoCliente
+      trabalho={trabalho}
+      lamina={laminaDoPedido}
+      formatoAtual={formato}
+      ocupado={ocupado || salvandoFormato}
+      onAplicarNaLamina={aplicarPedidoDoCliente}
+      onPedirAoDiretor={(texto) => setPedidoAoDiretor(texto)}
+      onMudarFormato={(f) => void mudarFormato(f)}
+      onAbrirEntrega={() => abrirFerramenta("entrega", false)}
+    />
+  ) : null;
 
   // Frente MF: o item é um post de fotos (feito na Mesa Foto): aqui nada é gerado; fotos, legenda e envio moram lá.
   const avisoDePostDeFotos = trabalho && ehPostDeFotos(trabalho.direcao) ? (
@@ -2106,11 +2123,19 @@ export default function AbaEstudio({
   };
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
-  // A altura da tela abaixo da barra da Mesa (faixa + estúdio juntos; mínimo menor que o do estúdio sozinho).
-  const altura = useAlturaDaEsteira(colunas, 480);
   // Tela cheia do Estúdio (dono, 26/09): só no computador (colunas).
   const [foco, setFoco] = useState(false);
   const focoLigado = foco && colunas;
+  // Frente AE-3 (dono, 28/09: "nenhum espaço sobrando no fim e nada cortado"): a altura é a que cabe na
+  // janela a partir de onde o Estúdio começa (a mesma medida da AreaDeTrabalho), não mais uma conta com o
+  // cabeçalho; a página não rola junto. Na tela cheia quem manda é a janela (fixed inset-0).
+  const cabe = useAlturaQueCabe(colunas && !focoLigado);
+  const altura = cabe.altura;
+  // Trocar entre Pautas e Arte rápida troca o elemento medido: mede de novo.
+  const medirDeNovo = cabe.medir;
+  useEffect(() => {
+    medirDeNovo();
+  }, [medirDeNovo, alvoRapido]);
   useModoFoco("estudio", focoLigado);
   const alturaDaJanela = useAlturaDaJanela(focoLigado);
   useEffect(() => {
@@ -2312,7 +2337,7 @@ export default function AbaEstudio({
       onRecolher={setRecolhida}
       arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas }}
       inicio={modoDoEstudio}
-      extra={<ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} />}
+      extra={<><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
     />
   );
 
@@ -2349,6 +2374,7 @@ export default function AbaEstudio({
         onAlvo={(alvo, limpar) => irParaRapida(alvo, limpar)}
         colunas={colunas}
         altura={altura}
+        refDaAltura={cabe.ref}
         foco={focoLigado}
         alturaDaJanela={alturaDaJanela}
         topo={modoDoEstudio}
@@ -2394,9 +2420,9 @@ export default function AbaEstudio({
       // Frente AE-2 (dono, 28/09: "rolagem certinha, sem quebrar"): no computador o Estúdio inteiro
       // (faixa + estúdio) ocupa a altura da tela abaixo da barra da Mesa e a página não rola; cada
       // região rola por dentro (a tira da faixa para o lado, a prancheta, a lâmina e o painel).
-      <div ref={raiz} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">
+      <div ref={cabe.ref} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">
         <div className="shrink-0">{faixaDasPautas}</div>
-        <div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">
+        <div ref={areaDoEstudio} className="mt-1.5 flex min-h-0 min-w-0 flex-1 flex-col">
           {detalhe || vazio}
         </div>
       </div>

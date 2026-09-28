@@ -5,7 +5,7 @@ import {
   AlertTriangle, ChevronDown, Flame, Lightbulb, MousePointerClick,
 } from "lucide-react";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
-import { Carregando, EstadoDeErro, Painel, Secao, botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoDeErro, Painel, Secao, botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import {
   recomendar, resumirCampanha,
   type CampanhaAtiva, type DiaDaCampanha, type Gravidade,
@@ -193,8 +193,11 @@ export default function CampanhasAtivas({
       {totalHoje.impressoes === 0 && ativas.length > 0 && (
         /* Zero hoje não é zero sempre: a Meta consolida o dia com atraso,
            e chamar isso de "parado" às 9h da manhã seria alarme falso. */
-        <p className={juntar(texto.auxiliar, "-mt-1 mb-3 truncate")}>
-          Sem números de hoje ainda: a Meta consolida o dia com algumas horas de atraso.
+        <p className={juntar(texto.auxiliar, "-mt-1 mb-3 flex min-w-0 items-center")}>
+          <span className="min-w-0 truncate">Sem números de hoje ainda</span>
+          <AjudaRecolhida className="ml-1" rotulo="Por que sem números de hoje">
+            A Meta consolida o dia com algumas horas de atraso.
+          </AjudaRecolhida>
         </p>
       )}
 
@@ -228,7 +231,7 @@ export default function CampanhasAtivas({
                       {r.campanha}
                     </p>
                     {/* O NÚMERO e a ação. Sem o número o aviso vira palpite. */}
-                    <p className="mt-0.5 text-[12.5px] leading-5 text-foreground/90">
+                    <p className="mt-0.5 text-[13px] leading-5 text-foreground/90">
                       {r.porque} <span className="text-muted-foreground">{r.acao}</span>
                     </p>
                   </div>
@@ -245,7 +248,7 @@ export default function CampanhasAtivas({
               type="button"
               onClick={() => setListaAberta((v) => !v)}
               aria-expanded={listaAberta}
-              className={juntar("flex w-full items-center px-4 py-2.5 text-left text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground", foco)}
+              className={juntar("flex w-full items-center px-4 py-2.5 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground", foco)}
             >
               <ChevronDown className={juntar("mr-1.5 h-4 w-4 transition-transform", listaAberta ? "rotate-180" : "")} aria-hidden="true" />
               {listaAberta ? "Esconder" : "Ver"} as campanhas ativas · últimos 14 dias
@@ -267,7 +270,7 @@ export default function CampanhasAtivas({
                           tamanho={22}
                           className="mr-2"
                         />
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
                           {grupo.nome}
                         </span>
                         <span className={juntar(texto.auxiliar, "ml-2 shrink-0 tabular-nums")}>
@@ -301,7 +304,7 @@ export default function CampanhasAtivas({
                               <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
                                 {c.name || c.campaign_id}
                               </span>
-                              <span className="ml-2 shrink-0 text-[12.5px] tabular-nums text-foreground">{dinheiro(r.gasto)}</span>
+                              <span className="ml-2 shrink-0 text-[13px] tabular-nums text-foreground">{dinheiro(r.gasto)}</span>
                             </div>
                             <p className={juntar(texto.auxiliar, "mt-0.5 flex flex-wrap pl-3.5 tabular-nums [&>*]:mr-3")}>
                               <span>{inteiro(r.impressoes)} exibições</span>

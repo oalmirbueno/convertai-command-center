@@ -488,13 +488,48 @@ export function levarParaAgenda(trabalhoId: string): Promise<RespostaDaPublicaca
 }
 
 /** O dono confirma data e hora (ISO). Sem aprovação do cliente, espera; aprovada, agenda. */
-export function confirmarPublicacao(trabalhoId: string, publicarEm: string, publicarAoAprovar: boolean): Promise<RespostaDaPublicacao> {
+export function confirmarPublicacao(trabalhoId: string, publicarEm: string, publicarAoAprovar: boolean, perfis?: string[] | null): Promise<RespostaDaPublicacao> {
   return chamarFuncao<RespostaDaPublicacao>("estudio-arte", {
     acao: "publicacao_confirmar",
     trabalho_id: trabalhoId,
     publicar_em: publicarEm,
     publicar_ao_aprovar: publicarAoAprovar,
+    // Frente AP: os perfis escolhidos (sem a lista, o post fica com os perfis que já tem).
+    ...(Array.isArray(perfis) ? { perfis } : {}),
   });
+}
+
+// ------------------------------------------------------------------ aprovou → Agenda (frente AP)
+
+/** Um perfil onde a peça pode sair (Instagram publica sozinho; Facebook, a equipe posta). */
+export interface PerfilDaPecaNaTela {
+  id: string;
+  platform: "instagram" | "facebook";
+  nome: string;
+  handle: string | null;
+  automatico: boolean;
+  escolhido: boolean;
+}
+
+/** Perfis e páginas do projeto da peça (a marca: Acerbi e CME separadas). */
+export async function lerPerfisDaPeca(trabalhoId: string): Promise<PerfilDaPecaNaTela[]> {
+  const r = await chamarFuncao<{ perfis?: PerfilDaPecaNaTela[] }>("estudio-arte", { acao: "publicacao_perfis", trabalho_id: trabalhoId });
+  return Array.isArray(r && r.perfis) ? (r.perfis as PerfilDaPecaNaTela[]) : [];
+}
+
+/** "Não vai postar" (ou desfazer): a peça aprovada fica em Arquivos e sai da pergunta de data. */
+export function dispensarPublicacao(trabalhoId: string, desfazer = false): Promise<{ trabalho_id: string; trabalho?: Record<string, unknown> }> {
+  return chamarFuncao("estudio-arte", { acao: "publicacao_dispensar", trabalho_id: trabalhoId, ...(desfazer ? { desfazer: true } : {}) });
+}
+
+/** O Jev entende os pedidos do cliente ainda não entendidos da peça (sem gerar nada). */
+export function entenderPedidosDoCliente(trabalhoId: string): Promise<{ trabalho_id: string; pedidos: unknown[]; entendidos: number; erro?: string | null }> {
+  return chamarFuncao("estudio-arte", { acao: "pedido_entender", trabalho_id: trabalhoId });
+}
+
+/** O comentário da aprovação foi visto (sai da pendência). */
+export function marcarPedidoVisto(trabalhoId: string, eventoId: string): Promise<{ trabalho_id: string }> {
+  return chamarFuncao("estudio-arte", { acao: "pedido_visto", trabalho_id: trabalhoId, evento_id: eventoId });
 }
 
 /** Publica daqui a 1 minuto (só com a arte aprovada pelo cliente). */

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -1109,21 +1109,22 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
                 { rotulo: "A receber", valor: fmt(aReceber), tom: "aviso" },
                 { rotulo: "Recebido (histórico)", valor: fmt(allTimeReceived), tom: "sucesso" },
               ]}
+              // O seletor da lista mora no cabeçalho do bloco (nada de faixa própria).
+              seletor={
+                <SeletorCompacto
+                  opcoes={[
+                    { valor: "ar", rotulo: "A receber", contador: accountsReceivable.length },
+                    { valor: "received", rotulo: "Recebidas", contador: receivedList.length },
+                  ]}
+                  valor={abaEntradas}
+                  onEscolher={(v) => setAbaEntradas(v as "ar" | "received")}
+                  rotulo="Lista de entradas"
+                  modo="segmentado"
+                />
+              }
             />
             {inflowsOpen && (
-              <div id="financeiro-entradas" className="border-t border-border">
-                <div className="px-4 py-2.5">
-                  <SeletorCompacto
-                    opcoes={[
-                      { valor: "ar", rotulo: "A receber", contador: accountsReceivable.length },
-                      { valor: "received", rotulo: "Recebidas", contador: receivedList.length },
-                    ]}
-                    valor={abaEntradas}
-                    onEscolher={(v) => setAbaEntradas(v as "ar" | "received")}
-                    rotulo="Lista de entradas"
-                    modo="segmentado"
-                  />
-                </div>
+              <div id="financeiro-entradas">
 
                 {abaEntradas === "ar" && (
                   accountsReceivable.length === 0 ? (
@@ -1185,20 +1186,20 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
                 { rotulo: "A pagar", valor: fmt(aPagar), tom: "aviso" },
                 { rotulo: "Pago (histórico)", valor: fmt(allTimePaidOut), tom: "perigo" },
               ]}
+              // Cinco listas: mais de quatro opções vira seletor, no cabeçalho do bloco.
+              seletor={
+                <SeletorCompacto
+                  opcoes={opcoesDasSaidas}
+                  valor={abaSaidas}
+                  onEscolher={(v) => setAbaSaidas(v as AbaDasSaidas)}
+                  rotulo="Lista de saídas"
+                  icone={<ListFilter className="h-3.5 w-3.5" />}
+                  modo="lista"
+                />
+              }
             />
             {outflowsOpen && (
-              <div id="financeiro-saidas" className="border-t border-border">
-                {/* Cinco listas: mais de quatro opções vira seletor. */}
-                <div className="px-4 py-2.5">
-                  <SeletorCompacto
-                    opcoes={opcoesDasSaidas}
-                    valor={abaSaidas}
-                    onEscolher={(v) => setAbaSaidas(v as AbaDasSaidas)}
-                    rotulo="Lista de saídas"
-                    icone={<ListFilter className="h-3.5 w-3.5" />}
-                    modo="lista"
-                  />
-                </div>
+              <div id="financeiro-saidas">
 
                 {estadoDasSaidas}
 
@@ -1344,7 +1345,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
                 {!estadoDasSaidas && abaSaidas === "pro" && (
                   <div className="min-w-0 border-t border-border">
                     <div className="space-y-3 p-4">
-                      <GradeDeKpis colunas={3}>
+                      <GradeDeKpis colunas={3} semMoldura>
                         <Kpi emPoco rotulo="Receita operacional do mês" valor={fmt(proLaboreView.operacional)} apoio={`${fmt(monthReceivedGross)} bruto − imposto`} />
                         <Kpi
                           emPoco
@@ -1364,8 +1365,11 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
 
                       {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
                         <div className="flex min-w-0 flex-wrap items-center rounded-md border border-success/30 px-3 py-2">
-                          <p className="mr-3 min-w-0 flex-1 py-1 text-[13px] leading-5 text-muted-foreground">
-                            O pró-labore ainda não é saída recorrente. Lançar no proporcional coloca ele no fluxo, vencendo no dia 10.
+                          <p className="mr-3 flex min-w-0 flex-1 items-center py-1 text-[13px] leading-5 text-muted-foreground">
+                            <span className="min-w-0 truncate">Pró-labore ainda não lançado como saída</span>
+                            <AjudaRecolhida className="ml-1" rotulo="Sobre lançar o pró-labore">
+                              O pró-labore ainda não é saída recorrente. Lançar no proporcional coloca ele no fluxo, vencendo no dia 10.
+                            </AjudaRecolhida>
                           </p>
                           <button type="button" onClick={lancarProLaboreProporcional}
                             className={juntar(botaoDeLinha, "border-success/40 text-success hover:bg-success/10")}>
@@ -1578,25 +1582,29 @@ function CabecalhoDoBloco({
   controla,
   titulo,
   valores,
+  seletor,
 }: {
   aberto: boolean;
   onAlternar: () => void;
   controla: string;
   titulo: string;
   valores: { rotulo: string; valor: string; tom: Tom }[];
+  /** Seletor da lista do bloco (só com o bloco aberto), na mesma linha do título. */
+  seletor?: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onAlternar}
-      aria-expanded={aberto}
-      aria-controls={controla}
-      className={juntar("flex w-full min-w-0 flex-wrap items-center rounded-lg px-4 py-3 text-left hover:bg-muted/40", foco)}
-    >
-      <span className="mr-3 flex min-w-0 flex-1 items-center">
+    <div className="-mb-1 flex min-w-0 flex-wrap items-center px-4 py-3 [&>*]:mb-1">
+      <button
+        type="button"
+        onClick={onAlternar}
+        aria-expanded={aberto}
+        aria-controls={controla}
+        className={juntar("mr-3 flex min-w-0 flex-1 items-center rounded-md text-left", foco)}
+      >
         <ChevronDown className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
         <span className={juntar(texto.tituloSecao, "truncate")}>{titulo}</span>
-      </span>
+      </button>
+      {aberto && seletor ? <div className="mr-4 min-w-0">{seletor}</div> : null}
       <span className="ml-auto flex shrink-0 items-center">
         {valores.map((v, i) => (
           <span key={v.rotulo} className={juntar("text-right", i > 0 && "ml-4")}>
@@ -1605,7 +1613,7 @@ function CabecalhoDoBloco({
           </span>
         ))}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -1632,8 +1640,11 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
   return (
     <div className="space-y-4">
       {mode === "investment" && (
-        <p className={juntar(superficie.poco, "px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
-          <span className="font-semibold text-primary">Investimento</span> não conta como despesa no DRE. Vai para o bloco de Capital e o retorno é medido contra ele.
+        <p className={juntar(superficie.poco, "flex min-w-0 items-center px-3 py-2 text-[12px] leading-5 text-muted-foreground")}>
+          <span className="min-w-0 truncate"><span className="font-semibold text-primary">Investimento</span> fora do DRE</span>
+          <AjudaRecolhida className="ml-1" rotulo="Sobre investimento">
+            Investimento não conta como despesa no DRE. Vai para o bloco de Capital e o retorno é medido contra ele.
+          </AjudaRecolhida>
         </p>
       )}
       <GrupoDeCampos>

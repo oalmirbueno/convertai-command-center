@@ -231,7 +231,7 @@ export default function ApprovedMediaPicker({
           {[0, 1, 2].map((item) => (
             <div
               key={item}
-              className="overflow-hidden rounded-xl border border-border"
+              className="overflow-hidden rounded-lg border border-border"
             >
               <div className="animate-pulse bg-secondary" style={{ paddingBottom: "75%" }} />
               <div className="space-y-2 p-3">
@@ -244,7 +244,7 @@ export default function ApprovedMediaPicker({
       ) : error ? (
         <div
           role="alert"
-          className="flex flex-col items-center rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-6 text-center"
+          className="flex flex-col items-center rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-6 text-center"
         >
           <AlertCircle className="h-5 w-5 text-destructive" />
           <p className="mt-2 text-xs text-muted-foreground">{error}</p>
@@ -262,7 +262,7 @@ export default function ApprovedMediaPicker({
           )}
         </div>
       ) : visibleAssets.length > 0 ? (
-        <div className="grid max-h-[420px] grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 pr-1 sm:max-h-[420px] sm:grid-cols-2 sm:overflow-y-auto sm:overscroll-contain xl:grid-cols-3">
           {visibleAssets.map((asset) => {
             const selected = selectedFileId === asset.id;
             const TypeIcon =
@@ -276,7 +276,7 @@ export default function ApprovedMediaPicker({
               <article
                 key={asset.id}
                 className={cn(
-                  "group overflow-hidden rounded-xl border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-md",
+                  "group overflow-hidden rounded-lg border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow",
                   selected
                     ? "border-primary ring-1 ring-primary/30"
                     : "border-border",
@@ -340,14 +340,14 @@ export default function ApprovedMediaPicker({
           })}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border bg-muted/15 px-4 py-8 text-center">
+        <div className="rounded-lg border border-dashed border-border bg-muted/15 px-4 py-8 text-center">
           <FileImage className="mx-auto h-6 w-6 text-muted-foreground/60" />
-          <p className="mt-2 text-xs font-medium text-foreground">
+          <p className="mt-2 text-[12px] font-medium text-foreground">
             {search
               ? "Nenhuma mídia aprovada corresponde à busca"
               : "Nenhuma mídia aprovada disponível"}
           </p>
-          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
             {search || contentType !== "all"
               ? "Limpe a busca ou troque o filtro para ver outros conteúdos."
               : "Só aparecem conteúdos com aprovação interna e do cliente."}

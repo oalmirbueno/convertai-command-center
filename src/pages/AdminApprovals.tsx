@@ -38,6 +38,7 @@ import {
   superficie,
   texto,
   useEstadoDaTela,
+  useLargo,
 } from "@/components/sistema";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
@@ -154,6 +155,8 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 export default function AdminApprovals() {
   const { profile, user } = useAuth();
   const confirmDialog = useConfirm();
+  // Situação e cliente vão na linha das filas de 1024 px para cima.
+  const largo = useLargo();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClient = searchParams.get("client") || "all";
   // Fila, aba e cliente ficam guardados: sair e voltar mantém onde estava.
@@ -423,15 +426,39 @@ export default function AdminApprovals() {
 
   const novoConteudo = `/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`;
 
+  /* Situação e cliente: seletores pequenos não ganham linha própria
+     (SISTEMA.md 4.2). No computador vão na linha das filas, à direita; abaixo
+     de 1024 px ficam numa linha curta embaixo das filas. */
+  const seletores = (
+    <>
+      <SeletorCompacto
+        rotulo="Situação"
+        valor={activeTab}
+        onEscolher={setActiveTab}
+        modo="segmentado"
+        listaQuandoNaoCabe
+        opcoes={tabs.map((t) => ({ valor: t.id, rotulo: t.label, contador: contagemDaAba(t.id) }))}
+      />
+      <SeletorCompacto
+        rotulo="Cliente"
+        icone={<Building2 className="h-3.5 w-3.5" />}
+        valor={selectedClient}
+        onEscolher={handleClientChange}
+        modo="lista"
+        opcoes={[{ valor: "all", rotulo: "Todos os clientes" }].concat(
+          (clients || []).map((client: any) => ({ valor: client.id, rotulo: client.company_name || client.full_name })),
+        )}
+      />
+    </>
+  );
+
   return (
     <div className="min-w-0">
       {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
           altura da janela e só a grade de entregas rola, por dentro, lembrando a
           posição. No celular a página rola normal. */}
-      <AreaDeTrabalho principalRolavel={false}>
-        <CabecalhoDePagina
+      <CabecalhoDePagina
           titulo="Aprovações"
-          className="shrink-0"
           descricao={
             pendingCount > 0
               ? `${pendingCount} ${queue === "agency" ? "aguardando revisão interna" : "aguardando cliente"}${nomeDoClienteEscolhido ? ` · ${nomeDoClienteEscolhido}` : ""}`
@@ -453,7 +480,8 @@ export default function AdminApprovals() {
           }
         />
 
-        <div className="mt-3 shrink-0 border-b border-border">
+      <AreaDeTrabalho principalRolavel={false} className="mt-3">
+        <div className="shrink-0 border-b border-border">
           <Etapas
             rotulo="Filas de aprovação"
             valor={queue}
@@ -462,31 +490,15 @@ export default function AdminApprovals() {
               { valor: "agency", rotulo: "Revisão interna", contador: queue === "agency" ? pendingCount : null },
               { valor: "client", rotulo: "Decisão do cliente", contador: queue === "client" ? pendingCount : null },
             ]}
+            depois={largo ? <div className="ml-auto flex shrink-0 items-center py-1 pl-4 [&>*+*]:ml-2">{seletores}</div> : undefined}
           />
         </div>
 
-        <div className="mt-3 shrink-0">
-          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-            <SeletorCompacto
-              rotulo="Situação"
-              valor={activeTab}
-              onEscolher={setActiveTab}
-              modo="segmentado"
-          listaQuandoNaoCabe
-              opcoes={tabs.map((t) => ({ valor: t.id, rotulo: t.label, contador: contagemDaAba(t.id) }))}
-            />
-            <SeletorCompacto
-              rotulo="Cliente"
-              icone={<Building2 className="h-3.5 w-3.5" />}
-              valor={selectedClient}
-              onEscolher={handleClientChange}
-              modo="lista"
-              opcoes={[{ valor: "all", rotulo: "Todos os clientes" }].concat(
-                (clients || []).map((client: any) => ({ valor: client.id, rotulo: client.company_name || client.full_name })),
-              )}
-            />
+        {!largo && (
+          <div className="mt-3 shrink-0">
+            <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">{seletores}</div>
           </div>
-        </div>
+        )}
 
         <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
           {isLoading ? (

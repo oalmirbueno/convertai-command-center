@@ -9,11 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2, Search, X } from "lucide-react";
+import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
+  CampoDeBusca,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
@@ -182,7 +183,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   if (!isAdminOrStaff) {
     return (
       <div className="min-w-0 space-y-4">
-        <CabecalhoDePagina titulo="Contratos" descricao="Área restrita à equipe." />
+        <CabecalhoDePagina titulo="Contratos" descricao="Área restrita à equipe" />
       </div>
     );
   }
@@ -217,7 +218,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       descricao="Suba o primeiro para começar."
       acao={
         canManageContracts ? (
-          <button type="button" onClick={() => setUploadOpen(true)} className={botao.primario}>
+          <button type="button" onClick={() => setUploadOpen(true)} className={botao.secundario}>
             <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" /> Novo contrato
           </button>
         ) : undefined
@@ -252,7 +253,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center">
                   <FileSignature className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <h3 className="min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{c.title}</h3>
+                  <h3 className="min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{c.title}</h3>
                   <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", meta.cls)}>{meta.label}</span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-1 truncate sm:pl-6")}>
@@ -339,21 +340,13 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
 
       {contracts.length > 0 && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-          <div className="relative min-w-0 flex-1 basis-full sm:basis-[240px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por título ou cliente"
-              aria-label="Buscar contrato"
-              className={juntar(campo, "pl-9 pr-9 text-[16px] sm:text-[13px]")}
-            />
-            {busca && (
-              <button type="button" onClick={() => setBusca("")} aria-label="Limpar busca" className={juntar(botao.icone, "absolute right-0.5 top-1/2 -translate-y-1/2")}>
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+          <CampoDeBusca
+            valor={busca}
+            onMudar={setBusca}
+            placeholder="Buscar por título ou cliente"
+            rotulo="Buscar contrato"
+            className="flex-1 basis-full sm:basis-[240px]"
+          />
           <SeletorCompacto
             rotulo="Status do contrato"
             opcoes={FILTROS_DE_STATUS.map((f) => ({ ...f, contador: f.valor === "todos" ? contracts.length : contagem[f.valor] || 0 }))}

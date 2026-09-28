@@ -83,9 +83,14 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
 
   if (data && !data.instalada) {
     return (
-      <Secao nivel={3} divisoria titulo="Metas de seguidores" recolher={`ciclo:folha:metas:${clientId}`}>
-        <p className={texto.auxiliar}>As metas ainda não foram ativadas no banco (SQL CE-01). Depois disso, cadastre aqui os degraus e a mensagem da Central comemora quando bater.</p>
-      </Secao>
+      <Secao
+        nivel={3}
+        divisoria
+        titulo="Metas de seguidores"
+        recolher={`ciclo:folha:metas:${clientId}`}
+        descricao="Ainda não ativadas no banco"
+        ajuda="As metas ainda não foram ativadas no banco (SQL CE-01). Depois disso, cadastre aqui os degraus e a mensagem da Central comemora quando bater."
+      />
     );
   }
 

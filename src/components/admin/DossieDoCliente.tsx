@@ -8,6 +8,7 @@ import {
 } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import EntregasNoDossie from "@/components/admin/EntregasNoDossie";
+import { EstadoVazio, Secao, botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 /**
  * O dossiê do cliente, com o texto inteiro.
@@ -146,102 +147,85 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
     await refetch();
   };
 
+  // Seção aberta (28/09, dono: "não encaixotar"): mora entre as seções da
+  // coluna do perfil na Central, com a mesma divisória fina e o mesmo recolher.
+  // Na tela: título, uma linha de estado (idade e versão) e o texto; o que o
+  // bloco é mora no "?".
+  const linkDaSecao = juntar("inline-flex cursor-pointer items-center rounded border-none bg-transparent p-0 text-[12px] font-medium text-primary hover:opacity-80", foco);
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-          Dossiê de contexto
-        </span>
-        {corpo && (
-          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {idade}
-          </span>
-        )}
-        {atual?.version != null && (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-            v{atual.version}
-          </span>
-        )}
+    <Secao
+      divisoria
+      recolher={`central:perfis:dossie:${clientId}`}
+      titulo="Dossiê de contexto"
+      descricao={corpo ? <>{idade}{atual?.version != null && <> · v{atual.version}</>}</> : undefined}
+      resumo={corpo ? idade : "nenhum dossiê escrito"}
+      ajuda="O retrato do cliente que a rotina de contexto e o MCP gravam, com o texto inteiro, o histórico de versões e o que já foi entregue. É a mesma leitura que o Ciclo e a Central usam."
+      acao={
         <button
           type="button"
           onClick={() => void atualizar()}
           disabled={isFetching}
-          className="ml-auto cursor-pointer rounded border-none bg-transparent p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className={botao.icone}
           aria-label="Atualizar dossiê"
           title="Buscar a versão mais recente"
         >
-          <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
-      </div>
-
+      }
+    >
       {/* O aviso que mata o "há 2 dias" enganoso: quando existe dossiê mais
-          novo em outra chave, esta caixa diz isso com todas as letras em vez
+          novo em outra chave, este bloco diz isso com todas as letras em vez
           de deixar o geral velho passar por retrato do cliente. */}
       {irmaoMaisNovo && (
-        <p className="mt-1.5 rounded-lg border border-warning/30 bg-warning/[0.06] px-2.5 py-1.5 text-[10.5px] leading-relaxed text-warning">
+        <p className="mb-2 rounded-md bg-warning/10 px-3 py-2 text-[12px] leading-relaxed text-warning">
           O dossiê geral está de {quando ? new Date(quando).toLocaleDateString("pt-BR") : "antes"},
           mas o {String(irmaoMaisNovo.project_id ? `do projeto ${(irmaoMaisNovo.project as { name?: string } | null)?.name ?? ""}` : `de tipo ${irmaoMaisNovo.dossier_type}`)} foi
-          atualizado em {new Date(String(irmaoMaisNovo.updated_at)).toLocaleDateString("pt-BR")} — veja abaixo.
+          atualizado em {new Date(String(irmaoMaisNovo.updated_at)).toLocaleDateString("pt-BR")}: veja abaixo.
         </p>
       )}
 
       {!corpo ? (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Nenhum dossiê escrito para {clientName || "este cliente"} ainda. A rotina de
-          contexto grava aqui, e o texto aparece inteiro nesta caixa.
-        </p>
+        <EstadoVazio compacto titulo={`Nenhum dossiê escrito para ${clientName || "este cliente"} ainda.`} />
       ) : (
         <>
           {/* O corpo é o que muda entre versões. */}
-          <p
-            className={`mt-2 whitespace-pre-line text-[12px] leading-relaxed text-foreground/90 ${
-              aberto ? "" : "line-clamp-6"
-            }`}
-          >
+          <p className={juntar(texto.corpo, "whitespace-pre-line leading-relaxed text-foreground/90", aberto ? "" : "line-clamp-6")}>
             {corpo}
           </p>
           {atual?.change_reason && (
-            <p className="mt-1.5 text-[10.5px] italic text-muted-foreground">
+            <p className={juntar(texto.auxiliar, "mt-1.5 truncate italic")} title={atual.change_reason}>
               Última mudança: {atual.change_reason}
             </p>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAberto((v) => !v)}
-              className="flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-[10.5px] font-medium text-primary hover:opacity-80"
-            >
+          <div className="mt-2 flex min-w-0 flex-wrap items-center [&>*]:mr-3">
+            <button type="button" onClick={() => setAberto((v) => !v)} className={linkDaSecao}>
               {aberto ? "Mostrar menos" : "Ler o dossiê inteiro"}
-              {aberto ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {aberto ? <ChevronUp className="ml-1 h-3 w-3" aria-hidden="true" /> : <ChevronDown className="ml-1 h-3 w-3" aria-hidden="true" />}
             </button>
             {atual && (
-              <button
-                type="button"
-                onClick={() => setHistoricoAberto((v) => !v)}
-                className="flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-[10.5px] font-medium text-primary hover:opacity-80"
-              >
-                <History className="h-3 w-3" />
+              <button type="button" onClick={() => setHistoricoAberto((v) => !v)} className={linkDaSecao}>
+                <History className="mr-1 h-3 w-3" aria-hidden="true" />
                 {historicoAberto ? "Fechar histórico" : "Ver histórico"}
               </button>
             )}
-            <span className="ml-auto text-[10px] text-muted-foreground">
-              {quando
-                ? new Date(quando).toLocaleString("pt-BR", {
-                    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                  })
-                : ""}
-            </span>
+            {quando && (
+              <span className={juntar(texto.auxiliar, "ml-auto !mr-0 tabular-nums")}>
+                {new Date(quando).toLocaleString("pt-BR", {
+                  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                })}
+              </span>
+            )}
           </div>
 
           {historicoAberto && (
-            <div className="mt-2 space-y-1 border-t border-border pt-2">
+            <ul className="mt-2 space-y-1 border-t border-border pt-2">
               {(historico || []).map((v) => (
-                <div key={v.id} className="text-[10.5px]">
-                  <div className="flex items-baseline gap-2">
-                    <span className={`shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
+                <li key={v.id} className="text-[12px]">
+                  <div className="flex min-w-0 items-baseline">
+                    <span className={`mr-2 shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
                       v{v.version}
                     </span>
-                    <span className="min-w-0 truncate text-muted-foreground">
+                    <span className="mr-2 min-w-0 truncate text-muted-foreground">
                       {v.change_reason || v.summary || v.source || "sem descrição"}
                     </span>
                     <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/70">
@@ -250,15 +234,15 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
                   </div>
                   {(v.entrou || []).length > 0 && (
                     <ul className="ml-6 mt-0.5 space-y-0.5">
-                      {v.entrou!.map((linha, i) => <li key={i} className="text-[10.5px] leading-snug text-foreground/85">+ {linha}</li>)}
+                      {v.entrou!.map((linha, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">+ {linha}</li>)}
                     </ul>
                   )}
-                </div>
+                </li>
               ))}
               {(historico || []).length === 0 && (
-                <p className="text-[10.5px] text-muted-foreground">Carregando histórico…</p>
+                <li className={texto.auxiliar}>Carregando histórico…</li>
               )}
-            </div>
+            </ul>
           )}
         </>
       )}
@@ -268,35 +252,33 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
           trabalho de todo dia parecer parado. */}
       {(irmaos as Array<Record<string, unknown>>).length > 0 && (
         <div className="mt-3 border-t border-border pt-2">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Outros dossiês atuais
-          </p>
-          <div className="mt-1.5 space-y-1">
+          <p className={texto.rotulo}>Outros dossiês atuais</p>
+          <ul className="mt-1.5 space-y-1">
             {(irmaos as Array<Record<string, unknown>>).map((d) => (
-              <div key={String(d.id)} className="flex items-baseline gap-2 text-[10.5px]">
-                <span className="shrink-0 font-semibold text-foreground/80">
+              <li key={String(d.id)} className="flex min-w-0 items-baseline text-[12px]">
+                <span className="mr-2 shrink-0 font-semibold text-foreground/80">
                   {d.project_id
                     ? `Projeto: ${(d.project as { name?: string } | null)?.name ?? "(sem nome)"}`
                     : `Tipo: ${String(d.dossier_type)}`}
                 </span>
-                <span className="shrink-0 rounded-full bg-primary/10 px-1.5 text-[9.5px] font-semibold text-primary">
+                <span className={juntar(etiqueta, "mr-2 bg-primary/10 text-primary")}>
                   v{String(d.version)}
                 </span>
-                <span className="min-w-0 truncate text-muted-foreground">
+                <span className="mr-2 min-w-0 truncate text-muted-foreground">
                   {String(d.summary ?? "")}
                 </span>
                 <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
                   {new Date(String(d.updated_at)).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                 </span>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
       {/* A outra metade do dossiê: quem é o cliente E o que já foi feito
           para ele. Vem da mesma memória que o Ciclo e a Central leem. */}
       <EntregasNoDossie clientId={clientId} />
-    </div>
+    </Secao>
   );
 }

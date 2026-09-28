@@ -4,7 +4,7 @@
 
 import { useState, useMemo } from "react";
 import { ShieldCheck, ShieldAlert, ChevronDown, Calculator } from "lucide-react";
-import { Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 type AnyRec = Record<string, any>;
 
@@ -140,28 +140,31 @@ export default function MetricsAudit({ metrics }: Props) {
 
   return (
     <Painel semEspaco as="section" className="overflow-hidden" aria-label="Auditoria das métricas">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
-      >
-        {allOk
-          ? <ShieldCheck className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          : <ShieldAlert className="mr-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />}
-        <span className="mr-3 min-w-0 flex-1">
-          <span className="flex min-w-0 items-center">
-            <span className={juntar(texto.tituloSecao, "min-w-0 truncate text-[14px]")}>Auditoria das métricas</span>
+      {/* Cabeçalho: o título abre e fecha; a explicação mora no "?" ao lado (SISTEMA.md seção 5). */}
+      <div className="flex min-w-0 items-center pr-3">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className={juntar("flex min-w-0 flex-1 items-center px-4 py-3 text-left transition-colors hover:bg-muted/30", foco)}
+        >
+          {allOk
+            ? <ShieldCheck className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            : <ShieldAlert className="mr-3 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />}
+          <span className="mr-3 flex min-w-0 flex-1 items-center">
+            <span className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Auditoria das métricas</span>
             <span className={juntar(etiqueta, "ml-2", allOk ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive")}>
               {allOk ? "Tudo confere" : `${failures.length} divergência${failures.length > 1 ? "s" : ""}`}
             </span>
           </span>
-          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-            Confere CTR, CPC, CPM e derivados com investimento, impressões, cliques e resultados.
-          </span>
-        </span>
-        <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden="true" />
-      </button>
+          <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} aria-hidden="true" />
+        </button>
+        <AjudaRecolhida rotulo="Sobre a auditoria das métricas">
+          Confere CTR, CPC, CPM e derivados com investimento, impressões, cliques e resultados. Os valores exibidos no relatório já usam o
+          cálculo correto (coluna Calculado). Valor em vermelho estava errado na importação: provavelmente o export trouxe colunas
+          deslocadas ou somou taxas de várias campanhas.
+        </AjudaRecolhida>
+      </div>
 
       {open && (
         <>
@@ -172,7 +175,7 @@ export default function MetricsAudit({ metrics }: Props) {
                 {base_.map((x) => (
                   <div key={x.l} className="min-w-0 border-l border-t border-border px-4 py-2.5">
                     <p className={texto.rotulo}>{x.l}</p>
-                    <p className="mt-0.5 truncate text-[14px] font-semibold tabular-nums text-foreground">{x.v}</p>
+                    <p className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-foreground">{x.v}</p>
                   </div>
                 ))}
               </div>
@@ -211,10 +214,8 @@ export default function MetricsAudit({ metrics }: Props) {
           </ul>
 
           {!allOk && (
-            <p className={juntar(texto.auxiliar, "border-t border-border px-4 py-3 leading-5")}>
-              Os valores exibidos no relatório já usam o cálculo correto (coluna <span className="font-medium text-primary">Calculado</span>).
-              Os valores em <span className="font-medium text-destructive line-through">vermelho</span> estavam errados na importação:
-              provavelmente o export trouxe colunas deslocadas ou somou taxas de várias campanhas.
+            <p className={juntar(texto.auxiliar, "truncate border-t border-border px-4 py-3")}>
+              O relatório já usa a coluna <span className="font-medium text-primary">Calculado</span>
             </p>
           )}
         </>

@@ -88,9 +88,19 @@ const ICONS = {
 export default function ProjectJournal({
   clientId,
   canWrite,
+  divisoria = false,
+  recolher,
 }: {
   clientId: string;
   canWrite: boolean;
+  /** Linha fina em cima (entre seções abertas da mesma coluna, como na Central). */
+  divisoria?: boolean;
+  /**
+   * Chave para recolher o diário (tudo recolhe, 28/09). O título é um
+   * elemento (ícone + texto), então não ganha chave automática: quem monta
+   * passa a chave com o cliente. Sem ela, o diário não recolhe.
+   */
+  recolher?: string | false;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -366,6 +376,8 @@ export default function ProjectJournal({
   // controlado pelos 12 mais recentes e "Ver tudo" na linha do título.
   return (
     <Secao
+      divisoria={divisoria}
+      recolher={recolher}
       titulo={
         <span className="inline-flex items-center">
           <BookOpen className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Diário do trabalho

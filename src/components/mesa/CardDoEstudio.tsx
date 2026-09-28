@@ -64,7 +64,7 @@ function Selo({ tom, children, titulo }: { tom: "ok" | "alerta" | "erro" | "neut
   const cor =
     tom === "ok" ? "bg-success/10 text-success" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "erro" ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground";
   return (
-    <span title={titulo} className={`mr-1 inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[10.5px] font-medium ${cor}`}>
+    <span title={titulo} className={`mr-1 inline-flex h-[18px] shrink-0 items-center whitespace-nowrap rounded-full px-1.5 text-[10.5px] font-medium ${cor}`}>
       {children}
     </span>
   );
@@ -74,8 +74,8 @@ function SelosDaConferencia({ v }: { v: Verificacao }) {
   const identidade = pct(v.identidade);
   return (
     <>
-      {v.ortografia_ok === true && <Selo tom="ok" titulo="O texto lido na arte bate com o texto exato"><CheckCircle2 className="mr-1 h-3 w-3" /> texto ok</Selo>}
-      {v.ortografia_ok === false && <Selo tom="erro" titulo="O texto lido na arte difere do texto exato"><TriangleAlert className="mr-1 h-3 w-3" /> erro de texto</Selo>}
+      {v.ortografia_ok === true && <Selo tom="ok" titulo="O texto lido na arte bate com o texto exato"><CheckCircle2 className="mr-0.5 h-2.5 w-2.5" /> texto ok</Selo>}
+      {v.ortografia_ok === false && <Selo tom="erro" titulo="O texto lido na arte difere do texto exato"><TriangleAlert className="mr-0.5 h-2.5 w-2.5" /> erro de texto</Selo>}
       {identidade !== null && <Selo tom={identidade >= 70 ? "ok" : identidade >= 50 ? "alerta" : "erro"} titulo="Nota de identidade da marca (Jev)">identidade {identidade}%</Selo>}
       {v.logo_ok === true && <Selo tom="ok">logo ok</Selo>}
       {v.logo_ok === false && <Selo tom="alerta">{v.logo_presente ? "logo sobrando" : "logo faltando"}</Selo>}
@@ -90,14 +90,17 @@ function SelosDaConferencia({ v }: { v: Verificacao }) {
  */
 function AindaComErro({ motivos, acaoCorrigir }: { motivos: string[]; acaoCorrigir: ReactNode }) {
   return (
-    <div className="border-t border-border px-2.5 py-2" data-ainda-com-erro="">
-      <p className="text-[11.5px] font-medium text-destructive">Ainda com erro</p>
-      <ul className="mt-1 space-y-0.5 text-[11.5px] leading-snug text-foreground/90">
+    <div className="mt-1 border-l-2 border-destructive/60 pl-2" data-ainda-com-erro="">
+      {/* Frente AE-3: o título e o "Corrigir de novo" dividem a linha; os motivos vêm logo abaixo. */}
+      <div className="flex min-h-7 min-w-0 flex-wrap items-center gap-x-2">
+        <p className="mr-auto text-[11.5px] font-medium text-destructive">Ainda com erro</p>
+        {acaoCorrigir}
+      </div>
+      <ul className="mt-0.5 space-y-0.5 text-[11.5px] leading-snug text-foreground/90">
         {motivos.map((m, i) => (
           <li key={i} className="[overflow-wrap:anywhere]">{m}</li>
         ))}
       </ul>
-      {acaoCorrigir && <div className="mt-2">{acaoCorrigir}</div>}
     </div>
   );
 }
@@ -122,7 +125,7 @@ function Conferencia({
 
   if (pendente) {
     return (
-      <div className="flex min-h-9 min-w-0 items-center rounded-lg border border-border bg-background px-2.5 py-1">
+      <div className="flex min-h-8 min-w-0 items-center">
         <span className="mr-2 text-[11.5px] font-medium">Conferência</span>
         {conferindo ? (
           <span className="text-[11.5px] text-muted-foreground">em andamento</span>
@@ -138,16 +141,15 @@ function Conferencia({
 
   const identidade = v && typeof v.identidade === "object" && v.identidade && "nivel" in v.identidade ? (v.identidade as any).nivel : null;
   return (
-    <div className="rounded-lg border border-border bg-background">
-      <button type="button" onClick={() => setAberta((a) => !a)} aria-expanded={aberta} className="flex min-h-9 w-full min-w-0 items-center rounded-lg px-2.5 py-1 text-left hover:bg-secondary">
+    <div className="min-w-0" data-conferencia="">
+      <button type="button" onClick={() => setAberta((a) => !a)} aria-expanded={aberta} className="-mx-1 flex min-h-8 w-[calc(100%+8px)] min-w-0 items-center rounded-md px-1 py-0.5 text-left hover:bg-secondary">
         <span className="mr-2 shrink-0 text-[11.5px] font-medium">Conferência</span>
-        <span className="flex min-w-0 flex-1 overflow-hidden">{v && <SelosDaConferencia v={v} />}</span>
+        <span className="flex min-w-0 flex-1 flex-wrap gap-y-0.5">{v && <SelosDaConferencia v={v} />}</span>
         <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} />
       </button>
       {decisao && !conferindo && <AindaComErro motivos={decisao.motivos} acaoCorrigir={acaoCorrigir} />}
       {aberta && v && (
-        <div className="space-y-2 border-t border-border px-2.5 pb-2.5 pt-2 text-[12px]">
-          <div className="flex flex-wrap">{<SelosDaConferencia v={v} />}</div>
+        <div className="space-y-2 pb-1 pt-1.5 text-[12px]">
           {v.faltando && v.faltando.length > 0 && (
             <p className="[overflow-wrap:anywhere]"><span className="text-destructive">Faltou na arte:</span> {v.faltando.join(", ")}</p>
           )}
@@ -369,7 +371,7 @@ export default function CardDoEstudio({
       titulo={`Corrigir a lâmina ${direcao.ordem}`}
       descricao="O estúdio edita a arte atual com os motivos da conferência (mesmo texto exato) e confere de novo antes de mostrar."
       variant="outline"
-      className="h-7 shrink-0 px-2 text-[11px]"
+      className="h-7 shrink-0 px-2 text-[11.5px]"
       disabled={ocupado}
       partes={partesCorrigir || partesAjustar}
       executar={onCorrigir}

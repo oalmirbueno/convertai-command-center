@@ -78,6 +78,7 @@ export default function OrdensAutorizadas() {
       {pendentes.length > 0 && (
         <Secao
           nivel={3}
+          recolher="execucao:ordens:autorizadas"
           titulo={<span className="inline-flex items-center"><Zap className="mr-1.5 h-3.5 w-3.5 text-info" aria-hidden="true" />Autorizado · esperando o agente fazer</span>}
           descricao={`${pendentes.length} ${pendentes.length === 1 ? "ordem" : "ordens"}`}
           ajuda="Você liberou; o agente ainda não executou. Autorizar não é o mesmo que estar feito, e sem esta lista as duas coisas pareceriam iguais."
@@ -88,7 +89,7 @@ export default function OrdensAutorizadas() {
               return (
                 <li key={o.id} className="min-w-0 px-4 py-2.5">
                   <p className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{o.o_que}</p>
-                  <p className="-mx-1 mt-0.5 flex flex-wrap items-center text-[11.5px] text-muted-foreground [&>*]:mx-1">
+                  <p className="-mx-1 mt-0.5 flex flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mx-1">
                     <span className="font-medium text-foreground/80">{o.agente}</span>
                     <span>· {String(o.action_kind).replace(/_/g, " ")}</span>
                     {o.destino && <span>· para {o.destino}</span>}
@@ -112,6 +113,7 @@ export default function OrdensAutorizadas() {
       {cumpridas.length > 0 && (
         <Secao
           nivel={3}
+          recolher="execucao:ordens:cumpridas"
           titulo={<span className="inline-flex items-center"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-success" aria-hidden="true" />Feito no mundo, com prova</span>}
           descricao={`${cumpridas.length} ${cumpridas.length === 1 ? "ordem cumprida" : "ordens cumpridas"}`}
         >

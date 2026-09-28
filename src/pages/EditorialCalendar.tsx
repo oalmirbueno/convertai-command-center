@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
 import {
   AjudaRecolhida,
+  CabecalhoDePagina,
   AreaDeTrabalho,
   Carregando,
   EstadoDeErro,
@@ -1601,31 +1602,32 @@ export default function EditorialCalendar() {
       <div className="min-w-0">
         <EditorialToolbar
           cabecalho={
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center">
-                <h1 className={juntar(texto.tituloPagina, "min-w-0 truncate")}>
-                  {effectiveRole === "client"
-                    ? "Calendário de conteúdo"
-                    : view === "board"
-                      ? "Conteúdos"
-                      : "Agenda editorial"}
-                </h1>
-                <AjudaRecolhida className="ml-2">
-                  {effectiveRole === "client"
-                    ? "Seu conteúdo planejado, aprovado e publicado. Aprovações acontecem na área de Aprovações."
-                    : view === "board"
-                      ? "Fluxo editorial completo: rascunho, produção e aprovação. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
-                      : "Conteúdo no dia certo, na conta certa. Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."}
-                </AjudaRecolhida>
-              </div>
-              <p className={juntar(texto.auxiliar, "mt-1 truncate")} aria-live="polite">
-                {resumoDoCalendario(
-                  filteredPosts,
-                  canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
-                )}
-                {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
-              </p>
-            </div>
+            // Cabeçalho do sistema: título, "?" com a explicação e uma linha de estado.
+            <CabecalhoDePagina
+              titulo={
+                effectiveRole === "client"
+                  ? "Calendário de conteúdo"
+                  : view === "board"
+                    ? "Conteúdos"
+                    : "Agenda editorial"
+              }
+              ajuda={
+                effectiveRole === "client"
+                  ? "Seu conteúdo planejado, aprovado e publicado. Aprovações acontecem na área de Aprovações."
+                  : view === "board"
+                    ? "Fluxo editorial completo: rascunho, produção e aprovação. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
+                    : "Conteúdo no dia certo, na conta certa. Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
+              }
+              descricao={
+                <>
+                  {resumoDoCalendario(
+                    filteredPosts,
+                    canUseTeamData && view === "board" ? tasksForCurrentView.length : undefined,
+                  )}
+                  {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
+                </>
+              }
+            />
           }
           inicioDaLinha={
             canUseTeamData ? (
@@ -1791,8 +1793,11 @@ export default function EditorialCalendar() {
 
         {/* O calendário rola por dentro de 1024 px para cima e lembra onde
             estava em cada visão; no celular a página rola normal. */}
+        {/* Na visão Conteúdos a principal não rola: o quadro organiza a
+            rolagem (colunas de 1280 px para cima), sem rolagem dentro de rolagem. */}
         <AreaDeTrabalho
           className="mt-1"
+          principalRolavel={view !== "board"}
           rotuloDoPrincipal="Calendário editorial"
           memoriaDaRolagem={`agenda:${view}`}
         >
@@ -1988,8 +1993,8 @@ export default function EditorialCalendar() {
 
       <DragOverlay dropAnimation={null}>
         {dragSummary ? (
-          <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-primary/35 bg-popover px-3 py-2.5 text-xs font-medium text-popover-foreground shadow-xl">
-            <GripVertical className="h-4 w-4 shrink-0 text-primary" />
+          <div className="flex max-w-[280px] items-center rounded-lg border border-primary/35 bg-popover px-3 py-2.5 text-[12px] font-medium text-popover-foreground shadow-sm">
+            <GripVertical className="mr-2 h-4 w-4 shrink-0 text-primary" />
             <span className="truncate">{dragSummary.label}</span>
           </div>
         ) : null}

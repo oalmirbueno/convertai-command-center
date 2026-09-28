@@ -12,7 +12,7 @@ import {
   ArrowUpRight, ArrowDownRight, GitCompareArrows, Minus,
   CheckCircle2, AlertTriangle, Info, ChevronDown, Sparkles,
 } from "lucide-react";
-import { Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, Painel, etiqueta, foco, juntar, texto } from "@/components/sistema";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
@@ -574,11 +574,14 @@ export default function ReportComparison({
       </div>
 
       {needNormalize && (
-        <p className="flex items-start border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
-          <Info className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
-          <span className="min-w-0">
-            Períodos com tamanhos diferentes ({curDays} × {prevDays} dias): os volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR, CPC, CPM, ROAS) são comparadas direto.
+        <p className="flex min-w-0 items-center border-t border-border px-4 py-3 text-[12px] leading-5 text-foreground">
+          <Info className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            Períodos com tamanhos diferentes ({curDays} × {prevDays} dias)
           </span>
+          <AjudaRecolhida className="ml-1" rotulo="Como a comparação foi ajustada">
+            Os volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR, CPC, CPM, ROAS) são comparadas direto.
+          </AjudaRecolhida>
         </p>
       )}
 

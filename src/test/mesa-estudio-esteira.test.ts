@@ -503,7 +503,8 @@ describe("a aba inteira no computador (faixa das pautas em cima, estúdio grande
       expect(screen.getAllByText("Pauta em produção").length).toBeGreaterThan(0);
       expect(screen.getByRole("navigation", { name: "Ferramentas" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Lâmina" }).getAttribute("aria-pressed")).toBe("true");
-      expect(screen.getByRole("button", { name: /Gerar as que faltam \(1\)/ })).toBeTruthy();
+      // Frente AE-3 (dono, 28/09: "Gerar as que faltam (3) mais curto"): o rótulo é "Gerar 1"; a dica diz "as que faltam".
+      expect(screen.getByRole("button", { name: /^Gerar 1/ })).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Conjunto" }));
       expect(screen.getByText("Mesma luz")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Entrega" }));
@@ -550,10 +551,14 @@ describe("estúdio com a altura de uma tela (dono, 23/09 noite)", () => {
   // Frente AE-2 (dono, 28/09: "rolagem certinha, sem quebrar"; "a página não rola no computador"): a faixa e o
   // estúdio dividem a altura da tela abaixo da barra da Mesa; cada região rola por dentro. Em tela baixa, a
   // faixa abre recolhida (a pauta troca pelo seletor da barra) para a lâmina ter altura.
+  // Frente AE-3 (dono, 28/09: "nenhum espaço sobrando no fim e nada cortado"): a altura passou a ser a que cabe
+  // na janela a partir de onde o Estúdio começa (useAlturaQueCabe do sistema, a mesma medida da AreaDeTrabalho),
+  // em vez da conta com o cabeçalho; na tela cheia quem manda é a janela. A faixa ficou mais baixa (mt-1.5).
   it("faixa e estúdio na altura da tela; cada região rola por dentro; tela baixa abre com a faixa recolhida", () => {
-    expect(aba).toContain('<div ref={raiz} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">');
-    expect(aba).toContain('<div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">');
-    expect(aba).toContain("const altura = useAlturaDaEsteira(colunas, 480);");
+    expect(aba).toContain('<div ref={cabe.ref} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">');
+    expect(aba).toContain('<div ref={areaDoEstudio} className="mt-1.5 flex min-h-0 min-w-0 flex-1 flex-col">');
+    expect(aba).toContain("const cabe = useAlturaQueCabe(colunas && !focoLigado);");
+    expect(aba).toContain("refDaAltura={cabe.ref}");
     expect(aba).toContain('(window.innerHeight || 900) < 760');
     expect(aba).toContain("encaixarNaJanela(areaDoEstudio.current)");
   });

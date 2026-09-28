@@ -295,7 +295,9 @@ export default function EditorialToolbar({
           )}
         </div>
 
-        <div className="mb-2 flex w-full min-w-0 items-center lg:w-auto">
+        {/* No tablet a busca e os filtros dividem a linha com o período (sem uma
+            terceira linha); só quebram quando não cabem mesmo. */}
+        <div className="mb-2 flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
           {/* Celular: área e visão num seletor só (a linha do título não comporta os dois segmentados). */}
           <div className="mr-2 shrink-0 sm:hidden">
             <SeletorCompacto

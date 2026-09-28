@@ -1115,7 +1115,7 @@ export default function Kanban() {
               </div>
               <div className="flex shrink-0 items-center">
                 <Avatar className="h-6 w-6" title={task.assignee?.full_name || "Sem responsável"}>
-                  <AvatarFallback className="bg-muted text-[10px] font-medium text-muted-foreground">
+                  <AvatarFallback className="bg-muted text-[11px] font-medium text-muted-foreground">
                     {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                   </AvatarFallback>
                 </Avatar>
@@ -1196,17 +1196,24 @@ export default function Kanban() {
       ajuda="Todas as tarefas da equipe por etapa. Arraste o cartão para mudar de coluna ou de ordem (com os filtros limpos e a ordem manual). Botão direito no cartão abre o menu."
       descricao={isLoading ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`}
       acoes={
-        !isClient ? (
-          <button
-            type="button"
-            data-tour="kanban-create-btn"
-            onClick={() => setCreateStatus(isMobile ? mobileTab : "backlog")}
-            className={botao.primario}
-            aria-label="Nova tarefa"
-          >
-            <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Nova tarefa</span>
-          </button>
+        // No computador os filtros sobem para a linha do título (uma linha a
+        // menos); no celular ficam na linha de baixo, que é a largura toda.
+        !isClient || !isMobile ? (
+          <>
+            {!isMobile && FiltersBar}
+            {!isClient && (
+              <button
+                type="button"
+                data-tour="kanban-create-btn"
+                onClick={() => setCreateStatus(isMobile ? mobileTab : "backlog")}
+                className={botao.primario}
+                aria-label="Nova tarefa"
+              >
+                <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Nova tarefa</span>
+              </button>
+            )}
+          </>
         ) : undefined
       }
     />
@@ -1270,7 +1277,6 @@ export default function Kanban() {
   return (
     <div className="min-w-0">
       {cabecalho}
-      <div className="mt-3">{FiltersBar}</div>
 
       <AreaDeTrabalho principalRolavel={false} className="mt-4">
         {!isLoading && (tasks || []).length === 0 ? (

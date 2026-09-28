@@ -21,7 +21,7 @@ import {
   type RequestTaskPriority,
 } from "@/lib/requestTaskWorkflow";
 import { toast } from "sonner";
-import { Building2, Flag, Inbox, ListTodo, Loader2, Search, X } from "lucide-react";
+import { Building2, Flag, Inbox, ListTodo, Loader2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   AreaDeTrabalho,
+  BarraDeControles,
   CabecalhoDePagina,
+  CampoDeBusca,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
@@ -518,7 +520,7 @@ export default function AdminRequests() {
         ) : null}
         {linkedTaskReadFailed ? (
           <p className="mt-2 text-[12px] text-destructive">
-            Não foi possível confirmar o vínculo com o Kanban. Atualize a tela antes de alterar o status.
+            Vínculo com o Kanban não confirmado. Atualize antes de mudar o status.
           </p>
         ) : null}
       </div>
@@ -649,80 +651,91 @@ export default function AdminRequests() {
       {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
           altura da janela, a lista e o detalhe rolam cada um por conta própria.
           No celular a página rola normal e o detalhe abre numa janela. */}
-      <AreaDeTrabalho principalRolavel={false}>
-        <CabecalhoDePagina
-          titulo="Pedidos"
-          className="shrink-0"
-          descricao={
-            !roleCanMutate
-              ? "Modo leitura. Admin ou manager gerencia os pedidos."
-              : todos.length
-                ? `${emAberto} em aberto de ${todos.length}`
-                : undefined
-          }
-          ajuda="Pedidos que os clientes fazem pelo portal. Abra um pedido para mudar o status ou transformar em tarefa no Kanban. Pedido que já virou tarefa muda de status pelo Kanban."
-        />
+      <CabecalhoDePagina
+        titulo="Pedidos"
+        descricao={
+          !roleCanMutate
+            ? "Modo leitura"
+            : todos.length
+              ? `${emAberto} em aberto de ${todos.length}`
+              : undefined
+        }
+        ajuda={
+          <>
+            Pedidos que os clientes fazem pelo portal. Abra um pedido para mudar o status ou transformar em tarefa no Kanban. Pedido que já virou tarefa muda de status pelo Kanban.
+            {!roleCanMutate && " Admin ou manager gerencia os pedidos."}
+          </>
+        }
+      />
 
+      <AreaDeTrabalho principalRolavel={false} className="mt-4">
+        {/* Busca primeiro; status, cliente e prioridade na linha 2 (no máximo
+            duas linhas: se não couberem, viram "Filtros (n)"). Limpar vai no "...". */}
         {todos.length > 0 && (
-          <div className="mt-4 shrink-0">
-            <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-              <SeletorCompacto
-                rotulo="Status"
-                valor={filter}
-                onEscolher={setFilter}
-                modo="segmentado"
-          listaQuandoNaoCabe
-                opcoes={filters.map((item) => ({ valor: item.value, rotulo: item.label, contador: contagemStatus(item.value) }))}
+          <BarraDeControles
+            rotulo="Filtros dos pedidos"
+            className="shrink-0"
+            inicio={
+              <CampoDeBusca
+                valor={busca}
+                onMudar={setBusca}
+                placeholder="Buscar pedido ou cliente"
+                rotulo="Buscar pedido"
+                className="sm:max-w-[280px]"
               />
-              <SeletorCompacto
-                rotulo="Cliente"
-                icone={<Building2 className="h-3.5 w-3.5" />}
-                valor={filtroCliente}
-                onEscolher={setFiltroCliente}
-                modo="lista"
-                opcoes={[{ valor: "todos", rotulo: "Todos os clientes" }].concat(
-                  clientesComPedido.map((c) => ({ valor: c.id, rotulo: c.nome })),
-                )}
-              />
-              <SeletorCompacto
-                rotulo="Prioridade"
-                icone={<Flag className="h-3.5 w-3.5" />}
-                valor={filtroPrioridade}
-                onEscolher={setFiltroPrioridade}
-                modo="lista"
-                opcoes={[
-                  { valor: "todas", rotulo: "Toda prioridade" },
-                  { valor: "urgent", rotulo: "Urgente" },
-                  { valor: "high", rotulo: "Alta" },
-                  { valor: "normal", rotulo: "Normal" },
-                  { valor: "low", rotulo: "Baixa" },
-                ]}
-              />
-              <label className="relative block w-full min-w-0 sm:w-56">
-                <span className="sr-only">Buscar pedido</span>
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input
-                  value={busca}
-                  onChange={(event) => setBusca(event.target.value)}
-                  placeholder="Buscar pedido ou cliente"
-                  className={juntar(campo, "pl-8")}
+            }
+            filtros={
+              <>
+                <SeletorCompacto
+                  rotulo="Status"
+                  valor={filter}
+                  onEscolher={setFilter}
+                  modo="segmentado"
+                  listaQuandoNaoCabe
+                  opcoes={filters.map((item) => ({ valor: item.value, rotulo: item.label, contador: contagemStatus(item.value) }))}
                 />
-              </label>
-              {filtrosAtivos && (
-                <button
-                  type="button"
-                  className={botao.discreto}
-                  onClick={() => {
-                    setFiltroCliente("todos");
-                    setFiltroPrioridade("todas");
-                    setBusca("");
-                  }}
-                >
-                  Limpar
-                </button>
-              )}
-            </div>
-          </div>
+                <SeletorCompacto
+                  rotulo="Cliente"
+                  icone={<Building2 className="h-3.5 w-3.5" />}
+                  valor={filtroCliente}
+                  onEscolher={setFiltroCliente}
+                  modo="lista"
+                  opcoes={[{ valor: "todos", rotulo: "Todos os clientes" }].concat(
+                    clientesComPedido.map((c) => ({ valor: c.id, rotulo: c.nome })),
+                  )}
+                />
+                <SeletorCompacto
+                  rotulo="Prioridade"
+                  icone={<Flag className="h-3.5 w-3.5" />}
+                  valor={filtroPrioridade}
+                  onEscolher={setFiltroPrioridade}
+                  modo="lista"
+                  opcoes={[
+                    { valor: "todas", rotulo: "Toda prioridade" },
+                    { valor: "urgent", rotulo: "Urgente" },
+                    { valor: "high", rotulo: "Alta" },
+                    { valor: "normal", rotulo: "Normal" },
+                    { valor: "low", rotulo: "Baixa" },
+                  ]}
+                />
+              </>
+            }
+            filtrosAtivos={(filtroCliente !== "todos" ? 1 : 0) + (filtroPrioridade !== "todas" ? 1 : 0)}
+            aoLimparFiltros={() => {
+              setFiltroCliente("todos");
+              setFiltroPrioridade("todas");
+            }}
+            mais={[
+              filtrosAtivos && {
+                rotulo: "Limpar busca e filtros",
+                aoEscolher: () => {
+                  setFiltroCliente("todos");
+                  setFiltroPrioridade("todas");
+                  setBusca("");
+                },
+              },
+            ]}
+          />
         )}
 
         <div className="mt-4 min-w-0 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-5 desk:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">

@@ -101,9 +101,14 @@ export default function EstudioLogoDaLamina({
     return <span className="text-[11.5px] text-muted-foreground">Sem logo no kit desta marca: a arte sai sem logo.</span>;
   }
 
-  const lado = compacto ? 24 : 36;
+  // Frente AE-3: no compacto (base da lâmina) as opções viram um seletor segmentado pequeno, de uma linha.
+  const lado = compacto ? 18 : 36;
   return (
-    <div role="radiogroup" aria-label={alvo === "lamina" ? `Logo da lâmina ${ordem}` : "Logo do conjunto"} className="flex min-w-0 flex-wrap items-center">
+    <div
+      role="radiogroup"
+      aria-label={alvo === "lamina" ? `Logo da lâmina ${ordem}` : "Logo do conjunto"}
+      className={compacto ? "inline-flex h-8 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" : "flex min-w-0 flex-wrap items-center"}
+    >
       {opcoes.map((o) => {
         const marcada = o.valor === atual;
         return (
@@ -115,9 +120,15 @@ export default function EstudioLogoDaLamina({
             title={o.dica}
             disabled={bloqueado || salvando}
             onClick={() => void escolher(o.valor)}
-            className={`mb-1 mr-1.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors disabled:opacity-50 ${
-              marcada ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-            }`}
+            className={
+              compacto
+                ? `inline-flex h-7 shrink-0 items-center rounded px-2 text-[11.5px] transition-colors disabled:opacity-50 ${
+                    marcada ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`
+                : `mb-1 mr-1.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors disabled:opacity-50 ${
+                    marcada ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`
+            }
           >
             {o.url ? (
               <span className="mr-1 inline-block shrink-0 overflow-hidden rounded border border-border" style={{ width: lado, height: lado, ...XADREZ }}>
@@ -128,7 +139,7 @@ export default function EstudioLogoDaLamina({
           </button>
         );
       })}
-      {salvando && <Loader2 className="mb-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando a logo" />}
+      {salvando && <Loader2 className={`${compacto ? "mx-1" : "mb-1"} h-3.5 w-3.5 animate-spin text-muted-foreground`} aria-label="Salvando a logo" />}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
   limitarAliquota, reservaTributaria, type AliquotaDoMes,
 } from "@/lib/tributos";
 import {
-  Carregando, CampoDeFormulario, EstadoDeErro, EstadoVazio, Painel, RegiaoRolavel, Secao, SeletorCompacto,
+  AjudaRecolhida, Carregando, CampoDeFormulario, EstadoDeErro, EstadoVazio, Painel, RegiaoRolavel, Secao, SeletorCompacto,
   botao, campo, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
 import { Etiqueta } from "@/components/finance/pecasDoFinanceiro";
@@ -146,7 +146,7 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
       >
         <Painel>
           <div className="-mb-1 flex min-w-0 flex-wrap items-center [&>*]:mb-1">
-            <span className="mr-3 text-[28px] font-semibold leading-9 tabular-nums text-foreground">{pct(valorNaBarra)}</span>
+            <span className={juntar(texto.numero, "mr-3")}>{pct(valorNaBarra)}</span>
             {resolvida.presumida && !mudou && (
               /* A diferença que importa: presumido não é confirmado. Sem este
                  aviso o piso pareceria um número que alguém conferiu. */
@@ -182,10 +182,12 @@ export default function AreaTributaria({ brutoRecebidoNoMes }: Props) {
           </div>
 
           <div className={juntar(superficie.poco, "mt-4 px-3 py-2.5")}>
-            <p className="text-[13px] leading-5 text-muted-foreground">
-              Sobre <span className="tabular-nums">{fmt(brutoRecebidoNoMes)}</span> recebidos no mês, separa{" "}
-              <strong className="font-semibold tabular-nums text-foreground">{fmt(reservaTributaria(brutoRecebidoNoMes, valorNaBarra))}</strong>.
-              {" "}Incide sobre o bruto, não sobre o operacional.
+            <p className="flex min-w-0 items-center text-[13px] leading-5 text-muted-foreground">
+              <span className="min-w-0">
+                Sobre <span className="tabular-nums">{fmt(brutoRecebidoNoMes)}</span> recebidos no mês, separa{" "}
+                <strong className="font-semibold tabular-nums text-foreground">{fmt(reservaTributaria(brutoRecebidoNoMes, valorNaBarra))}</strong>
+              </span>
+              <AjudaRecolhida className="ml-1" rotulo="Sobre a base da alíquota">Incide sobre o bruto, não sobre o operacional.</AjudaRecolhida>
             </p>
           </div>
 

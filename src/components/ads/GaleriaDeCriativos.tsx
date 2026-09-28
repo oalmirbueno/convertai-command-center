@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, ImageOff, Video, Megaphone } from "lucide-react";
 import { CampoDeBusca } from "@/components/sistema";
-import { EstadoVazio, Secao, SeletorCompacto, botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, EstadoVazio, Secao, SeletorCompacto, botao, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 
 /**
  * Os criativos de um cliente, com a peça à vista e o número ao lado.
@@ -75,7 +75,7 @@ function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
         <p className="line-clamp-3 text-[11px] leading-tight text-muted-foreground">
           {c.ad_name || "Peça sem nome"}
         </p>
-        <p className="mt-1 text-[10.5px] text-muted-foreground/70">
+        <p className="mt-1 text-[11px] text-muted-foreground/70">
           a imagem expirou na Meta
         </p>
       </div>
@@ -236,8 +236,22 @@ export default function GaleriaDeCriativos({
       divisoria
       titulo="Criativos"
       descricao={
+        // Uma linha de estado: contagem e o resumo das peças (antes era uma linha a mais embaixo).
         <span className="block truncate tabular-nums">
-          {ordenados.length} de {criativos.length} · últimos {periodoDias} dias
+          {ordenados.length} de {criativos.length} · últimos {periodoDias} dias · investido nas peças{" "}
+          <strong className="font-semibold text-foreground">{dinheiro(resumo.gasto)}</strong> · cliques no link{" "}
+          <strong className="font-semibold text-foreground">{inteiro(resumo.cliques_no_link)}</strong>
+          {resumo.custo_medio !== null && (
+            <>
+              {" "}· custo médio <strong className="font-semibold text-foreground">{dinheiro(resumo.custo_medio)}</strong>
+            </>
+          )}
+          {resumo.maior && (
+            <>
+              {" "}· maior gasto: <strong className="font-semibold text-foreground">{resumo.maior.ad_name || "peça sem nome"}</strong>
+            </>
+          )}
+          {resumo.pecas_sem_numero > 0 && ` · ${resumo.pecas_sem_numero} sem número no período`}
         </span>
       }
       ajuda={ajuda}
@@ -250,30 +264,6 @@ export default function GaleriaDeCriativos({
         />
       }
     >
-      <p className={juntar(texto.auxiliar, "mb-3 flex min-w-0 flex-wrap [&>*]:mr-4")}>
-        <span>
-          investido nas peças{" "}
-          <strong className="font-semibold tabular-nums text-foreground">{dinheiro(resumo.gasto)}</strong>
-        </span>
-        <span>
-          cliques no link{" "}
-          <strong className="font-semibold tabular-nums text-foreground">{inteiro(resumo.cliques_no_link)}</strong>
-        </span>
-        {resumo.custo_medio !== null && (
-          <span>
-            custo médio{" "}
-            <strong className="font-semibold tabular-nums text-foreground">{dinheiro(resumo.custo_medio)}</strong>
-          </span>
-        )}
-        {resumo.maior && (
-          <span className="min-w-0 max-w-full truncate">
-            maior gasto:{" "}
-            <strong className="font-semibold text-foreground">{resumo.maior.ad_name || "peça sem nome"}</strong>
-          </span>
-        )}
-        {resumo.pecas_sem_numero > 0 && <span>{resumo.pecas_sem_numero} sem número no período</span>}
-      </p>
-
       <div className="-m-1 mb-3 flex min-w-0 flex-wrap items-center [&>*]:m-1">
         <CampoDeBusca
           valor={busca}
@@ -324,17 +314,17 @@ export default function GaleriaDeCriativos({
                 <div className="relative overflow-hidden rounded-md bg-muted" style={{ paddingBottom: "100%" }}>
                   <Miniatura c={c} />
                   {c.video_id && (
-                    <span className="absolute left-1.5 top-1.5 flex items-center rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    <span className="absolute left-1.5 top-1.5 flex items-center rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white">
                       <Video className="mr-1 h-3 w-3" aria-hidden="true" /> vídeo
                     </span>
                   )}
                   {c.effective_status && c.effective_status !== "ACTIVE" && (
-                    <span className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    <span className="absolute right-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white">
                       {c.effective_status.toLowerCase()}
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 truncate text-[12.5px] font-medium text-foreground group-hover:text-primary">
+                <p className="mt-1.5 truncate text-[13px] font-medium text-foreground group-hover:text-primary">
                   {c.ad_name || "Peça sem nome"}
                 </p>
                 {c.campanha && (
@@ -343,7 +333,7 @@ export default function GaleriaDeCriativos({
                 {c.dias_com_dado === 0 ? (
                   <p className={juntar(texto.auxiliar, "mt-0.5")}>sem número no período</p>
                 ) : (
-                  <p className="mt-0.5 flex flex-wrap text-[11.5px] leading-4 tabular-nums [&>*]:mr-2">
+                  <p className="mt-0.5 flex flex-wrap text-[12px] leading-4 tabular-nums [&>*]:mr-2">
                     <span className="font-semibold text-foreground">{dinheiro(c.gasto)}</span>
                     {c.ctr !== null && <span className="text-muted-foreground">CTR {c.ctr.toFixed(2)}%</span>}
                     {c.custo_no_link !== null && <span className="text-info">{dinheiro(c.custo_no_link)}/clique</span>}
@@ -372,7 +362,7 @@ export default function GaleriaDeCriativos({
             role="dialog"
             aria-modal="true"
             aria-label={aberto.ad_name || "Peça sem nome"}
-            className="max-h-full w-full max-w-3xl overflow-y-auto overscroll-contain rounded-lg border border-border bg-card"
+            className={juntar(superficie.painel, "max-h-full w-full max-w-3xl overflow-y-auto overscroll-contain")}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between border-b border-border px-4 py-3">
@@ -398,7 +388,13 @@ export default function GaleriaDeCriativos({
                 {[
                   { rotulo: "Gasto", valor: dinheiro(aberto.gasto), tom: "" },
                   { rotulo: "Impressões", valor: inteiro(aberto.impressoes), tom: "" },
-                  { rotulo: "Maior alcance num dia", valor: inteiro(aberto.maior_alcance), tom: "" },
+                  {
+                    rotulo: "Maior alcance num dia",
+                    valor: inteiro(aberto.maior_alcance),
+                    tom: "",
+                    // Alcance não soma: dizer isso evita um relatório com a soma dos dias, número que nunca existiu.
+                    ajuda: "O alcance mostrado é o maior dia do período, não a soma: a mesma pessoa em dois dias não são duas pessoas.",
+                  },
                   { rotulo: "Cliques", valor: inteiro(aberto.cliques), tom: "" },
                   { rotulo: "Cliques no link", valor: inteiro(aberto.cliques_no_link), tom: "text-info" },
                   {
@@ -406,26 +402,22 @@ export default function GaleriaDeCriativos({
                     valor: aberto.custo_no_link !== null ? dinheiro(aberto.custo_no_link) : "-",
                     tom: "text-success",
                   },
-                ].map((n) => (
+                ].map((n: { rotulo: string; valor: string; tom: string; ajuda?: string }) => (
                   <div key={n.rotulo} className="min-w-0 bg-card px-3 py-2">
-                    <dt className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</dt>
+                    <dt className={juntar(texto.rotulo, "flex min-w-0 items-center")}>
+                      <span className="min-w-0 truncate">{n.rotulo}</span>
+                      {n.ajuda && <AjudaRecolhida className="ml-1" rotulo="Sobre o alcance">{n.ajuda}</AjudaRecolhida>}
+                    </dt>
                     <dd className={juntar("mt-0.5 truncate text-[15px] font-semibold tabular-nums", n.tom || "text-foreground")}>{n.valor}</dd>
                   </div>
                 ))}
               </dl>
 
-              {/* Alcance não soma, e dizer isso na tela evita que alguém
-                  monte um relatório somando os dias e apresente um número
-                  que nunca existiu. */}
-              <p className={juntar(texto.auxiliar, "mt-2")}>
-                O alcance mostrado é o maior dia do período, não a soma: a mesma pessoa em dois dias não são duas pessoas.
-              </p>
-
               {(aberto.titulo || aberto.corpo) && (
-                <div className="mt-3 rounded-md bg-muted/50 p-3">
+                <div className={juntar(superficie.poco, "mt-3 p-3")}>
                   {aberto.titulo && <p className="text-[13px] font-semibold text-foreground">{aberto.titulo}</p>}
                   {aberto.corpo && (
-                    <p className="mt-1 whitespace-pre-line text-[12.5px] leading-5 text-muted-foreground">{aberto.corpo}</p>
+                    <p className="mt-1 whitespace-pre-line text-[13px] leading-5 text-muted-foreground">{aberto.corpo}</p>
                   )}
                 </div>
               )}

@@ -62,7 +62,7 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
           <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
             <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
             <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{fmtNumero(n)}</p>
-            <p className={`flex items-center text-[11.5px] tabular-nums ${cor(n.tendencia)}`}>
+            <p className={`flex items-center text-[12px] tabular-nums ${cor(n.tendencia)}`}>
               <span className="mr-1 inline-flex"><IconeTendencia t={n.tendencia} /></span>
               {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}
             </p>
@@ -85,7 +85,7 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
         <div className={juntar(superficie.poco, "mt-3 px-3 py-2")}>
           <p className="text-[12px] font-medium text-primary">O que fazer por causa disso</p>
           <ul className="mt-1 space-y-1">
-            {leitura.fazer.map((x, i) => <li key={i} className="text-[12.5px] leading-5 text-foreground">• {x}</li>)}
+            {leitura.fazer.map((x, i) => <li key={i} className="text-[13px] leading-5 text-foreground">• {x}</li>)}
           </ul>
         </div>
       )}
@@ -218,7 +218,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
         <div className="shrink-0 px-4 pb-3 pt-2.5 sm:px-6">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
           <SheetHeader className="space-y-0 pr-12 text-left">
-            <SheetTitle className={juntar(texto.tituloPagina, "truncate text-[18px]")}>{cliente.nome}</SheetTitle>
+            <SheetTitle className={juntar(texto.tituloPagina, "truncate")}>{cliente.nome}</SheetTitle>
             <SheetDescription className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
               {e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · {e.resumo.urgentes} urgente{e.resumo.urgentes === 1 ? "" : "s"} · {e.resumo.atencao} de atenção · {feitosNaSemana} feito{feitosNaSemana === 1 ? "" : "s"}
             </SheetDescription>
@@ -249,7 +249,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                     <div>
                       <p className={texto.rotulo}>Feito nesta semana</p>
                       <ul className="mt-1 space-y-0.5">
-                        {plano.feito.map((f, i) => <li key={i} className="text-[12.5px] leading-5 text-foreground/90">• {f}</li>)}
+                        {plano.feito.map((f, i) => <li key={i} className="text-[13px] leading-5 text-foreground/90">• {f}</li>)}
                       </ul>
                     </div>
                   )}
@@ -313,7 +313,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             >
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
                 {e.rituais.map((r) => (
-                  <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[12.5px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
+                  <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
                     <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
                     <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
                   </label>
@@ -404,7 +404,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                       const tem = temPasso(p);
                       return (
                         <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
-                          <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[11.5px] text-muted-foreground">(detectado)</span> : null}</span>
+                          <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[12px] text-muted-foreground">(detectado)</span> : null}</span>
                           <Switch checked={Boolean(tem)} disabled={!canWrite} aria-label={p.rotulo} className="min-h-0 shrink-0" onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
                         </li>
                       );

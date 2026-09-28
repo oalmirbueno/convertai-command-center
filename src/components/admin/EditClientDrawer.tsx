@@ -789,7 +789,7 @@ export default function EditClientDrawer({
                     { label: "Atrasados", value: execOverdueBills, color: execOverdueBills > 0 ? "text-destructive" : "text-foreground" },
                   ].map((m) => (
                     <div key={m.label} className="min-w-0 px-2 text-center">
-                      <dd className={juntar("text-[17px] font-semibold leading-6 tabular-nums", m.color)}>{m.value}</dd>
+                      <dd className={juntar("text-[15px] font-semibold leading-6 tabular-nums", m.color)}>{m.value}</dd>
                       <dt className={juntar(texto.auxiliar, "truncate")}>{m.label}</dt>
                       {"alert" in m && m.alert && <p className="truncate text-[11px] text-destructive">{m.alert}</p>}
                     </div>
@@ -803,7 +803,7 @@ export default function EditClientDrawer({
                 ajuda="Crie uma entrega ou acompanhe o que já foi enviado para este cliente."
               >
                 <div className="-m-1 flex flex-wrap [&>*]:m-1">
-                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`)} className={botao.primario}>
+                  <button type="button" onClick={() => openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`)} className={botao.secundario}>
                     <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
                     Novo conteúdo
                   </button>
@@ -1229,7 +1229,7 @@ export default function EditClientDrawer({
                               toast.error("Copie manualmente selecionando o texto.");
                             }
                           }}
-                          className={juntar(botao.primario, "ml-2")}
+                          className={juntar(botao.secundario, "ml-2")}
                         >
                           Copiar
                         </button>

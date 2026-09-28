@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AjudaRecolhida } from "@/components/sistema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -556,24 +557,24 @@ export default function EditorialAccountSetup({
 
   return (
     <>
-      <div className={embutido ? "min-w-0" : "rounded-xl border border-dashed border-border bg-muted/20 p-4"} data-contas-embutidas={embutido ? "" : undefined}>
+      <div className={embutido ? "min-w-0" : "rounded-lg border border-dashed border-border bg-muted/20 p-4"} data-contas-embutidas={embutido ? "" : undefined}>
         <div className={embutido ? "flex min-w-0 justify-end empty:hidden" : "flex flex-wrap items-start justify-between gap-3"}>
           {!embutido && (
-          <div>
-            <p className="text-sm font-medium text-foreground">
+          <div className="flex min-w-0 items-center">
+            <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
               {compact
                 ? "Conectar sem sair do agendamento"
                 : linkedAccountCount === 0
                 ? "Adicione uma conta para liberar as plataformas"
                 : "Contas de publicação"}
             </p>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+            <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
               {compact
                 ? "Conecte uma conta oficial ou vincule outra conta deste cliente. O agendamento permanece aberto."
                 : showManualOptions
                 ? "Conecte a Meta oficialmente ou mantenha um cadastro manual."
                 : "Conecte a Meta oficialmente ou vincule uma conta já cadastrada neste cliente."}
-            </p>
+            </AjudaRecolhida>
           </div>
           )}
           {canManage && canShowAlternatives && linkedAccountCount > 0 && (
@@ -617,7 +618,7 @@ export default function EditorialAccountSetup({
             {linkedAccounts.map((account) => (
               <div
                 key={account.id}
-                className={embutido ? "flex flex-wrap items-center gap-2 py-2" : "flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/70 px-3 py-2"}
+                className={embutido ? "flex flex-wrap items-center gap-2 py-2" : "flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2"}
               >
                 <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                   {PLATFORM_LABELS[account.platform as EditorialPlatform] ||
@@ -651,7 +652,7 @@ export default function EditorialAccountSetup({
         )}
 
         {canManage && (
-          <div className="mt-4 rounded-xl border border-primary/25 bg-primary/[0.04] p-4">
+          <div className="mt-4 rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
             {/* Dentro do agendamento o espaço é estreito: sem min-w-0 no texto
                 e shrink-0 no botão, o botão era espremido e saía do lugar. */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -659,15 +660,17 @@ export default function EditorialAccountSetup({
                 <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
                   <Cable className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">
+                <div className="flex min-w-0 items-center">
+                  <p className="min-w-0 truncate text-[13px] font-semibold text-foreground">
                     Conexão oficial Meta
                   </p>
-                  <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
+                  <AjudaRecolhida className="ml-1.5" rotulo="Sobre a conexão oficial">
                     {compact
                       ? "Entre com Facebook/Meta, escolha a conta correta e continue daqui mesmo."
-                      : "Entre com Facebook/Meta para escolher Páginas que você administra e contas profissionais do Instagram ligadas a elas. A senha nunca passa pelo Aceleriq OS."}
-                  </p>
+                      : "Entre com Facebook/Meta para escolher Páginas que você administra e contas profissionais do Instagram ligadas a elas. A senha nunca passa pelo Aceleriq OS."}{" "}
+                    A conexão identifica e vincula a conta. Com ela ativa, o material
+                    aprovado e agendado é publicado pelo painel na data marcada.
+                  </AjudaRecolhida>
                 </div>
               </div>
               <Button
@@ -684,24 +687,20 @@ export default function EditorialAccountSetup({
                 {compact ? "Conectar Meta" : "Entrar com Facebook/Meta"}
               </Button>
             </div>
-            <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-              A conexão identifica e vincula a conta. Com ela ativa, o material
-              aprovado e agendado é publicado pelo painel na data marcada.
-            </p>
           </div>
         )}
 
         {canManage && showForm && (
           <div className="mt-4 space-y-4 border-t border-border pt-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex min-w-0 items-center">
+              <p className="min-w-0 truncate text-[12px] font-semibold text-muted-foreground">
                 Alternativas de cadastro
               </p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              <AjudaRecolhida className="ml-1.5" rotulo="Sobre as alternativas">
                 {showManualOptions
                   ? "Vincule uma conta já existente ou registre uma referência manual, sem login oficial e somente para planejamento."
                   : "Escolha uma conta deste cliente para vinculá-la ao projeto certo."}
-              </p>
+              </AjudaRecolhida>
             </div>
 
             {availableAccounts.length > 0 && (
@@ -807,10 +806,13 @@ export default function EditorialAccountSetup({
             )}
             {showManualOptions && (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[11px] leading-4 text-muted-foreground">
-                  Cadastro manual: libera somente planejamento e agendamento
-                  interno; não autentica a rede social.
-                </p>
+                <div className="flex min-w-0 items-center">
+                  <p className="min-w-0 truncate text-[12px] text-muted-foreground">Cadastro manual</p>
+                  <AjudaRecolhida className="ml-1.5" rotulo="Sobre o cadastro manual">
+                    Cadastro manual: libera somente planejamento e agendamento
+                    interno; não autentica a rede social.
+                  </AjudaRecolhida>
+                </div>
                 <Button
                   type="button"
                   variant="outline"

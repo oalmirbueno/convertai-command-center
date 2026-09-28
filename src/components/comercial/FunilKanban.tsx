@@ -292,7 +292,7 @@ export default function FunilKanban({
                   <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                   Trazer do diagnóstico
                 </button>
-                <button type="button" onClick={onNovo} className={botao.primario}>
+                <button type="button" onClick={onNovo} className={botao.secundario}>
                   <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
                   Novo lead
                 </button>

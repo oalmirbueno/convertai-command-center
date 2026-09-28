@@ -141,7 +141,7 @@ export default function EmpresasCRM({
               titulo="Nenhuma empresa ainda"
               descricao="Toda empresa que entra no funil ganha ficha aqui, com as pessoas e os negócios."
               acao={
-                <button type="button" onClick={() => setEditando("nova")} className={botao.primario}>
+                <button type="button" onClick={() => setEditando("nova")} className={botao.secundario}>
                   Nova empresa
                 </button>
               }

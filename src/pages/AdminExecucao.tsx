@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, PauseCircle, RefreshCw, Search, ShieldAlert, Wrench, XCircle,
+  FileCheck2, ListChecks, PauseCircle, RefreshCw, ShieldAlert, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
@@ -29,10 +29,27 @@ import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-context
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
 import {
-  AreaDeTrabalho, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Etapas,
-  RegiaoRolavel, Secao, SeletorCompacto, botao, campo, etiqueta, juntar, superficie, texto,
-  useEstadoDaTela,
+  AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
+  EstadoDeErro, EstadoVazio, Etapas, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
+  juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
 } from "@/components/sistema";
+
+/**
+ * Na gaveta do celular a lateral (o resumo) não tem cabeçalho de agente:
+ * este X fecha a gaveta. No computador não aparece (a área põe o botão de
+ * recolher no vão entre as colunas).
+ */
+function FecharResumo() {
+  const area = useAreaDeTrabalho();
+  if (!area || !area.fecharGaveta) return null;
+  return (
+    <div className="flex shrink-0 justify-end px-1 pb-1">
+      <button type="button" onClick={area.fecharGaveta} aria-label="Fechar o resumo" className={juntar(botao.icone, "h-10 w-10")}>
+        <X className="h-5 w-5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
 
 /** Estado de uma execucao do agente, em palavras. */
 const RUN_EM_PALAVRAS: Record<string, string> = {
@@ -1057,8 +1074,8 @@ export default function AdminExecucao() {
           </p>
         )}
         {encerrado(v) && (
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            encerrado: a tarefa foi concluída, arquivada ou excluída; este vínculo ficou como histórico.
+          <p className="mt-1 text-[12px] text-muted-foreground" title="A tarefa foi concluída, arquivada ou excluída; o vínculo ficou como histórico.">
+            encerrado: tarefa concluída, arquivada ou excluída
           </p>
         )}
         {!encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3 && (
@@ -1124,8 +1141,8 @@ export default function AdminExecucao() {
     <Secao
       titulo="O que pede a sua atenção"
       descricao={numeros.kanbanAbertas === 0
-        ? "Nenhuma tarefa aberta no Kanban agora."
-        : `${numeros.kanbanAbertas} ${numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban${numeros.semOperador.length > 0 ? `, ${numeros.semOperador.length} ainda sem agente` : ", todas com agente"}.`}
+        ? "Nenhuma tarefa aberta no Kanban agora"
+        : `${numeros.kanbanAbertas} ${numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban${numeros.semOperador.length > 0 ? ` · ${numeros.semOperador.length} ainda sem agente` : " · todas com agente"}`}
     >
       {carregandoVinculos && vinculos.length === 0 ? (
         <Carregando linhas={3} rotulo="Carregando o resumo" />
@@ -1151,9 +1168,9 @@ export default function AdminExecucao() {
   );
 
   const areasEIncidentes = (
-    <div className="space-y-6 lg:pb-6 lg:pr-1">
+    <div className="space-y-6">
       {incidentes.length > 0 && (
-        <Secao titulo={`${incidentes.length} incidente(s) de execução`}>
+        <Secao titulo={`${incidentes.length} incidente(s) de execução`} recolher="execucao:incidentes">
           <ul className="space-y-1.5">
             {incidentes.slice(0, 5).map((r) => (
               <li key={String(r.id)} className="flex min-w-0 items-start text-[12px] leading-5 text-muted-foreground" title={`execução ${String(r.run_key)}`}>
@@ -1221,7 +1238,7 @@ export default function AdminExecucao() {
                 )}
                 {area}
                 <span className={juntar(
-                  "ml-1.5 rounded-full px-1.5 text-[10px] tabular-nums",
+                  "ml-1.5 rounded-full px-1.5 text-[11px] tabular-nums",
                   aberta ? "bg-primary/20" : "bg-muted",
                 )}>
                   {doGrupo.length}
@@ -1352,12 +1369,22 @@ export default function AdminExecucao() {
         { titulo: "Fechamento do dia", texto: relatorio.fechamento, icone: CheckCircle2 },
         { titulo: "Semana do piloto", texto: relatorio.semanal, icone: FileCheck2 },
       ].map((r) => (
-        <section key={r.titulo} aria-label={r.titulo} className={juntar(superficie.painel, "min-w-0")}>
-          <div className="flex min-w-0 items-center justify-between border-b border-border py-2 pl-4 pr-2">
-            <h3 className="inline-flex min-w-0 items-center text-[13px] font-semibold text-foreground">
+        /* Cada relatório é um item da grade (cartão com função): o Painel do
+           sistema, que já recolhe. O ícone vai junto do título, então a chave
+           de recolher é escolhida aqui. */
+        <Painel
+          key={r.titulo}
+          as="section"
+          aria-label={r.titulo}
+          semEspaco
+          recolher={`execucao:relatorio:${r.titulo}`}
+          titulo={
+            <span className="inline-flex min-w-0 max-w-full items-center">
               <r.icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
               <span className="truncate">{r.titulo}</span>
-            </h3>
+            </span>
+          }
+          acao={
             <button
               type="button"
               onClick={() => void copiar(r.texto, r.titulo)}
@@ -1365,11 +1392,12 @@ export default function AdminExecucao() {
             >
               <ClipboardCopy className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Copiar
             </button>
-          </div>
+          }
+        >
           <pre className="whitespace-pre-wrap px-4 py-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
             {r.texto}
           </pre>
-        </section>
+        </Painel>
       ))}
     </div>
   ) : visao === "fila" ? (
@@ -1473,10 +1501,15 @@ export default function AdminExecucao() {
     <div className="space-y-3">
       <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
-        <p className="flex items-center text-[12px] text-warning">
+        <div className="flex items-center text-[12px] text-warning">
           <XCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
-        </p>
+          <span className="min-w-0">
+            {filtrados.filter((v) => !v.last_evidence).length} concluída(s) sem evidência
+          </span>
+          <AjudaRecolhida className="ml-1.5" rotulo="Por que isso é um problema?">
+            Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
+          </AjudaRecolhida>
+        </div>
       )}
     </div>
   );
@@ -1510,6 +1543,22 @@ export default function AdminExecucao() {
 
   const filtrosAtivos = Boolean(busca.trim() || filtroCliente || filtroPrazo !== "todas");
   const mostraFiltros = aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
+  /** Quantos recortes da linha 2 estão ligados (o número do botão "Filtros"). */
+  const recortesLigados = (filtroCliente ? 1 : 0) + (filtroPrazo !== "todas" ? 1 : 0);
+
+  /** A visão dentro da aba: um seletor (mais de 4 opções vira lista). */
+  const seletorDeVisao = aba !== "feito" && visoesDaAba.length > 1 ? (
+    <SeletorCompacto
+      rotulo="Visão"
+      valor={visao}
+      onEscolher={(v) => setVisao(v as (typeof VISOES)[number]["id"])}
+      listaQuandoNaoCabe
+      opcoes={visoesDaAba.map((x) => {
+        const quantos = contagemDaVisao[x.id] ?? null;
+        return { valor: x.id, rotulo: x.rotulo, contador: quantos !== null && quantos > 0 ? quantos : null };
+      })}
+    />
+  ) : null;
 
   const principal = (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
@@ -1530,83 +1579,67 @@ export default function AdminExecucao() {
         />
       </div>
 
-      {(visoesDaAba.length > 1 || mostraFiltros) && (
-        <div className="mt-3 shrink-0">
-          {/* A visão da aba e os recortes numa linha só. As visões são um
-              seletor (mais de 4 vira lista); a busca, o cliente e o prazo
-              aplicam antes das visões para número e conteúdo nunca
-              discordarem. */}
-          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-            {mostraFiltros && (
-              <label className="relative block w-full min-w-0 sm:w-60">
-                <span className="sr-only">Buscar tarefa, cliente, projeto ou agente</span>
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar tarefa, cliente ou agente"
-                  className={juntar(campo, "pl-8")}
-                />
-              </label>
-            )}
-            {aba !== "feito" && visoesDaAba.length > 1 && (
+      {/* A visão da aba e os recortes numa BarraDeControles (no máximo duas
+          linhas). Linha 1: a busca e a visão (um seletor; mais de 4 vira
+          lista) e o "..." com limpar e os vínculos encerrados. Linha 2: cliente
+          e prazo; se não couberem, viram "Filtros (n)". A busca, o cliente e o
+          prazo aplicam antes das visões para número e conteúdo nunca
+          discordarem. */}
+      {mostraFiltros ? (
+        <BarraDeControles
+          rotulo="Filtros da Execução"
+          className="mt-3 shrink-0"
+          inicio={
+            <CampoDeBusca
+              valor={busca}
+              onMudar={setBusca}
+              placeholder="Buscar tarefa, cliente ou agente"
+              rotulo="Buscar tarefa, cliente, projeto ou agente"
+              className="sm:max-w-[280px]"
+            />
+          }
+          acoes={seletorDeVisao || undefined}
+          filtros={
+            <>
               <SeletorCompacto
-                rotulo="Visão"
-                valor={visao}
-                onEscolher={(v) => setVisao(v as (typeof VISOES)[number]["id"])}
-                listaQuandoNaoCabe
-                opcoes={visoesDaAba.map((x) => {
-                  const quantos = contagemDaVisao[x.id] ?? null;
-                  return { valor: x.id, rotulo: x.rotulo, contador: quantos !== null && quantos > 0 ? quantos : null };
-                })}
+                rotulo="Cliente"
+                icone={<Building2 className="h-3.5 w-3.5" />}
+                valor={filtroCliente}
+                onEscolher={setFiltroCliente}
+                modo="lista"
+                opcoes={[{ valor: "", rotulo: "Todos os clientes" }].concat(clientesDoQuadro.map((c) => ({ valor: c, rotulo: c })))}
               />
-            )}
-            {mostraFiltros && (
-              <>
-                <SeletorCompacto
-                  rotulo="Cliente"
-                  icone={<Building2 className="h-3.5 w-3.5" />}
-                  valor={filtroCliente}
-                  onEscolher={setFiltroCliente}
-                  modo="lista"
-                  opcoes={[{ valor: "", rotulo: "Todos os clientes" }].concat(clientesDoQuadro.map((c) => ({ valor: c, rotulo: c })))}
-                />
-                <SeletorCompacto
-                  rotulo="Prazo"
-                  valor={filtroPrazo}
-                  onEscolher={(v) => setFiltroPrazo(v as typeof filtroPrazo)}
-                  modo="segmentado"
-          listaQuandoNaoCabe
-                  opcoes={[
-                    { valor: "todas", rotulo: "Qualquer prazo" },
-                    { valor: "vencidas", rotulo: "Vencidas" },
-                    { valor: "semana", rotulo: "Próximos 7 dias" },
-                  ]}
-                />
-                {filtrosAtivos && (
-                  <button
-                    type="button"
-                    onClick={() => { setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }}
-                    className={botao.discreto}
-                  >
-                    Limpar ({vinculosVisiveis.length}/{vinculos.length})
-                  </button>
-                )}
-                {totalEncerradas > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setMostrarEncerradas((v) => !v)}
-                    title="Tarefa concluída, arquivada ou excluída"
-                    className={botao.discreto}
-                  >
-                    {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+              <SeletorCompacto
+                rotulo="Prazo"
+                valor={filtroPrazo}
+                onEscolher={(v) => setFiltroPrazo(v as typeof filtroPrazo)}
+                modo="segmentado"
+                listaQuandoNaoCabe
+                opcoes={[
+                  { valor: "todas", rotulo: "Qualquer prazo" },
+                  { valor: "vencidas", rotulo: "Vencidas" },
+                  { valor: "semana", rotulo: "Próximos 7 dias" },
+                ]}
+              />
+            </>
+          }
+          filtrosAtivos={recortesLigados}
+          aoLimparFiltros={() => { setFiltroCliente(""); setFiltroPrazo("todas"); }}
+          mais={[
+            filtrosAtivos && {
+              rotulo: `Limpar busca e filtros (${vinculosVisiveis.length}/${vinculos.length})`,
+              aoEscolher: () => { setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); },
+            },
+            totalEncerradas > 0 && {
+              rotulo: `${mostrarEncerradas ? "Esconder" : "Mostrar"} ${totalEncerradas} vínculo${totalEncerradas === 1 ? "" : "s"} encerrado${totalEncerradas === 1 ? "" : "s"}`,
+              dica: "Tarefa concluída, arquivada ou excluída",
+              aoEscolher: () => setMostrarEncerradas((v) => !v),
+            },
+          ]}
+        />
+      ) : seletorDeVisao ? (
+        <div className="mt-3 shrink-0">{seletorDeVisao}</div>
+      ) : null}
 
       <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
         {aba !== "feito" && visao === "quadro" ? (
@@ -1632,83 +1665,96 @@ export default function AdminExecucao() {
 
   return (
     <div className="min-w-0">
-      {/* Sistema de design (docs/design/SISTEMA.md): no computador a tela tem a
-          altura da janela; o trabalho (abas e lista) rola de um lado e o resumo
-          (atenção, incidentes e áreas) do outro, cada um por conta própria. No
-          celular a página rola normal: primeiro o que pede atenção, depois o
-          trabalho, por último as áreas. */}
-      <AreaDeTrabalho principalRolavel={false}>
-        <CabecalhoDePagina
-          titulo="Execução"
-          className="shrink-0"
-          descricao={dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura"}
-          ajuda="Operadores internos executam e relatam; o responsável humano continua sendo quem responde. Feito só conta com evidência. A fila só anda com o Hermes ligado: o painel não dispara agente."
-          acoes={
-            <>
-              {profile?.role === "admin" && (
-                <button
-                  type="button"
-                  onClick={() => void reconciliarExecucoes()}
-                  disabled={reconciliando}
-                  title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
-                  aria-label="Reconciliar execuções"
-                  className={botao.secundario}
-                >
-                  <Wrench className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">{reconciliando ? "Reconciliando…" : "Reconciliar"}</span>
-                </button>
-              )}
+      <CabecalhoDePagina
+        titulo="Execução"
+        descricao={dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura"}
+        ajuda="Operadores internos executam e relatam; o responsável humano continua sendo quem responde. Feito só conta com evidência. A fila só anda com o Hermes ligado: o painel não dispara agente."
+        acoes={
+          <>
+            {profile?.role === "admin" && (
               <button
                 type="button"
-                onClick={() => void atualizarTudo()}
-                disabled={atualizando}
-                aria-label="Atualizar"
+                onClick={() => void reconciliarExecucoes()}
+                disabled={reconciliando}
+                title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
+                aria-label="Reconciliar execuções"
                 className={botao.secundario}
               >
-                <RefreshCw className={juntar("h-3.5 w-3.5 sm:mr-1.5", atualizando && "animate-spin")} aria-hidden="true" />
-                <span className="hidden sm:inline">Atualizar</span>
+                <Wrench className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">{reconciliando ? "Reconciliando…" : "Reconciliar"}</span>
               </button>
-            </>
-          }
-        />
+            )}
+            <button
+              type="button"
+              onClick={() => void atualizarTudo()}
+              disabled={atualizando}
+              aria-label="Atualizar"
+              className={botao.secundario}
+            >
+              <RefreshCw className={juntar("h-3.5 w-3.5 sm:mr-1.5", atualizando && "animate-spin")} aria-hidden="true" />
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
+          </>
+        }
+      />
 
-        {((erroVinculos || erroRuns) || runsSemHeartbeat > 0 || (diasSemAgente !== null && diasSemAgente >= 2)) && (
-          <div className="mt-3 shrink-0 space-y-2">
-            {(erroVinculos || erroRuns) && (
-              <EstadoDeErro
-                titulo="Não foi possível ler parte da execução."
-                descricao="Os dados exibidos podem estar desatualizados."
-                acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void atualizarTudo()}>Tentar de novo</button>}
-              />
-            )}
-            {runsSemHeartbeat > 0 && (
-              <p className="flex items-center text-[12px] text-warning">
-                <Clock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {runsSemHeartbeat} execução(ões) sem sinal dentro do prazo. O estado registrado aguarda reconciliação.
-              </p>
-            )}
-            {diasSemAgente !== null && diasSemAgente >= 2 && (
-              <p className="flex items-center text-[12px] text-warning">
-                <PauseCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"}).
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="mt-5 min-w-0 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-6 lg:gap-y-5 xl:grid-cols-[minmax(0,1fr)_340px] desk:grid-cols-[minmax(0,1fr)_380px]">
-          <aside aria-label="O que pede a sua atenção" className="min-w-0 lg:col-start-2 lg:row-start-1">
-            {atencao}
-          </aside>
-          <section aria-label="Trabalho dos agentes" className="mt-6 flex min-w-0 flex-col lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:min-h-0">
-            {principal}
-          </section>
-          <aside aria-label="Áreas e incidentes" className="mt-8 flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:mt-0 lg:min-h-0">
-            <RegiaoRolavel modo="lg" rotulo="Áreas e incidentes" memoria="execucao:areas">
-              {areasEIncidentes}
-            </RegiaoRolavel>
-          </aside>
+      {((erroVinculos || erroRuns) || runsSemHeartbeat > 0 || (diasSemAgente !== null && diasSemAgente >= 2)) && (
+        <div className="mt-3 space-y-2">
+          {(erroVinculos || erroRuns) && (
+            <EstadoDeErro
+              titulo="Não foi possível ler parte da execução."
+              descricao="Os dados exibidos podem estar desatualizados."
+              acao={<button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => void atualizarTudo()}>Tentar de novo</button>}
+            />
+          )}
+          {runsSemHeartbeat > 0 && (
+            <div className="flex items-center text-[12px] text-warning">
+              <Clock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0">{runsSemHeartbeat} execução(ões) sem sinal dentro do prazo</span>
+              <AjudaRecolhida className="ml-1.5">
+                O estado registrado aguarda reconciliação (Reconciliar, no alto da tela).
+              </AjudaRecolhida>
+            </div>
+          )}
+          {diasSemAgente !== null && diasSemAgente >= 2 && (
+            <p className="flex items-center text-[12px] text-warning">
+              <PauseCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"})
+            </p>
+          )}
         </div>
+      )}
+
+      {/* Sistema de design (docs/design/SISTEMA.md, 4.3 e 8): no computador a
+          área tem a altura da janela; o trabalho (abas e lista) rola de um lado
+          e o resumo (atenção, incidentes e áreas) do outro, cada um por conta
+          própria. O resumo é a lateral da AreaDeTrabalho: recolhe para o lado
+          numa tirinha (lembrado em "execucao-resumo"). No celular a página rola
+          normal e o resumo abre pelo botão de baixo, numa gaveta. */}
+      <AreaDeTrabalho
+        className="mt-5"
+        principalRolavel={false}
+        rotuloDoPrincipal="Trabalho dos agentes"
+        memoria="execucao-resumo"
+        rotuloDaLateral="Atenção"
+        iconeDaLateral={<ListChecks className="h-4 w-4" />}
+        lateral={
+          <>
+            <FecharResumo />
+            <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">
+              <div className="space-y-6 pb-4">
+                <div aria-label="O que pede a sua atenção" role="group">
+                  {atencao}
+                </div>
+                {areasEIncidentes}
+              </div>
+            </RegiaoRolavel>
+          </>
+        }
+      >
+        <section aria-label="Trabalho dos agentes" className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+          {principal}
+        </section>
       </AreaDeTrabalho>
 
       {menuEncaminhar && (

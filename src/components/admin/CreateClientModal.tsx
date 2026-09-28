@@ -399,9 +399,16 @@ export default function CreateClientModal({ open, onClose }: Props) {
         className="relative flex max-h-full w-full max-w-[640px] flex-col overflow-hidden border-border bg-card sm:max-h-[90vh] sm:rounded-lg sm:border"
       >
         <div className="flex min-w-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
-          <h2 id="novo-cliente-titulo" className={texto.tituloSecao}>
-            {createdSuccess ? "Cliente criado" : "Novo cliente"}
-          </h2>
+          <div className="flex min-w-0 items-center">
+            <h2 id="novo-cliente-titulo" className={juntar(texto.tituloSecao, "min-w-0 truncate")}>
+              {createdSuccess ? "Cliente criado" : "Novo cliente"}
+            </h2>
+            {createdSuccess && (
+              <AjudaRecolhida className="ml-1.5" rotulo="Sobre a senha do cliente">
+                A senha criada pelo cliente permanece privada e protegida. Se necessário, um administrador pode definir uma nova senha no cadastro, sem visualizar a atual.
+              </AjudaRecolhida>
+            )}
+          </div>
           <button type="button" onClick={handleClose} aria-label="Fechar" className={botao.icone}>
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -450,15 +457,11 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 />
               )}
               {emailWarning && inviteUrl && <p className={juntar(texto.auxiliar, "break-all")}>{inviteUrl}</p>}
-
-              <p className={texto.auxiliar}>
-                A senha criada pelo cliente permanece privada e protegida. Se necessário,
-                um administrador pode definir uma nova senha no cadastro, sem visualizar a atual.
-              </p>
             </div>
 
             <div className="flex justify-end border-t border-border px-4 py-3 sm:px-5">
-              <button type="button" onClick={handleClose} className={botao.primario}>
+              {/* Com o aviso, o primário é "Reenviar e-mail": um primário por área. */}
+              <button type="button" onClick={handleClose} className={emailWarning ? botao.secundario : botao.primario}>
                 Fechar
               </button>
             </div>

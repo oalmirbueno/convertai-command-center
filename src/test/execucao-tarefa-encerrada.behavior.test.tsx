@@ -32,7 +32,11 @@ describe("Execução lê o estado concluído do Kanban sem reescrever o operador
     mount();
     expect(screen.queryByRole("button", { name: /Entrega sintética encerrada/ })).not.toBeInTheDocument();
     expect(screen.getByText(/Nada está parado esperando você/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Mostrar 1 vínculo encerrado/ }));
+    // 28/09 (padronização L2): "Mostrar encerrados" saiu da barra para o "..."
+    // da BarraDeControles (no máximo duas linhas de controles; SISTEMA.md 4.2).
+    // A função é a mesma; o teste abre o menu antes de escolher.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais ações" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Mostrar 1 vínculo encerrado/ }));
     expect(screen.getByRole("button", { name: /Entrega sintética encerrada/ })).toBeInTheDocument();
     expect(state.from).not.toHaveBeenCalled();
     expect(state.rpc).not.toHaveBeenCalled();
@@ -40,6 +44,8 @@ describe("Execução lê o estado concluído do Kanban sem reescrever o operador
   it("preserva um vínculo quando a tarefa continua ativa", () => {
     state.taskStatus = "review"; mount();
     expect(screen.getByRole("button", { name: /Entrega sintética encerrada/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Mostrar 1 vínculo encerrado/ })).not.toBeInTheDocument();
+    // Sem vínculo encerrado e sem filtro ligado, o "..." nem aparece.
+    expect(screen.queryByRole("button", { name: "Mais ações" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Mostrar 1 vínculo encerrado/ })).not.toBeInTheDocument();
   });
 });

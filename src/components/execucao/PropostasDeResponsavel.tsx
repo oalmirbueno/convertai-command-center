@@ -208,8 +208,11 @@ export default function PropostasDeResponsavel({
               )}
               {visiveis.length > 0 && (
                 <ul className="divide-y divide-border border-t border-border">
-                  {visiveis.map((p) => {
+                  {visiveis.map((p, i) => {
                     const destacada = p.id === destaqueId;
+                    // Um primário por área (SISTEMA.md seção 6): a proposta em
+                    // destaque (ou a primeira aberta, sem destaque) leva o verde.
+                    const principal = destacada || (!propostas.some((x) => x.id === destaqueId) && i === 0 && grupos.length === 1);
                     const tarefa = tarefasDasPropostas.get(p.kanban_task_id);
                     return (
                       <li
@@ -262,7 +265,7 @@ export default function PropostasDeResponsavel({
                               type="button"
                               disabled={decidir.isPending}
                               onClick={() => decidir.mutate({ id: p.id, decisao: "aprovada" })}
-                              className={botao.primario}
+                              className={principal ? botao.primario : juntar(botao.secundario, "text-success")}
                             >
                               {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
                               Aprovar e designar

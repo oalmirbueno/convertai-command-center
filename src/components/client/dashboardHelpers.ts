@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useArquivosAoVivo } from "@/hooks/useArquivosAoVivo";
 import { useMemo } from "react";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 
@@ -80,6 +81,8 @@ export function formatDateShort(d: string) {
 
 export function useClientDashboardData(clientId: string) {
   const { user } = useAuth();
+  // Frente AP: aprovação pendente e entrega nova aparecem na hora no painel do cliente.
+  useArquivosAoVivo(clientId, null, !!user);
 
   const { data: projects, isLoading: loadingProjects, isError: errorProjects, refetch: refetchProjects } = useQuery({
     queryKey: ["client-projects", clientId],

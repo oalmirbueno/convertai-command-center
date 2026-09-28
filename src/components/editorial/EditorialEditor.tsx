@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { UNSAFE_NavigationContext, useBeforeUnload } from "react-router-dom";
+import { AjudaRecolhida, Secao, juntar, superficie } from "@/components/sistema";
 import {
   CalendarClock,
   FileCheck2,
@@ -944,13 +945,16 @@ export default function EditorialEditor({
         {afterSave && (
           <div className="absolute inset-0 z-50 flex flex-col bg-background">
             <div className="shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-6 sm:py-5">
-              <p className="text-base font-semibold text-foreground">
-                Conteúdo salvo. Programar a publicação?
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Sem sair daqui: escolha a conta e o horário. Aprovado e
-                agendado, publica sozinho.
-              </p>
+              <div className="flex min-w-0 items-center">
+                <p className="min-w-0 truncate text-[15px] font-semibold text-foreground">
+                  Conteúdo salvo. Programar a publicação?
+                </p>
+                <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
+                  Sem sair daqui: escolha a conta e o horário. Aprovado e
+                  agendado, publica sozinho. Sem horário, a conta fica
+                  definida e você agenda depois pelo card.
+                </AjudaRecolhida>
+              </div>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
               <div className="space-y-2">
@@ -982,9 +986,8 @@ export default function EditorialEditor({
                   value={afterWhen}
                   onChange={(event) => setAfterWhen(event.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Sem horário, a conta fica definida e você agenda depois pelo
-                  card.
+                <p className="text-[12px] text-muted-foreground">
+                  Opcional
                 </p>
               </div>
             </div>
@@ -1015,14 +1018,21 @@ export default function EditorialEditor({
           </div>
         )}
         <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-4 pr-12 text-left sm:px-6 sm:py-5 sm:pr-14">
-          <DialogTitle>
-            {post
-              ? "Editar conteúdo editorial"
-              : revisionOf
-                ? "Nova revisão editorial"
-                : "Novo conteúdo editorial"}
-          </DialogTitle>
-          <DialogDescription className="max-w-3xl">
+          <div className="flex min-w-0 items-center">
+            <DialogTitle className="min-w-0 truncate">
+              {post
+                ? "Editar conteúdo editorial"
+                : revisionOf
+                  ? "Nova revisão editorial"
+                  : "Novo conteúdo editorial"}
+            </DialogTitle>
+            <AjudaRecolhida className="ml-2" rotulo="Como funciona">
+              {revisionOf
+                ? "Escolha a nova versão do arquivo e revise o copy antes de enviar novamente para aprovação."
+                : "Prepare o conteúdo e os planos por plataforma. Agendar e confirmar publicação são ações separadas."}
+            </AjudaRecolhida>
+          </div>
+          <DialogDescription className="sr-only">
             {revisionOf
               ? "Escolha a nova versão do arquivo e revise o copy antes de enviar novamente para aprovação."
               : "Prepare o conteúdo e os planos por plataforma. Agendar e confirmar publicação são ações separadas."}
@@ -1030,15 +1040,12 @@ export default function EditorialEditor({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
-          <section className="grid gap-4 rounded-xl border border-border p-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <h3 className="text-sm font-semibold text-foreground">
-                Informações principais
-              </h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Defina o conteúdo antes de vincular mídia, tarefa e plataformas.
-              </p>
-            </div>
+          <Secao
+            titulo="Informações principais"
+            nivel={3}
+            ajuda="Defina o conteúdo antes de vincular mídia, tarefa e plataformas."
+            corpoClassName="grid gap-4 md:grid-cols-2"
+          >
             <div className="space-y-2">
               <Label htmlFor="editorial-client">Cliente</Label>
               <Select
@@ -1092,15 +1099,15 @@ export default function EditorialEditor({
               />
             </div>
             {defaultContext && !post && !revisionOf && (
-              <div className="md:col-span-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-500">
+              <div className="md:col-span-2 rounded-lg bg-violet-500/[0.06] p-3">
+                <p className="text-[12px] font-semibold text-violet-500">
                   Direção vinda do Kanban
                 </p>
-                <p className="mt-2 text-xs font-medium text-foreground">
+                <p className="mt-2 text-[12px] font-medium text-foreground">
                   <span className="text-muted-foreground">Tema:</span>{" "}
                   {defaultTitle || title}
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">
                   <span className="font-medium text-foreground">Contexto:</span>{" "}
                   {defaultContext}
                 </p>
@@ -1184,44 +1191,39 @@ export default function EditorialEditor({
                 placeholder="Texto base que pode ser adaptado por plataforma"
               />
             </div>
-          </section>
+          </Secao>
 
           {contentLocked && (
-            <div className="flex gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Conteúdo protegido pela aprovação
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Mídia e textos não podem mudar nesta versão. Conta,
-                  horário, fuso, tarefa, responsável e notas internas
-                  continuam editáveis.
-                </p>
-              </div>
+            <div className="flex items-center rounded-lg bg-primary/5 px-4 py-3">
+              <LockKeyhole className="mr-3 h-4 w-4 shrink-0 text-primary" />
+              <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                Conteúdo protegido pela aprovação
+              </p>
+              <AjudaRecolhida className="ml-1.5" rotulo="O que continua editável">
+                Mídia e textos não podem mudar nesta versão. Conta,
+                horário, fuso, tarefa, responsável e notas internas
+                continuam editáveis.
+              </AjudaRecolhida>
             </div>
           )}
 
-          <section className="space-y-4 rounded-xl border border-border p-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">
-                Produção e aprovação
-              </h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                O calendário reutiliza os registros existentes de Arquivos,
-                Aprovações e Kanban.
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-muted/20 p-3 sm:p-4">
+          <Secao
+            titulo="Produção e aprovação"
+            nivel={3}
+            divisoria
+            ajuda="O calendário reutiliza os registros existentes de Arquivos, Aprovações e Kanban."
+            corpoClassName="space-y-4"
+          >
+            <div className={juntar(superficie.poco, "p-3 sm:p-4")}>
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">
+                <div className="flex min-w-0 items-center">
+                  <p className="min-w-0 truncate text-[12px] font-semibold text-foreground">
                     Mídia aprovada deste projeto
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <AjudaRecolhida className="ml-1.5" rotulo="Sobre a mídia aprovada">
                     Selecione aqui sem sair do editor. PDFs, documentos e
                     arquivos já usados não aparecem.
-                  </p>
+                  </AjudaRecolhida>
                 </div>
                 <Button
                   type="button"
@@ -1390,20 +1392,16 @@ export default function EditorialEditor({
                 />
               </div>
             </div>
-          </section>
+          </Secao>
 
           {showExistingPublicationPlan && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">
-                  Plano de publicação existente
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Edite apenas este plano já criado. Para um novo plano, use
-                  Agendar publicação na Agenda.
-                </p>
-              </div>
+          <Secao
+            titulo="Plano de publicação existente"
+            nivel={3}
+            divisoria
+            ajuda="Edite apenas este plano já criado. Para um novo plano, use Agendar publicação na Agenda."
+            corpoClassName="space-y-4"
+            acao={
               <Button
                 type="button"
                 variant="outline"
@@ -1427,7 +1425,8 @@ export default function EditorialEditor({
                 <Plus className="mr-1.5 h-4 w-4" />
                 Plataforma
               </Button>
-            </div>
+            }
+          >
 
             {publications.map((publication, index) => {
               const fieldPrefix = `editorial-publication-${
@@ -1461,7 +1460,7 @@ export default function EditorialEditor({
               return (
                 <div
                   key={publication.id || publication.idempotencyKey}
-                  className="space-y-4 rounded-xl border border-border bg-card p-4"
+                  className="space-y-4 rounded-lg border border-border bg-card p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -1642,11 +1641,11 @@ export default function EditorialEditor({
             })}
 
             {publications.length === 0 && (
-              <div className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border p-5 text-center text-[12px] text-muted-foreground">
                 O conteúdo pode ser salvo como rascunho sem plataforma.
               </div>
             )}
-          </section>
+          </Secao>
           )}
         </div>
 

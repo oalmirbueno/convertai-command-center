@@ -19,11 +19,14 @@ import {
   PUBLICAR_AGORA_EM_MIN,
   arquivoEditavel,
   payloadComData,
+  payloadComPerfis,
+  perfisValidos,
   planoDaSincronizacao,
   problemaNoHorario,
   publicacaoDaPeca,
   type AcaoDaSincronizacao,
   type ContaDoProjeto,
+  type PerfilDaPeca,
   type PostExistente,
   type PublicacaoExistente,
 } from "../_shared/entrega-na-agenda.ts";
@@ -221,7 +224,11 @@ export interface ResultadoDaSincronizacao {
  * item (planoDaSincronizacao decide). Idempotente: a mesma entrega não
  * duplica nem regrava. Lança ErroDaAgenda com a frase do motivo.
  */
-export async function sincronizarPecaNaAgenda(ctx: ContextoDaAgenda, t: TrabalhoParaAgenda): Promise<ResultadoDaSincronizacao> {
+export async function sincronizarPecaNaAgenda(
+  ctx: ContextoDaAgenda,
+  t: TrabalhoParaAgenda,
+  opcoes: { quando?: string | null } = {},
+): Promise<ResultadoDaSincronizacao> {
   if (t.status !== "entregue" || !t.file_ids?.length) {
     throw new ErroDaAgenda(409, "sem_entrega", "Entregue a arte em Arquivos antes de levar para a Agenda.");
   }
@@ -258,7 +265,7 @@ export async function sincronizarPecaNaAgenda(ctx: ContextoDaAgenda, t: Trabalho
       rodada: Math.max(1, Number(t.entrega_rodada) || 1),
     },
     existente,
-    { conta, arquivoAtualEditavel: arquivoEditavel(arquivoAtual) },
+    { conta, arquivoAtualEditavel: arquivoEditavel(arquivoAtual), quando: opcoes.quando ?? null },
   );
 
   if (plano.acao === "bloqueado") throw new ErroDaAgenda(409, "agenda_bloqueada", plano.motivo || "A Agenda não aceitou esta entrega.");
@@ -327,9 +334,13 @@ async function postEPublicacao(ctx: ContextoDaAgenda, t: TrabalhoParaAgenda) {
 export async function confirmarDataDaPeca(
   ctx: ContextoDaAgenda,
   t: TrabalhoParaAgenda,
-  pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string },
+  pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string; perfis?: string[] | null },
   agora = new Date(),
 ): Promise<ResultadoDaData> {
+  if (Array.isArray(pedido.perfis)) {
+    const comPerfis = await confirmarComPerfis(ctx, t, { ...pedido, perfis: pedido.perfis }, agora);
+    if (comPerfis) return comPerfis;
+  }
   const { post, pub } = await postEPublicacao(ctx, t);
   if (pub.status === "published") throw new ErroDaAgenda(409, "ja_publicado", "Esta peça já foi publicada.");
   if (pub.status === "failed") throw new ErroDaAgenda(409, "publicacao_falhou", "A publicação falhou. Use Tentar de novo.");
@@ -420,3 +431,133 @@ export async function desfazerDataDaPeca(ctx: ContextoDaAgenda, t: TrabalhoParaA
   if (error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(error));
   return { post_id: post.id, publicacao_id: pub.id, quando: null, status: "planned" };
 }
+
+// ------------------------------------------------------------------ perfis (frente AP, 28/09)
+
+const PLATAFORMAS_DA_PECA = ["instagram", "facebook"];
+
+/**
+ * Onde a peça pode sair: os perfis do Instagram e as páginas do Facebook
+ * ligados ao projeto do item (o projeto é a marca: Acerbi e CME ficam
+ * separadas). `escolhido`: já tem publicação viva no post da peça.
+ */
+export async function perfisDaPeca(
+  db: SupabaseClient,
+  t: Pick<TrabalhoParaAgenda, "client_id" | "task_id" | "post_id">,
+): Promise<{ projectId: string | null; perfis: PerfilDaPeca[]; post: PostExistente | null }> {
+  const post = await postAtualDaPeca(db, t);
+  let projectId = post?.project_id || null;
+  if (!projectId && t.task_id) {
+    const { data } = await db.from("tasks").select("project_id").eq("id", t.task_id).maybeSingle();
+    projectId = (data as { project_id: string | null } | null)?.project_id || null;
+  }
+  if (!projectId) return { projectId: null, perfis: [], post };
+  const { data: links } = await db
+    .from("project_external_accounts")
+    .select("external_account_id")
+    .eq("project_id", projectId)
+    .eq("client_id", t.client_id);
+  const ids = ((links as { external_account_id: string }[] | null) ?? []).map((l) => l.external_account_id);
+  if (!ids.length) return { projectId, perfis: [], post };
+  const [contasRes, conexoesRes] = await Promise.all([
+    db.from("external_accounts")
+      .select("id, platform, status, display_name, handle, created_at")
+      .in("id", ids)
+      .eq("client_id", t.client_id)
+      .in("platform", PLATAFORMAS_DA_PECA)
+      .eq("status", "active")
+      .order("created_at", { ascending: true }),
+    db.from("external_account_connections")
+      .select("external_account_id, connection_status, automation_enabled, expires_at")
+      .in("external_account_id", ids),
+  ]);
+  type Conexao = { external_account_id: string; connection_status: string | null; automation_enabled: boolean | null; expires_at: string | null };
+  const conexao: Record<string, Conexao> = {};
+  for (const c of (conexoesRes.data as Conexao[] | null) ?? []) conexao[c.external_account_id] = c;
+  const vivas = new Set((post?.publications || []).filter((p) => p.status !== "cancelled").map((p) => p.external_account_id || ""));
+  type Conta = { id: string; platform: string; display_name: string | null; handle: string | null };
+  const perfis: PerfilDaPeca[] = ((contasRes.data as Conta[] | null) ?? []).map((c) => {
+    const cx = conexao[c.id];
+    const automatico = c.platform === "instagram" && cx?.connection_status === "connected" && cx?.automation_enabled === true &&
+      (!cx.expires_at || Date.parse(cx.expires_at) > Date.now());
+    return {
+      id: c.id,
+      platform: c.platform === "facebook" ? "facebook" : "instagram",
+      nome: (c.display_name || "").trim() || (c.platform === "facebook" ? "Página do Facebook" : "Instagram"),
+      handle: c.handle ? String(c.handle) : null,
+      automatico,
+      escolhido: vivas.has(c.id),
+    };
+  });
+  // Instagram primeiro (é o que o painel publica sozinho), depois as páginas.
+  perfis.sort((a, b) => (a.platform === b.platform ? 0 : a.platform === "instagram" ? -1 : 1));
+  return { projectId, perfis, post };
+}
+
+/** Toda lâmina tem o sha256 que o envio automático exige (mesma regra do agendador da Mesa). */
+async function laminasComAssinatura(db: SupabaseClient, raizId: string): Promise<boolean> {
+  if (!UUID.test(raizId)) return false;
+  const { data } = await db.from("files").select("id, sha256").or(`id.eq.${raizId},parent_file_id.eq.${raizId}`);
+  const lista = (data as { sha256: string | null }[] | null) ?? [];
+  return lista.length > 0 && lista.every((f) => !!f.sha256 && /^[0-9a-f]{64}$/i.test(f.sha256));
+}
+
+/**
+ * Confirmar com os perfis escolhidos: o post fica com exatamente esses
+ * perfis, todos na data. Só enquanto nenhuma publicação saiu do plano
+ * (agendada, publicada ou em falha): nesse caso devolve null quando o
+ * conjunto é o mesmo (segue o reagendar de sempre) e recusa quando mudou.
+ */
+async function confirmarComPerfis(
+  ctx: ContextoDaAgenda,
+  t: TrabalhoParaAgenda,
+  pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string; perfis: string[] },
+  agora: Date,
+): Promise<ResultadoDaData | null> {
+  const { perfis, post } = await perfisDaPeca(ctx.db, t);
+  if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
+  const ids = perfisValidos(pedido.perfis, perfis);
+  if (!ids.length) {
+    throw new ErroDaAgenda(
+      400,
+      "sem_perfil",
+      perfis.length ? "Escolha ao menos um perfil, ou marque que não vai postar." : "O projeto não tem perfil ligado. Ligue o Instagram na Agenda.",
+    );
+  }
+  const vivas = post.publications.filter((p) => p.status !== "cancelled");
+  const foraDoPlano = vivas.filter((p) => p.status !== "planned");
+  const atuais = vivas.map((p) => p.external_account_id || "").sort().join(",");
+  if (foraDoPlano.length) {
+    if (foraDoPlano.some((p) => p.status === "published")) throw new ErroDaAgenda(409, "ja_publicado", "Esta peça já foi publicada.");
+    if (atuais === ids.slice().sort().join(",")) return null;
+    throw new ErroDaAgenda(409, "perfis_agendados", "A publicação já está agendada. Desfaça o agendamento para trocar os perfis.");
+  }
+  const raiz = await lerArquivo(ctx.db, post.primary_file_id);
+  const aprovado = arquivoAprovado(raiz);
+  let quando = pedido.quando;
+  if (pedido.agoraMesmo) {
+    if (!aprovado) throw new ErroDaAgenda(409, "sem_aprovacao", "Sem a aprovação do cliente não publica.");
+    quando = new Date(agora.getTime() + PUBLICAR_AGORA_EM_MIN * 60_000).toISOString();
+  }
+  const problema = problemaNoHorario(quando, agora, { agoraMesmo: !!pedido.agoraMesmo });
+  if (problema) throw new ErroDaAgenda(400, "horario_invalido", problema);
+  const assinadas = aprovado && raiz ? await laminasComAssinatura(ctx.db, raiz.id) : false;
+  const escolhidos = ids.map((id) => {
+    const p = perfis.find((x) => x.id === id) as PerfilDaPeca;
+    return { id: p.id, platform: p.platform, automatico: p.automatico && assinadas && t.file_ids.length <= 10 };
+  });
+  const payload = await payloadComPerfis(post, {
+    trabalhoId: t.id,
+    rodada: Math.max(1, Number(t.entrega_rodada) || 1),
+    perfis: escolhidos,
+    quando,
+    mutationId: pedido.mutationId,
+    assetFileIds: aprovado ? t.file_ids.slice() : null,
+  });
+  const { error } = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payload, p_expected_version: post.version });
+  if (error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(error));
+  const relido = await lerPostDaAgenda(ctx.db, post.id);
+  const pub = publicacaoDaPeca(relido?.publications || []);
+  return { post_id: post.id, publicacao_id: pub?.id || "", quando, status: pub?.status || (aprovado ? "scheduled" : "planned") };
+}
+
