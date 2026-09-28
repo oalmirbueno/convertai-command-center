@@ -80,16 +80,16 @@ export function CabecalhoDeSecao({
                   onClick={recolher.onAlternar}
                   aria-expanded={!recolhido}
                   title={recolhido ? "Mostrar" : "Recolher"}
-                  className={juntar("-ml-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco)}
+                  className={juntar("relative -left-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco)}
                   data-titulo-recolhivel=""
                 >
                   <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
-                  {/* 28/09 (dono: "título grande não pode quebrar"): uma linha só. O
-                      texto não encolhe (shrink-0) e tem teto na largura do botão menos
-                      a seta: sem isso o Chrome media o título 4 px menor e cortava
-                      "O que enviar e quan..." com a coluna inteira sobrando. No
-                      celular estreito o teto faz as reticências. */}
-                  <span className="max-w-[calc(100%-1.25rem)] shrink-0 truncate">{titulo}</span>
+                  {/* 28/09 (dono: "título grande não pode quebrar"): uma linha só, com
+                      reticências só quando falta espaço de verdade. O botão se desloca
+                      com relative -left-1 e NÃO com margem negativa: a margem tirava
+                      4 px da largura medida e o título cortava ("O que enviar e
+                      quan...") com a coluna inteira sobrando. */}
+                  <span className="min-w-0 truncate">{titulo}</span>
                 </button>
               </Titulo>
             ) : titulo ? (

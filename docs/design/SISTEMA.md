@@ -87,7 +87,9 @@ Sem CAIXA ALTA em subtítulo novo. Números com `tabular-nums`.
 ### 4.2 Organização e respiro (28/09, pedido do dono)
 
 - **Título de seção numa linha só.** Nunca quebra; se faltar espaço, reticências. O resumo do bloco
-  recolhido vai na linha **de baixo**, não ao lado espremendo o título.
+  recolhido vai na linha **de baixo**, não ao lado espremendo o título. Armadilha medida em 28/09: margem
+  negativa (`-ml-1`) no botão do título tira a mesma medida da largura calculada e o título corta com
+  espaço sobrando; para alinhar, use `relative -left-1`.
 - **Nada espremido numa linha só.** Uma barra de controles tem no máximo **duas linhas organizadas**; se
   ainda não couber, o resto vai para um **seletor lateral ou menu "..."**. Nunca uma terceira fileira.
 - **Nada de linha nova para um seletor pequeno** (ex.: "Pautas do mês | Arte rápida"): ele entra numa
