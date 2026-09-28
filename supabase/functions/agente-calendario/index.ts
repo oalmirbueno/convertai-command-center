@@ -174,6 +174,19 @@ import {
   MAX_PECAS_NA_AGENDA_LONGA,
 } from "./acoes-agenda.ts";
 import {
+  acaoComEscolha,
+  blocoDoAlvo,
+  candidatasDoPedido,
+  decidirRoteamento,
+  juntarAlvoNaAcao,
+  perguntaDaIntencao,
+  perguntasDoPedido,
+  resolverAlvo,
+  type AcaoComAlvo,
+  type AlvoDoPedido,
+  type DecisaoDoRoteamento,
+} from "./alvo-citado.ts";
+import {
   AGENTE_ESCOLHE,
   arcoDaCampanha,
   BASE_DO_ESTRATEGISTA,
@@ -3389,6 +3402,17 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   // 60 mil caracteres: o refazer e o criar do agente do Mês mandam 12 linhas com a referência de cada uma.
   const mensagem = texto(corpo.mensagem, 60_000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer que o agente prepare.");
+  // Frente AM (28/09): "mude/troque/corrija esse conteúdo" digitado no modo Criar vinha para cá e virava
+  // pauta nova (Mirante Luz, 15 pautas criadas e nenhuma peça mudada). Só a mensagem que a equipe digitou
+  // passa por aqui (rotear: true); o refazer e o criar em lotes do próprio agente não.
+  if (corpo.rotear === true) {
+    const rota = await rotaDoPedidoLivre(servico, chamador, clientId, mensagem);
+    if (rota.mudar) {
+      const r = await planejarMes(servico, chamador, { ...corpo, acao: "planejar_mes", mes: hojeSaoPaulo().slice(0, 7), roteado: true });
+      const dados = (await r.json()) as Record<string, unknown>;
+      return json({ ...dados, roteado_para: "planejar_mes", rota });
+    }
+  }
   const arquivosDoPedido = normalizarArquivos(corpo.arquivos);
   const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
   const { fim, uteis } = janelaDoPedidoLivre(inicio, mensagem);
@@ -5358,6 +5382,64 @@ async function julgarPublico(
 
 const textoDoCampo = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
 
+/** Teto de espera pelo Jev nos julgamentos do pedido (responde em menos de 1 s; sem resposta, vale a reserva em código). */
+const JEV_DO_PEDIDO_MS = 8_000;
+
+/**
+ * Frente AM: o pedido digitado no modo Criar muda o que já está na agenda?
+ * Uma pergunta ao Jev (Choice); sem Jev, a reserva em código (verbo de troca
+ * e menção a conteúdo que existe). Custo na carteira do cliente.
+ */
+async function rotaDoPedidoLivre(servico: SupabaseClient, chamador: Chamador, clientId: string, mensagem: string): Promise<DecisaoDoRoteamento> {
+  try {
+    const r = await jevPerguntar({ state: { mensagem: mensagem.slice(0, 4000) }, questions: { intencao: perguntaDaIntencao() } }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    const conversaId = await conversaDoAgenteDoMes(servico, clientId, chamador.userId).catch(() => clientId);
+    await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }).catch(() => null);
+    return decidirRoteamento(r.answers.intencao, mensagem);
+  } catch (e) {
+    console.error("[agente-calendario] rota do pedido sem Jev", { codigo: e instanceof JevErro ? e.codigo : "jev_indisponivel" });
+    return decidirRoteamento(null, mensagem);
+  }
+}
+
+/**
+ * Frente AM: no agente do mês, o Jev diz se a mensagem muda peças gravadas e
+ * QUAL peça ela cita (candidatas pré-selecionadas em código, iguais juntas).
+ * Falha do Jev não derruba o pedido: segue sem peça citada.
+ */
+async function julgarPedidoNaAgenda(
+  mensagem: string,
+  pecas: PecaComApelido[],
+  c: { clientId: string; conversaId: string; criadoPor: string },
+): Promise<{ rota: DecisaoDoRoteamento; alvo: AlvoDoPedido; erro: string | null }> {
+  const candidatas = candidatasDoPedido(mensagem, pecas);
+  const { state, questions } = perguntasDoPedido(mensagem, candidatas);
+  try {
+    const r = await jevPerguntar({ state, questions }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    await cobrarJev(r, { clientId: c.clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: c.conversaId }, criadoPor: c.criadoPor }).catch(() => null);
+    return {
+      rota: decidirRoteamento(r.answers.intencao, mensagem),
+      alvo: resolverAlvo(r.answers.alvo, candidatas, pecas, r.answers.alvo_claro, r.answers.uma_so),
+      erro: null,
+    };
+  } catch (e) {
+    const codigo = e instanceof JevErro ? e.codigo : "jev_indisponivel";
+    console.error("[agente-calendario] peca citada sem Jev", { codigo });
+    return { rota: decidirRoteamento(null, mensagem), alvo: { tipo: "nenhum" }, erro: codigo };
+  }
+}
+
+/** Frase do agente quando o painel preparou a troca pela peça citada (o texto do modelo pode não saber). */
+export function fraseDaTroca(acao: AcaoComAlvo | null): string {
+  if (!acao) return "";
+  if (acao.escolher_um && acao.escolher_um.opcoes.length > 1) {
+    const n = acao.escolher_um.opcoes.length;
+    return `Achei ${n} peças ${acao.escolher_um.motivo === "iguais" ? "iguais" : "parecidas"} com o que você citou. Qual delas? Escolha no cartão: só a escolhida muda, e dá para desfazer.`;
+  }
+  if (acao.alvo_por === "jev") return "A troca está pronta no cartão: confirme e eu faço na agenda, com Desfazer.";
+  return "";
+}
+
 /**
  * planejar_mes { client_id, mensagem, mes (AAAA-MM ou AAAA-MM-01), proposta_id?,
  * anexos?, arquivos?, modelo_id?, raciocinio? }: o agente do mês conversando e
@@ -5434,7 +5516,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   }
 
   const promptDoPedido = [mensagem, arquivos.lidos.map((a) => a.texto).join("\n").slice(0, 6000), mcp.texto.slice(0, 3000)].filter(Boolean).join("\n\n");
-  const [modeloDoMes, lidosAntes, decisaoDoPublico] = await Promise.all([
+  const [modeloDoMes, lidosAntes, decisaoDoPublico, julgamento] = await Promise.all([
     resolverModeloDoMes(corpo.modelo_id, corpo.raciocinio),
     leiturasAnteriores(servico, clientId, caminhosDeLeitura),
     julgarPublico(clientId, {
@@ -5449,8 +5531,13 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
         extra.publicados_nos_ultimos_90_dias.slice(0, 12).map((a) => a.titulo).join("; "),
       ],
     }, conversaId, chamador.userId),
+    // Frente AM: o pedido muda peças gravadas? E qual peça ele cita? (Jev, em paralelo; menos de 1 s)
+    julgarPedidoNaAgenda(mensagem, pecasDaAgenda, { clientId, conversaId, criadoPor: chamador.userId }),
   ]);
   const { modelo, raciocinio } = modeloDoMes;
+  // Pedido que veio do modo Criar já passou pelo roteamento: é de mudar o que existe.
+  const pedeMudanca = corpo.roteado === true || julgamento.rota.mudar;
+  const alvoDoPedido: AlvoDoPedido = pedeMudanca ? julgamento.alvo : { tipo: "nenhum" };
 
   const blocoDaProposta = proposta
     ? `\nPROPOSTA DO ESTRATEGISTA PARA ESTE MÊS (JSON; ${editavel ? "pode sugerir mudanças" : "já gravada na agenda: não muda por aqui"}):\n${JSON.stringify({
@@ -5466,7 +5553,9 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
 ${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
 ${mensagem}
-${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}${notaDoSistema(imagens.aviso)}
+${pedeMudanca ? `
+A MENSAGEM PEDE PARA MUDAR CONTEÚDOS QUE JÁ ESTÃO NA AGENDA: responda com acoes_na_agenda (editar_textos, refazer, datas ou formatos) nas peças que casam; não crie conteúdo novo no lugar e não diga que não consegue mudar o painel (a lista com Confirmar é a mudança). Peça repetida ou parecida é aviso, nunca motivo para não fazer.
+` : ""}${blocoDoAlvo(alvoDoPedido)}${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}${notaDoSistema(imagens.aviso)}
 ${REGRAS_DO_AGENTE_DO_MES}
 
 TAREFA: você é o estrategista planejando e executando o mês junto com a equipe. Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda, o plano combinado, o MCP e os arquivos.
@@ -5545,7 +5634,9 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   }
 
   // Peças já gravadas (apagar, refazer, datas, formatos, textos, campanhas): só a lista; a equipe confirma.
-  const acaoNaAgenda = normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas);
+  // Frente AM: a peça citada entra na ação ("Qual delas?" quando há iguais ou parecidas; refazer quando o
+  // agente não mexeu nela) e peça repetida vira aviso no cartão, nunca motivo para não fazer.
+  const acaoNaAgenda = juntarAlvoNaAcao(normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas), alvoDoPedido, pecasDaAgenda, mensagem);
   // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
   const geracao = normalizarGeracao(r.gerar_conteudos, mesDeHoje, acoesCtx.projeto, acoesCtx.frequencia ?? 3);
   // Material colado ou anexado: conteúdos novos nas datas e formatos dele (a tela cria em lotes, com custo antes).
@@ -5554,7 +5645,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const acaoDoPublico = acaoDeAtualizarPublico(r.atualizar_publico, publicoAtual, decisaoDoPublico, clientId);
 
   // Imagem anexada que ficou de fora (anti-bug 26/09, AB2): a equipe lê o aviso na resposta.
-  const resposta = respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]);
+  // Frente AM: com "Qual delas?" ou a troca preparada pelo painel, a fala diz o que fazer no cartão.
+  const resposta = respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda)]);
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
   if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
@@ -5573,6 +5665,9 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     mcp: mcp.ativos,
     arquivos: arquivos.lidos.length + lidosAntes.length,
     cortes: orcamento.cortes.map((c) => c.chave),
+    pedido_de_mudanca: pedeMudanca,
+    peca_citada: alvoDoPedido.tipo,
+    jev_erro: julgamento.erro,
   };
   anexosDaResposta.push(contextoUsado);
 
@@ -5973,7 +6068,9 @@ type AntesDoTexto = {
   post_id: string | null;
   post: { title: string | null; default_caption: string | null } | null;
 };
-type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?: string; antes?: AntesDoTexto; campos?: string[] };
+/** Prova do que mudou: a peça relida do banco depois de gravar (frente AM). */
+type DepoisDoTexto = { title: string | null; description: string | null };
+type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?: string; antes?: AntesDoTexto; depois?: DepoisDoTexto; campos?: string[] };
 
 /** Item de proposta com os textos novos (lâminas conferidas pela regra de menos texto). */
 export function itemComTextosNovos(item: Record<string, unknown>, campos: CamposDeTexto): Record<string, unknown> {
@@ -6098,10 +6195,14 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
       if (titulo) mudarTarefa.title = titulo.slice(0, 200);
       const { error } = await servico.from("tasks").update(mudarTarefa).eq("id", tarefa.id).is("deleted_at", null);
       if (error) throw new Error("Não foi possível reescrever esta peça. Tente de novo.");
+      // Prova: relê a peça gravada (o cartão mostra o antes e o depois). O antes fica guardado para o Desfazer.
+      const { data: relida } = await servico.from("tasks").select("title, description").eq("id", tarefa.id).maybeSingle();
+      const depois = (relida as DepoisDoTexto | null) ?? null;
       resultados.push({
         task_id: tarefa.id,
         titulo: ed.titulo,
         ok: true,
+        depois: depois ? { title: depois.title, description: String(depois.description || "").slice(0, 600) } : undefined,
         campos: Object.keys(ed.campos),
         antes: {
           title: tarefa.title,
@@ -6162,10 +6263,15 @@ async function desfazerTextos(servico: SupabaseClient, clientId: string, lista: 
  * motivo. Dá para desfazer (desfazer_acao_agenda).
  */
 async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
-  const { m, acao, gravar } = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
-  if (acao.executada_em) throw new ErroHttp(409, "acao_ja_feita", "Esta ação já foi feita.");
-  if (acao.descartada_em) throw new ErroHttp(409, "acao_descartada", "Esta ação foi descartada. Peça de novo ao agente.");
-  if (corpo.descartar === true) return json({ anexo: await gravar({ ...acao, descartada_em: new Date().toISOString() }) });
+  const lida = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
+  const { m, gravar } = lida;
+  if (lida.acao.executada_em) throw new ErroHttp(409, "acao_ja_feita", "Esta ação já foi feita.");
+  if (lida.acao.descartada_em) throw new ErroHttp(409, "acao_descartada", "Esta ação foi descartada. Peça de novo ao agente.");
+  if (corpo.descartar === true) return json({ anexo: await gravar({ ...lida.acao, descartada_em: new Date().toISOString() }) });
+  // Frente AM: com "Qual delas?", só a peça escolhida no cartão muda (as iguais saem da lista).
+  const escolhida = acaoComEscolha(lida.acao as AcaoComAlvo & Record<string, unknown>, corpo.escolha);
+  if (!escolhida.ok) throw new ErroHttp(400, "escolha_invalida", escolhida.motivo);
+  const acao = escolhida.acao;
 
   const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];
   const refazer = Array.isArray(acao.refazer) ? acao.refazer : [];
@@ -6260,8 +6366,13 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   if (editadas) partes.push(`${editadas} ${editadas === 1 ? "campanha editada" : "campanhas editadas"}`);
   if (reescritos) partes.push(`${reescritos} ${reescritos === 1 ? "peça reescrita" : "peças reescritas"}`);
   if (falhas) partes.push(`${falhas} não ${falhas === 1 ? "pôde ser feita" : "puderam ser feitas"} (motivo na lista)`);
+  // Prova do que mudou (relido do banco): até 3 títulos, antes e depois.
+  const provas = textos
+    .filter((r) => r.ok && r.antes && r.depois && r.depois.title && r.depois.title !== r.antes.title)
+    .slice(0, 3)
+    .map((r) => `"${String(r.antes?.title || "").slice(0, 80)}" agora é "${String(r.depois?.title || "").slice(0, 80)}"`);
   await registrarMensagens(servico, m.conversa_id, m.client_id, [
-    { papel: "sistema", conteudo: `Agenda: ${partes.join(", ") || "nada mudou"}. Dá para desfazer.` },
+    { papel: "sistema", conteudo: `Agenda: ${partes.join(", ") || "nada mudou"}.${provas.length ? ` ${provas.join("; ")}.` : ""} Dá para desfazer.` },
   ]);
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_acao_na_agenda", origin: "mesa:agente-calendario",

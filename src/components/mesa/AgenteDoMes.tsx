@@ -37,6 +37,7 @@ import {
   partesDoPedido,
 } from "./mesaV4Api";
 import {
+  acaoComEscolha,
   acaoNaAgendaDaMensagem,
   aplicarMudanca,
   chavesDoPlano,
@@ -290,9 +291,15 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
-  const [atual, setAtual] = useState<AcaoNaAgenda>(acao);
+  const [guardada, setAtual] = useState<AcaoNaAgenda>(acao);
   const [lote, setLote] = useState<{ feito: number; total: number } | null>(null);
+  // "Qual delas?" (frente AM): com peças iguais ou parecidas, a equipe escolhe uma e só ela muda.
+  const [escolha, setEscolha] = useState<string | null>(acao.escolhida || null);
+  const opcoes = guardada.escolher_um && guardada.escolher_um.opcoes.length > 1 ? guardada.escolher_um.opcoes : null;
+  const escolhida = guardada.escolhida || escolha;
+  const atual = acaoComEscolha(guardada, escolhida);
   const estado = atual.desfeita_em ? "desfeita" : atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
+  const faltaEscolher = !!opcoes && estado === "aberta" && !escolhida;
   const textos = atual.editar_textos || [];
   const total = atual.apagar.length + atual.mudar_data.length + atual.mudar_formato.length + atual.refazer.length + atual.editar_campanhas.length + textos.length;
   const todos = (atual.resultados || []).concat(atual.mudancas || [], atual.formatos || [], atual.refeitos || [], atual.textos || []);
@@ -330,7 +337,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   const agir = async (tipo: "confirmar" | "descartar" | "desfazer") => {
     setFazendo(tipo);
     try {
-      const data = tipo === "desfazer" ? await desfazerAcaoNaAgenda(mensagemId) : await executarAcaoNaAgenda(mensagemId, tipo === "descartar");
+      const data = tipo === "desfazer" ? await desfazerAcaoNaAgenda(mensagemId) : await executarAcaoNaAgenda(mensagemId, tipo === "descartar", tipo === "confirmar" ? escolhida : null);
       depois(tipo, data);
     } catch (e) {
       avisarErro(e, tipo === "desfazer" ? "Não foi possível desfazer" : tipo === "descartar" ? "Não foi possível cancelar" : "Não foi possível mexer na agenda");
@@ -343,7 +350,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   const confirmarERefazer = async () => {
     setFazendo("confirmar");
     try {
-      const data = await executarAcaoNaAgenda(mensagemId, false);
+      const data = await executarAcaoNaAgenda(mensagemId, false, escolhida);
       depois("confirmar", data);
       const novo = data && data.anexo ? acaoNaAgendaDaMensagem([data.anexo]) : null;
       const sairam = (novo && novo.refeitos ? novo.refeitos : []).filter((r) => r.ok && !r.motivo).map((r) => r.task_id);
@@ -369,6 +376,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
 
   const linhaDoTexto = (i: EdicaoDeTextoNaAgenda) => {
     const motivo = motivoDe(i.task_id, atual.textos);
+    const feito = (atual.textos || []).find((r) => r.task_id === i.task_id) || null;
     const c = i.campos || {};
     const o_que = [c.titulo || c.tema ? "título" : "", c.publico ? "público" : "", c.gancho ? "gancho" : "", c.cards && c.cards.length ? `${c.cards.length} ${c.cards.length === 1 ? "lâmina" : "lâminas"}` : "", c.cta ? "CTA" : "", c.copy ? "legenda" : ""].filter(Boolean).join(", ");
     return (
@@ -379,6 +387,21 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           <span className="font-medium">{i.titulo}</span>
           <span className="text-muted-foreground"> · {i.data ? diaCurto(i.data) : "sem data"}{o_que ? ` · ${o_que}` : ""}</span>
           {(c.tema || c.publico) && <span className="block text-[11.5px] text-muted-foreground">{c.tema ? `Tema: ${c.tema}` : ""}{c.tema && c.publico ? " · " : ""}{c.publico ? `Público: ${c.publico}` : ""}</span>}
+          {(c.titulo || c.tema || c.gancho) && (
+            <span className="mt-0.5 block text-[11.5px] leading-snug" data-antes-depois>
+              <span className="text-muted-foreground">Antes: </span>
+              <span className="line-through decoration-muted-foreground/60">{i.titulo}</span>
+              <span className="text-muted-foreground"> · Depois: </span>
+              <span>{c.titulo || c.tema || i.titulo}</span>
+              {c.gancho && <span className="block text-muted-foreground">Gancho novo: {c.gancho}</span>}
+            </span>
+          )}
+          {feito && feito.ok && feito.depois && feito.depois.title && (
+            <span className="block text-[11.5px] text-foreground" data-prova>
+              <Check className="mr-1 inline h-3 w-3 text-success" />
+              Gravado na agenda: {feito.depois.title}
+            </span>
+          )}
           {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
         </span>
       </li>
@@ -412,6 +435,38 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
       </p>
       {atual.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {(atual.avisos || []).map((a) => (
+        <p key={a} className="mt-1 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-aviso-duplicado>{a}</p>
+      ))}
+      {opcoes && estado === "aberta" && (
+        <div className="mt-2 min-w-0" data-qual-delas>
+          <p className="text-[12.5px] font-medium">{escolhida ? "Escolhida:" : "Qual delas?"}</p>
+          <div className="mt-1 flex min-w-0 flex-col">
+            {opcoes.map((o) => {
+              const marcada = escolhida === o.task_id;
+              if (escolhida && !marcada) return null;
+              return (
+                <button
+                  key={o.task_id}
+                  type="button"
+                  onClick={() => setEscolha(marcada ? null : o.task_id)}
+                  disabled={!!fazendo}
+                  aria-pressed={marcada}
+                  className={`mb-1 min-w-0 rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] leading-snug [overflow-wrap:anywhere] ${marcada ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/60"}`}
+                >
+                  <span className="font-medium">{o.titulo}</span>
+                  <span className="block text-[11.5px] text-muted-foreground">{o.detalhe}</span>
+                </button>
+              );
+            })}
+          </div>
+          {escolhida && (
+            <button type="button" className="text-[11.5px] text-muted-foreground underline-offset-2 hover:underline" onClick={() => setEscolha(null)} disabled={!!fazendo}>
+              Trocar a escolha
+            </button>
+          )}
+        </div>
+      )}
       <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
         {atual.apagar.map((i) => linha(i, "sai"))}
         {atual.refazer.map((i) => linha(i, "refaz"))}
@@ -456,11 +511,11 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                 }}
                 executar={confirmarERefazer}
                 fecharAoConfirmar
-                disabled={!!fazendo}
+                disabled={!!fazendo || faltaEscolher}
                 className="mb-1 mr-1.5 h-8"
               />
             ) : (
-              <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo}>
+              <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo || faltaEscolher}>
                 {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
                 {atual.apagar.length && total === atual.apagar.length
                   ? `Confirmar e apagar ${atual.apagar.length}`
@@ -918,10 +973,12 @@ export default function AgenteDoMes({
         ? await ajustarProposta(ajustando.id, mensagem)
         : planejando || naAgenda
           ? await planejarMes({ clientId, mensagem, mes, anexos: caminhos, arquivos: doEnvio.corpo })
-          : await pedidoLivre({ clientId, mensagem, anexos: caminhos, campanhaId: campanhaEscolhida ? campanhaEscolhida.id : null });
+          : await pedidoLivre({ clientId, mensagem, anexos: caminhos, campanhaId: campanhaEscolhida ? campanhaEscolhida.id : null, rotear: true });
+      // "Mude / troque / corrija esse conteúdo" no modo Criar: o servidor (Jev) manda para o agente que mexe na agenda.
+      const roteado = !!data && (data as { roteado_para?: string }).roteado_para === "planejar_mes";
       // A resposta entra na conversa antes de o "Preparando" sair da tela.
       await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
-      if (planejando || naAgenda) void queryClient.invalidateQueries({ queryKey: chavesDoPlano.planos(clientId) });
+      if (planejando || naAgenda || roteado) void queryClient.invalidateQueries({ queryKey: chavesDoPlano.planos(clientId) });
       return data;
     } catch (e) {
       setTexto((t) => t || mensagem);

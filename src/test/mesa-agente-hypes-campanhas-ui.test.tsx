@@ -175,6 +175,8 @@ describe("agente do mês", () => {
       client_id: CLIENTE,
       mensagem: "Arte de depoimentos com estes prints",
       anexos: [caminho],
+      // Frente AM: a mensagem digitada passa pelo roteamento (mudar o que existe x criar novo).
+      rotear: true,
     });
   });
 

@@ -408,6 +408,12 @@ export interface CorpoDoPedido {
   anexos?: string[];
   campanhaId?: string | null;
   dataInicio?: string;
+  /**
+   * Mensagem digitada pela equipe no modo Criar: o servidor pergunta ao Jev se
+   * ela muda o que já está na agenda e, se mudar, responde pelo agente que
+   * planeja o mês (cartão com Confirmar). O refazer e o criar em lotes não mandam.
+   */
+  rotear?: boolean;
 }
 
 export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
@@ -415,6 +421,7 @@ export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
   if (p.anexos && p.anexos.length) corpo.anexos = p.anexos.slice(0, MAX_ANEXOS);
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.dataInicio) corpo.data_inicio = p.dataInicio;
+  if (p.rotear) corpo.rotear = true;
   return corpo;
 }
 

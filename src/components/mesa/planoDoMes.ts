@@ -394,6 +394,15 @@ export interface ResultadoDaAcaoNaAgenda {
   motivo?: string;
   de?: string | null;
   para?: string;
+  /** Reescrever textos: a peça antes e relida do banco depois de gravar (a prova do que mudou). */
+  antes?: { title?: string | null } | null;
+  depois?: { title?: string | null; description?: string | null } | null;
+}
+
+/** Uma das peças iguais ou parecidas do "Qual delas?" (o pedido citou uma, a agenda tem mais de uma). */
+export interface OpcaoDaEscolha extends ItemDaAcaoNaAgenda {
+  status: string | null;
+  detalhe: string;
 }
 
 /** Reescrever textos de uma peça gravada (sem gerar do zero). */
@@ -423,6 +432,29 @@ export interface AcaoNaAgenda {
   refeitos?: ResultadoDaAcaoNaAgenda[];
   formatos?: ResultadoDaAcaoNaAgenda[];
   campanhas_editadas?: ResultadoDaCampanhaEditada[];
+  /** "Qual delas?": a mudança vale para uma destas peças; a equipe escolhe e só ela muda. */
+  escolher_um?: { task_ids: string[]; opcoes: OpcaoDaEscolha[]; motivo: "iguais" | "parecidas" };
+  /** A peça escolhida (depois de confirmar). */
+  escolhida?: string;
+  /** Peça repetida na agenda e afins: só aviso, nunca trava a mudança. */
+  avisos?: string[];
+}
+
+const LISTAS_DE_PECAS = ["apagar", "mudar_data", "mudar_formato", "refazer", "editar_textos"] as const;
+
+/**
+ * A ação com a escolha do "Qual delas?" aplicada: as outras opções saem de
+ * todas as listas (espelho de acaoComEscolha em
+ * supabase/functions/agente-calendario/alvo-citado.ts). Sem escolha, igual.
+ */
+export function acaoComEscolha(acao: AcaoNaAgenda, escolha: string | null | undefined): AcaoNaAgenda {
+  const e = acao.escolher_um;
+  if (!e || !e.task_ids.length || !escolha) return acao;
+  const saida: AcaoNaAgenda = { ...acao };
+  for (const k of LISTAS_DE_PECAS) {
+    (saida as unknown as Record<string, unknown>)[k] = (acao[k] as ItemDaAcaoNaAgenda[]).filter((i) => e.task_ids.indexOf(i.task_id) < 0 || i.task_id === escolha);
+  }
+  return saida;
 }
 
 /** Anexo de ação na agenda numa mensagem do agente, ou null. */
@@ -444,8 +476,15 @@ export function acaoNaAgendaDaMensagem(anexos: unknown[] | null | undefined): Ac
   return null;
 }
 
-export const executarAcaoNaAgenda = (mensagemId: string, descartar = false) =>
-  chamarFuncao<any>("agente-calendario", descartar ? { acao: "executar_acao_agenda", mensagem_id: mensagemId, descartar: true } : { acao: "executar_acao_agenda", mensagem_id: mensagemId });
+export const executarAcaoNaAgenda = (mensagemId: string, descartar = false, escolha?: string | null) =>
+  chamarFuncao<any>(
+    "agente-calendario",
+    descartar
+      ? { acao: "executar_acao_agenda", mensagem_id: mensagemId, descartar: true }
+      : escolha
+        ? { acao: "executar_acao_agenda", mensagem_id: mensagemId, escolha }
+        : { acao: "executar_acao_agenda", mensagem_id: mensagemId },
+  );
 
 export const desfazerAcaoNaAgenda = (mensagemId: string) =>
   chamarFuncao<any>("agente-calendario", { acao: "desfazer_acao_agenda", mensagem_id: mensagemId });

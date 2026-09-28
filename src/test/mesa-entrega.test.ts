@@ -103,14 +103,16 @@ describe("custo do Jev na carteira", () => {
     // + a memória editorial (frente AP, 27/09): uma pergunta por geração, com a sua cobrança.
     // + frente AE (28/09): o tipo da campanha pelo pedido (agente-calendario) e a arte rápida (estudio-arte:
     // arte única ou carrossel, a campanha citada e o papel de cada imagem, numa pergunta só).
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(6);
+    // + frente AM (28/09): o roteamento do modo Criar (mudar o que existe x criar novo) e a peça citada
+    // no agente do Mês (intenção, qual peça, se está clara e se é uma só, numa pergunta só).
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(8);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
     // direcaoPedePessoa (Noul "a direção pede pessoa?", uma por geração da lâmina normal com
     // rosto escolhido, fora de laço). Cada pergunta, uma cobrança; nenhuma se repete.
     expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(6);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(6);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(8);
     expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(6);
     // Cada jevPerguntar do Estúdio tem o seu cobrarJev logo depois (uma cobrança por pergunta).
     const perguntas = estudio.split("await jevPerguntar(").slice(1);
