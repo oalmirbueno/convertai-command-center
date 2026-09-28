@@ -30,7 +30,7 @@ import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEdito
 import { useKitDoCliente } from "./contextoDoCliente";
 import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
-import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 
 /**
  * Planejamento automático: a pessoa escolhe o período (de um mês até 12), a
@@ -691,14 +691,13 @@ export default function PlanejamentoAutomatico() {
   return (
     <div className="space-y-4">
       <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
-        <div className="flex min-w-0 items-center">
-          <p className="flex min-w-0 items-center text-[14px] font-semibold">
-            <CalendarRange className="mr-1.5 h-4 w-4 shrink-0 text-primary" /> Planejar e preencher a agenda
-          </p>
-          <AjudaRecolhida className="ml-1.5" rotulo="Como funciona o planejar e preencher">
-            Para cada mês do período, o estrategista propõe os temas, a Mesa escolhe os melhores pela nota do Jev, detalha e grava na agenda. Até três meses correm ao mesmo tempo e cada um entra na agenda assim que fica pronto; você pode parar a qualquer hora (o que já começou termina).
-          </AjudaRecolhida>
-        </div>
+        <CabecalhoDeSecao
+          nivel={3}
+          icone={<CalendarRange className="h-4 w-4" />}
+          titulo="Planejar e preencher a agenda"
+          rotuloDaAjuda="Como funciona o planejar e preencher"
+          ajuda="Para cada mês do período, o estrategista propõe os temas, a Mesa escolhe os melhores pela nota do Jev, detalha e grava na agenda. Até três meses correm ao mesmo tempo e cada um entra na agenda assim que fica pronto; você pode parar a qualquer hora (o que já começou termina)."
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Campo rotulo="De">
             <Select value={de} onValueChange={setDe} disabled={rodando}>

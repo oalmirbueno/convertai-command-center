@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, List, Loader2, Palette, Sparkles, X } from "lucide-react";
@@ -16,7 +16,8 @@ import {
 import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
-import { TituloDeSecao } from "./Seletores";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useArtesDoMes, SEM_ARTES } from "./MesArtes";
 import {
   CartaoDoItem,
@@ -277,6 +278,16 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
     next.set("mes", m);
     setParams(next, { replace: true });
   };
+
+  // Recolher padronizado (lembrado por cliente). Ir para outro mês pela tela
+  // (Ver no mês, setas) abre a agenda de novo, para o pedido não sumir.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:mes:agenda:${clientId}`, false);
+  const mesAnterior = useRef(mes);
+  useEffect(() => {
+    if (mesAnterior.current === mes) return;
+    mesAnterior.current = mes;
+    if (recolhido) setRecolhido(false);
+  }, [mes, recolhido, setRecolhido]);
 
   const [vista, setVista] = useState<Vista>(lerVista);
   const trocarVista = (v: Vista) => {
@@ -609,17 +620,27 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   );
 
   return (
-    <section id="agenda-do-mes" className="scroll-mt-40 space-y-3 lg:scroll-mt-4">
-      <TituloDeSecao
+    <section id="agenda-do-mes" className="scroll-mt-40 space-y-3 lg:scroll-mt-4" data-recolhido={recolhido ? "sim" : "nao"}>
+      <CabecalhoDeSecao
+        titulo="Agenda do mês"
+        recolher={{
+          recolhido,
+          onAlternar: () => setRecolhido(!recolhido),
+          resumo: `${rotuloDoMes(mes).charAt(0).toUpperCase()}${rotuloDoMes(mes).slice(1)}${
+            dados ? ` · ${itensDaMesa.length} ${itensDaMesa.length === 1 ? "peça" : "peças"}` : ""
+          }`,
+        }}
         acao={
-          <Link to={`/calendario?client=${clientId}`} className="text-[12px] text-primary underline-offset-2 hover:underline">
-            Abrir na Agenda
-          </Link>
+          recolhido ? undefined : (
+            <Link to={`/calendario?client=${clientId}`} className="text-[12px] text-primary underline-offset-2 hover:underline">
+              Abrir na Agenda
+            </Link>
+          )
         }
-      >
-        Agenda do mês
-      </TituloDeSecao>
+      />
 
+      {!recolhido && (
+      <>
       {agenda.isError && <AvisoDeErro erro={agenda.error} />}
 
       <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
@@ -801,6 +822,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
           </>
         )}
       </div>
+      </>
+      )}
     </section>
   );
 }

@@ -29,6 +29,8 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, type Trabalho } from "./useItensDoMes";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { dataEHoraCurta, JanelaDaPublicacao, TOM_DO_ESTADO, useEstadoDaPeca } from "./PublicacaoDaPeca";
 
 /**
@@ -402,6 +404,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [laminas, setLaminas] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
+  const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, false);
 
   const melhores = useQuery({
     queryKey: ["mesa", "melhores-horarios", clientId],
@@ -436,6 +439,13 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   };
 
   const p = previsao.data;
+  // Recolhido, uma linha: o horário e o plano.
+  const resumoDosAjustes = [
+    horarioAutomatico ? "Horário automático" : `Horário fixo ${(p && p.hora_publicacao) || "09:00"}`,
+    p && p.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   useEffect(() => {
     if (!p || editando) return;
     setHora(p.hora_publicacao || "09:00");
@@ -515,18 +525,22 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   );
 
   return (
-    <section className="space-y-3 border-y border-border py-4 text-[13px]">
-      {!editando ? (
+    <section className="space-y-3 border-y border-border py-4 text-[13px]" data-recolhido={recolhido && !editando ? "sim" : "nao"}>
+      {/* Configuração da entrega: recolhível (lembrado por cliente); editando, fica aberta. */}
+      <CabecalhoDeSecao
+        titulo="Publicação e plano"
+        recolher={editando ? undefined : { recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: resumoDosAjustes }}
+        acao={
+          podeEditar && !editando && !recolhido ? (
+            <Button type="button" size="sm" variant="ghost" className="-my-1 h-8 text-[12px]" onClick={() => setEditando(true)}>
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar
+            </Button>
+          ) : undefined
+        }
+      />
+      {recolhido && !editando ? null : !editando ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-1.5">
-            <div className="flex items-start">
-              <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-[22px]">Publicação e plano</h2>
-              {podeEditar && (
-                <Button type="button" size="sm" variant="ghost" className="-mt-1 h-8 shrink-0 text-[12px]" onClick={() => setEditando(true)}>
-                  <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar
-                </Button>
-              )}
-            </div>
             <p className="leading-relaxed">
               {horarioAutomatico
                 ? `Cada post sai no melhor horário do seu tipo, de segunda a sexta. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
