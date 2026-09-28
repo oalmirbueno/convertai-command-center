@@ -263,7 +263,7 @@ import {
   resumoDaArvore,
   situacaoDaConta,
 } from "./gerenciador.ts";
-import { candidatosDaOrdem, decidirOrdem, pareceOrdemDireta, perguntasDaOrdem } from "./ordem-direta.ts";
+import { type CandidatoDaOrdem, candidatosDaOrdem, citadosNaMensagem, decidirOrdem, type EscolhaDeAlvo, pareceOrdemDireta, perguntasDaOrdem, trechoParaBuscarNaMeta } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
 import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
 import { caminhoSeguro } from "../_shared/acoes-do-agente.ts";
@@ -6072,7 +6072,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const modoAssumir = corpo.modo === "assumir_plano";
   const mensagem = texto(corpo.mensagem, 4000) || (modoAssumir ? MENSAGEM_DE_ASSUMIR_O_PLANO : "");
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente sênior.");
-  const pesquisar = corpo.pesquisar !== false;
+  let pesquisar = corpo.pesquisar !== false;
   let plano: Plano | null = null;
   if (corpo.plano_id) {
     plano = await carregarPlano(servico, corpo.plano_id);
@@ -6085,6 +6085,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   // fica gravada AO CHEGAR, com o andamento que a tela acompanha; qualquer falha também fica na conversa.
   const pedidoId = crypto.randomUUID();
   const inicioDoPedido = Date.now();
+  let acaoClara = false;
   const andamento = andamentoDoPedido(servico, clientId, pedidoId);
   await registrarMensagens(servico, conversaId, clientId, [{ id: pedidoId, papel: "usuario", conteudo: mensagem, anexos: [andamento.primeiro()] }]);
   const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
@@ -6092,10 +6093,14 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   // Ordem direta e única (pausar, ativar, renomear, verba com valor): sem o modelo pesado, em segundos.
   if (!modoAssumir && pareceOrdemDireta(mensagem)) {
     const direta = await tentarOrdemDireta(servico, chamador, { clientId, conversaId, mensagem, andamento, cobranca, inicioDoPedido });
-    if (direta) return direta;
+    if (direta instanceof Response) return direta;
+    // Frente AD (teste real 28/09, 3 min 19 s): é uma ação clara que não fechou sozinha (item incerto,
+    // valor faltando): o modelo pensa mais leve e sem pesquisa na web, porque não é análise.
+    acaoClara = !!(direta && direta.ehAcao);
+    if (acaoClara) pesquisar = false;
   }
   await andamento.passo("lendo", "Lendo a conta, os criativos e o que já foi feito");
-  const [c, historico, modeloEscolhido, criativosDaMesa, rotina, feito] = await Promise.all([
+  const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
     // Padrão GPT-6 Luna no raciocínio máximo; o modelo escolhido na tela vale.
@@ -6103,12 +6108,21 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     criativosParaAcoes(servico, clientId),
     lerLinhaDaRotina(servico, clientId),
     oQueFoiFeitoParaOAgente(servico, clientId),
+    // Frente AD: o que a mensagem cita pelo nome (pausado, encerrado, fora do período ou só na Meta).
+    itensCitadosNaMensagem(servico, clientId, mensagem).catch(() => ({ campanhas: [], conjuntos: [], anuncios: [] })),
   ]);
+  const leve = acaoClara ? raciocinioMaisLeve(modeloBase.modelo, modeloBase.raciocinio) : undefined;
+  const modeloEscolhido = leve ? { ...modeloBase, raciocinio: leve } : modeloBase;
   // Apelidos (c1, g1, n1, k1): o agente nunca vê nem devolve id da Meta nem UUID (acoes-conta.ts).
+  // Os itens citados vão primeiro: antes, campanha pausada fora do período "não aparecia nos alvos".
+  const semRepetir = <T,>(lista: T[], id: (x: T) => string) => {
+    const vistos = new Set<string>();
+    return lista.filter((x) => (vistos.has(id(x)) ? false : (vistos.add(id(x)), true)));
+  };
   const alvos = alvosComApelido({
-    campanhas: c.conta.campanhas.map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, orcamento_diario: x.orcamento_diario })),
-    conjuntos: c.conta.conjuntos.map((x) => ({ adset_id: x.adset_id, nome: x.nome, campanha: x.campanha })),
-    anuncios: c.conta.anuncios.map((x) => ({ ad_id: x.ad_id, nome: x.nome, status: x.status, campanha: x.campanha })),
+    campanhas: semRepetir([...citados.campanhas, ...c.conta.campanhas.map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, orcamento_diario: x.orcamento_diario }))], (x) => x.campaign_id),
+    conjuntos: semRepetir([...citados.conjuntos, ...c.conta.conjuntos.map((x) => ({ adset_id: x.adset_id, nome: x.nome, campanha: x.campanha }))], (x) => x.adset_id),
+    anuncios: semRepetir([...citados.anuncios, ...c.conta.anuncios.map((x) => ({ ad_id: x.ad_id, nome: x.nome, status: x.status, campanha: x.campanha }))], (x) => x.ad_id),
   });
   const criativosComRef = criativosComApelido(criativosDaMesa);
   const achado = await nichoDoCliente(c.ctx, c.briefing, cobranca, corpo.nicho);
@@ -6235,6 +6249,146 @@ async function contaConversaLer(servico: SupabaseClient, chamador: Chamador, cor
 
 // ---- conta_conversar: andamento, teto de tempo do modelo e ordem direta (frente AD, 28/09)
 
+type ItensParaOrdem = {
+  campanhas: { campaign_id: string; nome: string | null; status: string | null; orcamento_diario: number | null }[];
+  conjuntos: { adset_id: string; nome: string | null; campanha: string | null }[];
+  anuncios: { ad_id: string; nome: string | null; status: string | null; campanha: string | null }[];
+};
+
+/**
+ * Todos os itens da conta pela coleta (qualquer status), mais o que a Meta acha pelo nome entre aspas
+ * quando a coleta não tem (campanha nova, antiga, ou de fora do período). Só leitura.
+ */
+async function itensDaContaParaOrdem(servico: SupabaseClient, clientId: string, mensagem: string): Promise<ItensParaOrdem> {
+  const [campQ, adsQ] = await Promise.all([
+    servico.from("ads_campaigns").select("campaign_id, name, effective_status, daily_budget").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(300),
+    servico.from("ads_creatives").select("ad_id, ad_name, adset_id, adset_name, campaign_id, effective_status").eq("client_id", clientId).limit(800),
+  ]);
+  const camps = ((campQ.data as { campaign_id: string; name: string | null; effective_status: string | null; daily_budget: number | string | null }[] | null) ?? [])
+    .map((c) => ({ campaign_id: String(c.campaign_id), nome: c.name, status: c.effective_status, orcamento_diario: c.daily_budget != null && Number(c.daily_budget) > 0 ? Number(c.daily_budget) : null }));
+  const nomeDaCampanha = new Map(camps.map((c) => [c.campaign_id, c.nome]));
+  const ads = (adsQ.data as { ad_id: string; ad_name: string | null; adset_id: string | null; adset_name: string | null; campaign_id: string | null; effective_status: string | null }[] | null) ?? [];
+  const conjuntos = new Map<string, { adset_id: string; nome: string | null; campanha: string | null }>();
+  for (const a of ads) if (a.adset_id && !conjuntos.has(a.adset_id)) conjuntos.set(a.adset_id, { adset_id: a.adset_id, nome: a.adset_name, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null });
+  const itens: ItensParaOrdem = {
+    campanhas: camps,
+    conjuntos: [...conjuntos.values()],
+    anuncios: ads.map((a) => ({ ad_id: String(a.ad_id), nome: a.ad_name, status: a.effective_status, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null })),
+  };
+  const trecho = trechoParaBuscarNaMeta(mensagem, [...itens.campanhas.map((c) => c.nome || ""), ...itens.conjuntos.map((c) => c.nome || ""), ...itens.anuncios.map((a) => a.nome || "")]);
+  if (!trecho) return itens;
+  const achados = await buscarNaMetaPeloNome(servico, clientId, trecho).catch(() => null);
+  if (!achados) return itens;
+  const ja = new Set([...itens.campanhas.map((c) => c.campaign_id), ...itens.conjuntos.map((c) => c.adset_id), ...itens.anuncios.map((a) => a.ad_id)]);
+  for (const c of achados.campanhas) if (!ja.has(c.id)) itens.campanhas.unshift({ campaign_id: c.id, nome: c.nome, status: c.efetivo, orcamento_diario: c.orcamento_diario_brl });
+  for (const c of achados.conjuntos) if (!ja.has(c.id)) itens.conjuntos.unshift({ adset_id: c.id, nome: c.nome, campanha: null });
+  for (const a of achados.anuncios) if (!ja.has(a.id)) itens.anuncios.unshift({ ad_id: a.id, nome: a.nome, status: a.efetivo, campanha: null });
+  return itens;
+}
+
+/** Busca na Meta, pelo nome (contém), campanhas, conjuntos e anúncios das contas do cliente. Só leitura, até 10 de cada. */
+async function buscarNaMetaPeloNome(servico: SupabaseClient, clientId: string, trecho: string) {
+  const [acesso, contas] = await Promise.all([acessoDeGestao(servico, clientId), contasMetaDoCliente(servico, clientId)]);
+  if (!acesso.grafo) return null;
+  const grafo = acesso.grafo;
+  const filtro = encodeURIComponent(JSON.stringify([{ field: "name", operator: "CONTAIN", value: trecho }]));
+  const saida = { campanhas: [] as CampanhaLida[], conjuntos: [] as ConjuntoLido[], anuncios: [] as AnuncioLido[] };
+  for (const act of [...contas].slice(0, 3)) {
+    const [c, g, a] = await Promise.all([
+      grafo.ler(`act_${act}/campaigns?limit=10&filtering=${filtro}`, "id,name,status,effective_status,daily_budget").catch(() => null),
+      grafo.ler(`act_${act}/adsets?limit=10&filtering=${filtro}`, "id,name,campaign_id,status,effective_status").catch(() => null),
+      grafo.ler(`act_${act}/ads?limit=10&filtering=${filtro}`, "id,name,campaign_id,adset_id,status,effective_status").catch(() => null),
+    ]);
+    saida.campanhas.push(...campanhasDaMeta(c));
+    saida.conjuntos.push(...conjuntosDaMeta(g));
+    saida.anuncios.push(...anunciosDaMeta(a));
+  }
+  return saida;
+}
+
+/** Só os itens que a mensagem cita pelo nome (para irem primeiro nos alvos do agente). */
+async function itensCitadosNaMensagem(servico: SupabaseClient, clientId: string, mensagem: string): Promise<ItensParaOrdem> {
+  const todos = await itensDaContaParaOrdem(servico, clientId, mensagem);
+  return { campanhas: citadosNaMensagem(mensagem, todos.campanhas), conjuntos: citadosNaMensagem(mensagem, todos.conjuntos), anuncios: citadosNaMensagem(mensagem, todos.anuncios) };
+}
+
+const STATUS_CURTO: Record<string, string> = { ACTIVE: "ativa", PAUSED: "pausada", ARCHIVED: "arquivada", CAMPAIGN_PAUSED: "pausada pela campanha", ADSET_PAUSED: "pausado pelo conjunto", DELETED: "excluída" };
+const dataBr = (iso: unknown) => (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split("-").reverse().join("/") : "");
+
+/** O que diferencia um item do outro de mesmo nome: id curto, status, início e fim, e o gasto total (lidos na Meta). */
+async function detalheParaEscolher(grafo: GrafoMeta | null, c: CandidatoDaOrdem): Promise<string> {
+  const partes = [`id final ${c.meta_id.slice(-6)}`];
+  if (!grafo) return partes.concat(c.status ? [STATUS_CURTO[c.status] ?? c.status.toLowerCase()] : []).join(" · ");
+  const [info, ins] = await Promise.all([
+    grafo.ler(c.meta_id, c.nivel === "anuncio" ? "effective_status,created_time" : "effective_status,start_time,stop_time").catch(() => null),
+    grafo.ler(`${c.meta_id}/insights?date_preset=maximum`, "spend").catch(() => null),
+  ]);
+  const efetivo = info && typeof info.effective_status === "string" ? info.effective_status : c.status;
+  if (efetivo) partes.push(STATUS_CURTO[efetivo] ?? efetivo.toLowerCase());
+  const inicio = info ? dataBr(info.start_time ?? info.created_time) : "";
+  const fim = info ? dataBr(info.stop_time) : "";
+  if (inicio) partes.push(`início ${inicio}`);
+  if (fim) partes.push(`fim ${fim}`);
+  const linhas = ins && Array.isArray(ins.data) ? (ins.data as Record<string, unknown>[]) : null;
+  if (linhas) partes.push(`${brlDaAcao(linhas.reduce((soma, l) => soma + (Number(l.spend) || 0), 0))} gastos no total`);
+  return partes.join(" · ");
+}
+
+/**
+ * Nomes iguais (teste real: duas campanhas "[NÃO ATIVAR] Tentativa técnica incompleta"): responde em
+ * segundos, sem o modelo, "Achei 2 com esse nome; qual?", cada opção com id curto, status, datas e
+ * gasto; um clique escolhe e executa pelo Confirmar de sempre (relê, faz, relê, Desfazer).
+ */
+async function perguntarQualDosIguais(
+  servico: SupabaseClient,
+  e: { clientId: string; conversaId: string; mensagem: string; andamento: Andamento; inicioDoPedido: number },
+  esc: EscolhaDeAlvo,
+  custo: number,
+): Promise<Response> {
+  const base = esc.opcoes[0];
+  const plural = base.nivel === "campanha" ? "campanhas" : base.nivel === "conjunto" ? "conjuntos" : "anúncios";
+  await e.andamento.passo("executando", `Achei ${esc.opcoes.length} ${plural} com o mesmo nome: lendo cada uma na Meta para você escolher`);
+  const [acesso, contas] = await Promise.all([acessoDeGestao(servico, e.clientId, { conferir: true }), contasMetaDoCliente(servico, e.clientId)]);
+  const preparados = await Promise.all(esc.opcoes.map(async (c, k) => {
+    const r = await executarPedidoNaConta(servico, e.clientId, {
+      tipo: esc.tipo, nivel: c.nivel, meta_id: c.meta_id, nome_atual: c.nome, nome_novo: esc.nome_novo, orcamento_diario_brl: esc.orcamento_diario_brl,
+      motivo: `Ordem direta da equipe: "${semTravessao(e.mensagem).slice(0, 200)}"`, id: `i${k + 1}`, soPreparar: true,
+    }, { acesso, contas });
+    return { ...r, detalhe: await detalheParaEscolher(acesso.grafo, c) };
+  }));
+  const mensagemId = crypto.randomUUID();
+  const semGestao = preparados.every((x) => !x.preparado);
+  const verbo = esc.tipo === "pausar" ? "pauso" : esc.tipo === "ativar" ? "ativo" : esc.tipo === "renomear" ? "renomeio" : "mudo a verba";
+  const texto = semGestao
+    ? `Achei ${esc.opcoes.length} ${plural} com o nome "${base.nome}", mas não fiz: ${(preparados[0].item.resultado && preparados[0].item.resultado.motivo) || acesso.gestao.motivo || "sem permissão de gestão."} Nada mudou na conta.`
+    : `Achei ${esc.opcoes.length} ${plural} com o nome "${base.nome}". Qual delas? Um clique escolhe e eu ${verbo} na hora, relendo na Meta antes e depois, com o Voltar.`;
+  const acoes: AcoesDaConta = {
+    tipo: "acoes_conta",
+    resumo: texto.slice(0, 300),
+    itens: preparados.map((x) => ({ ...x.item, detalhe: x.detalhe, ...(x.preparado ? {} : { auto: true }) })),
+    ignorados: [],
+    gestao: { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo },
+    modo: "real",
+    escolher_um: !semGestao,
+  };
+  await registrarMensagens(servico, e.conversaId, e.clientId, [{ id: mensagemId, papel: "agente", conteudo: texto, anexos: [acoes] }]);
+  await e.andamento.passo("pronto", semGestao ? "Não deu: sem gestão na conta" : `Pronto: esperando você escolher entre ${esc.opcoes.length}`, { fim: true, erro: semGestao ? acesso.gestao.motivo : null });
+  return json({
+    conversa_id: e.conversaId,
+    mensagem_id: mensagemId,
+    resposta: texto,
+    estrategia: null,
+    markdown: texto,
+    acoes,
+    feitas_sozinho: 0,
+    pediu_para_fazer: true,
+    ordem_direta: { tipo: esc.tipo, escolher: esc.opcoes.length },
+    numeros: null,
+    tempo_ms: Date.now() - e.inicioDoPedido,
+    custo_usd: custo,
+  });
+}
+
 /** O andamento do pedido, gravado na própria mensagem do dono (a tela relê a conversa enquanto espera). */
 function andamentoDoPedido(servico: SupabaseClient, clientId: string, mensagemId: string) {
   const historico: { etapa: string; rotulo: string; em: string }[] = [{ etapa: "recebido", rotulo: "Recebi o pedido", em: new Date().toISOString() }];
@@ -6315,21 +6469,13 @@ async function tentarOrdemDireta(
   servico: SupabaseClient,
   chamador: Chamador,
   e: { clientId: string; conversaId: string; mensagem: string; andamento: Andamento; cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string }; inicioDoPedido: number },
-): Promise<Response | null> {
+): Promise<Response | { ehAcao: boolean } | null> {
   await e.andamento.passo("entendendo", "Entendendo a ordem e achando o item na conta");
-  const [campQ, adsQ] = await Promise.all([
-    servico.from("ads_campaigns").select("campaign_id, name, effective_status").eq("client_id", e.clientId).order("updated_at", { ascending: false }).limit(200),
-    servico.from("ads_creatives").select("ad_id, ad_name, adset_id, adset_name, campaign_id, effective_status").eq("client_id", e.clientId).limit(600),
-  ]);
-  const campanhas = ((campQ.data as { campaign_id: string; name: string | null; effective_status: string | null }[] | null) ?? []).map((c) => ({ id: String(c.campaign_id), nome: c.name, status: c.effective_status }));
-  const nomeDaCampanha = new Map(campanhas.map((c) => [c.id, c.nome]));
-  const ads = (adsQ.data as { ad_id: string; ad_name: string | null; adset_id: string | null; adset_name: string | null; campaign_id: string | null; effective_status: string | null }[] | null) ?? [];
-  const conjuntos = new Map<string, { id: string; nome: string | null; campanha: string | null }>();
-  for (const a of ads) if (a.adset_id && !conjuntos.has(a.adset_id)) conjuntos.set(a.adset_id, { id: a.adset_id, nome: a.adset_name, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null });
-  const { candidatos, direto } = candidatosDaOrdem(e.mensagem, {
-    campanhas,
-    conjuntos: [...conjuntos.values()],
-    anuncios: ads.map((a) => ({ id: String(a.ad_id), nome: a.ad_name, status: a.effective_status, campanha: a.campaign_id ? nomeDaCampanha.get(a.campaign_id) ?? null : null })),
+  const conta = await itensDaContaParaOrdem(servico, e.clientId, e.mensagem);
+  const { candidatos, direto, iguais } = candidatosDaOrdem(e.mensagem, {
+    campanhas: conta.campanhas.map((c) => ({ id: c.campaign_id, nome: c.nome, status: c.status })),
+    conjuntos: conta.conjuntos.map((c) => ({ id: c.adset_id, nome: c.nome, campanha: c.campanha })),
+    anuncios: conta.anuncios.map((a) => ({ id: a.ad_id, nome: a.nome, status: a.status, campanha: a.campanha })),
   });
   if (!candidatos.length) return null;
   let custo = 0;
@@ -6337,7 +6483,7 @@ async function tentarOrdemDireta(
   try {
     const r = await jevPerguntar({
       state: { mensagem_da_equipe: e.mensagem.slice(0, 1500), ...(direto ? {} : { itens: candidatos.map((c) => ({ ref: c.ref, nivel: c.nivel, nome: c.nome, status: c.status, campanha: c.campanha })) }) },
-      questions: perguntasDaOrdem(candidatos, !direto),
+      questions: perguntasDaOrdem(candidatos, !direto && !iguais.length),
     });
     const cobrado = await cobrarJev(r, { clientId: e.clientId, tarefa: TAREFA, referencia: e.cobranca.referencia, criadoPor: e.cobranca.criadoPor });
     custo = cobrado?.custoUsd ?? 0;
@@ -6346,10 +6492,11 @@ async function tentarOrdemDireta(
     console.error("[mesa-ads] jev da ordem direta falhou", { codigo: err instanceof JevErro ? err.codigo : "jev_falhou" });
     return null;
   }
-  const d = decidirOrdem(e.mensagem, respostas, candidatos, direto);
+  const d = decidirOrdem(e.mensagem, respostas, candidatos, direto, undefined, iguais);
+  if ("escolher" in d) return await perguntarQualDosIguais(servico, e, d.escolher, custo);
   if (!("ordem" in d)) {
-    await e.andamento.passo("modelo", `Não é uma ordem simples (${d.motivo}): vou ler a conta inteira`);
-    return null;
+    await e.andamento.passo("modelo", `Não fechou sozinha (${d.motivo}): vou ler a conta${d.eh_acao ? ", pensando mais leve (é uma ação, não análise)" : " inteira"}`);
+    return { ehAcao: d.eh_acao };
   }
   const o = d.ordem;
   const nivelTxt = o.alvo.nivel === "campanha" ? "a campanha" : o.alvo.nivel === "conjunto" ? "o conjunto" : "o anúncio";
@@ -8422,7 +8569,8 @@ async function gerenciadorAcao(servico: SupabaseClient, chamador: Chamador, corp
 async function executarPedidoNaConta(
   servico: SupabaseClient,
   clientId: string,
-  p: { tipo: "pausar" | "ativar" | "orcamento" | "renomear"; nivel: "campanha" | "conjunto" | "anuncio"; meta_id: string; nome_atual: string; nome_novo: string | null; orcamento_diario_brl: number | null; motivo: string; id?: string; soSeSeguro?: boolean },
+  p: { tipo: "pausar" | "ativar" | "orcamento" | "renomear"; nivel: "campanha" | "conjunto" | "anuncio"; meta_id: string; nome_atual: string; nome_novo: string | null; orcamento_diario_brl: number | null; motivo: string; id?: string; soSeSeguro?: boolean; soPreparar?: boolean },
+  ja?: { acesso: AcessoDeGestao; contas: Set<string> },
 ): Promise<{ item: ItemDaAcaoNaConta; gestao: { disponivel: boolean; motivo: string | null }; duracaoMs: number; preparado: boolean }> {
   const inicio = Date.now();
   let item: ItemDaAcaoNaConta = {
@@ -8442,7 +8590,7 @@ async function executarPedidoNaConta(
   let gestao = { disponivel: false, motivo: null as string | null };
   let resultado: NonNullable<ItemDaAcaoNaConta["resultado"]> | null = null;
   try {
-    const [acesso, contas] = await Promise.all([acessoDeGestao(servico, clientId, { conferir: true }), contasMetaDoCliente(servico, clientId)]);
+    const [acesso, contas] = ja ? [ja.acesso, ja.contas] : await Promise.all([acessoDeGestao(servico, clientId, { conferir: true }), contasMetaDoCliente(servico, clientId)]);
     gestao = { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo };
     if (!acesso.grafo || !acesso.gestao.disponivel) {
       resultado = { ok: false, motivo: acesso.gestao.motivo || "Sem permissão de gestão na Meta." };
@@ -8475,7 +8623,7 @@ async function executarPedidoNaConta(
           item = fotografar(item, lido);
           if (item.indisponivel) resultado = { ok: false, motivo: item.indisponivel };
           // Ordem ao agente: o que aumenta gasto (ativar, subir verba) fica pronto para o Confirmar, lido na Meta agora.
-          else if (p.soSeSeguro && !acaoSemRisco(item)) return { item, gestao, duracaoMs: Date.now() - inicio, preparado: true };
+          else if (p.soPreparar || (p.soSeSeguro && !acaoSemRisco(item))) return { item, gestao, duracaoMs: Date.now() - inicio, preparado: true };
           else resultado = await executarNaMeta(item, acesso.grafo, null, contas);
         }
       }

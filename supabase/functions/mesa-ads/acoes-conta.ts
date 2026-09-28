@@ -206,6 +206,8 @@ export type ItemDaAcaoNaConta = {
   auto?: boolean;
   /** Só em montar_campanha_do_plano. */
   montagem?: Montagem | null;
+  /** Frente AD: o que diferencia itens de mesmo nome na pergunta "qual?" (id curto, status, datas, gasto). */
+  detalhe?: string | null;
   resultado?: ResultadoDoItem;
 };
 
@@ -219,6 +221,8 @@ export type AcoesDaConta = {
   modo?: "real" | "ensaio";
   /** Contrato comum dos agentes (27/09): o botão "Ir para ..." depois de feito (só rota interna). */
   caminho?: CaminhoDoAgente | null;
+  /** Frente AD: itens de mesmo nome; a equipe escolhe UM (um clique escolhe e executa). */
+  escolher_um?: boolean;
   executada_em?: string;
   executada_por?: string;
   descartada_em?: string;

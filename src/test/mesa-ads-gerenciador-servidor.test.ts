@@ -22,7 +22,9 @@ import {
 } from "../../supabase/functions/mesa-ads/gerenciador";
 import {
   candidatosDaOrdem,
+  citadosNaMensagem,
   decidirOrdem,
+  trechoParaBuscarNaMeta,
   nomeNovoDaMensagem,
   pareceOrdemDireta,
   perguntasDaOrdem,
@@ -226,9 +228,10 @@ describe("ordem direta sem o modelo pesado", () => {
     expect(Object.keys((q.alvo as { criteria: Record<string, string> }).criteria)).toContain("nenhum");
     const ok = decidirOrdem(msg, { ordem: { choice: "pausar", probabilities: { pausar: 0.95 } }, alvo: { choice: "g1", probabilities: { g1: 0.9 } } }, candidatos, null);
     expect("ordem" in ok && ok.ordem).toMatchObject({ tipo: "pausar", alvo_por: "jev", alvo: { meta_id: "130000000000001" } });
-    expect(decidirOrdem(msg, { ordem: { choice: "pausar", probabilities: { pausar: 0.6 } } }, candidatos, null)).toEqual({ motivo: "ordem incerta (60%)" });
-    expect(decidirOrdem(msg, { ordem: { choice: "pausar", probabilities: { pausar: 0.95 } }, alvo: { choice: "nenhum", probabilities: { nenhum: 0.8 } } }, candidatos, null)).toEqual({ motivo: "item não identificado" });
-    expect(decidirOrdem(msg, { ordem: { choice: "outra", probabilities: { outra: 0.9 } } }, candidatos, null)).toEqual({ motivo: "não é uma ordem direta única" });
+    expect(decidirOrdem(msg, { ordem: { choice: "pausar", probabilities: { pausar: 0.6 } } }, candidatos, null)).toEqual({ motivo: "ordem incerta (60%)", eh_acao: false });
+    // Ação clara que não fechou: cai no modelo avisando que é ação (pensa mais leve, sem pesquisa).
+    expect(decidirOrdem(msg, { ordem: { choice: "pausar", probabilities: { pausar: 0.95 } }, alvo: { choice: "nenhum", probabilities: { nenhum: 0.8 } } }, candidatos, null)).toEqual({ motivo: "item não identificado", eh_acao: true });
+    expect(decidirOrdem(msg, { ordem: { choice: "outra", probabilities: { outra: 0.9 } } }, candidatos, null)).toEqual({ motivo: "não é uma ordem direta única", eh_acao: false });
   });
 
   it("verba: valor em reais em código (nunca inventado); sem valor, vai para o modelo", () => {
@@ -236,7 +239,39 @@ describe("ordem direta sem o modelo pesado", () => {
     expect(valorDaMensagem("coloca a verba do conjunto em 40 reais")).toBe(40);
     expect(valorDaMensagem("aumenta a verba")).toBeNull();
     const { candidatos, direto } = candidatosDaOrdem("aumenta a verba da campanha Reel Direct | Setembro", conta);
-    expect(decidirOrdem("aumenta a verba da campanha Reel Direct | Setembro", { ordem: { choice: "mudar_verba", probabilities: { mudar_verba: 0.9 } } }, candidatos, direto)).toEqual({ motivo: "valor da verba não encontrado na mensagem" });
+    expect(decidirOrdem("aumenta a verba da campanha Reel Direct | Setembro", { ordem: { choice: "mudar_verba", probabilities: { mudar_verba: 0.9 } } }, candidatos, direto)).toEqual({ motivo: "valor da verba não encontrado na mensagem", eh_acao: true });
+  });
+
+  it("teste real 2 (Verzelo): duas campanhas com o MESMO nome viram a pergunta Qual? (sem Jev no item, sem modelo)", () => {
+    const duas = {
+      campanhas: [
+        { id: "120247390733120137", nome: "[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET", status: "PAUSED" },
+        { id: "120247390720470137", nome: "[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET", status: "PAUSED" },
+        { id: "120000000000002", nome: "Reel Direct | Setembro", status: "ACTIVE" },
+      ],
+      conjuntos: [],
+      anuncios: [],
+    };
+    const { direto, iguais, candidatos } = candidatosDaOrdem(MSG, duas);
+    expect(direto).toBeNull();
+    expect(iguais.map((c) => c.meta_id)).toEqual(["120247390733120137", "120247390720470137"]);
+    expect(Object.keys(perguntasDaOrdem(candidatos, !direto && !iguais.length))).toEqual(["ordem"]);
+    const d = decidirOrdem(MSG, { ordem: { choice: "renomear", probabilities: { renomear: 0.96 } } }, candidatos, direto, undefined, iguais);
+    expect("escolher" in d && d.escolher).toMatchObject({ tipo: "renomear", nome_novo: "[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET (teste painel)" });
+    expect("escolher" in d && d.escolher.opcoes).toHaveLength(2);
+    // Mesmo sem aspas: o Jev dividiu 53% e 45% entre as duas de mesmo nome: soma o grupo e pergunta qual.
+    const semAspas = "renomeia a campanha tentativa tecnica incompleta do reel direct para teste";
+    const c2 = candidatosDaOrdem(semAspas, duas);
+    const [a, b] = c2.candidatos.filter((c) => c.nome.indexOf("NÃO ATIVAR") >= 0);
+    const d2 = decidirOrdem(semAspas, { ordem: { choice: "renomear", probabilities: { renomear: 0.9 } }, alvo: { choice: a.ref, probabilities: { [a.ref]: 0.53, [b.ref]: 0.45, nenhum: 0.02 } } }, c2.candidatos, c2.direto, undefined, c2.iguais);
+    expect("escolher" in d2 && d2.escolher.opcoes.map((c) => c.meta_id).sort()).toEqual(["120247390720470137", "120247390733120137"]);
+  });
+
+  it("itens citados pelo nome entram nos alvos (pausados e fora do período) e a busca na Meta só roda para nome desconhecido entre aspas", () => {
+    const itens = [{ nome: "[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET", id: 1 }, { nome: "Outra", id: 2 }];
+    expect(citadosNaMensagem(MSG, itens).map((x) => x.id)).toEqual([1]);
+    expect(trechoParaBuscarNaMeta(MSG, ["[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET"])).toBeNull();
+    expect(trechoParaBuscarNaMeta("pausa a campanha 'Black Friday 2025'", ["Outra"])).toBe("Black Friday 2025");
   });
 
   it("decidir é instantâneo (a parte em código da ordem direta leva milissegundos)", () => {
@@ -286,6 +321,14 @@ describe("fonte do servidor", () => {
     expect(direta).toContain("jevPerguntar(");
     expect(direta).toContain("soSeSeguro: true");
     expect(direta).toContain("registrarFeitosDoAgente(");
+    // Teste real 2: nomes iguais perguntam qual (sem modelo); ação clara que cai no modelo pensa mais leve.
+    expect(direta).toContain("perguntarQualDosIguais(");
+    const qual = fonte.slice(fonte.indexOf("async function perguntarQualDosIguais("), fonte.indexOf("async function tentarOrdemDireta("));
+    expect(qual).toContain("soPreparar: true");
+    expect(qual).toContain("escolher_um: !semGestao");
+    expect(corpo).toContain("acaoClara = !!(direta && direta.ehAcao);");
+    expect(corpo).toContain("raciocinioMaisLeve(modeloBase.modelo, modeloBase.raciocinio)");
+    expect(corpo).toContain("itensCitadosNaMensagem(servico, clientId, mensagem)");
   });
 
   it("o que o agente tentou e não deu também fica em O que foi feito (falhou, sem Desfazer, fora do dossiê)", () => {

@@ -96,7 +96,7 @@ export function candidatosDaOrdem(
     anuncios: { id: string; nome: string | null; status: string | null; campanha: string | null }[];
   },
   maximo = 150,
-): { candidatos: CandidatoDaOrdem[]; direto: CandidatoDaOrdem | null } {
+): { candidatos: CandidatoDaOrdem[]; direto: CandidatoDaOrdem | null; iguais: CandidatoDaOrdem[] } {
   const t = normalizar(mensagem);
   const niveis: NivelDaOrdem[] = [];
   if (/\bcampanhas?\b/.test(t)) niveis.push("campanha");
@@ -112,12 +112,15 @@ export function candidatosDaOrdem(
   const aspas = trechosEntreAspas(mensagem).map(normalizar);
   const pelasAspas = doNivel.filter((c) => aspas.indexOf(normalizar(c.nome)) >= 0);
   let direto: CandidatoDaOrdem | null = pelasAspas.length === 1 ? pelasAspas[0] : null;
+  // Frente AD (teste real 28/09): duas campanhas com o MESMO nome. Não é incerteza do Jev: é escolha do dono.
+  let iguais: CandidatoDaOrdem[] = pelasAspas.length > 1 && mesmoNome(pelasAspas) ? pelasAspas : [];
   if (!direto && !pelasAspas.length) {
     const contidos = doNivel.filter((c) => normalizar(c.nome).length >= 5 && t.indexOf(normalizar(c.nome)) >= 0);
     if (contidos.length) {
       const maior = Math.max(...contidos.map((c) => normalizar(c.nome).length));
       const maiores = contidos.filter((c) => normalizar(c.nome).length === maior);
       if (maiores.length === 1) direto = maiores[0];
+      else if (mesmoNome(maiores)) iguais = maiores;
     }
   }
 
@@ -131,7 +134,35 @@ export function candidatosDaOrdem(
   };
   const candidatos = doNivel.slice().sort((a, b) => nota(b) - nota(a)).slice(0, maximo);
   if (direto && candidatos.indexOf(direto) < 0) candidatos.unshift(direto);
-  return { candidatos, direto };
+  for (const c of iguais) if (candidatos.indexOf(c) < 0) candidatos.unshift(c);
+  return { candidatos, direto, iguais: iguais.slice(0, MAX_OPCOES) };
+}
+
+/** No máximo tantas opções na pergunta "qual?" (mais que isso, a equipe cita melhor). */
+export const MAX_OPCOES = 5;
+
+const mesmoNome = (lista: CandidatoDaOrdem[]) => lista.length > 1 && lista.every((c) => c.nivel === lista[0].nivel && normalizar(c.nome) === normalizar(lista[0].nome));
+
+/**
+ * Itens da conta citados pelo nome na mensagem (todos, inclusive pausados e encerrados): nome inteiro
+ * contido na mensagem (5+ letras) ou igual a um trecho entre aspas. Vão primeiro nos alvos do agente
+ * (teste real: "a campanha não aparece nos alvos disponíveis" porque estava pausada fora do período).
+ */
+export function citadosNaMensagem<T extends { nome: string | null }>(mensagem: string, itens: T[]): T[] {
+  const t = normalizar(mensagem);
+  const aspas = trechosEntreAspas(mensagem).map(normalizar);
+  return itens.filter((i) => {
+    const n = normalizar(String(i.nome || ""));
+    return n.length >= 5 && (t.indexOf(n) >= 0 || aspas.indexOf(n) >= 0);
+  });
+}
+
+/** O primeiro trecho entre aspas que não casou com nenhum item conhecido (para buscar na Meta pelo nome). */
+export function trechoParaBuscarNaMeta(mensagem: string, nomesConhecidos: string[]): string | null {
+  const conhecidos = nomesConhecidos.map(normalizar);
+  const t = trechosEntreAspas(mensagem).filter((x) => x.replace(/^(\.\.\.|…)/, "").trim().length >= 4 && !/^(\.\.\.|…)/.test(x.trim()))[0];
+  if (!t) return null;
+  return conhecidos.indexOf(normalizar(t)) >= 0 ? null : t.slice(0, 200);
 }
 
 /**
@@ -208,38 +239,55 @@ const probDa = (r: RespostaJev | undefined) => (r && r.choice && r.probabilities
  * Decide com as respostas do Jev e o que o código tirou da mensagem. Devolve a ordem pronta, ou o
  * motivo de seguir pelo caminho do modelo (análise completa). Limiares: 0,8 na ordem e 0,75 no item.
  */
+export type EscolhaDeAlvo = { tipo: TipoDaOrdem; opcoes: CandidatoDaOrdem[]; nome_novo: string | null; orcamento_diario_brl: number | null };
+
 export function decidirOrdem(
   mensagem: string,
   respostas: Record<string, RespostaJev>,
   candidatos: CandidatoDaOrdem[],
   direto: CandidatoDaOrdem | null,
   limiares = { ordem: 0.8, alvo: 0.75 },
-): { ordem: OrdemResolvida } | { motivo: string } {
+  iguais: CandidatoDaOrdem[] = [],
+): { ordem: OrdemResolvida } | { escolher: EscolhaDeAlvo } | { motivo: string; eh_acao: boolean } {
   const o = respostas.ordem;
   const tipo = o && o.choice ? TIPO_DA_ESCOLHA[o.choice] : undefined;
   const pOrdem = probDa(o);
-  if (!tipo) return { motivo: "não é uma ordem direta única" };
-  if (pOrdem === null || pOrdem < limiares.ordem) return { motivo: `ordem incerta (${pOrdem === null ? "sem probabilidade" : Math.round(pOrdem * 100) + "%"})` };
+  if (!tipo) return { motivo: "não é uma ordem direta única", eh_acao: false };
+  if (pOrdem === null || pOrdem < limiares.ordem) return { motivo: `ordem incerta (${pOrdem === null ? "sem probabilidade" : Math.round(pOrdem * 100) + "%"})`, eh_acao: false };
+  // Daqui para baixo é uma ação clara: se ainda cair no modelo, ele pode pensar mais leve.
   let alvo = direto;
   let pAlvo: number | null = null;
-  if (!alvo) {
+  let opcoes: CandidatoDaOrdem[] = iguais.length > 1 ? iguais : [];
+  if (!alvo && !opcoes.length) {
     const a = respostas.alvo;
     pAlvo = probDa(a);
     const escolhido = a && a.choice && a.choice !== "nenhum" ? candidatos.filter((c) => c.ref === a.choice)[0] : undefined;
-    if (!escolhido) return { motivo: "item não identificado" };
-    if (pAlvo === null || pAlvo < limiares.alvo) return { motivo: `item incerto (${pAlvo === null ? "sem probabilidade" : Math.round(pAlvo * 100) + "%"})` };
-    alvo = escolhido;
+    if (!escolhido) return { motivo: "item não identificado", eh_acao: true };
+    // Nomes iguais dividem a probabilidade entre si: soma o grupo; a escolha fica com a equipe.
+    const doMesmoNome = candidatos.filter((c) => c.nivel === escolhido.nivel && normalizar(c.nome) === normalizar(escolhido.nome));
+    const pGrupo = doMesmoNome.reduce((soma, c) => soma + ((a && a.probabilities && typeof a.probabilities[c.ref] === "number") ? a.probabilities[c.ref] : 0), 0);
+    if (doMesmoNome.length > 1 && pGrupo >= limiares.alvo) opcoes = doMesmoNome.slice(0, MAX_OPCOES);
+    else if (pAlvo === null || pAlvo < limiares.alvo) return { motivo: `item incerto (${pAlvo === null ? "sem probabilidade" : Math.round(pAlvo * 100) + "%"})`, eh_acao: true };
+    else alvo = escolhido;
+  }
+  if (!alvo) {
+    const base = opcoes[0];
+    const nomeNovo = tipo === "renomear" ? nomeNovoDaMensagem(mensagem, base.nome) : null;
+    if (tipo === "renomear" && !nomeNovo) return { motivo: "nome novo não encontrado na mensagem", eh_acao: true };
+    const valorPedido = tipo === "orcamento" ? valorDaMensagem(mensagem) : null;
+    if (tipo === "orcamento" && (base.nivel === "anuncio" || valorPedido === null)) return { motivo: "valor da verba não encontrado na mensagem", eh_acao: true };
+    return { escolher: { tipo, opcoes, nome_novo: nomeNovo, orcamento_diario_brl: valorPedido } };
   }
   let nomeNovo: string | null = null;
   let valor: number | null = null;
   if (tipo === "renomear") {
     nomeNovo = nomeNovoDaMensagem(mensagem, alvo.nome);
-    if (!nomeNovo) return { motivo: "nome novo não encontrado na mensagem" };
+    if (!nomeNovo) return { motivo: "nome novo não encontrado na mensagem", eh_acao: true };
   }
   if (tipo === "orcamento") {
-    if (alvo.nivel === "anuncio") return { motivo: "verba de anúncio não existe (fica no conjunto ou na campanha)" };
+    if (alvo.nivel === "anuncio") return { motivo: "verba de anúncio não existe (fica no conjunto ou na campanha)", eh_acao: true };
     valor = valorDaMensagem(mensagem);
-    if (valor === null) return { motivo: "valor da verba não encontrado na mensagem" };
+    if (valor === null) return { motivo: "valor da verba não encontrado na mensagem", eh_acao: true };
   }
   return { ordem: { tipo, alvo, nome_novo: nomeNovo, orcamento_diario_brl: valor, alvo_por: direto ? "nome" : "jev", prob_ordem: pOrdem, prob_alvo: pAlvo } };
 }

@@ -241,6 +241,81 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
 
   const alternar = (id: string) => setMarcados((m) => (m.indexOf(id) >= 0 ? m.filter((x) => x !== id) : m.concat([id])));
 
+  /** "Qual delas?" (itens de mesmo nome): um clique escolhe e executa só esse, pelo Confirmar de sempre. */
+  const escolherUm = async (id: string) => {
+    setFazendo(`escolher:${id}`);
+    try {
+      const data = await executarAcoesDaConta(mensagemId, [id]);
+      const novo = data && data.anexo ? normalizarAcoesDaConta(data.anexo) : null;
+      if (novo) setAtual(novo);
+      if (Number(data && data.feitos) > 0) toast.success("Feito e conferido na Meta", { description: "Dá para voltar no cartão." });
+      else toast.warning("Não foi feito", { description: "O motivo está no cartão." });
+      releituras();
+    } catch (e) {
+      avisarErro(e, "Não foi possível fazer");
+    } finally {
+      setFazendo(null);
+    }
+  };
+
+  if (atual.escolher_um) {
+    // Depois da escolha, só o item escolhido fica (os outros não foram tocados).
+    const visiveis = estado === "aberta" ? atual.itens : atual.itens.filter((i) => !(i.resultado && !i.resultado.ok && i.resultado.motivo === "Não marcado nesta confirmação."));
+    return (
+      <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Qual delas?" data-escolher-um={estado}>
+        <p className="flex min-w-0 items-center text-[12.5px] font-semibold">
+          <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
+          {estado === "aberta" ? `Qual delas? (${atual.itens.length} com o mesmo nome)` : "Escolhido"}
+        </p>
+        <ul className="mt-2 divide-y divide-border border-y border-border">
+          {visiveis.map((i) => {
+            const r = i.resultado;
+            return (
+              <li key={i.id} className="flex min-w-0 flex-wrap items-start py-2" data-opcao={i.id}>
+                <span className="mr-2 min-w-0 flex-1 text-[12px] leading-snug">
+                  <span className="block font-medium [overflow-wrap:anywhere]">{i.alvo ? i.alvo.nome : ROTULO_DA_ACAO[i.tipo]}</span>
+                  {i.detalhe && <span className="block text-muted-foreground [overflow-wrap:anywhere]">{i.detalhe}</span>}
+                  <AntesDepois i={i} />
+                  {i.indisponivel && estado === "aberta" && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
+                  {r && !r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">Não fiz: {r.motivo}</span>}
+                  {r && r.ok && !r.desfeito && r.depois && <ProvaNaMeta i={i} />}
+                  {r && r.desfeito && <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Desfeito.</span>}
+                </span>
+                {estado === "aberta" && !i.indisponivel && (
+                  <Button type="button" size="sm" className="mt-0.5 h-8" disabled={!!fazendo} onClick={() => void escolherUm(i.id)} aria-label={`É esta: ${i.detalhe || i.id}`}>
+                    {fazendo === `escolher:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+                    É esta
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {fazendo && fazendo.indexOf("escolher:") === 0 && (
+          <p className="mt-2 flex items-center text-[11.5px] leading-snug" role="status">
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+            Fazendo na Meta: relê o item, faz e relê de novo para provar.
+          </p>
+        )}
+        <div className="mt-2 flex min-w-0 flex-wrap items-center">
+          {estado === "aberta" && (
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" disabled={!!fazendo} onClick={() => void agir("descartar")}>
+              Nenhuma
+            </Button>
+          )}
+          {estado === "feita" && temDesfazer(atual) && (
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" disabled={!!fazendo} onClick={() => void agir("desfazer")}>
+              {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
+              Desfazer
+            </Button>
+          )}
+          {estado === "descartada" && <span className="text-[11.5px] text-muted-foreground">Nenhuma escolhida: nada mudou.</span>}
+          {estado === "desfeita" && <span className="text-[11.5px] text-muted-foreground">Desfeito: voltou como estava.</span>}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
       <p className="flex min-w-0 flex-wrap items-center text-[12.5px] font-semibold">

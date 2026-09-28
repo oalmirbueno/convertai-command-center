@@ -231,6 +231,30 @@ describe("ordem direta no cartão do agente", () => {
     expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
   });
 
+  it("Qual delas? (mesmo nome): cada opção com o detalhe; um clique executa só a escolhida e mostra a prova", async () => {
+    const opcao = (id: string, meta: string, detalhe: string) => ({
+      ...item(null), id, auto: false, resultado: undefined, detalhe, alvo: { ref: "direto", nivel: "campanha", meta_id: meta, nome: "[NÃO ATIVAR] Tentativa" },
+    });
+    const anexo = { tipo: "acoes_conta", resumo: "x", escolher_um: true, itens: [opcao("i1", "120247390733120137", "id final 120137 · pausada · início 15/09/2026 · fim 20/09/2026 · R$ 0,00 gastos no total"), opcao("i2", "120247390720470137", "id final 470137 · pausada · início 15/09/2026")], ignorados: [], gestao: { disponivel: true, motivo: null } };
+    responder({
+      conta_acao_executar: {
+        anexo: { ...anexo, executada_em: "2026-09-28T15:20:00Z", itens: [{ ...anexo.itens[0], resultado: { ok: false, motivo: "Não marcado nesta confirmação." } }, { ...anexo.itens[1], resultado: { ok: true, feito_em: "2026-09-28T15:20:00Z", relido_em: "2026-09-28T15:20:01Z", depois: { status: "PAUSED", nome: "[NÃO ATIVAR] Tentativa (teste painel)" }, resposta: { success: true } } }] },
+        feitos: 1,
+        falhas: 0,
+      },
+    });
+    montar(h(CartaoDasAcoes, { mensagemId: "m1", acoes: normalizarAcoesDaConta(anexo)! }));
+    const qual = screen.getByRole("region", { name: "Qual delas?" });
+    expect(within(qual).getByText(/Qual delas\? \(2 com o mesmo nome\)/)).toBeTruthy();
+    expect(within(qual).getByText(/id final 120137 · pausada · início 15\/09\/2026/)).toBeTruthy();
+    fireEvent.click(within(qual).getByRole("button", { name: /É esta: id final 470137/ }));
+    await waitFor(() => expect(chamadas("conta_acao_executar")).toEqual([{ acao: "conta_acao_executar", mensagem_id: "m1", itens: ["i2"] }]));
+    expect(await screen.findByText(/Conferido na Meta às 12:20/)).toBeTruthy();
+    // A não escolhida some; fica o Desfazer da escolhida.
+    expect(screen.queryByText(/id final 120137/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Desfazer/ })).toBeTruthy();
+  });
+
   it("ensaio (sem gestão) diz o motivo real, não um genérico", () => {
     const acoes = normalizarAcoesDaConta({ tipo: "acoes_conta", resumo: "x", modo: "ensaio", itens: [{ ...item(null), auto: false, ensaio: true, resultado: undefined }], ignorados: [], gestao: { disponivel: false, motivo: "A conta de anúncios Conta 01 está com pagamento pendente na Meta (saldo em aberto)." } })!;
     montar(h(CartaoDasAcoes, { mensagemId: "m1", acoes }));

@@ -79,6 +79,8 @@ export interface ItemDaAcao {
   /** Feito sozinho ("ele já vai fazendo"): reversível e sem aumento de gasto, com Desfazer próprio. */
   auto: boolean;
   montagem: MontagemNaTela | null;
+  /** Frente AD: o que diferencia itens de mesmo nome (id curto, status, datas, gasto). */
+  detalhe: string | null;
   resultado: {
     ok: boolean;
     motivo: string;
@@ -105,6 +107,8 @@ export interface AcoesDaConta {
   descartada_em: string | null;
   desfeita_em: string | null;
   caminho: CaminhoNaTela | null;
+  /** Itens de mesmo nome: a equipe escolhe UM (um clique escolhe e executa). */
+  escolher_um: boolean;
 }
 
 export interface NumerosVistos {
@@ -187,6 +191,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
         ensaio: !!i.ensaio,
         auto: !!i.auto,
         montagem: montagem(i.montagem),
+        detalhe: txt(i.detalhe) || null,
         resultado: r
           ? {
               ok: !!r.ok,
@@ -216,6 +221,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
     descartada_em: txt(o.descartada_em) || null,
     desfeita_em: txt(o.desfeita_em) || null,
     caminho: caminhoDaTela(o.caminho),
+    escolher_um: !!o.escolher_um,
   };
 }
 
