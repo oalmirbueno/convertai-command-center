@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { MessageSquare, PanelRightOpen } from "lucide-react";
+import { ChevronRight, MessageSquare, PanelRightOpen } from "lucide-react";
 import RegiaoRolavel from "./RegiaoRolavel";
 import { useReservaFlutuante } from "./useReservaFlutuante";
-import { foco, juntar } from "./estilos";
+import { botao, foco, juntar } from "./estilos";
 
 /**
  * Área de trabalho (docs/design/SISTEMA.md, "Área de trabalho e rolagem").
@@ -37,9 +37,15 @@ import { foco, juntar } from "./estilos";
  */
 
 const LARGO = 1024;
-/** Espaço livre embaixo da área (respiro e botões flutuantes do painel). */
-const FOLGA_EMBAIXO = 16;
-const ALTURA_MINIMA = 440;
+/**
+ * Respiro embaixo da área (28/09, dono: "a área vai até o fim da janela; nada
+ * vazio embaixo, nada cortado"). Só o respiro: o lançador mora nas barras e
+ * não há mais botão flutuante no computador para reservar espaço.
+ */
+const FOLGA_EMBAIXO = 12;
+// Piso baixo (28/09): com 440 px, uma janela de 1345x602 com o cabeçalho da
+// mesa em duas linhas forçava a área a passar do fim e a página cortava embaixo.
+const ALTURA_MINIMA = 300;
 
 interface AreaCtx {
   /** A área está no modo de colunas (>= 1024 px). */
@@ -91,7 +97,7 @@ export function alturaDaArea(alturaDaJanela: number, topoNaPagina: number): numb
   return Math.max(ALTURA_MINIMA, Math.round(alturaDaJanela - topoNaPagina - FOLGA_EMBAIXO));
 }
 
-function useAlturaDaArea(largo: boolean) {
+function useAlturaDaArea(largo: boolean): { ref: RefObject<HTMLDivElement>; altura: number | null; medir: () => void } {
   const ref = useRef<HTMLDivElement>(null);
   const [altura, setAltura] = useState<number | null>(null);
   const medir = useCallback(() => {
@@ -125,6 +131,27 @@ function useAlturaDaArea(largo: boolean) {
     // Depois das fontes e do cabeçalho assentarem (a barra da mesa pode quebrar em duas linhas).
     const t1 = window.setTimeout(medir, 250);
     const t2 = window.setTimeout(medir, 900);
+    const t3 = window.setTimeout(medir, 2000);
+    // O cabeçalho da mesa muda de altura depois de montar (cliente chegou, a
+    // barra quebrou em duas linhas, faixa do ensaio): a página muda de altura e
+    // a área mede de novo. Com ResizeObserver quando o navegador tem (Safari 11
+    // não tem: ficam os tempos acima e o resize).
+    const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    let obsDoCorpo: ResizeObserver | null = null;
+    if (RO) {
+      obsDoCorpo = new RO(() => medir());
+      obsDoCorpo.observe(document.body);
+      const cabecalho = ref.current && typeof ref.current.closest === "function" ? ref.current.closest("[data-casca-da-mesa]") : null;
+      const topoDaMesa = cabecalho ? cabecalho.querySelector("header[data-cabecalho-da-mesa]") : null;
+      if (topoDaMesa) obsDoCorpo.observe(topoDaMesa);
+    }
+    let vivo = true;
+    try {
+      const fontes = (document as unknown as { fonts?: { ready?: Promise<unknown> } }).fonts;
+      if (fontes && fontes.ready) fontes.ready.then(() => { if (vivo) medir(); }, () => undefined);
+    } catch {
+      /* sem API de fontes (Safari antigo): os dois tempos acima cobrem */
+    }
     window.addEventListener("resize", medir);
     window.addEventListener("orientationchange", medir);
     // Tela cheia liga e desliga: o cabeçalho do painel some e a área cresce.
@@ -134,8 +161,11 @@ function useAlturaDaArea(largo: boolean) {
       obs.observe(document.body, { attributes: true, attributeFilter: ["data-tela-cheia-da-mesa", "data-modo-foco"] });
     }
     return () => {
+      vivo = false;
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      if (obsDoCorpo) obsDoCorpo.disconnect();
       window.removeEventListener("resize", medir);
       window.removeEventListener("orientationchange", medir);
       if (obs) obs.disconnect();
@@ -143,6 +173,24 @@ function useAlturaDaArea(largo: boolean) {
   }, [largo, medir]);
 
   return { ref, altura, medir };
+}
+
+/**
+ * Altura que cabe na janela a partir de onde o elemento começa (28/09, dono:
+ * "nenhum espaço sobrando e nada cortado"). É a mesma medida da
+ * AreaDeTrabalho, para qualquer área de altura da janela que não usa a área:
+ * ponha `ref` no elemento e `style={{ height: altura }}` quando não for null.
+ * - null abaixo de 1024 px (celular e tablet: a página rola normal) ou com
+ *   `ativo` falso;
+ * - mede antes da pintura, de novo ao redimensionar, girar, ligar a tela cheia
+ *   ou o modo foco, e depois das fontes;
+ * - enquanto ativa, liga `data-area-de-trabalho` no body (a página não rola
+ *   junto e sai o recuo de baixo), como a AreaDeTrabalho.
+ * Nunca `h-[calc(100vh-Npx)]` fixo: sobra faixa na tela cheia e corta no normal.
+ */
+export function useAlturaQueCabe(ativo: boolean): { ref: RefObject<HTMLDivElement>; altura: number | null; medir: () => void } {
+  const largo = useLargo();
+  return useAlturaDaArea(ativo && largo);
 }
 
 function lerRecolhido(chave: string | undefined, inicial = false): boolean {
@@ -163,18 +211,6 @@ const abridores: Array<() => void> = [];
  * no computador tira do recolhido, no celular abre a gaveta. Devolve false
  * quando não há área com lateral montada.
  */
-/**
- * Altura que cabe da área até o fim da janela, para telas que não usam a
- * AreaDeTrabalho mas têm colunas de altura da janela (28/09: nada de
- * `calc(100vh-Npx)` fixo, que sobrava na tela cheia e cortava no normal).
- * null abaixo de 1024 px ou com ativo=false. Uso:
- * <div ref={ref} style={altura ? { height: `${altura}px` } : undefined}>.
- */
-export function useAlturaQueCabe(ativo: boolean) {
-  const largo = useLargo();
-  return useAlturaDaArea(ativo && largo);
-}
-
 export function abrirLateralDaArea(): boolean {
   const abrir = abridores[abridores.length - 1];
   if (!abrir) return false;
@@ -300,14 +336,27 @@ export default function AreaDeTrabalho({
   const colunas = !lateral
     ? ""
     : recolhido
-      ? "lg:grid-cols-[minmax(0,1fr)_44px]"
+      ? "lg:grid-cols-[minmax(0,1fr)_32px]"
       : larguraDaLateral === "larga"
         ? "lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] desk:grid-cols-[minmax(0,1fr)_440px]"
         : "lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px] desk:grid-cols-[minmax(0,1fr)_400px]";
 
+  // A lateral tem o próprio botão de recolher (CabecalhoDoAgente)? Sem ele, a
+  // área põe um botão pequeno no canto da lateral, no vão entre as colunas.
+  const refDaLateral = useRef<HTMLElement | null>(null);
+  const [botaoProprio, setBotaoProprio] = useState(true);
+  useLayoutEffect(() => {
+    const el = refDaLateral.current;
+    if (!el) return;
+    const tem = !!el.querySelector("[data-recolher-lateral]:not([data-botao-da-area])");
+    if (tem !== botaoProprio) setBotaoProprio(tem);
+  });
+
   const estilo: CSSProperties | undefined = largo && altura ? { height: `${altura}px` } : undefined;
   const principal = principalRolavel ? (
-    <RegiaoRolavel modo="lg" rotulo={rotuloDoPrincipal} memoria={memoriaDaRolagem} className="lg:pb-24 lg:pr-1" data-regiao-principal="">
+    // Sem recuo embaixo (28/09): o lg:pb-24 antigo (para o lançador que flutuava) fazia a barra
+    // sticky bottom-0 da aba parar 96 px acima do fim, flutuando por cima do texto.
+    <RegiaoRolavel modo="lg" rotulo={rotuloDoPrincipal} memoria={memoriaDaRolagem} className="lg:pr-1" data-regiao-principal="">
       {children}
     </RegiaoRolavel>
   ) : (
@@ -324,29 +373,48 @@ export default function AreaDeTrabalho({
       ref={ref}
       style={estilo}
       data-area-de-trabalho=""
-      className={juntar("min-w-0", lateral ? "lg:grid lg:gap-5" : "lg:flex lg:flex-col", colunas, "lg:min-h-0", className)}
+      className={juntar("min-w-0", lateral ? (recolhido ? "lg:grid lg:gap-3" : "lg:grid lg:gap-5") : "lg:flex lg:flex-col", colunas, "lg:min-h-0", className)}
     >
       {principal}
       {lateral && largo && (
         <ContextoDaArea.Provider value={ctxLargo}>
           {recolhido ? (
-            <aside aria-label={rotuloDaLateral} className="hidden min-h-0 lg:flex lg:flex-col lg:items-center lg:pb-14" data-lateral-recolhida="">
+            // Tirinha de 32 px (28/09, dono: "laterais recolhem para o lado"): ícone,
+            // nome em pé e a volta num toque só. Sem caixa: só um traço fino à esquerda.
+            <aside aria-label={rotuloDaLateral} className="hidden min-h-0 lg:flex lg:flex-col lg:items-center" data-lateral-recolhida="">
               <button
                 type="button"
                 onClick={alternarRecolhido}
                 aria-label={`Abrir ${rotuloDaLateral.toLowerCase()}`}
                 title={`Abrir ${rotuloDaLateral.toLowerCase()}`}
-                className={juntar("flex h-full w-11 flex-col items-center rounded-lg border border-border bg-card pt-3 text-muted-foreground transition-colors hover:text-foreground", foco)}
+                className={juntar("toque-compacto flex h-full w-8 flex-col items-center rounded-md border-l border-border/60 pt-2 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground", foco)}
               >
-                <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
-                <span className="mt-3 text-[12px] font-medium" style={{ writingMode: "vertical-rl" }}>
+                <span className="inline-flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                  {iconeDaLateral || <PanelRightOpen className="h-4 w-4" />}
+                </span>
+                <span className="mt-3 text-[11px] font-medium" style={{ writingMode: "vertical-rl" }}>
                   {rotuloDaLateral}
                 </span>
               </button>
             </aside>
           ) : (
-            // pb-14: o botão flutuante do painel (lançador, canto direito de baixo) não cobre o campo do agente.
-            <aside aria-label={rotuloDaLateral} className="hidden min-h-0 min-w-0 lg:flex lg:flex-col lg:pb-14" data-lateral="">
+            // Até o fim da área (28/09): o lg:pb-14 antigo reservava lugar para o lançador que
+            // flutuava no canto e deixava ~60 px vazios embaixo do agente. O lançador mora nas barras.
+            <aside ref={refDaLateral} aria-label={rotuloDaLateral} className="relative hidden min-h-0 min-w-0 lg:flex lg:flex-col" data-lateral="">
+              {!botaoProprio && (
+                // No vão entre as colunas (20 px), nunca por cima do conteúdo da lateral.
+                <button
+                  type="button"
+                  onClick={alternarRecolhido}
+                  aria-label={`Recolher ${rotuloDaLateral.toLowerCase()}`}
+                  title={`Recolher ${rotuloDaLateral.toLowerCase()}`}
+                  className={juntar(botao.icone, "absolute -left-5 top-0 h-8 w-5")}
+                  data-recolher-lateral=""
+                  data-botao-da-area=""
+                >
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
               {lateral}
             </aside>
           )}
@@ -363,7 +431,7 @@ export default function AreaDeTrabalho({
                   setGavetaAberta(true);
                 }}
                 className={juntar(
-                  "pointer-events-auto inline-flex h-11 max-w-full items-center rounded-full bg-primary px-5 text-[13.5px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background",
+                  "pointer-events-auto inline-flex h-11 max-w-full items-center rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background",
                   foco,
                 )}
               >

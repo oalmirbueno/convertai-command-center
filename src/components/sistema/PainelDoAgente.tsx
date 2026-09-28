@@ -49,11 +49,11 @@ export function CabecalhoDoAgente({
         )}
         <div className="mr-2 min-w-0 flex-1">
           <h2 className="truncate text-[14px] font-semibold leading-5 text-foreground">{titulo}</h2>
-          {descricao && <p className="truncate text-[12.5px] leading-[18px] text-muted-foreground">{descricao}</p>}
+          {descricao && <p className="truncate text-[12px] leading-[18px] text-muted-foreground">{descricao}</p>}
         </div>
         {acoes && <div className="flex shrink-0 items-center [&>*+*]:ml-1">{acoes}</div>}
         {area && area.largo && (
-          <button type="button" onClick={area.alternarRecolhido} aria-label="Recolher o painel" title="Recolher o painel" className={juntar(botao.icone, "ml-1")}>
+          <button type="button" onClick={area.alternarRecolhido} aria-label="Recolher o painel" title="Recolher o painel" className={juntar(botao.icone, "ml-1")} data-recolher-lateral="">
             <PanelRightClose className="h-4 w-4" aria-hidden="true" />
           </button>
         )}

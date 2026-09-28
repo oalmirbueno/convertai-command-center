@@ -153,8 +153,11 @@ describe("useEstadoDaTela", () => {
 
 describe("AreaDeTrabalho e PainelDoAgente", () => {
   it("altura da janela menos onde a área começa, com piso", () => {
-    expect(alturaDaArea(768, 150)).toBe(768 - 150 - 16);
-    expect(alturaDaArea(500, 300)).toBe(440);
+    // 28/09 (frente L0, dono: "a área vai até o fim da janela; nada vazio embaixo, nada cortado"):
+    // respiro de 12 px (era 16) e piso de 300 px (era 440, que cortava em 1345x602 com o
+    // cabeçalho da mesa em duas linhas).
+    expect(alturaDaArea(768, 150)).toBe(768 - 150 - 12);
+    expect(alturaDaArea(500, 300)).toBe(300);
   });
 
   it("no celular a lateral vira botão que abre o agente em tela cheia; o campo fica fora da rolagem", () => {

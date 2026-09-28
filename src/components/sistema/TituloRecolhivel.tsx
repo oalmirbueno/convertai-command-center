@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useEstadoDaTela } from "./useEstadoDaTela";
 import { foco, juntar } from "./estilos";
@@ -12,6 +12,50 @@ import { foco, juntar } from "./estilos";
 export function useRecolhido(chave: string, inicial = false): [boolean, (v: boolean) => void] {
   const [recolhido, setRecolhido] = useEstadoDaTela<boolean>(chave, inicial, { validar: (v) => typeof v === "boolean" });
   return [recolhido, setRecolhido];
+}
+
+/** Rota (e cliente do endereço, `?client=`) no momento em que o bloco montou. */
+function lugarAtual(): string {
+  try {
+    const rota = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
+    let cliente = "";
+    try {
+      cliente = new URLSearchParams(window.location.search || "").get("client") || "";
+    } catch {
+      cliente = "";
+    }
+    return cliente ? `${rota}:${cliente}` : rota;
+  } catch {
+    return "/";
+  }
+}
+
+/** Título em chave: minúsculas, sem acento, só letras e números separados por hífen. */
+export function tituloEmChave(titulo: string): string {
+  const semAcento = typeof titulo.normalize === "function" ? titulo.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : titulo;
+  return semAcento
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Tudo recolhe (28/09, dono: "tudo tem que ter o negócio de recolher, bem
+ * minimalista"): a chave de recolher de um bloco com título.
+ * - `recolher` string: essa chave (ponha o cliente nela).
+ * - `recolher={false}`: não recolhe.
+ * - sem `recolher` e com título em texto: chave automática
+ *   `auto:<rota>[:<cliente do ?client=>]:<título>`, lida no momento de montar.
+ * Título que não é texto (um elemento) não ganha chave automática.
+ */
+export function useChaveDeRecolher(titulo: ReactNode, recolher: string | false | undefined, prefixo = "auto"): string | null {
+  const lugar = useRef<string | null>(null);
+  if (lugar.current === null) lugar.current = lugarAtual();
+  if (recolher === false) return null;
+  if (typeof recolher === "string" && recolher) return recolher;
+  if (typeof titulo !== "string") return null;
+  const t = tituloEmChave(titulo);
+  return t ? `${prefixo}:${lugar.current}:${t}` : null;
 }
 
 /** O título do bloco vira o botão de recolher: seta que gira e, recolhido, um resumo curto ao lado. */

@@ -13,6 +13,30 @@ import { foco, juntar } from "./estilos";
  * sair. Celular e teclado: toque ou Enter abre e fecha (popover). Esc fecha.
  */
 
+const avisados: Record<string, true> = {};
+
+/**
+ * Auditoria dos lotes (28/09, dono: "esse negócio de explicando, coloca um
+ * ponto de interrogação e já era"): em desenvolvimento, avisa no console
+ * quando a descrição de um título tem cara de explicação (mais de 60
+ * caracteres ou frase com ponto). Explicação vai em `ajuda` (o "?"); na tela
+ * fica só estado curto. Não muda nada na tela nem em produção.
+ */
+export function avisarSeForExplicacao(onde: string, descricao: ReactNode) {
+  let ligado = false;
+  try {
+    ligado = !!(import.meta.env && import.meta.env.DEV && import.meta.env.MODE !== "test");
+  } catch {
+    ligado = false;
+  }
+  if (!ligado || typeof descricao !== "string") return;
+  const t = descricao.trim();
+  if (t.length <= 60 && !/[.!?](\s|$)/.test(t)) return;
+  if (avisados[t]) return;
+  avisados[t] = true;
+  console.warn(`${onde}: a descrição "${t}" parece explicação. Passe o texto em \`ajuda\` (vira o "?"); na tela fica só estado curto (docs/design/SISTEMA.md, seção 5).`);
+}
+
 /** O aparelho tem mouse de verdade (passar por cima)? */
 function temMouse(): boolean {
   try {

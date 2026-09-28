@@ -10,7 +10,16 @@ import { extendTailwindMerge } from "tailwind-merge";
  * arbitrária. Espaço entre itens em flex é margem (mr-2, space-x-2).
  */
 
-/** Escala tipográfica: cinco papéis, quatro tamanhos. */
+/**
+ * Escala de fonte FECHADA (28/09): 11, 12, 13, 14, 15, 20 e 24 px. Nada fora
+ * dela (nada de 10,5, 11,5, 12,5, 13,5, 16, 18 px nem text-xs/text-sm/text-lg).
+ * 14 px é só a conversa com agente (`conversa`); 24 px é só número de destaque
+ * (`texto.numero`). A tabela de troca está em docs/design/SISTEMA.md, seção 2,
+ * e o teste src/test/padrao-visual-catraca.test.ts não deixa o total subir.
+ */
+export const ESCALA_DE_FONTE = [11, 12, 13, 14, 15, 20, 24] as const;
+
+/** Escala tipográfica: sete papéis, seis tamanhos (mais os 14 px da conversa). */
 export const texto = {
   /** Título da página ou da área (um por tela). */
   tituloPagina: "text-[20px] font-semibold leading-7 tracking-[-0.01em] text-foreground",
@@ -22,6 +31,10 @@ export const texto = {
   corpo: "text-[13px] leading-5 text-foreground",
   /** Linha de apoio, metadado, contagem. Uma linha. */
   auxiliar: "text-[12px] leading-4 text-muted-foreground",
+  /** Etiqueta, contador, legenda miúda (11 px). O menor tamanho do painel. */
+  etiqueta: "text-[11px] font-medium leading-4",
+  /** Número de destaque (KPI, total): 24 px, algarismos da mesma largura. */
+  numero: "text-[24px] font-semibold leading-8 tracking-[-0.01em] tabular-nums text-foreground",
 } as const;
 
 /**
@@ -79,14 +92,75 @@ export const botao = {
   barra: `toque-compacto inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${foco}`,
 } as const;
 
-/** Superfícies: o fundo da página e, quando precisa, UM nível elevado. */
+/**
+ * Superfícies: o fundo da página e, quando precisa, UM nível elevado.
+ * Seção NÃO vira cartão (28/09, dono: "ficou tudo encaixotado"). Cartão só
+ * para o que é uma COISA: mídia, item de grade, janela, flutuante, ou o bloco
+ * que a seção 4 do SISTEMA.md já permitia no Painel.
+ */
 export const superficie = {
-  /** O único cartão elevado (Painel). Nada de cartão dentro dele. */
+  /** O único cartão elevado (Painel). Nada de cartão dentro dele. Nunca para embrulhar uma seção. */
   painel: "rounded-lg border border-border bg-card",
   /** Poço dentro de um painel: fundo levemente diferente, sem borda. */
   poco: "rounded-md bg-muted/50",
   /** Divisória fina entre seções. */
   divisoria: "border-t border-border",
+} as const;
+
+/**
+ * Ritmo de espaço (28/09, dono: "era só organizar melhor"). Seção é ABERTA:
+ * título, conteúdo e espaço; divisória fina só quando precisa. O espaço é o
+ * que separa, não caixa. Escala de 4/8 (SISTEMA.md seção 3).
+ */
+export const espaco = {
+  /** Entre os blocos grandes da página (cabeçalho, barra, seções): 24 px. */
+  pagina: "min-w-0 space-y-6",
+  /** Seções abertas lado a lado: 32 px entre colunas, 28 px entre linhas. */
+  colunas: "grid min-w-0 items-start gap-x-8 gap-y-7",
+  /** Itens de uma grade (mídia, item que é uma coisa): 16 px. */
+  grade: "grid min-w-0 gap-4",
+  /** Grupos de funções (GrupoDeFuncoes): 24 px entre colunas, 20 px entre linhas. */
+  grupos: "grid min-w-0 gap-x-6 gap-y-5",
+  /** Respiro interno de um Painel ou item (16 px no celular, 20 px de 640 para cima). */
+  interno: "p-4 sm:p-5",
+} as const;
+
+/**
+ * Linha de lista moderna (estilo Linear/Vercel): sem caixa por linha e sem
+ * traço duro. A lista encosta nas margens com `-mx-2` para o texto alinhar
+ * com o título, e a linha ganha fundo suave arredondado ao passar o mouse.
+ * A linha em destaque ("de hoje") usa fundo verde bem leve, sem faixa lateral.
+ * Quando a lista precisa de separação, `divisoria` (traço a 50%).
+ */
+export const lista = {
+  /** A lista (ul): alinha o texto das linhas com o título da seção. */
+  aberta: "-mx-2 min-w-0",
+  /** A lista com traço leve entre as linhas (junte com `aberta`). */
+  divisoria: "divide-y divide-border/50",
+  /** Uma linha: canto, respiro e fundo suave no hover. */
+  linha: "flex min-w-0 items-center rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40",
+  /** Linha em destaque (junte com `linha`): fundo verde leve no lugar do hover. */
+  destaque: "bg-primary/[0.07] hover:bg-primary/10",
+} as const;
+
+/**
+ * Rolagem (regra 2.7 do plano de padronização, SISTEMA.md seção 8): uma por
+ * região, nada de rolagem dentro de rolagem, nada de caixa com rolagem própria
+ * prendendo o dedo no celular. Lista longa dentro da página só rola por dentro
+ * de 1024 px para cima (`lg:`); abaixo disso a página rola normal. Classes
+ * inteiras aqui para o Tailwind gerar. `janela` é só para o que já está numa
+ * janela, popover ou gaveta (altura fixa em toda largura).
+ * A regra em código: `rolagemPresaNoCelular` (src/components/sistema/regras.ts).
+ */
+export const rolagem = {
+  /** Lista curta (até ~6 linhas) dentro da página. */
+  curta: "lg:max-h-[300px] lg:overflow-y-auto lg:overscroll-contain",
+  /** Lista média dentro da página. */
+  lista: "lg:max-h-[420px] lg:overflow-y-auto lg:overscroll-contain",
+  /** Lista longa dentro da página. */
+  longa: "lg:max-h-[560px] lg:overflow-y-auto lg:overscroll-contain",
+  /** Corpo de janela, popover ou gaveta. */
+  janela: "max-h-[60vh] overflow-y-auto overscroll-contain",
 } as const;
 
 /** Largura da área de trabalho das mesas: a tela toda até 1760 px. */

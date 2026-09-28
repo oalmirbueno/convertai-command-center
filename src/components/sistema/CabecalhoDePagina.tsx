@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import AjudaRecolhida from "./AjudaRecolhida";
+import AjudaRecolhida, { avisarSeForExplicacao } from "./AjudaRecolhida";
 import { foco, juntar, texto } from "./estilos";
 
 /**
@@ -33,6 +33,7 @@ export default function CabecalhoDePagina({
   className?: string;
 }) {
   const Titulo = nivel === 2 ? "h2" : "h1";
+  avisarSeForExplicacao("CabecalhoDePagina", descricao);
   return (
     <div className={juntar("flex min-w-0 items-end justify-between", className)}>
       <div className={juntar("mb-1 min-w-[120px] flex-auto", acoes && "mr-4")}>

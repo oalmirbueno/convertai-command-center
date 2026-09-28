@@ -27,29 +27,73 @@ Componentes: `src/components/sistema/` (importe de `@/components/sistema`).
 
 Três níveis de superfície, no máximo: fundo, painel, poço. Nada além disso.
 
-Classes prontas em `src/components/sistema/estilos.ts`: `texto`, `campo`, `campoTexto`, `botao`,
-`superficie`, `foco`, `etiqueta`, `larguraDaMesa`, `juntar`, `toqueCompacto`.
+Classes prontas em `src/components/sistema/estilos.ts`: `texto`, `conversa`, `campo`, `campoTexto`, `botao`,
+`superficie`, `foco`, `etiqueta`, `larguraDaMesa`, `juntar`, `toqueCompacto` e, desde 28/09 (frente L0),
+`espaco`, `lista`, `rolagem` e `ESCALA_DE_FONTE`. As regras em código (funções puras que o teste de catraca
+usa e que qualquer teste de tela pode usar) ficam em `src/components/sistema/regras.ts`.
+
+**Barras de rolagem** (28/09): quase invisíveis no painel inteiro (`src/index.css`, bloco "Barras de rolagem
+quase invisíveis": fina, cor da letra a 7%, 18% com o mouse em cima). Nunca pintar barra de rolagem por tela.
 
 `juntar` resolve conflito do Tailwind (tailwind-merge): a classe que vem depois vence, então
 `juntar(botao.secundario, "h-8")` fica com 32 px (antes o `h-9` da base vencia pela ordem do CSS). Diferença
 do padrão: trocar o tamanho da letra não apaga o `leading-*` anterior (os tamanhos do painel são arbitrários
 e não trazem altura de linha).
 
-## 2. Tipografia (5 papéis, 4 tamanhos)
+## 2. Tipografia (escala fechada: 11, 12, 13, 14, 15, 20 e 24 px)
 
-| Papel | Classe (`texto.*`) | Tamanho |
+| Papel | Classe | Tamanho |
 |---|---|---|
-| Título da página | `tituloPagina` | 20 px semibold, tracking -0.01em |
-| Título de seção | `tituloSecao` | 15 px semibold |
-| Rótulo | `rotulo` | 12 px medium, cinza |
-| Corpo | `corpo` | 13 px |
-| Auxiliar | `auxiliar` | 12 px cinza, uma linha |
+| Título da página | `texto.tituloPagina` | 20 px semibold, tracking -0.01em |
+| Título de seção | `texto.tituloSecao` | 15 px semibold |
+| Rótulo | `texto.rotulo` | 12 px medium, cinza |
+| Corpo | `texto.corpo` | 13 px |
+| Auxiliar | `texto.auxiliar` | 12 px cinza, uma linha |
+| Etiqueta (novo) | `texto.etiqueta` | 11 px medium: contador, legenda miúda, pastilha. O menor tamanho do painel |
+| Número (novo) | `texto.numero` | 24 px semibold, `tabular-nums`: KPI, total de destaque |
+| Conversa | `conversa.mensagem` | 14 px com linha 1,6: só conversa com agente (seção 9) |
 
-Sem CAIXA ALTA em subtítulo novo. Números com `tabular-nums`.
+A escala é **fechada** (`ESCALA_DE_FONTE` em `estilos.ts`): nada fora dela. Sem CAIXA ALTA em subtítulo novo.
+Números com `tabular-nums`.
+
+**Tabela de troca (de/para).** Cada lote troca só nos arquivos dele; ninguém troca fonte em massa fora do lote.
+Fonte vem depois de texto explicativo, cartões e rolagem (prioridade do dono em 28/09).
+
+| Hoje | Vira | Observação |
+|---|---|---|
+| `text-[9px]`, `text-[10px]`, `text-[10.5px]` | `text-[11px]` / `texto.etiqueta` | 11 px é o piso |
+| `text-[11.5px]` | `text-[12px]` / `texto.auxiliar` | |
+| `text-[12.5px]` | `text-[12px]` (apoio) ou `text-[13px]` (corpo) | pelo papel do texto |
+| `text-[13.5px]` | `text-[13px]` (ou 14 px se for conversa) | |
+| `text-[16px]`, `text-[17px]`, `text-[18px]` em título | `texto.tituloSecao` (15) ou `texto.tituloPagina` (20) | |
+| `text-[18px]`, `text-[22px]`, `text-[28px]`, `text-[34px]` em número | `texto.numero` (24) | |
+| `text-xs` | `text-[12px]` | |
+| `text-sm` | `text-[13px]` | |
+| `text-base` | `text-[13px]` (corpo) ou `text-[14px]` (conversa) | |
+| `text-lg`, `text-xl` em título | `texto.tituloSecao` / `texto.tituloPagina` | |
+| `text-2xl` ou maior em número | `texto.numero` | |
+
+Ficam como estão (contratos de teste): a pastilha `text-[11px]` de `execucao-areas-recolhiveis.test.ts:111` e os
+14 px da conversa (`ui-recolher-e-conversa.test.tsx`). Dentro do próprio sistema, só `PainelDoAgente` (12,5 para
+12 px) e `AreaDeTrabalho` (13,5 para 13 px) foram trocados. Ainda há 12,5 px no balão do "?", em `conversa.apoio`
+e na faixa do `SeletorCompacto`; 10,5 e 11,5 px nas `Etapas`, no `SeletorDeMesa` e na lista do `SeletorCompacto`;
+16 e 18 px na `FaixaDeNumeros`. Eles entram na troca quando o lote da tela que depende deles medir o efeito.
 
 ## 3. Espaçamento, grade e larguras
 
-- Escala de 4/8: 4, 8, 12, 16, 20, 24, 32. Entre seções: 20 a 24 px. Dentro de painel: 16 (celular) e 20 px.
+- Escala de 4/8: 4, 8, 12, 16, 20, 24, 32. Dentro de painel: 16 (celular) e 20 px.
+- **Ritmo de espaço** (`espaco` em `estilos.ts`, 28/09). O espaço é o que separa, não a caixa:
+
+  | Token | Classes | Uso |
+  |---|---|---|
+  | `espaco.pagina` | `min-w-0 space-y-6` | entre os blocos grandes da página (cabeçalho, barra, seções): 24 px |
+  | `espaco.colunas` | `grid min-w-0 items-start gap-x-8 gap-y-7` | seções abertas lado a lado: 32 px entre colunas, 28 px entre linhas (o da Central) |
+  | `espaco.grade` | `grid min-w-0 gap-4` | itens de grade que são uma coisa (mídia, criativo, oferta): 16 px |
+  | `espaco.grupos` | `grid min-w-0 gap-x-6 gap-y-5` | grupos de funções: 24 px entre colunas, 20 px entre linhas |
+  | `espaco.interno` | `p-4 sm:p-5` | respiro interno de um Painel ou item |
+
+  O plano pedia 20 px entre blocos. Com as seções abertas (sem caixa), 20 px deixava os blocos colados, e a
+  Central aberta já estava em 24 e 28 px. Por isso ficou 24.
 - Mesa: a área de trabalho usa a tela toda até **1760 px** (`larguraDaMesa`), com os gutters do painel
   (16 px no celular, 24 px de 768 para cima). Nada de coluna estreita no meio.
 - Colunas: grade (`grid`) com `minmax(0,1fr)`; todo filho de grade/flex com `min-w-0`.
@@ -72,17 +116,45 @@ Sem CAIXA ALTA em subtítulo novo. Números com `tabular-nums`.
   calendário, cartão de mídia). Dentro do painel: divisória ou poço (`superficie.poco`), nunca outro painel.
 - Grupos recolhíveis viram lista com divisória (ver `Hub` em `ContextoHub.tsx`).
 
+### 4.0 A regra final do dono (28/09)
+
+Depois de várias idas e voltas no mesmo dia, nas palavras dele: "a interface tá bonita, tá tudo funcionando,
+gosto do jeito que tá; a única coisa é ser menos poluído".
+
+- **Menos poluído, no painel inteiro.** Não é redesenho: é tirar o excesso sem tirar função.
+- **Dashboard intocado.** `/dashboard` (`AdminDashboard.tsx` e `src/components/dashboard`) já foi validado:
+  nenhum lote mexe nele.
+- **Tudo recolhe** (4.3): cada seção, bloco e área recolhe e volta com um controle pequeno.
+- **Laterais recolhem para o lado** (4.3): agente e listas laterais viram uma tirinha fina.
+- **Explicação sempre no "?"** (seção 5): na tela só o título e, no máximo, uma linha de estado.
+- **Cartão só onde tem função** (4.1). Seção não vira cartão.
+- **Fundo liso e barras de rolagem quase invisíveis** (4.1 e seção 1).
+
 ### 4.1 Fundo e cartões (28/09, pedido do dono)
 
 - **Fundo liso** nos dois temas. Nada de grade, manchas ou gradiente atrás do conteúdo: no claro deixava
   a tela com cara de suja e, no escuro, as seções pareciam transparentes. Claro: `--background` cinza-gelo
-  (96,5%) com cartão branco por cima; escuro: 5% com cartão a 10%.
-- **Cartão é sempre sólido** (`bg-card`). Nada de `bg-card/40`, `/50` ou `/60` em bloco de conteúdo;
-  translúcido só em estado de passar o mouse ou vazio tracejado.
-- Tela com duas ou mais colunas de seções (Central, perfis, painéis de cliente): cada seção num cartão,
-  `<Secao cartao>` (canto 12 px, borda, `shadow-sm`, 16/20 px de respiro), com 16 px entre cartões.
-  Dentro do cartão continua valendo: divisória ou poço, nunca outro cartão.
-- Lista dentro de cartão vai de borda a borda (`-mx-4 sm:-mx-5`), para as divisórias tocarem o cartão.
+  com cartão branco por cima; escuro: 5% com cartão a 10%.
+- **Seção é aberta, nunca caixa.** Título, conteúdo e espaço; quando precisa, uma divisória fina. Dono, 28/09,
+  depois de ver a Central em cartões: "não precisava; era só organizar melhor. Você criou um monte de
+  containers, caixas, cartões… ficou parecendo que tudo está encaixotado, antigo, feio". A regra antiga
+  ("telas com 2+ colunas: cada seção num cartão") está **revogada**. Seções lado a lado: `GradeDeSecoes`
+  (ritmo de `espaco.colunas`), sem caixa.
+- **Cartão só onde tem função**, nas palavras dele: "onde precisar, ter cartões e contêineres; você coloca
+  onde precisa; onde não precisa, não coloca".
+  - **Com cartão:** item de grade ou mídia (foto, criativo, oferta), formulário que é o assunto da tela,
+    janela, painel flutuante, lista que é uma coisa só. Use o `Painel` ou `superficie.painel`.
+  - **Sem cartão:** seção de página, grupo de funções, cabeçalho, barra de controles.
+  - Na dúvida entre caixa e aberto, escolha aberto.
+- `<Secao cartao>`: **não usar para seção**. A prop fica só para exceção pedida pelo dono.
+- **Cartão, quando existe, é sólido** (`bg-card`). Nada de `bg-card/40`, `/50` ou `/60` em bloco de conteúdo;
+  translúcido só em estado de passar o mouse, chip sobre foto, barra fixa ou vazio tracejado.
+- **Lista moderna** (`lista` em `estilos.ts`, estilo Linear/Vercel): sem caixa por linha e sem traço duro.
+  `ul` com `lista.aberta` (`-mx-2`, o texto alinha com o título); cada linha com `lista.linha` (canto, respiro
+  e `hover:bg-muted/40`); a linha em destaque ("de hoje") com `lista.destaque` (verde bem leve, sem faixa
+  lateral). Quando a lista precisa de separação, `lista.divisoria` (traço a 50%).
+- A catraca (`src/test/padrao-visual-catraca.test.ts`) conta os cartões feitos à mão para **baixar**: cartão
+  sem função sai (vira seção aberta); cartão com função passa a usar o `Painel` ou `superficie.painel`.
 
 ### 4.2 Organização e respiro (28/09, pedido do dono)
 
@@ -100,11 +172,46 @@ Sem CAIXA ALTA em subtítulo novo. Números com `tabular-nums`.
 - **Escolha entre poucas opções de tamanho/formato**: seletor compacto, não fileira de botões grandes.
 - **Tirar poluição nunca é tirar função.** Toda função continua lá, só mais organizada.
 - **Rolagem**: uma por região, nunca rolagem dentro de rolagem, nada cortado sem poder rolar.
+- Componentes (seção 15): `BarraDeControles` (duas linhas; a de filtros que não cabe vira "Filtros (n)"),
+  `MenuMais` (o "..."), `GrupoDeFuncoes` + `GradeDeGrupos` (agrupar com título curto e respiro, sem borda
+  nem fundo) e `GradeDeSecoes` (seções abertas lado a lado).
+
+### 4.3 Tudo recolhe (28/09, pedido do dono)
+
+"Tudo tem que ter o negócio de recolher, bem minimalista, pouquinho, fechado."
+
+- **`Secao` e `Painel` com título em texto já nascem recolhíveis** (abertos). O controle é uma setinha
+  pequena antes do título ("Recolher"/"Mostrar"); clicar no título também alterna. A escolha fica guardada
+  por pessoa, rota e chave. Chave automática: `auto:<rota>[:<cliente do ?client=>]:<título sem acento>`
+  (`useChaveDeRecolher` em `TituloRecolhivel.tsx`), lida no momento de montar.
+  - `recolher="<chave>"`: chave escolhida pela tela (ponha o cliente nela quando o cliente não está no
+    endereço). Nesse modo o título inteiro é o botão (contrato antigo).
+  - `recolher={false}`: não recolhe (bloco que não pode sumir).
+  - Título que é elemento (não texto) não ganha chave automática: passe `recolher`.
+  - Seção repetida numa lista (o mesmo título para cada item): passe `recolher` com o id do item; a chave
+    automática é por título, e todas as seções de mesmo título na mesma tela recolheriam juntas.
+  - Recolhido: fica o título e, embaixo, o `resumo` (ou a `descricao`, que é estado).
+  - O padrão é aberto: nada some sozinho, e os testes que procuram o conteúdo continuam vendo. A setinha
+    se chama "Recolher"/"Mostrar" (não leva o título no nome), então não muda o nome dos botões da tela.
+- **Bloco que não é `Secao` nem `Painel`** (cabeçalho feito à mão): `TituloRecolhivel` + `useRecolhido(chave)`,
+  ou vira `Secao`.
+- **Laterais recolhem para o lado** (`AreaDeTrabalho`, de 1024 px para cima): recolhida, a lateral vira uma
+  tirinha de 32 px (ícone, nome em pé, sem caixa, só um traço fino à esquerda) e a principal ganha a largura.
+  O botão de recolher é o do `CabecalhoDoAgente`; lateral sem ele ganha um botão pequeno no vão entre as
+  colunas (nunca por cima do conteúdo). A escolha fica guardada por área (`memoria`). No celular nada muda
+  (botão flutuante e gaveta).
 
 ## 5. Texto: menos, sempre
 
-- Página, seção e cartão mostram **só o título curto**. A explicação vai num **"?"** ao lado do título
-  (`AjudaRecolhida`: passa o mouse no computador, toca no celular). Nada de parágrafo explicativo fixo.
+Dono, 28/09: "esse negócio de explicando, coloca um ponto de interrogação e já era".
+
+- Página, aba, seção, conteúdo e ação mostram **só o título curto**. Todo subtítulo explicativo, parágrafo e
+  texto extra embaixo de título vai para o **"?"** ao lado do título (`ajuda` em `CabecalhoDePagina`, `Secao`,
+  `CabecalhoDeSecao`, `Painel`, `GrupoDeFuncoes`; ou `AjudaRecolhida`: passa o mouse no computador, toca no
+  celular). Nada de parágrafo explicativo fixo. Na tela fica, no máximo, uma linha de **estado** curta.
+- Auditoria: em desenvolvimento (`npm run dev`), `CabecalhoDePagina`, `CabecalhoDeSecao`/`Secao` e `Painel`
+  avisam no console quando a `descricao` tem cara de explicação (mais de 60 caracteres ou frase com ponto):
+  `avisarSeForExplicacao` em `AjudaRecolhida.tsx`. Não muda a tela nem a produção.
 - Linha auxiliar é **estado** (contagem, data, "3 de 9 completos"), em uma linha. Não é explicação.
 - Não repetir o que a barra já mostra (o nome do cliente está na casca: o título é "Contexto", não
   "Contexto de Fulano").
@@ -164,6 +271,23 @@ Dono: "o agente tem que ficar fixo; rolar um lugar não rola tudo; sempre separa
   chave sem posição guardada volta ao topo antes da pintura. O elemento que rola é `relative` (prende o que é
   absoluto lá dentro, como o select escondido do Radix, que esticava a página).
 - Sticky só dentro da própria região. Nada grudado no topo por cima do conteúdo.
+- **Regra de rolagem em código** (28/09): `max-h-[..] overflow-y-auto` sem prefixo dentro da página prende o
+  dedo no celular. Use `rolagem.curta` / `rolagem.lista` / `rolagem.longa` de `estilos.ts`
+  (`lg:max-h-[300|420|560px] lg:overflow-y-auto lg:overscroll-contain`: só rola por dentro de 1024 px para
+  cima) ou a `RegiaoRolavel`. `rolagem.janela` (`max-h-[60vh]`) só em janela, popover ou gaveta. A regra é
+  `rolagemPresaNoCelular` em `regras.ts`, e a catraca conta.
+- **Nenhuma altura fixa `calc(100vh-Npx)` em área de trabalho** (28/09, dono: "nenhum espaço sobrando e nada
+  cortado"): na tela cheia sobra faixa embaixo e, no modo normal, corta. Use `AreaDeTrabalho` ou
+  `useAlturaQueCabe(ativo)` (mede de onde a área começa; null abaixo de 1024 px; mede de novo em resize,
+  tela cheia, modo foco e depois das fontes). Janela e popover podem usar a altura da janela. A catraca conta
+  `h-[calc(100vh` e `max-h-[calc(100vh` fora de janela.
+- **A área vai até o fim da janela** (28/09): respiro de 12 px embaixo e nada mais. Principal e lateral sem
+  recuo de baixo (o `lg:pb-24` e o `lg:pb-14` antigos reservavam lugar para o lançador que flutuava: deixavam
+  ~60 px vazios embaixo do agente e faziam barra `sticky bottom-0` da aba parar 96 px acima do fim). A área
+  mede de novo quando o cabeçalho da mesa muda de altura depois de montar (ResizeObserver no corpo e no
+  cabeçalho, quando o navegador tem) e o piso é 300 px (440 cortava em 1345x602). Medido na demonstração em
+  1280x720, 1345x602, 1366x768 e 1920x1080, cabeçalho em 1 e 2 linhas (também chegando depois) e tela cheia:
+  área, lateral, região principal e barra sticky terminam em `innerHeight - 12`, sem rolagem da página.
 - `scroll-mt-*` grande (para o cabeçalho da página) vira `lg:scroll-mt-4` dentro de região.
 
 ## 9. Agentes
@@ -234,12 +358,13 @@ Sem `dvh/svh` como única medida. Sem ResizeObserver obrigatório (MutationObser
 | `SeletorDeMesa` | `atual`, `clientId`, `marcaId?`, `className?` (Alt+M abre; 1 a 9 escolhe) |
 | `Etapas` | `itens: {valor, rotulo, dica?, contador?, destaque?, icone?, dados?}[]`, `valor`, `onEscolher`, `rotulo` (aria-label), `numerar?`, `depois?` |
 | `SeletorCompacto` | `opcoes: {valor, rotulo, icone?, contador?, descricao?, desativada?}[]`, `valor`, `onEscolher`, `rotulo`, `icone?`, `modo?`, `listaQuandoNaoCabe?` (o segmentado vira lista sozinho quando algum rótulo corta ou a faixa passa da borda; medido antes da pintura; ao alargar tenta de novo), `larguraTotal?` |
-| `AreaDeTrabalho` | `children` (principal), `lateral?`, `rotuloDaLateral?`, `iconeDaLateral?`, `larguraDaLateral?: "padrao" \| "larga"`, `principalRolavel?`, `rotuloDoPrincipal?`, `memoria?` (lateral recolhida), `memoriaDaRolagem?`, `nasceRecolhida?`, `pedidoDeAbrir?` (muda a cada pedido). Função `abrirLateralDaArea()` abre de qualquer lugar (computador: tira do recolhido; celular: abre a gaveta) |
+| `AreaDeTrabalho` | `children` (principal), `lateral?`, `rotuloDaLateral?`, `iconeDaLateral?`, `larguraDaLateral?: "padrao" \| "larga"`, `principalRolavel?`, `rotuloDoPrincipal?`, `memoria?` (lateral recolhida), `memoriaDaRolagem?`, `nasceRecolhida?`, `pedidoDeAbrir?` (muda a cada pedido). Função `abrirLateralDaArea()` abre de qualquer lugar (computador: tira do recolhido; celular: abre a gaveta). Recolhida, a lateral é uma tirinha de 32 px; lateral sem `CabecalhoDoAgente` ganha o botão pequeno no vão (4.3) |
+| `useAlturaQueCabe` | `(ativo)` devolve `{ ref, altura, medir }`: altura em px que cabe na janela a partir de onde o elemento começa (null abaixo de 1024 px ou com `ativo` falso). Use `style={{ height: altura }}`; nunca `h-[calc(100vh-Npx)]` |
 | `RegiaoRolavel` | `modo?: "lg" \| "sempre"`, `rotulo?`, `memoria?`, `sombras?`, `sobre?: "fundo" \| "cartao"`, `className?`, `classeDeFora?`, `onScroll?`, ref = o elemento que rola |
 | `PainelDoAgente` | `titulo?`, `descricao?`, `icone?`, `acoes?`, `topo?`, `avisos?`, `compositor?`, `refDasMensagens?`, `rotuloDasMensagens?`, `semMoldura?`, `children` (mensagens) |
-| `Secao` | `titulo?`, `descricao?` (estado), `acao?`, `ajuda?`, `divisoria?`, `nivel?`, `id?`, `data-*`. As ações quebram por dentro no celular (o título guarda 96 px). Recolher (28/09): `recolher="<area>:<bloco>:<cliente>"`, `resumo?` (à vista recolhida), `recolhidaDeInicio?`; o título vira o botão, descrição e ações somem recolhida |
+| `Secao` | `titulo?`, `descricao?` (estado), `acao?`, `ajuda?`, `divisoria?`, `nivel?`, `id?`, `data-*`. As ações quebram por dentro no celular (o título guarda 96 px). **Tudo recolhe** (4.3): com título em texto já nasce recolhível (setinha pequena, chave automática); `recolher="<area>:<bloco>:<cliente>"` escolhe a chave (o título vira o botão); `recolher={false}` desliga; `resumo?` (à vista recolhida; sem ele, a `descricao`), `recolhidaDeInicio?`. `cartao`: não usar para seção (4.1) |
 | `CabecalhoDeSecao` | só o cabeçalho da Secao: `titulo?`, `descricao?`, `acao?`, `ajuda?`, `rotuloDaAjuda?`, `nivel?`, `icone?`, `truncar?`, `classeDoTitulo?`, `recolher?: { recolhido, onAlternar, resumo? }`, `className?`, `data-*`. Os cabeçalhos das mesas (`CabecalhoDaParte` da Mesa Ads, `CabecalhoDaEtapa` da Publicidade, `Cabecalho` dos Roteiros) usam este |
-| `Painel` | `titulo?`, `descricao?`, `acao?`, `ajuda?` (o "?" ao lado do título; some na impressão), `rodape?`, `semEspaco?`, `as?` |
+| `Painel` | `titulo?`, `descricao?`, `acao?`, `ajuda?` (o "?" ao lado do título; some na impressão), `rodape?`, `semEspaco?`, `as?`, `recolher?: string \| false`, `resumo?`, `recolhidoDeInicio?`. Com título em texto já nasce recolhível (setinha pequena). Só para o que tem função de cartão (4.1) |
 | `CabecalhoDePagina` | `titulo`, `descricao?`, `acoes?`, `ajuda?`, `voltar?: {para, rotulo}`, `nivel?`. As ações quebram por dentro no celular (o título guarda 120 px) |
 | `FaixaDeNumeros` | `itens?: {rotulo, valor, apoio?, aoLado?, ponto?, corDoValor?, lado?, extra?, para?, aoClicar?, dica?, chave?}[]` ou `children` com `CelulaDeNumero`; `rotulo?`, `colunas?: 1..6` (2 no celular; nunca mais que os itens), `grade?` (classes exatas), `tamanho?: "grande" \| "compacto"`, `apoioAoLado?`, `semMoldura?` (já dentro de um Painel), `data-*`. `para` = número que leva a outra tela (link de verdade) |
 | `CelulaDeNumero` | `rotulo`, `valor`, `apoio?`, `lado?`, `destaque?`, `tamanho?`, `children` (barra, minigráfico) |
@@ -254,6 +379,12 @@ Sem `dvh/svh` como única medida. Sem ResizeObserver obrigatório (MutationObser
 | `BarraDeAcoes` | `inicio?`, `fixa?`, `children` (botões) |
 | `AjudaRecolhida` | `children` (texto), `rotulo?`, `titulo?`, `lado?` |
 | `useEstadoDaTela` | `(chave, inicial, { validar?, esperaMs?, rota? })` devolve `[valor, mudar, esquecer]` |
+| `BarraDeControles` | `rotulo` (aria-label do grupo), `inicio?` (linha 1, esquerda: a busca; encolhe), `acoes?` (linha 1, direita; um primário), `filtros?` (linha 2, uma faixa), `mais?: ItemDoMenu[]` (o "..." no fim da linha 1), `filtrosAtivos?` (contador), `rotuloDosFiltros?` ("Filtros"), `recolherFiltros?: "quando-nao-cabe" \| "sempre"`, `lateral?: "auto" \| "popover" \| "gaveta"` (auto: popover de 768 px para cima, `JanelaDoCelular` abaixo), `aoLimparFiltros?` ("Limpar filtros" no pé), `className?`. Nunca mais de duas linhas: a linha 2 que não cabe (medida antes da pintura, como o `SeletorCompacto`) sai inteira para o botão "Filtros (n)"; ao alargar a janela, volta. Nada some. `data-barra-de-controles`, `data-filtros="na-barra" \| "recolhidos"` |
+| `MenuMais` | `itens: (ItemDoMenu \| false \| null)[]` com `{ rotulo, icone?, aoEscolher, perigo?, desativado?, separadorAntes?, dica? }`, `rotulo?` ("Mais ações"), `vertical?`, `alinhar?: "start" \| "end"`, `desativado?`, `className?`. Botão de ícone de 32 px com nome; perigo sempre por último, com traço antes; sem item, não desenha. Substitui os `DropdownMenu` com `MoreHorizontal` montados à mão |
+| `GradeDeSecoes` | `colunas?: 2 \| 3`, `apartirDe?: "md" \| "lg" \| "xl"` (padrão lg), `lateral?: 280 \| 320 \| 360 \| 400` (conteúdo + coluna fixa à direita), `className?`, `data-*`. Seções ABERTAS lado a lado com `espaco.colunas`; filhos com `min-w-0`. Em dev avisa se um filho é `Secao cartao` |
+| `GrupoDeFuncoes` | `titulo` (curto), `ajuda?` (o "?"), `mais?: ItemDoMenu[]` (o secundário do grupo, no "..." à direita do título), `acao?`, `grade?: 1 \| 2 \| 3` (controles em colunas iguais), `className?`, `data-*`. Sem borda e sem fundo: quem separa é o espaço. `role="group"` com o título como nome |
+| `GradeDeGrupos` | `colunas?: 2 \| 3 \| 4` (máximo), `larguraMinima?` (240 px), `className?`. As colunas saem da largura da CAIXA, não da janela: a direção do Estúdio numa coluna estreita fica com 1 coluna. Ritmo de `espaco.grupos` |
+| Tokens (28/09) | `espaco.pagina \| colunas \| grade \| grupos \| interno`; `lista.aberta \| divisoria \| linha \| destaque`; `rolagem.curta \| lista \| longa \| janela`; `texto.etiqueta`, `texto.numero`; `ESCALA_DE_FONTE`. Regras puras em `regras.ts`: `fontesForaDaEscala`, `rolagemPresaNoCelular`, `translucidoEmBloco`, `cartaoFeitoAMao`, `cantosForaDoToken`, `tituloQueQuebra`, `sombrasFortes`, `caixaAlta`, `alturasFixasDaJanela` |
 
 Ficaram locais (um uso só, não promovidos): `Recolhivel` (EsteiraClientSheet), `SemanaNav` (AdminEsteira),
 `useLarguraMinima(1280)` (AdminComercial). O "useEstreito/useLargura640" que Pedidos, Aprovações e Execução
@@ -289,6 +420,22 @@ Rodar em **375, 768, 1280x720, 1366x768, 1440 e 1920**:
 18. Nenhum título de seção quebrado em duas linhas; resumo recolhido embaixo do título.
 19. Nenhuma barra com mais de duas linhas de controles; o que sobra está num seletor ou menu.
 20. Áreas com muitas funções agrupadas com título curto e respiro entre os grupos (ver 4.2).
+21. Nenhuma seção, grupo, cabeçalho ou barra dentro de caixa; cartão só onde tem função (4.1).
+22. Toda seção e bloco recolhe e volta; lateral recolhe para a tirinha (4.3).
+23. Nenhum subtítulo ou parágrafo explicativo à vista: tudo no "?"; na tela só título e estado (seção 5).
+24. Nenhum espaço sobrando embaixo nem área cortada, na tela normal e na tela cheia (seção 8).
+25. A catraca passa: `npx vitest run src/test/padrao-visual-catraca.test.ts` (ver abaixo).
+
+**Catraca do padrão visual** (`src/test/padrao-visual-catraca.test.ts`, frente L0, 28/09): conta no código
+inteiro (`src/**/*.tsx`, sem `ui/` e sem testes) o que o padrão tira e **falha se algum número subir**. Cada lote
+baixa os números dos seus arquivos e, no mesmo commit, baixa o teto no teste (o teste avisa no console quando
+um número caiu). Nunca suba um teto: use o token ou o componente do sistema. Números por arquivo:
+`CATRACA_MOSTRAR=1 npx vitest run src/test/padrao-visual-catraca.test.ts`. Métricas: fonte fora da escala,
+fonte com nome do Tailwind, translúcido em bloco, rolagem presa no celular, rolagem dentro de rolagem, altura
+fixa pela janela, cartão feito à mão, seção em cartão, cartão dentro de cartão, parágrafo explicativo fixo
+(90 ou mais caracteres fora de janela), descrição explicativa (texto de `descricao` com mais de 60 caracteres
+ou frase), canto fora do token (`rounded-2xl`/`3xl`), título que quebra, sombra forte, caixa alta e `<h1>` feito
+à mão. Prioridade dos lotes: parágrafo e descrição explicativos, cartão à mão e rolagem; fonte fica por último.
 
 Como conferir sem o Supabase real (harness da D1, fora do repositório):
 1. Subir o Vite pela API (`createServer`, `configFile: false`, `root` no repositório, `process.chdir` para

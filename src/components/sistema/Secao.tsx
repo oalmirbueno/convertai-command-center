@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import AjudaRecolhida from "./AjudaRecolhida";
-import { useRecolhido } from "./TituloRecolhivel";
+import AjudaRecolhida, { avisarSeForExplicacao } from "./AjudaRecolhida";
+import { useChaveDeRecolher, useRecolhido } from "./TituloRecolhivel";
 import { foco, juntar, texto } from "./estilos";
 
 /** Título que vira o botão de recolher (Secao com `recolher`). */
@@ -10,6 +10,13 @@ export interface RecolherDoCabecalho {
   onAlternar: () => void;
   /** Linha curta à vista com o bloco recolhido (ex.: "12 itens"). */
   resumo?: ReactNode;
+  /**
+   * "titulo" (padrão): o título inteiro é o botão (chave passada pela tela).
+   * "icone": uma setinha pequena antes do título é o botão ("Recolher" /
+   * "Mostrar"), e o título continua um título comum (clicar nele também
+   * alterna). É o do recolher automático: não muda o nome dos botões da tela.
+   */
+  modo?: "titulo" | "icone";
 }
 
 /**
@@ -62,6 +69,7 @@ export function CabecalhoDeSecao({
 } & Record<`data-${string}`, string | undefined>) {
   const Titulo = nivel === 3 ? "h3" : "h2";
   const recolhido = !!(recolher && recolher.recolhido);
+  avisarSeForExplicacao("CabecalhoDeSecao", descricao);
   return (
     <div className={juntar("flex min-w-0 items-start", className)} data-cabecalho-de-secao="" {...resto}>
       {/* Título: cresce para ocupar a sobra; as ações encolhem com peso 5 (cedem primeiro). Pesos >= 1: com soma menor que 1 o flex não tira todo o excesso. */}
@@ -73,7 +81,28 @@ export function CabecalhoDeSecao({
                 {icone}
               </span>
             )}
-            {titulo && recolher ? (
+            {titulo && recolher && recolher.modo === "icone" ? (
+              <>
+                {/* Setinha pequena (28/09, dono: "tudo recolhe, bem minimalista"). Deslocada com relative -left-1, nunca margem negativa. */}
+                <button
+                  type="button"
+                  onClick={recolher.onAlternar}
+                  aria-expanded={!recolhido}
+                  aria-label={recolhido ? "Mostrar" : "Recolher"}
+                  title={recolhido ? "Mostrar" : "Recolher"}
+                  className={juntar("toque-compacto relative -left-1 inline-flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
+                  data-recolher-secao=""
+                >
+                  <ChevronDown className={juntar("h-4 w-4 transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+                </button>
+                <Titulo
+                  className={juntar(nivel === 3 ? "text-[13px] font-semibold leading-5 text-foreground" : texto.tituloSecao, "min-w-0 cursor-pointer select-none truncate", classeDoTitulo)}
+                  onClick={recolher.onAlternar}
+                >
+                  {titulo}
+                </Titulo>
+              </>
+            ) : titulo && recolher ? (
               <Titulo className={juntar(nivel === 3 ? "text-[13px] font-semibold leading-5 text-foreground" : texto.tituloSecao, "min-w-0", classeDoTitulo)}>
                 <button
                   type="button"
@@ -114,11 +143,20 @@ export function CabecalhoDeSecao({
   );
 }
 
-/** Cartão da seção: o mesmo fundo, borda e canto do Dossiê da Central. */
+/**
+ * Cartão da seção. NÃO use para seção (28/09, dono: "ficou tudo encaixotado,
+ * antigo"): seção é aberta. Fica só para exceção pedida pelo dono.
+ */
 const CARTAO = "rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm sm:px-5 sm:py-4";
 
 /**
  * Seção: título, uma linha de apoio, ação à direita e o conteúdo, SEM caixa.
+ *
+ * Tudo recolhe (28/09): com `titulo` em texto, a seção já nasce recolhível
+ * (aberta), com a chave automática `auto:<rota>[:<cliente>]:<título>`
+ * (useChaveDeRecolher). `recolher="<chave>"` escolhe a chave (ponha o
+ * cliente nela quando a página não tem `?client=`); `recolher={false}`
+ * desliga. Recolhida, fica o título e, embaixo, o `resumo` (ou a `descricao`).
  * Seções vizinhas se separam por espaço (e, com `divisoria`, por uma linha
  * fina em cima). Ajuda longa vai em `ajuda` (vira o "?" ao lado do título).
  * No celular as ações quebram por dentro (ver CabecalhoDeSecao).
@@ -156,26 +194,30 @@ export default function Secao({
   corpoClassName?: string;
   /**
    * Chave para recolher a seção (lembrada no navegador; ponha o cliente ou a
-   * área nela). Com ela, o título vira o botão de recolher. Precisa de `titulo`.
+   * área nela). Sem ela, título em texto ganha chave automática; `false`
+   * desliga o recolher. Precisa de `titulo`.
    */
-  recolher?: string;
-  /** Linha curta à vista com a seção recolhida ("12 itens"). */
+  recolher?: string | false;
+  /** Linha curta à vista com a seção recolhida ("12 itens"). Sem ela, a `descricao`. */
   resumo?: ReactNode;
   /** Começa recolhida enquanto a pessoa não escolheu. */
   recolhidaDeInicio?: boolean;
   /**
-   * Seção num cartão (fundo, borda e canto do Dossiê). Para telas em que as
-   * seções ficavam soltas no branco (Central, 28/09). Ignora `divisoria`.
+   * NÃO use para seção (28/09, revogado): seção é aberta, separada por espaço
+   * e, quando precisa, divisória fina. Fica só para exceção pedida pelo dono.
+   * Ignora `divisoria`.
    */
   cartao?: boolean;
   children?: ReactNode;
 } & Record<`data-${string}`, string | undefined>) {
-  if (recolher && titulo) {
+  const chave = useChaveDeRecolher(titulo, recolher);
+  if (chave && titulo) {
     return (
       <SecaoRecolhivel
-        chave={recolher}
+        modo={recolher ? "titulo" : "icone"}
+        chave={chave}
         inicial={recolhidaDeInicio}
-        resumo={resumo}
+        resumo={resumo !== undefined && resumo !== null ? resumo : descricao}
         titulo={titulo}
         descricao={descricao}
         acao={acao}
@@ -202,6 +244,7 @@ export default function Secao({
 }
 
 function SecaoRecolhivel({
+  modo,
   chave,
   inicial,
   resumo,
@@ -218,6 +261,7 @@ function SecaoRecolhivel({
   resto,
   children,
 }: {
+  modo: "titulo" | "icone";
   chave: string;
   inicial: boolean;
   resumo?: ReactNode;
@@ -244,7 +288,7 @@ function SecaoRecolhivel({
         acao={recolhido ? undefined : acao}
         ajuda={ajuda}
         nivel={nivel}
-        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo }}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo, modo }}
       />
       {!recolhido && <div className={juntar("min-w-0", corpoClassName)}>{children}</div>}
     </section>
