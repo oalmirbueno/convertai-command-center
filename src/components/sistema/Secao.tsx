@@ -84,10 +84,12 @@ export function CabecalhoDeSecao({
                   data-titulo-recolhivel=""
                 >
                   <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
-                  {/* 28/09 (dono: "título grande não pode quebrar"): uma linha só. Sem
-                      o nowrap, o navegador media o botão pelo mínimo e o título
-                      quebrava com a coluna inteira sobrando. */}
-                  <span className="min-w-0 truncate">{titulo}</span>
+                  {/* 28/09 (dono: "título grande não pode quebrar"): uma linha só. O
+                      texto não encolhe (shrink-0) e tem teto na largura do botão menos
+                      a seta: sem isso o Chrome media o título 4 px menor e cortava
+                      "O que enviar e quan..." com a coluna inteira sobrando. No
+                      celular estreito o teto faz as reticências. */}
+                  <span className="max-w-[calc(100%-1.25rem)] shrink-0 truncate">{titulo}</span>
                 </button>
               </Titulo>
             ) : titulo ? (
