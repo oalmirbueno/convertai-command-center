@@ -1457,6 +1457,22 @@
       "remote_name": "fila_da_mesa",
       "remote_statements_sha256": "708f5ec5ec258e2be546b1feff691112251828fff6688fd07e0a325400f577e1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928060000",
+      "path": "supabase/migrations/20260928060000_aprovacao_e_agenda_automaticas.sql",
+      "local_sha256": "16d10dcd71ac9b9f1d552d39a4dab4bfbb4ea030bb4d387b01c7048b09c0f818",
+      "remote_name": "aprovacao_e_agenda_automaticas",
+      "remote_statements_sha256": "103393f861ea75b15a0b008e30d9c8fe4dc680f87272453578f4e5667c719ab6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928060100",
+      "path": "supabase/migrations/20260928060100_estudio_data_do_conteudo.sql",
+      "local_sha256": "903a51d66fc81258e2ca677c74b17e3665c77ddfb6521f7c952489c8626f2f61",
+      "remote_name": "estudio_data_do_conteudo",
+      "remote_statements_sha256": "e9d8dfd711199e31fcf3ed09f36fb7cd05457d94fc151be61585f71708be3048",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
