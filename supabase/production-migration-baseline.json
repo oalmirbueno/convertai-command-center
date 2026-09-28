@@ -1433,6 +1433,14 @@
       "remote_name": "gerenciador_ao_vivo",
       "remote_statements_sha256": "b0ad2776c1ad3e8b2db8d4ee7d7bcd8867bdf677cd3e43aaefdb3834adfb6aba",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928030000",
+      "path": "supabase/migrations/20260928030000_metas_de_seguidores.sql",
+      "local_sha256": "31897dfac41ece196ab470b816671218f2bd36e8ed96630e3f9f653ca7b996b3",
+      "remote_name": "metas_de_seguidores",
+      "remote_statements_sha256": "a9fc57cff4b2a8b3a1ba31762a2db908c0fe1e9b722162e769ce0258a5dc5a14",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
