@@ -5,24 +5,29 @@ import {
   BellRing,
   CalendarPlus,
   CalendarRange,
+  Check,
   CheckCircle2,
   Copy,
   Eye,
   ImagePlus,
   Loader2,
   RefreshCw,
+  RotateCcw,
   Send,
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
-import { textoDoErro } from "@/lib/mesa/api";
+import { rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
 import {
   mensagemDeCobranca,
   montarFila,
+  useFeitoDaFila,
   useFilaDePrioridades,
   type AbaDaMesa,
   type AcaoDaFila,
+  type FeitoDaFila,
   type GrupoDaFila,
+  type MarcadoDaFila,
   type Nivel,
   type TipoDeAcao,
 } from "@/lib/mesa/fila";
@@ -31,6 +36,9 @@ import {
  * Fila de prioridades da Mesa: uma lista curta, do mais urgente para o menos,
  * agrupada por cliente, com o porquê em uma frase e o botão que leva direto
  * para a aba certa. Regras de ordem em src/lib/mesa/fila.ts (acoesDoCliente).
+ * Só clientes dentro da Mesa. Cada ação tem "Feito" para quando o sistema não
+ * reconhece sozinho: some até chegar coisa nova, com "Desfazer" no aviso e na
+ * lista dos marcados, no pé.
  */
 
 const ICONE: Record<TipoDeAcao, typeof Send> = {
@@ -87,14 +95,23 @@ async function copiar(texto: string): Promise<boolean> {
   }
 }
 
+const dataCurtinha = (iso: string | null) => (iso && iso.length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
+
+/** "Gerar artes (outubro)" quando a ação é de um mês; senão só o título. */
+const tituloComMes = (a: AcaoDaFila) => (a.mes ? `${a.titulo} (${rotuloDoMes(a.mes).split(" de ")[0]})` : a.titulo);
+
 function LinhaDaAcao({
   acao,
   grupo,
   onAbrir,
+  onFeito,
+  gravando,
 }: {
   acao: AcaoDaFila;
   grupo: GrupoDaFila;
   onAbrir: (clientId: string, aba: AbaDaMesa, mes: string | null) => void;
+  onFeito: (grupo: GrupoDaFila, acao: AcaoDaFila) => void;
+  gravando: boolean;
 }) {
   const Icone = ICONE[acao.tipo];
   const nivel = NIVEL[acao.nivel];
@@ -129,6 +146,16 @@ function LinhaDaAcao({
         )}
         <button
           type="button"
+          disabled={gravando}
+          onClick={() => onFeito(grupo, acao)}
+          className="mr-1.5 inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium text-muted-foreground hover:border-success/60 hover:text-foreground disabled:opacity-60"
+          aria-label={`Marcar como feito: ${acao.titulo} de ${grupo.nome}`}
+          title="Já fiz: some da fila até chegar coisa nova"
+        >
+          {gravando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Feito
+        </button>
+        <button
+          type="button"
           onClick={() => onAbrir(grupo.client_id, acao.aba, acao.mes)}
           className="inline-flex h-8 items-center rounded-lg bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:opacity-90"
           aria-label={`${acao.titulo}: abrir ${grupo.nome}`}
@@ -153,7 +180,37 @@ export default function FilaDePrioridades({
   const consulta = useFilaDePrioridades(clientes, clientesProntos);
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [verEmDia, setVerEmDia] = useState(false);
+  const [verMarcados, setVerMarcados] = useState(false);
+  const [gravando, setGravando] = useState<string | null>(null);
   const fila = useMemo(() => (consulta.data ? montarFila(consulta.data) : null), [consulta.data]);
+  const { marcar, desfazer } = useFeitoDaFila();
+
+  const desfazerFeito = async (clientId: string, nome: string, titulo: string, feito: FeitoDaFila) => {
+    setGravando(feito.id);
+    try {
+      await desfazer(clientId, feito);
+      toast.success("Voltou para a fila", { description: `${titulo}, ${nome}.` });
+    } catch (e) {
+      toast.error("Não consegui desfazer", { description: textoDoErro(e) });
+    } finally {
+      setGravando(null);
+    }
+  };
+
+  const marcarFeito = async (g: GrupoDaFila, a: AcaoDaFila) => {
+    setGravando(`${g.client_id}-${a.tipo}-${a.periodo}`);
+    try {
+      const feito = await marcar(g.client_id, a);
+      toast.success("Marcado como feito", {
+        description: `${a.titulo}, ${g.nome}. Volta se chegar coisa nova.`,
+        action: { label: "Desfazer", onClick: () => void desfazerFeito(g.client_id, g.nome, a.titulo, feito) },
+      });
+    } catch (e) {
+      toast.error("Não consegui marcar como feito", { description: textoDoErro(e) });
+    } finally {
+      setGravando(null);
+    }
+  };
 
   const contagem = (f: Filtro) => (fila ? fila.grupos.reduce((s, g) => s + g.acoes.filter((a) => noFiltro(f, a)).length, 0) : 0);
   const grupos = fila
@@ -250,9 +307,22 @@ export default function FilaDePrioridades({
                     <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{g.nome}</h3>
                     <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${nivel.selo}`}>{nivel.rotulo}</span>
                   </div>
+                  {g.pronto && (
+                    <p className="ml-7 mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+                      <CheckCircle2 className="mr-1 h-3 w-3 shrink-0 text-success" />
+                      <span className="truncate">{g.pronto}</span>
+                    </p>
+                  )}
                   <ul className="mt-1 divide-y divide-border">
                     {g.acoes.map((a) => (
-                      <LinhaDaAcao key={`${a.tipo}-${a.mes || ""}`} acao={a} grupo={g} onAbrir={onAbrir} />
+                      <LinhaDaAcao
+                        key={`${a.tipo}-${a.mes || ""}`}
+                        acao={a}
+                        grupo={g}
+                        onAbrir={onAbrir}
+                        onFeito={(gg, aa) => void marcarFeito(gg, aa)}
+                        gravando={gravando === `${g.client_id}-${a.tipo}-${a.periodo}`}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -279,9 +349,45 @@ export default function FilaDePrioridades({
                   <button
                     type="button"
                     onClick={() => onAbrir(c.client_id, "mes", null)}
+                    title={c.pronto || undefined}
                     className="rounded-full border border-border bg-card px-2.5 py-1 text-[12px] text-foreground hover:border-primary/50"
                   >
                     {c.nome}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {fila && fila.marcados.length > 0 && (
+        <div className="text-[12.5px] text-muted-foreground">
+          <button type="button" onClick={() => setVerMarcados((v) => !v)} className="inline-flex items-center hover:text-foreground" aria-expanded={verMarcados}>
+            <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
+            {fila.marcados.length === 1 ? "1 marcado como feito" : `${fila.marcados.length} marcados como feito`}
+          </button>
+          {verMarcados && (
+            <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-card px-3" aria-label="Marcados como feito">
+              {fila.marcados.map((m: MarcadoDaFila) => (
+                <li key={m.feito.id} className="flex min-w-0 items-center py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] text-foreground">
+                      <strong className="font-semibold">{m.nome}</strong>: {tituloComMes(m.acao)}
+                    </p>
+                    <p className="truncate text-[11.5px]">
+                      Feito{m.feito.marcado_por_nome ? ` por ${m.feito.marcado_por_nome}` : ""}
+                      {m.feito.marcado_em ? ` em ${dataCurtinha(m.feito.marcado_em)}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={gravando === m.feito.id}
+                    onClick={() => void desfazerFeito(m.client_id, m.nome, m.acao.titulo, m.feito)}
+                    className="ml-3 inline-flex h-7 shrink-0 items-center rounded-lg px-2 text-[12px] font-medium text-foreground hover:bg-muted disabled:opacity-60"
+                    aria-label={`Desfazer feito: ${m.acao.titulo} de ${m.nome}`}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Desfazer
                   </button>
                 </li>
               ))}

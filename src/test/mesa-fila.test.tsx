@@ -62,7 +62,13 @@ import {
   normalizarFila,
   pontosDoMesVazio,
   pontosDoPrazo,
+  aplicarFeitos,
+  clientesNaMesa,
+  feitoQueCobre,
+  prontoDoCliente,
   type ClienteDaFila,
+  type FeitoDaFila,
+  type MesDaFila,
   type RespostaDaFila,
 } from "@/lib/mesa/fila";
 import FilaDePrioridades from "@/components/mesa/FilaDePrioridades";
@@ -73,24 +79,32 @@ const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8").replace(/\
 
 const HOJE = "2026-09-24";
 
-const cliente = (extra: Partial<ClienteDaFila>): ClienteDaFila => ({
-  client_id: A,
-  nome: "Padaria São João",
-  ultimo_acesso: null,
-  posts_por_mes: null,
-  aprovacao_pendentes: 0,
-  aprovacao_desde: null,
-  revisao_pendentes: 0,
-  revisao_desde: null,
-  reprovados: 0,
-  prontas_para_enviar: 0,
-  precisam_atencao: 0,
-  meses: [
+type MesSimples = Omit<MesDaFila, "pecas" | "proposta_gravada"> & Partial<Pick<MesDaFila, "pecas" | "proposta_gravada">>;
+
+// Meses escritos à moda antiga (sem peças) valem peças = itens de arte.
+const cliente = (extra: Omit<Partial<ClienteDaFila>, "meses"> & { meses?: MesSimples[] }): ClienteDaFila => {
+  const meses: MesSimples[] = extra.meses || [
     { mes: "2026-09-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
     { mes: "2026-10-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
-  ],
-  ...extra,
-});
+  ];
+  return {
+    client_id: A,
+    nome: "Padaria São João",
+    ultimo_acesso: null,
+    posts_por_mes: null,
+    aprovacao_pendentes: 0,
+    aprovacao_desde: null,
+    aprovacao_ultimo: null,
+    revisao_pendentes: 0,
+    revisao_desde: null,
+    reprovados: 0,
+    prontas_para_enviar: 0,
+    precisam_atencao: 0,
+    feitos: [],
+    ...extra,
+    meses: meses.map((m) => ({ pecas: m.itens, proposta_gravada: false, ...m })),
+  };
+};
 
 const resposta = (clientes: ClienteDaFila[], acesso = true): RespostaDaFila => ({ versao: 1, hoje: HOJE, acesso_conhecido: acesso, clientes, origem: "banco" });
 
@@ -125,7 +139,7 @@ describe("ações de cada cliente", () => {
     const [a] = acoesDoCliente(cliente({ meses: [{ mes: "2026-09-01", itens: 5, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false }, { mes: "2026-10-01", itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false }] }), HOJE, true);
     expect(a.tipo).toBe("gerar_mes");
     expect(a.titulo).toBe("Gerar o mês");
-    expect(a.motivo).toBe("O calendário de outubro está vazio");
+    expect(a.motivo).toBe("O calendário de outubro está vazio e começa em 7 dias");
     expect(a.pontos).toBe(80);
     expect(a.nivel).toBe("agora");
     expect(a.aba).toBe("mes");
@@ -142,7 +156,7 @@ describe("ações de cada cliente", () => {
       ["Gerar o mês", 88, "2026-09-01"],
       ["Terminar o mês", 80, "2026-10-01"],
     ]);
-    expect(acoes[1].motivo).toBe("Outubro tem proposta começada, falta gravar no calendário");
+    expect(acoes[1].motivo).toBe("Outubro tem proposta começada, falta gravar no calendário; começa em 7 dias");
   });
 
   it("artes: um aviso só, pelo item mais próximo, com quantos em cada mês", () => {
@@ -236,7 +250,8 @@ describe("a fila", () => {
     expect(normalizarFila({ clientes: [{ nome: "sem id" }] }).clientes).toEqual([]);
     const r = normalizarFila({ hoje: HOJE, acesso_conhecido: true, clientes: [{ client_id: A, nome: "Padaria", aprovacao_pendentes: "2", meses: [{ mes: "2026-10-01", itens: 0 }] }] });
     expect(r.clientes[0].aprovacao_pendentes).toBe(2);
-    expect(r.clientes[0].meses[0]).toEqual({ mes: "2026-10-01", itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false });
+    expect(r.clientes[0].meses[0]).toEqual({ mes: "2026-10-01", itens: 0, pecas: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false, proposta_gravada: false });
+    expect(r.clientes[0].feitos).toEqual([]);
     expect(r.acesso_conhecido).toBe(true);
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);
     expect(diasEntre("2026-09-24", "2026-10-01")).toBe(7);
@@ -259,17 +274,32 @@ describe("a fila", () => {
     expect(r.origem).toBe("banco");
 
     mock.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "Could not find the function" } });
-    const vazio = () => {
+    // Só a tabela de clientes tem linhas: Padaria com plano ativo (entra na
+    // Mesa), Ótica com plano inativo (fica de fora). Mudança de 28/09: a
+    // leitura direta confere quem está dentro da Mesa antes de ler o resto.
+    const porTabela = (tabela: string) => {
       const q: any = {};
       for (const m of ["select", "in", "is", "eq", "gte", "lt", "order", "limit", "neq"]) q[m] = () => q;
-      q.then = (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok, erro);
+      const linhas =
+        tabela === "profiles"
+          ? [
+              { id: A, plan_status: "active", client_type: "recurring", deleted_at: null },
+              { id: B, plan_status: "inactive", client_type: "hybrid", deleted_at: null },
+            ]
+          : [];
+      q.then = (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) => Promise.resolve({ data: linhas, error: null }).then(ok, erro);
       return q;
     };
-    mock.from.mockImplementation(vazio);
-    const direto = await lerFila([{ id: A, nome: "Padaria" }]);
+    mock.from.mockImplementation(porTabela);
+    const direto = await lerFila([
+      { id: A, nome: "Padaria" },
+      { id: B, nome: "Ótica" },
+    ]);
     expect(direto.origem).toBe("direto");
     expect(direto.acesso_conhecido).toBe(false);
     expect(mock.from).toHaveBeenCalledWith("projects");
+    expect(direto.clientes.map((c) => c.nome)).toEqual(["Padaria"]);
+    expect(direto.clientes[0].meses.length).toBe(4);
   });
 });
 
@@ -300,7 +330,7 @@ describe("tela da fila", () => {
     montar(<FilaDePrioridades clientes={[]} clientesProntos onAbrir={onAbrir} />);
     const grupos = await screen.findAllByRole("heading", { level: 3 });
     expect(grupos.map((g) => g.textContent)).toEqual(["Ótica Visão", "Padaria São João"]);
-    expect(screen.getByText("O calendário de outubro está vazio")).toBeTruthy();
+    expect(screen.getByText("O calendário de outubro está vazio e começa em 7 dias")).toBeTruthy();
     expect(screen.getByText("2 posts esperando aprovação há 4 dias; último acesso há 14 dias")).toBeTruthy();
     expect(screen.getByText("1 cliente em dia")).toBeTruthy();
 
@@ -462,5 +492,168 @@ describe("cliente parado", () => {
     );
     expect(acoes.every((a) => a.nivel === "depois")).toBe(true);
     expect(acoes.find((a) => a.tipo === "cobrar")?.motivo).toContain("Cliente parado");
+  });
+});
+
+// ------------------------------------------------------------------ pedido do dono, 28/09 (PR-01)
+
+describe("só cliente dentro da Mesa", () => {
+  it("mesma regra do seletor: plano ativo, não avulso, escolha da equipe por cima", () => {
+    const E = "55555555-5555-5555-5555-555555555555";
+    const F = "66666666-6666-6666-6666-666666666666";
+    const brutos = [
+      { id: A, plan_status: "active", client_type: "recurring" },
+      { id: B, plan_status: "inactive", client_type: "hybrid" }, // caso Ajenda
+      { id: C, plan_status: "standby", client_type: "recurring" }, // caso Vivideo
+      { id: D, plan_status: "active", client_type: "one_off" }, // avulso
+      { id: E, plan_status: "active", client_type: "hybrid" }, // caso Jalimpo (retirado)
+      { id: F, plan_status: "inactive", client_type: "one_off" },
+    ];
+    const escolhas = [
+      { client_id: E, modo: "retirar" },
+      { client_id: F, modo: "incluir" },
+    ];
+    expect(clientesNaMesa(brutos, escolhas)).toEqual([A, F]);
+    expect(clientesNaMesa(brutos, [])).toEqual([A, E]);
+  });
+});
+
+describe("o que já foi feito (caso Softy Móveis, 28/09)", () => {
+  const HOJE_SOFTY = "2026-09-28";
+  const softy = cliente({
+    nome: "Softy Móveis",
+    meses: [
+      { mes: "2026-09-01", itens: 0, pecas: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+      { mes: "2026-10-01", itens: 20, sem_arte: 17, proximo_sem_arte: "2026-10-01", proposta_aberta: false, proposta_gravada: true },
+      { mes: "2026-11-01", itens: 16, sem_arte: 16, proximo_sem_arte: "2026-11-02", proposta_aberta: false, proposta_gravada: true },
+      { mes: "2026-12-01", itens: 18, sem_arte: 18, proximo_sem_arte: "2026-12-01", proposta_aberta: false, proposta_gravada: true },
+    ],
+  });
+
+  it("a 3 dias do fim, o mês corrente vazio não pede para gerar; as artes dizem o prazo real", () => {
+    const acoes = acoesDoCliente(softy, HOJE_SOFTY, true);
+    expect(acoes.map((a) => a.tipo)).toEqual(["gerar_artes"]);
+    expect(acoes[0].motivo).toBe("17 itens sem arte (17 em outubro); o próximo sai em 3 dias, 01/10");
+    expect(acoes[0].periodo).toBe("2026-10-01");
+    expect(prontoDoCliente(softy, HOJE_SOFTY)).toBe("Pronto: calendário de outubro, novembro e dezembro");
+  });
+
+  it("com 7 dias ou mais, o mês corrente vazio ainda pede; completar o mês corrente para nos últimos dias", () => {
+    const vazio = cliente({
+      meses: [
+        { mes: "2026-09-01", itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+        { mes: "2026-10-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+      ],
+    });
+    expect(acoesDoCliente(vazio, "2026-09-24", true).map((a) => [a.tipo, a.mes])).toEqual([["gerar_mes", "2026-09-01"]]);
+    expect(acoesDoCliente(vazio, "2026-09-25", true)).toEqual([]);
+    const plano = cliente({ posts_por_mes: 12 });
+    expect(acoesDoCliente(plano, "2026-09-28", true).map((a) => [a.tipo, a.mes])).toEqual([["completar_mes", "2026-10-01"]]);
+  });
+
+  it("mês com plano conta como feito: só vídeo no calendário ou proposta gravada", () => {
+    const soVideo = cliente({
+      meses: [
+        { mes: "2026-09-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+        { mes: "2026-10-01", itens: 0, pecas: 4, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+      ],
+    });
+    expect(acoesDoCliente(soVideo, HOJE, true)).toEqual([]);
+    const gravada = cliente({
+      meses: [
+        { mes: "2026-09-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+        { mes: "2026-10-01", itens: 0, pecas: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false, proposta_gravada: true },
+      ],
+    });
+    expect(acoesDoCliente(gravada, HOJE, true)).toEqual([]);
+    expect(prontoDoCliente(gravada, HOJE)).toBe("Pronto: calendário de setembro e outubro; artes em dia");
+  });
+});
+
+describe("botão Feito", () => {
+  const feito = (extra: Partial<FeitoDaFila>): FeitoDaFila => ({
+    id: "f-1",
+    tipo: "gerar_artes",
+    periodo: "2026-10-01",
+    quantidade: 9,
+    referencia: null,
+    marcado_em: "2026-09-24T12:00:00Z",
+    marcado_por_nome: "Almir",
+    ...extra,
+  });
+  const comArtes = (semArte: number) =>
+    cliente({
+      meses: [
+        { mes: "2026-09-01", itens: 8, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+        { mes: "2026-10-01", itens: 9, sem_arte: semArte, proximo_sem_arte: "2026-10-01", proposta_aberta: false },
+      ],
+    });
+
+  it("esconde a ação do mesmo tipo e mês; volta se crescer, se chegar pedido novo ou se virar o mês", () => {
+    const [artes] = acoesDoCliente(comArtes(9), HOJE, true);
+    expect(feitoQueCobre(artes, [feito({})])).not.toBeNull();
+    const [mais] = acoesDoCliente(comArtes(10), HOJE, true);
+    expect(mais.quantidade).toBe(10);
+    expect(feitoQueCobre(mais, [feito({})])).toBeNull();
+    expect(feitoQueCobre(artes, [feito({ periodo: "2026-09-01" })])).toBeNull();
+    expect(feitoQueCobre(artes, [feito({ tipo: "cobrar" })])).toBeNull();
+
+    const pedido = cliente({ aprovacao_pendentes: 2, aprovacao_desde: "2026-09-20T12:00:00Z", aprovacao_ultimo: "2026-09-21T12:00:00Z" });
+    const [cobrar] = acoesDoCliente(pedido, HOJE, true);
+    expect(cobrar.periodo).toBe("2026-09-01");
+    const marca = feito({ tipo: "cobrar", periodo: "2026-09-01", quantidade: 2, referencia: "2026-09-21T12:00:00Z" });
+    expect(feitoQueCobre(cobrar, [marca])).not.toBeNull();
+    const [novo] = acoesDoCliente({ ...pedido, aprovacao_ultimo: "2026-09-23T12:00:00Z" }, HOJE, true);
+    expect(feitoQueCobre(novo, [marca])).toBeNull();
+    expect(aplicarFeitos([artes, cobrar], [marca]).abertas.map((a) => a.tipo)).toEqual(["gerar_artes"]);
+  });
+
+  it("na fila: marcado sai do grupo e do resumo, vai para os marcados; cliente sem mais nada fica em dia", () => {
+    const fila = montarFila(resposta([{ ...comArtes(9), feitos: [feito({})] }]));
+    expect(fila.grupos).toEqual([]);
+    expect(fila.emDia.map((c) => c.nome)).toEqual(["Padaria São João"]);
+    expect(fila.marcados.map((m) => [m.nome, m.acao.tipo, m.feito.id])).toEqual([["Padaria São João", "gerar_artes", "f-1"]]);
+    expect(fila.resumo).toEqual({ agora: 0, semana: 0, depois: 0 });
+  });
+
+  it("tela: Feito grava pela RPC e some; Desfazer arquiva e volta", async () => {
+    const dados = resposta([comArtes(9)]);
+    mock.rpc.mockImplementation((nome: string, args?: Record<string, unknown>) => {
+      if (nome === "mesa_fila_prioridades") return Promise.resolve({ data: dados, error: null });
+      if (nome === "mesa_fila_marcar_feito")
+        return Promise.resolve({
+          data: { id: "f-9", tipo: args?._tipo, periodo: args?._periodo, quantidade: args?._quantidade, referencia: null, marcado_em: "2026-09-24T15:00:00Z", marcado_por_nome: "Almir" },
+          error: null,
+        });
+      return Promise.resolve({ data: null, error: null });
+    });
+    montar(<FilaDePrioridades clientes={[]} clientesProntos onAbrir={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Marcar como feito: Gerar artes de Padaria São João" }));
+    await waitFor(() =>
+      expect(mock.rpc).toHaveBeenCalledWith("mesa_fila_marcar_feito", { _client_id: A, _tipo: "gerar_artes", _periodo: "2026-10-01", _quantidade: 9, _referencia: null }),
+    );
+    await waitFor(() => expect(screen.queryByRole("heading", { level: 3 })).toBeNull());
+    await waitFor(() =>
+      expect(aviso.success).toHaveBeenCalledWith("Marcado como feito", expect.objectContaining({ action: expect.objectContaining({ label: "Desfazer" }) })),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 marcado como feito" }));
+    expect(screen.getByText("Feito por Almir em 24/09")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer feito: Gerar artes de Padaria São João" }));
+    await waitFor(() => expect(mock.rpc).toHaveBeenCalledWith("mesa_fila_desfazer_feito", { _id: "f-9" }));
+    expect(await screen.findByRole("heading", { level: 3, name: "Padaria São João" })).toBeTruthy();
+  });
+
+  it("sem a função no banco, avisa e a ação continua na fila", async () => {
+    mock.rpc.mockImplementation((nome: string) => {
+      if (nome === "mesa_fila_prioridades") return Promise.resolve({ data: resposta([comArtes(9)]), error: null });
+      return Promise.resolve({ data: null, error: { code: "PGRST202", message: "Could not find the function" } });
+    });
+    montar(<FilaDePrioridades clientes={[]} clientesProntos onAbrir={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Marcar como feito: Gerar artes de Padaria São João" }));
+    await waitFor(() =>
+      expect(aviso.error).toHaveBeenCalledWith("Não consegui marcar como feito", { description: "O botão Feito ainda não foi ativado no banco." }),
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Padaria São João" })).toBeTruthy();
   });
 });

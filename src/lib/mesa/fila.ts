@@ -1,7 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { inicioDoMes, rotuloDoMes, somarMeses } from "@/lib/mesa/api";
 import { rpcAusente } from "@/lib/mesa/custos";
+import { entraPeloPadrao, normalizarEscolhas, type ClienteBruto } from "@/components/mesa/clientesDaMesa";
 
 /**
  * Fila de prioridades da Mesa (pedido do dono em 24/09: "uma ordem do que
@@ -13,16 +15,46 @@ import { rpcAusente } from "@/lib/mesa/custos";
  * a ordem sai daqui, em função pura (acoesDoCliente e montarFila), para ser
  * testada e ajustada sem mexer no banco. Sem a RPC, a leitura direta pelo
  * RLS da equipe monta o mesmo formato (sem o último acesso, que só a RPC lê).
+ *
+ * Pedido do dono em 28/09 (PR-01):
+ * - só entra cliente DENTRO DA MESA, a mesma regra do seletor
+ *   (clientesDaMesa.ts, mesa "organica"): plano ativo, não avulso, com a
+ *   escolha "incluir"/"retirar" da equipe por cima. Plano inativo, em pausa
+ *   ou retirado da Mesa não aparece;
+ * - mês com plano (peça de arte ou vídeo no calendário, ou proposta gravada)
+ *   conta como feito; o mês que acaba em menos de 7 dias não pede mais nada;
+ * - botão "Feito" em cada ação: guarda por cliente, tipo e mês
+ *   (mesa_fila_feitos), some da fila até o fato crescer (mais itens, pedido
+ *   novo) ou virar o mês; "Desfazer" arquiva a marca.
  */
 
 export const RPC_DA_FILA = "mesa_fila_prioridades";
 
 export interface MesDaFila {
   mes: string;
+  /** Itens de arte (carrossel, estático, design) no calendário do mês. */
   itens: number;
+  /** Peças do mês (arte ou vídeo, como a aba Mês conta). */
+  pecas: number;
   sem_arte: number;
   proximo_sem_arte: string | null;
   proposta_aberta: boolean;
+  /** Plano do mês gravado no calendário (calendario_propostas "gravada"). */
+  proposta_gravada: boolean;
+}
+
+/** Marca de "Feito" dada pela equipe (tabela mesa_fila_feitos). */
+export interface FeitoDaFila {
+  id: string;
+  tipo: TipoDeAcao;
+  /** Mês da marca (AAAA-MM-01). */
+  periodo: string;
+  /** Quantos havia quando marcou: se crescer, a ação volta. */
+  quantidade: number;
+  /** Último pedido de aprovação quando marcou (só em "cobrar"). */
+  referencia: string | null;
+  marcado_em: string | null;
+  marcado_por_nome: string | null;
 }
 
 export interface ClienteDaFila {
@@ -32,12 +64,15 @@ export interface ClienteDaFila {
   posts_por_mes: number | null;
   aprovacao_pendentes: number;
   aprovacao_desde: string | null;
+  /** Pedido de aprovação mais novo (versão 2 da RPC). */
+  aprovacao_ultimo: string | null;
   revisao_pendentes: number;
   revisao_desde: string | null;
   reprovados: number;
   prontas_para_enviar: number;
   precisam_atencao: number;
   meses: MesDaFila[];
+  feitos: FeitoDaFila[];
 }
 
 export interface RespostaDaFila {
@@ -54,6 +89,28 @@ const inteiro = (v: unknown): number => {
 };
 const textoOuNulo = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
+const TIPOS: TipoDeAcao[] = ["resolver", "gerar_mes", "gerar_artes", "cobrar", "ajustar", "entregar", "revisar", "completar_mes"];
+
+function normalizarFeitos(v: unknown): FeitoDaFila[] {
+  const saida: FeitoDaFila[] = [];
+  for (const b of Array.isArray(v) ? v : []) {
+    if (!b || typeof b !== "object") continue;
+    const f = b as Record<string, unknown>;
+    const tipo = String(f.tipo || "") as TipoDeAcao;
+    if (typeof f.id !== "string" || !f.id || TIPOS.indexOf(tipo) < 0 || typeof f.periodo !== "string") continue;
+    saida.push({
+      id: f.id,
+      tipo,
+      periodo: `${f.periodo.slice(0, 7)}-01`,
+      quantidade: inteiro(f.quantidade),
+      referencia: textoOuNulo(f.referencia),
+      marcado_em: textoOuNulo(f.marcado_em),
+      marcado_por_nome: textoOuNulo(f.marcado_por_nome),
+    });
+  }
+  return saida;
+}
+
 const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
 export const diaLocal = (d: Date) => `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
 
@@ -69,12 +126,16 @@ export function normalizarFila(data: unknown, origem: "banco" | "direto" = "banc
       if (!m || typeof m !== "object") continue;
       const mm = m as Record<string, unknown>;
       if (typeof mm.mes !== "string") continue;
+      const itens = inteiro(mm.itens);
       meses.push({
         mes: mm.mes.slice(0, 10),
-        itens: inteiro(mm.itens),
+        itens,
+        // Versão 1 da RPC não manda "pecas": vale o número de itens de arte.
+        pecas: Math.max(inteiro(mm.pecas), itens),
         sem_arte: inteiro(mm.sem_arte),
         proximo_sem_arte: textoOuNulo(mm.proximo_sem_arte) ? String(mm.proximo_sem_arte).slice(0, 10) : null,
         proposta_aberta: mm.proposta_aberta === true,
+        proposta_gravada: mm.proposta_gravada === true,
       });
     }
     const plano = inteiro(c.posts_por_mes);
@@ -85,12 +146,14 @@ export function normalizarFila(data: unknown, origem: "banco" | "direto" = "banc
       posts_por_mes: plano > 0 ? plano : null,
       aprovacao_pendentes: inteiro(c.aprovacao_pendentes),
       aprovacao_desde: textoOuNulo(c.aprovacao_desde),
+      aprovacao_ultimo: textoOuNulo(c.aprovacao_ultimo),
       revisao_pendentes: inteiro(c.revisao_pendentes),
       revisao_desde: textoOuNulo(c.revisao_desde),
       reprovados: inteiro(c.reprovados),
       prontas_para_enviar: inteiro(c.prontas_para_enviar),
       precisam_atencao: inteiro(c.precisam_atencao),
       meses,
+      feitos: normalizarFeitos(c.feitos),
     });
   }
   return {
@@ -146,6 +209,18 @@ function textoDoPrazo(d: number): string {
   return `sai em ${d} dias`;
 }
 
+function textoDoComeco(d: number): string {
+  if (d <= 0) return "começa hoje";
+  if (d === 1) return "começa amanhã";
+  return `começa em ${d} dias`;
+}
+
+/** "outubro", "outubro e novembro", "outubro, novembro e dezembro". */
+function listaDeNomes(nomes: string[]): string {
+  if (nomes.length <= 1) return nomes.join("");
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
 // ------------------------------------------------------------------ ações
 
 export type TipoDeAcao =
@@ -176,6 +251,10 @@ export interface AcaoDaFila {
   quantidade: number;
   /** Só em "cobrar": dias de espera do pedido mais antigo. */
   diasEsperando?: number;
+  /** Mês a que o "Feito" se prende (AAAA-MM-01): o mês da ação ou o mês corrente. */
+  periodo: string;
+  /** Só em "cobrar": o pedido de aprovação mais novo (pedido novo faz a ação voltar). */
+  referencia: string | null;
 }
 
 export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
@@ -198,12 +277,13 @@ export function nivelDosPontos(p: number): Nivel {
   return "depois";
 }
 
-const acao = (a: Omit<AcaoDaFila, "nivel" | "titulo"> & { titulo?: string }): AcaoDaFila => ({
-  ...a,
-  titulo: a.titulo || ROTULO_DA_ACAO[a.tipo],
-  pontos: Math.round(a.pontos),
-  nivel: nivelDosPontos(a.pontos),
-});
+/** Dias finais do mês em que ele já não pede para gerar nem completar (caso Softy Móveis, 28/09). */
+export const DIAS_FIM_DO_MES = 7;
+
+/** Mês com plano: peça de arte ou vídeo no calendário, ou proposta gravada. */
+export const mesPlanejado = (m: MesDaFila | null) => !!m && (m.pecas > 0 || m.itens > 0 || m.proposta_gravada);
+
+type NovaAcao = Omit<AcaoDaFila, "nivel" | "titulo" | "periodo" | "referencia"> & { titulo?: string; periodo?: string; referencia?: string | null };
 
 /** Pontos de "gerar artes" pelo prazo do próximo item sem arte. */
 export function pontosDoPrazo(dias: number): number {
@@ -223,16 +303,20 @@ export function pontosDoMesVazio(diasParaComecar: number): number {
 /**
  * O que fazer com um cliente, da mais urgente para a menos. Regras (pontos):
  * - resolver: aprovadas que não entraram sozinhas na Agenda (90);
- * - gerar o mês: mês corrente vazio (88); mês seguinte vazio, pelo tempo que
- *   falta para começar (80, 65 ou 45);
+ * - gerar o mês: mês corrente sem plano (88), só se faltam 7 dias ou mais
+ *   para ele acabar; mês seguinte sem plano, pelo tempo que falta para
+ *   começar (80, 65 ou 45). Mês com peça no calendário ou proposta gravada
+ *   tem plano;
  * - gerar artes: itens sem arte de hoje em diante, pelo prazo do próximo
  *   (85 até 2 dias, 72 até 7, 55 até 14, senão 38);
  * - cobrar aprovação: 50 mais 2 por dia de espera (até 90); mais 5 se o
  *   cliente não entrou no painel depois do pedido;
  * - fazer ajustes pedidos (70); entregar artes prontas (62);
  * - revisar e liberar (60 mais 1 por dia, até 70);
- * - completar o mês: menos itens que o plano (40, ou 50 na última semana).
+ * - completar o mês: menos peças que o plano (40, ou 50 na última semana
+ *   antes do mês seguinte); o mês corrente não pede nos últimos dias.
  * 80 ou mais = agora; 55 ou mais = nesta semana; o resto = depois.
+ * Não olha as marcas de "Feito": quem esconde é aplicarFeitos.
  */
 export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: boolean): AcaoDaFila[] {
   const acoes: AcaoDaFila[] = [];
@@ -242,6 +326,17 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
   const atual = doMes(mesAtual);
   const seguinte = doMes(mesSeguinte);
   const diasParaSeguinte = diasEntre(hoje, mesSeguinte);
+  // Nos últimos dias do mês, o mês corrente não pede mais plano nem peça.
+  const atualConta = diasParaSeguinte >= DIAS_FIM_DO_MES;
+
+  const acao = (a: NovaAcao): AcaoDaFila => ({
+    ...a,
+    titulo: a.titulo || ROTULO_DA_ACAO[a.tipo],
+    pontos: Math.round(a.pontos),
+    nivel: nivelDosPontos(a.pontos),
+    periodo: a.periodo || a.mes || mesAtual,
+    referencia: a.referencia || null,
+  });
 
   if (c.precisam_atencao > 0) {
     acoes.push(
@@ -256,14 +351,17 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
     );
   }
 
-  const mesVazio = (m: MesDaFila | null, mes: string, pontos: number) => {
+  // `comeco`: "começa em 3 dias" para o mês seguinte (o prazo real); vazio no corrente.
+  const mesVazio = (m: MesDaFila | null, mes: string, pontos: number, comeco: string) => {
     const nome = nomeDoMes(mes);
     const aberta = !!(m && m.proposta_aberta);
     acoes.push(
       acao({
         tipo: "gerar_mes",
         titulo: aberta ? "Terminar o mês" : undefined,
-        motivo: aberta ? `${maiuscula(nome)} tem proposta começada, falta gravar no calendário` : `O calendário de ${nome} está vazio`,
+        motivo: aberta
+          ? `${maiuscula(nome)} tem proposta começada, falta gravar no calendário${comeco ? `; ${comeco}` : ""}`
+          : `O calendário de ${nome} está vazio${comeco ? ` e ${comeco}` : ""}`,
         pontos,
         aba: "mes",
         mes,
@@ -272,8 +370,8 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
     );
   };
 
-  if (atual && atual.itens === 0) mesVazio(atual, mesAtual, 88);
-  if (seguinte && seguinte.itens === 0) mesVazio(seguinte, mesSeguinte, pontosDoMesVazio(diasParaSeguinte));
+  if (atual && atualConta && !mesPlanejado(atual)) mesVazio(atual, mesAtual, 88, "");
+  if (seguinte && !mesPlanejado(seguinte)) mesVazio(seguinte, mesSeguinte, pontosDoMesVazio(diasParaSeguinte), textoDoComeco(diasParaSeguinte));
 
   // Artes: um aviso só, pelo item sem arte mais próximo; o motivo diz quantos em cada mês.
   const comFalta = [atual, seguinte].filter((m): m is MesDaFila => !!m && m.sem_arte > 0 && !!m.proximo_sem_arte);
@@ -317,6 +415,7 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
         mes: null,
         quantidade: c.aprovacao_pendentes,
         diasEsperando: dias,
+        referencia: c.aprovacao_ultimo || c.aprovacao_desde,
       }),
     );
   }
@@ -362,17 +461,17 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
   }
 
   if (c.posts_por_mes) {
-    for (const m of [atual, seguinte]) {
-      if (!m || m.itens === 0 || m.itens >= c.posts_por_mes) continue;
+    for (const m of [atualConta ? atual : null, seguinte]) {
+      if (!m || m.pecas === 0 || m.pecas >= c.posts_por_mes) continue;
       const ehSeguinte = m.mes === mesSeguinte;
       acoes.push(
         acao({
           tipo: "completar_mes",
-          motivo: `${maiuscula(nomeDoMes(m.mes))} tem ${m.itens} de ${c.posts_por_mes} posts do plano`,
+          motivo: `${maiuscula(nomeDoMes(m.mes))} tem ${m.pecas} de ${c.posts_por_mes} posts do plano`,
           pontos: ehSeguinte && diasParaSeguinte <= 7 ? 50 : 40,
           aba: "mes",
           mes: m.mes,
-          quantidade: c.posts_por_mes - m.itens,
+          quantidade: c.posts_por_mes - m.pecas,
         }),
       );
     }
@@ -383,7 +482,7 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
   // (caso Vivideo, 24/09: 107 dias). Vai para "depois" em vez de puxar o topo.
   const diasAprovacao = c.aprovacao_desde ? diasDesde(c.aprovacao_desde, hoje) : 0;
   const diasAcesso = c.ultimo_acesso ? diasDesde(c.ultimo_acesso, hoje) : Infinity;
-  const semCalendario = (!atual || atual.itens === 0) && (!seguinte || seguinte.itens === 0);
+  const semCalendario = !mesPlanejado(atual) && !mesPlanejado(seguinte);
   if (semCalendario && c.aprovacao_pendentes > 0 && diasAprovacao > DIAS_CLIENTE_PARADO && (!acessoConhecido || diasAcesso > DIAS_CLIENTE_PARADO)) {
     return acoes
       .map((x) => {
@@ -395,6 +494,60 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
   return acoes.sort((a, b) => b.pontos - a.pontos);
 }
 
+// ------------------------------------------------------------------ feito
+
+/**
+ * A marca de "Feito" que cobre a ação, ou null. Cobre quando é do mesmo
+ * tipo e mês, a quantidade não cresceu e (em "cobrar") não chegou pedido de
+ * aprovação mais novo que o da marca. Mês novo = outro período = volta.
+ */
+export function feitoQueCobre(a: AcaoDaFila, feitos: FeitoDaFila[]): FeitoDaFila | null {
+  for (const f of feitos || []) {
+    if (f.tipo !== a.tipo || f.periodo !== a.periodo) continue;
+    if (a.quantidade > f.quantidade) continue;
+    if (a.referencia && f.referencia && Date.parse(a.referencia) > Date.parse(f.referencia)) continue;
+    return f;
+  }
+  return null;
+}
+
+export interface AcaoFeita {
+  acao: AcaoDaFila;
+  feito: FeitoDaFila;
+}
+
+/** Separa as ações que ficam na fila das que a equipe já deu como feitas. */
+export function aplicarFeitos(acoes: AcaoDaFila[], feitos: FeitoDaFila[]): { abertas: AcaoDaFila[]; feitas: AcaoFeita[] } {
+  const abertas: AcaoDaFila[] = [];
+  const feitas: AcaoFeita[] = [];
+  for (const a of acoes) {
+    const f = feitoQueCobre(a, feitos);
+    if (f) feitas.push({ acao: a, feito: f });
+    else abertas.push(a);
+  }
+  return { abertas, feitas };
+}
+
+/**
+ * O que já está pronto, em uma linha curta: os meses com plano, do corrente
+ * (se ainda conta) até 3 à frente, e "artes em dia" quando nada falta.
+ */
+export function prontoDoCliente(c: ClienteDaFila, hoje: string): string | null {
+  const mesAtual = `${hoje.slice(0, 7)}-01`;
+  const mesSeguinte = somarMeses(mesAtual, 1);
+  const atualConta = diasEntre(hoje, mesSeguinte) >= DIAS_FIM_DO_MES;
+  const meses = c.meses
+    .filter((m) => m.mes >= mesAtual && (atualConta || m.mes !== mesAtual) && mesPlanejado(m))
+    .map((m) => m.mes)
+    .sort();
+  const partes: string[] = [];
+  if (meses.length) partes.push(`calendário de ${listaDeNomes(meses.map(nomeDoMes))}`);
+  const proximos = c.meses.filter((m) => m.mes === mesSeguinte || (atualConta && m.mes === mesAtual));
+  const comArte = proximos.reduce((s, m) => s + m.itens, 0);
+  if (comArte > 0 && proximos.every((m) => m.sem_arte === 0)) partes.push("artes em dia");
+  return partes.length ? `Pronto: ${partes.join("; ")}` : null;
+}
+
 export interface GrupoDaFila {
   client_id: string;
   nome: string;
@@ -404,25 +557,37 @@ export interface GrupoDaFila {
   ultimo_acesso: string | null;
   aprovacao_pendentes: number;
   aprovacao_dias: number;
+  /** "Pronto: calendário de outubro, novembro e dezembro", ou null. */
+  pronto: string | null;
+}
+
+export interface MarcadoDaFila extends AcaoFeita {
+  client_id: string;
+  nome: string;
 }
 
 export interface Fila {
   hoje: string;
   grupos: GrupoDaFila[];
-  emDia: { client_id: string; nome: string }[];
+  emDia: { client_id: string; nome: string; pronto: string | null }[];
+  /** Ações escondidas pelo "Feito" da equipe (para o Desfazer). */
+  marcados: MarcadoDaFila[];
   resumo: Record<Nivel, number>;
   acessoConhecido: boolean;
 }
 
-/** Clientes com algo a fazer, o mais urgente primeiro; os em dia ficam à parte. */
+/** Clientes com algo a fazer, o mais urgente primeiro; os em dia e os marcados como feito ficam à parte. */
 export function montarFila(r: RespostaDaFila): Fila {
   const grupos: GrupoDaFila[] = [];
-  const emDia: { client_id: string; nome: string }[] = [];
+  const emDia: { client_id: string; nome: string; pronto: string | null }[] = [];
+  const marcados: MarcadoDaFila[] = [];
   const resumo: Record<Nivel, number> = { agora: 0, semana: 0, depois: 0 };
   for (const c of r.clientes) {
-    const acoes = acoesDoCliente(c, r.hoje, r.acesso_conhecido);
+    const { abertas: acoes, feitas } = aplicarFeitos(acoesDoCliente(c, r.hoje, r.acesso_conhecido), c.feitos || []);
+    for (const f of feitas) marcados.push({ ...f, client_id: c.client_id, nome: c.nome });
+    const pronto = prontoDoCliente(c, r.hoje);
     if (!acoes.length) {
-      emDia.push({ client_id: c.client_id, nome: c.nome });
+      emDia.push({ client_id: c.client_id, nome: c.nome, pronto });
       continue;
     }
     for (const a of acoes) resumo[a.nivel] += 1;
@@ -436,6 +601,7 @@ export function montarFila(r: RespostaDaFila): Fila {
       ultimo_acesso: c.ultimo_acesso,
       aprovacao_pendentes: c.aprovacao_pendentes,
       aprovacao_dias: cobrar && cobrar.diasEsperando ? cobrar.diasEsperando : 0,
+      pronto,
     });
   }
   grupos.sort((a, b) => {
@@ -445,7 +611,8 @@ export function montarFila(r: RespostaDaFila): Fila {
     return a.nome.localeCompare(b.nome, "pt-BR");
   });
   emDia.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-  return { hoje: r.hoje, grupos, emDia, resumo, acessoConhecido: r.acesso_conhecido };
+  marcados.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR") || b.acao.pontos - a.acao.pontos);
+  return { hoje: r.hoje, grupos, emDia, marcados, resumo, acessoConhecido: r.acesso_conhecido };
 }
 
 /** Primeiro nome útil da empresa ou pessoa, para a saudação. */
@@ -472,6 +639,8 @@ export function mensagemDeCobranca(nome: string, quantidade: number, dias: numbe
 // ------------------------------------------------------------------ leitura direta (sem a RPC)
 
 const FORMATOS_DE_ARTE = ["carousel", "static", "design"];
+/** Arte ou vídeo: a mesma lista da aba Mês (FORMATOS_DE_PECA em useAgendaDoMes.ts). */
+const FORMATOS_DE_PECA = ["carousel", "static", "design", "reel", "story", "video", "short", "google_post"];
 const LOTE = 100;
 
 function emLotes<T>(lista: T[]): T[][] {
@@ -491,15 +660,52 @@ async function lerEmLotes<T>(ids: string[], ler: (lote: string[]) => PromiseLike
   return saida;
 }
 
+/**
+ * Quem está DENTRO DA MESA (mesa "organica"), a mesma regra do seletor:
+ * escolha da equipe por cima do padrão (plano ativo, não avulso, não apagado).
+ * Sem a tabela de escolhas, vale só o padrão. Diferente do seletor, a fila
+ * nunca mostra todos quando ninguém entra.
+ */
+export function clientesNaMesa(brutos: ClienteBruto[], escolhas: { client_id: string; modo: string }[]): string[] {
+  const modo: Record<string, string> = {};
+  for (const e of escolhas) modo[e.client_id] = e.modo;
+  const ids: string[] = [];
+  for (const c of brutos) {
+    if (!c || !c.id) continue;
+    const id = String(c.id);
+    const escolha = modo[id];
+    const entra = escolha === "incluir" ? !c.deleted_at : escolha === "retirar" ? false : entraPeloPadrao("organica", c).entra;
+    if (entra) ids.push(id);
+  }
+  return ids;
+}
+
 /** Leitura direta (RLS da equipe) no formato da RPC; o último acesso fica de fora. */
 export async function lerFilaDireta(clientes: { id: string; nome: string }[], agora = new Date()): Promise<RespostaDaFila> {
   const sb = supabase as any;
   const hoje = diaLocal(agora);
   const mesAtual = inicioDoMes(agora);
-  const mesSeguinte = somarMeses(mesAtual, 1);
-  const fim = somarMeses(mesAtual, 2);
-  const ids = clientes.map((c) => c.id);
-  if (!ids.length) return { versao: 1, hoje, acesso_conhecido: false, clientes: [], origem: "direto" };
+  const mesesDaFila = [0, 1, 2, 3].map((n) => somarMeses(mesAtual, n));
+  const fim = somarMeses(mesAtual, 4);
+  const vazio: RespostaDaFila = { versao: 2, hoje, acesso_conhecido: false, clientes: [], origem: "direto" };
+  if (!clientes.length) return vazio;
+
+  // Só quem está dentro da Mesa.
+  const [brutos, escolhas] = await Promise.all([
+    lerEmLotes<ClienteBruto>(
+      clientes.map((c) => c.id),
+      (lote) => sb.from("profiles").select("id, plan_status, client_type, deleted_at").in("id", lote),
+    ),
+    (async () => {
+      const { data, error } = await sb.from("mesa_cliente_escolhas").select("client_id, modo").eq("mesa", "organica");
+      return error ? [] : normalizarEscolhas(data);
+    })().catch(() => []),
+  ]);
+  const naMesa: Record<string, boolean> = {};
+  for (const id of clientesNaMesa(brutos, escolhas)) naMesa[id] = true;
+  const daMesa = clientes.filter((c) => naMesa[c.id]);
+  const ids = daMesa.map((c) => c.id);
+  if (!ids.length) return vazio;
 
   const projetos = await lerEmLotes<{ id: string; client_id: string }>(ids, (lote) =>
     sb.from("projects").select("id, client_id").in("client_id", lote).is("deleted_at", null),
@@ -507,27 +713,16 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
   const clienteDoProjeto: Record<string, string> = {};
   for (const p of projetos) clienteDoProjeto[p.id] = p.client_id;
 
-  const noventa = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - 90);
-  const [tarefas, recentes, trabalhos, arquivos, revisao, configs, propostas] = await Promise.all([
-    lerEmLotes<{ id: string; project_id: string; due_date: string; status: string | null }>(Object.keys(clienteDoProjeto), (lote) =>
+  const [tarefas, trabalhos, arquivos, revisao, configs, propostas, feitos] = await Promise.all([
+    lerEmLotes<{ id: string; project_id: string; due_date: string; status: string | null; delivery_type: string | null }>(Object.keys(clienteDoProjeto), (lote) =>
       sb
         .from("tasks")
-        .select("id, project_id, due_date, status")
+        .select("id, project_id, due_date, status, delivery_type")
         .in("project_id", lote)
-        .in("delivery_type", FORMATOS_DE_ARTE)
+        .in("delivery_type", FORMATOS_DE_PECA)
         .is("deleted_at", null)
         .gte("due_date", mesAtual)
         .lt("due_date", fim),
-    ),
-    lerEmLotes<{ project_id: string }>(Object.keys(clienteDoProjeto), (lote) =>
-      sb
-        .from("tasks")
-        .select("project_id")
-        .in("project_id", lote)
-        .in("delivery_type", FORMATOS_DE_ARTE)
-        .is("deleted_at", null)
-        .gte("due_date", diaLocal(noventa))
-        .limit(1000),
     ),
     lerEmLotes<{ id: string; client_id: string; task_id: string | null; status: string; entrega_status: string | null; tipo: string | null; cards: unknown; criado_em: string; atualizado_em: string }>(
       ids,
@@ -561,19 +756,28 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
     lerEmLotes<{ client_id: string; posts_por_mes: number | null }>(ids, (lote) =>
       sb.from("mesa_cliente_config").select("client_id, posts_por_mes").in("client_id", lote),
     ).catch(() => [] as { client_id: string; posts_por_mes: number | null }[]),
-    lerEmLotes<{ client_id: string; periodo_inicio: string; periodo_fim: string }>(ids, (lote) =>
+    lerEmLotes<{ client_id: string; periodo_inicio: string; periodo_fim: string; status: string }>(ids, (lote) =>
       sb
         .from("calendario_propostas")
-        .select("client_id, periodo_inicio, periodo_fim")
+        .select("client_id, periodo_inicio, periodo_fim, status")
         .in("client_id", lote)
-        .in("status", ["temas", "detalhando", "pronta"]),
-    ).catch(() => [] as { client_id: string; periodo_inicio: string; periodo_fim: string }[]),
+        .in("status", ["temas", "detalhando", "pronta", "gravada"]),
+    ).catch(() => [] as { client_id: string; periodo_inicio: string; periodo_fim: string; status: string }[]),
+    lerEmLotes<Record<string, unknown>>(ids, (lote) =>
+      sb
+        .from("mesa_fila_feitos")
+        .select("id, client_id, tipo, periodo, quantidade, referencia, marcado_em")
+        .in("client_id", lote)
+        .is("arquivado_em", null)
+        .gte("periodo", somarMeses(mesAtual, -1)),
+    ).catch(() => [] as Record<string, unknown>[]),
   ]);
 
   // Arte já feita: trabalho com imagem, post com arquivo ou anexo.
   const comArte: Record<string, boolean> = {};
   for (const t of trabalhos) if (t.task_id && Array.isArray(t.cards) && (t.cards as unknown[]).length > 0) comArte[t.task_id] = true;
-  const pendentes = tarefas.filter((t) => !comArte[t.id] && t.status !== "done" && t.status !== "review" && t.due_date >= hoje).map((t) => t.id);
+  const deArte = (t: { delivery_type: string | null }) => FORMATOS_DE_ARTE.indexOf(String(t.delivery_type || "")) >= 0;
+  const pendentes = tarefas.filter((t) => deArte(t) && !comArte[t.id] && t.status !== "done" && t.status !== "review" && t.due_date >= hoje).map((t) => t.id);
   if (pendentes.length) {
     const vinculos = await lerEmLotes<{ post_id: string; task_id: string }>(pendentes, (lote) =>
       sb.from("editorial_post_internal").select("post_id, task_id").in("task_id", lote),
@@ -603,8 +807,7 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
   const limite60 = agora.getTime() - 60 * 86400_000;
   const vistos: Record<string, boolean> = {};
   const porCliente: Record<string, ClienteDaFila> = {};
-  const ativo: Record<string, boolean> = {};
-  for (const c of clientes) {
+  for (const c of daMesa) {
     porCliente[c.id] = {
       client_id: c.id,
       nome: c.nome,
@@ -612,20 +815,23 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
       posts_por_mes: null,
       aprovacao_pendentes: 0,
       aprovacao_desde: null,
+      aprovacao_ultimo: null,
       revisao_pendentes: 0,
       revisao_desde: null,
       reprovados: 0,
       prontas_para_enviar: 0,
       precisam_atencao: 0,
-      meses: [mesAtual, mesSeguinte].map((mes) => ({ mes, itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false })),
+      meses: mesesDaFila.map((mes) => ({ mes, itens: 0, pecas: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false, proposta_gravada: false })),
+      feitos: [],
     };
   }
-  for (const r of recentes) if (clienteDoProjeto[r.project_id]) ativo[clienteDoProjeto[r.project_id]] = true;
   for (const t of tarefas) {
     const c = porCliente[clienteDoProjeto[t.project_id]];
     if (!c) continue;
     const m = c.meses.find((x) => x.mes === `${t.due_date.slice(0, 7)}-01`);
     if (!m) continue;
+    m.pecas += 1;
+    if (!deArte(t)) continue;
     m.itens += 1;
     const temArte = comArte[t.id] || t.status === "done" || t.status === "review";
     if (!temArte && t.due_date >= hoje) {
@@ -639,7 +845,6 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
     const chave = t.task_id || t.id;
     if (vistos[chave]) continue; // só o mais recente de cada item (lista vem do mais novo)
     vistos[chave] = true;
-    ativo[t.client_id] = true;
     if (!t.entrega_status && (t.status === "pronto" || t.status === "entregue")) c.prontas_para_enviar += 1;
     if (t.entrega_status === "reprovado") c.reprovados += 1;
     if (t.entrega_status === "precisa_de_atencao") c.precisam_atencao += 1;
@@ -647,10 +852,10 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
   for (const f of arquivos) {
     const c = porCliente[f.client_id];
     if (!c) continue;
-    ativo[f.client_id] = true;
     c.aprovacao_pendentes += 1;
     const quando = f.approval_requested_at || f.created_at;
     if (!c.aprovacao_desde || quando < c.aprovacao_desde) c.aprovacao_desde = quando;
+    if (!c.aprovacao_ultimo || quando > c.aprovacao_ultimo) c.aprovacao_ultimo = quando;
   }
   for (const f of revisao) {
     const c = porCliente[f.client_id];
@@ -660,26 +865,26 @@ export async function lerFilaDireta(clientes: { id: string; nome: string }[], ag
   }
   for (const cfg of configs) {
     const c = porCliente[cfg.client_id];
-    if (c && cfg.posts_por_mes) {
-      c.posts_por_mes = cfg.posts_por_mes;
-      ativo[cfg.client_id] = true;
-    }
+    if (c && cfg.posts_por_mes) c.posts_por_mes = cfg.posts_por_mes;
   }
   for (const p of propostas) {
     const c = porCliente[p.client_id];
     if (!c) continue;
     for (const m of c.meses) {
-      if (p.periodo_inicio < somarMeses(m.mes, 1) && p.periodo_fim >= m.mes) m.proposta_aberta = true;
+      if (!(p.periodo_inicio < somarMeses(m.mes, 1) && p.periodo_fim >= m.mes)) continue;
+      if (p.status === "gravada") m.proposta_gravada = true;
+      else m.proposta_aberta = true;
     }
   }
+  const feitosPorCliente: Record<string, unknown[]> = {};
+  for (const f of feitos) {
+    const id = String(f.client_id || "");
+    if (!porCliente[id]) continue;
+    (feitosPorCliente[id] = feitosPorCliente[id] || []).push(f);
+  }
+  for (const id of Object.keys(feitosPorCliente)) porCliente[id].feitos = normalizarFeitos(feitosPorCliente[id]);
 
-  return {
-    versao: 1,
-    hoje,
-    acesso_conhecido: false,
-    clientes: clientes.filter((c) => ativo[c.id]).map((c) => porCliente[c.id]),
-    origem: "direto",
-  };
+  return { ...vazio, clientes: daMesa.map((c) => porCliente[c.id]) };
 }
 
 /** RPC primeiro; sem ela no banco, a leitura direta com a lista de clientes da tela. */
@@ -702,4 +907,87 @@ export function useFilaDePrioridades(clientes: { id: string; nome: string }[], a
     enabled: ativo,
     queryFn: () => lerFila(clientes),
   });
+}
+
+// ------------------------------------------------------------------ marcar feito e desfazer
+
+export const RPC_MARCAR_FEITO = "mesa_fila_marcar_feito";
+export const RPC_DESFAZER_FEITO = "mesa_fila_desfazer_feito";
+
+const FEITO_SEM_BANCO = "O botão Feito ainda não foi ativado no banco.";
+
+/** Grava a marca de "Feito" da ação (cliente, tipo e mês). */
+export async function marcarFeito(clientId: string, a: AcaoDaFila): Promise<FeitoDaFila> {
+  const { data, error } = await (supabase as any).rpc(RPC_MARCAR_FEITO, {
+    _client_id: clientId,
+    _tipo: a.tipo,
+    _periodo: a.periodo,
+    _quantidade: a.quantidade,
+    _referencia: a.referencia,
+  });
+  if (error) throw rpcAusente(error) ? new Error(FEITO_SEM_BANCO) : error;
+  const [feito] = normalizarFeitos([data]);
+  if (!feito) throw new Error("O banco não devolveu a marca.");
+  return feito;
+}
+
+/** Desfaz a marca (o banco arquiva, não apaga). */
+export async function desfazerFeito(id: string): Promise<void> {
+  const { error } = await (supabase as any).rpc(RPC_DESFAZER_FEITO, { _id: id });
+  if (error) throw rpcAusente(error) ? new Error(FEITO_SEM_BANCO) : error;
+}
+
+function trocarFeitos(r: RespostaDaFila | undefined, clientId: string, mudar: (lista: FeitoDaFila[]) => FeitoDaFila[]): RespostaDaFila | undefined {
+  if (!r) return r;
+  return { ...r, clientes: r.clientes.map((c) => (c.client_id === clientId ? { ...c, feitos: mudar(c.feitos || []) } : c)) };
+}
+
+/**
+ * "Feito" e "Desfazer" com a fila atualizada na hora (o item some ou volta
+ * antes da resposta do banco); se o banco recusar, a fila volta como estava.
+ */
+export function useFeitoDaFila() {
+  const queryClient = useQueryClient();
+
+  const marcar = useCallback(
+    async (clientId: string, a: AcaoDaFila): Promise<FeitoDaFila> => {
+      const antes = queryClient.getQueryData<RespostaDaFila>(CHAVE_DA_FILA);
+      const provisorio: FeitoDaFila = {
+        id: `local-${a.tipo}-${a.periodo}`,
+        tipo: a.tipo,
+        periodo: a.periodo,
+        quantidade: a.quantidade,
+        referencia: a.referencia,
+        marcado_em: new Date().toISOString(),
+        marcado_por_nome: null,
+      };
+      const semEste = (lista: FeitoDaFila[]) => lista.filter((f) => !(f.tipo === a.tipo && f.periodo === a.periodo));
+      queryClient.setQueryData<RespostaDaFila | undefined>(CHAVE_DA_FILA, (r) => trocarFeitos(r, clientId, (lista) => semEste(lista).concat([provisorio])));
+      try {
+        const feito = await marcarFeito(clientId, a);
+        queryClient.setQueryData<RespostaDaFila | undefined>(CHAVE_DA_FILA, (r) => trocarFeitos(r, clientId, (lista) => semEste(lista).concat([feito])));
+        return feito;
+      } catch (e) {
+        queryClient.setQueryData<RespostaDaFila | undefined>(CHAVE_DA_FILA, antes);
+        throw e;
+      }
+    },
+    [queryClient],
+  );
+
+  const desfazer = useCallback(
+    async (clientId: string, feito: FeitoDaFila): Promise<void> => {
+      const antes = queryClient.getQueryData<RespostaDaFila>(CHAVE_DA_FILA);
+      queryClient.setQueryData<RespostaDaFila | undefined>(CHAVE_DA_FILA, (r) => trocarFeitos(r, clientId, (lista) => lista.filter((f) => f.id !== feito.id)));
+      try {
+        await desfazerFeito(feito.id);
+      } catch (e) {
+        queryClient.setQueryData<RespostaDaFila | undefined>(CHAVE_DA_FILA, antes);
+        throw e;
+      }
+    },
+    [queryClient],
+  );
+
+  return { marcar, desfazer };
 }
