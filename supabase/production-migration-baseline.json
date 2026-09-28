@@ -1425,6 +1425,14 @@
       "remote_name": "instagram_do_cliente",
       "remote_statements_sha256": "ab80a231c35a308ec29b701bc97c8e44f4951b7f17add6e6fb36fa5bc268e657",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928020000",
+      "path": "supabase/migrations/20260928020000_gerenciador_ao_vivo.sql",
+      "local_sha256": "5e6b4f248b444b8e9011c4588a85b5aa4ff2a7ddcaf7f39e1232a9bf4a704d07",
+      "remote_name": "gerenciador_ao_vivo",
+      "remote_statements_sha256": "b0ad2776c1ad3e8b2db8d4ee7d7bcd8867bdf677cd3e43aaefdb3834adfb6aba",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
