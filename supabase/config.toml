@@ -109,6 +109,8 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.mesa-site]
     verify_jwt = true
+  [functions.preencher-ia]
+    verify_jwt = true
   [functions.motor-codigo]
     verify_jwt = true
   [functions.agente-estilo]

@@ -27,3 +27,4 @@ export { default as BarraDeControles } from "./BarraDeControles";
 export { default as MenuMais, type ItemDoMenu } from "./MenuMais";
 export { default as GradeDeSecoes } from "./GradeDeSecoes";
 export { GrupoDeFuncoes, GradeDeGrupos } from "./GrupoDeFuncoes";
+export { default as PreencherComIA, type CampoParaPreencher, type ResultadoDoPreenchimento, type PropsDoPreencherComIA } from "./PreencherComIA";

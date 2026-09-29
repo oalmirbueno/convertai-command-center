@@ -1,0 +1,622 @@
+/**
+ * Preencher com IA (frente PIA, 30/09/2026): a parte pura da peça comum.
+ *
+ * Quem usa:
+ * - a função `preencher-ia` (ações estimar e preencher);
+ * - as funções das mesas que quiserem preencher campos por dentro, com as
+ *   mesmas regras (importe daqui: esquema, pedido e limpeza).
+ *
+ * Arquivo sem import (roda no Deno e no vitest). Três peças:
+ * 1. `esquemaDosCampos`: esquema JSON estrito montado dos campos (tipo,
+ *    opções, máximos na descrição e conferidos por código na limpeza). As
+ *    chaves do esquema são c0, c1... (a chave da tela pode ter ponto).
+ * 2. `montarPedido`: sistema e mensagem, com as fontes lidas e a regra dura.
+ * 3. `limparResposta`: a regra "nada inventado" conferida por código.
+ *    - número, preço, data e hora: cada número do valor precisa aparecer no
+ *      texto das fontes; senão o campo volta vazio, com aviso;
+ *    - nome próprio: palavra com inicial maiúscula no meio da frase precisa
+ *      aparecer nas fontes (menos no papel naming, que cria nomes);
+ *    - escolha fora das opções, lista além do máximo e texto além do limite
+ *      são cortados ou esvaziados, sempre com aviso;
+ *    - campo que a IA deixou sem base volta vazio, com aviso.
+ *
+ * Por padrão só os campos vazios vão ao modelo (`camposAPreencher`); com
+ * `substituir`, todos.
+ */
+
+export type TipoDoCampo = "texto" | "texto_longo" | "lista" | "numero" | "escolha" | "objeto";
+
+export interface CampoParaPreencher {
+  /** Caminho do campo, ex. "capa.headline". */
+  chave: string;
+  /** Como a tela chama o campo. */
+  rotulo: string;
+  tipo: TipoDoCampo;
+  /** Para "escolha". */
+  opcoes?: string[];
+  /** O que já está preenchido. */
+  valorAtual?: unknown;
+  /** Regra do campo (ex.: "até 8 palavras", "nunca inventar número"). */
+  dica?: string;
+  /** Caracteres (texto) ou itens (lista). */
+  maximo?: number;
+}
+
+export type FonteDoPreenchimento = "contexto" | "briefing" | "dossie" | "arquivos" | "conversa" | "web";
+
+export interface ResultadoDoPreenchimento {
+  valores: Record<string, unknown>;
+  modelo_id: string;
+  custo_usd: number;
+  fontes: string[];
+  avisos: string[];
+}
+
+/** Uma fonte lida pelo servidor: o rótulo vai para a tela, o texto vai para o modelo e para a conferência. */
+export type FonteLida = { id: FonteDoPreenchimento; rotulo: string; texto: string };
+
+export const TIPOS_DE_CAMPO: TipoDoCampo[] = ["texto", "texto_longo", "lista", "numero", "escolha", "objeto"];
+export const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie", "arquivos", "conversa", "web"];
+export const FONTES_PADRAO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie"];
+/** Os 9 papéis das mesas novas (os mesmos de ia-motor.ts e src/lib/mesa/api.ts). Outro papel é recusado. */
+export const PAPEIS_QUE_PREENCHEM = ["proposta", "contrato", "briefing", "conselho", "identidade", "naming", "site", "motion", "documento"] as const;
+export type PapelQuePreenche = (typeof PAPEIS_QUE_PREENCHEM)[number];
+
+export const MAX_CAMPOS = 40;
+const MAX_CHAVE = 120;
+const MAX_ROTULO = 120;
+const MAX_DICA = 400;
+const MAX_OPCOES = 40;
+const MAX_TEXTO_DO_VALOR_ATUAL = 1200;
+export const MAX_INSTRUCAO = 1500;
+export const MAX_CONTEXTO_DA_TELA = 3000;
+
+/** Tamanho de cada fonte no pedido (caracteres). */
+export const TAMANHO_DA_FONTE: Record<FonteDoPreenchimento, number> = {
+  contexto: 4000,
+  briefing: 5000,
+  dossie: 5000,
+  arquivos: 5000,
+  conversa: 3000,
+  web: 0,
+};
+
+export function ehPapelQuePreenche(p: unknown): p is PapelQuePreenche {
+  return typeof p === "string" && (PAPEIS_QUE_PREENCHEM as readonly string[]).indexOf(p) >= 0;
+}
+
+// ------------------------------------------------------------------ campos
+
+const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** Campos que a tela mandou, validados. Lança Error com mensagem para gente quando não servem. */
+export function normalizarCampos(bruto: unknown): CampoParaPreencher[] {
+  if (!Array.isArray(bruto) || bruto.length === 0) throw new Error("Mande ao menos um campo para preencher.");
+  if (bruto.length > MAX_CAMPOS) throw new Error(`No máximo ${MAX_CAMPOS} campos por vez.`);
+  const vistos: Record<string, true> = {};
+  const saida: CampoParaPreencher[] = [];
+  for (const b of bruto) {
+    if (!b || typeof b !== "object") throw new Error("Campo sem formato.");
+    const o = b as Record<string, unknown>;
+    const chave = texto(o.chave, MAX_CHAVE);
+    const tipo = String(o.tipo || "") as TipoDoCampo;
+    if (!chave) throw new Error("Todo campo precisa de chave.");
+    if (vistos[chave]) throw new Error(`Campo repetido: ${chave}.`);
+    if (TIPOS_DE_CAMPO.indexOf(tipo) < 0) throw new Error(`Tipo de campo desconhecido em ${chave}.`);
+    vistos[chave] = true;
+    const campo: CampoParaPreencher = { chave, rotulo: texto(o.rotulo, MAX_ROTULO) || chave, tipo };
+    if (tipo === "escolha") {
+      const opcoes = Array.isArray(o.opcoes) ? o.opcoes.map((x) => texto(x, 120)).filter(Boolean).slice(0, MAX_OPCOES) : [];
+      if (!opcoes.length) throw new Error(`O campo ${campo.rotulo} é de escolha e veio sem opções.`);
+      campo.opcoes = opcoes;
+    }
+    if (o.valorAtual !== undefined) campo.valorAtual = o.valorAtual;
+    const dica = texto(o.dica, MAX_DICA);
+    if (dica) campo.dica = dica;
+    const maximo = Number(o.maximo);
+    if (Number.isFinite(maximo) && maximo > 0) campo.maximo = Math.floor(maximo);
+    saida.push(campo);
+  }
+  return saida;
+}
+
+/** Vazio: nada, texto em branco, lista vazia, objeto sem nenhum valor preenchido. */
+export function campoVazio(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (typeof v === "number") return !Number.isFinite(v);
+  if (Array.isArray(v)) return v.every(campoVazio);
+  if (typeof v === "object") return Object.keys(v as object).every((k) => campoVazio((v as Record<string, unknown>)[k]));
+  return false;
+}
+
+/** Só vazios por padrão; com substituir, todos. */
+export function camposAPreencher(campos: CampoParaPreencher[], substituir = false): CampoParaPreencher[] {
+  return substituir ? campos.slice() : campos.filter((c) => campoVazio(c.valorAtual));
+}
+
+export function normalizarFontes(bruto: unknown): FonteDoPreenchimento[] {
+  if (!Array.isArray(bruto)) return FONTES_PADRAO.slice();
+  const saida: FonteDoPreenchimento[] = [];
+  for (const f of bruto) if (FONTES_DO_PREENCHIMENTO.indexOf(f as FonteDoPreenchimento) >= 0 && saida.indexOf(f as FonteDoPreenchimento) < 0) saida.push(f as FonteDoPreenchimento);
+  return saida;
+}
+
+// ------------------------------------------------------------------ esquema
+
+const NOME_DE_PROPRIEDADE = /^[A-Za-z0-9_-]{1,64}$/;
+
+function objetoSimples(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+/** Objeto com chaves conhecidas (do valor atual) vira objeto no esquema; sem forma conhecida, texto JSON. */
+function chavesDoObjeto(c: CampoParaPreencher): string[] | null {
+  if (!objetoSimples(c.valorAtual)) return null;
+  const chaves = Object.keys(c.valorAtual).filter((k) => NOME_DE_PROPRIEDADE.test(k)).slice(0, 20);
+  return chaves.length ? chaves : null;
+}
+
+function descricaoDoCampo(c: CampoParaPreencher): string {
+  const partes = [c.rotulo];
+  if (c.maximo) partes.push(c.tipo === "lista" ? `até ${c.maximo} itens` : c.tipo === "numero" ? "" : `até ${c.maximo} caracteres`);
+  if (c.dica) partes.push(c.dica);
+  partes.push("null quando as fontes não dão base");
+  return partes.filter(Boolean).join(". ");
+}
+
+function propriedadeDoCampo(c: CampoParaPreencher): Record<string, unknown> {
+  const description = descricaoDoCampo(c);
+  switch (c.tipo) {
+    case "numero":
+      return { type: ["number", "null"], description };
+    case "lista":
+      return { type: ["array", "null"], items: { type: "string" }, description };
+    case "escolha":
+      return { type: ["string", "null"], enum: (c.opcoes || []).concat([null as unknown as string]), description };
+    case "objeto": {
+      const chaves = chavesDoObjeto(c);
+      if (!chaves) return { type: ["string", "null"], description: `${description}. Objeto em texto JSON` };
+      const atual = c.valorAtual as Record<string, unknown>;
+      const properties: Record<string, unknown> = {};
+      for (const k of chaves) {
+        const v = atual[k];
+        properties[k] = typeof v === "number"
+          ? { type: ["number", "null"] }
+          : Array.isArray(v)
+          ? { type: ["array", "null"], items: { type: "string" } }
+          : { type: ["string", "null"] };
+      }
+      return { type: ["object", "null"], additionalProperties: false, required: chaves, properties, description };
+    }
+    default:
+      return { type: ["string", "null"], description };
+  }
+}
+
+export type MapaDoEsquema = Record<string, CampoParaPreencher>;
+
+/**
+ * Esquema JSON estrito (OpenAI strict, Anthropic e OpenRouter): todas as
+ * chaves obrigatórias, additionalProperties false, null para "sem base".
+ */
+export function esquemaDosCampos(campos: CampoParaPreencher[]): { nome: string; schema: Record<string, unknown>; mapa: MapaDoEsquema } {
+  const mapa: MapaDoEsquema = {};
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  campos.forEach((c, i) => {
+    const k = `c${i}`;
+    mapa[k] = c;
+    properties[k] = propriedadeDoCampo(c);
+    required.push(k);
+  });
+  return {
+    nome: "preenchimento",
+    mapa,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["valores", "fontes_usadas", "citacoes", "avisos"],
+      properties: {
+        valores: { type: "object", additionalProperties: false, required, properties },
+        fontes_usadas: { type: "array", items: { type: "string" }, description: "Rótulos das fontes que deram base (como vieram no pedido)" },
+        citacoes: {
+          type: "array",
+          description: "Trecho literal que sustenta cada número, data ou nome; na web, com a url",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["campo", "trecho", "url"],
+            properties: { campo: { type: "string" }, trecho: { type: "string" }, url: { type: ["string", "null"] } },
+          },
+        },
+        avisos: { type: "array", items: { type: "string" }, description: "O que ficou vazio e por quê" },
+      },
+    },
+  };
+}
+
+// ------------------------------------------------------------------ pedido
+
+function valorParaTexto(v: unknown, max = MAX_TEXTO_DO_VALOR_ATUAL): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v.slice(0, max);
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v).slice(0, max);
+  } catch {
+    return "";
+  }
+}
+
+const NOMES_DOS_TIPOS: Record<TipoDoCampo, string> = {
+  texto: "texto curto",
+  texto_longo: "texto longo",
+  lista: "lista de itens",
+  numero: "número",
+  escolha: "uma das opções",
+  objeto: "objeto",
+};
+
+export type PedidoDoPreenchimento = {
+  papel: string;
+  campos: CampoParaPreencher[];
+  fontes: FonteLida[];
+  contexto?: string | null;
+  instrucao?: string | null;
+  web?: boolean;
+  substituir?: boolean;
+};
+
+export function montarPedido(p: PedidoDoPreenchimento): { sistema: string; mensagem: string; esquema: ReturnType<typeof esquemaDosCampos> } {
+  const esquema = esquemaDosCampos(p.campos);
+  const sistema = [
+    `Você preenche campos de uma mesa de trabalho da agência Aceleriq (papel: ${p.papel}). Escreva em português do Brasil, direto, sem travessão.`,
+    "Regra dura: use só o que está nas fontes do pedido, na instrução e no que a tela sabe" + (p.web ? " e o que achar na pesquisa na web, sempre com a url" : "") + ".",
+    "Nunca invente número, preço, data, prazo, porcentagem, nome de pessoa, empresa, produto ou lugar. Se a fonte não traz, o campo fica null e vai um aviso curto dizendo o que faltou.",
+    "Para cada número, data ou nome que usar, ponha em citacoes o trecho literal da fonte (com a url quando vier da web).",
+    "Respeite o tipo, as opções e o limite de cada campo. Em fontes_usadas, repita os rótulos das fontes como vieram (### rótulo).",
+    p.substituir ? "Campos com valor atual podem ser reescritos; mantenha o que já estava certo." : "Os campos pedidos estão vazios.",
+  ].join("\n");
+
+  const blocos: string[] = [];
+  if (p.instrucao && p.instrucao.trim()) blocos.push(`## Instrução da pessoa\n${p.instrucao.trim().slice(0, MAX_INSTRUCAO)}`);
+  if (p.contexto && p.contexto.trim()) blocos.push(`## O que a tela sabe\n${p.contexto.trim().slice(0, MAX_CONTEXTO_DA_TELA)}`);
+  const lidas = p.fontes.filter((f) => f.texto.trim());
+  if (lidas.length) {
+    blocos.push(`## Fontes\n${lidas.map((f) => `### ${f.rotulo}\n${f.texto.trim().slice(0, TAMANHO_DA_FONTE[f.id] || 4000)}`).join("\n\n")}`);
+  } else {
+    blocos.push("## Fontes\n(nenhuma fonte do painel trouxe texto)");
+  }
+  if (p.web) blocos.push("## Web\nVocê pode pesquisar na web. Dado da web só entra com a url em citacoes.");
+  const linhas = Object.keys(esquema.mapa).map((k) => {
+    const c = esquema.mapa[k];
+    const partes = [`- ${k}: ${c.rotulo} (${NOMES_DOS_TIPOS[c.tipo]}`];
+    if (c.maximo) partes.push(c.tipo === "lista" ? `, até ${c.maximo} itens` : c.tipo === "numero" ? "" : `, até ${c.maximo} caracteres`);
+    partes.push(")");
+    if (c.opcoes && c.opcoes.length) partes.push(`. Opções: ${c.opcoes.join(" | ")}`);
+    if (c.dica) partes.push(`. Regra: ${c.dica}`);
+    const atual = valorParaTexto(c.valorAtual);
+    if (atual) partes.push(`. Valor atual: ${atual}`);
+    return partes.join("");
+  });
+  blocos.push(`## Campos a preencher\n${linhas.join("\n")}`);
+  return { sistema, mensagem: blocos.join("\n\n"), esquema };
+}
+
+// ------------------------------------------------------------------ estimativa
+
+const SAIDA_POR_TIPO: Record<TipoDoCampo, number> = { texto: 80, texto_longo: 450, lista: 220, numero: 15, escolha: 15, objeto: 260 };
+/** Entrada típica de cada fonte (tokens), para a estimativa antes de ler. */
+export const ENTRADA_POR_FONTE: Record<FonteDoPreenchimento, number> = {
+  contexto: 1200,
+  briefing: 1500,
+  dossie: 1500,
+  arquivos: 1500,
+  conversa: 900,
+  web: 10_000,
+};
+
+export type PartesDaEstimativa = {
+  pedido: number;
+  fontes: Array<{ fonte: FonteDoPreenchimento; tokens: number }>;
+  saida: number;
+  buscasWeb: number;
+};
+
+/** Tokens estimados (lado seguro) de um preenchimento, parte a parte. */
+export function tokensDaEstimativa(campos: CampoParaPreencher[], fontes: FonteDoPreenchimento[], extras = 0): PartesDaEstimativa {
+  const pedido = 450 + campos.length * 70 + Math.ceil(Math.max(0, extras) / 3.5);
+  const saida = 250 + campos.reduce((s, c) => {
+    const base = SAIDA_POR_TIPO[c.tipo] || 100;
+    if (c.maximo && (c.tipo === "texto" || c.tipo === "texto_longo")) return s + Math.max(40, Math.min(base * 3, Math.ceil(c.maximo / 3)));
+    if (c.maximo && c.tipo === "lista") return s + Math.max(60, c.maximo * 40);
+    return s + base;
+  }, 0);
+  return {
+    pedido,
+    fontes: fontes.map((f) => ({ fonte: f, tokens: ENTRADA_POR_FONTE[f] })),
+    saida,
+    buscasWeb: fontes.indexOf("web") >= 0 ? 3 : 0,
+  };
+}
+
+/** Teto de tokens de saída do pedido (margem sobre a estimativa). */
+export function tetoDeSaida(campos: CampoParaPreencher[]): number {
+  return Math.min(8000, Math.max(1200, Math.ceil(tokensDaEstimativa(campos, []).saida * 1.6)));
+}
+
+// ------------------------------------------------------------------ conferência
+
+/** Minúsculas e sem acento (para comparar nomes). */
+export function normalizarParaComparar(s: string): string {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+const NUMERO = /\d+(?:[.,]\d+)*/g;
+
+/** Valor canônico de um número escrito (1.500 = 1500; 1,5 = 1.5; 1,500 = 1500). */
+export function valorDoNumero(token: string): string {
+  let t = token;
+  if (t.indexOf(".") >= 0 && t.indexOf(",") >= 0) {
+    t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+  } else if (t.indexOf(",") >= 0) {
+    t = /^\d{1,3}(,\d{3})+$/.test(t) ? t.replace(/,/g, "") : t.replace(/,/g, ".");
+  } else if (t.indexOf(".") >= 0) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? String(n) : token;
+}
+
+export type ReferenciaDasFontes = { numeros: Record<string, true>; digitos: Record<string, true>; texto: string };
+
+/** Índice do texto de referência (fontes, instrução, contexto da tela, campo). */
+export function referenciaDas(textos: string[]): ReferenciaDasFontes {
+  const numeros: Record<string, true> = {};
+  const digitos: Record<string, true> = {};
+  const junto = textos.filter(Boolean).join("\n");
+  const achados = junto.match(NUMERO) || [];
+  for (const a of achados) {
+    numeros[valorDoNumero(a)] = true;
+    digitos[a.replace(/[.,]/g, "")] = true;
+  }
+  return { numeros, digitos, texto: " " + normalizarParaComparar(junto).replace(/\s+/g, " ") + " " };
+}
+
+/** Números do valor que não estão nas fontes. Inteiros até 10 soltos (sem %, sem moeda) ficam livres. */
+export function numerosSemFonte(valor: string, ref: ReferenciaDasFontes): string[] {
+  const faltam: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = new RegExp(NUMERO.source, "g");
+  while ((m = re.exec(valor))) {
+    const token = m[0];
+    const depois = valor.slice(m.index + token.length).replace(/^\s+/, "").charAt(0);
+    const antes = valor.slice(Math.max(0, m.index - 4), m.index);
+    const pequeno = /^\d+$/.test(token) && Number(token) <= 10 && depois !== "%" && antes.indexOf("$") < 0;
+    if (pequeno) continue;
+    if (ref.numeros[valorDoNumero(token)] || ref.digitos[token.replace(/[.,]/g, "")]) continue;
+    if (faltam.indexOf(token) < 0) faltam.push(token);
+  }
+  return faltam;
+}
+
+/** Palavras que aparecem com maiúscula sem ser nome inventado (plataformas, meses, siglas comuns). */
+const LIVRES = [
+  "instagram", "facebook", "whatsapp", "google", "tiktok", "youtube", "linkedin", "meta", "reels", "stories", "story",
+  "pix", "ia", "seo", "cta", "brasil", "internet", "site", "email", "e-mail", "aceleriq", "kpi", "roi", "b2b", "b2c",
+];
+
+const PALAVRA = /[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’-]*/g;
+
+/**
+ * Nomes próprios do valor que não aparecem nas fontes: palavra com inicial
+ * maiúscula que não abre frase. Texto em "Título Com Tudo Maiúsculo" (mais
+ * da metade das palavras) não é conferido: não dá para separar nome de estilo.
+ */
+export function nomesSemFonte(valor: string, ref: ReferenciaDasFontes): string[] {
+  const palavras: Array<{ p: string; i: number }> = [];
+  const re = new RegExp(PALAVRA.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(valor))) palavras.push({ p: m[0], i: m.index });
+  if (!palavras.length) return [];
+  const maiusculas = palavras.filter((w) => w.p.charAt(0) !== w.p.charAt(0).toLowerCase());
+  if (palavras.length >= 3 && maiusculas.length * 2 > palavras.length) return [];
+  const faltam: string[] = [];
+  for (const w of maiusculas) {
+    if (w.p.length < 3) continue;
+    const antes = valor.slice(0, w.i).replace(/\s+$/, "");
+    const ultimo = antes.charAt(antes.length - 1);
+    if (!antes || ".!?:;\n•-–—\"'(“[".indexOf(ultimo) >= 0) continue;
+    const n = normalizarParaComparar(w.p).replace(/['’]s$/, "");
+    if (LIVRES.indexOf(n) >= 0) continue;
+    if (ref.texto.indexOf(n) >= 0) continue;
+    if (faltam.indexOf(w.p) < 0) faltam.push(w.p);
+  }
+  return faltam;
+}
+
+/** Sem travessão (regra de escrita do painel). */
+export function semTravessao(s: string): string {
+  return s.replace(/\s*—\s*/g, ", ").replace(/\s+–\s+/g, ", ");
+}
+
+function cortarNoLimite(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const corte = s.slice(0, max);
+  const espaco = corte.lastIndexOf(" ");
+  return (espaco > max * 0.6 ? corte.slice(0, espaco) : corte).replace(/[\s,;:.-]+$/, "");
+}
+
+export type ContextoDaLimpeza = {
+  papel: string;
+  /** Mapa c0 -> campo, de esquemaDosCampos. */
+  mapa: MapaDoEsquema;
+  /** Fontes lidas pelo servidor (o texto é a referência da conferência). */
+  fontes: FonteLida[];
+  instrucao?: string | null;
+  contexto?: string | null;
+  web?: boolean;
+  substituir?: boolean;
+};
+
+type Conferencia = { valor: unknown; aviso: string | null };
+
+function conferirTexto(s: string, ref: ReferenciaDasFontes, nomesEstritos: boolean): { valor: string | null; motivo: string | null } {
+  const limpo = semTravessao(s.trim());
+  if (!limpo) return { valor: null, motivo: null };
+  const numeros = numerosSemFonte(limpo, ref);
+  if (numeros.length) return { valor: null, motivo: `o número ${numeros.slice(0, 3).join(", ")} não aparece nas fontes` };
+  if (nomesEstritos) {
+    const nomes = nomesSemFonte(limpo, ref);
+    if (nomes.length) return { valor: null, motivo: `o nome ${nomes.slice(0, 3).join(", ")} não aparece nas fontes` };
+  }
+  return { valor: limpo, motivo: null };
+}
+
+function conferirCampo(bruto: unknown, c: CampoParaPreencher, ref: ReferenciaDasFontes, nomesEstritos: boolean): Conferencia {
+  const vazio = (motivo: string | null): Conferencia => ({ valor: undefined, aviso: motivo ? `${c.rotulo}: ficou vazio, ${motivo}.` : `${c.rotulo}: ficou vazio, as fontes não dão base.` });
+  if (campoVazio(bruto)) return vazio(null);
+  switch (c.tipo) {
+    case "numero": {
+      const n = typeof bruto === "number" ? bruto : Number(valorDoNumero(String(bruto).replace(/[^\d.,-]/g, "")));
+      if (!Number.isFinite(n)) return vazio("o valor não é um número");
+      const s = String(n);
+      if (!ref.numeros[valorDoNumero(s)] && !ref.digitos[s.replace(/[.,-]/g, "")]) return vazio(`o número ${s} não aparece nas fontes`);
+      return { valor: n, aviso: null };
+    }
+    case "escolha": {
+      const s = normalizarParaComparar(String(bruto).trim());
+      const achada = (c.opcoes || []).filter((o) => normalizarParaComparar(o) === s)[0];
+      if (!achada) return vazio("a resposta não é uma das opções");
+      return { valor: achada, aviso: null };
+    }
+    case "lista": {
+      const itens = Array.isArray(bruto) ? bruto : typeof bruto === "string" ? bruto.split(/\n+/) : [];
+      const bons: string[] = [];
+      const motivos: string[] = [];
+      for (const it of itens) {
+        const t = typeof it === "string" ? it.replace(/^\s*[-•*]\s*/, "") : valorParaTexto(it, 600);
+        const r = conferirTexto(t, ref, nomesEstritos);
+        if (r.valor) bons.push(r.valor);
+        else if (r.motivo) motivos.push(r.motivo);
+      }
+      const avisos: string[] = [];
+      if (motivos.length) avisos.push(`${motivos.length} ${motivos.length === 1 ? "item saiu" : "itens saíram"} (${motivos[0]})`);
+      let lista = bons;
+      if (c.maximo && lista.length > c.maximo) {
+        avisos.push(`cortada em ${c.maximo} itens`);
+        lista = lista.slice(0, c.maximo);
+      }
+      if (!lista.length) return vazio(motivos[0] || null);
+      return { valor: lista, aviso: avisos.length ? `${c.rotulo}: ${avisos.join("; ")}.` : null };
+    }
+    case "objeto": {
+      let obj: unknown = bruto;
+      if (typeof bruto === "string") {
+        try {
+          obj = JSON.parse(bruto);
+        } catch {
+          return vazio("a resposta não veio no formato do campo");
+        }
+      }
+      if (!objetoSimples(obj)) return vazio("a resposta não veio no formato do campo");
+      const saida: Record<string, unknown> = {};
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        if (campoVazio(v)) continue;
+        const textoDoValor = valorParaTexto(v, 4000);
+        const numeros = numerosSemFonte(textoDoValor, ref);
+        if (numeros.length) return vazio(`o número ${numeros.slice(0, 3).join(", ")} não aparece nas fontes`);
+        if (nomesEstritos && typeof v === "string") {
+          const nomes = nomesSemFonte(v, ref);
+          if (nomes.length) return vazio(`o nome ${nomes.slice(0, 3).join(", ")} não aparece nas fontes`);
+        }
+        saida[k] = typeof v === "string" ? semTravessao(v.trim()) : v;
+      }
+      if (!Object.keys(saida).length) return vazio(null);
+      return { valor: saida, aviso: null };
+    }
+    default: {
+      const s = typeof bruto === "string" ? bruto : valorParaTexto(bruto, 20_000);
+      const r = conferirTexto(s, ref, nomesEstritos);
+      if (!r.valor) return vazio(r.motivo);
+      if (c.maximo && r.valor.length > c.maximo) return { valor: cortarNoLimite(r.valor, c.maximo), aviso: `${c.rotulo}: cortado em ${c.maximo} caracteres.` };
+      return { valor: r.valor, aviso: null };
+    }
+  }
+}
+
+function listaDeTextos(v: unknown, max: number): string[] {
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => semTravessao(String(x).trim()).slice(0, 300)).slice(0, max) : [];
+}
+
+/**
+ * A resposta do modelo, conferida: só as chaves pedidas, no tipo certo, sem
+ * número ou nome fora das fontes. Devolve valores pela chave da tela.
+ */
+export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores: Record<string, unknown>; fontes: string[]; avisos: string[] } {
+  const raiz = objetoSimples(json) ? json : {};
+  const brutos = objetoSimples(raiz.valores) ? raiz.valores : {};
+  const citacoes = Array.isArray(raiz.citacoes) ? raiz.citacoes.filter(objetoSimples) : [];
+  const daWeb = ctx.web
+    ? citacoes.filter((c) => typeof c.url === "string" && /^https?:\/\//i.test(String(c.url)) && typeof c.trecho === "string")
+    : [];
+  const textos = ctx.fontes.map((f) => f.texto).concat([ctx.instrucao || "", ctx.contexto || ""]).concat(daWeb.map((c) => String(c.trecho)));
+  const nomesEstritos = ctx.papel !== "naming";
+  const valores: Record<string, unknown> = {};
+  const avisos: string[] = [];
+  for (const k of Object.keys(ctx.mapa)) {
+    const c = ctx.mapa[k];
+    if (!ctx.substituir && !campoVazio(c.valorAtual)) continue;
+    // O próprio campo (rótulo, regra, opções e valor atual) também é referência.
+    const ref = referenciaDas(textos.concat([c.rotulo, c.dica || "", (c.opcoes || []).join(" "), valorParaTexto(c.valorAtual, 20_000)]));
+    const r = conferirCampo(brutos[k], c, ref, nomesEstritos);
+    if (r.valor !== undefined) valores[c.chave] = r.valor;
+    if (r.aviso) avisos.push(r.aviso);
+  }
+  // Avisos do modelo (curtos) depois dos da conferência, sem repetir.
+  for (const a of listaDeTextos(raiz.avisos, 12)) if (avisos.indexOf(a) < 0) avisos.push(a);
+
+  // Fontes: só os rótulos que o servidor leu de fato, mais as urls da web citadas.
+  const rotulos = ctx.fontes.filter((f) => f.texto.trim()).map((f) => f.rotulo);
+  const citadas = listaDeTextos(raiz.fontes_usadas, 20).map(normalizarParaComparar);
+  let fontes = rotulos.filter((r) => citadas.indexOf(normalizarParaComparar(r)) >= 0);
+  if (!fontes.length) fontes = rotulos.slice();
+  if (ctx.instrucao && ctx.instrucao.trim()) fontes.push("instrução da pessoa");
+  for (const c of daWeb) {
+    const url = String(c.url);
+    if (fontes.indexOf(url) < 0 && fontes.length < 24) fontes.push(url);
+  }
+  if (daWeb.length) avisos.push("Dados da web: confira a fonte antes de aplicar.");
+  return { valores, fontes, avisos: avisos.slice(0, 30) };
+}
+
+/** Resultado sem IA (nada para preencher). */
+export function resultadoVazio(modeloId: string, aviso: string): ResultadoDoPreenchimento {
+  return { valores: {}, modelo_id: modeloId, custo_usd: 0, fontes: [], avisos: [aviso] };
+}
+
+/** Palavras dos rótulos, dicas e instrução para a busca simples nos arquivos (sem acento de SQL, só letras). */
+const COMUNS = [
+  "para", "como", "qual", "quais", "sobre", "entre", "mais", "menos", "cada", "todo", "toda", "todos", "todas", "texto", "campo",
+  "nome", "lista", "valor", "itens", "item", "numero", "número", "descricao", "descrição", "titulo", "título", "até", "palavras",
+  "caracteres", "nunca", "inventar", "sempre", "breve", "curto", "longo", "com", "sem", "pela", "pelo", "dos", "das", "uma", "que",
+];
+
+export function palavrasDeBusca(campos: CampoParaPreencher[], instrucao?: string | null, max = 6): string[] {
+  const bruto = campos.map((c) => `${c.rotulo} ${c.dica || ""}`).join(" ") + " " + (instrucao || "");
+  const saida: string[] = [];
+  const re = new RegExp(PALAVRA.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(bruto))) {
+    const p = m[0].toLowerCase().replace(/['’-]/g, "");
+    if (p.length < 4 || COMUNS.indexOf(p) >= 0 || COMUNS.indexOf(normalizarParaComparar(p)) >= 0) continue;
+    if (saida.indexOf(p) < 0) saida.push(p);
+    if (saida.length >= max) break;
+  }
+  return saida;
+}
