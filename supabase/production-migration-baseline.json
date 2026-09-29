@@ -1521,6 +1521,30 @@
       "remote_name": "marcas_completas",
       "remote_statements_sha256": "f320afbd3bd0dc450710274c35827c4b2400d027c6e8a7d071acb67fb6a9b1ec",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930000000",
+      "path": "supabase/migrations/20260930000000_papeis_de_modelo_das_mesas_novas.sql",
+      "local_sha256": "d632a49efd7eac1699d184d78aff365183d249750ff7d5ba8b37d8b2ca1fbf3f",
+      "remote_name": "papeis_de_modelo_das_mesas_novas",
+      "remote_statements_sha256": "c9b3a5a99c4f2e9be0a5103bb8d0816bc1e3527b21dda82ec88440632145638d",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930000100",
+      "path": "supabase/migrations/20260930000100_dados_da_agencia.sql",
+      "local_sha256": "77027f8434d77fd1467ad6ea92bd20ae731b78a9bc555e3c85057b38c5ba1206",
+      "remote_name": "dados_da_agencia",
+      "remote_statements_sha256": "edbf1a8593690408d710af1a9e49dfb71e5ed58bf12805949cac3ba528d46763",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930000200",
+      "path": "supabase/migrations/20260930000200_agentes_das_mesas_novas.sql",
+      "local_sha256": "4a4aa773157e6d47171878dc0fe6f35c98e9f57f7b7e02bcf7889fc3132ca79d",
+      "remote_name": "agentes_das_mesas_novas",
+      "remote_statements_sha256": "2d972173e49cdbe2e2c30d8f330ad1205c925975d5d130959a32692ee2f49cf5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
