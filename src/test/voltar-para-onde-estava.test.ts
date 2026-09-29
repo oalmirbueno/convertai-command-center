@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chaveDoLugar, clienteDaUrl, lerLugares, lugarAnterior, lugarAtual, registrarLugar, rotuloDoLugar } from "@/lib/navegacao/lugares";
+import { chaveDoLugar, clienteDaUrl, comClienteNoLugar, lerLugares, lugarAnterior, lugarAtual, registrarLugar, rotuloDoLugar } from "@/lib/navegacao/lugares";
 
 const C1 = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const C2 = "52f2efb6-9928-4074-b8e2-bc972baf1f6a";
@@ -41,7 +41,7 @@ describe("voltar para onde eu estava (29/09)", () => {
     const mesa = lugarAtual("/mesa", `?client=${C1}&aba=estudio`, null, 1)!;
     const ws = lugarAtual("/workspace", "", C1, 2)!;
     const lista = registrarLugar(registrarLugar([], mesa), ws);
-    const anterior = lugarAnterior(lista, chaveDoLugar("/workspace", "", C1));
+    const anterior = lugarAnterior(lista, chaveDoLugar("/workspace", ""));
     expect(anterior?.url).toBe(`/mesa?client=${C1}&aba=estudio`);
   });
 
@@ -51,5 +51,17 @@ describe("voltar para onde eu estava (29/09)", () => {
     expect(lista).toHaveLength(8);
     expect(lerLugares("isso não é json")).toEqual([]);
     expect(lerLugares(JSON.stringify([{ url: "//evil.com", chave: "x", rotulo: "x" }]))).toEqual([]);
+  });
+
+  it("o foco de cliente que chega depois não cria outro lugar: só dá nome ao atual", () => {
+    const ws = lugarAtual("/workspace", "", null, 1)!;
+    const wsFoco = lugarAtual("/workspace", "", C1, 2)!;
+    expect(ws.chave).toBe(wsFoco.chave);
+    let lista = registrarLugar([], ws);
+    lista = comClienteNoLugar(lista, ws.chave, C1);
+    expect(lista).toHaveLength(1);
+    expect(lista[0].cliente).toBe(C1);
+    lista = registrarLugar(lista, lugarAtual("/workspace", "", null, 3)!);
+    expect(lista[0].cliente).toBe(C1);
   });
 });

@@ -4,19 +4,18 @@ import { ArrowLeft, ChevronDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useCronometro } from "@/components/cronometro/CronometroProvider";
-import { chaveDoLugar, lerLugares, lugarAnterior, lugarAtual, registrarLugar, type Lugar } from "@/lib/navegacao/lugares";
+import { chaveDoLugar, comClienteNoLugar, lerLugares, lugarAnterior, lugarAtual, registrarLugar, type Lugar } from "@/lib/navegacao/lugares";
 
 /**
  * "Voltar para onde eu estava" no topo (29/09, pedido do dono). Guarda os
  * últimos lugares da aba do navegador (sessionStorage: cada aba tem o seu
  * caminho) e mostra o anterior num botão: um toque volta com o mesmo cliente,
  * a mesma aba e o mesmo filtro. A setinha abre os últimos lugares.
- * Espera um instante antes de registrar, para o cliente em foco (Central,
- * Workspace) e o endereço final da tela assentarem.
+ * Registra na hora (sem tempo de espera: aba em segundo plano atrasa timers);
+ * o cliente em foco que chega depois só atualiza o nome do lugar atual.
  */
 
 const CHAVE = "painel:lugares";
-const ESPERA_MS = 700;
 
 function ler(): Lugar[] {
   try {
@@ -45,26 +44,29 @@ export default function VoltarParaOndeEstava() {
   const [lista, setLista] = useState<Lugar[]>(() => ler());
   const ultimo = useRef<string>("");
 
-  const chaveAgora = useMemo(
-    () => chaveDoLugar(location.pathname, location.search, clienteEmFoco),
-    [location.pathname, location.search, clienteEmFoco],
-  );
+  const chaveAgora = useMemo(() => chaveDoLugar(location.pathname, location.search), [location.pathname, location.search]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      const lugar = lugarAtual(location.pathname, location.search, clienteEmFoco, Date.now());
-      if (!lugar) return;
-      const assinatura = `${lugar.chave}#${lugar.url}`;
-      if (assinatura === ultimo.current) return;
-      ultimo.current = assinatura;
-      setLista((antes) => {
-        const nova = registrarLugar(antes, lugar);
-        gravar(nova);
-        return nova;
-      });
-    }, ESPERA_MS);
-    return () => window.clearTimeout(t);
-  }, [location.pathname, location.search, clienteEmFoco]);
+    const lugar = lugarAtual(location.pathname, location.search, null, Date.now());
+    if (!lugar) return;
+    const assinatura = `${lugar.chave}#${lugar.url}`;
+    if (assinatura === ultimo.current) return;
+    ultimo.current = assinatura;
+    setLista((antes) => {
+      const nova = registrarLugar(antes, lugar);
+      gravar(nova);
+      return nova;
+    });
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!clienteEmFoco) return;
+    setLista((antes) => {
+      const nova = comClienteNoLugar(antes, chaveAgora, clienteEmFoco);
+      if (nova !== antes) gravar(nova);
+      return nova;
+    });
+  }, [clienteEmFoco, chaveAgora]);
 
   const nomeDoCliente = (id: string | null): string | null => {
     if (!id) return null;

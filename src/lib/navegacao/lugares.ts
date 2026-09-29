@@ -115,11 +115,16 @@ export function rotuloDoLugar(pathname: string, search: string): string | null {
   return `${base} · ${nomeSub || capitalizar(sub)}`;
 }
 
-/** Identidade do lugar: rota + cliente + aba/etapa. */
-export function chaveDoLugar(pathname: string, search: string, clienteEmFoco: string | null): string {
+/**
+ * Identidade do lugar: rota + cliente DA URL + aba/etapa. O cliente em foco
+ * (Central, Workspace) não entra: ele chega depois da tela carregar e o
+ * endereço é o mesmo, então só serve para o nome (visto no teste de 29/09:
+ * o Workspace virava dois lugares e o "anterior" apontava para ele mesmo).
+ */
+export function chaveDoLugar(pathname: string, search: string): string {
   const rota = limparRota(pathname);
   const q = lerBusca(search);
-  const cliente = clienteDaUrl(pathname, search) || clienteEmFoco || "";
+  const cliente = clienteDaUrl(pathname, search) || "";
   const sub = subDoLugar(rota, q) || "";
   return `${rota}|${cliente}|${sub}`;
 }
@@ -129,7 +134,7 @@ export function lugarAtual(pathname: string, search: string, clienteEmFoco: stri
   const rotulo = rotuloDoLugar(pathname, search);
   if (!rotulo) return null;
   const cliente = clienteDaUrl(pathname, search) || clienteEmFoco || null;
-  return { url: `${limparRota(pathname)}${search || ""}`, chave: chaveDoLugar(pathname, search, clienteEmFoco), rotulo, cliente, em: agora };
+  return { url: `${limparRota(pathname)}${search || ""}`, chave: chaveDoLugar(pathname, search), rotulo, cliente, em: agora };
 }
 
 export const MAX_LUGARES = 8;
@@ -139,8 +144,17 @@ export const MAX_LUGARES = 8;
  * sobe e fica com o endereço novo (filtro, item aberto); a lista não repete.
  */
 export function registrarLugar(lista: Lugar[], lugar: Lugar, max = MAX_LUGARES): Lugar[] {
+  const antes = (lista || []).find((l) => l && l.chave === lugar.chave);
+  // O cliente em foco que já se sabia do lugar fica, se o novo ainda não tem.
+  const junto = antes && !lugar.cliente && antes.cliente ? { ...lugar, cliente: antes.cliente } : lugar;
   const resto = (lista || []).filter((l) => l && l.chave !== lugar.chave);
-  return [lugar].concat(resto).slice(0, max);
+  return [junto].concat(resto).slice(0, max);
+}
+
+/** O cliente em foco chegou depois (Central, Workspace): só atualiza o lugar atual. */
+export function comClienteNoLugar(lista: Lugar[], chave: string, cliente: string | null): Lugar[] {
+  if (!cliente) return lista;
+  return (lista || []).map((l) => (l.chave === chave && l.cliente !== cliente ? { ...l, cliente } : l));
 }
 
 /** Onde a pessoa estava antes do lugar atual (o primeiro diferente). */
