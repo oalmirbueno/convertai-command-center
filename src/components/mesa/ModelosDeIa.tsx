@@ -14,6 +14,7 @@ import {
   nomeDoModelo,
   nomeDoProvedor,
   PAPEIS,
+  PAPEIS_DAS_MESAS_NOVAS,
   precoDoModelo,
   textoDoErro,
   type ModeloIa,
@@ -32,13 +33,26 @@ const POR_PAGINA = 40;
  * Os papéis na ordem em que a Mesa trabalha. "contexto" é o agente que monta
  * e conversa sobre o contexto do cliente (papel novo no banco em 23/09).
  */
-const PAPEIS_DA_TELA: { valor: string; rotulo: string; dica: string; tipo: "texto" | "imagem" }[] = [
+export const PAPEIS_DA_TELA: { valor: string; rotulo: string; dica: string; tipo: "texto" | "imagem" }[] = [
   { valor: "estrategista", rotulo: "Estratégia", dica: "Propõe temas, detalha e completa a agenda.", tipo: "texto" },
   { valor: "diretor_arte", rotulo: "Diretor de arte", dica: "Dirige cada lâmina e confere a arte.", tipo: "texto" },
   { valor: "imagem", rotulo: "Gerador de imagem", dica: "Pinta as lâminas.", tipo: "imagem" },
   { valor: "leitura", rotulo: "Leitura de imagem", dica: "Lê referências e organiza o acervo.", tipo: "texto" },
   { valor: "contexto", rotulo: "Agente de contexto", dica: "Monta o contexto e conversa sobre a marca.", tipo: "texto" },
+  // Mesas novas (frente BAS, 29/09). Sem padrão, usam o da estratégia.
+  { valor: "proposta", rotulo: "Proposta", dica: "Escreve a proposta comercial.", tipo: "texto" },
+  { valor: "contrato", rotulo: "Contrato", dica: "Monta o contrato da proposta aceita.", tipo: "texto" },
+  { valor: "briefing", rotulo: "Briefing", dica: "Conduz e organiza o briefing.", tipo: "texto" },
+  { valor: "conselho", rotulo: "Conselho", dica: "Dá a segunda opinião sobre o cliente.", tipo: "texto" },
+  { valor: "identidade", rotulo: "Identidade visual", dica: "Pensa a marca e o manual.", tipo: "texto" },
+  { valor: "naming", rotulo: "Naming", dica: "Propõe e avalia nomes.", tipo: "texto" },
+  { valor: "site", rotulo: "Site", dica: "Escreve e ajusta o código do site.", tipo: "texto" },
+  { valor: "motion", rotulo: "Motion", dica: "Escreve o código dos vídeos de motion.", tipo: "texto" },
+  { valor: "documento", rotulo: "Documento", dica: "Redige documentos da agência.", tipo: "texto" },
 ];
+
+/** Papéis que, sem padrão próprio, usam o da estratégia (contexto e os das mesas novas). */
+const USA_O_DA_ESTRATEGIA = ["contexto"].concat(PAPEIS_DAS_MESAS_NOVAS as unknown as string[]);
 
 const rotuloDoPapel = (p: string) =>
   (PAPEIS_DA_TELA.find((x) => x.valor === p) || PAPEIS.find((x) => x.valor === p) || { rotulo: p }).rotulo;
@@ -204,7 +218,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                           Atual: {nomeDoModelo(atual)}{atual.ativo ? "" : " (desligado)"}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">Sem padrão: {papel.valor === "contexto" ? "usa o da estratégia" : "usa o primeiro modelo ativo"}</span>
+                        <span className="text-muted-foreground">Sem padrão: {USA_O_DA_ESTRATEGIA.indexOf(papel.valor) >= 0 ? "usa o da estratégia" : "usa o primeiro modelo ativo"}</span>
                       )}
                     </p>
                   </div>

@@ -95,8 +95,34 @@ export {
 export type Provedor = "openai" | "anthropic" | "openrouter";
 export type TipoModelo = "texto" | "imagem";
 export type Qualidade = "baixa" | "media" | "alta";
-export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto" | "ads";
-export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto" | "estrategista_ads";
+/**
+ * Papéis das mesas novas (frente BAS, 29/09): o mesmo nome é papel em
+ * ia_modelos.padrao_para (modeloPadrao), tarefa e agente em ia_usos
+ * (migration 20260930000000_papeis_de_modelo_das_mesas_novas.sql).
+ */
+export type PapelDasMesasNovas =
+  | "proposta"
+  | "contrato"
+  | "briefing"
+  | "conselho"
+  | "identidade"
+  | "naming"
+  | "site"
+  | "motion"
+  | "documento";
+export const PAPEIS_DAS_MESAS_NOVAS: PapelDasMesasNovas[] = [
+  "proposta",
+  "contrato",
+  "briefing",
+  "conselho",
+  "identidade",
+  "naming",
+  "site",
+  "motion",
+  "documento",
+];
+export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto" | "ads" | PapelDasMesasNovas;
+export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto" | "estrategista_ads" | PapelDasMesasNovas;
 
 export type ModeloIa = {
   id: string;
@@ -722,10 +748,20 @@ export async function carregarModelo(modeloId: string, tipo?: TipoModelo): Promi
   return m;
 }
 
-/** Modelo padrao de um papel (estrategista, diretor_arte, imagem, leitura). */
+/** Modelo padrao de um papel (estrategista, diretor_arte, imagem, leitura e os das mesas novas). */
 export async function modeloPadrao(papel: string): Promise<ModeloIa | null> {
   const { data } = await clienteServico().from("ia_modelos").select("*").eq("ativo", true).contains("padrao_para", [papel]).limit(1);
   return ((data ?? [])[0] as ModeloIa | undefined) ?? null;
+}
+
+/**
+ * Modelo de um pedido das mesas novas: o escolhido na tela (SeletorDeModelo)
+ * quando existe; senão o padrao do papel; senão o da estrategia (mesma regra
+ * de padraoPara em src/lib/mesa/api.ts). null = nenhum modelo de texto ligado.
+ */
+export async function modeloDoPapel(papel: PapelDasMesasNovas, escolhidoId?: string | null): Promise<ModeloIa | null> {
+  if (escolhidoId) return await carregarModelo(escolhidoId, "texto");
+  return (await modeloPadrao(papel)) ?? (await modeloPadrao("estrategista"));
 }
 
 type UsoTokens = {

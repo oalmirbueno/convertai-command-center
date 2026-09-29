@@ -217,7 +217,35 @@ export function custoDaResposta(data: any): number | null {
 
 // ------------------------------------------------------------------ catálogo
 
-export type Papel = "estrategista" | "diretor_arte" | "imagem" | "leitura";
+export type Papel =
+  | "estrategista"
+  | "diretor_arte"
+  | "imagem"
+  | "leitura"
+  // Papéis das mesas novas (frente BAS, 29/09; migration 20260930000000).
+  | "proposta"
+  | "contrato"
+  | "briefing"
+  | "conselho"
+  | "identidade"
+  | "naming"
+  | "site"
+  | "motion"
+  | "documento";
+
+/** Os 9 papéis das mesas novas, na ordem da tela de Modelos de IA. */
+export const PAPEIS_DAS_MESAS_NOVAS = [
+  "proposta",
+  "contrato",
+  "briefing",
+  "conselho",
+  "identidade",
+  "naming",
+  "site",
+  "motion",
+  "documento",
+] as const;
+export type PapelDasMesasNovas = (typeof PAPEIS_DAS_MESAS_NOVAS)[number];
 export type Qualidade = "baixa" | "media" | "alta";
 
 export interface ModeloIa {
@@ -250,6 +278,15 @@ export const PAPEIS: { valor: Papel; rotulo: string; tipo: "texto" | "imagem" }[
   { valor: "diretor_arte", rotulo: "Diretor de arte", tipo: "texto" },
   { valor: "imagem", rotulo: "Gerador de imagem", tipo: "imagem" },
   { valor: "leitura", rotulo: "Leitura de imagem", tipo: "texto" },
+  { valor: "proposta", rotulo: "Proposta", tipo: "texto" },
+  { valor: "contrato", rotulo: "Contrato", tipo: "texto" },
+  { valor: "briefing", rotulo: "Briefing", tipo: "texto" },
+  { valor: "conselho", rotulo: "Conselho", tipo: "texto" },
+  { valor: "identidade", rotulo: "Identidade visual", tipo: "texto" },
+  { valor: "naming", rotulo: "Naming", tipo: "texto" },
+  { valor: "site", rotulo: "Site", tipo: "texto" },
+  { valor: "motion", rotulo: "Motion", tipo: "texto" },
+  { valor: "documento", rotulo: "Documento", tipo: "texto" },
 ];
 
 /** Mesmas colunas que o ia-gateway devolve na ação "catalogo". */
@@ -281,7 +318,28 @@ export const modelosAtivos = (catalogo: ModeloIa[], tipo: "texto" | "imagem") =>
 export function padraoPara(catalogo: ModeloIa[], papel: Papel): ModeloIa | null {
   const tipo = PAPEIS.find((p) => p.valor === papel)?.tipo || "texto";
   const ativos = modelosAtivos(catalogo, tipo);
-  return ativos.find((m) => (m.padrao_para || []).indexOf(papel) >= 0) || ativos[0] || null;
+  const proprio = ativos.find((m) => (m.padrao_para || []).indexOf(papel) >= 0);
+  if (proprio) return proprio;
+  // Papel novo ainda sem padrão: o da estratégia antes do primeiro ativo.
+  if ((PAPEIS_DAS_MESAS_NOVAS as readonly string[]).indexOf(papel) >= 0) {
+    const estrategia = ativos.find((m) => (m.padrao_para || []).indexOf("estrategista") >= 0);
+    if (estrategia) return estrategia;
+  }
+  return ativos[0] || null;
+}
+
+/**
+ * Modelo de um pedido: o escolhido no SeletorDeModelo quando ele ainda está
+ * ligado e é do tipo do papel; senão o padrão do papel. É o que as mesas novas
+ * usam para trocar o modelo na hora sem perder o padrão.
+ */
+export function modeloDoPapel(catalogo: ModeloIa[], papel: Papel, escolhidoId?: string | null): ModeloIa | null {
+  const tipo = PAPEIS.find((p) => p.valor === papel)?.tipo || "texto";
+  if (escolhidoId) {
+    const escolhido = catalogo.find((m) => m.id === escolhidoId && m.ativo && m.tipo === tipo);
+    if (escolhido) return escolhido;
+  }
+  return padraoPara(catalogo, papel);
 }
 
 const preco = (v: number | null | undefined) =>

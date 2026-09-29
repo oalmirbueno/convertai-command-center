@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Bell, ChevronRight, Moon, Palette, Shield, Sun, User } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
+import DadosDaAgencia from "@/components/agencia/DadosDaAgencia";
 import { CabecalhoDePagina, SeletorCompacto, foco, juntar, texto } from "@/components/sistema";
 
 /**
@@ -32,7 +33,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-w-0 space-y-5">
-      <CabecalhoDePagina titulo="Configurações" ajuda="Tema do painel, avisos, perfil e senha." />
+      <CabecalhoDePagina titulo="Configurações" ajuda="Tema do painel, avisos, perfil, senha e os dados da agência." />
 
       <ul className="max-w-3xl divide-y divide-border border-y border-border">
         <li className="flex min-w-0 items-center py-3">
@@ -68,6 +69,8 @@ export default function SettingsPage() {
           </li>
         ))}
       </ul>
+
+      <DadosDaAgencia />
 
       {notificationsOpen && <NotificationsPanel open={notificationsOpen} onOpenChange={setNotificationsOpen} />}
     </div>

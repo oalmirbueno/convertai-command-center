@@ -9,6 +9,8 @@ vi.mock("@/components/NotificationsPanel", () => ({
     ? <div role="dialog" aria-label="Notificações"><button onClick={() => onOpenChange(false)}>Fechar avisos</button></div>
     : null,
 }));
+// A seção Dados da agência tem teste próprio (bas-papeis-e-dados-da-agencia.test.tsx).
+vi.mock("@/components/agencia/DadosDaAgencia", () => ({ default: () => <section aria-label="Dados da agência" /> }));
 afterEach(cleanup);
 
 describe("Configuracoes: acoes disponiveis", () => {
@@ -28,5 +30,10 @@ describe("Configuracoes: acoes disponiveis", () => {
     expect(screen.getByRole("dialog", { name: "Notificações" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Fechar avisos" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("mostra a seção Dados da agência", () => {
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+    expect(screen.getByRole("region", { name: "Dados da agência" })).toBeInTheDocument();
   });
 });
