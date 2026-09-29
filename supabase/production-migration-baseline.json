@@ -1473,6 +1473,14 @@
       "remote_name": "estudio_data_do_conteudo",
       "remote_statements_sha256": "e9d8dfd711199e31fcf3ed09f36fb7cd05457d94fc151be61585f71708be3048",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928070000",
+      "path": "supabase/migrations/20260928070000_aprovacao_pelo_admin.sql",
+      "local_sha256": "1b7501769267e759d3e918bf357315e9f020670f91b91333f269473c8d075dd0",
+      "remote_name": "aprovacao_pelo_admin",
+      "remote_statements_sha256": "281b2bf75c9c0da9c209f08e5cefcbee1957ff7963ca6fc26c4c0f890786ebb9",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
