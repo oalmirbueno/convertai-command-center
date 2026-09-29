@@ -1481,6 +1481,14 @@
       "remote_name": "aprovacao_pelo_admin",
       "remote_statements_sha256": "281b2bf75c9c0da9c209f08e5cefcbee1957ff7963ca6fc26c4c0f890786ebb9",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928080000",
+      "path": "supabase/migrations/20260928080000_aprovar_pelo_cliente.sql",
+      "local_sha256": "db478e1ada74d1dc8e64ad4f45381477426a57b69dd8e9f780d54a78274b4042",
+      "remote_name": "aprovar_pelo_cliente",
+      "remote_statements_sha256": "cceff4d45a1f7447fa3d109dc1f605b8a9508e0a35366a0ebbf8cb9074d20e42",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
