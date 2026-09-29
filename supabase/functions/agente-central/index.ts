@@ -52,6 +52,9 @@ import {
 } from "./regras.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG3 (29/09): aprende com as respostas do dono, obedece as regras e devolve "Aprendi"/"Segui".
+import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
+import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Mesmos rótulos de SERVICE_LABELS (src/lib/cycleDefs.ts).
@@ -183,17 +186,28 @@ async function acaoClientes(db: SupabaseClient) {
   return json({ clientes });
 }
 
+/** Regras que o dono ensinou a este agente (e as gerais do cliente). Falha vira lista vazia. */
+function regrasDaCentral(db: SupabaseClient, clientId: string): Promise<RegraAtiva[]> {
+  return regrasDoAgente(db as never, { agente: "central", clientId }).catch((e) => (registrarFalha("agente-central: regras do dono não lidas", e), []));
+}
+
+/** O bloco das regras também entra nos fatos do ritual (o escritor não tem campo próprio). */
+const regrasNosFatos = (regras: RegraAtiva[]) =>
+  regras.length ? `REGRAS QUE O DONO ENSINOU PARA ESTE CLIENTE (obrigatórias; EVITAR manda):\n${regras.map((r) => `- ${r.categoria === "evitar" ? "Evitar" : "Preferir"}: ${r.texto}`).join("\n")}` : "";
+
 async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, ritual: string, escolha: EscolhaDoModelo): Promise<Response> {
-  const [perfil, dossie, contexto, estado] = await Promise.all([
+  const [perfil, dossie, contexto, estado, regras] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
     // O estado real (orgânico e pago separados, com período): o mesmo leitor dos rituais.
     lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
+    regrasDaCentral(db, clientId),
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
-  const r = await perguntarIA(`${SISTEMA_PREPARAR}${MAPA_DA_CENTRAL}`, [
+  const r = await perguntarIA(`${SISTEMA_PREPARAR}${MAPA_DA_CENTRAL}${blocoDasRegras(regras)}`, [
+    `HOJE: ${hojeEmSaoPaulo()}`,
     `CLIENTE: ${n.nome}`,
     `SERVIÇOS CONTRATADOS: ${n.servicos.join(", ") || "não marcados no cadastro"}`,
     `FASE CALCULADA PELO PAINEL: ${fase.nome} (${contexto.motivoDaFase})`,
@@ -227,6 +241,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     fase: contexto.fase, motivo_da_fase: contexto.motivoDaFase,
     leitura, perguntas, dossie_versao: versao, dossie_aviso: dossieAviso,
     contagem: contexto.contagem, modelo: r.modelo,
+    aprendizado: anexosDoAprendizado(null, regrasSeguidas(r.dados.regras_seguidas, regras)),
   });
 }
 
@@ -244,13 +259,21 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   let aprendizados: Array<{ texto: string; area: AreaDoCerebro; categoria: "preferencia" | "evitar" | "aprendizado" }> = [];
   // Frente FS: a IA que não organizou as respostas tem motivo na resposta (as respostas entram como o dono escreveu).
   let iaErro: string | null = null;
+  const regras = await regrasDaCentral(db, clientId);
+  // Frente AG3: o que o dono respondeu também ensina ("nunca prometa prazo para este cliente"). Corre junto.
+  const textoDoDono = [...respostas.filter((x) => x.resposta).map((x) => x.resposta), contextoExtra].filter(Boolean).join("\n");
+  const aprendizado = textoDoDono
+    ? aprenderNoServidor(db as never, { texto: textoDoDono, agente: "central", clientId, donoId: uid, contexto: respostas.map((x) => x.pergunta).join(" | ") })
+    : Promise.resolve(null);
+  let seguidas: ReturnType<typeof regrasSeguidas> = null;
   if (temResposta) {
-    const r = await perguntarIA(SISTEMA_APLICAR, [
+    const r = await perguntarIA(`${SISTEMA_APLICAR}${blocoDasRegras(regras)}`, [
       `LEITURA DA SEMANA:\n${JSON.stringify(leituraAntes)}`,
       `PERGUNTAS E RESPOSTAS DO DONO:\n${respostas.map((x) => `- ${x.pergunta}\n  Resposta: ${x.resposta || "(sem resposta)"}`).join("\n")}`,
       contextoExtra ? `CONTEXTO EXTRA DO DONO:\n${contextoExtra}` : "",
     ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
     if (!r.dados) iaErro = r.erro;
+    if (r.dados) seguidas = regrasSeguidas(r.dados.regras_seguidas, regras);
     if (r.dados) {
       const nova = normalizarLeitura(r.dados.leitura);
       if (nova.onde_estamos) leitura = nova;
@@ -332,7 +355,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
     nome: n.nome, planoNome: perfil?.plan_name ? String(perfil.plan_name) : null, servicos: n.servicos,
     dossie: recortarDossie(dossieNovo?.content ?? "", LIMITE_DOSSIE_FATOS), versao: dossieNovo?.version ?? versao,
     leitura, respostas, contextoExtra,
-  });
+  }) + (regras.length ? `\n\n${regrasNosFatos(regras)}` : "");
   // O dossiê fica no FIM dos fatos: o corte preserva o fim (o mais recente), nunca só o começo.
   const fatosNoLimite = recortarDossie(fatos, LIMITE_FATOS);
   // Frente LR (29/09): o ritual que não sai tem motivo no log e na resposta (antes: null em silêncio).
@@ -348,6 +371,11 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       return null;
     })
     : null;
+  // Frente AG3: o escritor que volta sem texto (nenhum modelo ou JSON sem corpo) também tem motivo (antes: null calado).
+  if (!escrito && RITUAL_BRIEF[ritual] && !ritualErro) {
+    ritualErro = "o modelo não devolveu um ritual com texto (nenhum modelo respondeu ou a resposta veio sem corpo)";
+    console.error("agente-central: ritual vazio", { clientId, ritual });
+  }
   const repeticao = escrito
     ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))
     : null;
@@ -365,7 +393,75 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       : null,
     ritual_erro: ritualErro,
     ia_erro: iaErro,
+    aprendizado: anexosDoAprendizado(await aprendizado, seguidas),
   });
+}
+
+/**
+ * Frente AG3 (29/09): "Reescrever o ritual" de UM cliente, com o dossiê de
+ * agora, sem reaplicar as respostas (aplicar de novo duplicaria as
+ * confirmações no dossiê). Com instrução do dono ("mais curto", "sem falar de
+ * verba"), ela manda e também ensina (Jev decide se é regra). Sem instrução,
+ * pede outra composição, sem repetir a versão anterior.
+ */
+async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string, ritual: string, body: Record<string, unknown>, escolha: EscolhaDoModelo): Promise<Response> {
+  if (!RITUAL_BRIEF[ritual]) return json({ error: "Ritual desconhecido." }, 400);
+  const instrucao = String(body.instrucao ?? "").trim().slice(0, 1500);
+  const anterior = String(body.anterior ?? "").trim().slice(0, 4000);
+  const [perfil, dossie, contexto, estado, regras] = await Promise.all([
+    perfilDe(db, clientId),
+    lerDossie(db, clientId),
+    lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
+    lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
+    regrasDaCentral(db, clientId),
+  ]);
+  const aprendizado = instrucao
+    ? aprenderNoServidor(db as never, { texto: instrucao, agente: "central", clientId, donoId: uid, contexto: "reescrever o ritual" })
+    : Promise.resolve(null);
+  const n = nomes(perfil);
+  const fatos = [
+    `Cliente: ${n.nome}`,
+    perfil?.plan_name ? `Plano contratado atual: ${String(perfil.plan_name)}` : "",
+    `Serviços contratados atuais: ${n.servicos.join(", ") || "nenhuma frente identificada no cadastro; não presumir contratação"}`,
+    instrucao ? `PEDIDO DO DONO PARA ESTA VERSÃO (manda sobre o resto):\n${instrucao}` : "PEDIDO DO DONO: outra versão, com composição diferente da anterior (outra abertura, outra ordem), mesmos fatos.",
+    anterior ? `VERSÃO ANTERIOR (não repetir a estrutura nem as frases):\n${anterior}` : "",
+    regrasNosFatos(regras),
+    `DOSSIÊ GERAL ATUAL v${dossie?.version ?? "?"}:\n${recortarDossie(dossie?.content ?? "", LIMITE_DOSSIE_FATOS)}`,
+  ].filter(Boolean).join("\n\n");
+  let ritualErro: string | null = null;
+  const escrito = await escreverRitual({
+    ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto,
+    estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha,
+  }).catch((e) => {
+    ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
+    return null;
+  });
+  if (!escrito && !ritualErro) ritualErro = "o modelo não devolveu um ritual com texto";
+  if (ritualErro) console.error("agente-central: ritual não reescrito", { clientId, ritual, erro: ritualErro });
+  const repeticao = escrito
+    ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))
+    : null;
+  return json({
+    client_id: clientId,
+    ritual: escrito
+      ? {
+        tipo: ritual, title: escrito.title, body: escrito.body, next_steps: escrito.next_steps, alertas: escrito.alertas,
+        tarefas_sugeridas: escrito.tarefas_sugeridas, model: escrito.model, repeticao, memoria: extrairMemoriaDoRitual(escrito.body, escrito.next_steps),
+        fase: contexto.fase,
+      }
+      : null,
+    ritual_erro: ritualErro,
+    aprendizado: anexosDoAprendizado(await aprendizado, null),
+  });
+}
+
+/** Data em São Paulo (a semana da equipe). */
+function hojeEmSaoPaulo(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -394,6 +490,22 @@ Deno.serve(async (req) => {
     if (pode !== true) return json({ error: "Sem acesso a este cliente." }, 403);
 
     const escolha = escolhaDoModelo(body.modelo, body.raciocinio);
+    if (acao === "reescrever") return respostaComFolego(() => acaoReescrever(db, u.user.id, clientId, ritual, body, escolha), corsHeaders);
+    // Frente AG3: Esquecer e Guardar da linha "Aprendi" (regra deste cliente, acesso já conferido).
+    if (acao === "esquecer_regra") {
+      const r = await esquecerRegra(db as never, { id: String(body.regra_id ?? ""), donosPermitidos: [clientId] });
+      return r.ok ? json({ ok: true }) : json({ error: "esquecer_falhou", mensagem: r.motivo }, 400);
+    }
+    if (acao === "guardar_regra") {
+      const g = (body.regra && typeof body.regra === "object" ? body.regra : {}) as Record<string, unknown>;
+      try {
+        const aprendido = await guardarNoServidor(db as never, { texto: String(g.texto ?? ""), categoria: g.categoria === "preferencia" ? "preferencia" : "evitar", escopo: "cliente", agente: "central", clientId, donoId: u.user.id });
+        return json({ aprendido });
+      } catch (e) {
+        console.warn(`[agente-central] guardar regra falhou: ${e instanceof Error ? e.message : "falha"}`);
+        return json({ error: "guardar_falhou", mensagem: "Não foi possível guardar a regra agora." }, 400);
+      }
+    }
     if (acao === "preparar") return respostaComFolego(() => acaoPreparar(db, u.user.id, clientId, ritual, escolha), corsHeaders);
     if (acao === "aplicar") return respostaComFolego(() => acaoAplicar(db, u.user.id, clientId, ritual, body, escolha), corsHeaders);
     return json({ error: "Ação desconhecida." }, 400);

@@ -23,6 +23,22 @@
  * Travas: trabalho entregue ou agendado não muda por aqui (reabra antes);
  * anúncio não muda de formato (é escolhido na Mesa Ads).
  *
+ * Frente RO, fase 2 (29/09, dono: "o agente diretor do Estúdio tem que ser
+ * agêntico e completo com base no que converso com ele"): mais operações e a
+ * regra de quando faz direto.
+ * - Sem custo e com Desfazer (`direta`, feitas na hora quando o pedido é uma
+ *   ordem clara, pelo contrato de ../_shared/acoes-do-agente.ts):
+ *   aplicar_mudanca (as mudanças da conversa: texto, cor, cena, foto, uso do
+ *   rosto), trocar_texto, reordenar, mudar_formato, mudar_qualidade,
+ *   arquivar_versoes, tirar_lamina, duplicar_lamina, trocar_logo e
+ *   tirar_referencias.
+ * - Com custo ou que sai para o mundo (nunca direto sem clique, exceto o
+ *   ajuste de texto de custo pequeno numa ordem clara): ajustar_texto,
+ *   refazer, variacoes, entregar e agendar. Viram o PLANO do diretor
+ *   (diretor-agentico.ts): passos com o custo antes, andamento, Parar e a
+ *   prova no fim, pelos caminhos de sempre da tela (gerar, conferir, entregar,
+ *   Agendar do Estúdio).
+ *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
 import {
@@ -41,23 +57,42 @@ import {
 import { blocosDoTexto, FORMATOS_DO_POST, QUADRO_DO_POST, type FormatoDoPost } from "../_shared/direcao-arte.ts";
 import { caminhoDaResposta, caminhoNaArea, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 
-export const OPERACOES_DO_DIRETOR = ["reordenar", "mudar_formato", "trocar_texto", "arquivar_versoes", "refazer"];
+export const OPERACOES_DO_DIRETOR = [
+  "reordenar", "mudar_formato", "trocar_texto", "arquivar_versoes", "refazer",
+  // Frente RO, fase 2.
+  "mudar_qualidade", "tirar_lamina", "duplicar_lamina", "trocar_logo", "tirar_referencias",
+  "ajustar_texto", "variacoes", "entregar", "agendar",
+];
+
+/** Operações feitas pela tela, com custo ou para fora do Estúdio: nunca direto (viram passos do plano). */
+export const OPERACOES_COM_CUSTO = ["ajustar_texto", "refazer", "variacoes", "entregar", "agendar"];
+
+/** Montada pelo código a partir das mudanças da conversa (o modelo não pede esta). */
+export const OPERACAO_DA_MUDANCA = "aplicar_mudanca";
+
+export const QUALIDADES_DO_DIRETOR = ["baixa", "media", "alta"];
+export const LOGOS_DO_DIRETOR = ["principal", "alternativa", "auto"];
+export const MAX_VARIACOES = 3;
 
 export const ESQUEMA_DAS_ACOES_DO_DIRETOR = esquemaDasAcoes(OPERACOES_DO_DIRETOR);
 
 /** O mínimo do trabalho que as ações leem (o tipo completo mora em index.ts). */
-export type LaminaDoTrabalho = { ordem: number; funcao?: string; texto_exato?: string; blocos?: unknown };
+export type LaminaDoTrabalho = { ordem: number; funcao?: string; texto_exato?: string; blocos?: unknown; referencias_ids?: string[]; logo?: unknown; [k: string]: unknown };
 export type VersaoDoTrabalho = { ordem: number; versao: number; [k: string]: unknown };
 export type TrabalhoParaAcoes = {
   id: string;
   status: string;
   entrega_status?: string | null;
   tipo?: string | null;
-  direcao: { cards: LaminaDoTrabalho[]; carrossel_infinito?: boolean; formato?: string; versoes_arquivadas?: VersaoDoTrabalho[]; [k: string]: unknown };
+  qualidade?: string | null;
+  direcao: { cards: LaminaDoTrabalho[]; carrossel_infinito?: boolean; formato?: string; versoes_arquivadas?: VersaoDoTrabalho[]; laminas_arquivadas?: LaminaArquivada[]; [k: string]: unknown };
   cards: VersaoDoTrabalho[];
 };
 
-type DadosDoAlvo = { tipo: "trabalho" | "lamina"; ordem?: number; texto?: string; versoes?: number };
+/** Lâmina tirada do carrossel pelo diretor (nada é apagado): volta pelo Desfazer. */
+export type LaminaArquivada = { chave: string; ordem_original: number; card: LaminaDoTrabalho; versoes: VersaoDoTrabalho[]; em: string };
+
+type DadosDoAlvo = { tipo: "trabalho" | "lamina"; ordem?: number; texto?: string; versoes?: number; referencias?: number };
 export type AlvoDoDiretor = { id: string; titulo: string; detalhe?: string | null; dados: DadosDoAlvo };
 
 const entregue = (t: Pick<TrabalhoParaAcoes, "status" | "entrega_status">) => t.status === "entregue" || t.entrega_status === "agendado";
@@ -86,7 +121,7 @@ export function alvosDoTrabalho(t: TrabalhoParaAcoes): Array<AlvoComApelido<Alvo
       id: String(c.ordem),
       titulo: `Lâmina ${c.ordem}${c.funcao ? ` (${c.funcao})` : ""}`,
       detalhe: `${versoes} ${versoes === 1 ? "versão" : "versões"} · texto: ${umaLinha(c.texto_exato, 120) || "sem texto"}`,
-      dados: { tipo: "lamina", ordem: c.ordem, texto: String(c.texto_exato ?? ""), versoes },
+      dados: { tipo: "lamina", ordem: c.ordem, texto: String(c.texto_exato ?? ""), versoes, referencias: Array.isArray(c.referencias_ids) ? c.referencias_ids.length : 0 },
     });
   }
   return alvos;
@@ -144,6 +179,7 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
     reordenar: {
       rotulo: "reordenar",
       alvos: ["t"],
+      direta: true,
       para: (bruto) => {
         const nova = ordemPedida(bruto, ordens);
         return nova ? nova.join(",") : null;
@@ -153,6 +189,7 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
     mudar_formato: {
       rotulo: "mudar formato",
       alvos: ["t"],
+      direta: true,
       para: (bruto) => {
         const f = formatoPedido(bruto);
         const atual = FORMATOS_DO_POST.indexOf(t.direcao.formato as FormatoDoPost) >= 0 ? t.direcao.formato : "feed_4x5";
@@ -164,6 +201,7 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
       rotulo: "trocar texto",
       combina: true,
       alvos: ["l"],
+      direta: true,
       para: (bruto, alvo) => {
         const troca = trocaPedida(bruto);
         if (!troca || String(alvo.dados.texto ?? "").indexOf(troca.de) < 0) return null;
@@ -175,6 +213,7 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
       rotulo: "arquivar versões antigas",
       combina: true,
       alvos: ["l"],
+      direta: true,
       trava: (alvo) => travaGeral() || (Number(alvo.dados.versoes || 0) < 2 ? "Esta lâmina só tem a versão atual." : null),
     },
     refazer: {
@@ -183,7 +222,109 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
       alvos: ["l"],
       trava: travaGeral,
     },
+    // Frente RO, fase 2: sem custo e com Desfazer (vão direto numa ordem clara).
+    // A mudança da conversa (texto, cor, cena, foto, uso do rosto): montada pelo código, nunca pelo modelo.
+    aplicar_mudanca: {
+      rotulo: "aplicar",
+      combina: true,
+      repete: true,
+      alvos: ["t", "l"],
+      direta: true,
+      para: (bruto) => {
+        const id = String(bruto ?? "").trim();
+        return /^m\d{1,3}$/.test(id) ? id : null;
+      },
+      trava: travaGeral,
+    },
+    mudar_qualidade: {
+      rotulo: "mudar qualidade",
+      alvos: ["t"],
+      combina: true,
+      direta: true,
+      para: (bruto) => {
+        const q = String(bruto ?? "").trim().toLowerCase().replace("é", "e").replace("média", "media");
+        return QUALIDADES_DO_DIRETOR.indexOf(q) >= 0 && q !== (t.qualidade || "media") ? q : null;
+      },
+      trava: travaGeral,
+    },
+    tirar_lamina: {
+      rotulo: "tirar lâmina",
+      combina: false,
+      alvos: ["l"],
+      direta: true,
+      trava: () => travaGeral() || (continuo ? MOTIVO_CONTINUO_LAMINAS : null) || (ordens.length < 2 ? "O trabalho precisa de pelo menos uma lâmina." : null),
+    },
+    duplicar_lamina: {
+      rotulo: "duplicar lâmina",
+      alvos: ["l"],
+      direta: true,
+      trava: () => travaGeral() || (continuo ? MOTIVO_CONTINUO_LAMINAS : null) || (ordens.length >= 10 ? "O carrossel já tem 10 lâminas." : null),
+    },
+    trocar_logo: {
+      rotulo: "trocar logo",
+      combina: true,
+      alvos: ["l", "t"],
+      direta: true,
+      para: (bruto) => {
+        const l = String(bruto ?? "").trim().toLowerCase();
+        return LOGOS_DO_DIRETOR.indexOf(l) >= 0 ? l : null;
+      },
+      trava: travaGeral,
+    },
+    tirar_referencias: {
+      rotulo: "tirar referências",
+      combina: true,
+      alvos: ["l"],
+      direta: true,
+      trava: (alvo) => travaGeral() || (Number(alvo.dados.referencias || 0) < 1 ? "Esta lâmina não tem referência própria (as do conjunto saem pela ferramenta Referências)." : null),
+    },
+    // Com custo ou para fora: viram passos do plano (Confirmar com o custo antes).
+    ajustar_texto: {
+      rotulo: "ajustar o texto na arte",
+      combina: true,
+      alvos: ["l"],
+      trava: (alvo) => travaGeral() || (Number(alvo.dados.versoes || 0) < 1 ? "Esta lâmina ainda não tem arte: gere antes." : null),
+    },
+    variacoes: {
+      rotulo: "gerar variações",
+      combina: true,
+      alvos: ["l"],
+      para: (bruto) => {
+        const n = Math.round(Number(String(bruto ?? "").replace(/[^0-9]/g, "")) || 2);
+        return String(Math.max(1, Math.min(MAX_VARIACOES, n)));
+      },
+      trava: travaGeral,
+    },
+    entregar: {
+      rotulo: "mandar para a entrega",
+      alvos: ["t"],
+      combina: true,
+      trava: () => travaGeral() || (t.cards.length < 1 ? "Gere as lâminas antes de entregar." : null),
+    },
+    agendar: {
+      rotulo: "agendar",
+      alvos: ["t"],
+      combina: true,
+      trava: () => (t.tipo === "ads" ? "O criativo de anúncio sobe pela Mesa Ads." : t.status !== "entregue" ? "Entregue o trabalho antes de agendar (peça \"entrega e agenda\")." : null),
+    },
   };
+}
+
+export const MOTIVO_CONTINUO_LAMINAS = "No carrossel contínuo a cena atravessa as lâminas: tirar ou duplicar lâmina fica travado.";
+
+/**
+ * Separa a proposta em duas: o que o diretor faz sem custo (vai direto numa
+ * ordem clara, com Desfazer) e os passos com custo ou que saem para o mundo
+ * (o plano, com Confirmar e o custo antes).
+ */
+export function separarDoPlano(acao: AcaoDoAgente | null): { livre: AcaoDoAgente | null; comCusto: ItemDaAcaoDoAgente[] } {
+  if (!acao) return { livre: null, comCusto: [] };
+  const comCusto = acao.itens.filter((i) => OPERACOES_COM_CUSTO.indexOf(i.operacao) >= 0);
+  const itens = acao.itens.filter((i) => OPERACOES_COM_CUSTO.indexOf(i.operacao) < 0);
+  if (!itens.length && !acao.recusados.length) return { livre: null, comCusto };
+  const livre: AcaoDoAgente = { ...acao, itens };
+  delete livre.sem_desfazer;
+  return { livre, comCusto };
 }
 
 /**
@@ -201,13 +342,23 @@ export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, i
     rotuloDoPara: (op, para) => (op === "mudar_formato" && para ? QUADRO_DO_POST[para as FormatoDoPost]?.proporcao ?? null : op === "reordenar" && para ? `nova ordem ${para}` : null),
   });
   if (!acao) return null;
-  const temLamina = acao.itens.some((i) => i.operacao !== "reordenar" && i.operacao !== "mudar_formato");
+  const soDoTrabalho = ["reordenar", "mudar_formato", "mudar_qualidade", "entregar", "agendar"];
+  const temLamina = acao.itens.some((i) => soDoTrabalho.indexOf(i.operacao) < 0);
   if (temLamina && acao.itens.some((i) => i.operacao === "reordenar")) {
     acao.ignorados.push(...acao.itens.filter((i) => i.operacao === "reordenar").map((i) => i.ref));
     acao.itens = acao.itens.filter((i) => i.operacao !== "reordenar");
   }
-  // Troca de texto antes de refazer: a lâmina nova já sai com o texto novo.
-  const peso: Record<string, number> = { trocar_texto: 0, arquivar_versoes: 1, mudar_formato: 2, reordenar: 3, refazer: 4 };
+  // Frente RO: tirar e duplicar lâmina mudam a numeração; com outra operação de lâmina no mesmo pedido, as
+  // referências l1..lN mudariam no meio. Vale uma coisa só: essas duas ficam de fora (a equipe pede de novo).
+  const mexeNaNumeracao = acao.itens.filter((i) => i.operacao === "tirar_lamina" || i.operacao === "duplicar_lamina");
+  const outrasDeLamina = acao.itens.filter((i) => soDoTrabalho.indexOf(i.operacao) < 0 && i.operacao !== "tirar_lamina" && i.operacao !== "duplicar_lamina");
+  if (mexeNaNumeracao.length && (outrasDeLamina.length || mexeNaNumeracao.length > 1)) {
+    acao.ignorados.push(...mexeNaNumeracao.map((i) => i.ref));
+    acao.itens = acao.itens.filter((i) => mexeNaNumeracao.indexOf(i) < 0);
+  }
+  // Troca de texto antes de refazer: a lâmina nova já sai com o texto novo. Tirar e duplicar lâmina mudam a
+  // numeração: vão por último entre as sem custo (a ordem das outras já foi aplicada).
+  const peso: Record<string, number> = { aplicar_mudanca: 0, trocar_texto: 0, trocar_logo: 1, tirar_referencias: 1, arquivar_versoes: 1, mudar_qualidade: 2, mudar_formato: 2, reordenar: 3, duplicar_lamina: 4, tirar_lamina: 5, ajustar_texto: 6, refazer: 7, variacoes: 8, entregar: 9, agendar: 10 };
   acao.itens.sort((a, b) => (peso[a.operacao] ?? 9) - (peso[b.operacao] ?? 9));
   if (!acao.itens.length && !acao.recusados.length) return null;
   // Só refazer (gerar de novo): não tem volta; a tela avisa antes.
@@ -225,8 +376,19 @@ ${regraDasAcoes({
     trocar_texto: 'ref de cada lâmina; para "trecho antigo => trecho novo" (o trecho antigo exatamente como está no texto da lâmina). Serve para o mesmo ajuste em várias lâminas.',
     arquivar_versoes: "ref da lâmina; tira as versões antigas da lista (ficam guardadas). para vazio.",
     refazer: "ref de cada lâmina a gerar de novo pelo caminho de sempre (tem custo, mostrado antes). para vazio.",
+    mudar_qualidade: 'ref t1; para "baixa", "media" ou "alta" (qualidade da imagem nas próximas gerações).',
+    tirar_lamina: "ref da lâmina a tirar do carrossel (fica guardada; Desfazer devolve). para vazio. Sozinha no pedido.",
+    duplicar_lamina: "ref da lâmina a copiar; a cópia entra logo depois dela, sem arte, para a equipe mudar o texto. para vazio. Sozinha no pedido.",
+    trocar_logo: 'ref da lâmina (ou t1 para todas); para "principal", "alternativa" ou "auto" (a que contrasta com o fundo).',
+    tirar_referencias: "ref da lâmina; tira as referências escolhidas só para ela (volta a seguir o conjunto). para vazio.",
+    ajustar_texto: "ref da lâmina com arte; muda só a área do texto na arte depois de uma mudança de texto ou cor (custo pequeno). para vazio.",
+    variacoes: 'ref da lâmina; para com quantas versões novas (1 a 3). Tem custo, mostrado antes.',
+    entregar: "ref t1; manda o trabalho para a entrega (aprovação do cliente, como o botão Entregar). Pede confirmação.",
+    agendar: "ref t1; abre o Agendar do Estúdio com a data sugerida (só com o trabalho entregue). Pede confirmação.",
   })}
-- Mudança de estilo, cenário, luz, cores ou composição continua em mudancas; acoes é para organizar e executar.`;
+- Mudança de estilo, cenário, luz, cores ou composição continua em mudancas; acoes é para organizar e executar.
+- Quem pede com ordem clara ("faz", "muda", "tira", "troca", "aplica") vê as mudanças e as ações sem custo feitas na hora, com Desfazer; o que tem custo (refazer, variações, ajustar o texto na arte) e o que sai para o mundo (entregar, agendar) vai para a confirmação com o custo. Na resposta, diga o que fica feito e o que espera o clique.
+- "A segunda", "a capa", "a do café", "a última": resolva pela ordem e pelo conteúdo de cada lâmina. "Todas": a mesma mudança em cada lâmina. "Essa aqui": a lâmina em foco. Se não der para saber qual, pergunte e não mude nada.`;
 }
 
 // ------------------------------------------------------------------ execução (puro: devolve o patch)
@@ -288,6 +450,76 @@ export function devolverVersoesDaLamina(t: TrabalhoParaAcoes, ordem: number, ver
   const ficam = guardadas.filter((v) => !(v.ordem === ordem && versoes.indexOf(v.versao) >= 0));
   const existentes = new Set(t.cards.filter((v) => v.ordem === ordem).map((v) => v.versao));
   return { cards: t.cards.concat(voltam.filter((v) => !existentes.has(v.versao))), direcao: { ...t.direcao, versoes_arquivadas: ficam } };
+}
+
+// ------------------------------------------------------------------ frente RO: tirar e duplicar lâmina (puro)
+
+const funcaoNaPosicao = (ordem: number, total: number) => (ordem === 1 ? "capa" : ordem === total && total > 1 ? "cta" : "conteudo");
+
+/** Tira a lâmina: vai para direcao.laminas_arquivadas com as versões; as de depois sobem uma posição. */
+export function tirarLaminaDoTrabalho(t: TrabalhoParaAcoes, ordem: number, agora = new Date().toISOString()) {
+  const card = t.direcao.cards.find((c) => c.ordem === ordem);
+  if (!card) throw new Error(`A lâmina ${ordem} não existe mais.`);
+  if (t.direcao.cards.length < 2) throw new Error("O trabalho precisa de pelo menos uma lâmina.");
+  const total = t.direcao.cards.length - 1;
+  const chave = `l${ordem}-${agora}`;
+  const arquivada: LaminaArquivada = { chave, ordem_original: ordem, card, versoes: t.cards.filter((v) => v.ordem === ordem), em: agora };
+  const cards = t.direcao.cards
+    .filter((c) => c.ordem !== ordem)
+    .map((c) => {
+      const nova = c.ordem > ordem ? c.ordem - 1 : c.ordem;
+      return { ...c, ordem: nova, funcao: funcaoNaPosicao(nova, total) };
+    })
+    .sort((a, b) => a.ordem - b.ordem);
+  const versoes = t.cards.filter((v) => v.ordem !== ordem).map((v) => (v.ordem > ordem ? { ...v, ordem: v.ordem - 1 } : v));
+  const guardadas = Array.isArray(t.direcao.laminas_arquivadas) ? t.direcao.laminas_arquivadas : [];
+  return { patch: { direcao: { ...t.direcao, cards, laminas_arquivadas: guardadas.concat([arquivada]) }, cards: versoes }, desfazer: { chave, ordem, total_depois: total } };
+}
+
+/** Desfaz o tirar: a lâmina volta para a posição de antes, com as versões. */
+export function devolverLaminaAoTrabalho(t: TrabalhoParaAcoes, chave: string, totalDepois?: number) {
+  const guardadas = Array.isArray(t.direcao.laminas_arquivadas) ? t.direcao.laminas_arquivadas : [];
+  const a = guardadas.find((x) => x.chave === chave);
+  if (!a) throw new Error("A lâmina guardada não foi encontrada.");
+  if (typeof totalDepois === "number" && t.direcao.cards.length !== totalDepois) throw new Error("As lâminas mudaram depois. Devolva pela tela.");
+  const k = Math.min(a.ordem_original, t.direcao.cards.length + 1);
+  const total = t.direcao.cards.length + 1;
+  const cards = t.direcao.cards
+    .map((c) => (c.ordem >= k ? { ...c, ordem: c.ordem + 1 } : c))
+    .concat([{ ...a.card, ordem: k }])
+    .map((c) => ({ ...c, funcao: funcaoNaPosicao(c.ordem, total) }))
+    .sort((x, y) => x.ordem - y.ordem);
+  const versoes = t.cards.map((v) => (v.ordem >= k ? { ...v, ordem: v.ordem + 1 } : v)).concat(a.versoes.map((v) => ({ ...v, ordem: k })));
+  return { direcao: { ...t.direcao, cards, laminas_arquivadas: guardadas.filter((x) => x.chave !== chave) }, cards: versoes };
+}
+
+/** Duplica a lâmina: a cópia (sem arte) entra logo depois; as de depois descem uma posição. */
+export function duplicarLaminaDoTrabalho(t: TrabalhoParaAcoes, ordem: number) {
+  const card = t.direcao.cards.find((c) => c.ordem === ordem);
+  if (!card) throw new Error(`A lâmina ${ordem} não existe mais.`);
+  const total = t.direcao.cards.length + 1;
+  const copia = { ...card, ordem: ordem + 1 };
+  const cards = t.direcao.cards
+    .map((c) => (c.ordem > ordem ? { ...c, ordem: c.ordem + 1 } : c))
+    .concat([copia])
+    .map((c) => ({ ...c, funcao: funcaoNaPosicao(c.ordem, total) }))
+    .sort((a, b) => a.ordem - b.ordem);
+  const versoes = t.cards.map((v) => (v.ordem > ordem ? { ...v, ordem: v.ordem + 1 } : v));
+  return { patch: { direcao: { ...t.direcao, cards }, cards: versoes }, desfazer: { ordem: ordem + 1, total_depois: total } };
+}
+
+/** Desfaz o duplicar: tira a cópia (só enquanto ela não tem arte). */
+export function tirarCopiaDoTrabalho(t: TrabalhoParaAcoes, ordemDaCopia: number, totalDepois?: number) {
+  if (typeof totalDepois === "number" && t.direcao.cards.length !== totalDepois) throw new Error("As lâminas mudaram depois. Tire a cópia pela tela.");
+  if (t.cards.some((v) => v.ordem === ordemDaCopia)) throw new Error("A cópia já tem arte: tire pela tela, se quiser.");
+  const total = t.direcao.cards.length - 1;
+  const cards = t.direcao.cards
+    .filter((c) => c.ordem !== ordemDaCopia)
+    .map((c) => (c.ordem > ordemDaCopia ? { ...c, ordem: c.ordem - 1 } : c))
+    .map((c) => ({ ...c, funcao: funcaoNaPosicao(c.ordem, total) }))
+    .sort((a, b) => a.ordem - b.ordem);
+  const versoes = t.cards.map((v) => (v.ordem > ordemDaCopia ? { ...v, ordem: v.ordem - 1 } : v));
+  return { direcao: { ...t.direcao, cards }, cards: versoes };
 }
 
 /** Ordens das lâminas que a tela deve gerar de novo depois de confirmar (o que deu certo). */

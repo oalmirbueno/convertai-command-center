@@ -66,6 +66,10 @@ import {
 } from "./acoes-do-lancador.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG3 (29/09): aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
+import { blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
+import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
+import { blocoDoHistorico, historicoSeguro, linhaDeHoje } from "./conversa-do-lancador.ts";
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -164,11 +168,13 @@ Gere SEMPRE que houver projeto/plan. Regras absolutas:
 // Frente AG (26/09): ações no painel e caminho para as outras áreas. Entra no
 // sistema junto do mapa do painel (bloco curto) quando a equipe pede algo.
 const REGRA_DO_LANCADOR = `## Fazer no painel (acoes) e levar a outra área (ir_para)
-- Você conhece o painel inteiro (MAPA DO PAINEL abaixo). Pedido claro e simples do cliente escolhido (criar tarefa num projeto listado, lembrete, nota sobre o cliente, concluir tarefa, mudar prazo): preencha "acoes" com os apelidos das listas e use intent.kind "acao". O painel faz na hora quando é ordem clara e sem custo; a equipe pode desfazer.
+- Você conhece o painel inteiro (MAPA DO PAINEL abaixo). Pedido claro e simples do cliente escolhido (criar tarefa num projeto listado, lembrete, nota sobre o cliente, concluir tarefa, mover de coluna, mudar prazo ou prioridade): preencha "acoes" com os apelidos das listas e use intent.kind "acao". O painel faz na hora quando é ordem clara e sem custo; a equipe pode desfazer.
 - Projeto novo pelo contrato e etapa continuam em create_project e create_milestone. Tarefa sem projeto listado: create_task (a tela pergunta o projeto).
 - Pedido que é de outra área (anúncio, foto, arte, roteiro, vídeo, agenda de posts, CRM, métricas): preencha "ir_para" com a chave da área do mapa (ex.: "mesa_ads" ou "mesa_ads:conta" com a etapa) e diga em "resposta": "Isso é na <área>. Abro para você?" e o que o agente de lá faz. Pedido para abrir uma tela também vai em ir_para.
 - Financeiro, cofre e equipe: ir_para pode levar até a tela, mas você não mexe.
-- "resposta": uma ou duas frases curtas para a equipe (sem travessão). Sem cliente escolhido e pedido de ação: acoes null e peça para escolher o cliente no topo.
+- "resposta": uma ou duas frases curtas para a equipe (sem travessão), com o nome da tarefa ou do projeto. Sem cliente escolhido e pedido de ação: acoes null e peça para escolher o cliente no topo.
+- Referência vaga ("essa", "a outra", "a de ontem", "muda para sexta"): resolva pela CONVERSA ATÉ AQUI e pelas listas. Se continuar servindo para dois ou mais itens, não chute: acoes null e em "resposta" faça UMA pergunta curta com as opções pelo nome (ex.: "Qual: Revisar artes ou Subir campanha?").
+- Datas relativas ("amanhã", "sexta", "semana que vem") saem da linha Hoje, no formato AAAA-MM-DD.
 - Campos novos no JSON: "acoes": { "resumo": string, "itens": [ { "operacao": string, "ref": string, "para": string } ] } | null, "ir_para": string | null, "resposta": string.`;
 
 /** Datas em São Paulo (o prazo "hoje" da equipe). */
@@ -211,12 +217,18 @@ interface RequestBody {
   // agente propõe e faz ações; a análise automática (silenciosa) nunca faz.
   agir?: boolean;
   // Contrato comum: confirmar, cancelar ou desfazer a proposta guardada.
-  acao?: "executar_acao_agente" | "desfazer_acao_agente";
+  acao?: "executar_acao_agente" | "desfazer_acao_agente" | "esquecer_regra" | "guardar_regra";
   mensagem_id?: string;
   acao_id?: string;
   descartar?: boolean;
   /** Frente AG (27/09): encerra a sequência em passos no meio (o que foi feito fica, com o Desfazer). */
   parar?: boolean;
+  /** Frente AG3 (29/09): as últimas trocas da conversa (texto), para referências vagas. */
+  historico?: unknown;
+  /** Frente AG3: "Esquecer" da linha "Aprendi". */
+  regra_id?: string;
+  /** Frente AG3: "Guardar como regra" do incerto. */
+  regra?: { texto?: unknown; categoria?: unknown; escopo?: unknown };
 }
 
 // ─── Pré-contexto (cliente + serviço) ──────────────────────────────────
@@ -319,6 +331,8 @@ Responda à pergunta usando SÓ o PRÉ-CONTEXTO (cadastro, dossiê, memória do 
 Regras:
 - Português do Brasil, frases curtas e claras. Sem travessão. Sem markdown, sem asterisco.
 - Não invente dado. Se faltar informação, diga o que falta e onde a equipe encontra.
+- Seja específico: cite o nome da tarefa, do projeto e a data. Nada de conselho genérico que serviria para qualquer cliente.
+- Use a CONVERSA ATÉ AQUI para entender "isso", "e a outra?" e a linha Hoje para datas.
 - Financeiro, cobrança e cofre de senhas estão fora do seu alcance: se a pergunta for disso, diga que não acessa.
 - Devolva JSON puro: { "resposta": string, "passos"?: string[] } (passos só quando pedirem passos, até 5).`;
 
@@ -539,12 +553,12 @@ async function lerDadosDoLancador(
   let tarefas: DadosDoLancador["tarefas"] = [];
   if (lista.length) {
     try {
-      const { data } = await supabase.from("tasks").select("id, title, status, due_date, project_id")
+      const { data } = await supabase.from("tasks").select("id, title, status, due_date, priority, project_id")
         .in("project_id", lista.map((x) => x.id)).neq("status", "done").is("deleted_at", null)
         .order("due_date", { ascending: true, nullsFirst: false }).limit(30);
       const nomeDoProjeto: Record<string, string> = {};
       for (const x of lista) nomeDoProjeto[x.id] = x.name;
-      tarefas = ((data || []) as Array<{ id: string; title: string; status: string | null; due_date: string | null; project_id: string }>)
+      tarefas = ((data || []) as Array<{ id: string; title: string; status: string | null; due_date: string | null; priority: string | null; project_id: string }>)
         .map((t) => ({ ...t, projeto: nomeDoProjeto[t.project_id] || null }));
     } catch { /* sem tarefas: só projetos */ }
   }
@@ -555,7 +569,7 @@ async function lerDadosDoLancador(
   };
 }
 
-const AQUI_DO_LANCADOR = "o próprio Aceleriq faz: criar, concluir ou mudar prazo de tarefa, lembrete, nota sobre o cliente, projeto a partir do contrato, resumo e próximos passos do cliente";
+const AQUI_DO_LANCADOR = "o próprio Aceleriq faz: criar, concluir, mover de coluna, mudar prazo ou prioridade de tarefa, lembrete, nota sobre o cliente, projeto a partir do contrato, resumo e próximos passos do cliente";
 
 /** Onde o pedido se resolve e se é ordem clara (Jev). Falha do Jev: null, e quem chama usa a reserva sem IA. */
 async function rotearComJev(pedido: string, cliente: string | null, tela: string): Promise<Roteamento | null> {
@@ -674,14 +688,18 @@ async function tratarAcoesDoLancador(
     if (conversaId) {
       const agora = Date.now();
       const resposta = String(parsed.resposta || parsed.narrative || acao.resumo || "Pronto.").slice(0, 2000);
-      const { data: gravadas } = await supabase.from("agente_mensagens").insert([
+      const { data: gravadas, error: erroGravar } = await supabase.from("agente_mensagens").insert([
         { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto.slice(0, 4000) || "(pedido por voz)", criado_em: new Date(agora).toISOString(), anexos: [] },
         { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, anexos: [acao], criado_em: new Date(agora + 1).toISOString() },
       ]).select("id, papel");
+      // Frente AG3: o erro da gravação não some mais (foi assim que o anexos nulo escondeu a mensagem).
+      if (erroGravar) console.error(`[assistente] conversa não gravada: ${erroGravar.message}`);
       mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
+    } else {
+      console.error("[assistente] conversa do lançador não abriu: a ação fica sem Confirmar/Desfazer");
     }
   } catch (e) {
-    console.warn(`[assistente] conversa não gravada: ${e instanceof Error ? e.message : "falha"}`);
+    console.error(`[assistente] conversa não gravada: ${e instanceof Error ? e.message : "falha"}`);
   }
   if (!mensagemId && !acao.executada_em) acao = null; // sem onde guardar, nada para confirmar
   return { acao, mensagemId, destino: destinoFinal, direto };
@@ -819,6 +837,32 @@ Deno.serve(async (req) => {
     if (body.acao === "executar_acao_agente" || body.acao === "desfazer_acao_agente") {
       return await acaoGuardadaDoLancador(supabase, caller, body, userData.user.id);
     }
+    // Frente AG3: "Esquecer" da linha "Aprendi" (regra deste cliente, já com acesso conferido, ou do próprio dono).
+    if (body.acao === "esquecer_regra") {
+      const r = await esquecerRegra(supabase, { id: String(body.regra_id || ""), donosPermitidos: [userData.user.id, ...(body.clientId ? [body.clientId] : [])] });
+      if (!r.ok) console.warn(`[assistente] esquecer regra recusado: ${r.motivo}`);
+      return jsonResposta(r.ok ? { ok: true } : { error: "esquecer_falhou", mensagem: r.motivo }, r.ok ? 200 : 400);
+    }
+    if (body.acao === "guardar_regra") {
+      try {
+        const g = body.regra || {};
+        const aprendido = await guardarNoServidor(supabase, {
+          texto: String(g.texto || ""), categoria: g.categoria === "preferencia" ? "preferencia" : "evitar", escopo: g.escopo === "dono" ? "dono" : "cliente",
+          agente: "geral", clientId: body.clientId || null, donoId: userData.user.id,
+        });
+        return jsonResposta({ aprendido });
+      } catch (e) {
+        console.warn(`[assistente] guardar regra falhou: ${e instanceof Error ? e.message : "falha"}`);
+        return jsonResposta({ error: "guardar_falhou", mensagem: "Não foi possível guardar a regra agora." }, 400);
+      }
+    }
+    const historico = historicoSeguro(body.historico);
+    const hojeTexto = linhaDeHoje(hojeEmSaoPaulo());
+    // Regras que o dono ensinou (do cliente e dele): leitura barata, sem IA, antes de qualquer modelo.
+    const regrasLidas: Promise<RegraAtiva[]> = (body.fetchOnly || (!body.text?.trim() && body.modo !== "conversa"))
+      ? Promise.resolve([])
+      : regrasDoAgente(supabase, { agente: "geral", clientId: body.clientId || null, donoId: userData.user.id })
+        .catch((e) => (registrarFalha("voice-assistant-agent: regras do dono não lidas", e), []));
     const incomingAttachments = [
       ...(body.attachment?.text ? [body.attachment] : []),
       ...((body.attachments || []).filter((a) => a?.text)),
@@ -845,7 +889,12 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const pre = await lerPreContexto(supabase, body.clientId || null, servico, tela);
+      // A pergunta livre também ensina ("nunca me mande resumo longo"); a pronta (atalho) não.
+      const ehLivre = !PERGUNTAS_PRONTAS[chave];
+      const [pre, regras] = await Promise.all([lerPreContexto(supabase, body.clientId || null, servico, tela), regrasLidas]);
+      const aprendizado = ehLivre
+        ? aprenderNoServidor(supabase, { texto: pergunta, agente: "geral", clientId: body.clientId || null, donoId: userData.user.id, cliente: pre.clienteNome, contexto: historico.map((x) => x.texto).join(" | ") })
+        : Promise.resolve(null);
       const local = {
         resposta: pre.linhasLocais.length
           ? `A IA não respondeu agora. O que o painel mostra${pre.clienteNome ? ` de ${pre.clienteNome}` : ""}:`
@@ -854,12 +903,12 @@ Deno.serve(async (req) => {
         _degraded: true,
       };
       if (!providers.length) {
-        return new Response(JSON.stringify(local), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ ...local, aprendi: await aprendizado }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      const pedidoDaConversa = `Pergunta da equipe:\n"""${pergunta}"""${pre.texto}\n\nRetorne APENAS o JSON.`;
+      const pedidoDaConversa = `${hojeTexto}${blocoDoHistorico(historico)}\n\nPergunta da equipe:\n"""${pergunta}"""${pre.texto}\n\nRetorne APENAS o JSON.`;
       const erros: string[] = [];
       // O mapa do painel entra na conversa: "onde faço isso?" sai com a área certa e o link.
-      const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}`;
+      const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}${blocoDasRegras(regras)}`;
       for (const provider of providers) {
         const r = await callModel(provider, sistemaDaConversa, pedidoDaConversa);
         if (!r.ok) { erros.push(`${provider.label}: ${r.status}`); continue; }
@@ -871,14 +920,17 @@ Deno.serve(async (req) => {
         if (j && typeof j.resposta === "string" && j.resposta.trim()) {
           const passos = Array.isArray(j.passos) ? j.passos.map((p: unknown) => String(p)).filter(Boolean).slice(0, 5) : [];
           const irPara = destinoNaResposta(`${j.resposta} ${passos.join(" ")}`, body.clientId || null);
-          return new Response(JSON.stringify({ resposta: j.resposta.trim(), passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model }), {
+          return new Response(JSON.stringify({
+            resposta: j.resposta.trim(), passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model,
+            aprendi: await aprendizado, segui: regrasSeguidas(j.regras_seguidas, regras),
+          }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         erros.push(`${provider.label}: parse_failed`);
       }
       console.warn(`[assistente] conversa sem resposta: ${erros.join(" | ")}`);
-      return new Response(JSON.stringify({ ...local, _errors: erros }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ...local, _errors: erros, aprendi: await aprendizado }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (!body.text && incomingAttachments.length === 0 && !body.clientId) {
@@ -929,16 +981,22 @@ Deno.serve(async (req) => {
     const alvosDoPedido = dadosDoLancador ? alvosDoLancador(dadosDoLancador) : null;
     // Roteamento (Jev) corre junto do modelo: onde o pedido se resolve e se é ordem clara.
     const roteamento = agir ? rotearComJev(body.text, dadosDoLancador ? dadosDoLancador.cliente.nome : null, tela) : Promise.resolve(null);
+    // Frente AG3: o pedido explícito também ensina (Jev decide se é regra), em paralelo ao modelo.
+    const aprendizado = agir
+      ? aprenderNoServidor(supabase, { texto: body.text, agente: "geral", clientId: body.clientId || null, donoId: userData.user.id, cliente: dadosDoLancador ? dadosDoLancador.cliente.nome : null, contexto: historico.map((x) => x.texto).join(" | ") })
+      : Promise.resolve(null);
+    const regras = await regrasLidas;
 
     const userPrompt =
+      `${hojeTexto}${agir ? blocoDoHistorico(historico) : ""}\n\n` +
       `Comando do administrador:\n"""${body.text.slice(0, 4000)}"""\n\n` +
       `Clientes disponíveis (JSON):\n${JSON.stringify(clientsCondensed)}\n` +
       preContexto +
-      (agir ? `\n\nHoje: ${hojeEmSaoPaulo()}.${alvosDoPedido ? blocoDasAcoesDoLancador(alvosDoPedido) : "\nSem cliente escolhido: acoes sempre null."}` : "") +
+      (agir ? `${alvosDoPedido ? blocoDasAcoesDoLancador(alvosDoPedido) : "\nSem cliente escolhido: acoes sempre null."}` : "") +
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
     // O mapa do painel e a regra das ações só entram no pedido explícito (custo por mensagem).
-    const sistema = agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT;
+    const sistema = (agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT) + blocoDasRegras(regras);
 
     // Fallback degradado se não há provider configurado.
     if (!providers.length) {
@@ -984,6 +1042,7 @@ Deno.serve(async (req) => {
         narrative: "Modelos de IA temporariamente indisponíveis. Interpretação local ativa — você pode confirmar manualmente.",
         confidence: 0, plan: null,
         ir_para: semModelo ? semModelo.destino : null,
+        aprendi: await aprendizado,
         _degraded: true, _reason: "all_models_failed", _errors: errors,
         _contractAutoLoaded: contractAutoLoaded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -1001,6 +1060,10 @@ Deno.serve(async (req) => {
     parsed._documentsCount = documentosDoPedido.enviados;
     parsed._documentsLeftOut = documentosDoPedido.deFora;
     parsed._servico = servico;
+    // Frente AG3: devolve o que aprendeu ("Aprendi: ... Esquecer") e as regras que pesaram ("Segui: ...").
+    parsed.segui = regrasSeguidas(parsed.regras_seguidas, regras);
+    delete parsed.regras_seguidas;
+    parsed.aprendi = await aprendizado;
 
     // Frente AG: ações (direto quando pode), destino no mapa e a frase para a conversa.
     if (agir) {
@@ -1010,6 +1073,10 @@ Deno.serve(async (req) => {
       parsed.mensagem_id = r.mensagemId;
       parsed.ir_para = r.destino;
       parsed._direto = r.direto;
+      // Feito direto, mas sem a mensagem guardada: a tela avisa (sem ela não há Desfazer pelo cartão).
+      if (r.acao && r.acao.executada_em && !r.mensagemId) {
+        parsed.aviso_da_acao = `Feito (${textoDoResultado(r.acao.resultados || [])}), mas a conversa não gravou: o Desfazer deste pedido não está disponível. Confira no Kanban.`;
+      }
       parsed._roteamento = rota ? { area: rota.area, ordem: rota.ordem, abrir: rota.abrir } : null;
       if (typeof parsed.resposta !== "string" || !parsed.resposta.trim()) {
         parsed.resposta = r.acao
@@ -1030,7 +1097,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    // Última linha de defesa: nunca quebra a UI.
+    // Última linha de defesa: nunca quebra a UI. Frente AG3: o motivo vai para o log (antes sumia).
+    console.error(`[assistente] erro interno: ${err instanceof Error ? err.message : String(err)}`);
     return new Response(JSON.stringify({
       intent: { kind: "unknown", raw: "" },
       suggestedClientIds: [], narrative: "Erro interno do agente. Interpretação local ativa.",

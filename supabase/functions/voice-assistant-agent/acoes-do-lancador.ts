@@ -9,7 +9,8 @@
  *   agendar_lembrete (tarefa com prazo para quem pediu, no projeto aberto
  *   mais recente; o aviso sai pelo lembrete de tarefas do painel).
  * - p1..pN: projetos abertos. criar_tarefa e agendar_lembrete.
- * - t1..tN: tarefas abertas. concluir_tarefa e mudar_prazo.
+ * - t1..tN: tarefas abertas. concluir_tarefa, mudar_prazo, mover_tarefa (coluna
+ *   do Kanban) e mudar_prioridade (frente AG3, 29/09: "criar ou mover tarefa").
  *
  * Tudo aqui é sem custo e tem Desfazer (criar vai para a lixeira, mudar volta
  * o valor de antes, a nota sai do cérebro): pedido claro vai direto (regra 6
@@ -35,7 +36,7 @@ export const AGENTE_DO_LANCADOR = "aceleriq";
 export const AGENTE_DA_CONVERSA_DO_LANCADOR = "estrategista";
 export const REF_CONVERSA_DO_LANCADOR = "lancador";
 
-export const OPERACOES_DO_LANCADOR = ["criar_tarefa", "agendar_lembrete", "registrar_nota", "concluir_tarefa", "mudar_prazo"] as const;
+export const OPERACOES_DO_LANCADOR = ["criar_tarefa", "agendar_lembrete", "registrar_nota", "concluir_tarefa", "mudar_prazo", "mover_tarefa", "mudar_prioridade"] as const;
 export type OperacaoDoLancador = (typeof OPERACOES_DO_LANCADOR)[number];
 
 export const DESCRICOES_DO_LANCADOR: Record<OperacaoDoLancador, string> = {
@@ -44,10 +45,26 @@ export const DESCRICOES_DO_LANCADOR: Record<OperacaoDoLancador, string> = {
   registrar_nota: "ref c1. para: o fato sobre o cliente, numa frase (fica no cérebro do cliente e os agentes passam a saber).",
   concluir_tarefa: "ref t#. Marca a tarefa como feita. para vazio.",
   mudar_prazo: "ref t#. para: a data nova AAAA-MM-DD.",
+  mover_tarefa: "ref t#. para: a coluna do Kanban (backlog, a fazer, fazendo, revisão). Para concluir use concluir_tarefa.",
+  mudar_prioridade: "ref t#. para: alta, media ou baixa.",
 };
 
+/** Colunas do Kanban (tasks.status, canonicalTaskStatus da tela) e como a equipe fala delas. */
+export const COLUNAS_DO_KANBAN: Record<string, string> = {
+  backlog: "backlog", "a fazer": "todo", afazer: "todo", todo: "todo", pendente: "todo",
+  fazendo: "doing", "em andamento": "doing", andamento: "doing", doing: "doing", "em produção": "doing", "em producao": "doing",
+  "revisão": "review", revisao: "review", "em revisão": "review", "em revisao": "review", review: "review", "aprovação": "review", aprovacao: "review",
+};
+export const ROTULO_DA_COLUNA: Record<string, string> = { backlog: "Backlog", todo: "A fazer", doing: "Fazendo", review: "Revisão", done: "Feito" };
+
+/** "fazendo" -> "doing". Concluir não passa por aqui (tem trava e Desfazer próprios). */
+export function colunaDoKanban(v: unknown): string | null {
+  const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim().toLowerCase().slice(0, 30);
+  return COLUNAS_DO_KANBAN[s] || null;
+}
+
 export type ProjetoDoLancador = { id: string; name: string; status?: string | null; deadline?: string | null };
-export type TarefaDoLancador = { id: string; title: string; status?: string | null; due_date?: string | null; project_id: string; projeto?: string | null };
+export type TarefaDoLancador = { id: string; title: string; status?: string | null; due_date?: string | null; priority?: string | null; project_id: string; projeto?: string | null };
 
 export type DadosDoLancador = {
   cliente: { id: string; nome: string };
@@ -70,6 +87,7 @@ export function dataValida(v: unknown): string | null {
 }
 
 const PRIORIDADES: Record<string, string> = { alta: "high", high: "high", media: "medium", "média": "medium", medium: "medium", baixa: "low", low: "low" };
+const ROTULO_DA_PRIORIDADE: Record<string, string> = { high: "alta", medium: "média", low: "baixa" };
 
 /** "título | 2026-10-02 | alta" -> partes. Título vazio: null. */
 export function lerTarefaDoPara(bruto: unknown): { titulo: string; prazo: string | null; prioridade: string } | null {
@@ -108,8 +126,13 @@ export function alvosDoLancador(d: DadosDoLancador) {
   const tarefas = comApelido<AlvoDoLancador>(d.tarefas.slice(0, 30).map((t) => ({
     id: t.id,
     titulo: umaLinha(t.title, 140) || "Tarefa",
-    detalhe: [t.status || "", t.due_date ? `prazo ${t.due_date}` : "sem prazo", t.projeto || ""].filter(Boolean).join(" · "),
-    dados: { status: t.status || null, due_date: t.due_date || null, project_id: t.project_id },
+    detalhe: [
+      ROTULO_DA_COLUNA[t.status || ""] || t.status || "",
+      t.due_date ? `prazo ${t.due_date}` : "sem prazo",
+      t.priority ? `prioridade ${ROTULO_DA_PRIORIDADE[t.priority] || t.priority}` : "",
+      t.projeto || "",
+    ].filter(Boolean).join(" · "),
+    dados: { status: t.status || null, due_date: t.due_date || null, priority: t.priority || null, project_id: t.project_id },
   })), "t");
   return { cliente, projetos, tarefas, todos: ([] as Array<AlvoComApelido<AlvoDoLancador>>).concat(cliente, projetos, tarefas) };
 }
@@ -171,9 +194,26 @@ export function regrasDoLancador(hoje: string): Record<OperacaoDoLancador, Regra
     mudar_prazo: {
       rotulo: "mudar o prazo para",
       alvos: ["t"],
+      combina: true,
       direta: true,
       para: (v) => dataValida(v),
       trava: (a, para) => (String(para) < hoje ? "A data nova já passou." : a.dados && a.dados.due_date === para ? "A tarefa já tem este prazo." : null),
+    },
+    mover_tarefa: {
+      rotulo: "mover para",
+      alvos: ["t"],
+      combina: true,
+      direta: true,
+      para: (v) => colunaDoKanban(v),
+      trava: (a, para) => (a.dados && a.dados.status === "done" ? "A tarefa está concluída: reabra no Kanban antes." : a.dados && a.dados.status === para ? "A tarefa já está nesta coluna." : null),
+    },
+    mudar_prioridade: {
+      rotulo: "mudar a prioridade para",
+      alvos: ["t"],
+      combina: true,
+      direta: true,
+      para: (v) => PRIORIDADES[umaLinha(v, 10).toLowerCase()] || null,
+      trava: (a, para) => (a.dados && a.dados.priority === para ? "A tarefa já tem esta prioridade." : null),
     },
   };
 }
@@ -225,10 +265,20 @@ async function projetoDoCliente(db: BancoDoLancador, clientId: string, id: unkno
   return p.id;
 }
 
+/**
+ * Motivo do banco quando é uma trava escrita para a equipe (RAISE EXCEPTION,
+ * código P0001: "O conteúdo vinculado precisa estar publicado antes de
+ * concluir a tarefa."). Erro técnico continua com a frase padrão.
+ */
+export function motivoDoBanco(error: { code?: string; message?: string } | null | undefined, padrao: string): string {
+  const m = String((error && error.message) || "").trim();
+  return error && error.code === "P0001" && m && m.length <= 240 ? m : padrao;
+}
+
 async function tarefaDoCliente(db: BancoDoLancador, clientId: string, id: string) {
-  const { data, error } = await db.from("tasks").select("id, project_id, status, due_date, deleted_at").eq("id", id).maybeSingle();
+  const { data, error } = await db.from("tasks").select("id, project_id, status, kanban_status, priority, due_date, deleted_at").eq("id", id).maybeSingle();
   if (error) throw new Error("Não foi possível ler a tarefa.");
-  const t = data as { id: string; project_id: string; status: string; due_date: string | null; deleted_at: string | null } | null;
+  const t = data as { id: string; project_id: string; status: string; kanban_status?: string | null; priority?: string | null; due_date: string | null; deleted_at: string | null } | null;
   if (!t || t.deleted_at) throw new Error("Esta tarefa não existe mais.");
   await projetoDoCliente(db, clientId, t.project_id);
   return t;
@@ -276,9 +326,29 @@ export async function executarItemDoLancador(
       const t = await tarefaDoCliente(db, clientId, item.alvo_id);
       if (t.status === "done") throw new Error("A tarefa já está concluída.");
       // O valor de antes é lido antes de gravar (é o que o Desfazer devolve).
-      const antes = { status: t.status };
-      const { error } = await db.from("tasks").update({ status: "done" }).eq("id", t.id);
-      if (error) throw new Error("Não foi possível concluir a tarefa.");
+      // status e kanban_status andam juntos (update-task do MCP, esteira e Ciclo fazem igual).
+      const antes = { status: t.status, kanban_status: t.kanban_status ?? null };
+      const { error } = await db.from("tasks").update({ status: "done", kanban_status: "done" }).eq("id", t.id);
+      if (error) throw new Error(motivoDoBanco(error, "Não foi possível concluir a tarefa."));
+      return { desfazer: { tarefa_id: t.id, projeto_id: t.project_id, antes } };
+    }
+    case "mover_tarefa": {
+      const coluna = colunaDoKanban(item.para) || (typeof item.para === "string" && item.para !== "done" && ROTULO_DA_COLUNA[item.para] ? item.para : null);
+      if (!coluna) throw new Error("Coluna do Kanban inválida.");
+      const t = await tarefaDoCliente(db, clientId, item.alvo_id);
+      if (t.status === "done") throw new Error("A tarefa está concluída: reabra no Kanban antes.");
+      const antes = { status: t.status, kanban_status: t.kanban_status ?? null };
+      const { error } = await db.from("tasks").update({ status: coluna, kanban_status: coluna }).eq("id", t.id);
+      if (error) throw new Error(motivoDoBanco(error, "Não foi possível mover a tarefa."));
+      return { desfazer: { tarefa_id: t.id, projeto_id: t.project_id, antes } };
+    }
+    case "mudar_prioridade": {
+      const prioridade = PRIORIDADES[umaLinha(item.para, 10).toLowerCase()];
+      if (!prioridade) throw new Error("Prioridade inválida.");
+      const t = await tarefaDoCliente(db, clientId, item.alvo_id);
+      const antes = { priority: t.priority ?? "medium" };
+      const { error } = await db.from("tasks").update({ priority: prioridade }).eq("id", t.id);
+      if (error) throw new Error(motivoDoBanco(error, "Não foi possível mudar a prioridade."));
       return { desfazer: { tarefa_id: t.id, projeto_id: t.project_id, antes } };
     }
     case "mudar_prazo": {
@@ -287,7 +357,7 @@ export async function executarItemDoLancador(
       const t = await tarefaDoCliente(db, clientId, item.alvo_id);
       const antes = { due_date: t.due_date };
       const { error } = await db.from("tasks").update({ due_date: data }).eq("id", t.id);
-      if (error) throw new Error("Não foi possível mudar o prazo.");
+      if (error) throw new Error(motivoDoBanco(error, "Não foi possível mudar o prazo."));
       return { desfazer: { tarefa_id: t.id, projeto_id: t.project_id, antes } };
     }
     default:
@@ -323,7 +393,7 @@ export async function reverterItemDoLancador(
   const patch = r.operacao === "criar_tarefa" || r.operacao === "agendar_lembrete" ? { deleted_at: agora } : ((d.antes || {}) as Record<string, unknown>);
   if (!Object.keys(patch).length) throw new Error("Sem o que desfazer.");
   const { error } = await db.from("tasks").update(patch).eq("id", tarefaId).eq("project_id", projetoId);
-  if (error) throw new Error("Não foi possível voltar a tarefa.");
+  if (error) throw new Error(motivoDoBanco(error, "Não foi possível voltar a tarefa."));
 }
 
 /** Pedido claro sem o Jev: a regra comum do contrato (verbo de ordem no começo). */

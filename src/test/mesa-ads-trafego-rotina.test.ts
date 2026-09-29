@@ -413,12 +413,13 @@ describe("montar a campanha do plano (tudo pausado)", () => {
 });
 
 describe("\"ele já vai fazendo\": o que é seguro", () => {
-  it("pausar, baixar verba, renomear e ligar criativo; nunca ativar, subir verba, criar ou montar", () => {
+  // Frente AG3 (29/09), regra inegociável do dono: verba (subir OU baixar) só com Confirmar.
+  it("pausar, renomear e ligar criativo; nunca verba (nem baixar), ativar, criar ou montar", () => {
     const i = (tipo: string, extra: Record<string, unknown> = {}) => ({ tipo, variacao_pct: null, para: null, de: null, ...extra }) as never;
     expect(acaoSemRisco(i("pausar"))).toBe(true);
     expect(acaoSemRisco(i("renomear"))).toBe(true);
     expect(acaoSemRisco(i("vincular_criativo"))).toBe(true);
-    expect(acaoSemRisco(i("orcamento", { variacao_pct: -20 }))).toBe(true);
+    expect(acaoSemRisco(i("orcamento", { variacao_pct: -20 }))).toBe(false);
     expect(acaoSemRisco(i("orcamento", { de: { orcamento_diario_brl: 50 }, para: { orcamento_diario_brl: 60 }, variacao_pct: -5 }))).toBe(false);
     for (const t of ["ativar", "duplicar_anuncio", "trocar_criativo", "plano_de_teste", "tarefa_equipe", "montar_campanha_do_plano"]) expect(acaoSemRisco(i(t))).toBe(false);
   });

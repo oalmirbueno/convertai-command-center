@@ -20,6 +20,10 @@ export interface ItemDaRodada {
   publicado: boolean;
   tarefasCriadas: number[];
   erro: string | null;
+  /** Frente AG3: "Aprendi"/"Segui" do agente para este cliente (leitura, respostas, reescrita). */
+  aprendizado?: unknown[];
+  /** Frente AG3: canal em que o ritual saiu ("portal" ou "grupo", o "Enviei no grupo"). */
+  canal?: "portal" | "grupo" | null;
 }
 
 export interface Rodada {

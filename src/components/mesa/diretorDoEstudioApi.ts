@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, padraoPara, TAMANHOS, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { acoesDaMensagem, caminhoDosAnexos, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { planoDoAnexo, TIPO_DA_PERGUNTA, type PerguntaDoDiretor, type PlanoDoDiretor } from "../../../supabase/functions/estudio-arte/diretor-agentico";
+import type { AnexoPedido } from "../../../supabase/functions/estudio-arte/anexos-do-ajuste";
 
 /**
  * Conversa com o diretor de arte dentro do Estúdio (pedido do dono em 24/09:
@@ -45,7 +47,8 @@ export type CampoDaMudanca =
   | "cor_destaque"
   | "evitar"
   | "foto_acervo"
-  | "texto_exato";
+  | "texto_exato"
+  | "uso_da_foto";
 
 export interface MudancaDoDiretor {
   id: string;
@@ -75,6 +78,14 @@ export interface MensagemDoDiretor {
   acoes?: AcaoDoAgente[];
   /** Frente AG (27/09): a área que a resposta citou ("Isso é na Mesa Ads"), vira o botão "Abrir". */
   caminho?: CaminhoDoAgente | null;
+  /** Frente RO, fase 2: o plano do que custa (passos, andamento, prova). */
+  plano?: PlanoDoDiretor | null;
+  /** Frente RO, fase 2: a pergunta curta com opções clicáveis (na dúvida real). */
+  pergunta?: PerguntaDoDiretor | null;
+  /** Frente RO, fase 2: as imagens anexadas nesta mensagem (a pergunta sobre elas manda de novo). */
+  imagens?: AnexoPedido[];
+  /** Frente RO, fase 2: os anexos crus ("Aprendi" e "Segui" leem daqui). */
+  anexosCrus?: unknown[];
 }
 
 export interface ConversaDoDiretor {
@@ -99,11 +110,12 @@ export const ROTULOS_DOS_CAMPOS: { campo: CampoDaMudanca; rotulo: string }[] = [
   { campo: "cor_destaque", rotulo: "Cor de destaque" },
   { campo: "evitar", rotulo: "Evitar" },
   { campo: "texto_exato", rotulo: "Texto da lâmina" },
+  { campo: "uso_da_foto", rotulo: "Uso da foto" },
 ];
 
 const CAMPOS_VALIDOS = ROTULOS_DOS_CAMPOS.map((r) => r.campo);
 /** Campos que mudam a cena desenhada (no contínuo, o fundo panorâmico nasce de novo). */
-const CAMPOS_DE_CENA: CampoDaMudanca[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo"];
+const CAMPOS_DE_CENA: CampoDaMudanca[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo", "uso_da_foto"];
 
 export const ehHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
@@ -111,6 +123,7 @@ export const ehHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 export function valorParaMostrar(campo: CampoDaMudanca, valor: string): string {
   if (campo === "foto_acervo") return valor === SEM_FOTO ? "Tirar a foto real e desenhar a cena" : valor.indexOf(PREFIXO_FOTO_DO_PEDIDO) === 0 ? "Usar outra foto do pedido" : "Usar uma foto do acervo do cliente";
   if (campo === "zona_texto") return valor.replace(/-/g, " ");
+  if (campo === "uso_da_foto") return valor === "rosto" ? "Usar o rosto (cena nova)" : valor === "exata" ? "Foto exata" : valor;
   return valor;
 }
 
@@ -231,7 +244,16 @@ export async function lerConversaDoDiretor(trabalhoId: string): Promise<Conversa
     .reverse()
     .map((m) => {
       const papel: MensagemDoDiretor["papel"] = m.papel === "usuario" || m.papel === "agente" ? m.papel : "sistema";
-      return { id: String(m.id), papel, conteudo: String(m.conteudo || ""), criado_em: String(m.criado_em || ""), ...lerAnexosDaMensagem(m.anexos), acoes: acoesDaMensagem(m.anexos), caminho: caminhoDosAnexos(m.anexos) };
+      return {
+        id: String(m.id),
+        papel,
+        conteudo: String(m.conteudo || ""),
+        criado_em: String(m.criado_em || ""),
+        ...lerAnexosDaMensagem(m.anexos),
+        acoes: acoesDaMensagem(m.anexos),
+        caminho: caminhoDosAnexos(m.anexos),
+        ...extrasDaMensagem(m.anexos),
+      };
     });
   return { conversaId, mensagens };
 }
@@ -242,13 +264,55 @@ export interface CorpoDaConversaDoDiretor {
   trabalhoId: string;
   mensagem: string;
   ordem?: number | null;
+  /** Frente RO, fase 2: imagens anexadas (caminho no bucket mesa ou id do acervo) com o papel. */
+  imagens?: AnexoPedido[];
 }
 
 export function corpoDaConversaDoDiretor(c: CorpoDaConversaDoDiretor): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "conversar", trabalho_id: c.trabalhoId, mensagem: c.mensagem.trim() };
   if (typeof c.ordem === "number" && c.ordem > 0) corpo.ordem = c.ordem;
+  if (c.imagens && c.imagens.length) {
+    corpo.imagens = c.imagens.slice(0, 4).map((a) => (a.imagem_id ? { imagem_id: a.imagem_id, nome: a.nome, papel: a.papel } : { caminho: a.caminho, nome: a.nome, papel: a.papel }));
+  }
   return corpo;
 }
+
+/** Frente RO, fase 2: o plano, a pergunta, as imagens e os anexos crus da mensagem. */
+export function extrasDaMensagem(anexos: unknown): Pick<MensagemDoDiretor, "plano" | "pergunta" | "imagens" | "anexosCrus"> {
+  const lista = Array.isArray(anexos) ? anexos : [];
+  let plano: PlanoDoDiretor | null = null;
+  let pergunta: PerguntaDoDiretor | null = null;
+  let imagens: AnexoPedido[] = [];
+  for (const a of lista) {
+    if (!a || typeof a !== "object") continue;
+    const o = a as Record<string, unknown>;
+    if (!plano) plano = planoDoAnexo(o);
+    if (o.tipo === TIPO_DA_PERGUNTA && typeof o.pergunta === "string" && Array.isArray(o.opcoes)) {
+      pergunta = {
+        tipo: TIPO_DA_PERGUNTA,
+        pergunta: o.pergunta,
+        motivo: String(o.motivo || ""),
+        opcoes: (o.opcoes as Record<string, unknown>[]).filter((x) => x && typeof x.rotulo === "string" && typeof x.mensagem === "string").map((x) => ({ rotulo: String(x.rotulo), mensagem: String(x.mensagem) })).slice(0, 10),
+      };
+    }
+    if (o.tipo === "imagens_da_conversa" && Array.isArray(o.imagens)) imagens = (o.imagens as AnexoPedido[]).slice(0, 4);
+  }
+  return { plano, pergunta, imagens, anexosCrus: lista };
+}
+
+/** Frente RO, fase 2: grava o andamento de um passo do plano (ou do plano todo). Sem custo. */
+export const passoDoPlano = (mensagemId: string, planoId: string, patch: Record<string, unknown>) =>
+  chamarFuncao<{ plano: PlanoDoDiretor }>("estudio-arte", { acao: "plano_passo", mensagem_id: mensagemId, plano_id: planoId, ...patch });
+
+/** Frente RO, fase 2: volta a lâmina para a versão anterior (a atual fica guardada). Sem custo. */
+export const desfazerVersaoDaLamina = (trabalhoId: string, ordem: number, versao: number) =>
+  chamarFuncao<any>("estudio-arte", { acao: "desfazer_versao", trabalho_id: trabalhoId, ordem, versao });
+
+/** Frente RO, fase 2: "Esquecer" a regra que o Estúdio aprendeu e "Guardar como regra" o incerto. */
+export const esquecerRegraDoEstudio = (clientId: string, id: string, mensagemId?: string | null) =>
+  chamarFuncao<any>("estudio-arte", { acao: "aprendizado_esquecer", client_id: clientId, id, ...(mensagemId ? { mensagem_id: mensagemId } : {}) });
+export const guardarRegraDoEstudio = (clientId: string, texto: string, tipo: "evitar" | "preferencia", mensagemId?: string | null) =>
+  chamarFuncao<any>("estudio-arte", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo, ...(mensagemId ? { mensagem_id: mensagemId } : {}) });
 
 export interface CorpoDeAplicar {
   trabalhoId: string;

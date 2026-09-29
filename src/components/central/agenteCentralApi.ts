@@ -53,6 +53,8 @@ export interface Preparo {
   perguntas: PerguntaDoAgente[];
   dossie_versao: number | null;
   dossie_aviso: string | null;
+  /** Frente AG3: "Segui: ..." (regras do dono que pesaram na leitura). */
+  aprendizado?: unknown[];
 }
 
 export interface RitualDoAgente {
@@ -79,12 +81,31 @@ export interface Aplicado {
   ritual_erro?: string | null;
   /** Frente FS: motivo quando a IA não organizou as respostas (elas entraram como o dono escreveu). */
   ia_erro?: string | null;
+  /** Frente AG3: "Aprendi: ..." (com Esquecer ou Guardar) e "Segui: ...". */
+  aprendizado?: unknown[];
+}
+
+export interface Reescrito {
+  ritual: RitualDoAgente | null;
+  ritual_erro: string | null;
+  aprendizado?: unknown[];
 }
 
 async function chamar<T>(body: Record<string, unknown>): Promise<T> {
   // O modelo escolhido na Central (GPT-6 Luna, raciocínio máximo, por padrão) vale também para o agente.
   const { data, error } = await supabase.functions.invoke("agente-central", { body: { ...body, ...corpoDoModelo(escolhaGuardada()) } });
-  if (error) throw new Error("O agente não respondeu agora. Tente de novo.");
+  if (error) {
+    // Frente AG3: o motivo do servidor (403, 400 com mensagem) aparece em vez da frase genérica.
+    let mensagem = "";
+    try {
+      const ctx = (error as { context?: { clone?: () => Response } }).context;
+      const j = ctx && typeof ctx.clone === "function" ? await ctx.clone().json() : null;
+      mensagem = j && typeof j.mensagem === "string" ? j.mensagem : j && typeof j.error === "string" ? j.error : "";
+    } catch {
+      mensagem = "";
+    }
+    throw new Error(mensagem || "O agente não respondeu agora. Tente de novo.");
+  }
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== "object") throw new Error("Resposta vazia do agente.");
   if (typeof d.error === "string") throw new Error(String(d.mensagem || d.error));
@@ -107,6 +128,17 @@ export function aplicarRespostas(input: {
   return chamar<Aplicado>({
     action: "aplicar", client_id: input.clientId, ritual: input.ritual, leitura: input.leitura,
     perguntas: input.perguntas, respostas: input.respostas, contexto_extra: input.contextoExtra,
+  });
+}
+
+/**
+ * Frente AG3: reescreve o ritual de UM cliente com o dossiê de agora, sem
+ * reaplicar as respostas. A instrução do dono manda (e pode virar regra).
+ */
+export function reescreverRitual(input: { clientId: string; ritual: string; instrucao?: string; anterior?: string }): Promise<Reescrito> {
+  return chamar<Reescrito>({
+    action: "reescrever", client_id: input.clientId, ritual: input.ritual,
+    instrucao: (input.instrucao || "").slice(0, 1500), anterior: (input.anterior || "").slice(0, 4000),
   });
 }
 
@@ -137,14 +169,26 @@ export async function salvarEPublicarRitual(input: {
   ritual: RitualDoAgente;
   publicar: boolean;
   userId: string;
+  /**
+   * Frente AG3: rascunho já salvo numa tentativa anterior. Com ele, não nasce
+   * outro rascunho: só publica (ou registra o envio no grupo).
+   */
+  reportId?: string | null;
+  /** "grupo" = "Enviei no grupo": registra o envio (Ciclo, diário, dossiê) sem aviso no portal. */
+  canal?: "portal" | "grupo";
 }): Promise<{ reportId: string; publicado: boolean; avisos: string[] }> {
   const { clientId, ritual, userId } = input;
+  const canal = input.canal === "grupo" ? "grupo" : "portal";
   const avisos: string[] = [];
   const projectId = await projetoDoCliente(clientId);
-  const source = await readCentralReviewSource(clientId);
   const agora = new Date();
   const titulo = (ritual.title || `${NOME_DO_RITUAL[ritual.tipo] ?? "Atualização"} · ${agora.toLocaleDateString("pt-BR")}`).slice(0, 80);
   const proximo = completarProximoPasso(ritual.next_steps, ritual.body);
+  if (input.reportId) {
+    if (!input.publicar) return { reportId: input.reportId, publicado: false, avisos };
+    return await publicarRascunho({ id: input.reportId, clientId, projectId, ritual, titulo, proximo, userId, canal, avisos, metrics: null });
+  }
+  const source = await readCentralReviewSource(clientId);
   const dadosDaIA = ritual as unknown as Record<string, unknown>;
   const metrics: Record<string, unknown> = {
     ritual_type: ritual.tipo,
@@ -179,16 +223,36 @@ export async function salvarEPublicarRitual(input: {
   } as never);
 
   if (!input.publicar) return { reportId: id, publicado: false, avisos };
+  return await publicarRascunho({ id, clientId, projectId, ritual, titulo, proximo, userId, canal, avisos, metrics });
+}
 
+/**
+ * Publica (portal) ou registra o envio (grupo) de um rascunho do agente.
+ * Frente AG3: falhar aqui não perde o rascunho: volta publicado=false com o
+ * motivo nos avisos e o id, para o "Publicar no portal" tentar só isto de novo.
+ */
+async function publicarRascunho(p: {
+  id: string; clientId: string; projectId: string; ritual: RitualDoAgente; titulo: string; proximo: string;
+  userId: string; canal: "portal" | "grupo"; avisos: string[]; metrics: Record<string, unknown> | null;
+}): Promise<{ reportId: string; publicado: boolean; avisos: string[] }> {
+  const { id, clientId, projectId, ritual, titulo, proximo, userId, canal, avisos } = p;
+  let metrics = p.metrics;
+  if (!metrics) {
+    const { data: atual } = await supabase.from("reports").select("metrics").eq("id", id).maybeSingle();
+    metrics = ((atual as { metrics?: Record<string, unknown> } | null)?.metrics ?? {}) as Record<string, unknown>;
+  }
   const { error } = await supabase.from("reports").update({
     status: "published",
     summary: ritual.body,
     next_steps: proximo,
-    metrics: { ...metrics, sent_channel: "portal", sent_at: new Date().toISOString() } as never,
+    metrics: { ...metrics, sent_channel: canal === "grupo" ? "whatsapp_group" : "portal", sent_at: new Date().toISOString() } as never,
   }).eq("id", id);
-  if (error) throw new Error(`Rascunho salvo, mas não publicado: ${error.message}`);
+  if (error) {
+    avisos.push(`Rascunho salvo, mas não ${canal === "grupo" ? "registrado" : "publicado"}: ${error.message}`);
+    return { reportId: id, publicado: false, avisos };
+  }
 
-  await notifyUser(clientId, `Nova atualização disponível: ${titulo}`, "report", "/onde-estamos");
+  if (canal === "portal") await notifyUser(clientId, `Nova atualização disponível: ${titulo}`, "report", "/onde-estamos");
   const registrou = await recordMemory({
     clientId,
     projectId,
@@ -197,7 +261,7 @@ export async function salvarEPublicarRitual(input: {
     content: [ritual.body, proximo ? `Próximo passo combinado: ${proximo}` : ""].filter(Boolean).join("\n\n"),
     source: "central",
     tags: [ritual.tipo || "ritual", "agente-central"],
-    metadata: { report_id: id, ritual_type: ritual.tipo, written_by: "ai", sent_channel: "portal", aprovado_por: userId, aprovado_via: "agente_central" },
+    metadata: { report_id: id, ritual_type: ritual.tipo, written_by: "ai", sent_channel: canal === "grupo" ? "whatsapp_group" : "portal", aprovado_por: userId, aprovado_via: "agente_central" },
     clientVisible: true,
   });
   if (!registrou) avisos.push("Publicado, mas o diário não registrou.");

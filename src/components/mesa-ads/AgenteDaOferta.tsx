@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
@@ -279,6 +281,16 @@ export default function AgenteDaOferta({
               <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
                 <TextoDoAgente texto={m.conteudo} />
               </Bolha>
+            )}
+            {/* Frente AG3: "Aprendi" (com Esquecer) e "Segui" do agente de tráfego. */}
+            {m.papel === "agente" && (
+              <div className="ml-8">
+                <AprendizadoDoAgente
+                  anexos={m.anexos}
+                  onEsquecer={(id) => esquecerRegraAprendida("mesa-ads", id, { client_id: clientId })}
+                  onGuardar={(texto, tipo) => guardarRegraAprendida("mesa-ads", { texto, categoria: tipo }, { client_id: clientId })}
+                />
+              </div>
             )}
             {imagens.length > 0 && (
               <div className="ml-8 flex flex-wrap justify-end">

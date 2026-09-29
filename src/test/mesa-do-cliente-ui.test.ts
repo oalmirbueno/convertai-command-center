@@ -265,7 +265,9 @@ describe("estimativa antes de toda ação que gasta", () => {
     expect(estudio).toContain("partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}");
     expect(estudio.slice(estudio.indexOf('titulo="Escrever a legenda"'), estudio.indexOf('acao: "legenda"'))).toContain("partes={");
     expect(cardEstudio).toContain("executar={onGerar}");
-    expect(cardEstudio).toContain("executar={() => onAjustar(instrucao.trim())}");
+    // Frente RO, fase 2: o ajuste leva as imagens anexadas e trata a proposta do pedido vago (ajustarComMais chama onAjustar).
+    expect(cardEstudio).toContain("executar={() => ajustarComMais(instrucao.trim())}");
+    expect(cardEstudio).toContain("return await onAjustar(instr, tudo);");
     expect(cardEstudio).toContain("executar={onConferir}");
     // Referência
     expect(referencias.slice(referencias.indexOf('titulo="Ler a referência"'), referencias.indexOf('acao: "ler"'))).toContain("partes={");
@@ -351,7 +353,7 @@ describe("Estúdio versão 3 (pedido do dono em 23/09)", () => {
     expect(seletorDeAreas).toContain("onPointerDown");
     expect(seletorDeAreas).toContain("setPointerCapture");
     expect(seletorDeAreas).toContain('className="absolute rounded-sm border-2 border-primary');
-    expect(cardEstudio).toContain("executar={() => onAjustar(instrucao.trim(), { areas })}");
+    expect(cardEstudio).toContain("executar={() => ajustarComMais(instrucao.trim(), { areas })}");
     expect(cardEstudio).toContain('{ tipo: "fundo", imagem_id: fundoId || undefined }');
     const ajuste = estudio.slice(estudio.indexOf('acao: "ajustar_card"'), estudio.indexOf("atualizar();", estudio.indexOf('acao: "ajustar_card"')));
     expect(ajuste).toContain("areas: opcoes.areas && opcoes.areas.length ? opcoes.areas : undefined");

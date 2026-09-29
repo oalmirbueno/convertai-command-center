@@ -1632,3 +1632,38 @@ export async function recortarNaProporcao(
     return null;
   }
 }
+
+/**
+ * Frente RO, fase 2 (29/09): "usa esta foto aqui, igual" no Ajustar com área
+ * marcada. A foto entra INTACTA na área (união das áreas, em frações do
+ * quadro), recortada pelo foco dela (cobrirComFoco) e colada sobre a arte
+ * editada: nenhum pixel da foto é refeito pelo gerador. A foto chega na cópia
+ * leve (até 2048 px), então a conta de CPU é a de uma decodificação a mais.
+ */
+export async function colarFotoNaArea(arte: Uint8Array, foto: Uint8Array, area: Area): Promise<Uint8Array> {
+  const img = await decodificar(arte);
+  const W = img.width, H = img.height;
+  const x0 = Math.max(0, Math.round(area.x0 * W));
+  const y0 = Math.max(0, Math.round(area.y0 * H));
+  const x1 = Math.min(W, Math.round(area.x1 * W));
+  const y1 = Math.min(H, Math.round(area.y1 * H));
+  const l = x1 - x0, a = y1 - y0;
+  if (l < 8 || a < 8) return arte;
+  const f = await decodificar(foto);
+  // Reduz antes de recortar (limite de CPU): a área raramente passa de 1100 px.
+  const reduzida = f.width > 2 * l && f.height > 2 * a ? f.resize(Math.round(f.width / 2), Math.round(f.height / 2)) : f;
+  const recorte = cobrirComFoco(reduzida, l, a);
+  img.composite(recorte, x0, y0);
+  return await img.encode(1);
+}
+
+/** União das áreas marcadas (frações), para colar a foto exata numa caixa só. */
+export function uniaoDasAreas(areas: Area[]): Area | null {
+  if (!areas.length) return null;
+  return {
+    x0: Math.min(...areas.map((a) => a.x0)),
+    y0: Math.min(...areas.map((a) => a.y0)),
+    x1: Math.max(...areas.map((a) => a.x1)),
+    y1: Math.max(...areas.map((a) => a.y1)),
+  };
+}

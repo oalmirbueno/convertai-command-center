@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ListPlus, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ExternalLink, ListPlus, Loader2, MessageCircle, PenLine, RefreshCw, Send, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -9,10 +10,12 @@ import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { botao, campoTexto, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import {
-  aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, salvarEPublicarRitual,
-  type ClienteDoAgente,
+  aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, reescreverRitual, salvarEPublicarRitual,
+  type Aplicado, type ClienteDoAgente,
 } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
 import {
@@ -214,6 +217,82 @@ function SugestoesRecentes() {
   );
 }
 
+/**
+ * Frente AG3 (29/09): o que dá para fazer com um ritual pronto, sem sair do
+ * agente. "Reescrever" pede outra versão (com instrução opcional, que também
+ * ensina o agente); "Publicar no portal" e "Enviei no grupo" registram o envio
+ * do rascunho (Ciclo, diário e dossiê); "Abrir a ficha" leva ao cliente.
+ */
+function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar }: {
+  item: ItemDaRodada;
+  ritual: string;
+  ocupado: boolean;
+  onReescrever: (instrucao: string) => Promise<void>;
+  onEnviar: (canal: "portal" | "grupo") => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [instrucao, setInstrucao] = useState("");
+  const [fazendo, setFazendo] = useState<"reescrever" | "portal" | "grupo" | null>(null);
+  const travado = ocupado || fazendo !== null;
+  const rodar = async (qual: "reescrever" | "portal" | "grupo") => {
+    if (travado) return;
+    setFazendo(qual);
+    try {
+      if (qual === "reescrever") {
+        await onReescrever(instrucao.trim());
+        // A instrução só some quando a nova versão chegou (se falhar, fica para tentar de novo).
+        setInstrucao("");
+        setAberto(false);
+      } else {
+        await onEnviar(qual);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível agora.");
+    } finally {
+      setFazendo(null);
+    }
+  };
+  return (
+    <div className="mt-2" data-acoes-do-ritual={ritual}>
+      <div className="flex min-w-0 flex-wrap items-center">
+        <button type="button" onClick={() => setAberto((v) => !v)} disabled={travado} aria-expanded={aberto} className={juntar(botao.secundario, "mb-1 mr-1.5 h-8 px-2.5 text-[12px]")}>
+          {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PenLine className="mr-1 h-3.5 w-3.5" />} Reescrever
+        </button>
+        {!item.publicado && item.reportId && (
+          <>
+            <button type="button" onClick={() => void rodar("portal")} disabled={travado} className={juntar(botao.secundario, "mb-1 mr-1.5 h-8 px-2.5 text-[12px]")}>
+              {fazendo === "portal" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />} Publicar no portal
+            </button>
+            <button type="button" onClick={() => void rodar("grupo")} disabled={travado} className={juntar(botao.secundario, "mb-1 mr-1.5 h-8 px-2.5 text-[12px]")}>
+              {fazendo === "grupo" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="mr-1 h-3.5 w-3.5" />} Enviei no grupo
+            </button>
+          </>
+        )}
+        <Link to={`/clientes?client=${item.cliente.id}`} className={juntar(botao.discreto, "mb-1 h-8 px-2 text-[12px]")}>
+          <ExternalLink className="mr-1 h-3.5 w-3.5" /> Abrir a ficha
+        </Link>
+      </div>
+      {aberto && (
+        <div className="mt-1">
+          <textarea
+            value={instrucao}
+            onChange={(e) => setInstrucao(e.target.value)}
+            rows={2}
+            aria-label={`Como reescrever o ritual de ${item.cliente.nome}`}
+            placeholder="O que mudar (opcional). Ex.: mais curto, sem falar de verba."
+            className={juntar(campoTexto, conversa.campo, "min-h-[56px]")}
+          />
+          <div className="mt-1 flex justify-end">
+            <button type="button" onClick={() => void rodar("reescrever")} disabled={travado} className={juntar(botao.primario, "h-8 px-3 text-[12px]")}>
+              {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} Escrever de novo
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function novoItem(c: ClienteDoAgente): ItemDaRodada {
   return {
     cliente: c, incluir: true, situacao: "fila", preparo: null, respostas: ["", ""], contexto: "",
@@ -305,7 +384,7 @@ export default function AgenteDaCentral() {
       atualizarItem(c.id, (i) => ({ ...i, situacao: "lendo", erro: null }));
       try {
         const p = await prepararCliente(c.id, ritual);
-        atualizarItem(c.id, (i) => ({ ...i, situacao: "perguntas", preparo: p, respostas: p.perguntas.map((_, k) => i.respostas[k] ?? "") }));
+        atualizarItem(c.id, (i) => ({ ...i, situacao: "perguntas", preparo: p, respostas: p.perguntas.map((_, k) => i.respostas[k] ?? ""), aprendizado: p.aprendizado ?? [] }));
       } catch (e) {
         atualizarItem(c.id, (i) => ({ ...i, situacao: "erro", erro: e instanceof Error ? e.message : "Falha ao ler." }));
       }
@@ -328,31 +407,47 @@ export default function AgenteDaCentral() {
       const preparo = item.preparo!;
       atualizarItem(c.id, (i) => ({ ...i, situacao: "aplicando", erro: null }));
       try {
-        const contexto = [item.contexto.trim(), atual.contextoGeral.trim() ? `Para todos: ${atual.contextoGeral.trim()}` : ""].filter(Boolean).join("\n");
-        const ap = await aplicarRespostas({
-          clientId: c.id, ritual: atual.ritual, leitura: preparo.leitura, perguntas: preparo.perguntas,
-          respostas: item.respostas, contextoExtra: contexto,
-        });
-        atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, situacao: ap.ritual ? "publicando" : "pronto" }));
+        // Frente AG3: a nova tentativa não reaplica o que já entrou no dossiê (duplicaria as confirmações).
+        // Já aplicado sem ritual: só escreve o ritual. Já com ritual e sem rascunho: só salva e publica.
+        let ap: Aplicado;
+        if (item.aplicado && !item.aplicado.ritual) {
+          const rr = await reescreverRitual({ clientId: c.id, ritual: atual.ritual });
+          ap = { ...item.aplicado, ritual: rr.ritual, ritual_erro: rr.ritual_erro };
+        } else if (item.aplicado && item.aplicado.ritual) {
+          ap = item.aplicado;
+        } else {
+          const contexto = [item.contexto.trim(), atual.contextoGeral.trim() ? `Para todos: ${atual.contextoGeral.trim()}` : ""].filter(Boolean).join("\n");
+          ap = await aplicarRespostas({
+            clientId: c.id, ritual: atual.ritual, leitura: preparo.leitura, perguntas: preparo.perguntas,
+            respostas: item.respostas, contextoExtra: contexto,
+          });
+        }
+        atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, situacao: ap.ritual ? "publicando" : "erro", aprendizado: ap.aprendizado?.length ? ap.aprendizado : i.aprendizado }));
         // Frente FS: a IA que não organizou as respostas não some em silêncio.
         if (ap.ia_erro) toast.warning(`${c.nome}: a IA não organizou as respostas agora; elas entraram como foram escritas.`, { description: `Motivo: ${ap.ia_erro}` });
         if (ap.ritual) {
-          const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id });
-          atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, situacao: "pronto" }));
+          const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id, reportId: item.reportId });
+          atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, canal: pub.publicado ? "portal" : null, situacao: "pronto" }));
           if (pub.avisos.length) toast.warning(`${c.nome}: ${pub.avisos.join(" ")}`);
         } else {
-          atualizarItem(c.id, (i) => ({ ...i, erro: `Dossiê atualizado, mas a IA não escreveu o ritual agora.${ap.ritual_erro ? ` Motivo: ${ap.ritual_erro}` : ""}` }));
+          // Antes ficava "Pronto" sem ritual, sem jeito de tentar de novo. Agora é erro: "Aplicar" tenta só o ritual.
+          atualizarItem(c.id, (i) => ({ ...i, erro: `Dossiê atualizado, mas a IA não escreveu o ritual agora.${ap.ritual_erro ? ` Motivo: ${ap.ritual_erro}` : ""} Toque em Aplicar de novo para tentar só o ritual.` }));
         }
       } catch (e) {
         atualizarItem(c.id, (i) => ({ ...i, situacao: "erro", erro: e instanceof Error ? e.message : "Falha ao aplicar." }));
       }
     });
     setRodando(null);
-    setEtapa((e) => (e === "aplicar" ? "copiar" : e));
+    // Frente AG3: só vai para Copiar quando há ritual pronto; com erro, fica em Aplicar mostrando o motivo.
+    const depois = rodadaRef.current?.itens.filter((i) => i.incluir) ?? [];
+    const comErro = depois.filter((i) => i.situacao === "erro").length;
+    const comRitual = depois.some((i) => i.situacao === "pronto" && i.aplicado?.ritual);
+    setEtapa((e) => (e === "aplicar" && comRitual && !comErro ? "copiar" : e));
     for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente", "agente-central-tarefas-sugeridas"]) {
       void queryClient.invalidateQueries({ queryKey: [k] });
     }
-    toast.success("Rodada aplicada. Os rituais estão prontos para copiar.");
+    if (comErro) toast.warning(`${comErro} cliente(s) não deram certo. O motivo está na lista; toque em Aplicar de novo para tentar só o que faltou.`);
+    else toast.success("Rodada aplicada. Os rituais estão prontos para copiar.");
   };
 
   const itens = rodada?.itens ?? [];
@@ -374,6 +469,38 @@ export default function AgenteDaCentral() {
     const primeiro = lidos.find((i) => i.situacao !== "pronto" && perguntasSemResposta(i) > 0) ?? lidos.find((i) => i.situacao !== "pronto");
     if (primeiro) setClienteAberto(primeiro.cliente.id);
   }, [etapa, clienteAberto, lidos]);
+
+  // Frente AG3: reescrever o ritual de um cliente (a nova versão entra no lugar; rascunho novo quando o antigo já saiu).
+  const reescreverDoItem = async (item: ItemDaRodada, instrucao: string) => {
+    const atual = rodadaRef.current;
+    if (!atual || !item.aplicado?.ritual) return;
+    const rr = await reescreverRitual({ clientId: item.cliente.id, ritual: atual.ritual, instrucao, anterior: item.aplicado.ritual.body });
+    if (!rr.ritual) throw new Error(`A IA não reescreveu agora.${rr.ritual_erro ? ` Motivo: ${rr.ritual_erro}` : ""}`);
+    const novoRitual = rr.ritual;
+    atualizarItem(item.cliente.id, (i) => ({
+      ...i,
+      aplicado: i.aplicado ? { ...i.aplicado, ritual: novoRitual } : i.aplicado,
+      // O que já saiu fica como está; a versão nova nasce rascunho, para publicar ou enviar de novo.
+      reportId: null, publicado: false, canal: null, tarefasCriadas: [],
+      aprendizado: rr.aprendizado?.length ? rr.aprendizado : i.aprendizado,
+    }));
+    if (user) {
+      const pub = await salvarEPublicarRitual({ clientId: item.cliente.id, ritual: novoRitual, publicar: false, userId: user.id });
+      atualizarItem(item.cliente.id, (i) => ({ ...i, reportId: pub.reportId }));
+    }
+    toast.success(`Ritual de ${item.cliente.nome} reescrito. Ficou como rascunho: publique ou marque como enviado.`);
+  };
+
+  // Frente AG3: "Publicar no portal" ou "Enviei no grupo" de um rascunho do agente.
+  const enviarDoItem = async (item: ItemDaRodada, canal: "portal" | "grupo") => {
+    if (!user || !item.aplicado?.ritual || !item.reportId) return;
+    const pub = await salvarEPublicarRitual({ clientId: item.cliente.id, ritual: item.aplicado.ritual, publicar: true, userId: user.id, reportId: item.reportId, canal });
+    atualizarItem(item.cliente.id, (i) => ({ ...i, publicado: pub.publicado, canal: pub.publicado ? canal : null }));
+    if (!pub.publicado) throw new Error(pub.avisos.join(" ") || "Não foi possível agora.");
+    if (pub.avisos.length) toast.warning(`${item.cliente.nome}: ${pub.avisos.join(" ")}`);
+    toast.success(canal === "grupo" ? `Envio de ${item.cliente.nome} registrado: histórico, dossiê e Ciclo atualizados.` : `Ritual de ${item.cliente.nome} publicado no portal.`);
+    for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente"]) void queryClient.invalidateQueries({ queryKey: [k] });
+  };
 
   const copiarTodos = async () => {
     const texto = prontos.map((i) => `${i.cliente.nome}\n\n${i.aplicado!.ritual!.body}`).join("\n\n----------\n\n");
@@ -500,6 +627,7 @@ export default function AgenteDaCentral() {
                   </div>
                   {i.preparo?.leitura.onde_estamos && <p className="text-[13px] leading-relaxed text-muted-foreground">{i.preparo.leitura.onde_estamos}</p>}
                   {i.preparo?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.preparo.dossie_aviso}</p>}
+                  <AprendizadoDoAgente anexos={i.preparo?.aprendizado} />
                   {(i.preparo?.perguntas ?? []).map((p, k) => (
                     <div key={k} className="mt-3">
                       <p className="text-[14px] font-medium text-foreground">{p.pergunta}</p>
@@ -586,7 +714,7 @@ export default function AgenteDaCentral() {
                 <div className="flex min-w-0 flex-wrap items-center">
                   <p className="mr-2 min-w-0 truncate text-[14px] font-semibold text-foreground">{i.cliente.nome}</p>
                   <span className={juntar(etiqueta, "mr-2", i.publicado ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
-                    {i.publicado ? "Publicado no portal" : "Rascunho na fila da Central"}
+                    {i.publicado ? (i.canal === "grupo" ? "Enviado no grupo" : "Publicado no portal") : "Rascunho na fila da Central"}
                   </span>
                   {i.aplicado?.dossie_versao != null && <span className="text-[12px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
                   <button
@@ -601,6 +729,18 @@ export default function AgenteDaCentral() {
                 {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">{aviso}</p>}
                 {i.aplicado?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.aplicado.dossie_aviso}</p>}
                 <p className="mt-1.5 whitespace-pre-line text-[14px] leading-relaxed text-foreground/90">{r.body}</p>
+                <AcoesDoRitual
+                  item={i}
+                  ritual={rodada?.ritual ?? ""}
+                  ocupado={!!rodando}
+                  onReescrever={(instrucao) => reescreverDoItem(i, instrucao)}
+                  onEnviar={(canal) => enviarDoItem(i, canal)}
+                />
+                <AprendizadoDoAgente
+                  anexos={i.aprendizado}
+                  onEsquecer={(id) => esquecerRegraAprendida("agente-central", id, { client_id: i.cliente.id })}
+                  onGuardar={(texto, tipo) => guardarRegraAprendida("agente-central", { texto, categoria: tipo }, { client_id: i.cliente.id })}
+                />
                 {i.reportId && (
                   <TarefasDoRitual
                     clientId={i.cliente.id}

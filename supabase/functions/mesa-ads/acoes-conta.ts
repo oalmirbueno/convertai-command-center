@@ -54,14 +54,9 @@ export const naMeta = (t: TipoDeAcao) => TIPOS_NA_META.indexOf(t) >= 0;
  * tarefa continuam com Confirmar.
  */
 export function acaoSemRisco(i: Pick<ItemDaAcaoNaConta, "tipo" | "variacao_pct" | "para" | "de">): boolean {
-  if (i.tipo === "pausar" || i.tipo === "renomear" || i.tipo === "vincular_criativo") return true;
-  if (i.tipo === "orcamento") {
-    const para = i.para && typeof i.para.orcamento_diario_brl === "number" ? i.para.orcamento_diario_brl : null;
-    const de = i.de ? i.de.orcamento_diario_brl : null;
-    if (para !== null && de !== null) return para < de;
-    return typeof i.variacao_pct === "number" && i.variacao_pct < 0;
-  }
-  return false;
+  // Frente AG3 (29/09), regra inegociável do dono: verba (para cima OU para baixo), ativar e criar
+  // campanha só com Confirmar. Antes, baixar verba ia sozinho, e "sobe 20% a verba" chegou a virar R$ 20.
+  return i.tipo === "pausar" || i.tipo === "renomear" || i.tipo === "vincular_criativo";
 }
 
 /** Teto de variação do orçamento diário por confirmação (30% para cima ou para baixo). */
@@ -131,9 +126,25 @@ export function criativosComApelido(lista: { id: string; nome: string | null; fo
     .map((c, i) => ({ ref: `k${i + 1}`, id: c.id, nome: limpo(c.nome, 160) || `Criativo ${i + 1}`, formato: c.formato, ad_id: c.ad_id, tem_arte: c.tem_arte }));
 }
 
-/** Bloco do prompt: um alvo por linha, só apelido, nível, nome e status (nunca o id). */
+/** Chave de nome para achar homônimos (mesmo nível, mesmo nome sem caixa e sem espaço extra). */
+const chaveDoNome = (a: Pick<Alvo, "nivel" | "nome">) => `${a.nivel}|${a.nome.toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/**
+ * Frente AG3 (29/09): alvos com nome repetido no mesmo nível (a Verzelo tinha duas campanhas
+ * "[NÃO ATIVAR] Tentativa técnica incompleta | Reel Direct | 15 SET", ids terminados em 33120137 e
+ * 20470137: os 4 últimos dígitos eram iguais). O agente não age sozinho neles e o prompt mostra os
+ * 8 últimos dígitos do id para diferenciar.
+ */
+export function alvosComNomeRepetido(alvos: Alvo[]): Set<string> {
+  const conta = new Map<string, number>();
+  for (const a of alvos) conta.set(chaveDoNome(a), (conta.get(chaveDoNome(a)) ?? 0) + 1);
+  return new Set(alvos.filter((a) => (conta.get(chaveDoNome(a)) ?? 0) > 1).map((a) => a.meta_id));
+}
+
+/** Bloco do prompt: um alvo por linha, só apelido, nível, nome e status (nunca o id; homônimo leva o final do id). */
 export function blocoDosAlvos(alvos: Alvo[], criativos: CriativoDaMesa[]): string {
-  const linha = (a: Alvo) => `${a.ref} | ${NOME_DO_NIVEL[a.nivel]} | ${a.nome}${a.campanha ? ` (campanha ${limpo(a.campanha, 80)})` : ""} | ${a.status ?? "status não lido"}${a.orcamento_diario_brl != null ? ` | R$ ${a.orcamento_diario_brl.toFixed(2)} por dia` : ""}`;
+  const repetidos = alvosComNomeRepetido(alvos);
+  const linha = (a: Alvo) => `${a.ref} | ${NOME_DO_NIVEL[a.nivel]} | ${a.nome}${repetidos.has(a.meta_id) ? ` [nome repetido; final ${a.meta_id.slice(-8)}]` : ""}${a.campanha ? ` (campanha ${limpo(a.campanha, 80)})` : ""} | ${a.status ?? "status não lido"}${a.orcamento_diario_brl != null ? ` | R$ ${a.orcamento_diario_brl.toFixed(2)} por dia` : ""}`;
   const partes = [
     "\nALVOS_DAS_ACOES (apelido | nível | nome | status | orçamento). Use SÓ estes apelidos em acoes:",
     ...(alvos.length ? alvos.map(linha) : ["nenhum alvo lido da conta"]),
@@ -144,7 +155,7 @@ export function blocoDosAlvos(alvos: Alvo[], criativos: CriativoDaMesa[]): strin
 }
 
 /** Texto da regra no pedido do agente sênior. */
-export const REGRA_DAS_ACOES_DA_CONTA = `- acoes: o que você FAZ na conta. Quando a equipe pede para fazer ("faz", "resolve", "otimiza", "pausa esse"), o painel já executa sozinho o que é seguro (pausar, baixar verba, renomear, ligar criativo), relendo a Meta antes, com Desfazer; o que aumenta gasto, cria campanha ou ativa algo novo fica para a equipe confirmar num clique. Proponha quando a análise pedir ou quando a equipe pedir. Cada item: tipo, ref (apelido de ALVOS_DAS_ACOES), criativo_ref (apelido de CRIATIVOS_DA_MESA_PARA_ACOES, só em trocar_criativo e vincular_criativo), texto (novo nome em renomear; título em tarefa_equipe), variacao_pct (só em orcamento: de -30 a 30; o painel limita a 30% por vez) e motivo com o número que justifica. Tipos: pausar e ativar (campanha, conjunto ou anúncio); orcamento (campanha ou conjunto); renomear; duplicar_anuncio (anúncio vencedor vai para um conjunto novo pausado); trocar_criativo (sobe o criativo da Mesa como anúncio novo pausado no conjunto do anúncio ref); vincular_criativo (liga o anúncio ao criativo da Mesa); tarefa_equipe (o que só uma pessoa faz, sem ref); plano_de_teste (leva o plano_de_teste preenchido, sem ref); montar_campanha_do_plano (sem ref, só com PLANO_ABERTO: monta na Meta a campanha do plano com os criativos aprovados, tudo pausado). Nunca pause o último anúncio ativo sem motivo forte. Use SÓ apelidos das listas; nunca escreva número de id; na dúvida sobre qual, pergunte e não proponha. No máximo ${MAX_ACOES_POR_PEDIDO} itens. Sem ação a propor, lista vazia.`;
+export const REGRA_DAS_ACOES_DA_CONTA = `- acoes: o que você FAZ na conta. Quando a equipe pede para fazer ("faz", "resolve", "otimiza", "pausa esse"), o painel já executa sozinho o que é seguro (pausar, renomear, ligar criativo), relendo a Meta antes, com Desfazer; verba (subir ou baixar), ativar, duplicar, subir criativo e criar campanha ficam SEMPRE para a equipe confirmar num clique. Nome com "[nome repetido]" na lista: diga qual (pelo final do id) ou pergunte; nunca escolha sozinho. Proponha quando a análise pedir ou quando a equipe pedir. Cada item: tipo, ref (apelido de ALVOS_DAS_ACOES), criativo_ref (apelido de CRIATIVOS_DA_MESA_PARA_ACOES, só em trocar_criativo e vincular_criativo), texto (novo nome em renomear; título em tarefa_equipe), variacao_pct (só em orcamento: de -30 a 30; o painel limita a 30% por vez) e motivo com o número que justifica. Tipos: pausar e ativar (campanha, conjunto ou anúncio); orcamento (campanha ou conjunto); renomear; duplicar_anuncio (anúncio vencedor vai para um conjunto novo pausado); trocar_criativo (sobe o criativo da Mesa como anúncio novo pausado no conjunto do anúncio ref); vincular_criativo (liga o anúncio ao criativo da Mesa); tarefa_equipe (o que só uma pessoa faz, sem ref); plano_de_teste (leva o plano_de_teste preenchido, sem ref); montar_campanha_do_plano (sem ref, só com PLANO_ABERTO: monta na Meta a campanha do plano com os criativos aprovados, tudo pausado). Nunca pause o último anúncio ativo sem motivo forte. Use SÓ apelidos das listas; nunca escreva número de id; na dúvida sobre qual, pergunte e não proponha. No máximo ${MAX_ACOES_POR_PEDIDO} itens. Sem ação a propor, lista vazia.`;
 
 // ------------------------------------------------------------------ normalização
 

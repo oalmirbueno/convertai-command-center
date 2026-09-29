@@ -12,6 +12,12 @@ import {
 import { AlertTriangle, ClipboardCopy, History, Lightbulb, ListChecks, TrendingUp } from "lucide-react";
 import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 
+/** Frente AG3: vínculo só com painel_task_id também acha a tarefa (antes aparecia "(sem tarefa vinculada)"). */
+function tarefaDoVinculo<T>(v: { kanban_task_id?: string | null }, tarefas: Map<string, T>): T | null {
+  const id = v.kanban_task_id || (v as { painel_task_id?: string | null }).painel_task_id;
+  return id ? tarefas.get(String(id)) ?? null : null;
+}
+
 /**
  * Entrar no agente: tudo o que ele fez, como está indo e o que melhorar.
  *
@@ -80,15 +86,17 @@ export default function PerfilDoAgente({
     [vinculos, operador],
   );
 
-  const { data: runs = [] } = useQuery({
+  const { data: runs = [], isError: runsFalhou } = useQuery({
     queryKey: ["agente-runs", operador?.id],
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      // Frente AG3: a leitura que falha vira erro na tela (antes dizia "Nada a corrigir").
+      const { data, error } = await (supabase as any)
         .from("operator_runs")
         .select("id, run_key, status, attempt, started_at, heartbeat_at, finished_at, error")
         .eq("operator_id", operador!.id)
         .order("started_at", { ascending: false })
         .limit(30);
+      if (error) throw new Error(error.message);
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: Boolean(operador?.id),
@@ -114,15 +122,16 @@ export default function PerfilDoAgente({
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   });
 
-  const { data: trilha = [] } = useQuery({
+  const { data: trilha = [], isError: trilhaFalhou } = useQuery({
     queryKey: ["agente-trilha", operador?.id],
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("operator_audit_log")
         .select("id, occurred_at, actor, action, old_status, new_status, evidence, from_cron")
         .eq("operator_id", operador!.id)
         .order("occurred_at", { ascending: false })
         .limit(40);
+      if (error) throw new Error(error.message);
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: Boolean(operador?.id),
@@ -186,11 +195,15 @@ export default function PerfilDoAgente({
         texto: "Nenhuma execução ainda. Leia o quadro, escolha uma tarefa da lista de disponíveis e reporte started.",
       });
     }
+    // Frente AG3: sem conseguir ler as execuções, não dá para dizer que está tudo certo.
+    if (runsFalhou || trilhaFalhou) {
+      lista.push({ grave: true, texto: "Não consegui ler as execuções ou a trilha deste agente agora. Recarregue antes de concluir que está tudo certo." });
+    }
     if (lista.length === 0) {
       lista.push({ grave: false, texto: "Nada a corrigir: evidência em dia, sem falhas e sem tarefa parada." });
     }
     return lista;
-  }, [numeros]);
+  }, [numeros, runsFalhou, trilhaFalhou]);
 
   const comandoDeAcionamento = useMemo(() => {
     if (!operador) return "";
@@ -198,7 +211,7 @@ export default function PerfilDoAgente({
       .filter((v) => !["done"].includes(v.status))
       .slice(0, 6)
       .map((v) => {
-        const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+        const t = tarefaDoVinculo(v, tarefas);
         return `- ${t?.title || v.last_action || "(tarefa)"} · ${v.status}${v.block_reason ? " · bloqueio: " + v.block_reason : ""}`;
       });
     return [
@@ -329,7 +342,7 @@ export default function PerfilDoAgente({
                     {[...meus]
                       .sort((a, b) => ORDEM_DO_ESTADO.indexOf(a.status) - ORDEM_DO_ESTADO.indexOf(b.status))
                       .map((v) => {
-                        const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+                        const t = tarefaDoVinculo(v, tarefas);
                         const tarefaId = v.kanban_task_id || v.painel_task_id;
                         return (
                           <li key={v.id} className="min-w-0 py-2.5">

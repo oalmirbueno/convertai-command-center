@@ -87,7 +87,7 @@ export default function DiarioDaExecucao({
   const [anexos, setAnexos] = useState<Array<{ name: string; url: string }>>([]);
   const [subindo, setSubindo] = useState(false);
 
-  const { data: entradas = [], isLoading } = useQuery({
+  const { data: entradas = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["diario", linkId],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -121,19 +121,39 @@ export default function DiarioDaExecucao({
   const subirArquivo = async (file: File) => {
     setSubindo(true);
     try {
-      // O mesmo balde que o resto do painel usa; caminho carimbado com o
-      // vínculo para o anexo nunca ficar órfão de contexto.
+      // Frente AG3 (29/09): o balde "files" é privado e só aceita caminho com dono (cliente ou tarefa).
+      // Antes ia para execucao/<vínculo>/, a regra do Storage recusava e o link público nunca abria.
+      // Agora vai para task-attachments/<tarefa>/execucao/ e o anexo guarda files://caminho (o link
+      // assinado é pedido na hora de abrir; o agente lê o mesmo caminho pelo MCP).
+      const { data: vinculo, error: erroVinculo } = await (supabase as any)
+        .from("operator_task_links").select("kanban_task_id, painel_task_id").eq("id", linkId).maybeSingle();
+      if (erroVinculo) throw new Error(erroVinculo.message);
+      const tarefa = vinculo ? (vinculo.kanban_task_id || vinculo.painel_task_id) : null;
+      if (!tarefa) throw new Error("Este vínculo não tem tarefa: anexo precisa de uma tarefa para ficar guardado.");
       const ext = file.name.split(".").pop() || "bin";
-      const path = `execucao/${linkId}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+      const path = `task-attachments/${tarefa}/execucao/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
       const { error } = await supabase.storage.from("files").upload(path, file);
       if (error) throw new Error(error.message);
-      const { data } = supabase.storage.from("files").getPublicUrl(path);
-      setAnexos((a) => [...a, { name: file.name, url: data.publicUrl }]);
+      setAnexos((a) => [...a, { name: file.name, url: `files://${path}` }]);
     } catch (e) {
       toast.error(`Não subiu: ${e instanceof Error ? e.message : e}`);
     } finally {
       setSubindo(false);
     }
+  };
+
+  /** Abre o anexo: caminho privado (files://) pede um link assinado curto; link antigo abre como estava. */
+  const abrirAnexo = async (url: string) => {
+    if (!url.startsWith("files://")) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const { data, error } = await supabase.storage.from("files").createSignedUrl(url.slice("files://".length), 600);
+    if (error || !data?.signedUrl) {
+      toast.error(`Não abriu o anexo: ${error?.message || "tente de novo"}`);
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const enviar = useMutation({
@@ -171,6 +191,12 @@ export default function DiarioDaExecucao({
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-5 py-4">
           {isLoading ? (
             <Carregando linhas={3} rotulo="Carregando o diário" />
+          ) : isError ? (
+            // Frente AG3: a leitura que falha não finge "Ainda não há entradas".
+            <div className="space-y-2" role="alert">
+              <p className="text-[13px] text-destructive">Não consegui ler o diário agora.</p>
+              <button type="button" onClick={() => void refetch()} className={botao.secundario}>Tentar de novo</button>
+            </div>
           ) : entradas.length === 0 ? (
             <EstadoVazio
               compacto
@@ -212,15 +238,14 @@ export default function DiarioDaExecucao({
                   {Array.isArray(e.attachments) && e.attachments.length > 0 && (
                     <div className="-m-0.5 mt-1 flex flex-wrap [&>*]:m-0.5">
                       {e.attachments.map((a, i) => (
-                        <a
+                        <button
                           key={i}
-                          href={a.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-[11.5px] text-primary hover:underline"
+                          type="button"
+                          onClick={() => void abrirAnexo(String(a.url || ""))}
+                          className="inline-flex items-center rounded-md border border-border bg-transparent px-2 py-0.5 text-[11.5px] text-primary hover:underline"
                         >
                           <Paperclip className="mr-1 h-3 w-3" aria-hidden="true" /> {a.name || "anexo"}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}

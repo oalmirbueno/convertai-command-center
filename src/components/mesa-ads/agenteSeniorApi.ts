@@ -74,6 +74,8 @@ export interface MensagemDoAgenteSenior {
   acoes: AcoesDaConta | null;
   /** Na mensagem do dono: o andamento do pedido (etapas reais do servidor). */
   andamento?: AndamentoDoPedido | null;
+  /** Frente AG3: "Aprendi: ..." (Esquecer/Guardar) e "Segui: ..." (AprendizadoDoAgente). */
+  aprendizado?: unknown[];
 }
 
 const lista = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -149,6 +151,7 @@ export function normalizarMensagensDoAgente(bruto: unknown): { conversa_id: stri
           numeros: normalizarNumerosVistos(o.numeros),
           acoes: normalizarAcoesDaConta(o.acoes),
           andamento: normalizarAndamento(o.andamento),
+          aprendizado: lista(o.aprendizado),
         } as MensagemDoAgenteSenior;
       })
       .filter((m) => !!m.id && (!!m.conteudo || !!m.estrategia)),

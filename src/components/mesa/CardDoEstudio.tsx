@@ -11,16 +11,22 @@ import {
   Pencil,
   RefreshCw,
   TriangleAlert,
+  Undo2,
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { dataEHora, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { dataEHora, ErroDaMesa, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { BotaoComCusto } from "./Custo";
 import { rolarAte } from "./EstudioAltura";
-import { ImagemDaMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
+import AnexosComPapel, { anexosComPapel, corpoDosAnexos, usePapeisDosAnexos } from "./AnexosComPapel";
+import { esquecerRegraDoEstudio } from "./diretorDoEstudioApi";
+import type { AnexoPedido } from "../../../supabase/functions/estudio-arte/anexos-do-ajuste";
 import Moldura45 from "./Moldura45";
 import { funcaoDaLamina } from "./PranchetaDoEstudio";
 import SeletorDoAcervo, { FotoDoAcervo, useAcervo } from "./SeletorDoAcervo";
@@ -49,6 +55,10 @@ export interface OpcoesDoAjuste {
   areas?: Area[];
   tipo?: "livre" | "fundo";
   imagem_id?: string;
+  /** Frente RO, fase 2: imagens anexadas com o papel (estilo, elemento, foto exata, rosto, logo, print do erro). */
+  anexos?: AnexoPedido[];
+  /** Frente RO, fase 2: aplicar a proposta que o diretor fez para um pedido vago (sem perguntar de novo). */
+  confirmado?: boolean;
 }
 
 // O estúdio grava a identidade como { nota, escala_max } (Score do Jev de 0 a escala_max).
@@ -80,6 +90,12 @@ function SelosDaConferencia({ v }: { v: Verificacao }) {
       {v.logo_ok === true && <Selo tom="ok">logo ok</Selo>}
       {v.logo_ok === false && <Selo tom="alerta">{v.logo_presente ? "logo sobrando" : "logo faltando"}</Selo>}
       {v.erro && <Selo tom="alerta" titulo={v.erro}>incompleta</Selo>}
+      {/* Frente RO, fase 2: a arte pode ter feito o que a equipe mandou evitar (Jev, só aviso). */}
+      {Array.isArray((v as { regras_evitar?: unknown }).regras_evitar) && ((v as { regras_evitar: { violada?: boolean; texto?: string }[] }).regras_evitar).some((r) => r && r.violada) && (
+        <Selo tom="alerta" titulo={`Pode ter feito o que a equipe pediu para evitar: ${((v as { regras_evitar: { violada?: boolean; texto?: string }[] }).regras_evitar).filter((r) => r && r.violada).map((r) => r.texto).join("; ")}`}>
+          regra evitada?
+        </Selo>
+      )}
     </>
   );
 }
@@ -230,6 +246,7 @@ export default function CardDoEstudio({
   semTrocaDeFundo = false,
   refinarTexto,
   instrucaoInicial,
+  onDesfazerVersao,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -269,7 +286,16 @@ export default function CardDoEstudio({
    * (o dono só confere e aperta Ajustar). Muda = preenche de novo.
    */
   instrucaoInicial?: string | null;
+  /** Frente RO, fase 2: "Desfazer" o último ajuste (a lâmina volta para a versão anterior; a nova fica guardada). */
+  onDesfazerVersao?: (versao: number) => Promise<unknown>;
 }) {
+  const { clientId } = useMesa();
+  // Frente RO, fase 2: imagens no Ajustar e a proposta para o pedido vago.
+  const anexosDoAjuste = useAnexos(clientId);
+  const papeisDoAjuste = usePapeisDosAnexos();
+  const imagensDoAjuste = anexosComPapel(anexosDoAjuste, papeisDoAjuste);
+  const [proposta, setProposta] = useState<{ texto: string; opcoes: OpcoesDoAjuste } | null>(null);
+  const [desfazendo, setDesfazendo] = useState(false);
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
   const [instrucao, setInstrucao] = useState(instrucaoInicial || "");
@@ -342,12 +368,56 @@ export default function CardDoEstudio({
     }
   };
 
-  const aoAjustar = () => {
+  const aoAjustar = (data?: unknown) => {
+    // A proposta para o pedido vago fica na tela (a área marcada e o pedido também).
+    if (data && typeof data === "object" && (data as { proposta_pendente?: boolean }).proposta_pendente) return;
     setInstrucao("");
     onAreas([]);
     setFundoId(null);
+    anexosDoAjuste.limpar();
+    papeisDoAjuste.limpar();
+    setProposta(null);
     onConcluido();
   };
+
+  /** Frente RO, fase 2: o ajuste com as imagens anexadas; o pedido vago volta com a proposta do diretor. */
+  const ajustarComMais = async (instr: string, opcoes: OpcoesDoAjuste = {}) => {
+    const anexos = corpoDosAnexos(imagensDoAjuste);
+    const tudo: OpcoesDoAjuste = { ...opcoes, ...(anexos.length ? { anexos } : {}) };
+    setProposta(null);
+    try {
+      return await onAjustar(instr, tudo);
+    } catch (e) {
+      if (e instanceof ErroDaMesa && e.codigo === "ajuste_proposta" && typeof e.detalhes.proposta === "string" && e.detalhes.proposta) {
+        setProposta({ texto: String(e.detalhes.proposta), opcoes: tudo });
+        return { custo_usd: Number(e.detalhes.custo_usd) || 0, proposta_pendente: true, aviso_da_acao: "O pedido ficou vago: o diretor fez uma proposta concreta. Confira e aplique." };
+      }
+      throw e;
+    }
+  };
+
+  const desfazerUltimo = async () => {
+    if (!ultima || !onDesfazerVersao) return;
+    setDesfazendo(true);
+    try {
+      await onDesfazerVersao(ultima.versao);
+      toast.success(`Voltou para a versão anterior`, { description: `A v${ultima.versao} fica guardada.` });
+      onConcluido();
+    } catch (e) {
+      toast.error("Não foi possível desfazer", { description: textoDoErro(e), duration: 9000 });
+    } finally {
+      setDesfazendo(false);
+    }
+  };
+  const anexosDaVersao = ultima
+    ? [
+      ...((ultima as unknown as { aprendido?: unknown }).aprendido ? [(ultima as unknown as { aprendido?: unknown }).aprendido] : []),
+      ...(Array.isArray((ultima as unknown as { regras_seguidas?: unknown }).regras_seguidas) && ((ultima as unknown as { regras_seguidas: unknown[] }).regras_seguidas).length
+        ? [{ tipo: "regras_seguidas", regras: (ultima as unknown as { regras_seguidas: unknown[] }).regras_seguidas }]
+        : []),
+    ]
+    : [];
+  const campoDeAnexos = <AnexosComPapel controle={anexosDoAjuste} papeis={papeisDoAjuste} desabilitado={ocupado} />;
 
   const acaoConferir = vista && vista.versao === ultima?.versao ? (
     <BotaoDaLamina
@@ -446,6 +516,24 @@ export default function CardDoEstudio({
       {ultima && (
         <section ref={blocoDeAjuste} className="scroll-mt-2">
           <Rotulo>Ajustar esta lâmina</Rotulo>
+          {/* Frente RO, fase 2: o que o último ajuste aprendeu (Esquecer) e as regras que a geração seguiu. */}
+          {anexosDaVersao.length > 0 && (
+            <div className="mb-1.5">
+              <AprendizadoDoAgente anexos={anexosDaVersao} onEsquecer={(id) => esquecerRegraDoEstudio(clientId, id)} />
+            </div>
+          )}
+          {ultima && ultima.origem === "ajuste" && ordenadas.length > 1 && onDesfazerVersao && (
+            <button
+              type="button"
+              onClick={() => void desfazerUltimo()}
+              disabled={ocupado || desfazendo}
+              className="mb-1.5 inline-flex h-7 items-center text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+              data-desfazer-ajuste={ultima.versao}
+              title="Volta para a versão anterior; a do ajuste fica guardada"
+            >
+              {desfazendo ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Undo2 className="mr-1 h-3 w-3" />} Desfazer o último ajuste
+            </button>
+          )}
           {vista && vista.versao !== ultima.versao && (
             // O servidor sempre ajusta a versão mais recente: quem olha uma
             // anterior achava que o ajuste partiria da que está na tela.
@@ -477,16 +565,19 @@ export default function CardDoEstudio({
 
           {modoAjuste === "livre" && (
             <div className="mt-2.5 space-y-2">
-              <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="Ex.: título maior e a planta mais à esquerda" className="text-[13px]" />
+              <ZonaDeAnexos anexos={anexosDoAjuste} className="min-w-0" rotulo="Solte as imagens para o ajuste">
+                <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="Ex.: título maior e a planta mais à esquerda" className="text-[13px]" />
+                {campoDeAnexos}
+              </ZonaDeAnexos>
               <div className="flex justify-end">
                 <BotaoDaLamina
                   emAndamento={ocupado}
                   rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> Ajustar</>}
                   titulo={`Ajustar a lâmina ${direcao.ordem}`}
                   descricao="O diretor transforma o pedido em instrução de edição e o gerador edita a versão atual. A nova versão passa pela conferência."
-                  disabled={ocupado || !instrucao.trim()}
+                  disabled={ocupado || !instrucao.trim() || anexosDoAjuste.subindo}
                   partes={partesAjustar}
-                  executar={() => onAjustar(instrucao.trim())}
+                  executar={() => ajustarComMais(instrucao.trim())}
                   aoConcluir={aoAjustar}
                 />
               </div>
@@ -507,16 +598,19 @@ export default function CardDoEstudio({
                   </Button>
                 )}
               </div>
-              <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="O que mudar nas áreas. Ex.: trocar o copo por uma xícara branca" className="text-[13px]" />
+              <ZonaDeAnexos anexos={anexosDoAjuste} className="min-w-0" rotulo="Solte as imagens para o ajuste">
+                <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="O que mudar nas áreas. Ex.: trocar o copo por uma xícara branca, ou deixa mais bonito aqui" className="text-[13px]" />
+                {campoDeAnexos}
+              </ZonaDeAnexos>
               <div className="flex justify-end">
                 <BotaoDaLamina
                   emAndamento={ocupado}
                   rotulo={<><Crop className="mr-1 h-3.5 w-3.5" /> Ajustar a área</>}
                   titulo={`Ajustar áreas da lâmina ${direcao.ordem}`}
-                  descricao="O gerador edita só dentro das áreas marcadas (máscara). A nova versão passa pela conferência."
-                  disabled={ocupado || !instrucao.trim() || areas.length === 0}
+                  descricao="O gerador edita só dentro das áreas marcadas (máscara). Pedido vago vira uma proposta concreta antes de gastar. A nova versão passa pela conferência."
+                  disabled={ocupado || !instrucao.trim() || areas.length === 0 || anexosDoAjuste.subindo}
                   partes={partesAjustar}
-                  executar={() => onAjustar(instrucao.trim(), { areas })}
+                  executar={() => ajustarComMais(instrucao.trim(), { areas })}
                   aoConcluir={aoAjustar}
                 />
               </div>
@@ -558,6 +652,32 @@ export default function CardDoEstudio({
                   executar={() => onAjustar(instrucao.trim() || "Trocar só o fundo, mantendo o texto e o primeiro plano.", { tipo: "fundo", imagem_id: fundoId || undefined })}
                   aoConcluir={aoAjustar}
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Frente RO, fase 2: o pedido vago virou uma proposta concreta; nada foi gerado ainda. */}
+          {proposta && (
+            <div className="mt-2 min-w-0" data-proposta-do-ajuste="">
+              <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">
+                <span className="font-medium">Proposta do diretor:</span> {proposta.texto}
+              </p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center">
+                <span className="mb-1 mr-1.5">
+                  <BotaoDaLamina
+                    emAndamento={ocupado}
+                    rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> Aplicar a proposta</>}
+                    titulo={`Aplicar a proposta na lâmina ${direcao.ordem}`}
+                    descricao="Edita a versão atual com a proposta, só na área marcada quando houver. A nova versão passa pela conferência."
+                    disabled={ocupado}
+                    partes={partesAjustar}
+                    executar={() => onAjustar(proposta.texto, { ...proposta.opcoes, confirmado: true })}
+                    aoConcluir={aoAjustar}
+                  />
+                </span>
+                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => { setInstrucao(proposta.texto); setProposta(null); }}>
+                  Editar a proposta
+                </Button>
               </div>
             </div>
           )}

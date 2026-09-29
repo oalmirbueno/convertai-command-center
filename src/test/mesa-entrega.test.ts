@@ -115,9 +115,11 @@ describe("custo do Jev na carteira", () => {
     // e a clareza do pedido de ajuste (Choice, em paralelo com o leitor, cobrada no .then; fora da autocorreção).
     // + frente RO (29/09): o uso da foto pedido na conversa com o diretor (Choice com "nenhum", só quando a
     // mensagem fala de foto, rosto ou pose e a lâmina em foco tem foto).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(9);
+    // + frente RO, fase 2 (29/09): entender o pedido ao diretor (ordem clara e qual lâmina, numa chamada, em
+    // paralelo com a leitura) e o papel das imagens anexadas no Ajustar (só com imagem em Automático).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(11);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(8);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(8);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(10);
     const ajuste = estudio.slice(estudio.indexOf("const jevDoAjuste"), estudio.indexOf("const dir = await chamarTexto({", estudio.indexOf("const jevDoAjuste")));
     expect(ajuste).toContain("jevPerguntar({");
     expect(ajuste).toContain("await cobrarJev(r,");

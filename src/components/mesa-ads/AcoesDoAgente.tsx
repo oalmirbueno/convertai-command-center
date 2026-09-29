@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown, ExternalLink, FlaskConical, KeyRound, Loader2, Play, ShieldAlert, Undo2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -192,6 +192,13 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const [atual, setAtual] = useState<AcoesDaConta>(acoes);
+  // Frente AG3: a conversa relida (a cada 3 s, ou depois de um Desfazer em "O que foi feito") atualiza o cartão;
+  // antes ele ficava com o estado velho e mostrava o Desfazer já usado.
+  const assinatura = JSON.stringify([acoes.executada_em ?? null, acoes.desfeita_em ?? null, acoes.descartada_em ?? null, acoes.itens.map((i) => [i.id, i.resultado ? [i.resultado.ok, i.resultado.desfeito ?? null] : null])]);
+  useEffect(() => {
+    setAtual(acoes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinatura]);
   const [marcados, setMarcados] = useState<string[]>(() => itensDisponiveis(acoes).map((i) => i.id));
   const [fazendo, setFazendo] = useState<string | null>(null);
   const [irSozinho, setIrSozinho] = useState(false);
@@ -230,7 +237,11 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         // Confirmado nesta tela: o caminho abre sozinho quando o servidor pediu.
         setIrSozinho(true);
       } else if (tipo === "desfazer") {
-        toast.success("Conta como estava", { description: `${Number(data && data.voltaram) || 0} item(ns) voltaram.` });
+        const voltaram = Number(data && data.voltaram) || 0;
+        const naoVoltaram = Array.isArray(data && data.nao_voltaram) ? (data.nao_voltaram as Array<{ motivo?: string }>) : [];
+        // Frente AG3: "Conta como estava" só quando voltou mesmo; senão, o motivo.
+        if (voltaram && !naoVoltaram.length) toast.success("Conta como estava", { description: `${voltaram} item(ns) voltaram.` });
+        else toast.warning(voltaram ? `${voltaram} voltaram; ${naoVoltaram.length} não` : "Nada voltou", { description: (naoVoltaram[0] && naoVoltaram[0].motivo) || "O motivo está no cartão.", duration: 9000 });
         releituras();
       }
     } catch (e) {
@@ -247,7 +258,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       const data = await desfazerItemDaConta(mensagemId, i.id);
       const novo = data && data.anexo ? normalizarAcoesDaConta(data.anexo) : null;
       if (novo) setAtual(novo);
-      toast.success("Desfeito", { description: "Este item voltou como estava." });
+      const naoVoltou = Array.isArray(data && data.nao_voltaram) ? (data.nao_voltaram as Array<{ motivo?: string }>)[0] : null;
+      if (Number(data && data.voltaram) > 0) toast.success("Desfeito", { description: "Este item voltou como estava." });
+      else toast.warning("Não voltou", { description: (naoVoltou && naoVoltou.motivo) || "O motivo está no cartão.", duration: 9000 });
       releituras();
     } catch (e) {
       avisarErro(e, "Não foi possível desfazer");

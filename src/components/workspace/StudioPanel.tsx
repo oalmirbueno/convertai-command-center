@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
+import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
@@ -2138,7 +2143,39 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 // =========================
 
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
-type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
+type AgentMsg = {
+  id: string; role: "user" | "assistant" | "system"; content: string; created_at: string;
+  /** Frente AG3: anexos da resposta (cartão da ação no Workspace, "Aprendi" e "Segui"). */
+  meta?: { anexos?: unknown[] } | null;
+  /** A ação chegou feita agora (execução direta): o cartão pode ir sozinho. */
+  recemFeita?: boolean;
+};
+
+/** Frente AG3: as ações do agente do Workspace guardadas na mensagem. */
+function acoesDaMensagemDoWorkspace(m: AgentMsg): AcaoDoAgente[] {
+  const anexos = m.meta && Array.isArray(m.meta.anexos) ? m.meta.anexos : [];
+  return anexos.map(acaoDoAnexo).filter((a): a is AcaoDoAgente => !!a);
+}
+
+/** Frente AG3: Confirmar, Cancelar, Parar e Desfazer do cartão do Workspace (a função confere o dono da conversa). */
+async function pedidoDaAcaoDoWorkspace(mensagemId: string, acaoId: string, pedido: PedidoDaAcao): Promise<RespostaDaAcao> {
+  const corpo: Record<string, unknown> = { acao: pedido === "desfazer" ? "desfazer_acao_agente" : "executar_acao_agente", mensagem_id: mensagemId, acao_id: acaoId };
+  if (pedido === "descartar") corpo.descartar = true;
+  if (pedido === "parar") corpo.parar = true;
+  const { data, error } = await supabase.functions.invoke("workspace-agent", { body: corpo });
+  if (error) {
+    let mensagem = "";
+    try {
+      const ctx = (error as { context?: { clone?: () => Response } }).context;
+      const j = ctx && typeof ctx.clone === "function" ? await ctx.clone().json() : null;
+      mensagem = j && typeof j.mensagem === "string" ? j.mensagem : "";
+    } catch { mensagem = ""; }
+    throw new Error(mensagem || "Não foi possível agora. Tente de novo.");
+  }
+  const d = (data || {}) as RespostaDaAcao & { error?: string; mensagem?: string };
+  if (d.error) throw new Error(d.mensagem || "Não foi possível agora. Tente de novo.");
+  return d;
+}
 
 function GroupedThreadList({
   threads, activeId, currentClientId, currentFolderPath, clientNameMap, onSelect, onDelete,
@@ -2461,8 +2498,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   async function loadThreads() {
     // Carrega TODAS as conversas visíveis (staff enxerga tudo por RLS) para
     // que o painel lateral consiga agrupar por cliente e projeto/pasta.
+    // Frente AG3: só as conversas de quem está logado. Antes vinham as dos colegas (RLS de staff) e
+    // enviar numa delas dava "Thread inválida" e a mensagem sumia.
+    const { data: sessaoAtual } = await supabase.auth.getSession();
+    const uid = sessaoAtual.session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase.from("workspace_agent_threads")
       .select("id,title,updated_at,client_id,folder_path")
+      .eq("user_id", uid)
       .order("updated_at", { ascending: false })
       .limit(200);
     const list = (data as AgentThread[]) || [];
@@ -2481,8 +2524,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     if (!scoped.length && !list.length) { setActiveId(null); return; }
     let restored: string | null = null;
     try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath, threadScope)); } catch {}
-    const preferred = (restored && list.find(t => t.id === restored)?.id) || scoped[0]?.id || list[0]?.id;
-    if (preferred) setActiveId(preferred);
+    // Fora do escopo aberto não restaura conversa de outro cliente (antes caía em list[0]).
+    const preferred = (restored && scoped.find(t => t.id === restored)?.id) || scoped[0]?.id || null;
+    setActiveId(preferred);
   }
 
   // Persiste a última thread ativa por (escopo, cliente, pasta) para restaurar ao reabrir
@@ -2493,11 +2537,20 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
 
 
 
+  // Frente AG3: conversaAtiva (logo abaixo, a da rolagem) diz a conversa aberta agora: a resposta que chega
+  // tarde não cai na conversa errada.
+  const qcDoWorkspace = useQueryClient();
+  // Depois de organizar pelo agente, a árvore do Workspace relê (mesmas chaves da página).
+  const recarregarWorkspace = () => {
+    for (const k of ["workspace-nodes", "workspace-index", "workspace-client-files"]) void qcDoWorkspace.invalidateQueries({ queryKey: [k] });
+  };
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
   async function loadMsgs(id: string) {
     setErroMsgs(false);
     const { data, error } = await supabase.from("workspace_agent_messages")
-      .select("id,role,content,created_at").eq("thread_id", id).order("created_at", { ascending: true });
+      .select("id,role,content,created_at,meta").eq("thread_id", id).order("created_at", { ascending: true });
+    // Leitura lenta de outra conversa não sobrescreve a que está aberta.
+    if (conversaAtiva.current !== id) return;
     if (error) setErroMsgs(true);
     restaurarRolagem.current = id;
     setMsgs((data as AgentMsg[]) || []);
@@ -2585,7 +2638,13 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   }
 
   async function deleteThread(id: string) {
-    await supabase.from("workspace_agent_threads").delete().eq("id", id);
+    // Frente AG3: apagar a conversa leva as mensagens junto: confirma e confere se apagou de verdade.
+    if (typeof window !== "undefined" && !window.confirm("Apagar esta conversa e todas as mensagens dela?")) return;
+    const { data, error } = await supabase.from("workspace_agent_threads").delete().eq("id", id).select("id");
+    if (error || !data || !data.length) {
+      toast({ title: "Conversa não apagada", description: error?.message || "Você não tem permissão para apagar esta conversa.", variant: "destructive" });
+      return;
+    }
     setThreads(t => t.filter(x => x.id !== id));
     if (activeId === id) { setActiveId(null); setMsgs([]); }
   }
@@ -2841,6 +2900,8 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     if (!clientId) return;
     if (streaming || pulling) return;
     if (!activeId) return;
+    // Frente AG3: só depois de ler ESTA conversa, sem erro (antes disparava em conversa existente ainda carregando).
+    if (carregadoPara !== activeId || erroMsgs) return;
     if (msgs.length > 0) return;
     const key = `studio:autoPulled:${clientId}:${threadScope}:${folderPath || "_root"}:${activeId}`;
     try { if (localStorage.getItem(key)) return; } catch {}
@@ -2849,7 +2910,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     try { localStorage.setItem(key, "1"); } catch {}
     void pullDeepContext({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, activeId, msgs.length, folderPath, threadScope]);
+  }, [clientId, activeId, msgs.length, folderPath, threadScope, carregadoPara, erroMsgs]);
 
 
 
@@ -2872,7 +2933,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
       const { data: sess } = await supabase.auth.getUser();
       if (!sess.user) return;
       const { data } = await supabase.from("workspace_agent_threads")
-        .insert({ user_id: sess.user.id, client_id: clientId, folder_path: folderPath || null, title: text.slice(0, 60) })
+        .insert({ user_id: sess.user.id, client_id: clientId, folder_path: folderPath || null, title: (options?.displayText?.trim() || text).slice(0, 60) })
         .select("id,title,updated_at,client_id,folder_path").single();
 
       if (!data) return;
@@ -2892,6 +2953,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     coladoNoFim.current = true;
     setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: visibleText, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamBuf("");
+    // Frente AG3: o que chegou do stream (para não sumir se cair no meio) e se a conversa ainda é esta.
+    let parcial = "";
+    const naMesmaConversa = () => conversaAtiva.current === tid;
 
     try {
       const { data: sess } = await supabase.auth.getSession();
@@ -2933,6 +2997,20 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         const usedName = res.headers.get("X-Persona-Name");
         if (usedName) setPersona(p => ({ ...p, lastUsedName: decodeURIComponent(usedName) }));
       } catch { /* ignore */ }
+      // Frente AG3: pedido de organizar o Workspace volta em JSON, com o cartão da ação (e o que ele aprendeu).
+      if (res.ok && (res.headers.get("content-type") || "").includes("application/json")) {
+        const d = await res.json().catch(() => ({})) as { resposta?: string; acao?: unknown; aprendizado?: unknown[]; mensagem_id?: string | null; aviso?: string | null };
+        const acao = acaoDoAnexo(d.acao);
+        if (naMesmaConversa()) {
+          setMsgs(m => [...m, {
+            id: d.mensagem_id || crypto.randomUUID(), role: "assistant", content: String(d.resposta || ""), created_at: new Date().toISOString(),
+            meta: { anexos: [...(acao && d.mensagem_id ? [acao] : []), ...(Array.isArray(d.aprendizado) ? d.aprendizado : [])] }, recemFeita: true,
+          }]);
+        }
+        if (d.aviso) toast({ title: "Feito, sem Desfazer", description: d.aviso, variant: "destructive" });
+        void loadThreads();
+        return;
+      }
       if (!res.ok || !res.body) {
         const t = await res.text().catch(() => "");
         let msg = t || `HTTP ${res.status}`;
@@ -2948,6 +3026,11 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         } catch { /* not json */ }
         throw new Error(msg);
       }
+      let aprendizadoDoCabecalho: unknown[] = [];
+      try {
+        const bruto = res.headers.get("X-Aprendizado");
+        if (bruto) { const lido = JSON.parse(decodeURIComponent(bruto)); if (Array.isArray(lido)) aprendizadoDoCabecalho = lido; }
+      } catch { /* sem aprendizado */ }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let full = "";
@@ -2956,12 +3039,25 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         full += chunk;
-        setStreamBuf(full);
+        parcial = full;
+        if (naMesmaConversa()) setStreamBuf(full);
       }
-      setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", content: full, created_at: new Date().toISOString() }]);
+      parcial = "";
+      if (naMesmaConversa()) {
+        setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", content: full, created_at: new Date().toISOString(), meta: aprendizadoDoCabecalho.length ? { anexos: aprendizadoDoCabecalho } : null }]);
+      }
       setStreamBuf("");
       void loadThreads();
     } catch (e: any) {
+      // Frente AG3: nada some. O que o agente já tinha escrito fica na conversa, e o texto e os anexos
+      // voltam para o campo quando nada chegou (dá para mandar de novo sem redigitar).
+      if (parcial.trim() && naMesmaConversa()) {
+        setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", content: `${parcial}\n\n_(resposta interrompida)_`, created_at: new Date().toISOString() }]);
+      } else {
+        setInput(atual => atual || text);
+        setAttached(atual => (atual.length ? atual : currentAttachments));
+      }
+      setStreamBuf("");
       toast({ title: "Falha no agente", description: e?.message?.slice(0, 200), variant: "destructive" });
     } finally { setStreaming(false); }
   }
@@ -3305,6 +3401,25 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 >{m.content}</ReactMarkdown>
                 {/* Frente AG (27/09): a área que a resposta citou vira o botão "Abrir" com o cliente. */}
                 <CaminhoDoTexto texto={m.content} clientId={clientId} />
+                {/* Frente AG3: o que o agente fez ou propõe no Workspace (Confirmar, Parar, Desfazer, Ir para). */}
+                {acoesDaMensagemDoWorkspace(m).map((a) => (
+                  <CartaoDeAcao
+                    key={a.id}
+                    acao={a}
+                    recemFeita={!!m.recemFeita}
+                    titulo="O agente organiza"
+                    observacao="Sem custo. Dá para desfazer."
+                    onPedido={(pedido) => pedidoDaAcaoDoWorkspace(m.id, a.id, pedido)}
+                    onFeito={() => recarregarWorkspace()}
+                  />
+                ))}
+                {clientId && (
+                  <AprendizadoDoAgente
+                    anexos={m.meta?.anexos}
+                    onEsquecer={(id) => esquecerRegraAprendida("workspace-agent", id, { client_id: clientId })}
+                    onGuardar={(texto, tipo) => guardarRegraAprendida("workspace-agent", { texto, categoria: tipo }, { client_id: clientId })}
+                  />
+                )}
               </article>
             )
           ))}
@@ -3949,7 +4064,12 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
   async function deleteOne(id: string, name: string | null) {
     setLoading(true);
     try {
-      await supabase.functions.invoke("workspace-agent-import", { body: { delete_id: id } });
+      // Frente AG3: antes dizia "Persona removida" mesmo quando a função recusava.
+      const { data, error } = await supabase.functions.invoke("workspace-agent-import", { body: { delete_id: id } });
+      if (error || (data as any)?.error) {
+        toast({ title: "Persona não removida", description: (data as any)?.error || error?.message || "Tente de novo.", variant: "destructive" });
+        return;
+      }
       await onSaved();
       toast({ title: "Persona removida", description: name || undefined });
     } finally { setLoading(false); }

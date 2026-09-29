@@ -11,8 +11,113 @@ import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG3 (29/09): o agente do Workspace age (pastas e arquivos, com Desfazer), aprende com o dono e obedece.
+import {
+  type AcaoDoAgente,
+  type AcaoGuardada,
+  acaoDoAnexo,
+  confirmarAcaoGuardada,
+  desfazerAcaoGuardada,
+  ErroDaAcao,
+  executarDireto,
+  pareceOrdem,
+  podeExecutarDireto,
+  TIPO_DA_ACAO,
+  textoDoResultado,
+} from "../_shared/acoes-do-agente.ts";
+import {
+  AGENTE_DO_WORKSPACE,
+  alvosDoWorkspace,
+  blocoDasAcoesDoWorkspace,
+  executarItemDoWorkspace,
+  type NoDoWorkspace,
+  normalizarAcoesDoWorkspace,
+  pareceOrganizar,
+  regrasDoWorkspace,
+  reverterItemDoWorkspace,
+} from "./acoes-do-workspace.ts";
+import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas, temSinalDeAprendizado } from "../_shared/aprender-com-o-dono.ts";
+import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
+import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
+
+/** Data em São Paulo (prazo "hoje" da equipe). */
+function hojeEmSaoPaulo(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+/** Trabalho depois da resposta (memória, Segundo Cérebro) sem segurar o stream. */
+function depoisDaResposta(p: Promise<unknown>) {
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (rt && typeof rt.waitUntil === "function") rt.waitUntil(p);
+  else void p;
+}
+
+/**
+ * Frente AG3: o pedido é para organizar o Workspace agora? Jev (Noul) decide
+ * "organizar" e "ordem clara" numa chamada; sem Jev, o verbo de ordem decide.
+ */
+async function julgarOrganizacao(mensagem: string, cliente: string | null): Promise<{ organizar: boolean; ordem: boolean }> {
+  try {
+    const r = await jevPerguntar({
+      state: { pedido: mensagem.slice(0, 1500), cliente: cliente || null, onde: "Workspace (pastas e arquivos do cliente)" },
+      questions: {
+        organizar: { type: "noul", instructions: "O `pedido` manda criar, renomear, mover ou arquivar pastas ou arquivos do Workspace do cliente (organizar a árvore de pastas)? Pergunta, análise de conteúdo ou pedido de texto não conta." },
+        ordem: { type: "noul", instructions: "O `pedido` é uma ordem clara para fazer já (não uma pergunta, sugestão ou pedido de opinião)?" },
+      },
+    }, { timeoutMs: 8_000 });
+    const org = probabilidadeNoul(r.answers.organizar);
+    const ord = probabilidadeNoul(r.answers.ordem);
+    return { organizar: org !== null ? org >= 0.6 : pareceOrganizar(mensagem), ordem: ord !== null ? ord >= 0.75 : pareceOrdem(mensagem) };
+  } catch (e) {
+    console.warn(`[workspace-agent] organizar sem Jev: ${e instanceof Error ? e.message : "falha"}`);
+    return { organizar: pareceOrganizar(mensagem) && pareceOrdem(mensagem), ordem: pareceOrdem(mensagem) };
+  }
+}
+
+/** A proposta guardada na mensagem do Workspace (meta.anexos), com o dono da conversa conferido. */
+async function acaoGuardadaNoWorkspace(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  // deno-lint-ignore no-explicit-any
+  sb: any,
+  userId: string,
+  mensagemId: unknown,
+  acaoId: unknown,
+): Promise<AcaoGuardada> {
+  const id = String(mensagemId ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new ErroDaAcao(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: m, error } = await admin.from("workspace_agent_messages").select("id, thread_id, meta").eq("id", id).maybeSingle();
+  if (error) throw new ErroDaAcao(500, "mensagem_indisponivel", "Não foi possível ler a mensagem do agente.");
+  if (!m) throw new ErroDaAcao(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  const { data: t } = await admin.from("workspace_agent_threads").select("id, user_id, client_id").eq("id", m.thread_id).maybeSingle();
+  if (!t || t.user_id !== userId || !t.client_id) throw new ErroDaAcao(403, "sem_acesso", "Esta conversa não é sua.");
+  const { data: pode, error: e2 } = await sb.rpc("can_access_client", { _client_id: t.client_id });
+  if (e2 || pode !== true) throw new ErroDaAcao(403, "sem_acesso", "Você não tem acesso a este cliente.");
+  const meta = (m.meta && typeof m.meta === "object" ? m.meta : {}) as Record<string, unknown>;
+  const anexos = Array.isArray(meta.anexos) ? (meta.anexos as Record<string, unknown>[]) : [];
+  const alvo = acaoId ? String(acaoId) : "";
+  const i = anexos.findIndex((a) => a && a.tipo === TIPO_DA_ACAO && (!alvo || a.id === alvo));
+  if (i < 0) throw new ErroDaAcao(404, "acao_inexistente", "Esta mensagem não tem ação do agente.");
+  const acao = acaoDoAnexo(anexos[i]) as AcaoDoAgente;
+  return {
+    mensagem: { id: m.id, client_id: t.client_id, conversa_id: m.thread_id },
+    acao,
+    gravar: async (novo: AcaoDoAgente) => {
+      const lista = anexos.slice();
+      lista[i] = novo as unknown as Record<string, unknown>;
+      const { error: e3 } = await admin.from("workspace_agent_messages").update({ meta: { ...meta, anexos: lista } }).eq("id", m.id);
+      if (e3) throw new ErroDaAcao(500, "acao_nao_registrada", "A ação foi feita, mas o registro na conversa falhou. Atualize a tela.");
+      anexos[i] = lista[i];
+      return novo;
+    },
+  };
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -111,6 +216,47 @@ Deno.serve(async (req) => {
       preview = parsed as Record<string, any>;
     } catch {
       return json({ error: "JSON inválido" }, 400);
+    }
+
+    // ─── Frente AG3: Confirmar / Cancelar / Parar / Desfazer do cartão e Esquecer / Guardar da regra ───
+    const acaoDoCartao = String(preview?.acao ?? "");
+    if (acaoDoCartao === "executar_acao_agente" || acaoDoCartao === "desfazer_acao_agente") {
+      const adminCartao = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      try {
+        const guardada = await acaoGuardadaNoWorkspace(adminCartao, sb, user.id, preview.mensagem_id, preview.acao_id);
+        const clientId = guardada.mensagem.client_id;
+        if (acaoDoCartao === "desfazer_acao_agente") {
+          const r = await desfazerAcaoGuardada(guardada, (x) => reverterItemDoWorkspace(adminCartao, clientId, x), { userId: user.id });
+          return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
+        }
+        const r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoWorkspace(adminCartao, clientId, item, { userId: user.id }), {
+          descartar: preview.descartar === true, parar: preview.parar === true, userId: user.id, lote: 1, porVez: 5,
+        });
+        const feitos = r.resultados.filter((x) => x.ok).length;
+        return json({ anexo: r.anexo, feitos, falhas: r.resultados.length - feitos, custo_usd: 0 });
+      } catch (e) {
+        if (e instanceof ErroDaAcao) return json({ error: e.codigo, mensagem: e.message }, e.status);
+        console.error(`[workspace-agent] ação do cartão falhou: ${e instanceof Error ? e.message : "falha"}`);
+        return json({ error: "acao_falhou", mensagem: e instanceof Error ? e.message : "Não foi possível." }, 500);
+      }
+    }
+    if (acaoDoCartao === "esquecer_regra" || acaoDoCartao === "guardar_regra") {
+      const clientIdDaRegra = String(preview?.client_id ?? "");
+      const { data: pode } = await sb.rpc("can_access_client", { _client_id: clientIdDaRegra });
+      if (pode !== true) return json({ error: "sem_acesso", mensagem: "Você não tem acesso a este cliente." }, 403);
+      const adminRegra = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      if (acaoDoCartao === "esquecer_regra") {
+        const r = await esquecerRegra(adminRegra, { id: String(preview?.regra_id ?? ""), donosPermitidos: [clientIdDaRegra] });
+        return r.ok ? json({ ok: true }) : json({ error: "esquecer_falhou", mensagem: r.motivo }, 400);
+      }
+      try {
+        const g = (preview?.regra && typeof preview.regra === "object" ? preview.regra : {}) as Record<string, unknown>;
+        const aprendido = await guardarNoServidor(adminRegra, { texto: String(g.texto ?? ""), categoria: g.categoria === "preferencia" ? "preferencia" : "evitar", escopo: "cliente", agente: "workspace", clientId: clientIdDaRegra, donoId: user.id });
+        return json({ aprendido });
+      } catch (e) {
+        console.warn(`[workspace-agent] guardar regra falhou: ${e instanceof Error ? e.message : "falha"}`);
+        return json({ error: "guardar_falhou", mensagem: "Não foi possível guardar a regra agora." }, 400);
+      }
     }
 
     // ─── MODO STRUCTURE / ENRICH (não-stream, retorna JSON pronto pro doc) ───
@@ -259,11 +405,6 @@ Regras absolutas:
       .select("id, user_id, client_id, system_prompt, title").eq("id", thread_id).maybeSingle();
     if (!thread || thread.user_id !== user.id) return json({ error: "Thread inválida" }, 403);
 
-    const { data: quota } = await sb.rpc("claim_ai_usage", {
-      _workload: "workspace-agent-chat",
-    });
-    if (quota !== true) return json({ error: "Limite de uso atingido" }, 429);
-
     // Resolve e valida todo identificador de escopo com o cliente autenticado
     // antes de qualquer leitura service_role dirigida pelo contexto do request.
     // A thread também é uma fronteira: um client_id enviado não pode trocar o
@@ -312,11 +453,47 @@ Regras absolutas:
     const safeClientId = context?.client_id ?? authorizedClientId;
     const safeProjectId = context?.project_id ?? null;
 
+    // Frente AG3: a cota só é gasta depois de o escopo passar (antes um 403 de contexto já consumia a cota).
+    const { data: quota } = await sb.rpc("claim_ai_usage", {
+      _workload: "workspace-agent-chat",
+    });
+    if (quota !== true) return json({ error: "Limite de uso atingido" }, 429);
+
+    // Frente AG3: a mensagem do dono é gravada ANTES do modelo (e o erro não é engolido). Antes ela só
+    // entrava depois de todo o contexto e, se a gravação falhasse, a resposta existia sem a pergunta.
+    const userMessageToStore = String(display_message || message).slice(0, 12000);
+    const { error: erroDaPergunta } = await admin.from("workspace_agent_messages").insert({ thread_id, role: "user", content: userMessageToStore });
+    if (erroDaPergunta) {
+      console.error(`[workspace-agent] pergunta não gravada: ${erroDaPergunta.message}`);
+      return json({ error: "Não consegui guardar a sua mensagem agora. Nada foi gasto; tente de novo." }, 500);
+    }
+    const hoje = hojeEmSaoPaulo();
+    // Regras que o dono ensinou e o aprendizado deste pedido (Jev decide se é regra), em paralelo ao resto.
+    const regrasP: Promise<RegraAtiva[]> = safeClientId
+      ? regrasDoAgente(admin, { agente: "workspace", clientId: safeClientId }).catch((e) => (registrarFalha("workspace-agent: regras do dono não lidas", e), []))
+      : Promise.resolve([]);
+    const aprendizadoP = safeClientId && temSinalDeAprendizado(message)
+      ? aprenderNoServidor(admin, { texto: String(display_message || message).slice(0, 3000), agente: "workspace", clientId: safeClientId, donoId: user.id, cliente: context?.client_name || null })
+      : Promise.resolve(null);
+
+    // ─── Frente AG3: organizar o Workspace (criar pasta, renomear, mover, arquivar) vira ação real ───
+    if (safeClientId && pareceOrganizar(message)) {
+      const julgado = await julgarOrganizacao(String(display_message || message), context?.client_name || null);
+      if (julgado.organizar) {
+        return await responderComAcao({
+          admin, userId: user.id, threadId: thread_id, threadTitle: thread.title, clientId: safeClientId,
+          clientName: context?.client_name || "", mensagem: String(display_message || message), pedidoClaro: julgado.ordem, hoje,
+          regras: await regrasP, aprendizado: aprendizadoP,
+        });
+      }
+    }
+
     // carrega histórico (últimas 30 msgs)
     // Ordem decrescente + inverter: com ascending o limite pegava as 30 PRIMEIRAS e o agente perdia a conversa recente.
     const { data: historicoRecente } = await admin.from("workspace_agent_messages")
-      .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(30);
-    const history = historicoRecente ? historicoRecente.slice().reverse() : historicoRecente;
+      .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(31);
+    // A pergunta de agora já foi gravada: sai do histórico (vai uma vez só, no fim).
+    const history = historicoRecente ? historicoRecente.slice(1).reverse() : historicoRecente;
 
     // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
     let fc = context?.folder_contents;
@@ -340,8 +517,9 @@ Regras absolutas:
       const pidDeep = safeProjectId;
       const [profRes, projRes, fileRes, wsRes, briefRes, reportRes, docRes] = await Promise.all([
         admin.from("profiles").select("full_name,company_name,email,phone,plan_name,plan_value,plan_status,brand,client_type").eq("id", cidDeep).maybeSingle(),
-        admin.from("projects").select("id,name,status,progress,description,scope,objectives,deadline,brand,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(12),
-        admin.from("files").select("id,file_name,file_type,folder,approval_status,caption,carousel_text,description,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(160),
+        // Frente AG3: sem projeto apagado e sem arquivo arquivado (o agente citava o que já tinha saído).
+        admin.from("projects").select("id,name,status,progress,description,scope,objectives,deadline,brand,created_at").eq("client_id", cidDeep).is("deleted_at", null).order("created_at", { ascending: false }).limit(12),
+        admin.from("files").select("id,file_name,file_type,folder,approval_status,caption,carousel_text,description,project_id,created_at").eq("client_id", cidDeep).is("archived_at", null).order("created_at", { ascending: false }).limit(160),
         admin.from("workspace_nodes").select("id,name,kind,mime,size_bytes,parent_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(160),
         admin.from("briefings").select("responses,submitted,required,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(3),
         admin.from("reports").select("title,summary,highlights,next_steps,status,period_start,period_end,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(5),
@@ -356,7 +534,7 @@ Regras absolutas:
         deepLines.push(`\nPROJETOS DO CLIENTE (${projects.length}):\n${projects.map(p => `- ${p.name} · ${p.status || "-"} · ${p.progress ?? 0}%${p.deadline ? ` · ${p.deadline}` : ""}${p.description ? ` — ${String(p.description).slice(0, 140)}` : ""}`).join("\n")}`);
         const ids = pidDeep ? [pidDeep] : projects.map(p => p.id);
         const [tasksRes, milsRes] = await Promise.all([
-          admin.from("tasks").select("title,status,priority,due_date,description,project_id").in("project_id", ids).order("updated_at", { ascending: false }).limit(80),
+          admin.from("tasks").select("title,status,priority,due_date,description,project_id").in("project_id", ids).is("deleted_at", null).neq("status", "done").order("updated_at", { ascending: false }).limit(80),
           admin.from("milestones").select("title,status,target_date,description,project_id").in("project_id", ids).order("milestone_order", { ascending: true }).limit(40),
         ]);
         const tasks = (tasksRes.data as any[]) || [];
@@ -603,10 +781,13 @@ Regras:
       : "";
 
     const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch((e) => (registrarFalha("workspace-agent: contexto do agente não lido", e), "")) : "";
+    const regras = await regrasP;
     const systemMsg = [
       baseIdentity,
+      `Hoje: ${hoje} (horário de Brasília). Prazo antes de hoje está atrasado.`,
       thread.system_prompt || "",
       preparoBlock,
+      blocoDasRegras(regras).replace('Devolva no JSON o campo "regras_seguidas": lista dos apelidos (r1, r2...) das regras que mudaram esta resposta ou ação. Vazio se nenhuma pesou.', "Quando uma regra mudar a resposta, diga em uma frase curta qual seguiu."),
       blocoDoMapaDoPainel("workspace"),
       contextoDoCliente ? blocoDoContextoDoCliente(contextoDoCliente) : "",
       deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
@@ -620,8 +801,6 @@ Regras:
       { role: "user", content: message },
     ];
 
-    const userMessageToStore = String(display_message || message).slice(0, 12000);
-    await admin.from("workspace_agent_messages").insert({ thread_id, role: "user", content: userMessageToStore });
     if (persona?.id) {
       await admin.from("workspace_agent_personas")
         .update({ usage_count: (persona.usage_count || 0) + 1, last_used_at: new Date().toISOString() })
@@ -668,10 +847,27 @@ Regras:
       return json({ error: `AI falhou: ${lastStatus} ${lastText.slice(0, 200)}` }, 500);
     }
 
+    // Frente AG3: "Aprendi" deste pedido (o Jev já respondeu enquanto o contexto era lido) vai no cabeçalho e na mensagem.
+    const aprendizado = anexosDoAprendizado(await aprendizadoP, null);
+
     // Proxy do stream + captura para persistir
     let full = "";
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
+    // Frente AG3: a resposta é gravada no fim mesmo quando o stream quebra (com o aviso de interrompida),
+    // o stream fecha antes dos extras (memória e Segundo Cérebro correm depois, sem segurar a tela).
+    let gravada = false;
+    const gravarResposta = async (interrompida: boolean) => {
+      if (gravada || !full.trim()) return;
+      gravada = true;
+      const conteudo = interrompida ? `${full}\n\n_(resposta interrompida)_` : full;
+      const { error: e1 } = await admin.from("workspace_agent_messages").insert({ thread_id, role: "assistant", content: conteudo, ...(aprendizado.length ? { meta: { anexos: aprendizado } } : {}) });
+      if (e1) console.error(`[workspace-agent] resposta não gravada: ${e1.message}`);
+      const { error: e2 } = thread.title === "Nova conversa"
+        ? await admin.from("workspace_agent_threads").update({ title: userMessageToStore.slice(0, 60).replace(/\n/g, " "), updated_at: new Date().toISOString() }).eq("id", thread_id)
+        : await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+      if (e2) console.warn(`[workspace-agent] conversa não atualizada: ${e2.message}`);
+    };
     const outStream = new ReadableStream({
       async start(controller) {
         const reader = aiRes.body!.getReader();
@@ -693,16 +889,10 @@ Regras:
               } catch { /* ignore parse */ }
             }
           }
-          // persiste assistente
-          if (full.trim()) {
-            await admin.from("workspace_agent_messages").insert({ thread_id, role: "assistant", content: full });
-            // atualiza título se ainda for default
-            if (thread.title === "Nova conversa") {
-              const title = userMessageToStore.slice(0, 60).replace(/\n/g, " ");
-              await admin.from("workspace_agent_threads").update({ title, updated_at: new Date().toISOString() }).eq("id", thread_id);
-            } else {
-              await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
-            }
+          // persiste assistente (antes de fechar: quem recarrega logo depois já acha a resposta)
+          await gravarResposta(false);
+          controller.close();
+          if (full.trim()) depoisDaResposta((async () => {
             // ── Memória persistente: grava turno como registro cumulativo ──
             if (safeClientId) {
               try {
@@ -734,19 +924,25 @@ Regras:
                 }
               } catch (e) { console.warn("second-brain propose failed", (e as Error).message); }
             }
-          }
+          })());
         } catch (e) {
-          controller.error(e);
-          return;
+          // Stream quebrou no meio (provedor, aba fechada, tempo): o que chegou fica gravado, marcado.
+          console.error(`[workspace-agent] stream interrompido: ${e instanceof Error ? e.message : "falha"}`);
+          await gravarResposta(true).catch(() => undefined);
+          try { controller.error(e); } catch { /* já fechado */ }
         }
-        controller.close();
+      },
+      async cancel() {
+        // A aba fechou: grava o que já veio.
+        await gravarResposta(true).catch(() => undefined);
       },
     });
 
     return new Response(outStream, {
       headers: {
         ...cors,
-        "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name, X-Orq-Extra, X-Orq-Reason, X-Web-Queries",
+        "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name, X-Orq-Extra, X-Orq-Reason, X-Web-Queries, X-Aprendizado",
+        ...(aprendizado.length ? { "X-Aprendizado": encodeURIComponent(JSON.stringify(aprendizado)).slice(0, 6000) } : {}),
         "Content-Type": "text/plain; charset=utf-8",
         "X-Accel-Buffering": "no",
         "X-Orq-Extra": orq.needs_extra_agent ? "1" : "0",
@@ -756,9 +952,97 @@ Regras:
       },
     });
   } catch (err) {
+    console.error(`[workspace-agent] falha: ${err instanceof Error ? err.message : String(err)}`);
     return json({ error: err instanceof Error ? err.message : "erro" }, 500);
   }
 });
+
+const SISTEMA_DAS_ACOES = `Você é o agente do Workspace da Aceleriq (agência de marketing). A equipe pede para organizar as pastas e os arquivos do cliente. Responda SÓ JSON: {"resposta": string, "acoes": {"resumo": string, "itens": [{"operacao": string, "ref": string, "para": string}]} | null, "regras_seguidas": string[]}.
+- "resposta": uma ou duas frases curtas em português, sem travessão, com o nome das pastas e arquivos.
+- Use SÓ os apelidos das listas (r1 é a raiz do cliente, n# são os itens). Nunca escreva id.
+- Nome de pasta nova ou nome novo: curto e claro, do jeito que a equipe pediu.
+- Pedido amplo ("organize as artes por mês") vira os itens que casam; se não der para saber quais, acoes null e em "resposta" faça UMA pergunta curta com as opções pelo nome.
+- Nada é apagado: arquivar só leva para a pasta Arquivo.`;
+
+/**
+ * Frente AG3: o pedido de organizar vira ação (contrato comum). Ordem clara vai direto (até 5 itens,
+ * sem custo, com Desfazer); o resto fica no cartão para Confirmar. Responde JSON (a tela mostra o cartão).
+ */
+async function responderComAcao(o: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  userId: string;
+  threadId: string;
+  threadTitle: string;
+  clientId: string;
+  clientName: string;
+  mensagem: string;
+  pedidoClaro: boolean;
+  hoje: string;
+  regras: RegraAtiva[];
+  aprendizado: Promise<Awaited<ReturnType<typeof aprenderNoServidor>>>;
+}): Promise<Response> {
+  const { admin } = o;
+  const [nosR, historicoR] = await Promise.all([
+    admin.from("workspace_nodes").select("id, name, kind, parent_id, client_id, sent_for_approval_file_id").eq("client_id", o.clientId).order("created_at", { ascending: false }).limit(150),
+    admin.from("workspace_agent_messages").select("role, content").eq("thread_id", o.threadId).order("created_at", { ascending: false }).limit(9),
+  ]);
+  if (nosR.error) {
+    console.error(`[workspace-agent] itens do Workspace não lidos: ${nosR.error.message}`);
+    return json({ error: "Não consegui ler as pastas do cliente agora. Tente de novo." }, 500);
+  }
+  const alvos = alvosDoWorkspace(o.clientId, o.clientName, (nosR.data as NoDoWorkspace[]) || []);
+  const historico = ((historicoR.data as { role: string; content: string }[] | null) || []).slice(1).reverse()
+    .map((m) => `${m.role === "user" ? "Equipe" : "Agente"}: ${String(m.content).slice(0, 500)}`).join("\n");
+  const providers = resolveAiProviderChain({ primaryModels: ["gpt-5-mini", "gpt-4.1"], lovableModels: ["google/gemini-2.5-flash", "openai/gpt-5-mini"] });
+  if (!providers.length) return json({ error: "Nenhum provedor de IA configurado" }, 500);
+  let bruto: Record<string, unknown> | null = null;
+  try {
+    const { response } = await requestAiChatCompletion(providers, (provider) => ({
+      messages: [
+        { role: "system", content: `${SISTEMA_DAS_ACOES}${blocoDasRegras(o.regras)}` },
+        { role: "user", content: `Hoje: ${o.hoje}. Cliente: ${o.clientName || "cliente"}.${historico ? `\n\nCONVERSA ATÉ AQUI:\n${historico}` : ""}${blocoDasAcoesDoWorkspace(alvos)}\n\nPEDIDO DA EQUIPE: ${o.mensagem.slice(0, 3000)}\n\nRetorne só o JSON.` },
+      ],
+      ...(/^gpt-5/i.test(provider.model) ? {} : { temperature: 0.1 }),
+      response_format: { type: "json_object" },
+    }));
+    if (response.ok) {
+      const j = await response.json();
+      const texto = String(j?.choices?.[0]?.message?.content || "{}");
+      try { bruto = JSON.parse(texto); } catch { const m = texto.match(/\{[\s\S]*\}/); bruto = m ? JSON.parse(m[0]) : null; }
+    } else {
+      console.error(`[workspace-agent] modelo das ações: ${response.status}`);
+    }
+  } catch (e) {
+    console.error(`[workspace-agent] modelo das ações falhou: ${e instanceof Error ? e.message : "falha"}`);
+  }
+  if (!bruto) {
+    const texto = "Não consegui montar a organização agora. Nada foi mexido. Tente de novo ou diga item por item.";
+    await admin.from("workspace_agent_messages").insert({ thread_id: o.threadId, role: "assistant", content: texto });
+    return json({ modo: "acao", mensagem_id: null, resposta: texto, acao: null, aprendizado: anexosDoAprendizado(await o.aprendizado, null) });
+  }
+  let acao = normalizarAcoesDoWorkspace(bruto.acoes, alvos, { clientId: o.clientId });
+  const direto = acao ? podeExecutarDireto(acao, regrasDoWorkspace(alvos), { pedidoClaro: o.pedidoClaro }) : null;
+  if (acao && direto && direto.direto) {
+    acao = await executarDireto(acao, (item) => executarItemDoWorkspace(admin, o.clientId, item, { userId: o.userId }), { userId: o.userId });
+  }
+  const aprendizado = anexosDoAprendizado(await o.aprendizado, regrasSeguidas(bruto.regras_seguidas, o.regras));
+  const resposta = String(bruto.resposta || (acao ? (acao.executada_em ? `Feito: ${textoDoResultado(acao.resultados || [])}.` : `${acao.resumo} Está pronto para confirmar.`) : "Certo.")).slice(0, 2000);
+  const { data: gravada, error } = await admin.from("workspace_agent_messages")
+    .insert({ thread_id: o.threadId, role: "assistant", content: resposta, meta: { anexos: [...(acao ? [acao] : []), ...aprendizado] } })
+    .select("id").single();
+  if (error) console.error(`[workspace-agent] resposta da ação não gravada: ${error.message}`);
+  await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString(), ...(o.threadTitle === "Nova conversa" ? { title: o.mensagem.slice(0, 60).replace(/\n/g, " ") } : {}) }).eq("id", o.threadId);
+  return json({
+    modo: "acao",
+    mensagem_id: gravada ? (gravada as { id: string }).id : null,
+    resposta,
+    acao,
+    aprendizado,
+    aviso: error && acao && acao.executada_em ? "Feito, mas a conversa não gravou: o Desfazer deste pedido não está disponível." : null,
+    _direto: direto,
+  });
+}
 
 function json(o: unknown, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { ...cors, "Content-Type": "application/json" } });

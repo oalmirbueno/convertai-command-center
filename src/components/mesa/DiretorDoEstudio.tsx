@@ -16,6 +16,11 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
+import AnexosComPapel, { anexosComPapel, corpoDosAnexos, usePapeisDosAnexos } from "./AnexosComPapel";
+import PlanoDoDiretor, { type ExecutorDoPasso } from "./PlanoDoDiretor";
+import type { PassoDoPlano } from "../../../supabase/functions/estudio-arte/diretor-agentico";
 import {
   ajustarTextoDaLamina,
   aplicarMudancasDoDiretor,
@@ -23,6 +28,8 @@ import {
   camposParaMostrar,
   chavesDoDiretor,
   conversarComODiretor,
+  esquecerRegraDoEstudio,
+  guardarRegraDoEstudio,
   lerConversaDoDiretor,
   marcarPedidoAoDiretor,
   mudancaMexeNoTexto,
@@ -69,6 +76,15 @@ export interface PropsDoDiretor {
   onRefazer: (ordens: number[]) => Promise<unknown>;
   /** Releia o trabalho (direção e custo mudaram). */
   onAtualizar: () => void;
+  /**
+   * Frente RO, fase 2: executa um passo do plano do diretor pelo caminho de
+   * sempre de quem hospeda (gerar e conferir, ajustar o texto, entregar,
+   * agendar). Sem ele: ajustar o texto e refazer pelo caminho desta tela; o
+   * resto pede a Entrega do item.
+   */
+  executarPasso?: ExecutorDoPasso;
+  /** Custo dos passos do plano; sem ele, pela estimativa desta tela. */
+  partesDoPlano?: (passos: PassoDoPlano[]) => ParteDaEstimativa[];
   className?: string;
 }
 
@@ -95,9 +111,15 @@ export default function DiretorDoEstudio({
   partesRefazer,
   onRefazer,
   onAtualizar,
+  executarPasso,
+  partesDoPlano,
   className = "",
 }: PropsDoDiretor) {
-  const { catalogo } = useMesa();
+  const { catalogo, clientId } = useMesa();
+  // Frente RO, fase 2: imagens na conversa (colar, arrastar, acervo, câmera), cada uma com o papel.
+  const anexosDoCampo = useAnexos(clientId);
+  const papeisDoCampo = usePapeisDosAnexos();
+  const imagensDoCampo = anexosComPapel(anexosDoCampo, papeisDoCampo);
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [texto, setTexto] = useState("");
@@ -137,10 +159,13 @@ export default function DiretorDoEstudio({
   const enviar = async () => {
     const mensagem = texto.trim();
     const trabalhoId = trabalho.id;
-    marcarPedidoAoDiretor(trabalhoId, { mensagem, desde: Date.now() });
+    const imagens = corpoDosAnexos(imagensDoCampo);
+    marcarPedidoAoDiretor(trabalhoId, { mensagem: mensagem || (imagens.length ? "(imagens anexadas)" : ""), desde: Date.now() });
     setTexto("");
     try {
-      const data = await conversarComODiretor({ trabalhoId, mensagem, ordem: ordemEnviada });
+      const data = await conversarComODiretor({ trabalhoId, mensagem, ordem: ordemEnviada, imagens });
+      anexosDoCampo.limpar();
+      papeisDoCampo.limpar();
       await queryClient.invalidateQueries({ queryKey: chave });
       onAtualizar();
       return data;
@@ -151,6 +176,39 @@ export default function DiretorDoEstudio({
       marcarPedidoAoDiretor(trabalhoId, null);
     }
   };
+
+  /** Frente RO, fase 2: o passo do plano pelo caminho desta tela (quem hospeda pode passar o seu). */
+  const executorPadrao: ExecutorDoPasso = async (p) => {
+    if (p.operacao === "ajustar_texto" && p.ordem) {
+      const r = await ajustarTextoDaLamina(trabalho.id, p.ordem);
+      onAtualizar();
+      let custo = custoDaResposta(r) || 0;
+      try {
+        custo += custoDaResposta(await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalho.id, ordem: p.ordem })) || 0;
+      } catch {
+        // A conferência é aviso: a arte ajustada já está gravada.
+      }
+      return { custo_usd: custo };
+    }
+    if ((p.operacao === "refazer" || p.operacao === "variacoes") && p.ordem) {
+      let custo = 0;
+      const vezes = p.operacao === "variacoes" ? Math.max(1, Math.min(3, p.n || 2)) : 1;
+      for (let i = 0; i < vezes; i++) custo += custoDaResposta(await onRefazer([p.ordem])) || 0;
+      return { custo_usd: custo };
+    }
+    throw new Error("Faça este passo pela Entrega do item.");
+  };
+  const partesPadrao = (passos: PassoDoPlano[]): ParteDaEstimativa[] =>
+    passos.reduce((todas: ParteDaEstimativa[], p) => {
+      if (p.operacao === "ajustar_texto") return todas.concat(partesDoAjusteDeTexto(catalogo, trabalho.modelo_imagem_id, trabalho.qualidade));
+      if ((p.operacao === "refazer" || p.operacao === "variacoes") && p.ordem) {
+        const vezes = p.operacao === "variacoes" ? Math.max(1, Math.min(3, p.n || 2)) : 1;
+        const ordens: number[] = [];
+        for (let i = 0; i < vezes; i++) ordens.push(p.ordem);
+        return todas.concat(partesRefazer(ordens, false));
+      }
+      return todas;
+    }, []);
 
   /** Grava as mudanças na direção (sem custo) e relê a conversa e o trabalho. */
   const aplicarNoServidor = async (m: MensagemDoDiretor, lista: MudancaDoDiretor[], refazer: boolean) => {
@@ -232,7 +290,7 @@ export default function DiretorDoEstudio({
   };
 
   const travado = ocupado || bloqueado || aplicando !== null || !!envio;
-  const podeEnviar = !!texto.trim() && !envio;
+  const podeEnviar = (!!texto.trim() || imagensDoCampo.some((a) => a.estado === "pronto")) && !anexosDoCampo.subindo && !envio;
 
   const cartao = (m: MensagemDoDiretor, mud: MudancaDoDiretor) => {
     const aplicada = m.aplicadas.indexOf(mud.id) >= 0;
@@ -413,6 +471,47 @@ export default function DiretorDoEstudio({
             )}
           </div>
         )}
+        {/* Frente RO, fase 2: a pergunta curta com opções clicáveis (a opção vai para o campo, com as imagens). */}
+        {m.pergunta && (
+          <div className="mr-4 min-w-0" data-pergunta-do-diretor={m.pergunta.motivo}>
+            <p className="mb-1 text-[12px] font-medium">{m.pergunta.pergunta}</p>
+            <div className="flex flex-wrap" role="group" aria-label="Opções da pergunta do diretor">
+              {m.pergunta.opcoes.map((o) => (
+                <button
+                  key={o.rotulo}
+                  type="button"
+                  onClick={() => preencher(o.mensagem)}
+                  className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-foreground transition-colors hover:border-primary/50"
+                >
+                  {o.rotulo}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Frente RO, fase 2: o que custa espera o clique (ou roda sozinho, se for o ajuste de texto de custo pequeno). */}
+        {m.plano && (
+          <PlanoDoDiretor
+            plano={m.plano}
+            mensagemId={m.id}
+            trabalho={trabalho}
+            executar={executarPasso || executorPadrao}
+            partes={partesDoPlano || partesPadrao}
+            bloqueado={bloqueado || ocupado}
+            onAtualizar={() => {
+              onAtualizar();
+              void queryClient.invalidateQueries({ queryKey: chave });
+            }}
+          />
+        )}
+        {/* Frente RO, fase 2: "Aprendi: ..." com Esquecer e "Segui: ..." (as regras que mudaram a resposta). */}
+        <div className="mr-4">
+          <AprendizadoDoAgente
+            anexos={m.anexosCrus}
+            onEsquecer={(id) => esquecerRegraDoEstudio(clientId, id, m.id)}
+            onGuardar={(textoDaRegra, tipo) => guardarRegraDoEstudio(clientId, textoDaRegra, tipo, m.id)}
+          />
+        </div>
         {(m.acoes || []).map((a) => {
           const refazer = ordensARefazer(a);
           return (
@@ -506,7 +605,7 @@ export default function DiretorDoEstudio({
 
       <CompositorDoAgente>
         <OQuePossoFazer
-          capacidades={["reordenar as lâminas", "refazer lâminas", "trocar um texto em várias", "mudar o formato", "arquivar versões antigas"]}
+          capacidades={["mudar texto, cor e cena (faz na hora, com Desfazer)", "trocar ou tirar a foto e usar só o rosto", "reordenar, tirar ou duplicar lâminas", "o mesmo ajuste em todas", "formato e qualidade", "refazer e gerar variações (com o custo antes)", "entregar e agendar (com confirmação)"]}
           atalhos={[
             { rotulo: "Reorganizar as lâminas", texto: "Reorganize a ordem das lâminas para a história fluir melhor." },
             { rotulo: "Mudar para 9:16", texto: "Mude o formato deste trabalho para 9:16." },
@@ -538,6 +637,7 @@ export default function DiretorDoEstudio({
             </button>
           ))}
         </div>
+        <ZonaDeAnexos anexos={anexosDoCampo} className="min-w-0" rotulo="Solte as imagens para o diretor">
         <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
           <Textarea
             ref={campoRef}
@@ -556,6 +656,9 @@ export default function DiretorDoEstudio({
             placeholder="Ex.: quero um cenário ao ar livre, com luz de fim de tarde"
             className="max-h-40 min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
+          <div className="mt-1 min-w-0">
+            <AnexosComPapel controle={anexosDoCampo} papeis={papeisDoCampo} desabilitado={!!envio} />
+          </div>
           <div className="mt-1 flex min-w-0 items-center">
             <Ditado valor={texto} onChange={setTexto} disabled={!!envio} className="mr-1.5 min-w-0" />
             <span ref={botaoRef} className="ml-auto shrink-0">
@@ -575,6 +678,7 @@ export default function DiretorDoEstudio({
             </span>
           </div>
         </div>
+        </ZonaDeAnexos>
       </CompositorDoAgente>
     </div>
   );

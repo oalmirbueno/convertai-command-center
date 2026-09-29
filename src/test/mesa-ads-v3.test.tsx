@@ -357,7 +357,8 @@ describe("contratos v3 da função mesa-ads (fonte)", () => {
     // Frente AD (28/09): o agente sênior passa pelo teto de tempo (chamarComTetoDeTempo), que reenvia o mesmo
     // pedido (nascido com TIMEOUT_TEXTO_ADS_MS) com prazo menor: 150 s e, se estourar, 90 s mais leve.
     const chamadas = (fonte.match(/chamarTexto\(\{(?! \.\.\.pedido,)/g) || []).length;
-    const comTempo = (fonte.match(/chamarTexto\(\{\n\s+timeoutMs: TIMEOUT_TEXTO_ADS_MS,/g) || []).length;
+    // Frente AG3 (29/09): a reescrita da oferta cabe no que sobra da função (300 s ou o restante menos 60 s).
+    const comTempo = (fonte.match(/chamarTexto\(\{\n\s+(?:\/\/[^\n]*\n\s+)?timeoutMs: (?:TIMEOUT_TEXTO_ADS_MS,|Math\.max\(30_000, Math\.min\(TIMEOUT_TEXTO_ADS_MS, restanteMs\(chamador\) - 60_000\)\),)/g) || []).length;
     expect(comTempo).toBe(chamadas);
     expect(fonte).toMatch(/chamarComTetoDeTempo\(\{\n\s+timeoutMs: TIMEOUT_TEXTO_ADS_MS,/);
     expect(fonte).toMatch(/TETO_DO_MODELO_MS = 150_000/);

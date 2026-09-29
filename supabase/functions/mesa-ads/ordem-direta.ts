@@ -187,14 +187,28 @@ export function nomeNovoDaMensagem(mensagem: string, nomeAtual: string): string 
   return novo;
 }
 
-/** Valor em reais pedido para a verba ("para R$ 40", "40 reais", "R$ 1.234,50"); o último número depois de "para" vale. */
+/**
+ * Valor em reais pedido para a verba ("para R$ 40", "40 reais", "R$ 1.234,50"); o último número depois de "para" vale.
+ * Frente AG3 (29/09): percentual ("sobe 20%") não é valor em reais, e número solto sem "R$", "reais" ou
+ * "para" (o "15" de "Promo 15 SET") também não: antes "sobe 20% a verba" virava R$ 20.
+ */
 export function valorDaMensagem(mensagem: string): number | null {
   const t = mensagem.replace(/\s+/g, " ");
   const i = t.toLowerCase().lastIndexOf(" para ");
   const trecho = i >= 0 ? t.slice(i) : t;
-  const m = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:\s*(?:reais|brl))?/i.exec(trecho);
+  const re = /(r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(\s*%|\s*por\s*cento)?(\s*(?:reais|brl))?/gi;
+  let m: RegExpExecArray | null = null;
+  for (let achado = re.exec(trecho); achado; achado = re.exec(trecho)) {
+    if (achado[3]) continue; // percentual
+    const comMoeda = !!(achado[1] || achado[4]);
+    // Depois de " para ", o primeiro número vale; sem "para", só número com R$ ou "reais".
+    if (comMoeda || i >= 0) {
+      m = achado;
+      break;
+    }
+  }
   if (!m) return null;
-  const bruto = m[1];
+  const bruto = m[2];
   const n = /\.\d{3}/.test(bruto) ? Number(bruto.replace(/\./g, "").replace(",", ".")) : Number(bruto.replace(",", "."));
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }

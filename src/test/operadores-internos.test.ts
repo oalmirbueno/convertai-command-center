@@ -831,7 +831,8 @@ describe("a Central deixa de ser uma parede de cartoes", () => {
     // Contava quantas eram e nao mostrava nenhuma: quem abria ficava com
     // o numero e sem o assunto.
     expect(perfil).toContain("Tarefas deste agente");
-    expect(perfil).toContain("tarefas.get(String(v.kanban_task_id))");
+    // Frente AG3 (29/09): vínculo só com painel_task_id também acha a tarefa (tarefaDoVinculo).
+    expect(perfil).toContain("tarefaDoVinculo(v, tarefas)");
   });
 
   it("o que trava vem primeiro, o que terminou por ultimo", () => {

@@ -38,6 +38,8 @@ export const ESQUEMA_AGENTE_SENIOR = {
   nome: "estrategia_do_agente_senior",
   schema: obj({
     resposta: S("string"),
+    // Frente AG3: apelidos das regras que o dono ensinou e que pesaram nesta resposta (r1, r2...).
+    regras_seguidas: lista(S("string")),
     diagnostico: lista(obj({ titulo: S("string"), detalhe: S("string"), gravidade: S("string", { enum: [...GRAVIDADES] }) })),
     manter: lista(obj({ ad_id: S("string"), porque: S("string") })),
     cortar: lista(obj({ ad_id: S("string"), porque: S("string") })),

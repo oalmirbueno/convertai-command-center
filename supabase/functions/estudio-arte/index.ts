@@ -234,10 +234,53 @@ import {
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
+  executarDireto,
   type ItemDaAcaoDoAgente,
+  podeExecutarDireto,
   type ResultadoDoItem,
+  TIPO_DA_ACAO,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
+// Frente RO, fase 2: o diretor que executa (entender, fazer o que não custa, plano do que custa) e as imagens no Ajustar.
+import {
+  type Entendimento,
+  expandirParaTodas,
+  type LaminaParaEntender,
+  lerEntendimento,
+  montarPlano,
+  type MudancaDoPasso,
+  perguntaDeEsclarecimento,
+  perguntaSobreImagens,
+  perguntasDoEntendimento,
+  type PlanoDoDiretor,
+  planoComPasso,
+  planoDoAnexo,
+  precisaPerguntar,
+  resumoDoPlano,
+  TIPO_DO_PLANO,
+} from "./diretor-agentico.ts";
+import {
+  type AnexoDoAjuste,
+  type AnexoPedido,
+  colaAFotoExata,
+  decidirPapeis,
+  legendaParaOGerador,
+  legendaParaOLeitor,
+  MAX_BYTES_DOS_ANEXOS,
+  motivoDoDefeito,
+  normalizarAnexos,
+  perguntaDoPapelDoAnexo,
+  ROTULO_DO_PAPEL_DO_ANEXO,
+} from "./anexos-do-ajuste.ts";
+import {
+  anexoDasRegrasSeguidas,
+  aprenderDoPedido,
+  type Aprendido,
+  CAMPOS_DO_APRENDIZADO,
+  type RegraDaMesa,
+  regrasDaMesa,
+  rotasDoAprendizado,
+} from "../_shared/aprendizado-das-mesas.ts";
 import {
   arquivarVersoesDaLamina,
   blocoDasAcoesDoDiretor,
@@ -254,6 +297,15 @@ import {
   reordenarTrabalho,
   trocarTextoDaLamina,
   type TrabalhoParaAcoes,
+  // Frente RO, fase 2.
+  devolverLaminaAoTrabalho,
+  duplicarLaminaDoTrabalho,
+  MOTIVO_CONTINUO_LAMINAS,
+  OPERACAO_DA_MUDANCA,
+  regrasDoDiretor,
+  separarDoPlano,
+  tirarCopiaDoTrabalho,
+  tirarLaminaDoTrabalho,
 } from "./acoes-do-diretor.ts";
 import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
@@ -361,6 +413,7 @@ import {
   avisoDaPoseCopiada,
   lerQuemEscolheu,
   lerUso,
+  linhasDaIdentidadeDaFoto,
   perguntaDoUso,
   ROTULO_DA_FOTO_DE_IDENTIDADE,
   type UsoDaFoto,
@@ -382,6 +435,8 @@ import {
   cobrir,
   decodificar,
   dimensoesDoCabecalho,
+  colarFotoNaArea,
+  uniaoDasAreas,
   estimarAlinhamento,
   fotoNaLamina,
   logoLimpa,
@@ -4079,6 +4134,9 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     return { verificacao: v, usos };
   }
 
+  // Frente RO, fase 2 (dono: "tem coisas que ele não pode mais fazer quando eu peço"): a conferência também
+  // pergunta ao Jev, na mesma chamada, se a arte faz o que uma regra EVITAR proíbe (até 3). Só aviso, sem laço.
+  const regrasEvitar = ads ? [] : (await regrasDoEstudio(t)).filter((r) => r.tipo === "evitar").slice(0, 3);
   try {
     const questions: Record<string, PerguntaJev> = {
       identidade: {
@@ -4087,6 +4145,16 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         criteria: NIVEIS_IDENTIDADE,
       },
     };
+    regrasEvitar.forEach((r, k) => {
+      questions[`evitar_${k + 1}`] = {
+        type: "noul",
+        instructions: `A arte descrita em \`arte_gerada\` (a descrição da imagem e o texto lido nela) faz o que a regra \`regras_evitar[${k}]\` manda EVITAR?`,
+        criteria: {
+          true: "Sim: a arte faz exatamente o que a regra proíbe.",
+          false: "Não: a arte respeita a regra, ou a regra não tem a ver com esta lâmina.",
+        },
+      } as PerguntaJev;
+    });
     // Criativo de anúncio: o Jev também julga o risco de política da Meta e a
     // clareza da oferta, com a descrição lida da arte e o texto exato da peça.
     if (ads) {
@@ -4130,6 +4198,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         conceito: t.direcao.conceito,
         lamina: { funcao: card.funcao, composicao: card.composicao, texto_exato: card.texto_exato },
         arte_gerada: { descricao_visual: v.descricao_visual, texto_lido: v.texto_lido, logo_presente: v.logo_presente },
+        ...(regrasEvitar.length ? { regras_evitar: regrasEvitar.map((r) => r.texto) } : {}),
         ...(ads
           ? {
             anuncio: {
@@ -4154,6 +4223,12 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     });
     if (cobrado) usos.push(cobrado);
     v.identidade = notaDoJev(res.answers.identidade, NIVEIS_IDENTIDADE);
+    if (regrasEvitar.length) {
+      (v as Verificacao & { regras_evitar?: unknown }).regras_evitar = regrasEvitar.map((r, k) => {
+        const p = probabilidadeNoul(res.answers[`evitar_${k + 1}`]);
+        return { id: r.id, texto: r.texto, probabilidade: p == null ? null : Math.round(p * 100) / 100, violada: p != null && p >= 0.6 };
+      });
+    }
     if (navegacaoDaConferencia) {
       const p = probabilidadeNoul(res.answers.navegacao);
       v.navegacao = {
@@ -4182,6 +4257,20 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     }
   }
   return { verificacao: v, usos };
+}
+
+/** Frente RO, fase 2: as regras do Estúdio que a equipe ensinou (marca do trabalho; nunca lança). */
+async function regrasDoEstudio(t: Trabalho): Promise<RegraDaMesa[]> {
+  const marca = await marcaDe(t.client_id, t).catch(() => null);
+  const r = await regrasDaMesa(servico() as never, { clientId: t.client_id, mesa: "estudio", marcaId: marca ? marca.id : null });
+  return r.regras;
+}
+
+/** Frente RO, fase 2: o bloco do prompt de imagem com o que NUNCA fazer (vazio sem regra EVITAR). */
+function blocoDoEvitarNaGeracao(regras: RegraDaMesa[]): string {
+  const evitar = regras.filter((r) => r.tipo === "evitar").slice(0, 8);
+  if (!evitar.length) return "";
+  return ["NUNCA FAÇA NESTA ARTE (a equipe pediu e vale acima do estilo e da referência):", ...evitar.map((r) => `- ${r.texto}`)].join("\n");
 }
 
 /** Nota do Score do Jev com o nível correspondente da escala. */
@@ -4921,6 +5010,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }),
   ]);
   const dasEntregas = await dasEntregasP;
+  // Frente RO, fase 2: as regras que a equipe ensinou ao Estúdio (EVITAR primeiro). As EVITAR entram no prompt
+  // com prioridade e a versão guarda quais seguiu (a tela mostra "Segui: ...", com o Esquecer da regra).
+  const regrasDaGeracaoLidas = ads ? [] : await regrasDoEstudio(t);
+  const regrasDaGeracao = regrasDaGeracaoLidas.slice(0, 6).map((r) => ({ id: r.id, tipo: r.tipo, texto: r.texto }));
+  const blocoDoEvitarAprendido = blocoDoEvitarNaGeracao(regrasDaGeracaoLidas);
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
   // Marca do trabalho (kit, fontes, nome): o nome vai na leitura e na descrição da logo.
   const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
@@ -5511,6 +5605,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     campanha ? blocoDaCampanha(campanha) : "",
     // Frente T2: tipografia do cliente (amostras, família, peso e caixa por papel, âncora da série).
     blocoDaTipografiaAqui,
+    // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
+    blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
     // Frente AP: o que funcionou nas entregas deste cliente e, na capa, não repetir a composição das últimas capas entregues.
@@ -5671,7 +5767,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     });
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
-      avisos: avisosDaGeracao,
+      avisos: avisosDaGeracao, regras: regrasDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5723,7 +5819,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const img = await chamarImagem({ ...comum, prompt, editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo });
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
-      avisos: avisosDaGeracao,
+      avisos: avisosDaGeracao, regras: regrasDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5780,7 +5876,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
-      avisos: avisosDaGeracao,
+      avisos: avisosDaGeracao, regras: regrasDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5833,7 +5929,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }
     return await gravarVersao(ch, t, card, { ...img, png: fim.png, mime: "image/png" }, {
       origem: "gerar",
-      avisos: avisosDaGeracao,
+      avisos: avisosDaGeracao, regras: regrasDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5864,7 +5960,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
     origem: "gerar",
-    avisos: avisosDaGeracao,
+    avisos: avisosDaGeracao, regras: regrasDaGeracao,
     referencias: idsReferencias,
     // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
     custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5892,7 +5988,7 @@ async function gravarVersao(
   t: Trabalho,
   card: CardDirecao,
   img: { png: Uint8Array; mime: string; usoId: string; custoUsd: number; saldoUsd: number; reservaUsada?: string | null },
-  meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown>; avisos?: string[] },
+  meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown>; avisos?: string[]; regras?: { id: string; tipo: string; texto: string }[] },
 ) {
   // Frente FS (29/09): o que falhou no caminho e mudou a arte (logo não lida, referência que não abriu,
   // molde não medido...) fica na versão (a tela mostra na lâmina) e volta em aviso_da_acao.
@@ -5914,6 +6010,8 @@ async function gravarVersao(
     criado_por: ch.userId,
     ...(meta.extra ?? {}),
     ...(avisos.length ? { avisos_da_geracao: avisos } : {}),
+    // Frente RO, fase 2: as regras ensinadas que esta geração seguiu ("Segui: ...").
+    ...(meta.regras && meta.regras.length ? { regras_seguidas: meta.regras } : {}),
   };
   // Acrescenta a versao (nunca substitui): o caminho no bucket ja e unico.
   const gravado = await mutarTrabalho(t.id, (atual) => ({
@@ -5945,13 +6043,14 @@ const ESQUEMA_AJUSTE = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["instrucao_edicao", "texto_exato", "memoria", "entendi", "pergunta"],
+    required: ["instrucao_edicao", "texto_exato", "memoria", "entendi", "pergunta", "proposta"],
     properties: {
       instrucao_edicao: { type: "string" },
       texto_exato: { type: "string" },
       memoria: { type: "string" },
       entendi: { type: "string" },
       pergunta: { type: "string" },
+      proposta: { type: "string" },
     },
   },
 };
@@ -5966,6 +6065,8 @@ A imagem anexada é a versão atual da lâmina. A pessoa da equipe pediu um ajus
 - Se \`tipo\` for "fundo", troque SÓ o fundo: texto, logo, pessoas e objetos em primeiro plano ficam idênticos, na mesma posição. Com \`nova_foto_de_fundo\`, o fundo novo é essa foto real do cliente (anexada depois da lâmina).
 - Com \`recorte_da_area\`, a imagem 2 é o recorte ampliado da área marcada: "isso", "esse", "aqui" e "ali" são o que está nela. Diga em instrucao_edicao exatamente o que está no recorte e o que muda.
 - entendi: uma frase curta com o que você vai fazer (ex.: "tirar a linha 'ou compre agora pelo Lazada' e manter o resto").
+- proposta (frente RO, 29/09): quando o pedido é VAGO ("deixa mais bonito aqui", "arruma isso", "melhore", "não gostei"), olhe a lâmina inteira e, com área, o recorte ampliado, e escreva UMA proposta concreta do que mudar: o quê, onde e como (ex.: "aumentar o título em 20% e alinhar à esquerda com a foto; tirar a sombra atrás do preço"). A equipe vê a proposta antes de gastar. Pedido claro: proposta vazia.
+- Com \`imagens_anexadas\`, cada imagem depois da lâmina (e do recorte) tem o papel dito na legenda: referência de estilo, elemento para inserir, foto exata, rosto (identidade), logo ou print do erro. Use cada uma pelo papel; o print do erro só mostra o que corrigir.
 
 O PEDIDO É A FONTE DA VERDADE (frente AG, 28/09)
 - Faça só o que foi pedido; o resto da lâmina fica igual.
@@ -5991,6 +6092,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   // Correção automática: só as áreas de texto e logo da lâmina (o resto volta do original).
   const areas = tipo === "fundo" ? [] : auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas);
   const pedidoBruto = texto(corpo.instrucao, auto ? 4000 : 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
+  // Frente RO, fase 2: imagens anexadas no Ajustar (colar, arrastar, acervo, câmera), cada uma com o papel.
+  const anexosPedidos: AnexoPedido[] = auto ? [] : normalizarAnexos(corpo.anexos, t.client_id);
   if (!pedidoBruto) throw new ErroEstudio(400, "instrucao_vazia", "Descreva o ajuste que você quer.");
   garantirEditavel(t);
   // Frente AG: "sim" (ou o mesmo pedido de novo) responde a pergunta pendente desta lâmina e retoma o pedido.
@@ -6039,6 +6142,27 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     !auto && t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id).catch(nuloComLog("estudio-arte: campanha do ajuste não lida", { trabalho_id: t.id })) : Promise.resolve(null),
   ]);
   const nomeDaMarca = (await marcaDoCliente(t.client_id, kit, undefined, t).catch(nuloComLog("estudio-arte: nome da marca não lido", { trabalho_id: t.id })))?.nomeCliente || "";
+  // Frente RO, fase 2: os anexos abertos e conferidos ANTES de gastar (arquivo quebrado volta com o motivo);
+  // o papel em Automático vem do Jev pelo texto do pedido (Choice, confiança mínima), senão da regra.
+  const imagensDosAnexos = anexosPedidos.length ? await abrirAnexos(t, anexosPedidos) : [];
+  let custoDosPapeis = 0;
+  let respostasDosPapeis: Record<string, RespostaDeEscolha> | null = null;
+  if (anexosPedidos.some((x) => x.papel === "auto")) {
+    try {
+      const questions: Record<string, PerguntaJev> = {};
+      anexosPedidos.forEach((x, i) => {
+        if (x.papel === "auto") questions[`papel_${i + 1}`] = perguntaDoPapelDoAnexo(i, x.nome || "imagem") as PerguntaJev;
+      });
+      const res = await jevPerguntar({ state: { pedido, imagens: anexosPedidos.map((x, i) => ({ posicao: i + 1, nome: x.nome, papel_escolhido: x.papel === "auto" ? null : x.papel })) }, questions });
+      const cobrado = await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId }).catch(() => null);
+      custoDosPapeis = cobrado?.custoUsd ?? 0;
+      respostasDosPapeis = res.answers as Record<string, RespostaDeEscolha>;
+    } catch (e) {
+      registrarFalha("estudio-arte: jev (papel dos anexos do ajuste) falhou", e, { trabalho_id: t.id, ordem });
+      avisosDoAjuste.push("O Jev não respondeu o papel das imagens anexadas: valeu a regra do pedido. Confira.");
+    }
+  }
+  const anexosDoAjuste: AnexoDoAjuste[] = decidirPapeis(anexosPedidos, respostasDosPapeis, pedido);
   // Frente AG: com área marcada, o leitor vê de perto o que está nela (em 28/09 "apague isso" apagou a linha errada).
   const recorteDaArea = !auto && areas.length ? await recorteDasAreas(atual, areas) : null;
   // Frente AG: o Jev diz, junto com o leitor, se o pedido é claro (ruído do ditado, nome fora do contexto, vago).
@@ -6076,32 +6200,42 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         autocorrecao: auto ? { motivos: auto.motivos, texto_exato_fixo: true } : null,
         areas: areas.length ? areas : null,
         recorte_da_area: recorteDaArea ? "a imagem 2 é o recorte ampliado da área marcada" : null,
+        imagens_anexadas: anexosDoAjuste.length ? anexosDoAjuste.map((x, i) => legendaParaOLeitor(x, i + (recorteDaArea ? 3 : 2))) : null,
         nova_foto_de_fundo: fotoFundo ? resumoDaFoto(fotoFundo) : null,
         lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, leva_logo: levaLogo(t, ordem) },
         verificacao_atual: atualVersao.verificacao,
         marca: { nome: nomeDaMarca || null, paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null },
         campanha: campanhaDoAjuste ? { nome: campanhaDoAjuste.nome, oferta: briefingDaCampanha(campanhaDoAjuste).oferta || null } : null,
       }),
-      imagens: ([{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }] as ImagemEntrada[]).concat(recorteDaArea ? [recorteDaArea] : []),
+      imagens: ([{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }] as ImagemEntrada[]).concat(recorteDaArea ? [recorteDaArea] : []).concat(imagensDosAnexos),
     }],
     esquemaJson: ESQUEMA_AJUSTE,
     maxTokensSaida: 3_000,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });
-  const a = (dir.json ?? {}) as { instrucao_edicao?: string; texto_exato?: string; memoria?: string; entendi?: string; pergunta?: string };
+  const a = (dir.json ?? {}) as { instrucao_edicao?: string; texto_exato?: string; memoria?: string; entendi?: string; pergunta?: string; proposta?: string };
   const jev = await jevDoAjuste;
-  const custoDaLeitura = arred(dir.custoUsd + (jev ? jev.custo : 0));
+  const custoDaLeitura = arred(dir.custoUsd + (jev ? jev.custo : 0) + custoDosPapeis);
   // Frente AG: na dúvida, UMA pergunta curta e nenhuma imagem gerada (só a leitura foi paga).
   const duvida = auto || confirmado ? null : duvidaDoAjuste(jev ? jev.resposta : null, { pergunta: a.pergunta, entendi: a.entendi });
   if (duvida) {
-    const guardada: DuvidaGuardada = { ordem, pedido, pergunta: duvida.pergunta, em: new Date().toISOString() };
+    // Frente RO, fase 2 (dono: "o de ajuste mais inteligente"): pedido vago com proposta concreta do leitor vira a
+    // PROPOSTA mostrada antes de gastar ("Aplicar a proposta" ou escrever de outro jeito). A proposta fica guardada
+    // como o pedido: aplicar é mandar o mesmo texto confirmado.
+    const proposta = texto(a.proposta, 600);
+    const vago = duvida.motivo === "vago" || !!(jev && jev.resposta && jev.resposta.choice === "vago");
+    const comProposta = vago && proposta.length >= 8;
+    const pergunta = comProposta ? `Proponho: ${proposta.replace(/[.\s]+$/, "")}. Aplico assim?` : duvida.pergunta;
+    const guardada: DuvidaGuardada = { ordem, pedido: comProposta ? proposta : pedido, pergunta, em: new Date().toISOString() };
     await mutarTrabalho(t.id, (x) => ({ direcao: { ...x.direcao, duvida_do_ajuste: guardada }, custo_usd: arred(num(x.custo_usd) + custoDaLeitura) }));
     throw new ErroEstudio(
       409,
-      "ajuste_com_duvida",
-      `${duvida.pergunta} Para seguir assim, responda "sim" no ajuste desta lâmina; ou escreva o pedido de outro jeito. Nenhuma imagem foi gerada.`,
-      { pergunta: duvida.pergunta, entendi: texto(a.entendi, 300) || null, motivo: duvida.motivo, custo_usd: custoDaLeitura },
+      comProposta ? "ajuste_proposta" : "ajuste_com_duvida",
+      comProposta
+        ? `${pergunta} Nenhuma imagem foi gerada: aplique a proposta ou escreva o pedido de outro jeito.`
+        : `${duvida.pergunta} Para seguir assim, responda "sim" no ajuste desta lâmina; ou escreva o pedido de outro jeito. Nenhuma imagem foi gerada.`,
+      { pergunta, proposta: comProposta ? proposta : null, entendi: texto(a.entendi, 300) || null, motivo: comProposta ? "vago" : duvida.motivo, custo_usd: custoDaLeitura },
     );
   }
   const instrucaoEdicao = texto(a.instrucao_edicao, 4000);
@@ -6166,6 +6300,15 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     referencias.push({ bytes: await fotoRealNaLamina(fotoFundo, quadro.largura, quadro.altura), mime: "image/png", nome: "novo-fundo.png" });
     legendas.push(`imagem ${referencias.length + 1}: foto real do cliente que vira o novo fundo (use como está, sem redesenhar)`);
   }
+  // Frente RO, fase 2: as imagens anexadas vão ao gerador pelo papel (o print do erro fica só com o leitor).
+  let comRostoAnexado = false;
+  anexosDoAjuste.forEach((x, i) => {
+    const legenda = legendaParaOGerador(x);
+    if (!legenda || !imagensDosAnexos[i]) return;
+    referencias.push(imagensDosAnexos[i]);
+    legendas.push(`imagem ${referencias.length + 1}: ${legenda}`);
+    if (x.papel === "rosto") comRostoAnexado = true;
+  });
   // A edição mantém o formato da versão editada.
   const tamanhoAtual = String((atualVersao as { tamanho?: string }).tamanho || (card.layout ? quadro.tamanho : TAMANHO_2X3));
   const dims = dimensoesPng(atual);
@@ -6182,6 +6325,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ? `${NAO_REENQUADRAR} As faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado) emendam com as lâminas vizinhas: não mude nada nelas. A cena é o fundo contínuo e não muda; o texto continua na mesma área da lâmina.`
       : "",
     instrucaoEdicao,
+    // Frente RO, fase 2: rosto anexado no Ajustar = só a identidade (a frase do dono).
+    comRostoAnexado ? linhasDaIdentidadeDaFoto().join("\n") : "",
     regrasDeRender(base, cardAjustado, legendas, levaLogo(base, ordem) ? "manter" : false, false, naEmenda),
     marcaDaVersao.recorte ? "A pessoa ou o produto recortado desta lâmina fica exatamente como está, no mesmo lugar e tamanho; nada por cima dele." : "",
   ].filter(Boolean).join("\n\n");
@@ -6204,6 +6349,19 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   let img = comMascara && gerado.tamanho === tamanhoAtual && !naEmenda
     ? { ...gerado, png: await devolverOriginalForaDasAreas(atual, gerado.png, abertas, 16), mime: "image/png" }
     : gerado;
+  // Frente RO, fase 2: "usa esta foto aqui, igual" com área marcada: a foto entra INTACTA na área, pelo código.
+  if (!naEmenda && colaAFotoExata(anexosDoAjuste, comMascara)) {
+    const k = anexosDoAjuste.findIndex((x) => x.papel === "exata");
+    const area = uniaoDasAreas(areas);
+    if (k >= 0 && imagensDosAnexos[k] && area) {
+      try {
+        img = { ...img, png: await colarFotoNaArea(img.png, imagensDosAnexos[k].bytes, area), mime: "image/png" };
+      } catch (e) {
+        const motivo = registrarFalha("estudio-arte: foto exata do ajuste não foi colada", e, { trabalho_id: base.id, ordem });
+        avisosDoAjuste.push(`A foto exata não foi colada na área (${motivo}): ficou o que o gerador fez com ela. Confira.`);
+      }
+    }
+  }
   // Lâmina contínua: nada é reenquadrado. Só o que mudou (nas áreas marcadas
   // ou no interior) é colado sobre a versão atual, o canto da logo fica e as
   // bordas voltam exatas do fundo gravado: a emenda com as vizinhas não quebra.
@@ -6282,6 +6440,16 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   // mesmo pedido de novo vira reforço, o que contradiz um antigo o aposenta.
   // O card e o pedido literal vão no motivo, para o texto repetir e reforçar.
   const aprendizado = texto(a.memoria, 400);
+  // Frente RO, fase 2 (dono: "tem que aprender com cada ajuste"): o pedido ensina? Duradoura vira regra (evitar ou
+  // preferência) no cérebro, com reforço; a versão leva o "Aprendi" com o Esquecer.
+  const aprendido: Aprendido | null = auto ? null : await aprenderDoPedido(servico() as never, {
+    clientId: base.client_id,
+    mesa: "estudio",
+    pedido,
+    regraSugerida: aprendizado || null,
+    marcaId: (await marcaDe(base.client_id, base).catch(() => null))?.id ?? null,
+    userId: ch.userId,
+  });
   if (!auto) await gravarNoCerebro(servico(), {
     client_id: base.client_id,
     area: "arte",
@@ -6309,6 +6477,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ...(a.entendi ? { entendi: texto(a.entendi, 300) } : {}),
       ...(fiel && fiel.removidas.length ? { texto_removido: fiel.removidas } : {}),
       versao_editada: atualVersao.versao,
+      // Frente RO, fase 2: o que o ajuste aprendeu (Aprendi, com Esquecer) e as imagens anexadas com o papel.
+      ...(aprendido ? { aprendido } : {}),
+      ...(anexosDoAjuste.length ? { anexos_do_ajuste: anexosDoAjuste.map((x) => ({ nome: x.nome, papel: x.papel, papel_por: x.papel_por })) } : {}),
       // Frente RO (29/09): o ajuste mantém o formato da versão editada (sem ele, a entrega do 3:4 parava).
       formato_post: formatoDaVersao(atualVersao as VersaoCard & { formato_post?: string | null; tamanho?: string | null }),
       uso_diretor: dir.usoId,
@@ -7923,7 +8094,9 @@ function apelidosDasFotos(arte: ArteRapida | null, acervo: ImagemAcervo[]) {
 async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   const mensagem = limparTexto(corpo.mensagem, 2000);
-  if (!mensagem) throw new ErroEstudio(400, "mensagem_vazia", "Escreva o que você quer mudar ou perguntar ao diretor.");
+  // Frente RO, fase 2: imagens anexadas na conversa (colar, arrastar, acervo, câmera), com o papel ou em Automático.
+  const anexosDaConversa = normalizarAnexos(corpo.imagens, t.client_id);
+  if (!mensagem && !anexosDaConversa.length) throw new ErroEstudio(400, "mensagem_vazia", "Escreva o que você quer mudar ou perguntar ao diretor.");
   if (!t.direcao.cards.length) throw new ErroEstudio(409, "trabalho_sem_direcao", "Este trabalho ainda não tem direção de arte. Prepare a direção antes de conversar.");
   const total = totalCards(t);
   const ordemPedida = Number(corpo.ordem);
@@ -7935,6 +8108,30 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       : null;
   const textoPodeMudar = pedidoMexeNoTexto(mensagem);
   const arteRapida = arteRapidaDa(t.direcao);
+  // Frente RO, fase 2: imagem sem texto vira uma pergunta curta (sem custo): o que fazer com ela.
+  if (!mensagem) {
+    const pergunta = perguntaSobreImagens({ quantas: anexosDaConversa.length, emFoco });
+    const conversaNova = await conversaDoTrabalho(t, ch.userId, true);
+    const imagensDaMensagem = { tipo: "imagens_da_conversa", imagens: anexosDaConversa };
+    const [, idDaPergunta] = await gravarMensagens(conversaNova!, t.client_id, [
+      { papel: "usuario", conteudo: anexosDaConversa.length === 1 ? "(uma imagem anexada)" : `(${anexosDaConversa.length} imagens anexadas)`, anexos: [{ tipo: "pedido", em_foco: emFoco }, imagensDaMensagem] },
+      { papel: "agente", conteudo: pergunta.pergunta, anexos: [pergunta, imagensDaMensagem] },
+    ]);
+    return json({ trabalho_id: t.id, conversa_id: conversaNova, mensagem_id: idDaPergunta ?? null, resposta: pergunta.pergunta, mudancas: [], avisos: [], acao: null, pergunta, em_foco: emFoco, custo_usd: 0 });
+  }
+  // Frente RO, fase 2: entender (Jev), as regras que a equipe ensinou e as imagens anexadas, em paralelo com a leitura.
+  const laminasParaEntender: LaminaParaEntender[] = t.direcao.cards.map((c) => ({
+    ordem: c.ordem,
+    funcao: c.funcao,
+    texto: c.texto_exato,
+    cena: (c.layout && typeof (c.layout as { imagem?: unknown }).imagem === "string" ? (c.layout as { imagem: string }).imagem : null) || c.ilustracao || null,
+  }));
+  const entendimentoP = entenderOPedido(t, mensagem, laminasParaEntender, emFoco, ch.userId);
+  const marcaDoTrabalhoP = marcaDe(t.client_id, t).catch(nuloComLog("estudio-arte: marca do trabalho não lida (conversa)", { trabalho_id: t.id }));
+  const regrasP = marcaDoTrabalhoP.then((m) => regrasDaMesa(servico() as never, { clientId: t.client_id, mesa: "estudio", marcaId: m ? m.id : null }));
+  const anexosLidosP = anexosDaConversa.length ? abrirAnexos(t, anexosDaConversa) : Promise.resolve([] as ImagemEntrada[]);
+  // Recusa (arquivo quebrado) só é lida mais adiante: marcada como tratada para o Deno não derrubar a função antes.
+  anexosLidosP.catch(() => undefined);
 
   const conversaExistente = await conversaDoTrabalho(t, ch.userId, false);
   const idsDasFotos = t.direcao.cards.flatMap((c) => c.imagens_ids ?? []);
@@ -7970,6 +8167,14 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente AG: fotos por apelido (F1, F2 do pedido; A1, A2 do acervo). O modelo nunca recebe nem devolve id
   // (agente-uuid-transposto); "troca a foto pela segunda" vira F2 e o servidor traduz.
   const { apelidos, rotuloDoValor, fotosDoPedido } = apelidosDasFotos(arteRapida, [...acervo, ...fotosEmUso.filter((f) => !acervo.some((a) => a.id === f.id))]);
+  // Frente RO, fase 2: as imagens anexadas na conversa viram N1, N2... (a foto de uma lâmina pelo apelido).
+  anexosDaConversa.forEach((a, i) => {
+    const valor = a.imagem_id ? a.imagem_id : `${PREFIXO_FOTO_DO_PEDIDO}${a.caminho}`;
+    const apelido = `N${i + 1}`;
+    apelidos[apelido] = valor;
+    rotuloDoValor[valor] = `${apelido} (${texto(a.nome, 60)})`;
+    fotosDoPedido.push({ apelido, nome: texto(a.nome, 80), valor });
+  });
   const rotuloDaFoto = (c: CardDirecao) => {
     const id = (c.imagens_ids ?? [])[0];
     if (id) return rotuloDoValor[id] || "foto do acervo";
@@ -8052,6 +8257,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente AG: fotos pelo apelido (foto_acervo = apelido); as do pedido primeiro, na ordem em que a equipe mandou.
     fotos_do_pedido: fotosDoPedido.map((f) => ({ apelido: f.apelido, nome: f.nome })),
     acervo: acervo.map((a) => ({ apelido: (rotuloDoValor[a.id] || "").split(" ")[0] || null, nome: texto(a.nome, 80), categoria: a.categoria, descricao: texto(a.descricao, 200) || null })),
+    // Frente RO, fase 2: imagens anexadas agora (vão depois da lâmina em foco), com o papel escolhido.
+    imagens_anexadas: anexosDaConversa.map((a, i) => ({ apelido: `N${i + 1}`, nome: a.nome, papel: a.papel === "auto" ? "a decidir pelo pedido" : ROTULO_DO_PAPEL_DO_ANEXO[a.papel] })),
     // Com o cérebro no sistema, a lista crua da memória não se repete aqui.
     memoria_do_diretor: doDiretor.usouCerebro ? undefined : memoria,
   };
@@ -8068,6 +8275,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       imagens = undefined;
     }
   }
+
+  // Frente RO, fase 2: as imagens anexadas vão depois da lâmina em foco (quebrada: recusada antes de gastar).
+  const anexosLidos = await anexosLidosP;
+  if (anexosLidos.length) imagens = (imagens ?? []).concat(anexosLidos);
+  const [regras, entendimento] = await Promise.all([regrasP, entendimentoP]);
 
   const anteriores = (((historico as { data: unknown }).data as { papel: string; conteudo: string; anexos: unknown }[] | null) ?? [])
     .slice()
@@ -8087,11 +8299,16 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente F (anti-bug AB2): o mapa do painel só na conversa, nunca no prompt de imagem.
     blocoDoMapaDoPainel("estudio"),
     doDiretor.texto,
+    // Frente RO, fase 2: as regras que a equipe ensinou (EVITAR primeiro, com prioridade).
+    regras.bloco,
   ].filter(Boolean).join("\n\n");
   const pedido = [
     `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
     emFoco !== null ? `Lâmina em foco: ${emFoco}${imagens ? " (a imagem anexada é a versão atual dela)" : versaoEmFoco ? "" : " (ainda sem arte gerada)"}.` : "",
     `MENSAGEM DA EQUIPE: ${mensagem}`,
+    anexosLidos.length
+      ? `IMAGENS ANEXADAS AGORA (depois da lâmina em foco, na ordem): ${anexosDaConversa.map((a, i) => `N${i + 1} = ${a.nome}${a.papel !== "auto" ? ` (${ROTULO_DO_PAPEL_DO_ANEXO[a.papel]})` : ""}`).join("; ")}. Para usar uma como a foto de uma lâmina, foto_acervo com o apelido (N1); só o rosto da pessoa: também uso_da_foto "rosto". Referência de estilo: descreva em estilo ou tratamento o que levar dela.`
+      : "",
     blocoDasAcoesDoDiretor(t as unknown as TrabalhoParaAcoes),
   ].filter(Boolean).join("\n\n");
 
@@ -8103,7 +8320,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     raciocinio: raciocinioPara(modelo, ["low", "medium"]),
     sistema,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens }],
-    esquemaJson: ESQUEMA_CONVERSA,
+    esquemaJson: ESQUEMA_CONVERSA_QUE_APRENDE,
     maxTokensSaida: 6_000,
     timeoutMs: 300_000,
     referencia: { tipo: REFERENCIA_DA_CONVERSA, id: t.id },
@@ -8115,7 +8332,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const normalizadas = normalizarMudancas(traduzirApelidosDeFoto(bruto.mudancas, apelidos), {
     ordens: t.direcao.cards.map((c) => c.ordem),
     paleta: hexDaPaleta(kit),
-    acervo: new Set(acervo.map((a) => a.id).concat(fotosEmUso.map((a) => a.id))),
+    acervo: new Set(acervo.map((a) => a.id).concat(fotosEmUso.map((a) => a.id)).concat(anexosDaConversa.map((a) => a.imagem_id || "").filter(Boolean))),
     permitirTexto: textoPodeMudar,
     semCaixa,
     continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
@@ -8133,8 +8350,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // não virou mudança: o Jev (Choice com "nenhum") e as palavras fortes decidem; vira uma mudança de um clique.
   const mudancaDoUso = await mudancaDeUsoNaConversa(t, mensagem, emFoco, normalizadas.mudancas, ch.userId);
   if (mudancaDoUso) normalizadas.mudancas.push(mudancaDoUso);
+  // Frente RO, fase 2: "todas" (o Jev ou as palavras) repete a mudança de uma lâmina em cada lâmina.
+  const comTodas = entendimento.alvo === "todas" ? expandirParaTodas(normalizadas.mudancas, t.direcao.cards.map((c) => c.ordem)) : normalizadas.mudancas;
   // Frente AG: cada mudança leva o valor de hoje (a tela mostra antes e depois) e o nome da foto nova.
-  const mudancas: MudancaProposta[] = normalizadas.mudancas.map((m) => {
+  const mudancas: MudancaProposta[] = comTodas.map((m) => {
     const foto = m.campos.foto_acervo;
     return {
       ...m,
@@ -8144,21 +8363,46 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
   const resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
-  // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer): só a lista; a equipe confirma.
+  // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
   const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes), t, mensagem);
-  if (!resposta && !mudancas.length && !acaoProposta) {
+  // Frente RO, fase 2: na dúvida real (ambíguo, lâmina que o pedido não diz, diretor e Jev discordando), uma pergunta
+  // curta com opções clicáveis, e nada muda.
+  const duvida = precisaPerguntar(entendimento, { total, emFoco, ordensDasMudancas: mudancas.filter((m) => m.alvo === "lamina" && m.ordem !== null).map((m) => m.ordem as number) });
+  const pergunta = duvida.perguntar && duvida.motivo ? perguntaDeEsclarecimento({ mensagem, laminas: laminasParaEntender, motivo: duvida.motivo }) : null;
+  if (!resposta && !mudancas.length && !acaoProposta && !pergunta) {
     throw new ErroEstudio(502, "conversa_vazia", "O diretor não respondeu desta vez. Tente de novo ou pergunte de outro jeito.", { uso_id: r.usoId, custo_usd: r.custoUsd });
   }
+  // Frente RO, fase 2: numa ordem clara, o que não custa é feito agora (com Desfazer); o que custa vira o plano.
+  const execucao = await executarOQueNaoCusta(ch, t, { mudancas, acaoProposta, entendimento, perguntar: !!pergunta });
+  // Frente RO, fase 2 (aprender): o pedido ensina? Duradoura vira regra no cérebro (reforça se já existe).
+  const marcaDoTrabalho = await marcaDoTrabalhoP;
+  const aprendido = await aprenderDoPedido(servico() as never, {
+    clientId: t.client_id,
+    mesa: "estudio",
+    pedido: mensagem,
+    regraSugerida: bruto.regra_aprendida,
+    marcaId: marcaDoTrabalho ? marcaDoTrabalho.id : null,
+    userId: ch.userId,
+    ultimaResposta: resposta,
+  });
+  const segui = anexoDasRegrasSeguidas(bruto.regras_seguidas, regras.regras);
 
   const conversaId = conversaExistente ?? await conversaDoTrabalho(t, ch.userId, true);
+  const imagensDaMensagem = anexosDaConversa.length ? [{ tipo: "imagens_da_conversa", imagens: anexosDaConversa }] : [];
   const [, mensagemId] = await gravarMensagens(conversaId!, t.client_id, [
-    { papel: "usuario", conteudo: mensagem, anexos: [{ tipo: "pedido", em_foco: emFoco }] },
+    { papel: "usuario", conteudo: mensagem, anexos: [{ tipo: "pedido", em_foco: emFoco }, ...imagensDaMensagem] },
     {
       papel: "agente",
-      conteudo: resposta || "Seguem as mudanças que eu sugiro.",
+      conteudo: resposta || (pergunta ? pergunta.pergunta : "Seguem as mudanças que eu sugiro."),
       anexos: anexosDaRespostaDoDiretor([
-        { tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: [] },
-        ...(acaoProposta ? [acaoProposta] : []),
+        { tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: execucao.aplicadas },
+        ...(execucao.livre ? [execucao.livre] : []),
+        ...(execucao.plano ? [execucao.plano] : []),
+        ...(pergunta ? [pergunta] : []),
+        ...(aprendido ? [aprendido] : []),
+        ...(segui ? [segui] : []),
+        { tipo: "entendimento", pedido: entendimento.tipo, claro: entendimento.claro, alvo: entendimento.alvo, confianca: entendimento.confianca, por: entendimento.por },
+        ...imagensDaMensagem,
       ], resposta, t.client_id, mensagem),
       uso_id: r.usoId,
     },
@@ -8169,16 +8413,144 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     trabalho_id: t.id,
     conversa_id: conversaId,
     mensagem_id: mensagemId ?? null,
-    resposta: resposta || "Seguem as mudanças que eu sugiro.",
+    resposta: resposta || (pergunta ? pergunta.pergunta : "Seguem as mudanças que eu sugiro."),
     mudancas,
     avisos,
-    acao: acaoProposta,
+    acao: execucao.livre,
+    plano: execucao.plano,
+    pergunta,
+    aprendido,
+    segui,
+    entendimento,
+    aplicadas: execucao.aplicadas,
+    trabalho: execucao.feitoAgora ? await lerTrabalho(t.id) : undefined,
     em_foco: emFoco,
     texto_pode_mudar: textoPodeMudar,
     custo_usd: r.custoUsd,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
   });
+}
+
+/** Frente RO, fase 2: o esquema da conversa com os campos do aprendizado (regra aprendida e regras seguidas). */
+const ESQUEMA_CONVERSA_QUE_APRENDE = {
+  ...ESQUEMA_CONVERSA,
+  schema: {
+    ...ESQUEMA_CONVERSA.schema,
+    required: [...ESQUEMA_CONVERSA.schema.required, "regra_aprendida", "regras_seguidas"],
+    properties: { ...ESQUEMA_CONVERSA.schema.properties, ...CAMPOS_DO_APRENDIZADO },
+  },
+};
+
+/**
+ * Frente RO, fase 2: o Jev entende o pedido (ordem clara, opinião ou ambíguo;
+ * e a lâmina). Numa chamada, em paralelo com a leitura do trabalho. Falha: a
+ * regra de palavras (nunca derruba a conversa).
+ */
+async function entenderOPedido(t: Trabalho, mensagem: string, laminas: LaminaParaEntender[], emFoco: number | null, criadoPor: string): Promise<Entendimento> {
+  const e = { mensagem, laminas, emFoco };
+  try {
+    const p = perguntasDoEntendimento(e);
+    const res = await jevPerguntar({ state: p.state, questions: p.questions as Record<string, PerguntaJev> });
+    await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }).catch(() => null);
+    return lerEntendimento(res.answers as Record<string, RespostaDeEscolha>, e);
+  } catch (err) {
+    registrarFalha("estudio-arte: jev (entender o pedido ao diretor) falhou", err, { trabalho_id: t.id });
+    return lerEntendimento(null, e);
+  }
+}
+
+/** Frente RO, fase 2: abre as imagens anexadas (conversa e Ajustar), conferindo o arquivo antes de gastar. */
+async function abrirAnexos(t: Trabalho, anexos: Array<Pick<AnexoPedido, "caminho" | "imagem_id" | "nome">>): Promise<ImagemEntrada[]> {
+  const doAcervo = anexos.filter((a) => a.imagem_id).map((a) => a.imagem_id as string);
+  const fotos = doAcervo.length ? await imagensDoAcervo(t.client_id, doAcervo) : [];
+  let soma = 0;
+  const saida: ImagemEntrada[] = [];
+  for (const a of anexos) {
+    const f = a.imagem_id ? fotos.find((x) => x.id === a.imagem_id) : null;
+    if (a.imagem_id && !f) throw new ErroEstudio(404, "anexo_inexistente", `A imagem "${a.nome || "do acervo"}" não está no acervo deste cliente.`);
+    const bucket = f ? f.storage_bucket || "mesa" : "mesa";
+    const caminho = f ? f.storage_path : String(a.caminho);
+    // Arquivo quebrado (cortado no envio): recusado antes de gastar, com o motivo.
+    let cru: Uint8Array | null = null;
+    try {
+      cru = await baixar(bucket, caminho);
+    } catch (e) {
+      if (!(e instanceof ErroEstudio) || e.status !== 413) throw new ErroEstudio(404, "anexo_sumiu", `A imagem "${a.nome || "anexada"}" não foi encontrada. Anexe de novo.`);
+    }
+    if (cru) {
+      const defeito = defeitoDaImagem(cru);
+      if (defeito) throw new ErroEstudio(400, "anexo_quebrado", motivoDoDefeito(defeito, a.nome || "anexada"), { defeito });
+      soma += cru.byteLength;
+    }
+    if (soma > MAX_BYTES_DOS_ANEXOS) throw new ErroEstudio(413, "anexos_grandes_demais", "As imagens anexadas passam do tamanho aceito juntas. Anexe menos ou menores.");
+    // A cópia leve (2048 px) vai ao modelo: o provedor recusa o pedido inteiro acima de 30 MB.
+    saida.push(await anexoLeve(bucket, caminho, a.nome || "anexo"));
+  }
+  return saida;
+}
+
+/** Frente RO, fase 2: cada mudança da conversa vira um item "aplicar" (sem custo, com Desfazer). */
+function itensDasMudancas(mudancas: MudancaProposta[], t: Trabalho): ItemDaAcaoDoAgente[] {
+  const contagem: Record<string, number> = {};
+  return mudancas.map((m) => {
+    const base = m.alvo === "lamina" && m.ordem ? `l${m.ordem}` : "t1";
+    contagem[base] = (contagem[base] || 0) + 1;
+    const antes = m.antes || {};
+    const detalhe = (Object.keys(m.campos) as (keyof typeof m.campos)[])
+      .map((k) => `${k.replace(/_/g, " ")}: ${texto(antes[k] || "", 50) || "vazio"} → ${texto(m.campos[k], 60)}`)
+      .join("; ");
+    return {
+      ref: contagem[base] > 1 ? `${base}.${contagem[base]}` : base,
+      alvo_id: m.alvo === "lamina" && m.ordem ? String(m.ordem) : t.id,
+      titulo: texto(m.titulo, 200) || "Mudança",
+      detalhe: texto(detalhe, 300) || null,
+      operacao: OPERACAO_DA_MUDANCA,
+      rotulo: "aplicar",
+      para: m.id,
+    };
+  });
+}
+
+/**
+ * Frente RO, fase 2 (dono: "eu converso, ele entende, mas não está fazendo"):
+ * - ordem clara (Jev) e sem dúvida: as mudanças da conversa e as ações sem
+ *   custo são feitas agora (executarDireto do contrato), com Desfazer; o plano
+ *   do que custa (ajustar o texto na arte, refazer, variações, entregar,
+ *   agendar) vai para a tela, com o custo antes;
+ * - senão: as mudanças ficam como cartões de um clique (como antes), as ações
+ *   sem custo pedem Confirmar e o que custa espera no plano.
+ */
+async function executarOQueNaoCusta(
+  ch: Chamador,
+  t: Trabalho,
+  e: { mudancas: MudancaProposta[]; acaoProposta: AcaoDoAgente | null; entendimento: Entendimento; perguntar: boolean },
+): Promise<{ livre: AcaoDoAgente | null; plano: PlanoDoDiretor | null; aplicadas: string[]; feitoAgora: boolean }> {
+  const { livre: doModelo, comCusto } = separarDoPlano(e.acaoProposta);
+  const comArte = new Set(t.cards.map((v) => v.ordem));
+  const planoId = `plano-${Date.now().toString(36)}`;
+  if (e.perguntar) return { livre: doModelo, plano: null, aplicadas: [], feitoAgora: false };
+  const direto = e.entendimento.claro && !estaEntregue(t);
+  if (direto && (e.mudancas.length || doModelo)) {
+    const base: AcaoDoAgente = doModelo || { tipo: TIPO_DA_ACAO, agente: "estudio", id: `estudio-${Date.now().toString(36)}`, resumo: "", itens: [], ignorados: [], recusados: [] };
+    const junta: AcaoDoAgente = {
+      ...base,
+      itens: itensDasMudancas(e.mudancas, t).concat(base.itens),
+      resumo: base.resumo || (e.mudancas.length === 1 ? `Vou aplicar: ${e.mudancas[0].titulo}.` : `Vou aplicar ${e.mudancas.length} mudanças.`),
+      contexto: { ...(base.contexto || {}), trabalho_id: t.id, mudancas: e.mudancas },
+    };
+    const pode = podeExecutarDireto(junta, regrasDoDiretor(t as unknown as TrabalhoParaAcoes), { pedidoClaro: true, maxItens: 12 });
+    if (pode.direto) {
+      const feita = await executarDireto(junta, (item, acao) => executarItemDoDiretor(t.id, item, acao), { userId: ch.userId, lote: 1 });
+      const aplicadas = (feita.resultados || []).filter((r) => r.ok && r.operacao === OPERACAO_DA_MUDANCA).map((r) => String(junta.itens.find((i) => i.ref === r.ref && i.operacao === r.operacao)?.para || "")).filter(Boolean);
+      const feitas = e.mudancas.filter((m) => aplicadas.indexOf(m.id) >= 0);
+      const plano = montarPlano({ id: planoId, itens: comCusto, mudancasFeitas: feitas, comArte, claro: true });
+      return { livre: feita, plano, aplicadas, feitoAgora: true };
+    }
+    registrarFalha("estudio-arte: diretor não fez direto", pode.motivo, { trabalho_id: t.id });
+  }
+  const plano = montarPlano({ id: planoId, itens: comCusto, mudancasFeitas: [], comArte, claro: false });
+  return { livre: doModelo, plano, aplicadas: [], feitoAgora: false };
 }
 
 /**
@@ -8260,8 +8632,13 @@ async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
     ordens: t.direcao.cards.map((c) => c.ordem),
     paleta: hexDaPaleta(kit),
     acervo: new Set(fotos.map((f) => f.id)),
-    // Frente AG: foto do pedido da arte rápida ("troca a foto pela segunda").
-    fotosDoPedido: new Set(apelidosDasFotos(arteRapida, []).fotosDoPedido.map((f) => f.valor)),
+    // Frente AG: foto do pedido da arte rápida ("troca a foto pela segunda"). Frente RO, fase 2: e a imagem anexada
+    // na conversa (N1...), que chega como "pedido:<caminho>" sempre na pasta deste cliente.
+    fotosDoPedido: new Set(apelidosDasFotos(arteRapida, []).fotosDoPedido.map((f) => f.valor).concat(
+      brutas
+        .map((m) => (m && typeof m === "object" ? String(((m as { campos?: Record<string, unknown> }).campos ?? {}).foto_acervo ?? "") : ""))
+        .filter((v) => v.indexOf(`${PREFIXO_FOTO_DO_PEDIDO}${t.client_id}/`) === 0 && v.indexOf("..") < 0 && v.length <= 320),
+    )),
     // Quem clica em Aplicar viu o texto novo no cartão da mudança.
     permitirTexto: true,
     semCaixa: laminasSemCaixa(t, kit),
@@ -8448,9 +8825,97 @@ function exigirTrabalhoAberto(x: Trabalho) {
 }
 
 /** Uma operação do diretor, já confirmada pela equipe. Devolve o que o Desfazer precisa. */
-async function executarItemDoDiretor(trabalhoId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null } | void> {
+async function executarItemDoDiretor(trabalhoId: string, item: ItemDaAcaoDoAgente, acao?: AcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null } | void> {
   const ordem = Number(item.alvo_id);
   switch (item.operacao) {
+    // Frente RO, fase 2: a mudança da conversa (texto, cor, cena, foto, uso do rosto), com o antes para o Desfazer.
+    case "aplicar_mudanca": {
+      const lista = (acao && acao.contexto && Array.isArray((acao.contexto as { mudancas?: unknown }).mudancas) ? (acao.contexto as { mudancas: MudancaProposta[] }).mudancas : []);
+      const m = lista.find((x) => x && x.id === item.para);
+      if (!m) throw new Error("A mudança não está mais na proposta. Peça de novo ao diretor.");
+      let desfazer: Record<string, unknown> = {};
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (m.alvo === "lamina") {
+          const card = x.direcao.cards.find((c) => c.ordem === m.ordem);
+          if (!card) throw new Error(`A lâmina ${m.ordem} não existe mais.`);
+          desfazer = { alvo: "lamina", ordem: m.ordem, card_antes: card };
+        } else {
+          desfazer = { alvo: "conjunto", conceito: x.direcao.conceito ?? null, fio_visual: x.direcao.fio_visual ?? null, estilo_pedido: x.direcao.estilo_pedido ?? null };
+        }
+        return { direcao: aplicarNaDirecao<Direcao>(x.direcao, [m]).direcao };
+      });
+      return { desfazer };
+    }
+    case "mudar_qualidade": {
+      let de: string | null = null;
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        de = x.qualidade ?? null;
+        return { qualidade: String(item.para) };
+      });
+      return { desfazer: { qualidade: de } };
+    }
+    case "tirar_lamina": {
+      let d: Record<string, unknown> = {};
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (!ehAds(x) && x.direcao.carrossel_infinito && x.direcao.cards.length > 1) throw new Error(MOTIVO_CONTINUO_LAMINAS);
+        const r = tirarLaminaDoTrabalho(x as unknown as TrabalhoParaAcoes, ordem);
+        d = r.desfazer;
+        return r.patch as unknown as Record<string, unknown>;
+      });
+      return { desfazer: d };
+    }
+    case "duplicar_lamina": {
+      let d: Record<string, unknown> = {};
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (!ehAds(x) && x.direcao.carrossel_infinito && x.direcao.cards.length > 1) throw new Error(MOTIVO_CONTINUO_LAMINAS);
+        const r = duplicarLaminaDoTrabalho(x as unknown as TrabalhoParaAcoes, ordem);
+        d = r.desfazer;
+        return r.patch as unknown as Record<string, unknown>;
+      });
+      return { desfazer: d };
+    }
+    case "trocar_logo": {
+      const escolha = escolhaDaLogo(item.para);
+      if (!escolha) throw new Error("Logo inválida. Use principal, alternativa ou auto.");
+      const doTrabalho = !/^\d+$/.test(String(item.alvo_id));
+      let antes: unknown = null;
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (doTrabalho) {
+          antes = x.direcao.logo_escolhida ?? null;
+          return { direcao: { ...x.direcao, logo_escolhida: escolha } };
+        }
+        const card = x.direcao.cards.find((c) => c.ordem === ordem);
+        if (!card) throw new Error(`A lâmina ${ordem} não existe mais.`);
+        antes = card.logo ?? null;
+        return { direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, logo: escolha } : c)) } };
+      });
+      return { desfazer: { ordem: doTrabalho ? null : ordem, logo: antes } };
+    }
+    case "tirar_referencias": {
+      let antes: string[] = [];
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        const card = x.direcao.cards.find((c) => c.ordem === ordem);
+        if (!card) throw new Error(`A lâmina ${ordem} não existe mais.`);
+        antes = (card.referencias_ids ?? []).slice();
+        return { direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, referencias_ids: [] } : c)) } };
+      });
+      return { desfazer: { ordem, referencias_ids: antes } };
+    }
+    // Com custo ou para fora: quem faz é a tela, pelo plano (aqui só confere que ainda dá).
+    case "ajustar_texto":
+    case "variacoes":
+    case "entregar":
+    case "agendar": {
+      const x = await lerTrabalho(trabalhoId);
+      if (item.operacao !== "agendar") exigirTrabalhoAberto(x);
+      return;
+    }
     case "reordenar": {
       const nova = String(item.para ?? "").split(",").map(Number);
       await mutarTrabalho(trabalhoId, (x) => {
@@ -8512,6 +8977,65 @@ async function desfazerItemDoDiretor(trabalhoId: string, r: ResultadoDoItem) {
   const d = (r.desfazer ?? {}) as Record<string, unknown>;
   const ordem = Number(d.ordem);
   switch (r.operacao) {
+    // Frente RO, fase 2.
+    case "aplicar_mudanca": {
+      await mutarTrabalho(trabalhoId, (x) => {
+        if (d.alvo === "lamina") {
+          const antes = d.card_antes as CardDirecao;
+          if (!antes || !x.direcao.cards.some((c) => c.ordem === antes.ordem)) throw new Error("A lâmina mudou de lugar depois. Ajuste pela tela.");
+          return { direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === antes.ordem ? antes : c)) } };
+        }
+        return {
+          direcao: {
+            ...x.direcao,
+            conceito: typeof d.conceito === "string" ? d.conceito : x.direcao.conceito,
+            fio_visual: typeof d.fio_visual === "string" ? d.fio_visual : null,
+            estilo_pedido: typeof d.estilo_pedido === "string" ? d.estilo_pedido : null,
+          },
+        };
+      });
+      return;
+    }
+    case "mudar_qualidade": {
+      await mutarTrabalho(trabalhoId, () => ({ qualidade: typeof d.qualidade === "string" && d.qualidade ? d.qualidade : QUALIDADE_PADRAO }));
+      return;
+    }
+    case "tirar_lamina": {
+      await mutarTrabalho(trabalhoId, (x) => devolverLaminaAoTrabalho(x as unknown as TrabalhoParaAcoes, String(d.chave || ""), typeof d.total_depois === "number" ? d.total_depois : undefined) as unknown as Record<string, unknown>);
+      return;
+    }
+    case "duplicar_lamina": {
+      await mutarTrabalho(trabalhoId, (x) => tirarCopiaDoTrabalho(x as unknown as TrabalhoParaAcoes, ordem, typeof d.total_depois === "number" ? d.total_depois : undefined) as unknown as Record<string, unknown>);
+      return;
+    }
+    case "trocar_logo": {
+      await mutarTrabalho(trabalhoId, (x) => {
+        const volta = escolhaDaLogo(d.logo);
+        if (d.ordem == null) {
+          const direcao = { ...x.direcao } as Direcao;
+          if (volta) direcao.logo_escolhida = volta;
+          else delete direcao.logo_escolhida;
+          return { direcao };
+        }
+        return {
+          direcao: {
+            ...x.direcao,
+            cards: x.direcao.cards.map((c) => {
+              if (c.ordem !== ordem) return c;
+              const semLogo = { ...c };
+              delete semLogo.logo;
+              return volta ? { ...semLogo, logo: volta } : semLogo;
+            }),
+          },
+        };
+      });
+      return;
+    }
+    case "tirar_referencias": {
+      const refs = Array.isArray(d.referencias_ids) ? (d.referencias_ids as unknown[]).map(String) : [];
+      await mutarTrabalho(trabalhoId, (x) => ({ direcao: { ...x.direcao, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, referencias_ids: refs } : c)) } }));
+      return;
+    }
     case "reordenar": {
       const volta = Array.isArray(d.ordem) ? (d.ordem as unknown[]).map(Number) : [];
       await mutarTrabalho(trabalhoId, (x) => {
@@ -8553,6 +9077,88 @@ async function desfazerItemDoDiretor(trabalhoId: string, r: ResultadoDoItem) {
   }
 }
 
+/** Frente RO, fase 2: tira os ids desfeitos da lista de aplicadas do cartão das mudanças. */
+async function tirarDasAplicadas(mensagemId: string, clientId: string, ids: string[]) {
+  const { data } = await servico().from("agente_mensagens").select("id, anexos").eq("id", mensagemId).eq("client_id", clientId).maybeSingle();
+  const anexos = data && Array.isArray((data as { anexos?: unknown }).anexos) ? ((data as { anexos: Record<string, unknown>[] }).anexos) : null;
+  if (!anexos) return;
+  const novos = anexos.map((a) => (a && a.tipo === "mudancas" && Array.isArray(a.aplicadas) ? { ...a, aplicadas: (a.aplicadas as string[]).filter((x) => ids.indexOf(x) < 0) } : a));
+  await servico().from("agente_mensagens").update({ anexos: novos }).eq("id", mensagemId).eq("client_id", clientId);
+}
+
+/**
+ * plano_passo { mensagem_id, plano_id?, passo_id?, estado?, motivo?, versao_antes?, versoes_depois?, custo_usd?, plano? }
+ * Frente RO, fase 2: a tela executa o plano do diretor passo a passo (gerar e
+ * conferir, ajustar o texto, entregar, Agendar do Estúdio) e grava aqui o
+ * andamento de cada passo e a prova (as versões de antes e depois). Parar e
+ * descartar valem para os passos que não começaram. Sem custo.
+ */
+async function planoPasso(ch: Chamador, corpo: Record<string, unknown>) {
+  const id = texto(corpo.mensagem_id, 64);
+  if (!UUID.test(id)) throw new ErroEstudio(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data, error } = await servico().from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroEstudio(503, "mensagem_indisponivel", "Não foi possível ler a mensagem do diretor.");
+  const linha = data as { id: string; client_id: string; conversa_id: string | null; anexos: unknown } | null;
+  if (!linha) throw new ErroEstudio(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  await garantirAcesso(ch, linha.client_id);
+  const anexos = Array.isArray(linha.anexos) ? (linha.anexos as Record<string, unknown>[]).slice() : [];
+  const planoId = texto(corpo.plano_id, 80);
+  const i = anexos.findIndex((a) => a && a.tipo === TIPO_DO_PLANO && (!planoId || a.id === planoId));
+  if (i < 0) throw new ErroEstudio(404, "plano_inexistente", "Esta mensagem não tem plano do diretor.");
+  const plano = planoDoAnexo(anexos[i]);
+  if (!plano) throw new ErroEstudio(404, "plano_inexistente", "Esta mensagem não tem plano do diretor.");
+  const estados = ["pendente", "executando", "feito", "falhou", "parado"];
+  const m: MudancaDoPasso = {
+    ...(corpo.passo_id ? { passo_id: texto(corpo.passo_id, 20) } : {}),
+    ...(estados.indexOf(String(corpo.estado)) >= 0 ? { estado: corpo.estado as MudancaDoPasso["estado"] } : {}),
+    ...(corpo.motivo !== undefined ? { motivo: corpo.motivo == null ? null : texto(corpo.motivo, 300) } : {}),
+    ...(typeof corpo.versao_antes === "number" ? { versao_antes: corpo.versao_antes } : {}),
+    ...(Array.isArray(corpo.versoes_depois) ? { versoes_depois: (corpo.versoes_depois as unknown[]).map(Number) } : {}),
+    ...(typeof corpo.custo_usd === "number" ? { custo_usd: corpo.custo_usd } : {}),
+    ...(["confirmar", "parar", "descartar", "terminar"].indexOf(String(corpo.plano)) >= 0 ? { plano: corpo.plano as MudancaDoPasso["plano"] } : {}),
+  };
+  let novo: PlanoDoDiretor;
+  try {
+    novo = planoComPasso(plano, m);
+  } catch (e) {
+    throw new ErroEstudio(409, "plano_fechado", e instanceof Error ? e.message : "O plano não aceita mais este passo.");
+  }
+  anexos[i] = novo as unknown as Record<string, unknown>;
+  const { error: erroGravar } = await servico().from("agente_mensagens").update({ anexos }).eq("id", linha.id).eq("client_id", linha.client_id);
+  if (erroGravar) throw new ErroEstudio(503, "plano_nao_gravado", "O passo foi feito, mas o andamento não foi gravado na conversa. Atualize a tela.");
+  if (novo.terminado_em && !plano.terminado_em && linha.conversa_id) {
+    await gravarMensagens(linha.conversa_id, linha.client_id, [{ papel: "sistema", conteudo: `Diretor: plano ${resumoDoPlano(novo)}.` }]).catch(nuloComLog("estudio-arte: fim do plano não gravado", { mensagem_id: linha.id }));
+  }
+  return json({ plano: novo, custo_usd: 0 });
+}
+
+/**
+ * desfazer_versao { trabalho_id, ordem, versao } (frente RO, fase 2): o
+ * "Desfazer" do ajuste e dos passos do plano. A versão atual sai da lista e
+ * fica guardada em direcao.versoes_arquivadas (nenhum arquivo é apagado); a
+ * anterior volta a ser a atual. Só a atual, e só com uma anterior. Sem custo.
+ */
+async function desfazerVersao(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  garantirEditavel(t);
+  const ordem = lerOrdem(corpo);
+  const versao = Number(corpo.versao);
+  const gravado = await mutarTrabalho(t.id, (x) => {
+    const daLamina = x.cards.filter((v) => v.ordem === ordem);
+    if (daLamina.length < 2) throw new ErroEstudio(409, "sem_versao_anterior", "Esta lâmina não tem versão anterior para voltar.");
+    const atual = daLamina.reduce((a, b) => (b.versao > a.versao ? b : a));
+    if (Number.isInteger(versao) && atual.versao !== versao) throw new ErroEstudio(409, "versao_mudou", "A versão atual mudou desde então; nada foi desfeito.");
+    const naDirecao = (x.direcao as unknown as { versoes_arquivadas?: unknown }).versoes_arquivadas;
+    const guardadas: unknown[] = Array.isArray(naDirecao) ? naDirecao : [];
+    return {
+      cards: x.cards.filter((v) => v !== atual),
+      direcao: { ...x.direcao, versoes_arquivadas: guardadas.concat([{ ...atual, desfeita_em: new Date().toISOString(), desfeita_por: ch.userId }]) },
+    };
+  });
+  const atual = versaoAtual(gravado, ordem);
+  return json({ trabalho: gravado, ordem, versao_atual: atual ? atual.versao : null, custo_usd: 0 });
+}
+
 /** A proposta guardada na mensagem do diretor, com o trabalho conferido (mesmo cliente, com acesso). */
 async function propostaDoDiretor(ch: Chamador, corpo: Record<string, unknown>) {
   let guardada: AcaoGuardada;
@@ -8579,7 +9185,7 @@ async function executarAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
   let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[] };
   try {
     // Numa chamada só (sem passos): o "refazer" volta em gerar_de_novo e a tela gera uma vez.
-    r = await confirmarAcaoGuardada(guardada, (item) => executarItemDoDiretor(t.id, item), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1, caminho: () => caminhoDoTrabalho(t) });
+    r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItemDoDiretor(t.id, item, acao), { descartar: corpo.descartar === true, userId: ch.userId, lote: 1, caminho: () => caminhoDoTrabalho(t) });
   } catch (e) {
     throw comoErroDoEstudio(e);
   }
@@ -8610,6 +9216,11 @@ async function desfazerAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
   if (guardada.mensagem.conversa_id) {
     await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }]).catch(nuloComLog("estudio-arte: mensagem do diretor não gravada", { trabalho_id: t.id }));
   }
+  // Frente RO, fase 2: as mudanças desfeitas voltam a ser propostas (o cartão deixa de dizer "Aplicada").
+  const desfeitas = (guardada.acao.resultados || []).filter((x) => x.ok && x.operacao === OPERACAO_DA_MUDANCA)
+    .map((x) => String(guardada.acao.itens.find((i) => i.ref === x.ref && i.operacao === x.operacao)?.para || ""))
+    .filter(Boolean);
+  if (desfeitas.length) await tirarDasAplicadas(guardada.mensagem.id, t.client_id, desfeitas).catch(nuloComLog("estudio-arte: aplicadas não atualizadas no desfazer", { trabalho_id: t.id }));
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "estudio_desfazer_acao_do_diretor", origin: "mesa:estudio-arte",
     keyId: `mesa:estudio-arte:${ch.userId}`, scopes: ["studio:write"],
@@ -8879,6 +9490,10 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   texto_da_lamina: textoDaLamina,
   executar_acao_agente: executarAcaoDoDiretor,
   desfazer_acao_agente: desfazerAcaoDoDiretor,
+  // Frente RO, fase 2: o andamento do plano do diretor, o Desfazer da versão e o "Esquecer" do que aprendeu.
+  plano_passo: planoPasso,
+  desfazer_versao: desfazerVersao,
+  ...rotasDoAprendizado({ mesa: "estudio", servico: () => servico() as never, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
   enfileirar,
   cancelar_fila: cancelarFila,
   processar_fila: processarFila,

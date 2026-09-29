@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -609,6 +611,12 @@ export default function AgenteSenior({
             {m.acoes && <CartaoDasAcoes mensagemId={m.id} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />}
           </div>
         )}
+        {/* Frente AG3: o que ele aprendeu com o pedido (Esquecer) e as regras do dono que seguiu. */}
+        <AprendizadoDoAgente
+          anexos={m.aprendizado}
+          onEsquecer={(id) => esquecerRegraAprendida("mesa-ads", id, { client_id: clientId })}
+          onGuardar={(texto, tipo) => guardarRegraAprendida("mesa-ads", { texto, categoria: tipo }, { client_id: clientId })}
+        />
       </FalaDoAgente>
     );
   };

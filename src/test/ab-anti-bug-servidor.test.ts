@@ -56,8 +56,9 @@ describe("histórico das conversas: as mais recentes, na ordem", () => {
 
   it("workspace-agent manda ao modelo as 30 últimas mensagens", () => {
     const f = ler("supabase/functions/workspace-agent/index.ts");
-    expect(f).toContain('.eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(30);');
-    expect(f).toContain("historicoRecente.slice().reverse()");
+    // Frente AG3 (29/09): a pergunta de agora é gravada antes do modelo; o histórico lê 31 e tira ela (vai uma vez só, no fim).
+    expect(f).toContain('.eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(31);');
+    expect(f).toContain("historicoRecente.slice(1).reverse()");
     expect(f).not.toContain('.eq("thread_id", thread_id).order("created_at", { ascending: true }).limit(30)');
   });
 });

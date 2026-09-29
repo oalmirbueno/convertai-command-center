@@ -64,6 +64,12 @@ const RUN_EM_PALAVRAS: Record<string, string> = {
 const runEmPalavras = (status: unknown) => RUN_EM_PALAVRAS[String(status)] ?? String(status);
 import { operatorRunIsStale } from "../../supabase/functions/_shared/operator-freshness";
 
+/** Frente AG3: vínculo só com painel_task_id também acha a tarefa (antes aparecia "(sem tarefa vinculada)"). */
+function tarefaDoVinculo<T>(v: { kanban_task_id?: string | null }, tarefas: Map<string, T>): T | null {
+  const id = v.kanban_task_id || (v as { painel_task_id?: string | null }).painel_task_id;
+  return id ? tarefas.get(String(id)) ?? null : null;
+}
+
 /**
  * Execução da equipe: o que os operadores internos (Hermes) estão fazendo,
  * sob qual responsável humano, com que evidência.
@@ -358,7 +364,7 @@ export default function AdminExecucao() {
 
   const numeros = useMemo(() => {
     const por = (st: string) => vinculosAtivos.filter((v) => v.status === st).length;
-    const comOperador = new Set(vinculos.map((v) => v.kanban_task_id).filter(Boolean));
+    const comOperador = new Set(vinculos.flatMap((v) => [v.kanban_task_id, (v as any).painel_task_id]).filter(Boolean));
     const semOperador = disponiveis.filter((t) => !comOperador.has(String(t.id)));
     return {
       fila: por("queued") + por("in_progress"),
@@ -372,7 +378,7 @@ export default function AdminExecucao() {
       semOperador,
       // Prazo estourado é a única contagem que vale por si: ela decide o dia.
       vencidas: vinculosAtivos.filter((v) => {
-        const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+        const t = tarefaDoVinculo(v, tarefas);
         return t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
       }).length,
     };
@@ -457,7 +463,7 @@ export default function AdminExecucao() {
     const base = mostrarEncerradas ? vinculos : vinculosAtivos;
     if (!busca.trim() && !filtroCliente && filtroPrazo === "todas") return base;
     return base.filter((v) => {
-      const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+      const t = tarefaDoVinculo(v, tarefas);
       const cliente = t?.project?.client;
       return passaNoFiltro({
         busca,
@@ -554,7 +560,7 @@ export default function AdminExecucao() {
   const relatorio = useMemo(() => {
     const doDia = (iso?: string | null) => Boolean(iso && String(iso).slice(0, 10) === hoje);
     const linha = (v: Vinculo) => {
-      const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+      const t = tarefaDoVinculo(v, tarefas);
       const cliente = t?.project?.client;
       return [
         "- " + [
@@ -580,7 +586,7 @@ export default function AdminExecucao() {
     const bloqueadas = vinculosAtivos.filter((v) => v.status === "blocked");
     const andamento = vinculosAtivos.filter((v) => v.status === "in_progress");
     const prazoCritico = vinculosAtivos.filter((v) => {
-      const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+      const t = tarefaDoVinculo(v, tarefas);
       return t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
     });
 
@@ -748,7 +754,7 @@ export default function AdminExecucao() {
   };
 
   const itensDoCartao = (v: Vinculo): ItemDeMenu[] => {
-    const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+    const t = tarefaDoVinculo(v, tarefas);
     const itens: ItemDeMenu[] = [
       { rotulo: "Ver o agente", acao: () => setAgenteAberto(opDe(v.operator_id) ?? null) },
       {
@@ -939,7 +945,7 @@ export default function AdminExecucao() {
   }
 
   const Cartao = ({ v }: { v: Vinculo }) => {
-    const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+    const t = tarefaDoVinculo(v, tarefas);
     const cliente = t?.project?.client;
     const op = opDe(v.operator_id);
     const destacado = v.id === vinculoAlvo;

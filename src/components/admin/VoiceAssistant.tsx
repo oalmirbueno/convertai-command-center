@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Sparkles, X, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, Brain, MessageSquare } from "lucide-react";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import TextoDoAgente, { BotaoDaArea } from "@/components/agentes/TextoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { chamarAcaoDoLancador, destinoDoAgente, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
@@ -146,6 +148,8 @@ interface RespostaDaConversa {
   aviso?: string | null;
   /** Área do painel que a resposta cita (botão Abrir). */
   destino?: DestinoDoAgente | null;
+  /** Frente AG3: "Aprendi: ..." (com Esquecer ou Guardar) e "Segui: ..." desta resposta. */
+  aprendizado?: unknown[];
 }
 
 /** Ação que o Aceleriq fez (ou propôs) pelo servidor, guardada na conversa do cliente. */
@@ -154,6 +158,14 @@ interface AcaoDoServidor {
   acao: AcaoDoAgente;
   pedido: string;
   resposta: string;
+  /** Frente AG3: "Aprendi" e "Segui" desta ação. */
+  aprendizado?: unknown[];
+}
+
+/** Frente AG3: os anexos "Aprendi" e "Segui" que a função devolveu (formato comum das mesas). */
+function anexosDoAprendizado(d: unknown): unknown[] {
+  const x = (d || {}) as { aprendi?: unknown; segui?: unknown };
+  return [x.aprendi, x.segui].filter((a) => a && typeof a === "object");
 }
 
 /** Classes do painel: gaveta em tela cheia no celular, coluna fixa à direita no computador (abaixo da barra do topo). */
@@ -194,6 +206,12 @@ export default function VoiceAssistant({
   const ultimoClienteDaTelaRef = useRef<string | null>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
   const fimDaConversaRef = useRef<HTMLDivElement>(null);
+  // Frente AG3: as últimas trocas (só texto) vão junto do pedido: "e a outra?", "faz isso" passam a ter referência.
+  const historicoRef = useRef<Array<{ papel: "equipe" | "aceleriq"; texto: string }>>([]);
+  const lembrarTroca = (papel: "equipe" | "aceleriq", texto: string) => {
+    const t = String(texto || "").trim();
+    if (t) historicoRef.current = [...historicoRef.current, { papel, texto: t.slice(0, 600) }].slice(-8);
+  };
   const [listening, setListening] = useState(false);
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
@@ -460,6 +478,7 @@ export default function VoiceAssistant({
           ...preContextoAtual(),
           // Só o pedido explícito da pessoa faz ações; a análise automática nunca faz.
           agir: !opts?.silent,
+          historico: opts?.silent ? [] : historicoRef.current,
           // Se o componente já carregou docs do sistema, sinaliza pro edge skip recarregar.
           skipSystemContractAutoLoad: systemDocs.length > 0,
           clients: clientList.map((c) => ({
@@ -476,15 +495,28 @@ export default function VoiceAssistant({
       const anexo = (data as any).acao ? acaoDoAnexo((data as any).acao) : null;
       const mensagemDaAcao = (data as any).mensagem_id ? String((data as any).mensagem_id) : "";
       const destinoNovo = destinoDoAgente((data as any).ir_para);
+      const aprendizado = anexosDoAprendizado(data);
       if (anexo && mensagemDaAcao) {
-        setAcoesDoServidor((l) => [...l.slice(-5), { mensagemId: mensagemDaAcao, acao: anexo, pedido: text, resposta: String((data as any).resposta || "") }]);
+        setAcoesDoServidor((l) => [...l.slice(-5), { mensagemId: mensagemDaAcao, acao: anexo, pedido: text, resposta: String((data as any).resposta || ""), aprendizado }]);
+      } else if (!opts?.silent && aprendizado.length && text) {
+        // Pedido que só ensinou (ou só seguiu regra): vira uma troca na conversa, com "Aprendi"/"Segui".
+        setRespostas((r) => [...r.slice(-7), { id: crypto.randomUUID(), pergunta: text, resposta: String((data as any).resposta || "") || null, passos: [], carregando: false, aprendizado }]);
+      }
+      if (!opts?.silent && text) {
+        lembrarTroca("equipe", text);
+        lembrarTroca("aceleriq", String((data as any).resposta || (data as any).narrative || ""));
+      }
+      // Frente AG3: feito direto sem a mensagem guardada (sem Desfazer pelo cartão) não passa calado.
+      if ((data as any).aviso_da_acao) {
+        appendLog({ kind: "info", text: String((data as any).aviso_da_acao) });
+        toast({ title: "Feito, sem Desfazer", description: String((data as any).aviso_da_acao), variant: "destructive" });
       }
       setDestino(destinoNovo && !destinoNovo.direto ? destinoNovo : null);
       if (destinoNovo && destinoNovo.direto) {
         navigate(destinoNovo.link);
         appendLog({ kind: "ok", text: `Abri ${destinoNovo.nome}.` });
       }
-      if ((anexo && mensagemDaAcao) || (destinoNovo && destinoNovo.direto)) {
+      if ((anexo && mensagemDaAcao) || (destinoNovo && destinoNovo.direto) || (!opts?.silent && !anexo && aprendizado.some((a: any) => a && a.tipo === "aprendizado_do_agente"))) {
         // O pedido virou ação: o campo limpa para não repetir na próxima análise.
         setFinalText("");
         setInterim("");
@@ -1159,6 +1191,8 @@ export default function VoiceAssistant({
 
   function escolherCliente(id: string | null) {
     semAnaliseAutomaticaRef.current = false;
+    // Outro cliente, outra conversa: "a outra tarefa" não pode apontar para o cliente anterior.
+    if (id !== (answers.client_id || null)) historicoRef.current = [];
     aiAttemptedRef.current = false;
     setClientSearch("");
     if (!id) {
@@ -1181,7 +1215,7 @@ export default function VoiceAssistant({
     setRespostas((r) => [...r.slice(-7), { id, pergunta: rotulo, resposta: null, passos: [], carregando: true }]);
     try {
       const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
-        body: { modo: "conversa", pergunta, text: "", clientId: answers.client_id || null, ...preContextoAtual() },
+        body: { modo: "conversa", pergunta, text: "", clientId: answers.client_id || null, historico: historicoRef.current, ...preContextoAtual() },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -1193,7 +1227,10 @@ export default function VoiceAssistant({
         passos: Array.isArray(d.passos) ? d.passos.map(String) : [],
         aviso: d._degraded ? "Sem IA agora: mostrei o que o painel tem." : null,
         destino: destinoDoAgente(d.ir_para),
+        aprendizado: anexosDoAprendizado(d),
       } : x)));
+      lembrarTroca("equipe", rotulo);
+      lembrarTroca("aceleriq", String(d.resposta || ""));
     } catch (err: any) {
       setRespostas((r) => r.map((x) => (x.id === id ? { ...x, carregando: false, aviso: `Não consegui responder: ${err?.message || "tente de novo"}` } : x)));
     }
@@ -1439,6 +1476,11 @@ export default function VoiceAssistant({
                               )}
                               {r.aviso && <p className="mt-1 text-[12.5px] text-muted-foreground">{r.aviso}</p>}
                               {r.destino && <BotaoDaArea destino={r.destino} onAbrir={(link) => navigate(link)} className="mt-1.5" />}
+                              <AprendizadoDoAgente
+                                anexos={r.aprendizado}
+                                onEsquecer={(id) => esquecerRegraAprendida("voice-assistant-agent", id, { clientId: answers.client_id || null })}
+                                onGuardar={(texto, tipo) => guardarRegraAprendida("voice-assistant-agent", { texto, categoria: tipo }, { clientId: answers.client_id || null })}
+                              />
                             </>
                           )}
                         </div>
@@ -1459,6 +1501,11 @@ export default function VoiceAssistant({
                           titulo="O Aceleriq faz"
                           observacao="Sem custo. Dá para desfazer."
                           onPedido={(p) => chamarAcaoDoLancador(a.mensagemId, a.acao.id, p)}
+                        />
+                        <AprendizadoDoAgente
+                          anexos={a.aprendizado}
+                          onEsquecer={(id) => esquecerRegraAprendida("voice-assistant-agent", id, { clientId: answers.client_id || null })}
+                          onGuardar={(texto, tipo) => guardarRegraAprendida("voice-assistant-agent", { texto, categoria: tipo }, { clientId: answers.client_id || null })}
                         />
                       </div>
                     ))}

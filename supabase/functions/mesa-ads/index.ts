@@ -232,7 +232,7 @@ import {
 } from "./acoes-conta.ts";
 import { ESQUEMA_KIT_RECEPCAO, itemDaAgendaDoKit, type KitDeRecepcao, normalizarKit, pedidoDoKit } from "./kit-recepcao.ts";
 // Frente TR (27/09): agente sênior que faz o seguro sozinho, monta a campanha do plano e a rotina de monitoramento.
-import { acaoSemRisco, arquivarMontagem, ativarMontagem, completarMontagem, itemDeMontagem, montarCampanhaNaMeta, type Montagem } from "./acoes-conta.ts";
+import { acaoSemRisco, alvosComNomeRepetido, arquivarMontagem, ativarMontagem, completarMontagem, itemDeMontagem, montarCampanhaNaMeta, type Montagem } from "./acoes-conta.ts";
 import {
   avaliarItem,
   limitesDoDono,
@@ -371,6 +371,9 @@ import {
 } from "./melhores-criativos.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG3 (29/09): o tráfego aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
+import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
+import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -709,6 +712,8 @@ const ESQUEMA_CONVERSA_PLANO = {
     nome: S(["string", "null"]),
     angulos: { type: ["array", "null"], items: ESQUEMA_ANGULO },
     estrutura: { ...ESQUEMA_ESTRUTURA, type: ["object", "null"] },
+    // Frente AG3: apelidos das regras do dono que pesaram (r1, r2...); vazio sem regra.
+    regras_seguidas: lista(S("string")),
   }),
 };
 
@@ -780,6 +785,7 @@ const ESQUEMA_OFERTA_CONVERSA = {
     ofertas: lista(obj(OFERTA_CAMPOS)),
     briefing_sugerido: { ...obj(ESQUEMA_BRIEFING_CORPO), type: ["object", "null"] },
     ideias: lista(ESQUEMA_IDEIA),
+    regras_seguidas: lista(S("string")),
   }),
 };
 
@@ -971,7 +977,8 @@ async function registrarMensagens(
     .filter((m) => m.conteudo.trim())
     .map((m, i) => ({
       // Frente TR: id escolhido antes (as ações feitas sozinhas apontam para a mensagem).
-      ...(m.id ? { id: m.id } : {}),
+      // Frente AG3: sempre com id (lote com e sem id mandaria id nulo e o insert inteiro cairia).
+      id: m.id || crypto.randomUUID(),
       conversa_id: conversaId,
       client_id: clientId,
       // criado_em crescente: a ordem da conversa não depende do relógio do banco.
@@ -981,9 +988,53 @@ async function registrarMensagens(
       anexos: m.anexos ?? [],
       uso_id: m.uso_id || null,
     }));
-  if (!linhas.length) return;
+  if (!linhas.length) return true;
   const { error } = await servico.from("agente_mensagens").insert(linhas);
-  if (error) console.error("[mesa-ads] mensagens nao gravadas", { conversa_id: conversaId, code: error.code });
+  if (!error) return true;
+  console.error("[mesa-ads] mensagens nao gravadas", { conversa_id: conversaId, code: error.code, erro: error.message });
+  // Frente AG3: a resposta do agente não some por causa de um anexo que o banco recusou: grava de novo
+  // sem os anexos (o texto fica na conversa) e o chamador sabe que o cartão não foi guardado.
+  const semAnexos = linhas.map((l) => ({ ...l, anexos: [] }));
+  const { error: e2 } = await servico.from("agente_mensagens").insert(semAnexos);
+  if (e2) console.error("[mesa-ads] mensagens nao gravadas nem sem anexos", { conversa_id: conversaId, code: e2.code, erro: e2.message });
+  return false;
+}
+
+/** Regras que o dono ensinou ao tráfego (e as gerais do cliente). Falha vira lista vazia. */
+function regrasDoTrafego(servico: SupabaseClient, clientId: string): Promise<RegraAtiva[]> {
+  return regrasDoAgente(servico as never, { agente: "trafego", clientId }).catch((e) => (registrarFalha("mesa-ads: regras do dono não lidas", e), []));
+}
+
+/**
+ * esquecer_regra { client_id, regra_id } / guardar_regra { client_id, regra: { texto, categoria } }:
+ * o "Esquecer" e o "Guardar como regra" da linha "Aprendi" (frente AG3).
+ */
+async function esquecerRegraDoTrafego(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const r = await esquecerRegra(servico as never, { id: String(corpo.regra_id ?? ""), donosPermitidos: [clientId] });
+  if (!r.ok) throw new ErroHttp(400, "esquecer_falhou", r.motivo || "Não foi possível esquecer agora.");
+  return json({ ok: true, custo_usd: 0 });
+}
+
+async function guardarRegraDoTrafego(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const g = (corpo.regra && typeof corpo.regra === "object" ? corpo.regra : {}) as Record<string, unknown>;
+  try {
+    const aprendido = await guardarNoServidor(servico as never, { texto: String(g.texto ?? ""), categoria: g.categoria === "preferencia" ? "preferencia" : "evitar", escopo: "cliente", agente: "trafego", clientId, donoId: chamador.userId });
+    return json({ aprendido, custo_usd: 0 });
+  } catch (e) {
+    throw new ErroHttp(400, "guardar_falhou", e instanceof Error ? e.message : "Não foi possível guardar a regra agora.");
+  }
+}
+
+/** Campanhas recentes da conta em qualquer status (pausada sem gasto também é alvo de ordem). Só leitura. */
+async function campanhasRecentesDaConta(servico: SupabaseClient, clientId: string) {
+  const { data } = await servico.from("ads_campaigns").select("campaign_id, name, effective_status, daily_budget").eq("client_id", clientId)
+    .not("effective_status", "in", "(DELETED,ARCHIVED)").order("updated_at", { ascending: false }).limit(30);
+  return ((data as { campaign_id: string; name: string | null; effective_status: string | null; daily_budget: number | string | null }[] | null) ?? [])
+    .map((c) => ({ campaign_id: String(c.campaign_id), nome: c.name, status: c.effective_status, orcamento_diario: c.daily_budget != null && Number(c.daily_budget) > 0 ? Number(c.daily_budget) : null }));
 }
 
 /** Imagens anexadas (bucket mesa, só caminho do próprio cliente). */
@@ -2679,7 +2730,11 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
     .filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
 
-  const pedido = `DADOS REAIS DO CLIENTE (JSON):
+  const [regrasDoPlano] = await Promise.all([regrasDoTrafego(servico, p.client_id)]);
+  const aprendizadoDoPlano = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId: p.client_id, donoId: chamador.userId, contexto: `plano de teste ${p.nome}` });
+  const pedido = `HOJE: ${hojeSaoPaulo()}
+
+DADOS REAIS DO CLIENTE (JSON):
 ${JSON.stringify(ctx.dados)}
 
 BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -2698,19 +2753,30 @@ Aplique o pedido. Devolva:
 - nome: novo nome só se mudou; senão null.
 - angulos: ${podeMudar ? `a lista COMPLETA atualizada só se algum ângulo mudou, entrou ou saiu (mantenha o id dos que ficam; novo recebe id novo); senão null. Mesmas regras de ângulo, hipótese e referências.\n${REGRA_PORQUE_TESTAR}` : "sempre null."}
 - estrutura: a estrutura completa só se mudou; senão null.`;
-  const s = await chamarTexto({
-    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
-    clientId: p.client_id,
-    tarefa: TAREFA,
-    agente: AGENTE,
-    modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa(),
-    mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
-    raciocinio,
-    esquemaJson: ESQUEMA_CONVERSA_PLANO,
-    referencia: { tipo: REF_PLANO, id: p.id },
-    criadoPor: chamador.userId,
-  });
+  let s;
+  try {
+    s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+      clientId: p.client_id,
+      tarefa: TAREFA,
+      agente: AGENTE,
+      modeloId: modelo.id,
+      sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano),
+      mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+      raciocinio,
+      esquemaJson: ESQUEMA_CONVERSA_PLANO,
+      referencia: { tipo: REF_PLANO, id: p.id },
+      criadoPor: chamador.userId,
+    });
+  } catch (err) {
+    // Frente AG3: a mensagem do dono não some quando o modelo falha (antes só era gravada depois da resposta).
+    const motivo = err instanceof ErroHttp || err instanceof IaMotorErro ? err.message : "falha inesperada no servidor";
+    await registrarMensagens(servico, conversaId, p.client_id, [
+      { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((c) => ({ caminho: c })) },
+      { papel: "agente", conteudo: `Não consegui responder: ${motivo}. O plano ficou como estava.` },
+    ]).catch((e) => (registrarFalha("mesa-ads: registrarMensagens falhou", e), undefined));
+    throw err;
+  }
   const r = (s.json ?? {}) as Record<string, unknown>;
   const campos: Record<string, unknown> = {};
   let jevErro: string | null = null;
@@ -2753,11 +2819,12 @@ Aplique o pedido. Devolva:
   if (total != null) plano.custo_usd = total;
 
   const resposta = texto(r.resposta, 2000) || "Plano atualizado.";
+  const aprendizado = anexosDoAprendizado(await aprendizadoDoPlano, regrasSeguidas(r.regras_seguidas, regrasDoPlano));
   await registrarMensagens(servico, conversaId, p.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: aprendizado },
   ]);
-  return json({ plano, resposta, conversa_id: conversaId, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: jevErro });
+  return json({ plano, resposta, conversa_id: conversaId, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: jevErro, aprendizado });
 }
 
 /**
@@ -4150,7 +4217,11 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
     .map((o) => ({ id: o.id, nome: o.nome, promessa: o.promessa, para_quem: o.para_quem, status: o.status, origem: o.origem }));
   const foco = emFoco ? (({ status: _s, jev: _j, briefing_id: _b, conversa_id: _c, criado_em: _ce, atualizado_em: _ae, ...o }) => o)(ofertaDaLinha(emFoco)) : null;
 
-  const pedido = `DADOS REAIS DO CLIENTE (JSON; null ou vazio = não existe):
+  const regrasDaOferta = await regrasDoTrafego(servico, clientId);
+  const aprendizadoDaOferta = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId, donoId: chamador.userId, contexto: "oferta do cliente" });
+  const pedido = `HOJE: ${hojeSaoPaulo()} (use para urgência real e datas do ano; nunca invente prazo)
+
+DADOS REAIS DO CLIENTE (JSON; null ou vazio = não existe):
 ${JSON.stringify(ctx.dados)}
 
 BRIEFING ATUAL: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -4183,7 +4254,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa(),
+      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta),
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_OFERTA_CONVERSA,
@@ -4191,7 +4262,13 @@ Responda como o estrategista de ofertas da agência. Devolva:
       criadoPor: chamador.userId,
     });
   } catch (err) {
-    if (conversaNova) await servico.from("agente_conversas").delete().eq("id", conversaId).eq("client_id", clientId);
+    // Frente AG3: antes a conversa nova era apagada e a mensagem do dono sumia. Agora fica, com o motivo.
+    const motivo = err instanceof ErroHttp || err instanceof IaMotorErro ? err.message : "falha inesperada no servidor";
+    await registrarMensagens(servico, conversaId, clientId, [
+      { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((c) => ({ caminho: c })) },
+      { papel: "agente", conteudo: `Não consegui responder: ${motivo}. Nenhuma oferta foi criada.` },
+    ]).catch((e) => (registrarFalha("mesa-ads: registrarMensagens falhou", e), undefined));
+    void conversaNova;
     throw err;
   }
   const r = (s.json ?? {}) as Record<string, unknown>;
@@ -4212,7 +4289,8 @@ Responda como o estrategista de ofertas da agência. Devolva:
   if (alertadas.length && restanteMs(chamador) > TEMPO_DE_UMA_RODADA_MS) {
     try {
       const re = await chamarTexto({
-        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+        // Frente AG3: a reescrita cabe no que sobra da função (antes 300 s com a guarda de 165 s estourava os 400 s e perdia tudo).
+        timeoutMs: Math.max(30_000, Math.min(TIMEOUT_TEXTO_ADS_MS, restanteMs(chamador) - 60_000)),
         clientId,
         tarefa: TAREFA,
         agente: AGENTE,
@@ -4285,17 +4363,19 @@ Devolva cada oferta com o mesmo indice.`,
   }
   const resposta = texto(r.resposta, 4000) || (criadas.length ? "Ofertas criadas." : "Certo.");
   const comAlerta = criadas.filter((o) => o.jev?.alerta_politica).map((o) => o.nome);
+  const aprendizado = anexosDoAprendizado(await aprendizadoDaOferta, regrasSeguidas(r.regras_seguidas, regrasDaOferta));
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
     {
       papel: "agente",
       conteudo: `${resposta}${criadas.length ? `\n\nOfertas criadas: ${criadas.map((o) => o.nome).join("; ")}.` : ""}${comAlerta.length ? `\nAinda com alerta de política: ${comAlerta.join("; ")}.` : ""}`,
       uso_id: s.usoId,
+      anexos: aprendizado,
     },
   ]);
   const sugerido = r.briefing_sugerido && typeof r.briefing_sugerido === "object" ? normalizarBriefing(r.briefing_sugerido as Record<string, unknown>) : null;
   const ideias = (Array.isArray(r.ideias) ? r.ideias : []).slice(0, 6).map(normalizarIdeia).filter((x) => x.titulo);
-  return json({ conversa_id: conversaId, resposta, ofertas: criadas, briefing_sugerido: sugerido, ideias, custo_usd: arred6(custo), saldo_usd: saldo, jev_erro: jevErro });
+  return json({ conversa_id: conversaId, resposta, ofertas: criadas, briefing_sugerido: sugerido, ideias, custo_usd: arred6(custo), saldo_usd: saldo, jev_erro: jevErro, aprendizado });
 }
 
 /** oferta_salvar { client_id, oferta_id, campos?, status? } -> { oferta } (sem IA; mudar o conteúdo apaga a nota do Jev, que ficou velha). */
@@ -5927,12 +6007,15 @@ async function mensagensDoAgenteSenior(servico: SupabaseClient, conversaId: stri
     const acoes = anexos.find((a) => a && typeof a === "object" && a.tipo === "acoes_conta") ?? null;
     // Frente AD: o andamento do pedido (na mensagem do dono), que a tela mostra enquanto espera.
     const andamento = anexos.find((a) => a && typeof a === "object" && a.tipo === "andamento") ?? null;
+    // Frente AG3: "Aprendi" e "Segui" (formato comum dos agentes) vão para a tela como vieram.
+    const aprendizado = anexos.filter((a) => a && typeof a === "object" && (a.tipo === "aprendizado_do_agente" || a.tipo === "regras_seguidas"));
     return {
       id: m.id,
       papel: m.papel,
       conteudo: m.conteudo,
       criado_em: m.criado_em,
       andamento,
+      aprendizado,
       estrategia: anexo && anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null,
       numeros: anexo && anexo.numeros && typeof anexo.numeros === "object" ? anexo.numeros as Record<string, unknown> : null,
       acoes,
@@ -6138,7 +6221,9 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     if (acaoClara) pesquisar = false;
   }
   await andamento.passo("lendo", "Lendo a conta, os criativos e o que já foi feito");
-  const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados] = await Promise.all([
+  // Frente AG3: aprende com o pedido (Jev decide se é regra) enquanto lê a conta.
+  const aprendizadoDaConta = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId, donoId: chamador.userId, contexto: "conversa da conta de anúncios" });
+  const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados, recentes, regrasEnsinadas] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
     // Padrão GPT-6 Luna no raciocínio máximo; o modelo escolhido na tela vale.
@@ -6148,6 +6233,9 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     oQueFoiFeitoParaOAgente(servico, clientId),
     // Frente AD: o que a mensagem cita pelo nome (pausado, encerrado, fora do período ou só na Meta).
     itensCitadosNaMensagem(servico, clientId, mensagem).catch((e) => (registrarFalha("mesa-ads: itensCitadosNaMensagem falhou", e), ({ campanhas: [], conjuntos: [], anuncios: [] }))),
+    // Frente AG3 (evidência de 28/09: "a campanha não aparece nos alvos"): pausada sem gasto também entra, depois das ativas.
+    campanhasRecentesDaConta(servico, clientId).catch((e) => (registrarFalha("mesa-ads: campanhas recentes não lidas", e), [])),
+    regrasDoTrafego(servico, clientId),
   ]);
   const leve = acaoClara ? raciocinioMaisLeve(modeloBase.modelo, modeloBase.raciocinio) : undefined;
   const modeloEscolhido = leve ? { ...modeloBase, raciocinio: leve } : modeloBase;
@@ -6158,7 +6246,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     return lista.filter((x) => (vistos.has(id(x)) ? false : (vistos.add(id(x)), true)));
   };
   const alvos = alvosComApelido({
-    campanhas: semRepetir([...citados.campanhas, ...c.conta.campanhas.map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, orcamento_diario: x.orcamento_diario }))], (x) => x.campaign_id),
+    campanhas: semRepetir([...citados.campanhas, ...c.conta.campanhas.map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, orcamento_diario: x.orcamento_diario })), ...recentes], (x) => x.campaign_id),
     conjuntos: semRepetir([...citados.conjuntos, ...c.conta.conjuntos.map((x) => ({ adset_id: x.adset_id, nome: x.nome, campanha: x.campanha }))], (x) => x.adset_id),
     anuncios: semRepetir([...citados.anuncios, ...c.conta.anuncios.map((x) => ({ ad_id: x.ad_id, nome: x.nome, status: x.status, campanha: x.campanha }))], (x) => x.ad_id),
   });
@@ -6176,6 +6264,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     ...contextoEmJson(c, plano, biblioteca),
     RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano),
     REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
+    HOJE: hojeSaoPaulo(),
   };
   await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
   const tentativa = await chamarComTetoDeTempo({
@@ -6184,7 +6273,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modeloEscolhido.modelo.id,
-    sistema: sistemaDoAgenteSenior(objetivo),
+    sistema: sistemaDoAgenteSenior(objetivo) + blocoDasRegras(regrasEnsinadas),
     mensagens: [
       // A mensagem de agora já está gravada (pedidoId): vai uma vez só, no fim, com o contexto.
       ...historico.filter((m) => m.id !== pedidoId && (m.papel === "usuario" || m.papel === "agente")).map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
@@ -6221,16 +6310,17 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const doPlano = plano ? { id: plano.id, nome: plano.nome } : null;
   let lista = normalizarAcoesDaConta(bruto.acoes, alvos, criativosComRef, bruto.resumo_das_acoes, doPlano);
   if (modoAssumir && doPlano && !(lista && lista.itens.some((i) => i.tipo === "montar_campanha_do_plano"))) {
-    const montar = itemDeMontagem(doPlano, "Você mandou o plano ao agente sênior: ele monta a campanha na Meta com os criativos aprovados, tudo pausado.", `i${(lista ? lista.itens.length : 0) + 1}`);
+    const montar = itemDeMontagem(doPlano, "Você mandou o plano ao agente sênior. Confirme e ele monta a campanha na Meta com os criativos aprovados, tudo pausado (criar campanha é sempre com o seu Confirmar).", `i${(lista ? lista.itens.length : 0) + 1}`);
     lista = lista ? { ...lista, itens: [...lista.itens, montar] } : { tipo: "acoes_conta", resumo: "Montar a campanha do plano na Meta, pausada, para você ativar.", itens: [montar], ignorados: [], gestao: null };
   }
   if (lista && lista.itens.length) await andamento.passo("executando", pedido.faz ? "Conferindo cada item na Meta e fazendo o que é seguro" : "Conferindo na Meta os itens propostos");
   const preparadas = await prepararAcoesDaConta(servico, clientId, lista, { plano, conta: c.conta, teto: configDaLinha(rotina).teto_diario_brl });
   const acoes = preparadas
-    ? await fazerOQueESeguro(servico, chamador, { clientId, mensagemId, acoes: preparadas, executar: pedido.faz, montar: modoAssumir, conta: c.conta, regras: regrasDoDono })
+    ? await fazerOQueESeguro(servico, chamador, { clientId, mensagemId, acoes: preparadas, executar: pedido.faz, montar: modoAssumir, conta: c.conta, regras: regrasDoDono, repetidos: alvosComNomeRepetido(alvos) })
     : null;
   const numeros = numerosVistos(c.conta);
-  await registrarMensagens(servico, conversaId, clientId, [
+  const aprendizado = anexosDoAprendizado(await aprendizadoDaConta, regrasSeguidas(bruto.regras_seguidas, regrasEnsinadas));
+  const gravou = await registrarMensagens(servico, conversaId, clientId, [
     {
       id: mensagemId,
       papel: "agente",
@@ -6239,6 +6329,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       anexos: [
         { tipo: "estrategia", estrategia, numeros, periodo: c.conta.periodo, plano_id: plano?.id ?? null, biblioteca: biblioteca ? { consultada: biblioteca.consultada, motivo: biblioteca.motivo, total: biblioteca.anuncios.length } : null },
         ...(acoes ? [acoes] : []),
+        ...aprendizado,
       ],
     },
   ]);
@@ -6267,6 +6358,9 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     saldo_usd: s.saldoUsd,
     jev_erro: achado.jev_erro,
     reserva_usada: s.reservaUsada ?? null,
+    aprendizado,
+    // Frente AG3: o cartão não ficou guardado na conversa (o texto ficou): a tela avisa e mostra a resposta daqui.
+    aviso_da_conversa: gravou ? null : "A resposta foi dada, mas o cartão das ações não ficou guardado na conversa. O que foi feito está em \"O que o agente fez\".",
   });
   } catch (err) {
     // Nunca some: o motivo fica na conversa (e o erro segue para a tela como antes).
@@ -7164,7 +7258,64 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
   if (acoes.executada_em) throw new ErroHttp(409, "acao_ja_feita", "Estas ações já foram confirmadas.");
   if (acoes.descartada_em) throw new ErroHttp(409, "acao_descartada", "Estas ações foram canceladas. Peça de novo ao agente.");
   if (corpo.descartar === true) return json({ anexo: await gravar({ ...anexo, descartada_em: new Date().toISOString(), descartada_por: chamador.userId }), custo_usd: 0 });
+  // Frente AG3: dois cliques (ou duas abas) não executam duas vezes (montar e duplicar criariam em dobro).
+  await travarConfirmacao(servico, m.id, m.client_id);
+  try {
+    return await executarAcoesConfirmadas(servico, chamador, corpo, m, anexo, acoes, gravar);
+  } catch (err) {
+    // Falhou no meio: solta a trava (o que foi feito já está no registro da Meta e em "O que o agente fez").
+    await soltarTrava(servico, m.id, m.client_id).catch(() => undefined);
+    throw err;
+  }
+}
 
+const TRAVA_DA_CONFIRMACAO_MS = 10 * 60_000;
+
+/** Marca a mensagem como "em execução" só se ninguém marcou antes (update condicional no banco). */
+async function travarConfirmacao(servico: SupabaseClient, mensagemId: string, clientId: string) {
+  const ler = async () => {
+    const { data } = await servico.from("agente_mensagens").select("anexos").eq("id", mensagemId).maybeSingle();
+    return Array.isArray((data as { anexos?: unknown } | null)?.anexos) ? ((data as { anexos: Record<string, unknown>[] }).anexos) : [];
+  };
+  const tentar = async (anexos: Record<string, unknown>[]) => {
+    const lista = anexos.map((a) => (a && a.tipo === "acoes_conta" ? { ...a, travada: true, travada_em: new Date().toISOString() } : a));
+    const { data, error } = await servico.from("agente_mensagens").update({ anexos: lista }).eq("id", mensagemId).eq("client_id", clientId)
+      .not("anexos", "cs", JSON.stringify([{ tipo: "acoes_conta", travada: true }])).select("id");
+    if (error) throw new ErroHttp(503, "trava_indisponivel", "Não foi possível começar agora. Tente de novo.");
+    return ((data as unknown[] | null) ?? []).length > 0;
+  };
+  const anexos = await ler();
+  if (await tentar(anexos)) return;
+  // Trava velha (a função caiu no meio): passado o prazo, pode tentar de novo.
+  const atual = anexos.find((a) => a && a.tipo === "acoes_conta") as { travada_em?: string } | undefined;
+  const velha = atual && atual.travada_em && Date.now() - Date.parse(atual.travada_em) > TRAVA_DA_CONFIRMACAO_MS;
+  if (velha) {
+    await soltarTrava(servico, mensagemId, clientId);
+    if (await tentar(await ler())) return;
+  }
+  throw new ErroHttp(409, "acao_em_andamento", "Estas ações já estão sendo feitas (outro clique ou outra aba). Espere terminar.");
+}
+
+async function soltarTrava(servico: SupabaseClient, mensagemId: string, clientId: string) {
+  const { data } = await servico.from("agente_mensagens").select("anexos").eq("id", mensagemId).maybeSingle();
+  const anexos = Array.isArray((data as { anexos?: unknown } | null)?.anexos) ? ((data as { anexos: Record<string, unknown>[] }).anexos) : [];
+  const lista = anexos.map((a) => {
+    if (!a || a.tipo !== "acoes_conta") return a;
+    const { travada: _t, travada_em: _e, ...resto } = a;
+    return resto;
+  });
+  await servico.from("agente_mensagens").update({ anexos: lista }).eq("id", mensagemId).eq("client_id", clientId);
+}
+
+async function executarAcoesConfirmadas(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  corpo: Record<string, unknown>,
+  m: { id: string; client_id: string; conversa_id: string },
+  anexo: Record<string, unknown>,
+  acoes: AcoesDaConta,
+  gravar: (novo: Record<string, unknown>) => Promise<Record<string, unknown>>,
+) {
   const escolhidos = Array.isArray(corpo.itens) ? new Set(corpo.itens.map(String)) : null;
   const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
   // Frente TR: o que o agente já fez sozinho fica como está (tem o próprio Desfazer).
@@ -7295,10 +7446,13 @@ async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, co
     });
   }
   // Desfeito por inteiro só quando não sobra nada com volta (o Desfazer de um item deixa o resto como está).
-  const inteiro = !soEstes || !itens.some(temReverso);
+  // Frente AG3: item que falhou ao voltar continua com volta: o cartão não é marcado desfeito e dá para tentar de novo.
+  const inteiro = !itens.some(temReverso);
   const novo = await gravar({ ...anexo, itens, ...(inteiro && acoes.executada_em ? { desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId } : {}) });
   await marcarDesfeitosNoRegistro(servico, chamador, m.client_id, m.id, itens.filter((i) => voltaramIds.indexOf(i.id) >= 0));
-  return json({ anexo: novo, voltaram, custo_usd: 0 });
+  const naoVoltaram = itens.filter((i) => i.resultado && i.resultado.motivo_desfazer && voltaramIds.indexOf(i.id) < 0 && (!soEstes || soEstes.has(i.id)))
+    .map((i) => ({ id: i.id, motivo: i.resultado!.motivo_desfazer as string }));
+  return json({ anexo: novo, voltaram, nao_voltaram: naoVoltaram, custo_usd: 0 });
 }
 
 // ---- kit de recepção do ângulo (kit-recepcao.ts)
@@ -7663,7 +7817,7 @@ async function pacoteImportar(servico: SupabaseClient, chamador: Chamador, corpo
 // o agente funciona igual e a rotina responde "em preparação".
 
 /** Mensagem do agente quando o dono manda o plano pelo botão (sem texto). */
-const MENSAGEM_DE_ASSUMIR_O_PLANO = "Assuma este plano de teste: monte a campanha na Meta com os criativos aprovados, tudo pausado, e me diga como vai rodar e o que eu preciso confirmar para ativar.";
+const MENSAGEM_DE_ASSUMIR_O_PLANO = "Assuma este plano de teste: prepare a montagem da campanha na Meta com os criativos aprovados, tudo pausado (eu confirmo antes de criar), e me diga como vai rodar e o que eu preciso confirmar para ativar.";
 
 /** Padrão do agente de tráfego: GPT-6 Luna no raciocínio máximo (o mesmo do diretor da Mesa Vídeos). */
 const MODELO_DO_TRAFEGO = "openrouter:openai/gpt-6-luna";
@@ -7822,9 +7976,11 @@ function caminhoDasAcoes(clientId: string, itens: ItemDaAcaoNaConta[]) {
 async function fazerOQueESeguro(
   servico: SupabaseClient,
   chamador: Chamador,
-  e: { clientId: string; mensagemId: string; acoes: AcoesDaConta; executar: boolean; montar: boolean; conta: Awaited<ReturnType<typeof lerContaAoVivo>>; regras: RegraDoDonoTR[] },
+  e: { clientId: string; mensagemId: string; acoes: AcoesDaConta; executar: boolean; montar: boolean; conta: Awaited<ReturnType<typeof lerContaAoVivo>>; regras: RegraDoDonoTR[]; repetidos?: Set<string> },
 ): Promise<AcoesDaConta> {
-  const candidato = (i: ItemDaAcaoNaConta) => !i.resultado && !i.ensaio && !i.indisponivel && (acaoSemRisco(i) || (e.montar && i.tipo === "montar_campanha_do_plano"));
+  // Frente AG3 (29/09), regra inegociável: criar campanha (montar o plano) só com Confirmar, mesmo com o
+  // plano mandado ao agente. `e.montar` segue aceito para não mudar quem chama, mas não executa mais sozinho.
+  const candidato = (i: ItemDaAcaoNaConta) => !i.resultado && !i.ensaio && !i.indisponivel && acaoSemRisco(i);
   if (!e.executar || !e.acoes.itens.some(candidato)) return e.acoes;
   const precisaMeta = e.acoes.itens.some((i) => candidato(i) && i.na_meta);
   const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, e.clientId, { conferir: true }), contasMetaDoCliente(servico, e.clientId)]) : [null, new Set<string>()];
@@ -7844,6 +8000,10 @@ async function fazerOQueESeguro(
   for (const i of e.acoes.itens) {
     if (!candidato(i) || feitas >= 5) {
       itens.push(i);
+      continue;
+    }
+    if (i.alvo && e.repetidos && e.repetidos.has(i.alvo.meta_id)) {
+      itens.push({ ...i, motivo: `${i.motivo} Há mais de um item com este nome: fica para você confirmar que é este.`.trim() });
       continue;
     }
     if (i.tipo === "pausar" && i.alvo && i.alvo.nivel === "anuncio" && ativos <= 1) {
@@ -8360,7 +8520,10 @@ async function rotinaDesfazer(servico: SupabaseClient, chamador: Chamador, corpo
   await exigirAcessoAoCliente(chamador, a.client_id);
   if (a.estado !== "feita" || !a.desfazer) throw new ErroHttp(409, "sem_desfazer", "Esta ação não tem como desfazer.");
   if (a.origem === "agente" && a.mensagem_id && a.item_id) {
-    await contaAcaoDesfazer(servico, chamador, { mensagem_id: a.mensagem_id, itens: [a.item_id] });
+    // Frente AG3: antes o resultado era ignorado e a tela dizia "Desfeito" sem ter desfeito.
+    const r = await contaAcaoDesfazer(servico, chamador, { mensagem_id: a.mensagem_id, itens: [a.item_id] });
+    const d = await r.json().catch(() => ({})) as { voltaram?: number; nao_voltaram?: Array<{ motivo: string }> };
+    if (!d.voltaram) throw new ErroHttp(409, "nao_desfeito", (d.nao_voltaram && d.nao_voltaram[0] && d.nao_voltaram[0].motivo) || "Não foi possível desfazer.");
   } else {
     const item = a.desfazer.item as ItemDaAcaoNaConta | undefined;
     if (!item) throw new ErroHttp(409, "sem_desfazer", "Esta ação não tem como desfazer.");
@@ -9192,6 +9355,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // Frente AD3 (28/09): o anúncio aberto (criativo, qualidade e aprendizado lidos na Meta) e o relatório do período.
   gerenciador_anuncio: gerenciadorAnuncio,
   relatorio_ads_gerar: relatorioAdsGerar,
+  // Frente AG3 (29/09): "Esquecer" e "Guardar como regra" da linha "Aprendi" dos agentes de tráfego.
+  esquecer_regra: esquecerRegraDoTrafego,
+  guardar_regra: guardarRegraDoTrafego,
 };
 
 /**

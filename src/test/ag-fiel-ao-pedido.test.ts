@@ -197,7 +197,7 @@ describe("dúvida no ajuste: uma pergunta curta, sem gerar", () => {
     expect(a).toContain("recorteDasAreas(atual, areas)");
     expect(a).toContain("perguntaDoAjusteClaro()");
     expect(a).toContain("textoDoAjusteFiel(card.texto_exato");
-    expect(estudio).toContain('required: ["instrucao_edicao", "texto_exato", "memoria", "entendi", "pergunta"]');
+    expect(estudio).toContain('required: ["instrucao_edicao", "texto_exato", "memoria", "entendi", "pergunta", "proposta"]');
   });
 });
 

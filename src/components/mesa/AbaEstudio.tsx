@@ -63,6 +63,8 @@ import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
 import DiretorDoEstudio from "./DiretorDoEstudio";
+import { desfazerVersaoDaLamina } from "./diretorDoEstudioApi";
+import type { ExecutorDoPasso } from "./PlanoDoDiretor";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { emColunas, encaixarNaJanela, rolarAte, useFaixa } from "./EstudioAltura";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
@@ -847,6 +849,9 @@ function DetalheDoItem({
         areas: opcoes.areas && opcoes.areas.length ? opcoes.areas : undefined,
         tipo: opcoes.tipo,
         imagem_id: opcoes.imagem_id,
+        // Frente RO, fase 2: imagens anexadas com o papel e a proposta aplicada (pedido vago).
+        ...(opcoes.anexos && opcoes.anexos.length ? { anexos: opcoes.anexos } : {}),
+        ...(opcoes.confirmado ? { confirmado: true } : {}),
       });
       atualizar();
       custo = custoDaResposta(a) || 0;
@@ -921,6 +926,9 @@ function DetalheDoItem({
   };
 
   // Frente RO: "Foto exata" ou "Usar o rosto" por foto da lâmina (vale na próxima geração; as versões ficam).
+  // Frente RO, fase 2: a janela do Agendar aberta por um passo do plano do diretor.
+  const [agendarDoPlano, setAgendarDoPlano] = useState<{ fim: (feito: boolean) => void } | null>(null);
+
   const trocarUsoDaFoto = async (card: CardDaDirecao, alvo: { acervo: true } | { caminho: string }, uso: "exata" | "rosto") => {
     try {
       if ("acervo" in alvo) await configurar({ card: { ordem: card.ordem, uso_do_acervo: uso } });
@@ -1398,6 +1406,34 @@ function DetalheDoItem({
         {estado === "producao" && acaoPrincipal}
         {/* Frente AP: arte entregue → Agendar (data do conteúdo, perfil e se vai postar), só admin e gestor. */}
         {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0 px-2.5" />}
+        {trabalho && agendarDoPlano && (
+          <JanelaDaAprovada
+            peca={{
+              id: trabalho.id,
+              task_id: item.id,
+              file_ids: trabalho.file_ids || [],
+              post_id: trabalho.post_id || null,
+              aprovado_em: trabalho.aprovado_em || null,
+              publicar_em: trabalho.publicar_em || null,
+              entrega_aviso: trabalho.entrega_aviso || null,
+              titulo: item.title,
+              dia: item.due_date || null,
+              project_id: item.project_id || null,
+            }}
+            posicao={1}
+            total={1}
+            titulo="Agendar"
+            onFechar={() => {
+              agendarDoPlano.fim(false);
+              setAgendarDoPlano(null);
+            }}
+            onFeita={() => {
+              agendarDoPlano.fim(true);
+              setAgendarDoPlano(null);
+              atualizar();
+            }}
+          />
+        )}
         {pedirData && (
           <JanelaDaAprovada peca={pedirData} posicao={1} total={1} titulo="Agendar" onFechar={() => setPedirData(null)} onFeita={() => { setPedirData(null); atualizar(); }} />
         )}
@@ -1705,6 +1741,10 @@ function DetalheDoItem({
       partesConferir={partesConferir}
       onGerar={() => gerarEConferir(cardSelecionado.ordem)}
       onAjustar={(instrucao, opcoes) => ajustar(cardSelecionado.ordem, instrucao, opcoes)}
+      onDesfazerVersao={async (versao) => {
+        await desfazerVersaoDaLamina(trabalho.id, cardSelecionado.ordem, versao);
+        atualizar();
+      }}
       onConferir={() => conferir(trabalho.id, cardSelecionado.ordem)}
       onCorrigir={() => corrigirDeNovo(cardSelecionado.ordem)}
       partesCorrigir={() => partesAjustar().concat(partesConferir())}
@@ -1747,6 +1787,46 @@ function DetalheDoItem({
   );
 
   /** Refazer depois de aplicar: no contínuo com a cena nova, o fundo panorâmico inteiro entra no preço. */
+  /**
+   * Frente RO, fase 2: cada passo do plano do diretor pelo caminho de sempre desta tela: ajustar o texto
+   * (e conferir), gerar e conferir (refazer e variações, uma de cada vez), entregar (enviar para aprovação,
+   * como o botão da Entrega) e agendar (a janela do Agendar do Estúdio; fechar sem agendar vira "falhou").
+   */
+  const executarPassoDoPlano: ExecutorDoPasso = async (p) => {
+    if (!trabalho) throw new Error("Abra o trabalho antes.");
+    if (p.operacao === "ajustar_texto" && p.ordem) {
+      const r = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_texto", trabalho_id: trabalho.id, ordem: p.ordem });
+      atualizar();
+      const c = await conferirSemDerrubar(trabalho.id, p.ordem);
+      atualizar();
+      return { custo_usd: (custoDaResposta(r) || 0) + c };
+    }
+    if ((p.operacao === "refazer" || p.operacao === "variacoes") && p.ordem) {
+      const vezes = p.operacao === "variacoes" ? Math.max(1, Math.min(3, p.n || 2)) : 1;
+      let custo = 0;
+      for (let i = 0; i < vezes; i++) {
+        custo += await gerarUma(trabalho.id, p.ordem);
+        custo += await conferirSemDerrubar(trabalho.id, p.ordem);
+        atualizar();
+      }
+      return { custo_usd: custo };
+    }
+    if (p.operacao === "entregar") {
+      const r = await entregarComModo(trabalho.id, "aprovacao");
+      depoisDaEntrega(r);
+      atualizar();
+      if (!r.ok) throw new Error(r.erro || "A entrega não terminou.");
+      return { custo_usd: 0 };
+    }
+    if (p.operacao === "agendar") {
+      if (trabalho.status !== "entregue") throw new Error("Entregue o trabalho antes de agendar.");
+      return await new Promise((ok, erro) =>
+        setAgendarDoPlano({ fim: (feito) => (feito ? ok({ custo_usd: 0 }) : erro(new Error("O agendamento foi fechado sem agendar."))) }),
+      );
+    }
+    throw new Error("Este passo não existe nesta tela.");
+  };
+
   const partesDoRefazer = (ordens: number[], refazFundo: boolean): ParteDaEstimativa[] => {
     const fundo = refazFundo && comFundoContinuo
       ? partesDoPanorama(ordens.filter((o) => cardsDaDirecao.some((c) => c.ordem === o && usaFundoContinuo(c))), cardsDaDirecao.length, null, modeloImagem, qualidade)
@@ -1765,6 +1845,7 @@ function DetalheDoItem({
       partesRefazer={partesDoRefazer}
       onRefazer={(ordens) => gerarVarias(ordens)}
       onAtualizar={atualizar}
+      executarPasso={executarPassoDoPlano}
       className="h-full"
     />
   ) : null;

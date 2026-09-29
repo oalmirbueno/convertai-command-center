@@ -98,8 +98,9 @@ describe("mapa do painel no sistema de cada agente", () => {
     for (const [arq, trecho] of funcoes) expect(ler(arq), arq).toContain(trecho);
     // Os três agentes de conversa da Mesa Ads (plano, oferta e sênior) recebem o mapa; as gerações não.
     const ads = ler("supabase/functions/mesa-ads/index.ts");
-    expect(ads).toContain('sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa(),');
-    expect(ads).toContain('sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa(),');
+    // Frente AG3: depois do mapa vêm as regras que o dono ensinou.
+    expect(ads).toContain('sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta),');
+    expect(ads).toContain('sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano),');
     expect(ads).toContain("${REGRAS_DA_EXECUCAO}${mapaDoPainelNaConversa()}");
   });
 
