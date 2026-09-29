@@ -1,0 +1,40 @@
+EFEITO: success  (arquivo assets/sfx/success.wav)
+NOMES EM PORTUGUES: sucesso (sucesso, acerto, concluido)
+SOM: tres notas de steel drum subindo e o acorde soando (sucesso, deu certo)
+
+TITULO DO PACOTE: Music Jingles (versao 1.0, 2014)
+PAGINA:        https://kenney.nl/assets/music-jingles
+ARQUIVO BAIXADO: https://kenney.nl/media/pages/assets/music-jingles/f37e530b9e-1677590399/kenney_music-jingles.zip
+ARQUIVO USADO: Audio/Steel jingles/jingles_STEEL00.ogg (Ogg Vorbis 44,1 kHz, estereo, 0,93 s)
+AUTOR:         Kenney Vleugels (Kenney.nl)
+LICENCA:       CC0 1.0 Universal (Creative Commons Zero)
+CITACAO DA LICENCA, do arquivo License.txt que vem dentro do .zip, palavra por palavra:
+               "License (Creative Commons Zero, CC0)"
+               "http://creativecommons.org/publicdomain/zero/1.0/"
+               "You may use these assets in personal and commercial projects."
+               "Credit (Kenney or www.kenney.nl) would be nice but is not mandatory."
+               A pagina do pacote mostra, na linha "License" da tabela: "Creative Commons CC0".
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). O proprio License.txt diz que creditar e bem-vindo mas nao
+               obrigatorio.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Arquivo inteiro, convertido de Ogg 44,1 kHz para 48 kHz (reamostragem polifasica), em mono.
+2. Tirada a corrente continua (DC), comeco 2 ms antes da primeira nota.
+3. Subida de 2 ms e descida de 60 ms (o jingle ja termina sozinho, 42 dB abaixo do pico).
+4. Volume acertado para a janela de 200 ms ficar em -14,0 LUFS com o volume 1.0 do editor.
+5. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,929 s, ponto forte em 0,023 s, pico -9,17 dBFS,
+janela de 200 ms -16,92 LUFS e janela de 3 s -27,71 LUFS no arquivo
+(com o volume 1.0 do editor: -14,00 e -24,79 LUFS).
+NIVEL: janela de 200 ms em -14,0 LUFS com volume 1.0 (marca leve), sem passar de -20,0 na janela de
+3 s.
+
+OBSERVACAO: e o mesmo gesto do modelo (notas que sobem rapido e um acorde que fica soando), com
+timbre de steel drum. O modelo e mais longo (1,2 s de som) e um pouco mais grave: o centro do som
+ficou em 714 Hz contra 524 Hz. O desenho do volume e quase o mesmo (correlacao 0,97).
+O som de referencia que serviu de modelo foi usado so para medir (duracao, volume, faixa de
+frequencia, ponto forte). Nenhum pedaco dele foi copiado, cortado, misturado ou entregue.

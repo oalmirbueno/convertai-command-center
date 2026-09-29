@@ -41,6 +41,8 @@ import {
   useEstadoDaTela,
 } from "@/components/sistema";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+// Frente DOC (29/09): documentos da entrega do cliente na pasta Entregas (prévia e envio com Confirmar).
+import DocumentosDaEntrega from "@/components/documentos/DocumentosDaEntrega";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
@@ -1626,6 +1628,9 @@ export default function AdminFiles() {
           />
         ) : (
           <>
+            {activeFolder === "entregas" && selectedClient !== "all" && (
+              <DocumentosDaEntrega clientId={selectedClient} className="mb-6" />
+            )}
             {filesReadFailed && (
               <EstadoDeErro
                 className="mb-4"

@@ -204,3 +204,89 @@ Onde plugar nas mesas de imagem (sem mexer agora, outras frentes estão nelas):
 - **Deploy da `editor-video`** (nova, já no `supabase/config.toml` com `verify_jwt = true`). Sem ela: Timestamp, agente, visão e "Ler a edição" mostram "em preparação"; o resto do editor funciona.
 - **SQL V-B-01** para templates de edição.
 - Licença do Remotion se a agência tiver mais de 3 pessoas.
+
+---
+
+## 12. Frente EDT (30/09/2026): render de verdade, corte pela onda, som e motion
+
+Pedido do dono: "o agente edita pra mim, eu converso". O EDIT IA PRO (pacote autorizado pelo dono,
+em `C:\AI\acervo-aceleriq\edit-ia-pro\`) entrou como ESPECIFICAÇÃO: as regras e os números medidos
+foram reescritos no nosso padrão (a IA escolhe; quem calcula tempo é o código). Do pacote vieram só
+os arquivos livres: sons CC0 (com o comprovante de cada um) e fontes OFL.
+
+### 12.1 Render pela fila (F1)
+
+| Parte | Onde |
+|---|---|
+| Fila | `render_pedidos` (SQL `20260930080000_render_pedidos.sql`): um pedido por clique (`client_id, uid`), um ativo por versão e tipo, tipos `render_final`, `amostra` (8 a 15 s) e `onda` |
+| Pegar e travar | RPC `render_pedidos_pegar` (FOR UPDATE SKIP LOCKED, trava de 10 min renovada a cada progresso, 3 tentativas, esquecido 24 h sai); `render_pedidos_progresso` / `_concluir` / `_falhar` só com o token da trava; só `service_role` |
+| Ações | `editor-video`: `render_pedir`, `render_status` (a tela lê no máximo a cada 15 s e só com pedido ativo), `render_cancelar` (`render.ts`) |
+| Worker | `workers/render/` (Node 22.18+): baixa do Storage para o disco, roda a Remotion CLI com a `ComposicaoDoProjeto` (a MESMA da prévia), -14 LUFS em dois passos, sobe o MP4 pelo TUS em partes de 6 MB, grava em `video_arquivos` (tipo `render` ou `amostra`) e conclui |
+| Tela | Botão **Renderizar** na barra do editor (`Renderizar.tsx`); "..." com Amostra de 12 s no cursor e Medir a onda; o cartão Exportar do agente virou **Renderizar** e o ZIP ficou como "Baixar ZIP" ao lado |
+
+**Ligar o worker** (PowerShell, na máquina da agência; a chave só na sessão, nunca em arquivo):
+
+```
+cd workers\render
+npm install
+npx remotion browser ensure
+$env:SUPABASE_URL = "https://jjjtkowvxemvituvywvf.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "<cole aqui>"
+npm run worker
+```
+
+Opcionais: `RENDER_WORKER_NOME`, `RENDER_CHROME` (Chrome Headless Shell já baixado),
+`RENDER_PASTA`, `RENDER_INTERVALO_S` (15), `RENDER_CONCORRENCIA`, `RENDER_FFMPEG`, `RENDER_FFPROBE`.
+`npm run uma-vez` faz um pedido e sai. Testes: `npm run teste` (fila no PGlite) e
+`npm run ponta-a-ponta` (vídeo curto de exemplo, render de verdade, Storage local com TUS).
+
+Máquina desligada: o pedido espera na fila e a barra diz "a máquina da agência parece desligada"
+(worker não visto há 90 s e pedido parado há 2 min). Papel restrito em vez da service role: fica
+para a F7 (mesmo worker no Modal).
+
+### 12.2 Corte de verdade (F2)
+
+- **Onda** (`_shared/onda-do-audio.ts`): RMS em janelas de 10 ms; limiar pelo chão de ruído de cada
+  fonte (percentil 10 mais 35% do caminho até a voz); pausas guardadas em `projeto.ondas[fonte]` com
+  o LUFS da voz. Palavra que o transcritor adiantou passa a começar quando a voz volta.
+- **cortar_pela_onda**: nenhuma pausa acima de 0,25 s; emenda de 0,12 s (0,07 depois da fala, 0,05
+  antes da próxima).
+- **ficar_com_melhor_tomada**: falso começo, frase repetida e gagueira saem; fica a última tomada
+  inteira; a lista do que saiu vai no cartão.
+- **conferir_corte**: respiro acima de 0,25 s, palavra mordida, repetição e clipe curto. Só aviso.
+- **Legenda padrão de 3 palavras** (`PALAVRAS_POR_LEGENDA`); o agente muda por comando (`legendar`).
+
+### 12.3 Som e motion (F3)
+
+- **Biblioteca CC0** (`_shared/som-do-editor.ts`, arquivos em `public/editor/sons/`, comprovantes em
+  `public/editor/sons/licencas/`): 20 sons, pico medido por `workers/render/sons/medir-sons.mjs`.
+- **Plano de sons**: o pico do som cai no quadro do auge do movimento da peça; 0,65 s entre sons
+  (fica o mais importante); "poucos" = só os fortes, um a cada 2 s.
+- **Trilha**: clipe de áudio com `estilo.papel = "trilha"`; 22 dB abaixo da voz (LUFS medidos pelo
+  worker; na prévia, presumidos), sobe 6 dB nas pausas de 0,8 s ou mais; arquivo final em -14 LUFS.
+- **Peças de motion** (`src/lib/editor/motion/catalogo.ts` e `editor/motion/Pecas.tsx`): rótulo,
+  carimbo, lista (check ou riscada), passos, contador, notificação, polaroide, cartão final,
+  lettering, barra, etiqueta de preço, comentário/CTA, selo e a logo (canto, cartão final, sting).
+  Parâmetros tipados; entram na palavra dita; número, porcentagem e preço só se foram ditos.
+  Letras OFL em `public/editor/fontes/`.
+- **sugerir_animacoes**: o código monta as candidatas com o que foi dito; o Jev julga em uma chamada
+  (Noul "pede animação?" e Choice "qual peça" por frase); o código escolhe pelo limiar 0,6 e pela
+  densidade (poucas: 20 s; médias: 7 s).
+- **Mensagens padrão** (`MensagemPadrao.tsx`): "Amostra pronta pra conferir" (player e estilos
+  ligados n/5), "O que mudei" e o custo do pedido.
+
+### 12.4 B-roll e elementos no agente (F4)
+
+- `gerar_broll`: vídeo pela Mesa Vídeos (`gerar_video`, modo texto, motor sugerido "normal"), custo
+  antes (409 `confirmar_custo` sem gasto), cartão "Gerar por US$ X"; pronto, "Pôr no trecho" põe numa
+  trilha "B-roll" sem som por cima da principal.
+- `gerar_elemento`: ícone ou objeto com fundo transparente (`elemento_estimar` / `elemento_gerar`,
+  GPT Image), idempotente pelo uid do clique; entra na trilha "Elementos" no trecho pedido.
+- Logo e foto real do cliente nunca pelo gerador: a logo vem do kit da marca aberta, pelo código.
+
+### 12.5 O que depende de fora
+
+- SQL `20260930080000_render_pedidos.sql` aplicado.
+- Deploy da `editor-video` (ações novas) e da `mesa-videos` (o `projeto_salvar` normaliza pelo
+  `projeto-de-edicao.ts`; sem publicar de novo, `ondas` e `mixagem` somem ao salvar).
+- O worker ligado numa máquina com ffmpeg e Node 22.18+.

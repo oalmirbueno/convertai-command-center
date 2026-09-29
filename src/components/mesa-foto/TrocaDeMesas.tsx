@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CalendarRange, Camera, Clapperboard, Megaphone, Package, Scissors, ScrollText, type LucideIcon } from "lucide-react";
+import { BriefcaseBusiness, CalendarRange, Camera, Clapperboard, Globe, Megaphone, Package, Palette, Scissors, ScrollText, type LucideIcon } from "lucide-react";
 import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
@@ -14,7 +14,7 @@ import { propsDePreCarga } from "@/lib/mesa/preCarga";
  * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
-export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao";
+export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site";
 
 export interface MesaDoSeletor {
   valor: QualMesa;
@@ -45,6 +45,11 @@ export const MESAS: MesaDoSeletor[] = [
   { valor: "edicao", rotulo: "Edição", titulo: "Abrir a Mesa Edição (vídeos de fora, organizar e editar)", caminho: "/mesa-edicao", descricao: "Subir vídeos de fora, organizar e editar", icone: Scissors },
   { valor: "publicidade", rotulo: "Publicidade", titulo: "Abrir a Mesa Publicidade (campanhas de produto)", caminho: "/mesa-publicidade", descricao: "Campanhas de produto com direção de arte", icone: Package },
   { valor: "roteiros", rotulo: "Roteiros", titulo: "Abrir a Mesa Roteiros (roteiros de vídeo para gravar)", caminho: "/mesa-roteiros", descricao: "Roteiros de vídeo para gravar", icone: ScrollText },
+  { valor: "identidade", rotulo: "Identidade", titulo: "Abrir a Mesa Identidade (identidade visual, naming e brandbook)", caminho: "/mesa-identidade", descricao: "Identidade visual, naming e brandbook", icone: Palette },
+  // Frente PRO (30/09): proposta comercial do cliente (só admin e gestor abrem a rota).
+  { valor: "proposta", rotulo: "Proposta", titulo: "Abrir a Mesa Proposta (proposta comercial com link e aceite)", caminho: "/mesa-proposta", descricao: "Proposta comercial com link e aceite", icone: BriefcaseBusiness },
+  // Frente SIT (30/09): criador de sites com o motor de código.
+  { valor: "site", rotulo: "Site", titulo: "Abrir a Mesa Site (site do cliente com prévia e domínio)", caminho: "/mesa-site", descricao: "Site do cliente com prévia ao vivo e domínio", icone: Globe },
 ];
 
 /** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */

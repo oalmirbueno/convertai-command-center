@@ -19,6 +19,8 @@ import type { AcaoDoAgente, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 export interface ControleDePropostas {
   aplicar: (p: PropostaDaSkill, rotulo: string) => boolean;
   desfazer: (p: PropostaDaSkill) => boolean;
+  /** Frente EDT: grava o projeto agora (antes de pôr uma amostra na fila). */
+  salvarAgora?: () => Promise<void>;
 }
 
 function Parametros({ s, valores, mudar }: { s: Skill; valores: Record<string, ValorDoParametro>; mudar: (k: string, v: ValorDoParametro) => void }) {

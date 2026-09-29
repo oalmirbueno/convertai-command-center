@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { QualMesa } from "@/components/mesa-foto/TrocaDeMesas";
 import { BotaoDeTelaCheia, classeDaRaiz, type TelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import SeletorDeMesa from "./SeletorDeMesa";
+import BotaoDoBriefing from "@/components/briefing/BotaoDoBriefing";
 import { juntar, larguraDaMesa } from "./estilos";
 
 /**
@@ -85,6 +86,8 @@ export default function CascaDaMesa({
             )}
             data-casca-acoes=""
           >
+            {/* Frente BRF: link do briefing no modelo da mesa (some em mesa sem modelo). */}
+            <BotaoDoBriefing clientId={clientId} marcaId={marcaId} mesa={mesa} className="mr-0.5" />
             {acoes}
             <BotaoDeTelaCheia tela={telaCheia} className="ml-0.5" />
           </div>

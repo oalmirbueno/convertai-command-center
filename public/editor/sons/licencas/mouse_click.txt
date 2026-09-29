@@ -1,0 +1,50 @@
+EFEITO: mouse_click  (arquivo assets/sfx/mouse_click.wav)
+NOMES EM PORTUGUES: clique de mouse (mouse, clique_de_mouse)
+SOM: clique de mouse de verdade: aperta e solta
+
+TITULO:        Raspberry Mouse, Single Click (som numero 1735)
+PAGINA:        https://bigsoundbank.com/raspberry-mouse-single-click-s1735.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/1735.wav
+                 (WAV 48 kHz, 24 bits, mono, 0,47 s; estudio, SoundDevices MixPre-3 + Rode NT5)
+AUTOR:         Joseph SARDIN (BigSoundBank.com). A ficha tecnica da pagina traz "Author : Joseph SARDIN".
+               O titulo cita o mouse gravado; o arquivo do kit tem nome generico (mouse_click).
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "Yes, because I intentionally release it under the CC0 license (public-domain equivalent).
+                You can download and use it without paying, without creating an account, and without
+                asking for permission."
+               A pagina de licencas do site (https://bigsoundbank.com/licenses.html) diz, em
+               "You are allowed to": "Share, copy, distribute and communicate the material by all means
+               and in all formats." / "Adapt, remix, transform and create from material." / "Use,
+               including for commercial purposes." / "Without any restrictions." e chama a licenca de
+               "CC0 1.0 Universal".
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). A mesma pagina de licencas PEDE (nao exige) um credito:
+               "Add in your credits: 'Additional sounds: Joseph SARDIN - BigSoundBank.com'". O
+               THIRD_PARTY_NOTICES.md (secao 4) tem uma linha pronta para quem quiser atender.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Trecho a partir de 0,08 s de 1735.wav, tirada a corrente continua (DC).
+2. Corte de graves em 60 Hz (Butterworth de 2a ordem).
+3. Equalizador (a gravacao e muito aguda: 60% da energia acima de 10 kHz): +9 dB em 700 Hz (Q 0,8),
+   +10 dB em 1,8 kHz (Q 1), +8 dB em 3,8 kHz (Q 1,2) e prateleira de -6 dB acima de 9 kHz (Q 0,7).
+4. Aperto e soltura como foram gravados (0,1 s entre os dois), comeco 2 ms antes do aperto, cortado
+   em 0,240 s, subida de 1 ms e descida de 40 ms.
+5. Volume: pico no teto de -1,2 dBFS (veja NIVEL abaixo).
+6. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,240 s, ponto forte em 0,000 s, pico -1,20 dBFS,
+janela de 200 ms -19,79 LUFS e janela de 3 s -31,55 LUFS no arquivo
+(com o volume 1.0 do editor: -16,87 e -28,63 LUFS).
+NIVEL: pico no teto de -1,2 dBFS: um clique seco nao chega em -14 LUFS na janela de 200 ms sem
+estourar, entao fica em -16,9 com volume 1.0 (perto do tick, -16,7).
+
+OBSERVACAO: depois do equalizador o centro do som ficou em 4024 Hz contra 3978 Hz do modelo, com a
+energia espalhada de 400 Hz a 10 kHz como nele. Um clique seco nao chega em -14 LUFS na janela de
+200 ms sem passar do teto de pico (o proprio modelo tambem nao chegaria), entao ele fica perto do
+nivel do tick. Se ficar baixo, use "volume": 1.5 no item.
+O som de referencia que serviu de modelo foi usado so para medir (duracao, volume, faixa de
+frequencia, ponto forte). Nenhum pedaco dele foi copiado, cortado, misturado ou entregue.

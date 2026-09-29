@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Megaphone, Plus, Sparkles } from "lucide-react";
+import { Loader2, Megaphone, Plus, Sparkles, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -17,6 +17,8 @@ import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
 import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
 import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
+// Frente IDV (30/09): o criador de nomes da Mesa Identidade também dá nome de campanha (só baixa quando abre).
+const NamingDaCampanha = lazy(() => import("@/components/mesa-identidade/NamingDaCampanha"));
 
 /**
  * Aba Campanhas (entre Mês e Estúdio), mesa de trabalho em três colunas:
@@ -174,6 +176,7 @@ export default function AbaCampanhas({
   const [projetoDaCriacao, setProjetoDaCriacao] = useState<Record<string, string>>({});
   const [gaveta, setGaveta] = useState(false);
   const [rascunho, setRascunho] = useState<RascunhoParaOAgente | null>(null);
+  const [nomes, setNomes] = useState(false);
 
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
   const hypes = useQuery({ queryKey: chaves.hypes(clientId), enabled: hypeIndice !== null, queryFn: () => lerHypes(clientId) });
@@ -238,9 +241,14 @@ export default function AbaCampanhas({
 
   // Secundário: o primário da área é o do estado vazio ou o da campanha aberta (28/09, um primário por área).
   const botaoNova = (
-    <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" onClick={comecarNova} disabled={nova}>
-      <Plus className="mr-1 h-3.5 w-3.5" /> Nova campanha
-    </Button>
+    <>
+      <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 shrink-0" onClick={() => setNomes(true)} title="Criar nome de campanha" aria-label="Criar nome de campanha">
+        <Type className="h-3.5 w-3.5" />
+      </Button>
+      <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" onClick={comecarNova} disabled={nova}>
+        <Plus className="mr-1 h-3.5 w-3.5" /> Nova campanha
+      </Button>
+    </>
   );
 
   const listaLateral = (
@@ -367,6 +375,12 @@ export default function AbaCampanhas({
           </aside>
         )}
       </div>
+
+      {nomes && (
+        <Suspense fallback={null}>
+          <NamingDaCampanha aberto={nomes} onOpenChange={setNomes} campanhaId={escolhida ? escolhida.id : null} nomeDaCampanha={escolhida ? escolhida.nome : null} />
+        </Suspense>
+      )}
 
       {!agenteFixo && agente && (
         <>

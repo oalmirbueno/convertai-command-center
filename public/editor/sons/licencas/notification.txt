@@ -1,0 +1,54 @@
+EFEITO: notification  (arquivo assets/sfx/notification.wav)
+NOMES EM PORTUGUES: notificação (notificacao, ding, mensagem)
+SOM: ding curto e brilhante de vidro, tipo notificacao de celular
+
+TITULO:        clinking of empty glass (Toast) (som numero 471)
+PAGINA:        https://bigsoundbank.com/clinking-of-empty-glass-toast-s0471.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/0471.wav
+                 (WAV 48 kHz, 16 bits, mono, 57,47 s; gravado em estudio)
+AUTOR:         Joseph SARDIN (BigSoundBank.com). A ficha tecnica da pagina traz "Author : Joseph SARDIN".
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "Yes, because I intentionally release it under the CC0 license (public-domain equivalent).
+                You can download and use it without paying, without creating an account, and without
+                asking for permission."
+               A pagina de licencas do site (https://bigsoundbank.com/licenses.html) diz, em
+               "You are allowed to": "Share, copy, distribute and communicate the material by all means
+               and in all formats." / "Adapt, remix, transform and create from material." / "Use,
+               including for commercial purposes." / "Without any restrictions." e chama a licenca de
+               "CC0 1.0 Universal".
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). A mesma pagina de licencas PEDE (nao exige) um credito:
+               "Add in your credits: 'Additional sounds: Joseph SARDIN - BigSoundBank.com'". O
+               THIRD_PARTY_NOTICES.md (secao 4) tem uma linha pronta para quem quiser atender.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Uma unica batida no copo, a que comeca em 0,472 s de 0471.wav (o silencio antes dela fica 68 dB
+   abaixo), convertida para 48 kHz, tirada a corrente continua (DC).
+2. Corte de graves em 300 Hz (Butterworth de 2a ordem).
+3. Comeco 2 ms antes da batida.
+4. Afinada 2 semitons acima por reamostragem (101 -> 90 amostras): o tom principal vai de 1668 Hz
+   para 1872 Hz e o som fica 11% mais curto.
+5. Prateleira de -12 dB acima de 7 kHz (Q 0,7): depois de subir o tom, o parcial mais agudo passou
+   de 10 kHz e deixava o ding aspero.
+6. Cortado em 1,200 s, subida de 1 ms e descida de 450 ms.
+7. Volume acertado para a janela de 200 ms ficar em -14,0 LUFS com o volume 1.0 do editor.
+8. Gravado em WAV 48 kHz, 16 bits, estereo (o mesmo som nos dois lados).
+
+MEDIDAS DO ARQUIVO FINAL: 1,200 s, ponto forte em 0,008 s, pico -12,32 dBFS,
+janela de 200 ms -16,92 LUFS e janela de 3 s -26,62 LUFS no arquivo
+(com o volume 1.0 do editor: -14,00 e -23,70 LUFS).
+NIVEL: janela de 200 ms em -14,0 LUFS com volume 1.0 (marca leve), sem passar de -20,0 na janela de
+3 s.
+
+OBSERVACAO: o pedido era a ideia de uma notificacao de celular, sem copiar o som de nenhum aparelho.
+Este e um copo de vidro de verdade: um tom principal com parciais que nao sao harmonicos, ataque
+instantaneo e um toque que some. Medindo contra o modelo, o centro do som ficou em 2273 Hz contra
+2251 Hz e 90% da energia fica entre 1 e 2,5 kHz (96% no modelo). A diferenca que se ouve: o modelo
+soa por mais de 2 s, este some em cerca de 1 s, o que atrapalha menos a voz. Os sons da BigSoundBank
+gravados de celulares de marca (toques e camera) foram deixados de fora de proposito.
+O som de referencia que serviu de modelo foi usado so para medir (duracao, volume, faixa de
+frequencia, ponto forte). Nenhum pedaco dele foi copiado, cortado, misturado ou entregue.

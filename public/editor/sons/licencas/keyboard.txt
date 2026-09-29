@@ -1,0 +1,48 @@
+EFEITO: keyboard  (arquivo assets/sfx/keyboard.wav)
+NOMES EM PORTUGUES: teclado (teclado, digitando, digitacao)
+SOM: rajada de digitacao num teclado de computador
+
+TITULO:        Computer Keyboard (som numero 229)
+PAGINA:        https://bigsoundbank.com/computer-keyboard-s0229.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/0229.wav
+                 (WAV 44,1 kHz, 16 bits, mono, 30,09 s; estudio, Tascam DR-40 + Rode NT5)
+AUTOR:         Joseph SARDIN (BigSoundBank.com). A ficha tecnica da pagina traz "Author : Joseph SARDIN".
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "Yes, because I intentionally release it under the CC0 license (public-domain equivalent).
+                You can download and use it without paying, without creating an account, and without
+                asking for permission."
+               A pagina de licencas do site (https://bigsoundbank.com/licenses.html) diz, em
+               "You are allowed to": "Share, copy, distribute and communicate the material by all means
+               and in all formats." / "Adapt, remix, transform and create from material." / "Use,
+               including for commercial purposes." / "Without any restrictions." e chama a licenca de
+               "CC0 1.0 Universal".
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). A mesma pagina de licencas PEDE (nao exige) um credito:
+               "Add in your credits: 'Additional sounds: Joseph SARDIN - BigSoundBank.com'". O
+               THIRD_PARTY_NOTICES.md (secao 4) tem uma linha pronta para quem quiser atender.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Trecho a partir de 0,70 s de 0229.wav (escolhido por ter as teclas mais parelhas, sem uma tecla
+   muito mais forte que as outras), convertido para 48 kHz, tirada a corrente continua (DC).
+2. Corte de graves em 350 Hz (Butterworth de 2a ordem).
+3. Equalizador: +5 dB em 2 kHz e -3 dB em 4 kHz (Q 2), para a faixa de 1 a 2,5 kHz ficar como no
+   modelo.
+4. Comeco 2 ms antes da primeira tecla, cortado em 1,500 s, subida de 2 ms e descida de 80 ms.
+5. Volume acertado para a janela de 200 ms ficar em -14,0 LUFS com o volume 1.0 do editor.
+6. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 1,500 s, ponto forte em 0,111 s, pico -1,75 dBFS,
+janela de 200 ms -16,93 LUFS e janela de 3 s -23,67 LUFS no arquivo
+(com o volume 1.0 do editor: -14,01 e -20,75 LUFS).
+NIVEL: janela de 200 ms em -14,0 LUFS com volume 1.0 (marca leve), sem passar de -20,0 na janela de
+3 s.
+
+OBSERVACAO: 67% da energia fica entre 1 e 2,5 kHz (71% no modelo) e o centro do som ficou em 2441 Hz
+contra 2466 Hz. O ritmo e de umas 12 teclas por segundo, como no modelo. O ponto forte cai em 0,111 s,
+na tecla mais forte do trecho: o som comeca um pouco antes do "at".
+O som de referencia que serviu de modelo foi usado so para medir (duracao, volume, faixa de
+frequencia, ponto forte). Nenhum pedaco dele foi copiado, cortado, misturado ou entregue.

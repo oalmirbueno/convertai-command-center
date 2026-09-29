@@ -22,7 +22,19 @@ export interface Lugar {
 }
 
 /** Telas que não viram "lugar" (entrada, públicas, raiz). */
-const FORA = /^\/(login|redefinir-senha|primeiro-acesso|oauth|\.lovable|briefing\/|contrato\/|inbox\/|quiz\/|unsubscribe|conectar-mcp)/;
+const FORA = /^\/(login|redefinir-senha|primeiro-acesso|oauth|\.lovable|briefing\/|contrato\/|marca\/|proposta\/|inbox\/|quiz\/|unsubscribe|conectar-mcp)/;
+
+/** Frente SIT (30/09): o nome das etapas da Mesa Site, com acento. */
+const ETAPAS_DA_MESA_SITE: Record<string, string> = {
+  briefing: "Briefing",
+  referencias: "Referências",
+  direcao: "Direção",
+  conteudo: "Conteúdo",
+  imagens: "Imagens",
+  construcao: "Construção",
+  revisao: "Revisão",
+  publicacao: "Publicação",
+};
 
 const OUTRAS_AREAS: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -111,7 +123,7 @@ export function rotuloDoLugar(pathname: string, search: string): string | null {
   const q = lerBusca(search);
   const sub = subDoLugar(rota, q);
   if (!sub) return base;
-  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : null;
+  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : null;
   return `${base} · ${nomeSub || capitalizar(sub)}`;
 }
 

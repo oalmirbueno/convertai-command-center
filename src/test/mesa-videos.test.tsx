@@ -653,7 +653,8 @@ describe("Mesa Vídeos e Mesa Edição no esqueleto das mesas", () => {
     expect(etapaQueVaiAbrir("/mesa-edicao", `?client=${CLIENTE}`)).toBe("entrada");
     expect(cargasDaMesa("/mesa-edicao", `?client=${CLIENTE}&etapa=editar`).map(([k]) => k)).toEqual(["pagina/mesa-edicao", "mesa-edicao/editar", "mesa-edicao/agente"]);
     expect(etapaValidaDaEdicao("nada")).toBe("entrada");
-    expect(MESAS.map((m) => m.valor)).toEqual(["mesa", "ads", "foto", "videos", "edicao", "publicidade", "roteiros"]);
+    // As 7 primeiras; mesas novas (Proposta e as das outras frentes) entram depois delas.
+    expect(MESAS.map((m) => m.valor).slice(0, 7)).toEqual(["mesa", "ads", "foto", "videos", "edicao", "publicidade", "roteiros"]);
     expect(enderecoDaMesa("videos", CLIENTE)).toBe(`/mesa-videos?client=${CLIENTE}`);
     expect(enderecoDaMesa("edicao", CLIENTE)).toBe(`/mesa-edicao?client=${CLIENTE}`);
     expect(NOME_DA_MESA.videos).toBe("Mesa Vídeos");

@@ -1,0 +1,10 @@
+/* Gerado pelo motor a partir de pacote.paleta e pacote.fontes. Não edite à mão. */
+:root {
+  --cor-destaque: #00d52b;
+  --cor-fundo: #111111;
+  --cor-texto: #f5f5f5;
+  --cor-suave: #9a9a9a;
+  --cor-superficie: #1b1b1b;
+  --fonte-titulo: ui-sans-serif, system-ui, sans-serif;
+  --fonte-texto: ui-sans-serif, system-ui, sans-serif;
+}

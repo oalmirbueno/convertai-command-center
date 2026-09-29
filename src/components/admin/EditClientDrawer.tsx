@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, Pause, Play } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, BriefcaseBusiness, Pause, Play } from "lucide-react";
 import {
   AjudaRecolhida,
   CampoDeFormulario,
@@ -32,7 +32,8 @@ import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
-import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
+import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
+import { estadoDoLink, modeloDeFabrica } from "../../../supabase/functions/_shared/briefing-modelos";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
@@ -189,19 +190,19 @@ export default function EditClientDrawer({
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [markPaidId, setMarkPaidId] = useState<string | null>(null);
 
-  // Fetch client's briefing
-  const { data: clientBriefing } = useQuery({
-    queryKey: ["client-briefing", client?.id],
+  // Briefings do cliente (frente BRF): os últimos links, de qualquer modelo e estado.
+  const { data: clientBriefings } = useQuery({
+    queryKey: ["client-briefings", client?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("briefings")
-        .select("*")
+        .select("id, modelo, titulo, submitted, expira_em, enviado_em, reabertura_pedida_em, created_at")
         .eq("client_id", client.id)
-        .eq("submitted", true)
+        .is("arquivado_em" as any, null)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
+        .limit(5);
+      if (error) throw error;
+      return (data as unknown as Array<{ id: string; modelo: string | null; titulo: string | null; submitted: boolean | null; expira_em: string | null; enviado_em: string | null; reabertura_pedida_em: string | null; created_at: string }>) || [];
     },
     enabled: !!client?.id,
   });
@@ -815,6 +816,13 @@ export default function EditClientDrawer({
                     <PackageCheck className="mr-1.5 h-4 w-4 text-warning" aria-hidden="true" />
                     Aprovações
                   </button>
+                  {/* Frente PRO: a Mesa Proposta com o estrategista comercial (só admin e gestor). */}
+                  {(isAdmin || profile?.role === "manager") && (
+                    <button type="button" onClick={() => openClientOperation(`/mesa-proposta?client=${encodeURIComponent(client.id)}&etapa=contexto`)} className={botao.secundario}>
+                      <BriefcaseBusiness className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
+                      Gerar proposta
+                    </button>
+                  )}
                 </div>
               </Secao>
 
@@ -877,19 +885,40 @@ export default function EditClientDrawer({
                 )}
               </Secao>
 
-              {clientBriefing && (
-                <Secao titulo="Briefing" divisoria>
-                  <button
-                    type="button"
-                    onClick={() => setBriefingOpen(true)}
-                    className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-1.5 text-left hover:bg-muted/50", foco)}
-                  >
-                    <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                    <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>Ver diagnóstico estratégico</span>
-                    <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{new Date(clientBriefing.created_at).toLocaleDateString("pt-BR")}</span>
+              <Secao
+                titulo="Briefing"
+                divisoria
+                acao={
+                  <button type="button" onClick={() => setBriefingOpen(true)} className={botao.barra}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <span className="ml-1.5">Novo link</span>
                   </button>
-                </Secao>
-              )}
+                }
+              >
+                {clientBriefings && clientBriefings.length > 0 ? (
+                  <ul className="-mx-1 min-w-0">
+                    {clientBriefings.map((b) => {
+                      const estado = b.submitted && b.reabertura_pedida_em ? "reabertura pedida" : estadoDoLink(b) === "enviado" ? "recebido" : estadoDoLink(b) === "expirado" ? "expirado" : "aguardando";
+                      const quando = b.submitted ? b.enviado_em || b.created_at : b.created_at;
+                      return (
+                        <li key={b.id}>
+                          <button
+                            type="button"
+                            onClick={() => void openClientOperation(`/briefings?briefing=${b.id}`)}
+                            className={juntar("flex w-full min-w-0 items-center rounded-md px-1 py-1.5 text-left hover:bg-muted/50", foco)}
+                          >
+                            <FileText className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                            <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{b.titulo || modeloDeFabrica(b.modelo).nome} · {estado}</span>
+                            <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{new Date(quando).toLocaleDateString("pt-BR")}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <EstadoVazio compacto titulo="Sem briefing." descricao="Gere o link no modelo do serviço." />
+                )}
+              </Secao>
 
             </div>
 
@@ -1307,11 +1336,11 @@ export default function EditClientDrawer({
         />
       )}
 
-      <BriefingPdfModal
+      <GerarLinkDoBriefing
         open={briefingOpen}
         onClose={() => setBriefingOpen(false)}
-        briefing={clientBriefing}
-        clientName={client.company_name || client.full_name}
+        clientId={client.id}
+        aoGerar={() => void queryClient.invalidateQueries({ queryKey: ["client-briefings", client.id] })}
       />
       <CreateProjectModal
         open={novoProjetoAberto}

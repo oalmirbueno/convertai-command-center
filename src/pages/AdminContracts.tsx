@@ -1,6 +1,7 @@
-import { useState, useRef, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast as avisar } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -9,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2 } from "lucide-react";
+import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2, Plus } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   AreaDeTrabalho,
@@ -20,6 +21,7 @@ import {
   EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
+  MenuMais,
   Painel,
   SeletorCompacto,
   botao,
@@ -35,6 +37,13 @@ import {
   storageRefFromFile,
   useResolvedFileUrl,
 } from "@/lib/fileUrls";
+import { textoDoErro } from "@/lib/mesa/api";
+import { chamarContratos, CHAVES_DOS_CONTRATOS } from "@/lib/contratos/api";
+
+// Frente CON (30/09): contratos montados por modelo, com o agente de contratos ao lado.
+const DetalheDoContrato = lazy(() => import("@/components/contratos/DetalheDoContrato"));
+const NovoContrato = lazy(() => import("@/components/contratos/NovoContrato"));
+const AgenteDeContratos = lazy(() => import("@/components/contratos/AgenteDeContratos"));
 
 type Contract = {
   id: string;
@@ -51,6 +60,12 @@ type Contract = {
   sign_token: string;
   sent_at: string | null;
   created_at: string;
+  /** Frente CON: 'modelo' é montado pelo modelo; sem a coluna (banco antigo), vale 'arquivo'. */
+  origem?: string | null;
+  numero?: string | null;
+  versao?: number | null;
+  documento_hash?: string | null;
+  arquivado_em?: string | null;
 };
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -58,6 +73,8 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   sent: { label: "Aguardando cliente", cls: "bg-warning/15 text-warning" },
   signed: { label: "Em revisão", cls: "bg-primary/15 text-primary" },
   completed: { label: "Assinado", cls: "bg-success/15 text-success" },
+  cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
+  substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground" },
 };
 
 const FILTROS_DE_STATUS = [
@@ -66,7 +83,11 @@ const FILTROS_DE_STATUS = [
   { valor: "sent", rotulo: "Aguardando cliente" },
   { valor: "signed", rotulo: "Em revisão" },
   { valor: "completed", rotulo: "Assinado" },
+  { valor: "cancelled", rotulo: "Cancelado" },
+  { valor: "substituido", rotulo: "Substituído" },
 ];
+
+const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizar(v: string) {
   return v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -83,9 +104,13 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const canDeleteContracts = profile?.role === "admin";
 
   // "Novo contrato" do agente Aceleriq chega com ?novo=1&client=<id>.
-  const [params] = useSearchParams();
-  const [uploadOpen, setUploadOpen] = useState(params.get("novo") === "1");
+  // Frente CON: ?client=<id> filtra e abre o agente; ?contrato=<id> abre o contrato; ?proposta=<id> gera da proposta aceita.
+  const [params, setParams] = useSearchParams();
+  const [novoAberto, setNovoAberto] = useState(params.get("novo") === "1");
+  const [uploadOpen, setUploadOpen] = useState(false);
   const clienteDoLink = params.get("client") || "";
+  const contratoAberto = !lockedClientId && UUID_VALIDO.test(params.get("contrato") || "") ? String(params.get("contrato")) : null;
+  const clienteFiltro = lockedClientId || (UUID_VALIDO.test(clienteDoLink) ? clienteDoLink : "");
   const [signOpen, setSignOpen] = useState<Contract | null>(null);
   const [linkOpen, setLinkOpen] = useState<{ url: string; email: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
@@ -95,6 +120,16 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     validar: (v) => typeof v === "string" && FILTROS_DE_STATUS.some((f) => f.valor === v),
   });
   const [busca, setBusca] = useEstadoDaTela(`contratos:busca:${escopo}`, "", { validar: (v) => typeof v === "string" });
+
+  const mudar = (mudancas: Record<string, string | null>) => {
+    const next = new URLSearchParams(params);
+    Object.keys(mudancas).forEach((k) => {
+      const v = mudancas[k];
+      if (v) next.set(k, v);
+      else next.delete(k);
+    });
+    setParams(next);
+  };
 
   const { data: contracts = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["contracts", user?.id, lockedClientId || "all"],
@@ -110,6 +145,28 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   });
 
   const clientById = (id: string) => clients.find((c: any) => c.id === id);
+  const listaDeClientes = useMemo(
+    () => (clients as any[]).map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") })).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [clients],
+  );
+  const aberto = contratoAberto ? contracts.find((c) => c.id === contratoAberto) || null : null;
+  const clienteDoAgente = clienteFiltro || (aberto ? aberto.client_id : "");
+
+  // Proposta aceita (frente PRO) vira rascunho: ?proposta=<id>. Uma vez por endereço.
+  const propostaPedida = useRef<string | null>(null);
+  useEffect(() => {
+    const proposta = params.get("proposta") || "";
+    if (!UUID_VALIDO.test(proposta) || propostaPedida.current === proposta || !canManageContracts) return;
+    propostaPedida.current = proposta;
+    chamarContratos("gerar_do_aceite", { proposta_id: proposta })
+      .then((p: any) => {
+        void qc.invalidateQueries({ queryKey: CHAVES_DOS_CONTRATOS.lista });
+        mudar({ proposta: null, client: p.contrato.client_id, contrato: p.contrato.id });
+        avisar.success(p.ja_existia ? "Esta proposta já tinha contrato" : "Rascunho gerado da proposta aceita", { description: p.pergunta || undefined });
+      })
+      .catch((e) => avisar.error("O contrato não foi gerado da proposta", { description: textoDoErro(e) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, canManageContracts]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -154,6 +211,12 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   };
 
   const abrirContrato = async (c: Contract) => {
+    // Contrato de modelo abre por dentro (documento, dados, versões e trilha).
+    if (c.origem === "modelo") {
+      if (lockedClientId) window.open(`/contratos?client=${c.client_id}&contrato=${c.id}`, "_self");
+      else mudar({ contrato: c.id });
+      return;
+    }
     try {
       const url = await resolveFileUrl({ fileUrl: c.original_file_url });
       window.open(url, "_blank", "noopener,noreferrer");
@@ -189,15 +252,16 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   }
 
   const termo = normalizar(busca);
+  const doCliente = clienteFiltro ? contracts.filter((c) => c.client_id === clienteFiltro) : contracts;
   const contagem: Record<string, number> = {};
-  for (const c of contracts) contagem[c.status] = (contagem[c.status] || 0) + 1;
-  const filtrados = contracts.filter((c) => {
+  for (const c of doCliente) contagem[c.status] = (contagem[c.status] || 0) + 1;
+  const filtrados = doCliente.filter((c) => {
     if (filtroStatus !== "todos" && c.status !== filtroStatus) return false;
     if (!termo) return true;
     const cl = clientById(c.client_id);
-    return normalizar([c.title, c.description, cl?.full_name, cl?.company_name, c.original_file_name].filter(Boolean).join(" ")).indexOf(termo) >= 0;
+    return normalizar([c.title, c.description, c.numero, cl?.full_name, cl?.company_name, c.original_file_name].filter(Boolean).join(" ")).indexOf(termo) >= 0;
   });
-  const aguardandoAssinatura = contracts.filter((c) => !c.admin_signed_at).length;
+  const aguardandoAssinatura = doCliente.filter((c) => !c.admin_signed_at && c.status === "draft").length;
   const filtrando = filtroStatus !== "todos" || !!termo;
 
   const lista: ReactNode = isError ? (
@@ -211,15 +275,15 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     />
   ) : isLoading && contracts.length === 0 ? (
     <Carregando rotulo="Carregando contratos" linhas={4} />
-  ) : contracts.length === 0 ? (
+  ) : doCliente.length === 0 ? (
     <EstadoVazio
       icone={<FileSignature className="h-5 w-5" />}
       titulo="Nenhum contrato ainda"
-      descricao="Suba o primeiro para começar."
+      descricao="Monte o primeiro pelo modelo."
       acao={
         canManageContracts ? (
-          <button type="button" onClick={() => setUploadOpen(true)} className={botao.secundario}>
-            <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" /> Novo contrato
+          <button type="button" onClick={() => setNovoAberto(true)} className={botao.secundario}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Novo contrato
           </button>
         ) : undefined
       }
@@ -247,7 +311,8 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         {filtrados.map((c) => {
           const client = clientById(c.client_id);
           const meta = STATUS_META[c.status] || STATUS_META.draft;
-          const podeExcluir = canDeleteContracts && c.status === "draft" && !c.admin_signed_at && !c.sent_at && !c.client_signed_at;
+          const modelo = c.origem === "modelo";
+          const podeExcluir = !modelo && canDeleteContracts && c.status === "draft" && !c.admin_signed_at && !c.sent_at && !c.client_signed_at;
           return (
             <li key={c.id} className="flex min-w-0 items-center px-3 py-3 sm:px-4">
               <div className="min-w-0 flex-1">
@@ -260,42 +325,45 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                   <span className="sm:hidden">{meta.label} · </span>
                   {client?.full_name || "-"}
                   {client?.company_name ? ` · ${client.company_name}` : ""}
+                  {modelo && c.numero ? ` · ${c.numero} v${c.versao || 1}` : ""}
                   {` · ${new Date(c.created_at).toLocaleDateString("pt-BR")}`}
                 </p>
-                <p className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] sm:pl-6 [&>*]:mr-3">
-                  {c.admin_signed_at ? (
-                    <span className="inline-flex items-center text-success">
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center text-muted-foreground">
-                      <Clock className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Aguarda sua assinatura
-                    </span>
-                  )}
-                  {c.client_signed_at ? (
-                    <span className="inline-flex items-center text-success">
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
-                    </span>
-                  ) : c.sent_at ? (
-                    <span className="inline-flex items-center text-warning">
-                      <Mail className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Enviado, aguardando cliente
-                    </span>
-                  ) : null}
-                </p>
+                {!modelo && (
+                  <p className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] sm:pl-6 [&>*]:mr-3">
+                    {c.admin_signed_at ? (
+                      <span className="inline-flex items-center text-success">
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-muted-foreground">
+                        <Clock className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Aguarda sua assinatura
+                      </span>
+                    )}
+                    {c.client_signed_at ? (
+                      <span className="inline-flex items-center text-success">
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
+                      </span>
+                    ) : c.sent_at ? (
+                      <span className="inline-flex items-center text-warning">
+                        <Mail className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Enviado, aguardando cliente
+                      </span>
+                    ) : null}
+                  </p>
+                )}
               </div>
               <div className="ml-3 flex shrink-0 items-center sm:ml-4 [&>*+*]:ml-1.5 sm:[&>*+*]:ml-2">
                 <button type="button" onClick={() => void abrirContrato(c)} className={botao.secundario} aria-label={`Abrir ${c.title}`}>
                   <ExternalLink className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                   <span className="hidden sm:inline">Abrir</span>
                 </button>
-                {canManageContracts && !c.admin_signed_at && (
+                {!modelo && canManageContracts && !c.admin_signed_at && (
                   <button type="button" onClick={() => setSignOpen(c)} className={juntar(botao.secundario, "border-primary/50 text-primary hover:bg-primary/10")}>
                     <FileSignature className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Assinar</span>
                     <span className="sr-only sm:hidden">Assinar {c.title}</span>
                   </button>
                 )}
-                {canManageContracts && c.admin_signed_at && !c.client_signed_at && (
+                {!modelo && canManageContracts && c.admin_signed_at && !c.client_signed_at && ["draft", "sent"].indexOf(c.status) >= 0 && (
                   <button type="button" onClick={() => void enviarContrato(c)} className={botao.secundario}>
                     <Send className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
                     <span className="hidden sm:inline">{c.sent_at ? "Reenviar" : "Enviar"}</span>
@@ -315,41 +383,70 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     </Painel>
   );
 
+  const principal: ReactNode = contratoAberto ? (
+    <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo o contrato" />}>
+      <DetalheDoContrato
+        key={contratoAberto}
+        contratoId={contratoAberto}
+        aoVoltar={() => mudar({ contrato: null })}
+        aoAbrir={(id) => mudar({ contrato: id })}
+        nomeDoCliente={(() => {
+          const cl = aberto ? clientById(aberto.client_id) : null;
+          return (cl && (cl.company_name || cl.full_name)) || "";
+        })()}
+      />
+    </Suspense>
+  ) : (
+    lista
+  );
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
         titulo="Contratos"
         nivel={lockedClientId ? 2 : 1}
         descricao={
-          contracts.length === 0
+          doCliente.length === 0
             ? undefined
             : filtrando
-              ? `${filtrados.length} de ${contracts.length}`
-              : `${contracts.length} ${contracts.length === 1 ? "contrato" : "contratos"}${aguardandoAssinatura ? ` · ${aguardandoAssinatura} aguardando sua assinatura` : ""}`
+              ? `${filtrados.length} de ${doCliente.length}`
+              : `${doCliente.length} ${doCliente.length === 1 ? "contrato" : "contratos"}${aguardandoAssinatura ? ` · ${aguardandoAssinatura} em rascunho` : ""}`
         }
-        ajuda="Suba o PDF do contrato, assine e envie o link para o cliente assinar no portal."
+        ajuda="Monte o contrato pelo modelo (condições gerais e um anexo por serviço), confira em Dados o que falta, congele e assine pela agência e envie o link. O agente ao lado monta pelo que você descrever. Contrato já pronto em PDF ainda sobe pelo menu."
         acoes={
           canManageContracts ? (
-            <button type="button" onClick={() => setUploadOpen(true)} className={botao.primario} aria-label="Novo contrato">
-              <Upload className="h-4 w-4" aria-hidden="true" />
-              <span className="ml-1.5 hidden sm:inline">Novo contrato</span>
-            </button>
+            <div className="flex items-center [&>*+*]:ml-1.5">
+              <button type="button" onClick={() => setNovoAberto(true)} className={botao.primario} aria-label="Novo contrato">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span className="ml-1.5 hidden sm:inline">Novo contrato</span>
+              </button>
+              <MenuMais itens={[{ rotulo: "Subir PDF pronto", icone: <Upload className="h-4 w-4" />, aoEscolher: () => setUploadOpen(true) }]} />
+            </div>
           ) : undefined
         }
       />
 
-      {contracts.length > 0 && (
+      {contracts.length > 0 && !contratoAberto && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           <CampoDeBusca
             valor={busca}
             onMudar={setBusca}
-            placeholder="Buscar por título ou cliente"
+            placeholder="Buscar por título, número ou cliente"
             rotulo="Buscar contrato"
             className="flex-1 basis-full sm:basis-[240px]"
           />
+          {!lockedClientId && (
+            <SeletorCompacto
+              rotulo="Cliente"
+              opcoes={[{ valor: "todos", rotulo: "Todos os clientes" }].concat(listaDeClientes.map((c) => ({ valor: c.id, rotulo: c.nome })))}
+              valor={clienteFiltro || "todos"}
+              onEscolher={(v) => mudar({ client: v === "todos" ? null : v })}
+              modo="lista"
+            />
+          )}
           <SeletorCompacto
             rotulo="Status do contrato"
-            opcoes={FILTROS_DE_STATUS.map((f) => ({ ...f, contador: f.valor === "todos" ? contracts.length : contagem[f.valor] || 0 }))}
+            opcoes={FILTROS_DE_STATUS.map((f) => ({ ...f, contador: f.valor === "todos" ? doCliente.length : contagem[f.valor] || 0 }))}
             valor={filtroStatus}
             onEscolher={setFiltroStatus}
           />
@@ -359,9 +456,42 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       {lockedClientId ? (
         lista
       ) : (
-        <AreaDeTrabalho memoriaDaRolagem="contratos:lista" rotuloDoPrincipal="Lista de contratos">
-          {lista}
+        <AreaDeTrabalho
+          memoria="contratos"
+          memoriaDaRolagem={contratoAberto ? `contratos:${contratoAberto}` : "contratos:lista"}
+          rotuloDoPrincipal={contratoAberto ? "Contrato aberto" : "Lista de contratos"}
+          rotuloDaLateral="Agente de contratos"
+          iconeDaLateral={<FileSignature className="h-4 w-4" />}
+          lateral={
+            clienteDoAgente ? (
+              <Suspense fallback={<div aria-busy="true" aria-label="Abrindo o agente" className="h-full min-h-[320px] animate-pulse rounded-lg bg-muted" />}>
+                <AgenteDeContratos key={clienteDoAgente} clientId={clienteDoAgente} contratoId={contratoAberto} aoAbrirContrato={(id) => mudar({ contrato: id, client: clienteDoAgente })} />
+              </Suspense>
+            ) : (
+              <EstadoVazio compacto icone={<FileSignature className="h-5 w-5" />} titulo="Escolha um cliente" descricao="O agente monta o contrato dele." />
+            )
+          }
+        >
+          {principal}
         </AreaDeTrabalho>
+      )}
+
+      {novoAberto && (
+        <Suspense fallback={null}>
+          <NovoContrato
+            aberto={novoAberto}
+            aoFechar={() => setNovoAberto(false)}
+            clientes={lockedClientId ? listaDeClientes.filter((c) => c.id === lockedClientId) : listaDeClientes}
+            clienteInicial={lockedClientId || clienteDoLink || null}
+            aoCriar={(p) => {
+              setNovoAberto(false);
+              void qc.invalidateQueries({ queryKey: CHAVES_DOS_CONTRATOS.lista });
+              qc.setQueryData(CHAVES_DOS_CONTRATOS.um(p.contrato.id), p);
+              if (lockedClientId) window.open(`/contratos?client=${p.contrato.client_id}&contrato=${p.contrato.id}`, "_self");
+              else mudar({ client: p.contrato.client_id, contrato: p.contrato.id, novo: null });
+            }}
+          />
+        </Suspense>
       )}
 
       <UploadContractDialog

@@ -1,10 +1,14 @@
 import { duracaoDoClipe, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
-import { MAX_FERRAMENTAS, MAX_PASSOS, type ChamadaDeFerramenta, type RespostaDoPasso } from "../../../supabase/functions/editor-video/ferramentas";
+import { FERRAMENTAS_DE_SAIDA, FERRAMENTAS_DO_SERVIDOR, MAX_FERRAMENTAS, MAX_PASSOS, type ChamadaDeFerramenta, type RespostaDoPasso } from "../../../supabase/functions/editor-video/ferramentas";
 import { apelidosDoProjeto, ErroDeApelido, resolverApelidos, resumoParaOAgente } from "./apelidos";
 import { aplicarOperacao, emOrdem, ErroDaOperacao, trilhaPrincipal, type Operacao } from "./operacoes";
 import { proporSkill, skillPorId, type IdDaSkill } from "./skills";
 import { tempoFino } from "./tempo";
 import { falaNaLinhaDoTempo } from "./transcricao";
+import { Montador } from "./skills/tipos";
+import { conferirCorteDoProjeto, textoDaConferencia } from "./skills/corteDeVerdade";
+import { CHAVE_DA_LOGO, pecasDoProjeto, porLogo, porPeca, porTrilha } from "./motion/aplicar";
+import { PECAS_DE_MOTION, type IdDaPeca } from "./motion/catalogo";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -28,6 +32,25 @@ export interface ResultadoDaFerramenta {
   ok: boolean;
   /** Pedido de exportar (vira cartão com Confirmar; nunca roda sozinho). */
   exportar?: boolean;
+  /** Frente EDT: saída que vira cartão (geração paga com o custo antes). */
+  saida?: SaidaDoAgente | null;
+  /** Frente EDT: pedido que já foi para a fila do worker (amostra, onda). */
+  naFila?: { tipo: "amostra" | "onda"; pedido_id: string; inicio_s?: number; fim_s?: number } | null;
+}
+
+/** Saída paga que o agente preparou (a tela mostra o cartão com custo e Confirmar). */
+export interface SaidaDoAgente {
+  tipo: "gerar_broll" | "gerar_elemento";
+  argumentos: Record<string, unknown>;
+  custo_usd: number | null;
+  detalhe: string | null;
+}
+
+/** O que a tela passa ao agente além do projeto (frente EDT): a marca aberta para a logo e a cor. */
+export interface MarcaParaOAgente {
+  logo_path: string | null;
+  cor: string | null;
+  nome: string | null;
 }
 
 const num = (v: unknown) => {
@@ -108,6 +131,10 @@ export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: Estad
     });
     partes.push(`Fala na linha do tempo:\n${linhas.join("\n")}`);
   } else partes.push("Sem transcrição guardada.");
+  const pecas = pecasDoProjeto(p);
+  partes.push(pecas.length ? `Animações: ${pecas.map((x) => `${x.peca} em ${tempoFino(x.inicio_s)}`).join(", ")}.` : "Sem animação.");
+  const semOnda = Object.keys(p.fontes).filter((k) => p.fontes[k].midia !== "imagem" && !(p.ondas || {})[k]);
+  partes.push(`Onda medida: ${Object.keys(p.ondas || {}).length ? Object.keys(p.ondas || {}).join(", ") : "nenhuma"}${semOnda.length ? `; sem onda: ${semOnda.join(", ")}` : ""}. Músicas na Mídia do projeto: ${Object.keys(p.fontes).filter((k) => p.fontes[k].midia === "audio" && p.fontes[k].storage_bucket !== "publico").join(", ") || "nenhuma"}.`);
   const visto = visaoNaLinhaDoTempo(p, 0, Infinity);
   partes.push(visto.length ? `O que foi visto:\n${visto.join("\n")}` : "Ninguém assistiu o vídeo ainda (sem visão guardada).");
   const texto = partes.join("\n\n");
@@ -115,7 +142,7 @@ export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: Estad
 }
 
 /** Roda UMA ferramenta na cópia de trabalho. Nunca lança: erro volta como texto para o modelo conferir. */
-export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, agora: string): ResultadoDaFerramenta {
+export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, agora: string, marca: MarcaParaOAgente | null = null): ResultadoDaFerramenta {
   const a = ch.argumentos || {};
   const aplicar = (ops: Operacao[], texto: string): ResultadoDaFerramenta => {
     const resolvidas = resolverApelidos(p, ops);
@@ -184,7 +211,73 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         return { projeto: aplicarOperacao(p, o), operacoes: [o], texto: `Trilha ${id}${campos.muda !== undefined ? (campos.muda ? " sem som" : " com som") : ""}${campos.oculta !== undefined ? (campos.oculta ? " escondida" : " à vista") : ""}.`, ok: true };
       }
       case "exportar":
-        return { projeto: p, operacoes: [], texto: "Exportação preparada: o dono confirma no cartão.", ok: true, exportar: true };
+      case "renderizar":
+        return { projeto: p, operacoes: [], texto: "Render preparado: o dono confirma no cartão (vai para a fila da máquina da agência).", ok: true, exportar: true };
+      // ---------------------------------------------------------------- frente EDT
+      case "ler_onda": {
+        const chaves = a.fonte ? [String(a.fonte)] : Object.keys(p.ondas || {});
+        const linhas = chaves
+          .filter((k) => (p.ondas || {})[k])
+          .map((k) => {
+            const o = (p.ondas || {})[k];
+            const longas = o.pausas.filter((x) => x.ate_s - x.de_s > 0.25).length;
+            return `${k}: limiar ${o.limiar_db} dB, chão ${o.chao_db} dB, ${o.pausas.length} pausas medidas (${longas} acima de 0,25 s)${o.lufs !== null ? `, voz ${o.lufs} LUFS` : ""}.`;
+          });
+        return { projeto: p, operacoes: [], texto: linhas.length ? linhas.join("\n") : "Nenhuma onda medida ainda. Chame medir_onda.", ok: true };
+      }
+      case "conferir_corte":
+        return { projeto: p, operacoes: [], texto: textoDaConferencia(conferirCorteDoProjeto(p)), ok: true };
+      case "cortar_pela_onda":
+      case "ficar_com_melhor_tomada":
+      case "sons":
+      case "legendar": {
+        const id = (ch.ferramenta === "sons" ? "efeitos_sonoros" : ch.ferramenta === "legendar" ? "legendas" : ch.ferramenta) as IdDaSkill;
+        const params: Record<string, string | number | boolean> = {};
+        if (ch.ferramenta === "legendar") {
+          const n = Number(a.palavras_por_vez);
+          if (isFinite(n) && n >= 1) params.palavras_por_bloco = Math.min(8, Math.round(n));
+          if (a.estilo) params.estilo = String(a.estilo);
+          if (a.posicao) params.posicao = String(a.posicao);
+        } else {
+          Object.keys(a).forEach((k) => {
+            const v = a[k];
+            if (typeof v === "number" || typeof v === "string" || typeof v === "boolean") params[k] = v;
+          });
+        }
+        const prop = proporSkill(id, p, { agora }, params);
+        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: false };
+        return { projeto: prop.resultado, operacoes: prop.operacoes, texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: true };
+      }
+      case "animar": {
+        const peca = String(a.peca || "") as IdDaPeca;
+        if ((PECAS_DE_MOTION as readonly string[]).indexOf(peca) < 0 || peca === "logo") throw new ErroDaOperacao(`Peça desconhecida: ${peca || "sem nome"}.`);
+        const m = new Montador(p);
+        const r = porPeca(m, { peca, palavra_ref: a.palavra_ref ? String(a.palavra_ref) : null, inicio_s: isNaN(num(a.inicio_s)) ? null : num(a.inicio_s), duracao_s: isNaN(num(a.duracao_s)) ? null : num(a.duracao_s), params: (a.params && typeof a.params === "object" ? a.params : {}) as Record<string, unknown> });
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: `Peça ${peca} em ${tempoFino(r.inicio_s)} por ${tempoFino(r.duracao_s)}.`, ok: true };
+      }
+      case "musica": {
+        const m = new Montador(p);
+        const r = porTrilha(m, String(a.fonte || ""), isNaN(num(a.abaixo_da_voz_db)) ? null : num(a.abaixo_da_voz_db));
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: `Trilha de ${tempoFino(r.duracao_s)}, ${m.projeto.mixagem.trilha_abaixo_da_voz_db} dB abaixo da voz; sobe nas pausas; o render sai em ${m.projeto.mixagem.lufs_alvo} LUFS.`, ok: true };
+      }
+      case "logo":
+      case "cartao_final": {
+        const m = new Montador(p);
+        if (ch.ferramenta === "logo") {
+          if (!marca || !marca.logo_path) throw new ErroDaOperacao("A marca aberta não tem logo no kit. Suba a logo em Marca e peça de novo.");
+          const onde = a.onde === "cartao_final" || a.onde === "sting" ? a.onde : "canto";
+          const r = porLogo(m, { storage_path: marca.logo_path, nome: marca.nome ? `Logo ${marca.nome}` : null }, onde);
+          return { projeto: m.projeto, operacoes: m.operacoes, texto: `Logo (${onde}) em ${tempoFino(r.inicio_s)} por ${tempoFino(r.duracao_s)}.`, ok: true };
+        }
+        const total = p.duracao_s;
+        if (marca && marca.logo_path && (!p.fontes[CHAVE_DA_LOGO] || p.fontes[CHAVE_DA_LOGO].storage_path !== marca.logo_path)) {
+          m.aplicar({ op: "fonte", fonte: { chave: CHAVE_DA_LOGO, arquivo_id: null, nome: marca.nome ? `Logo ${marca.nome}` : "Logo do cliente", tipo: "quadro", storage_bucket: "mesa", storage_path: marca.logo_path, duracao_s: null, largura: null, altura: null, midia: "imagem" } });
+        }
+        const params: Record<string, unknown> = { titulo: a.titulo, botao: a.botao };
+        if (marca && marca.cor) params.cor = marca.cor;
+        const r = porPeca(m, { peca: "cartao_final", inicio_s: Math.max(0, total - 3.5), duracao_s: Math.min(3.5, Math.max(1, total)), params, fonte: m.projeto.fontes[CHAVE_DA_LOGO] ? CHAVE_DA_LOGO : null });
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: `Cartão final em ${tempoFino(r.inicio_s)}${m.projeto.fontes[CHAVE_DA_LOGO] ? " com a logo" : " (sem logo no kit)"}.`, ok: true };
+      }
       case "fechar_buracos":
       case "aplicar_skill": {
         const id = (ch.ferramenta === "fechar_buracos" ? "fechar_buracos" : String(a.skill || "")) as IdDaSkill;
@@ -223,6 +316,13 @@ export interface PedidoAoAgente {
   tela?: EstadoDaTela;
   /** AG2: as últimas trocas desta conversa (texto curto), para "e agora o outro" fazer sentido. */
   conversa?: string;
+  /** Frente EDT: marca aberta (logo e cor do kit). */
+  marca?: MarcaParaOAgente | null;
+  /**
+   * Frente EDT: ferramentas que chamam o servidor (sugerir_animacoes, medir_onda,
+   * amostra) e as saídas pagas (gerar_broll, gerar_elemento: só estimam o custo).
+   */
+  servidor?: (ch: ChamadaDeFerramenta, projeto: ProjetoDeEdicao) => Promise<ResultadoDaFerramenta>;
 }
 
 export interface ResultadoDoAgente {
@@ -247,6 +347,9 @@ export interface ResultadoDoAgente {
   seguidas: unknown | null;
   /** Último uso registrado (liga a mensagem ao gasto). */
   uso_id: string | null;
+  /** Frente EDT: cartões pagos preparados (custo antes) e pedidos já na fila do worker. */
+  saidas: SaidaDoAgente[];
+  naFila: NonNullable<ResultadoDaFerramenta["naFila"]>[];
 }
 
 /** O que o servidor devolve num passo (agente_passo). */
@@ -293,6 +396,8 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   let aprendido: unknown = null;
   let seguidas: unknown = null;
   let usoId: string | null = null;
+  const saidas: SaidaDoAgente[] = [];
+  const naFila: NonNullable<ResultadoDaFerramenta["naFila"]>[] = [];
   while (passo < MAX_PASSOS) {
     if (e.cancelado && e.cancelado()) {
       log.push({ tipo: "aviso", texto: `Parado pelo dono depois de ${passo} ${passo === 1 ? "passo" : "passos"}. O que já saiu fica para você conferir.` });
@@ -345,16 +450,27 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     const resultados: string[] = [];
     const chamadas = p.chamadas || [];
     const cabem = Math.max(0, MAX_FERRAMENTAS - usadas);
-    chamadas.slice(0, cabem).forEach((c) => {
+    for (const c of chamadas.slice(0, cabem)) {
       usadas++;
-      const x = executarFerramenta(trabalho, c, e.agora);
+      const noServidor = FERRAMENTAS_DO_SERVIDOR.indexOf(c.ferramenta) >= 0 || (FERRAMENTAS_DE_SAIDA.indexOf(c.ferramenta) >= 0 && c.ferramenta.indexOf("gerar_") === 0);
+      let x: ResultadoDaFerramenta;
+      if (noServidor) {
+        try {
+          x = e.servidor ? await e.servidor(c, trabalho) : { projeto: trabalho, operacoes: [], texto: "Indisponível aqui.", ok: false };
+        } catch (err) {
+          console.error("[agente editor] ferramenta do servidor falhou", c.ferramenta, err);
+          x = { projeto: trabalho, operacoes: [], texto: `Erro em ${c.ferramenta}: ${err instanceof Error ? err.message.slice(0, 160) : "falhou"}`, ok: false };
+        }
+      } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null);
       trabalho = x.projeto;
       x.operacoes.forEach((o) => operacoes.push(o));
       if (x.exportar) exportar = true;
+      if (x.saida) saidas.push(x.saida);
+      if (x.naFila) naFila.push(x.naFila);
       if (!x.ok) falhas++;
       resultados.push(`${c.ferramenta}: ${x.texto}`);
       log.push({ tipo: "ferramenta", texto: `${c.ferramenta}${x.ok ? "" : " (não deu)"}: ${x.texto.split("\n")[0].slice(0, 160)}` });
-    });
+    }
     if (chamadas.length > cabem) {
       recusadas += chamadas.length - cabem;
       log.push({ tipo: "aviso", texto: `${chamadas.length - cabem} ${chamadas.length - cabem === 1 ? "ferramenta ficou" : "ferramentas ficaram"} de fora: limite de ${MAX_FERRAMENTAS} por pedido.` });
@@ -381,7 +497,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos sem o agente dizer que terminou. Confira o que já saiu.` });
   }
   if (resposta) log.push({ tipo: "resposta", texto: resposta });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, uso_id: usoId };
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, uso_id: usoId, saidas, naFila };
 }
 
 /** Pedido que é só exportar/renderizar (regra fixa, sem modelo e sem custo): vira o cartão direto. */

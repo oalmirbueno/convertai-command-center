@@ -1,0 +1,46 @@
+EFEITO: click  (arquivo assets/sfx/click.wav)
+SOM: clique seco e brilhante, tipo obturador de camera
+
+TITULO DO PACOTE: UI Audio (UI SFX Set)
+PAGINA:        https://kenney.nl/assets/ui-audio
+ARQUIVO BAIXADO: https://kenney.nl/media/pages/assets/ui-audio/490d233f68-1677590494/kenney_ui-audio.zip
+ARQUIVO USADO: Audio/switch3.ogg (Ogg Vorbis 44,1 kHz, estereo)
+AUTOR:         Kenney Vleugels (Kenney.nl)
+LICENCA:       CC0 1.0 Universal (Creative Commons Zero)
+CITACAO DA LICENCA, do arquivo License.txt que vem dentro do .zip, palavra por palavra:
+               "License (Creative Commons Zero, CC0)"
+               "http://creativecommons.org/publicdomain/zero/1.0/"
+               "You may use these assets in personal and commercial projects."
+               "Credit (Kenney or www.kenney.nl) would be nice but is not mandatory."
+               A pagina do pacote mostra, na linha "License" da tabela:
+               "Creative Commons CC0", com link para
+               https://creativecommons.org/publicdomain/zero/1.0/
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0)
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+O mesmo arquivo entra DUAS vezes, porque um obturador de camera sao dois estalos (o espelho e
+depois as laminas), e porque um estalo sozinho e tao seco que nao chega em -14 LUFS na janela de
+200 ms sem passar do teto de -1 dBFS de pico.
+
+1. switch3.ogg convertido para 48 kHz estereo, tirada a corrente continua (DC), tirado o silencio
+   do comeco, pico normalizado.
+2. Somado consigo mesmo com 30 ms de atraso e ganho 0,9.
+3. Cortado em 0,300 s, subida de 2 ms e descida de 25 ms.
+4. Volume acertado para a janela de 200 ms mais forte ficar em -16,92 LUFS no arquivo, que da
+   -14,0 LUFS com o volume 1.0 do editor.
+5. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,300 s, ponto forte em 0,017 s, pico -1,34 dBFS,
+janela de 200 ms -16,92 LUFS, janela de 3 s -28,68 LUFS.
+
+OBSERVACAO: e um clique de botao, nao a gravacao de uma camera de verdade, mas ele mede quase
+igual ao efeito antigo: centro do som em 7222 Hz contra 7660 Hz, e o chao de ruido em -64,0 dBFS
+contra -64,2 dBFS. A diferenca que se ouve e o ritmo: aqui sao dois estalos separados por 30 ms,
+enquanto o antigo era um estalo so, com um corpo curto depois. Para ter um estalo unico, refaca
+por esta receita sem o passo 2; nesse caso, com o pico no teto de -1 dBFS, a janela de 200 ms
+chega so a -16,3 LUFS com o volume 1.0, ou seja 2,3 dB abaixo do alvo de -14,0 (medido).
+Todas as gravacoes de obturador de verdade que eu encontrei com licenca verificavel ficavam
+mais graves (2400 a 6200 Hz) e mais sujas.

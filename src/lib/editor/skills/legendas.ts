@@ -17,6 +17,9 @@ export const PRESETS_DE_LEGENDA = [
 
 const FIM_DE_FRASE = /[.!?…]$/;
 
+/** Frente EDT (30/09): a legenda padrão da casa é de 3 palavras (a quantidade muda por comando). */
+export const PALAVRAS_POR_LEGENDA = 3;
+
 export function blocosDeLegenda(palavras: PalavraNaLinha[], maxPalavras: number, pausaQuebra = 0.5): PalavraNaLinha[][] {
   const blocos: PalavraNaLinha[][] = [];
   let atual: PalavraNaLinha[] = [];
@@ -83,11 +86,11 @@ export function legendasEm(m: Montador, params: Record<string, ValorDoParametro>
 export const SKILL_LEGENDAS: Skill = {
   id: "legendas",
   rotulo: "Legendas animadas",
-  descricao: "Legenda da fala em blocos curtos; a palavra dita acende na hora dela.",
+  descricao: "Legenda da fala em blocos curtos (padrão 3 palavras); a palavra dita acende na hora dela.",
   referencia: "HyperFrames (embedded-captions) / clone-03-shopify (legenda_corte.srt)",
   precisaDeFala: true,
   parametros: [
-    { chave: "palavras_por_bloco", rotulo: "Palavras por bloco", tipo: "numero", padrao: 4, min: 1, max: 8, passo: 1 },
+    { chave: "palavras_por_bloco", rotulo: "Palavras por bloco", tipo: "numero", padrao: PALAVRAS_POR_LEGENDA, min: 1, max: 8, passo: 1 },
     { chave: "estilo", rotulo: "Estilo", tipo: "escolha", padrao: "destaque", opcoes: PRESETS_DE_LEGENDA.map((x) => ({ valor: x.valor, rotulo: x.rotulo })) },
   ],
   propor(p, ctx, dados) {

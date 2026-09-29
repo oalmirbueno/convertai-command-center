@@ -350,7 +350,7 @@ describe("contas, redes e o caminho do agente", () => {
     expect(mesa.etapas!.slice(0, 2)).toEqual(["contexto", "instagram"]);
     const ag = AGENTES_DO_PAINEL.find((a) => a.chave === "instagram")!;
     expect(ag.funcao).toBe("mesa-instagram");
-    expect(blocoDoMapaDoPainel("instagram").length).toBeLessThan(3600);
+    expect(blocoDoMapaDoPainel("instagram").length).toBeLessThan(4400); // 30/09: +Mesa Proposta, Identidade, Site e Contratos no mapa (antes 3600)
   });
 });
 

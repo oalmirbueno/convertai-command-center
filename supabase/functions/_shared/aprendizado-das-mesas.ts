@@ -34,7 +34,8 @@ import { AGENTE_DA_AREA, type AreaDoCerebro, type BancoDoCerebro, type JulgarApr
 import { gravarNoCerebro } from "./cerebro-nas-mesas.ts";
 
 // Frente RO (29/09): o Estúdio (diretor de arte e o Ajustar da lâmina) aprende pelo mesmo caminho.
-export const MESAS_QUE_APRENDEM = ["foto", "video", "edicao", "publicidade", "roteiro", "estilo", "estudio"] as const;
+// Frentes CON, IDV, PRO e SIT (30/09): contratos, diretor de marca (identidade e naming), estrategista comercial e diretor de site.
+export const MESAS_QUE_APRENDEM = ["foto", "video", "edicao", "publicidade", "roteiro", "estilo", "estudio", "contrato", "identidade", "naming", "proposta", "site"] as const;
 export type MesaQueAprende = (typeof MESAS_QUE_APRENDEM)[number];
 
 export const AREA_DA_MESA: Record<MesaQueAprende, AreaDoCerebro> = {
@@ -45,6 +46,11 @@ export const AREA_DA_MESA: Record<MesaQueAprende, AreaDoCerebro> = {
   roteiro: "copy",
   estilo: "arte",
   estudio: "arte",
+  contrato: "geral",
+  identidade: "arte",
+  naming: "copy",
+  proposta: "copy",
+  site: "arte",
 };
 
 export const FONTE_DA_MESA: Record<MesaQueAprende, string> = {
@@ -55,6 +61,11 @@ export const FONTE_DA_MESA: Record<MesaQueAprende, string> = {
   roteiro: "mesa_roteiros",
   estilo: "estilo",
   estudio: "estudio_aprendizado",
+  contrato: "mesa_contratos",
+  identidade: "mesa_identidade",
+  naming: "mesa_naming",
+  proposta: "mesa_proposta",
+  site: "mesa_site",
 };
 
 const NOME_DA_MESA: Record<MesaQueAprende, string> = {
@@ -65,6 +76,11 @@ const NOME_DA_MESA: Record<MesaQueAprende, string> = {
   roteiro: "Mesa Roteiros (roteirista)",
   estilo: "Estilo do cliente (diretor de arte)",
   estudio: "Estúdio (diretor de arte das lâminas e o Ajustar)",
+  contrato: "Contratos (agente de contratos)",
+  identidade: "Mesa Identidade (diretor de marca)",
+  naming: "Mesa Identidade (criador de nomes)",
+  proposta: "Mesa Proposta (estrategista comercial)",
+  site: "Mesa Site (diretor de site)",
 };
 
 const FONTES_DAS_MESAS = new Set(Object.values(FONTE_DA_MESA));

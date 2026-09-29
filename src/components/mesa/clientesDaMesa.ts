@@ -18,7 +18,7 @@
  * confunde quem abre a mesa todo dia.
  */
 
-export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao";
+export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site";
 export type ModoDaEscolha = "incluir" | "retirar";
 
 export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
@@ -29,6 +29,9 @@ export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
   publicidade: "Mesa Publicidade",
   roteiros: "Mesa Roteiros",
   edicao: "Mesa Edição",
+  identidade: "Mesa Identidade",
+  proposta: "Mesa Proposta",
+  site: "Mesa Site",
 };
 
 export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
@@ -39,6 +42,9 @@ export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
   publicidade: "Padrão: clientes com plano mensal ativo.",
   roteiros: "Padrão: clientes com plano mensal ativo.",
   edicao: "Padrão: clientes com plano mensal ativo.",
+  identidade: "Padrão: clientes com plano ativo, inclusive trabalho avulso (marca costuma ser projeto).",
+  proposta: "Padrão: todos os clientes (proposta vale para quem ainda não fechou).",
+  site: "Padrão: todos os clientes (site é projeto, não plano).",
 };
 
 export interface ClienteBruto {
@@ -83,6 +89,12 @@ export function nomeDoClienteBruto(c: ClienteBruto): string {
 /** O padrão da mesa para um cliente, com o motivo. */
 export function entraPeloPadrao(mesa: MesaDeClientes, c: ClienteBruto): { entra: boolean; motivo: string } {
   if (c.deleted_at) return { entra: false, motivo: "Cliente apagado" };
+  // Mesa Identidade (frente IDV): identidade e naming costumam ser projeto avulso, então o avulso entra.
+  if (mesa === "identidade" && c.client_type === "one_off") return { entra: true, motivo: "Trabalho avulso" };
+  // Frente PRO: proposta é antes do plano; todo cliente vivo entra.
+  if (mesa === "proposta") return { entra: true, motivo: "Todo cliente" };
+  // Frente SIT: site é projeto avulso tanto quanto de plano; todo cliente vivo entra.
+  if (mesa === "site") return { entra: true, motivo: "Todo cliente" };
   const status = String(c.plan_status || "");
   if (status !== "active") return { entra: false, motivo: status === "standby" ? "Plano em pausa" : "Sem plano ativo" };
   if (c.client_type === "one_off") return { entra: false, motivo: "Trabalho avulso" };

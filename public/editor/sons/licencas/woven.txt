@@ -1,0 +1,15 @@
+SONS: woven-bass-impact, woven-camera-shutter-1-shot, woven-dull-thud, woven-fast-whoosh,
+      woven-glitch-logo, woven-message-pop-reply, woven-pop-hand, woven-swish-whoosh-large,
+      woven-tick-sound (arquivos .wav nesta pasta, com o prefixo "woven-")
+
+ORIGEM:    Woven SFX, repositorio https://github.com/woven-video/woven-sfx
+           (commit 521b446db682a3cae9ae1647e94bbdc312cd9a3a); arquivo publico em
+           https://assets.sfx.woven.video/sfx/<nome>.wav
+LICENCA:   CC0 1.0 Universal (dominio publico), arquivo SOUNDS_LICENSE do repositorio.
+           https://creativecommons.org/publicdomain/zero/1.0/
+CREDITO:   nao obrigatorio.
+USO AQUI:  copia sem mudanca, so o nome ganhou o prefixo "woven-".
+           Pico medido pela Aceleriq (workers/render/sons/medir-sons.mjs), em
+           supabase/functions/_shared/som-do-editor.ts.
+REGISTRO:  Aceleriq, 30/09/2026. Arquivos vieram do pacote EDIT IA PRO (uso autorizado pelo dono);
+           a licenca vale pela origem publica acima.

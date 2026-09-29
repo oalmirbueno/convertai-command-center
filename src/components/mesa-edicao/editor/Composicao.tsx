@@ -1,6 +1,10 @@
-import type { CSSProperties, ReactNode } from "react";
-import { AbsoluteFill, Html5Audio, Html5Video, Img, interpolate, Sequence, useCurrentFrame } from "remotion";
-import { duracaoDoClipe, type ClipeDoProjeto, type ProjetoDeEdicao, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { AbsoluteFill, getRemotionEnvironment, Html5Audio, Html5Video, Img, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { duracaoDoClipe, mixagemPadrao, type ClipeDoProjeto, type ProjetoDeEdicao, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
+import { dbParaGanho, ganhoDaTrilhaDb, MIXAGEM_PADRAO, subidaDaTrilhaDb, trechosDeFala } from "../../../../supabase/functions/_shared/som-do-editor";
+import { falaNaLinhaDoTempo } from "../../../lib/editor/transcricao";
+import { definicaoDaPeca, parametrosDaPeca, type IdDaPeca, type ParametrosDaPeca } from "../../../lib/editor/motion/catalogo";
+import { CarregarFontes, PecaDeMotion } from "./motion/Pecas";
 
 /**
  * Composição Remotion gerada do projeto de edição (frente V-B). A MESMA
@@ -13,10 +17,27 @@ import { duracaoDoClipe, type ClipeDoProjeto, type ProjetoDeEdicao, type TrilhaD
 
 export interface PropsDaComposicao {
   projeto: ProjetoDeEdicao;
-  /** URL de cada fonte (chave da fonte -> URL assinada). */
+  /** URL de cada fonte (chave da fonte -> URL assinada). No worker: "estatico:<arquivo baixado>". */
   urls: Record<string, string>;
+  /**
+   * Frente EDT: de onde vêm as fontes de letra do motion. "painel" (padrão):
+   * /editor/... do próprio painel; "estatico": a pasta pública do render (staticFile).
+   */
+  publico?: "painel" | "estatico";
+  /** Frente EDT: medidas do worker (ganho de cada trilha em dB, pela voz medida em LUFS). */
+  mix?: { ganhos_db?: Record<string, number> } | null;
+  /** Cor da marca do cliente (peças de motion sem cor própria). */
+  cor_da_marca?: string | null;
   [chave: string]: unknown;
 }
+
+/** URL que a composição usa: "estatico:x" vira o arquivo da pasta pública do render. */
+export function resolverUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  return u.indexOf("estatico:") === 0 ? staticFile(u.slice(9)) : u;
+}
+
+export const urlPublica = (caminho: string, publico: "painel" | "estatico") => (publico === "estatico" ? staticFile(caminho) : `/${caminho}`);
 
 const VERDE = "#00FF66";
 const q = (s: number, fps: number) => Math.round(s * fps);
@@ -58,7 +79,7 @@ const cheio: CSSProperties = { position: "absolute", left: 0, top: 0, width: "10
 
 function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, estilo }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; fonte: string | null; entrada_s: number; velocidade: number; volume: number; muda: boolean; estilo?: CSSProperties }) {
   const f = fonte ? projeto.fontes[fonte] : null;
-  const url = fonte ? urls[fonte] : null;
+  const url = fonte ? resolverUrl(urls[fonte]) : null;
   if (!f || !url) {
     return (
       <AbsoluteFill style={{ background: "#111", color: "#777", alignItems: "center", justifyContent: "center", fontSize: projeto.largura * 0.03, fontFamily: "Outfit, sans-serif" }}>
@@ -67,6 +88,10 @@ function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, esti
     );
   }
   if (f.midia === "imagem") return <Img src={url} style={{ ...cheio, ...estilo }} />;
+  // No render (worker), o vídeo sai quadro a quadro exato pelo OffthreadVideo; na prévia, o Html5Video.
+  if (getRemotionEnvironment().isRendering) {
+    return <OffthreadVideo src={url} trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))} playbackRate={velocidade} volume={muda ? 0 : volume} muted={muda} style={{ ...cheio, ...estilo }} />;
+  }
   return (
     <Html5Video
       src={url}
@@ -243,16 +268,64 @@ function ClipeDeTexto({ projeto, trilha, c }: { projeto: ProjetoDeEdicao; trilha
   );
 }
 
-function ClipeDeAudio({ projeto, urls, trilha, c }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto }) {
-  const url = c.fonte ? urls[c.fonte] : null;
+/**
+ * Áudio (frente EDT, F3): clipe com estilo.papel "trilha" fica 22 dB abaixo da
+ * voz (medida pelo worker; na prévia, a voz e a trilha presumidas) e sobe nas
+ * pausas longas (duck pela fala da linha do tempo). "efeito" e o resto: volume do clipe.
+ */
+function ClipeDeAudio({ projeto, urls, trilha, c, fala, ganhoMedidoDb }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto; fala: { de_s: number; ate_s: number }[]; ganhoMedidoDb: number | null }) {
+  const url = c.fonte ? resolverUrl(urls[c.fonte]) : null;
   if (!url || trilha.muda) return null;
+  const papel = estiloTxt(c, "papel", "");
+  if (papel === "trilha") {
+    const mix = projeto.mixagem || mixagemPadrao();
+    const doClipe = estiloNumOuNulo(c, "ganho_db");
+    const base = ganhoMedidoDb !== null ? ganhoMedidoDb : doClipe !== null ? doClipe : ganhoDaTrilhaDb(MIXAGEM_PADRAO.voz_presumida_lufs, MIXAGEM_PADRAO.trilha_presumida_lufs, mix.trilha_abaixo_da_voz_db);
+    const fps = projeto.fps;
+    const fim = projeto.duracao_s;
+    const volume = (f: number) => {
+      const t = c.inicio_s + f / fps;
+      const sobe = mix.duck ? subidaDaTrilhaDb(t, fala, { subida_db: mix.subida_nas_pausas_db, fim_s: fim }) : 0;
+      return Math.min(2, c.volume * dbParaGanho(base + sobe));
+    };
+    return <Html5Audio src={url} trimBefore={Math.max(0, Math.round(c.entrada_s * projeto.fps))} playbackRate={c.velocidade} volume={volume} pauseWhenBuffering />;
+  }
   return <Html5Audio src={url} trimBefore={Math.max(0, Math.round(c.entrada_s * projeto.fps))} playbackRate={c.velocidade} volume={c.volume} pauseWhenBuffering />;
+}
+
+function estiloNumOuNulo(c: ClipeDoProjeto, k: string): number | null {
+  const v = c.estilo ? Number((c.estilo as Record<string, unknown>)[k]) : NaN;
+  return c.estilo && (c.estilo as Record<string, unknown>)[k] !== undefined && isFinite(v) ? v : null;
+}
+
+/** Peça de motion (estilo.peca): parâmetros conferidos pelo catálogo; peça quebrada não derruba o vídeo. */
+function ClipeDePeca({ projeto, urls, c, corDaMarca }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; c: ClipeDoProjeto; corDaMarca: string | null }) {
+  const e = (c.estilo || {}) as Record<string, unknown>;
+  const id = String(e.peca || "") as IdDaPeca;
+  const chave = JSON.stringify(e.params || null);
+  const params = useMemo<ParametrosDaPeca | null>(() => {
+    if (!definicaoDaPeca(id)) return null;
+    try {
+      return parametrosDaPeca(id, (e.params as Record<string, unknown>) || {});
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, chave]);
+  if (!params) return null;
+  const tempos = Array.isArray(e.tempos) ? (e.tempos as unknown[]).map(Number).filter((n) => isFinite(n)) : undefined;
+  const dur = Math.max(1, q(duracaoDoClipe(c), projeto.fps));
+  return <PecaDeMotion peca={id} params={params} tempos={tempos} desdeS={Number(e._desde_s) || 0} duracaoQuadros={dur} imagem={c.fonte ? resolverUrl(urls[c.fonte]) : null} corDaMarca={corDaMarca} />;
 }
 
 const ORDEM: Record<string, number> = { video: 0, sobreposicao: 1, texto: 2, legenda: 3, audio: 4 };
 
-export function ComposicaoDoProjeto({ projeto, urls }: PropsDaComposicao) {
+export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca }: PropsDaComposicao) {
   const fps = projeto.fps;
+  const origem = publico === "estatico" ? "estatico" : "painel";
+  // A fala da linha do tempo (para a trilha abaixar na voz): uma conta por projeto, não por quadro.
+  const fala = useMemo(() => trechosDeFala(falaNaLinhaDoTempo(projeto)), [projeto]);
+  const ganhos = (mix && mix.ganhos_db) || {};
   const trilhas = projeto.trilhas
     .map((t, i) => ({ t, i }))
     .filter((x) => !x.t.oculta)
@@ -260,16 +333,19 @@ export function ComposicaoDoProjeto({ projeto, urls }: PropsDaComposicao) {
     .sort((a, b) => ORDEM[a.t.tipo] - ORDEM[b.t.tipo] || a.i - b.i);
   return (
     <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+      <CarregarFontes url={(c) => urlPublica(c, origem)} />
       {trilhas.map(({ t }) =>
         t.clipes.map((c) => {
           const de = q(c.inicio_s, fps);
           const d = Math.max(1, q(duracaoDoClipe(c), fps));
           return (
             <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} layout="none" name={`${t.nome} ${c.id}`}>
-              {t.tipo === "video" || t.tipo === "sobreposicao" ? (
+              {c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string" && t.tipo !== "audio" && t.tipo !== "video" ? (
+                <ClipeDePeca projeto={projeto} urls={urls} c={c} corDaMarca={cor_da_marca || null} />
+              ) : t.tipo === "video" || t.tipo === "sobreposicao" ? (
                 <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} />
               ) : t.tipo === "audio" ? (
-                <ClipeDeAudio projeto={projeto} urls={urls} trilha={t} c={c} />
+                <ClipeDeAudio projeto={projeto} urls={urls} trilha={t} c={c} fala={fala} ganhoMedidoDb={typeof ganhos[c.id] === "number" ? ganhos[c.id] : null} />
               ) : (
                 <ClipeDeTexto projeto={projeto} trilha={t} c={c} />
               )}

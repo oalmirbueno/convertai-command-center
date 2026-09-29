@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, FileSignature, CheckCircle2, Download, ShieldCheck, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CampoDeFormulario, EstadoVazio, Painel, botao, campo, juntar, texto } from "@/components/sistema";
-import CascaPublica from "@/components/publico/CascaPublica";
+import { CampoDeFormulario, EstadoVazio, Painel, botao, juntar, texto } from "@/components/sistema";
+import CascaPublica, { campoPublico } from "@/components/publico/CascaPublica";
+
+// Frente CON (30/09): contrato montado por modelo mostra o texto congelado com o código SHA-256.
+const DocumentoDoContrato = lazy(() => import("@/components/contratos/DocumentoDoContrato"));
 
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/contract-public`;
+const EMAIL_VALIDO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-type Phase = "loading" | "invalid" | "ready" | "signing" | "done";
+type Phase = "loading" | "invalid" | "replaced" | "ready" | "signing" | "done";
 
 export default function ContractPublic() {
   const { token } = useParams<{ token: string }>();
@@ -15,8 +19,10 @@ export default function ContractPublic() {
   const [contract, setContract] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
   const [signName, setSignName] = useState("");
+  const [signEmail, setSignEmail] = useState("");
   const [accept, setAccept] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pdfFinal, setPdfFinal] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setPhase("invalid"); return; }
@@ -25,19 +31,23 @@ export default function ContractPublic() {
     })
       .then(r => r.json())
       .then((res) => {
+        if (res.error === "substituido") return setPhase("replaced");
         if (res.error || !res.contract) return setPhase("invalid");
         setContract(res.contract);
         setClient(res.client);
         setSignName(res.client?.full_name || "");
+        setSignEmail(res.client?.email || "");
         if (res.contract.client_signed_at) setPhase("done");
         else setPhase("ready");
       })
       .catch(() => setPhase("invalid"));
   }, [token]);
 
+  const modelo = !!contract && contract.origem === "modelo";
+
   const handleSign = async () => {
-    if (!signName.trim() || !accept) {
-      setError("Preencha seu nome e marque a confirmação.");
+    if (!signName.trim() || !accept || (modelo && !EMAIL_VALIDO.test(signEmail.trim()))) {
+      setError(modelo ? "Preencha seu nome, um e-mail válido e marque a confirmação." : "Preencha seu nome e marque a confirmação.");
       return;
     }
     setError(null);
@@ -49,10 +59,15 @@ export default function ContractPublic() {
           "Content-Type": "application/json",
           "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "",
         },
-        body: JSON.stringify({ token, signature_name: signName.trim(), accept: true }),
+        body: JSON.stringify(
+          modelo
+            ? { token, signature_name: signName.trim(), email: signEmail.trim(), accept: true, hash: contract.documento_hash }
+            : { token, signature_name: signName.trim(), accept: true },
+        ),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "Erro ao assinar");
+      if (!res.ok || data.error) throw new Error(data.mensagem || data.error || "Erro ao assinar");
+      if (data.pdf_url) setPdfFinal(String(data.pdf_url));
       setPhase("done");
       setContract((c: any) => ({ ...c, client_signed_at: new Date().toISOString(), client_signature_name: signName.trim(), status: "completed" }));
     } catch (e: any) {
@@ -62,6 +77,7 @@ export default function ContractPublic() {
   };
 
   const pronto = (phase === "ready" || phase === "signing") && !!contract;
+  const baixarUrl = modelo ? pdfFinal || contract?.pdf_url : contract?.original_file_url;
 
   // A casca das páginas públicas (logo, título numa linha, uma linha de apoio),
   // na largura de documento para o PDF caber.
@@ -93,6 +109,14 @@ export default function ContractPublic() {
         />
       )}
 
+      {phase === "replaced" && (
+        <EstadoVazio
+          icone={<AlertCircle className="h-5 w-5 text-warning" />}
+          titulo="Este link foi substituído"
+          descricao="Há uma versão nova do contrato. Peça o link novo para a sua agência."
+        />
+      )}
+
       {(phase === "ready" || phase === "signing") && contract && (
         <div className="space-y-5">
           {contract.admin_signature_name && (
@@ -102,11 +126,17 @@ export default function ContractPublic() {
             </p>
           )}
 
-          <iframe
-            src={`${contract.original_file_url}#toolbar=1&view=FitH`}
-            className="h-[60vh] w-full rounded-lg border border-border bg-white"
-            title={contract.title}
-          />
+          {modelo ? (
+            <Suspense fallback={<div className="h-[60vh] animate-pulse rounded-lg bg-muted/70" aria-busy="true" />}>
+              <DocumentoDoContrato texto={contract.documento_texto || ""} hash={contract.documento_hash} />
+            </Suspense>
+          ) : (
+            <iframe
+              src={`${contract.original_file_url}#toolbar=1&view=FitH`}
+              className="h-[60vh] w-full rounded-lg border border-border bg-white"
+              title={contract.title}
+            />
+          )}
 
           <Painel
             titulo="Assinatura digital"
@@ -130,9 +160,21 @@ export default function ContractPublic() {
                   onChange={(e) => setSignName(e.target.value)}
                   disabled={phase === "signing"}
                   autoComplete="name"
-                  className={juntar(campo, "text-[16px] sm:text-[13px]")}
+                  className={campoPublico}
                 />
               </CampoDeFormulario>
+              {modelo && (
+                <CampoDeFormulario rotulo="Seu e-mail" obrigatorio apoio="Vai para a página de carimbo do contrato.">
+                  <input
+                    value={signEmail}
+                    onChange={(e) => setSignEmail(e.target.value)}
+                    disabled={phase === "signing"}
+                    type="email"
+                    autoComplete="email"
+                    className={campoPublico}
+                  />
+                </CampoDeFormulario>
+              )}
               <div className="flex items-start">
                 <Checkbox id="client-accept" checked={accept} onCheckedChange={(v) => setAccept(!!v)} className="mr-2 mt-0.5" disabled={phase === "signing"} />
                 <label htmlFor="client-accept" className={juntar(texto.corpo, "cursor-pointer")}>
@@ -140,6 +182,7 @@ export default function ContractPublic() {
                 </label>
               </div>
               <p className={juntar(texto.auxiliar, "sm:hidden")}>Fica registrada com data, hora e endereço IP.</p>
+              {modelo && <p className={texto.auxiliar}>Seu nome, e-mail, IP, data e hora ficam no contrato como prova da assinatura (LGPD).</p>}
             </div>
           </Painel>
         </div>
@@ -151,9 +194,11 @@ export default function ContractPublic() {
           titulo="Contrato assinado"
           descricao="Sua assinatura foi registrada. Uma cópia fica no seu portal, na pasta Contratos."
           acao={
-            <a href={contract.original_file_url} download={contract.original_file_name} className={botao.primario}>
-              <Download className="mr-1.5 h-4 w-4" aria-hidden="true" /> Baixar contrato
-            </a>
+            baixarUrl ? (
+              <a href={baixarUrl} download={contract.original_file_name} className={botao.primario} target={modelo ? "_blank" : undefined} rel="noreferrer">
+                <Download className="mr-1.5 h-4 w-4" aria-hidden="true" /> Baixar contrato
+              </a>
+            ) : undefined
           }
         />
       )}

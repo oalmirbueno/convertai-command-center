@@ -1,0 +1,27 @@
+{
+  "name": "aceleriq-render-worker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Worker de render da Mesa Edição (frente EDT): puxa render_pedidos, baixa do Storage, renderiza com o Remotion, -14 LUFS e sobe o MP4 em partes.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "worker": "node principal.ts",
+    "uma-vez": "node principal.ts --uma-vez",
+    "teste": "node --test testes/fila.test.ts",
+    "ponta-a-ponta": "node testes/ponta-a-ponta.ts",
+    "sons": "node sons/medir-sons.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "@supabase/supabase-js": "^2.97.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  }
+}

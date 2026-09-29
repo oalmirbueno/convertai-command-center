@@ -116,6 +116,8 @@ const ROTULO_DA_OPERACAO: Record<Operacao["op"], string> = {
   referencias: "Referências",
   continuidade: "Continuidade",
   marcador: "Marcador",
+  onda: "Guardar a onda de",
+  mixagem: "Ajustar a mixagem",
   registrar_skill: "Registrar",
 };
 

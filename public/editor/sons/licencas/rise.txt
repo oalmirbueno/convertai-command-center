@@ -1,0 +1,46 @@
+EFEITO: rise  (arquivo assets/sfx/rise.wav)
+SOM: subida que cresce, chega no maximo e para
+
+TITULO:        Phonk Riser (1) Sample.wav
+PAGINA:        https://commons.wikimedia.org/wiki/File:Phonk_Riser_(1)_Sample.wav
+ARQUIVO BAIXADO: https://upload.wikimedia.org/wikipedia/commons/d/d2/Phonk_Riser_%281%29_Sample.wav
+               (WAV 44,1 kHz, 24 bits, estereo, 10,80 s)
+AUTOR:         UnKnownrNone (usuario do Wikimedia Commons), trabalho proprio ("Own work"),
+               publicado em 24/08/2024
+LICENCA:       CC0 1.0 Universal (dedicacao ao dominio publico)
+CITACAO DA LICENCA, como aparece nos dados da pagina do arquivo:
+               "LicenseShortName": "CC0"
+               "UsageTerms": "Creative Commons Zero, Public Domain Dedication"
+               "License": "cc0"
+               A pagina esta nas categorias "CC-Zero" e "Self-published work".
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0)
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+O arquivo original NAO e uma subida: ele comeca forte e desce sem parar, do comeco ate o silencio
+em 10,6 s (o tom cai de 10,4 kHz para 1,5 kHz). De tras para frente, o mesmo trecho e uma subida
+perfeita. Por isso:
+
+1. Pegue o trecho de 7,60 s a 9,05 s (1,45 s) e toque de tras para frente: isso cresce do quase
+   silencio ate o corpo da subida, com o tom subindo de 1,5 para 7 kHz.
+2. Cole em seguida o MESMO trecho tocado de frente para tras (1,15 s): isso da a descida, e o
+   ponto mais forte fica dentro do som e nao no fim dele.
+3. Convertido para 48 kHz estereo, tirada a corrente continua (DC).
+4. Corte de graves em 500 Hz e corte de agudos em 5500 Hz para aproximar a faixa do efeito antigo
+   (que fica quase todo entre 800 Hz e 5 kHz): ffmpeg highpass=f=500:p=2,lowpass=f=5500:p=2
+5. Tirado o silencio do comeco (4 ms antes do ataque), cortado em 2,600 s, subida de 2 ms e
+   descida de 90 ms.
+6. Volume acertado para a janela de 3 s ficar em -22,92 LUFS no arquivo, que da -20,0 LUFS com o
+   volume 1.0 do editor (som longo: 6 dB abaixo da voz de -14 LUFS).
+7. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 2,600 s, ponto forte em 1,228 s, pico -8,93 dBFS,
+janela de 200 ms -16,76 LUFS, janela de 3 s -22,92 LUFS.
+
+OBSERVACAO HONESTA: entre os seis, a subida e a que ficou mais longe do som antigo. Ela cresce e
+para no tempo certo (o ponto forte cai em 1,228 s contra 1,149 s do antigo, e o desenho do volume
+e o mais parecido de todos os candidatos testados), mas ela e mais cheia e mais grave: boa parte da
+energia fica entre 200 e 800 Hz, faixa em que o som antigo quase nao tinha nada. Nao existe, nas
+fontes CC0 sem login que eu consegui abrir, uma subida musical estreita como a antiga.

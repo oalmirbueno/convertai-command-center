@@ -59,12 +59,32 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
     argumentos: '{"skill": string, "parametros"?: object, "selecionados"?: ["c1", "c2"]}',
     leitura: false,
   },
-  // Exportar nunca roda sozinho: a tela mostra um cartão com Confirmar (baixa o projeto para o render na máquina da agência).
-  { nome: "exportar", descricao: "Prepara a exportação do vídeo como está (projeto.json, edl.json e o passo a passo do render). Vira um cartão com Confirmar; não muda a linha do tempo.", argumentos: "{}", leitura: true },
+  // Exportar nunca roda sozinho: a tela mostra um cartão com Confirmar (Renderizar pela fila ou baixar o ZIP).
+  { nome: "exportar", descricao: "Cartão para o dono renderizar o vídeo inteiro pela fila (ou baixar o ZIP). Vira um cartão com Confirmar; não muda a linha do tempo.", argumentos: "{}", leitura: true },
+  // Frente EDT (30/09): corte de verdade, som, motion, amostra e geração.
+  { nome: "renderizar", descricao: "O mesmo cartão do exportar: o render do vídeo inteiro vai para a fila com o Confirmar do dono.", argumentos: "{}", leitura: true },
+  { nome: "medir_onda", descricao: "Pede ao worker a onda do áudio das fontes sem onda (sem custo, uns 30 s). Base do cortar_pela_onda.", argumentos: "{}", leitura: true },
+  { nome: "ler_onda", descricao: "Limiar, chão de ruído e pausas medidas de uma fonte (ou de todas).", argumentos: '{"fonte"?: string}', leitura: true },
+  { nome: "cortar_pela_onda", descricao: "Tira toda pausa acima de 0,25 s pela onda medida e deixa 0,12 s na emenda. Nenhuma palavra sai. Sem onda medida: chame medir_onda.", argumentos: '{"pausa_max_s"?: number, "emenda_s"?: number}', leitura: false },
+  { nome: "ficar_com_melhor_tomada", descricao: "Tira falsos começos, frases repetidas e gagueira; fica a última tomada inteira. A lista do que saiu vai no cartão.", argumentos: '{"pausa_s"?: number}', leitura: false },
+  { nome: "conferir_corte", descricao: "Confere o corte: respiros acima de 0,25 s, palavra mordida, repetição, clipe curto. Só AVISO: não corrija em laço, conte ao dono.", argumentos: "{}", leitura: true },
+  { nome: "legendar", descricao: "Legenda a fala em blocos de N palavras (padrão 3; o dono pode pedir 1 a 8).", argumentos: '{"palavras_por_vez"?: number, "estilo"?: "destaque"|"caixa"|"simples", "posicao"?: "topo"|"meio"|"base"}', leitura: false },
+  { nome: "animar", descricao: "Põe uma peça de motion na palavra DITA (o tempo sai da fala medida). Peças: rotulo, carimbo, lista, passos, contador, notificacao, polaroide, cartao_final, lettering, barra, preco, comentario, selo. Número, preço e porcentagem só se foram ditos.", argumentos: '{"peca": string, "palavra_ref"?: string, "inicio_s"?: number, "duracao_s"?: number, "params": object}', leitura: false },
+  { nome: "sugerir_animacoes", descricao: "Acha na fala os momentos que pedem animação e escolhe a peça de cada um (julgamento pelo Jev). Põe as peças na linha do tempo.", argumentos: '{"densidade"?: "poucas"|"medias"}', leitura: false },
+  { nome: "sons", descricao: "Efeitos sonoros CC0 no pico de cada animação (0,65 s entre eles). Refaz os que já estavam.", argumentos: '{"modo"?: "casados"|"poucos"}', leitura: false },
+  { nome: "musica", descricao: "Põe uma música da Mídia como trilha do vídeo inteiro, 22 dB abaixo da voz (medida no render), subindo nas pausas; o render sai em -14 LUFS.", argumentos: '{"fonte": string, "abaixo_da_voz_db"?: number}', leitura: false },
+  { nome: "logo", descricao: "Logo do cliente (do kit da marca) acompanhando: canto (o vídeo todo), cartao_final ou sting (abertura).", argumentos: '{"onde": "canto"|"cartao_final"|"sting"}', leitura: false },
+  { nome: "cartao_final", descricao: "Cartão final nos últimos 3,5 s com a chamada e a logo do cliente.", argumentos: '{"titulo": string, "botao"?: string}', leitura: false },
+  { nome: "amostra", descricao: "Renderiza uma amostra de 8 a 15 s no worker (sem custo) para o dono conferir antes do vídeo inteiro.", argumentos: '{"inicio_s": number, "fim_s": number}', leitura: true },
+  { nome: "gerar_broll", descricao: "B-roll gerado (Mesa Vídeos) para cobrir um trecho. PAGO: vira cartão com o custo antes e o Confirmar do dono.", argumentos: '{"de_s": number, "ate_s": number, "prompt": string, "motor"?: string}', leitura: true },
+  { nome: "gerar_elemento", descricao: "Ícone ou objeto gerado com fundo transparente, por cima do vídeo num trecho. PAGO: cartão com o custo antes e Confirmar.", argumentos: '{"tipo": "icone"|"objeto", "prompt": string, "inicio_s": number, "duracao_s"?: number}', leitura: true },
 ];
 
 /** Ferramenta que não muda a linha do tempo, mas sai da tela (vira cartão com Confirmar). */
-export const FERRAMENTAS_DE_SAIDA = ["exportar"];
+export const FERRAMENTAS_DE_SAIDA = ["exportar", "renderizar", "gerar_broll", "gerar_elemento"];
+
+/** Frente EDT: ferramentas que a tela roda chamando o servidor (sem custo para o cliente) dentro do laço. */
+export const FERRAMENTAS_DO_SERVIDOR = ["sugerir_animacoes", "medir_onda", "amostra"];
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS_DO_AGENTE.map((f) => f.nome);
 
@@ -204,6 +224,9 @@ export function sistemaDoAgente(): string {
     "Pedido de editar (editar, edição dinâmica, Brabo, deixar dinâmico, cortar, legendar) só termina depois de ferramentas que MUDAM o projeto. Nunca responda só com texto nem diga que abriu algo: edite.",
     "Edição dinâmica = aplicar_skill brabo. Silêncios = cortar_silencios. Legenda = legendas. Ganchos = punch_in. Sem fala marcada as skills ainda rodam (tempo exato); avise na resposta.",
     "Reordenar = reordenar com TODOS os apelidos da trilha de vídeo. Música: volume por clipe (ajustar volume), tirar o som da trilha inteira (trilha muda). Exportar ou renderizar = exportar (vira um cartão com Confirmar; nunca diga que já exportou).",
+    "Corte de verdade: tirar pausas/respiros = cortar_pela_onda (sem onda: medir_onda e avise que volta em ~30 s); erros, repetição e falso começo = ficar_com_melhor_tomada; depois de cortar, conferir_corte e CONTE o resultado (é aviso, não refaça em laço).",
+    "Legenda padrão: 3 palavras por vez (legendar); o dono muda a quantidade. Animação na palavra dita = animar; momentos pela fala = sugerir_animacoes; som = sons (depois das animações); música = musica; marca = logo e cartao_final.",
+    "Amostra (8 a 15 s) antes do vídeo inteiro quando o dono quer conferir o estilo. B-roll e elementos gerados são PAGOS: só gerar_broll/gerar_elemento (cartão com custo); nunca diga que gerou.",
     "\"Esse\", \"este corte\", \"o selecionado\" = os clipes em \"Selecionados na tela\"; \"aqui\" = o cursor. \"O segundo clipe\" conta na ordem da trilha de vídeo. \"Todos\" = todos os da trilha de vídeo.",
     "Dúvida real (não dá para saber qual clipe, qual trecho ou o que o dono quer): não mude nada; termine com UMA pergunta curta em resposta e até 4 respostas curtas em opcoes (ex.: [\"c2\", \"c3\"]). Sem dúvida, opcoes vazio.",
     "Nunca prometa (\"vou cortar\"): ou chama a ferramenta agora, ou pergunta. Nunca cite clipe, trecho ou fala que não está no projeto.",
@@ -271,7 +294,7 @@ export function sistemaDoPasso(base: string, blocoDasRegras: string, blocoDaRefe
   return [base, String(blocoDasRegras || "").trim(), String(blocoDaReferencia || "").trim()].filter(Boolean).join("\n\n");
 }
 
-export const ANEXOS_ACEITOS = ["log_do_editor", "acao_agente", "aprendizado_do_agente", "regras_seguidas", "pergunta_do_editor"];
+export const ANEXOS_ACEITOS = ["log_do_editor", "acao_agente", "aprendizado_do_agente", "regras_seguidas", "pergunta_do_editor", "padrao_do_editor"];
 export const MAX_BYTES_DOS_ANEXOS = 400_000;
 
 /** Só os anexos que a tela do editor sabe mostrar, e com teto de tamanho. */

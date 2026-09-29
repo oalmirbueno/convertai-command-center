@@ -347,7 +347,7 @@ describe("mapa de ações tela -> servidor", () => {
     const usadas = new Set<string>();
     tela.forEach((p) => {
       const s = ler(p);
-      s.replace(/acao:\s*"([a-z_]+)"/g, (_m, n) => {
+      s.replace(/\bacao:\s*"([a-z_]+)"/g, (_m, n) => {
         usadas.add(n);
         return "";
       });

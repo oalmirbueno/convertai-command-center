@@ -8,7 +8,9 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCusto";
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
-import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
+import { inicioDoMes, lerPrevisao, rotuloDoMes, type PrevisaoDoPlano } from "@/lib/mesa/api";
+// Frente CNS (30/09): o conselho de agentes abre do Contexto e do Mês, com o tema da tela.
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import { montarFila, useFilaDePrioridades, type AbaDaMesa } from "@/lib/mesa/fila";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { botaoPequeno, CustoCompacto } from "@/components/mesa/CustoCompacto";
@@ -557,6 +559,15 @@ export default function MesaDoCliente() {
               <Calculator className="h-3.5 w-3.5" />
               <span className="ml-1 hidden 2xl:inline">Custos</span>
             </button>
+          )}
+          {clientId && !painel && (aba === "contexto" || aba === "mes") && (
+            <BotaoDoConselho
+              clientId={clientId}
+              origem={aba === "mes" ? "mesa-mes" : "mesa-contexto"}
+              tema={aba === "mes" ? `Plano de ${rotuloDoMes(mes)}${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}` : `Marca${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}${marca && marca.nome ? ` (${marca.nome})` : ""}`}
+              contexto={aba === "mes" ? `Mês em foco: ${rotuloDoMes(mes)}.` : "Contexto da marca: posicionamento, público, tom e identidade."}
+              referencia={aba === "mes" ? { tipo: "mes", mes } : { tipo: "contexto" }}
+            />
           )}
           {clientId && (
             <>

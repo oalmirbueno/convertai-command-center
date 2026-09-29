@@ -1,0 +1,47 @@
+EFEITO: whoosh  (arquivo assets/sfx/whoosh.wav)
+SOM: swoosh de ar que sobe e passa
+
+TITULO DO ITEM: SSE Library: SWOOSHES
+PAGINA:        https://archive.org/details/SSE_Library_SWOOSHES
+ARQUIVO USADO: WHOOSH/WHSH-FIREWORKS_Fireworks launching swooshes_CS_USC.wav
+               (WAV 48 kHz, 24 bits, mono, 4,83 s)
+ARQUIVO BAIXADO: https://archive.org/download/SSE_Library_SWOOSHES/WHOOSH%2FWHSH-FIREWORKS_Fireworks%20launching%20swooshes_CS_USC.wav
+AUTOR:         USC Cinema / Sunset Editorial Collection. Digitalizado por Craig Smith (USC) e
+               publicado no Internet Archive por jscott@archive.org em 19/05/2023.
+               Descricao do item: "Sound effects from the USC Cinema and/or the Sunset Editorial
+               Collection".
+LICENCA:       CC0 1.0 Universal (dedicacao ao dominio publico)
+CITACAO DA LICENCA:
+               A pagina do item mostra o selo Creative Commons com o texto "CC0 1.0 Universal" e
+               aponta para https://creativecommons.org/publicdomain/zero/1.0/ .
+               Os metadados do proprio item (https://archive.org/metadata/SSE_Library_SWOOSHES)
+               trazem o campo:
+               "licenseurl": "https://creativecommons.org/publicdomain/zero/1.0/"
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0)
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Recorte de 1,20 s comecando em 0,10 s (o primeiro swoosh da bobina), convertido para
+   48 kHz estereo.
+2. Tirada a corrente continua (DC).
+3. Corte de graves em 90 Hz, porque a bobina antiga tem um ronco de fita que o efeito antigo nao
+   tinha, e limpeza leve do chiado: ffmpeg highpass=f=90:p=2,afftdn=nr=8:nf=-58:tn=1
+4. Tirado o silencio do comeco (4 ms antes do ataque), cortado em 0,850 s, subida de 2 ms e
+   descida de 60 ms.
+5. Volume acertado para a janela de 200 ms mais forte ficar em -12,92 LUFS no arquivo, que da
+   -10,0 LUFS com o volume 1.0 do editor (o mesmo nivel do whoosh antigo).
+6. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,850 s, ponto forte em 0,150 s, pico -6,53 dBFS,
+janela de 200 ms -12,92 LUFS, janela de 3 s -23,38 LUFS.
+
+OBSERVACAO HONESTA: o corte de graves em 90 Hz tirou o ronco mais fundo da fita, mas nao tudo.
+Medindo os dois, este swoosh ficou mais pesado e menos "ar" que o do conjunto antigo: 5,2% da
+energia dele fica abaixo de 120 Hz, contra 0,07% do antigo, e quase nada sobra acima de 8 kHz
+(0,03%, contra 4,8% do antigo). Ele tambem tem um toque seco nos primeiros 40 ms (o estouro do
+lancamento do fogo) antes de crescer, enquanto o antigo so crescia. O tempo e o mesmo (0,85 s,
+ponto forte em 0,150 s contra 0,140 s) e o volume e o mesmo. Se ficar grave demais de ouvido,
+refaca por esta mesma receita com o corte de graves mais alto (por exemplo highpass=f=160:p=2)
+e confira de novo com helpers/make_sfx.py --measure.

@@ -12,12 +12,12 @@
  * e estado; rascunho sai marcado como RASCUNHO e mantém as pendências. Bloco
  * que não cabe vai inteiro para a página seguinte; texto nunca é cortado.
  *
- * Gerador próprio, sem dependência: fontes padrão do PDF (Helvetica e
- * Helvetica Bold) com WinAnsiEncoding, que tem todos os acentos do português
- * (á, â, ã, à, ç, é, ê, í, ó, ô, õ, ú, ü). As larguras vêm das métricas
- * oficiais das fontes, para a quebra de linha ser exata. Roda igual no
- * navegador (Baixar) e na Edge Function (Compartilhar), em poucos
- * milissegundos. Puro: sem Deno, sem npm. Compatível com Safari 11. Sem travessão.
+ * Gerador próprio, sem dependência: as primitivas (página A4, faixa verde,
+ * logo, rodapé, fontes padrão em WinAnsi com as métricas oficiais, montagem
+ * dos bytes) ficam em pdf-base.ts desde 29/09/2026 (Frente DOC), e este
+ * arquivo sai igual byte a byte ao de antes (src/test/pdf-base.test.ts).
+ * Roda igual no navegador (Baixar) e na Edge Function (Compartilhar), em
+ * poucos milissegundos. Puro: sem Deno, sem npm. Compatível com Safari 11. Sem travessão.
  */
 
 import {
@@ -29,7 +29,30 @@ import {
   type Roteiro,
   type StatusDoRoteiro,
 } from "./roteiro-modelo.ts";
-import { LOGO_ALTURA, LOGO_LARGURA, LOGO_MASCARA_ZLIB_B64, LOGO_RGB_ZLIB_B64 } from "./pdf-logo-aceleriq.ts";
+import {
+  ALTURA,
+  alturaDe,
+  CORES,
+  caixaAlta,
+  dataDoDocumento,
+  DIR,
+  dois,
+  DocumentoPdf as Documento,
+  ESQ,
+  FIM_DO_CONTEUDO,
+  type Fonte,
+  MESES,
+  MIOLO,
+  montarPdf,
+  Pagina,
+  quebrarLinhas,
+  rotuloEmCima,
+  tituloDeSecao,
+  TOPO_DO_CONTEUDO,
+} from "./pdf-base.ts";
+
+// Quem já importava daqui (tela, testes) continua importando.
+export { CORES, type Fonte, larguraDoTexto, paginasDoPdf, paraWinAnsi, quebrarLinhas, textosDoPdf } from "./pdf-base.ts";
 
 // ------------------------------------------------------------------ entrada
 
@@ -51,313 +74,6 @@ export type DocumentoDeRoteiros = {
   assinatura?: string | null;
 };
 
-// ------------------------------------------------------------------ fontes (métricas oficiais, códigos 32 a 255 em WinAnsi)
-
-const LARGURAS_HELV = [
-  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
-  1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
-  333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, 0,
-  556, 0, 222, 556, 333, 1000, 556, 556, 333, 1000, 667, 333, 1000, 0, 611, 0, 0, 222, 222, 333, 333, 350, 556, 1000, 333, 1000, 500, 333, 944, 0, 500, 667,
-  278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 333, 400, 584, 333, 333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611,
-  667, 667, 667, 667, 667, 667, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611,
-  556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278, 556, 556, 556, 556, 556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556, 500,
-];
-
-const LARGURAS_BOLD = [
-  278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611,
-  975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556,
-  333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584, 0,
-  556, 0, 278, 556, 500, 1000, 556, 556, 333, 1000, 667, 333, 1000, 0, 611, 0, 0, 278, 278, 500, 500, 350, 556, 1000, 333, 1000, 556, 333, 944, 0, 500, 667,
-  278, 333, 556, 556, 556, 556, 280, 556, 333, 737, 370, 556, 584, 333, 737, 333, 400, 584, 333, 333, 333, 611, 556, 278, 333, 333, 365, 556, 834, 834, 834, 611,
-  722, 722, 722, 722, 722, 722, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611,
-  556, 556, 556, 556, 556, 556, 889, 556, 556, 556, 556, 556, 278, 278, 278, 278, 611, 611, 611, 611, 611, 611, 611, 584, 611, 611, 611, 611, 611, 556, 611, 556,
-];
-
-/** Unicode que o WinAnsi guarda entre 128 e 159. */
-const WIN_ANSI_ESPECIAIS: Record<number, number> = {
-  0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88, 0x2030: 0x89, 0x0160: 0x8a,
-  0x2039: 0x8b, 0x0152: 0x8c, 0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93, 0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
-  0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b, 0x0153: 0x9c, 0x017e: 0x9e, 0x0178: 0x9f,
-};
-
-const UNICODE_DO_WIN_ANSI: Record<number, number> = {};
-Object.keys(WIN_ANSI_ESPECIAIS).forEach((u) => {
-  UNICODE_DO_WIN_ANSI[WIN_ANSI_ESPECIAIS[Number(u)]] = Number(u);
-});
-
-/** Troca o que o WinAnsi não tem por algo equivalente (seta, aspas, espaços). */
-const SUBSTITUTOS: Record<number, string> = { 0x2192: "->", 0x2190: "<-", 0x2212: "-", 0x2011: "-", 0x2010: "-", 0x00a0: " ", 0x2009: " ", 0x202f: " ", 0x200b: "" };
-
-/** Texto em códigos WinAnsi (0 a 255). Acento solto é recomposto; emoji e símbolo sem par somem. */
-export function paraWinAnsi(t: string): number[] {
-  let s = String(t == null ? "" : t);
-  try {
-    s = s.normalize("NFC");
-  } catch {
-    /* navegador sem normalize: segue como veio */
-  }
-  const saida: number[] = [];
-  for (let i = 0; i < s.length; i++) {
-    let c = s.charCodeAt(i);
-    // Par substituto (emoji e afins): pula os dois.
-    if (c >= 0xd800 && c <= 0xdbff) {
-      i++;
-      continue;
-    }
-    if (c === 9) c = 32;
-    if (SUBSTITUTOS[c] !== undefined) {
-      const sub = SUBSTITUTOS[c];
-      for (let k = 0; k < sub.length; k++) saida.push(sub.charCodeAt(k));
-      continue;
-    }
-    if (c >= 32 && c < 127) saida.push(c);
-    else if (c >= 0xa0 && c <= 0xff) saida.push(c);
-    else if (WIN_ANSI_ESPECIAIS[c] !== undefined) saida.push(WIN_ANSI_ESPECIAIS[c]);
-    else if (c >= 0x300 && c <= 0x36f) continue;
-  }
-  return saida;
-}
-
-export type Fonte = "F1" | "F2";
-
-export function larguraDoTexto(t: string, fonte: Fonte, tamanho: number): number {
-  const tabela = fonte === "F2" ? LARGURAS_BOLD : LARGURAS_HELV;
-  let soma = 0;
-  for (const c of paraWinAnsi(t)) soma += c >= 32 ? tabela[c - 32] || 556 : 0;
-  return (soma * tamanho) / 1000;
-}
-
-/** Quebra em linhas que cabem na largura. Palavra maior que a linha quebra por letra. Nunca corta texto. */
-export function quebrarLinhas(t: string, fonte: Fonte, tamanho: number, largura: number): string[] {
-  const linhas: string[] = [];
-  const paragrafos = String(t || "").replace(/\r\n/g, "\n").split("\n");
-  for (const p of paragrafos) {
-    const palavras = p.split(/\s+/).filter(Boolean);
-    if (!palavras.length) {
-      linhas.push("");
-      continue;
-    }
-    let atual = "";
-    for (let w of palavras) {
-      const tentativa = atual ? `${atual} ${w}` : w;
-      if (larguraDoTexto(tentativa, fonte, tamanho) <= largura) {
-        atual = tentativa;
-        continue;
-      }
-      if (atual) linhas.push(atual);
-      atual = "";
-      while (larguraDoTexto(w, fonte, tamanho) > largura && w.length > 1) {
-        let corte = w.length - 1;
-        while (corte > 1 && larguraDoTexto(w.slice(0, corte), fonte, tamanho) > largura) corte--;
-        linhas.push(w.slice(0, corte));
-        w = w.slice(corte);
-      }
-      atual = w;
-    }
-    if (atual) linhas.push(atual);
-  }
-  // Tira linhas vazias do começo e do fim (parágrafo em branco no meio fica).
-  while (linhas.length && !linhas[0]) linhas.shift();
-  while (linhas.length && !linhas[linhas.length - 1]) linhas.pop();
-  return linhas;
-}
-
-// ------------------------------------------------------------------ bytes
-
-function literal(t: string): string {
-  let s = "(";
-  for (const c of paraWinAnsi(t)) {
-    if (c === 0x28 || c === 0x29 || c === 0x5c) s += `\\${String.fromCharCode(c)}`;
-    else if (c < 32 || c > 126) s += `\\${("00" + c.toString(8)).slice(-3)}`;
-    else s += String.fromCharCode(c);
-  }
-  return `${s})`;
-}
-
-function bytesDoTexto(s: string): Uint8Array {
-  const b = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 0xff;
-  return b;
-}
-
-function deBase64(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const b = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
-  return b;
-}
-
-const n2 = (v: number) => (Math.round(v * 100) / 100).toString();
-
-// ------------------------------------------------------------------ cores (as do documento modelo)
-
-type Cor = [number, number, number];
-const hex = (h: string): Cor => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
-
-export const CORES = {
-  verde: hex("#00a900"),
-  verdeEscuro: hex("#157330"),
-  verdeClaro: hex("#73d578"),
-  tinta: hex("#151b17"),
-  cinza: hex("#626d66"),
-  linha: hex("#dfe5df"),
-  cartao: hex("#f5f7f5"),
-  cartaoVerde: hex("#eff6ef"),
-  branco: hex("#ffffff"),
-};
-
-// ------------------------------------------------------------------ página
-
-const LARGURA = 595.28;
-const ALTURA = 841.89;
-const ESQ = 40;
-const DIR = 555.28;
-const MIOLO = DIR - ESQ;
-const TOPO_DO_CONTEUDO = 84;
-const FIM_DO_CONTEUDO = 790;
-
-class Pagina {
-  ops: string[] = [];
-  usaLogo = false;
-  rascunho = false;
-  secao: string;
-  constructor(secao: string) {
-    this.secao = secao;
-  }
-  cor(c: Cor, preenchimento = true) {
-    this.ops.push(`${n2(c[0])} ${n2(c[1])} ${n2(c[2])} ${preenchimento ? "rg" : "RG"}`);
-  }
-  retangulo(x: number, y: number, w: number, h: number, c: Cor) {
-    this.cor(c);
-    this.ops.push(`${n2(x)} ${n2(ALTURA - y - h)} ${n2(w)} ${n2(h)} re f`);
-  }
-  arredondado(x: number, y: number, w: number, h: number, r: number, c: Cor) {
-    const k = 0.5523 * r;
-    const x0 = x;
-    const x1 = x + w;
-    const y0 = ALTURA - y - h;
-    const y1 = ALTURA - y;
-    this.cor(c);
-    this.ops.push(
-      [
-        `${n2(x0 + r)} ${n2(y0)} m`,
-        `${n2(x1 - r)} ${n2(y0)} l`,
-        `${n2(x1 - r + k)} ${n2(y0)} ${n2(x1)} ${n2(y0 + r - k)} ${n2(x1)} ${n2(y0 + r)} c`,
-        `${n2(x1)} ${n2(y1 - r)} l`,
-        `${n2(x1)} ${n2(y1 - r + k)} ${n2(x1 - r + k)} ${n2(y1)} ${n2(x1 - r)} ${n2(y1)} c`,
-        `${n2(x0 + r)} ${n2(y1)} l`,
-        `${n2(x0 + r - k)} ${n2(y1)} ${n2(x0)} ${n2(y1 - r + k)} ${n2(x0)} ${n2(y1 - r)} c`,
-        `${n2(x0)} ${n2(y0 + r)} l`,
-        `${n2(x0)} ${n2(y0 + r - k)} ${n2(x0 + r - k)} ${n2(y0)} ${n2(x0 + r)} ${n2(y0)} c`,
-        "f",
-      ].join("\n"),
-    );
-  }
-  linha(x: number, y: number, w: number, c: Cor = CORES.linha, espessura = 0.65) {
-    this.retangulo(x, y, w, espessura, c);
-  }
-  texto(x: number, y: number, t: string, fonte: Fonte, tamanho: number, c: Cor) {
-    if (!t) return;
-    this.cor(c);
-    this.ops.push(`BT /${fonte} ${n2(tamanho)} Tf 1 0 0 1 ${n2(x)} ${n2(ALTURA - y)} Tm ${literal(t)} Tj ET`);
-  }
-  textoADireita(xDir: number, y: number, t: string, fonte: Fonte, tamanho: number, c: Cor) {
-    this.texto(xDir - larguraDoTexto(t, fonte, tamanho), y, t, fonte, tamanho, c);
-  }
-  textoCentrado(xMeio: number, y: number, t: string, fonte: Fonte, tamanho: number, c: Cor) {
-    this.texto(xMeio - larguraDoTexto(t, fonte, tamanho) / 2, y, t, fonte, tamanho, c);
-  }
-  /** Parágrafo com quebra; devolve o y depois da última linha. */
-  paragrafo(x: number, y: number, t: string, fonte: Fonte, tamanho: number, c: Cor, largura: number, entrelinha: number): number {
-    const linhas = quebrarLinhas(t, fonte, tamanho, largura);
-    linhas.forEach((l, i) => this.texto(x, y + i * entrelinha, l, fonte, tamanho, c));
-    return y + linhas.length * entrelinha;
-  }
-  logo(x: number, y: number, w: number) {
-    const h = (w * LOGO_ALTURA) / LOGO_LARGURA;
-    this.usaLogo = true;
-    this.ops.push(`q ${n2(w)} 0 0 ${n2(h)} ${n2(x)} ${n2(ALTURA - y - h)} cm /Im1 Do Q`);
-  }
-}
-
-// ------------------------------------------------------------------ montagem
-
-const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-
-function dataDoDocumento(v: string | Date | undefined): Date {
-  const d = v instanceof Date ? v : v ? new Date(v) : new Date();
-  return isNaN(d.getTime()) ? new Date() : d;
-}
-
-const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
-const caixaAlta = (t: string) => String(t || "").toLocaleUpperCase("pt-BR");
-
-/** Quanto ocupa um parágrafo (altura em pt). */
-const alturaDe = (t: string, fonte: Fonte, tamanho: number, largura: number, entrelinha: number) => quebrarLinhas(t, fonte, tamanho, largura).length * entrelinha;
-
-class Documento {
-  paginas: Pagina[] = [];
-  y = TOPO_DO_CONTEUDO;
-  cliente: string;
-  rascunho: boolean;
-  constructor(cliente: string, rascunho: boolean) {
-    this.cliente = cliente;
-    this.rascunho = rascunho;
-  }
-
-  atual(): Pagina {
-    return this.paginas[this.paginas.length - 1];
-  }
-
-  /** Página interna com o cabeçalho do documento modelo. */
-  nova(secao: string, direita = "PRODUÇÃO AUDIOVISUAL", rascunho = this.rascunho): Pagina {
-    const p = new Pagina(secao);
-    p.rascunho = rascunho;
-    this.paginas.push(p);
-    p.retangulo(0, 0, 4, ALTURA, CORES.verde);
-    p.texto(ESQ, 44, caixaAlta(this.cliente).slice(0, 48), "F2", 7.6, CORES.cinza);
-    p.logo(242.6, 23, 110);
-    p.textoADireita(DIR - 12, 44, rascunho ? `RASCUNHO  /  ${direita}` : direita, "F2", 7.6, CORES.cinza);
-    p.linha(ESQ, 66, MIOLO);
-    this.y = TOPO_DO_CONTEUDO;
-    return p;
-  }
-
-  /** Garante espaço; sem espaço, abre página com o mesmo cabeçalho e devolve true. */
-  garantir(altura: number, secao: string, continuacao?: () => void): boolean {
-    if (this.y + altura <= FIM_DO_CONTEUDO) return false;
-    const anterior = this.atual();
-    this.nova(secao, "PRODUÇÃO AUDIOVISUAL", anterior ? anterior.rascunho : this.rascunho);
-    if (continuacao) continuacao();
-    return true;
-  }
-
-  rodapes() {
-    const total = this.paginas.length;
-    this.paginas.forEach((p, i) => {
-      p.linha(ESQ, 803, MIOLO);
-      p.texto(ESQ, 821, `${caixaAlta(this.cliente).slice(0, 40)}  /  ${p.secao}`, "F1", 7.2, CORES.cinza);
-      p.textoADireita(DIR, 821, `${dois(i + 1)} / ${dois(total)}`, "F1", 7.2, CORES.cinza);
-    });
-  }
-}
-
-function rotuloEmCima(p: Pagina, x: number, y: number, t: string, c: Cor = CORES.verdeEscuro) {
-  p.texto(x, y, caixaAlta(t), "F2", 7.6, c);
-}
-
-/** Título de seção como no documento modelo: rótulo verde, título grande e traço verde. */
-function tituloDeSecao(d: Documento, rotulo: string, titulo: string, apoio?: string) {
-  const p = d.atual();
-  rotuloEmCima(p, ESQ, d.y, rotulo);
-  d.y += 34;
-  const linhas = quebrarLinhas(titulo, "F2", 25, MIOLO);
-  linhas.forEach((l, i) => p.texto(ESQ, d.y + i * 29, l, "F2", 25, CORES.tinta));
-  d.y += (linhas.length - 1) * 29 + 14;
-  p.retangulo(ESQ, d.y, 58, 3, CORES.verde);
-  d.y += 22;
-  if (apoio) d.y = p.paragrafo(ESQ, d.y, apoio, "F1", 9.2, CORES.cinza, MIOLO, 12.5) + 10;
-}
 
 // ------------------------------------------------------------------ capa
 
@@ -721,65 +437,6 @@ function paginaFinal(d: Documento, doc: DocumentoDeRoteiros) {
   }
 }
 
-// ------------------------------------------------------------------ montagem final
-
-function montarBytes(paginas: Pagina[], titulo: string, assunto: string): Uint8Array {
-  const partes: Uint8Array[] = [];
-  const offsets: number[] = [];
-  let tamanho = 0;
-  const escrever = (b: Uint8Array | string) => {
-    const bytes = typeof b === "string" ? bytesDoTexto(b) : b;
-    partes.push(bytes);
-    tamanho += bytes.length;
-  };
-  // Números dos objetos: 1 catálogo, 2 páginas, 3 F1, 4 F2, 5 logo, 6 máscara, 7 info, depois página+conteúdo.
-  const primeiraPagina = 8;
-  const idsDasPaginas = paginas.map((_, i) => primeiraPagina + i * 2);
-  const total = primeiraPagina + paginas.length * 2 - 1;
-  const objeto = (n: number, corpo: Uint8Array | string) => {
-    offsets[n] = tamanho;
-    escrever(`${n} 0 obj\n`);
-    escrever(corpo);
-    escrever("\nendobj\n");
-  };
-  escrever("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n");
-  objeto(1, "<< /Type /Catalog /Pages 2 0 R >>");
-  objeto(2, `<< /Type /Pages /Kids [${idsDasPaginas.map((n) => `${n} 0 R`).join(" ")}] /Count ${paginas.length} >>`);
-  objeto(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-  objeto(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-  const rgb = deBase64(LOGO_RGB_ZLIB_B64);
-  const mascara = deBase64(LOGO_MASCARA_ZLIB_B64);
-  offsets[5] = tamanho;
-  escrever(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${LOGO_LARGURA} /Height ${LOGO_ALTURA} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /SMask 6 0 R /Length ${rgb.length} >>\nstream\n`);
-  escrever(rgb);
-  escrever("\nendstream\nendobj\n");
-  offsets[6] = tamanho;
-  escrever(`6 0 obj\n<< /Type /XObject /Subtype /Image /Width ${LOGO_LARGURA} /Height ${LOGO_ALTURA} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${mascara.length} >>\nstream\n`);
-  escrever(mascara);
-  escrever("\nendstream\nendobj\n");
-  objeto(7, `<< /Title ${literal(titulo)} /Subject ${literal(assunto)} /Producer ${literal("Aceleriq OS, Mesa Roteiros")} /Creator ${literal("Aceleriq OS")} >>`);
-  paginas.forEach((p, i) => {
-    const idPagina = idsDasPaginas[i];
-    const conteudo = p.ops.join("\n");
-    objeto(
-      idPagina,
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${LARGURA} ${ALTURA}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents ${idPagina + 1} 0 R >>`,
-    );
-    objeto(idPagina + 1, `<< /Length ${conteudo.length} >>\nstream\n${conteudo}\nendstream`);
-  });
-  const inicioXref = tamanho;
-  let xref = `xref\n0 ${total + 1}\n0000000000 65535 f \n`;
-  for (let n = 1; n <= total; n++) xref += `${("0000000000" + (offsets[n] || 0)).slice(-10)} 00000 n \n`;
-  escrever(xref);
-  escrever(`trailer\n<< /Size ${total + 1} /Root 1 0 R /Info 7 0 R >>\nstartxref\n${inicioXref}\n%%EOF\n`);
-  const saida = new Uint8Array(tamanho);
-  let pos = 0;
-  for (const b of partes) {
-    saida.set(b, pos);
-    pos += b.length;
-  }
-  return saida;
-}
 
 /**
  * Gera o PDF (bytes) dos roteiros, na ordem recebida. Não altera nenhum
@@ -789,7 +446,7 @@ export function gerarPdfDeRoteiros(doc: DocumentoDeRoteiros): Uint8Array {
   if (!doc.itens.length) throw new Error("Nenhum roteiro para exportar.");
   const data = dataDoDocumento(doc.data);
   const rascunho = doc.itens.some((i) => i.status !== "aprovado" && i.status !== "gravado");
-  const d = new Documento(doc.cliente || "Cliente", rascunho);
+  const d = new Documento(doc.cliente || "Cliente", rascunho, "PRODUÇÃO AUDIOVISUAL");
   capa(d, doc, data);
   doc.itens.forEach((it, i) => paginaDeFala(d, it, i));
   paginasTecnicas(d, doc.itens);
@@ -799,7 +456,7 @@ export function gerarPdfDeRoteiros(doc: DocumentoDeRoteiros): Uint8Array {
   d.rodapes();
   const titulo = doc.itens.length === 1 ? `Roteiro: ${doc.itens[0].roteiro.titulo}` : `Plano de produção audiovisual: ${doc.cliente}`;
   const assunto = doc.itens.map((it) => `r${it.versao}:${it.hash}`).join(" ");
-  return montarBytes(d.paginas, titulo, assunto);
+  return montarPdf(d.paginas, { titulo, assunto, produtor: "Aceleriq OS, Mesa Roteiros" });
 }
 
 /** Nome do arquivo: roteiro-cliente-titulo-r3.pdf, sem acento nem espaço. */
@@ -814,49 +471,4 @@ export function nomeDoArquivoPdf(cliente: string, itens: ItemDoPdf[]): string {
       .slice(0, 40);
   const base = itens.length === 1 ? `roteiro-${limpar(cliente)}-${limpar(itens[0].roteiro.titulo)}-r${itens[0].versao}` : `roteiros-${limpar(cliente)}-${itens.length}-videos`;
   return `${base.replace(/-+/g, "-")}.pdf`;
-}
-
-// ------------------------------------------------------------------ leitura (testes e conferência)
-
-/**
- * Textos das páginas, na ordem em que foram desenhados (lê os literais dos
- * fluxos, que ficam sem compressão). Serve para conferir que o PDF tem os
- * blocos, sem depender de leitor de PDF.
- */
-export function textosDoPdf(bytes: Uint8Array): string[] {
-  let bruto = "";
-  for (let i = 0; i < bytes.length; i++) bruto += String.fromCharCode(bytes[i]);
-  const saida: string[] = [];
-  const re = /\((.*?[^\\])\) Tj/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bruto))) {
-    const lit = m[1];
-    let s = "";
-    for (let k = 0; k < lit.length; k++) {
-      const c = lit.charAt(k);
-      if (c !== "\\") {
-        s += c;
-        continue;
-      }
-      const prox = lit.charAt(k + 1);
-      if (/[0-7]/.test(prox)) {
-        const cod = parseInt(lit.substr(k + 1, 3), 8);
-        s += String.fromCharCode(UNICODE_DO_WIN_ANSI[cod] || cod);
-        k += 3;
-      } else {
-        s += prox;
-        k += 1;
-      }
-    }
-    saida.push(s);
-  }
-  return saida;
-}
-
-/** Quantas páginas o PDF tem (conta os objetos de página). */
-export function paginasDoPdf(bytes: Uint8Array): number {
-  let bruto = "";
-  for (let i = 0; i < bytes.length; i++) bruto += String.fromCharCode(bytes[i]);
-  const m = /\/Type \/Pages \/Kids \[[^\]]*\] \/Count (\d+)/.exec(bruto);
-  return m ? Number(m[1]) : 0;
 }

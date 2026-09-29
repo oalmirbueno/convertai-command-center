@@ -248,7 +248,7 @@ describe("skills determinísticas", () => {
   });
 
   it("catálogo e palavras (reserva sem IA)", () => {
-    expect(SKILLS_DO_EDITOR.map((s) => s.id)).toEqual(["brabo", "cortar_silencios", "legendas", "punch_in", "organizar_por_roteiro", "antes_depois", "fechar_buracos", "transicoes_suaves"]);
+    expect(SKILLS_DO_EDITOR.map((s) => s.id)).toEqual(["brabo", "cortar_pela_onda", "ficar_com_melhor_tomada", "cortar_silencios", "legendas", "punch_in", "organizar_por_roteiro", "antes_depois", "fechar_buracos", "transicoes_suaves", "efeitos_sonoros"]);
     expect(skillPorPalavras("corta os silêncios")).toBe("cortar_silencios");
     expect(skillPorPalavras("edição dinâmica estilo brabo")).toBe("brabo");
     expect(skillPorPalavras("sei lá")).toBeNull();

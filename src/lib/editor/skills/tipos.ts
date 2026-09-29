@@ -18,7 +18,10 @@ export type IdDaSkill =
   | "organizar_por_roteiro"
   | "antes_depois"
   | "fechar_buracos"
-  | "transicoes_suaves";
+  | "transicoes_suaves"
+  | "cortar_pela_onda"
+  | "ficar_com_melhor_tomada"
+  | "efeitos_sonoros";
 
 export interface CenaDoRoteiro {
   ref: string;

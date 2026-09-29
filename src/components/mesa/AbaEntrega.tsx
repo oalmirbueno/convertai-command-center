@@ -25,7 +25,10 @@ import {
   usd,
 } from "@/lib/mesa/api";
 import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
+// Frente DOC (29/09): o documento da entrega do mês (gancho sem custo ao enviar; gerar pede Confirmar).
+import BotaoDocumentoDaEntrega from "@/components/documentos/BotaoDocumentoDaEntrega";
+import { referenciaDoMes, registrarEntregaSemTravar, type PedidoDoDocumento } from "@/lib/documentos/registrarEntrega";
 import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, type Trabalho } from "./useItensDoMes";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
@@ -135,6 +138,10 @@ export function linkDaAgenda(clientId: string, t: Pick<Trabalho, "post_id" | "ag
 
 export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes: (m: string) => void; onAbrir: (taskId: string) => void }) {
   const { clientId, clientName, podeRecarregar, atualizarCusto } = useMesa();
+  const { marca } = useMarcaDaMesa();
+  const pedidoDoDocumento: PedidoDoDocumento | null = clientId
+    ? { clientId, marcaId: marca ? marca.id : null, tipo: "mes_de_pautas", referencia: referenciaDoMes(mes) }
+    : null;
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
   const dados = useItensDoMes(clientId, mes);
@@ -210,6 +217,14 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         resultados.filter((r) => !r.ok).forEach((r) => falhas.push(r.erro || "falhou"));
         const enviados = resultados.filter((r) => r.ok).length;
         if (enviados) toast.success(`${enviados} ${enviados === 1 ? "arte enviada" : "artes enviadas"} para aprovação`);
+        // Gancho do documento da entrega: registra o mês (sem custo, nada vai ao cliente).
+        if (enviados && pedidoDoDocumento) {
+          const ok = new Set(resultados.filter((r) => r.ok).map((r) => r.trabalho_id));
+          const provas = paraEnviar.concat(paraEntregar).filter((t) => ok.has(t.id)).reduce<string[]>((acc, t) => acc.concat(t.file_ids || []), []);
+          void registrarEntregaSemTravar({ ...pedidoDoDocumento, provas }).then((r) => {
+            if (r.erro) toast.error("O documento da entrega não ficou registrado", { description: r.erro });
+          });
+        }
       }
       if (falhas.length) {
         toast.error(`${falhas.length} não ${falhas.length === 1 ? "foi" : "foram"} enviada${falhas.length === 1 ? "" : "s"}`, {
@@ -253,10 +268,13 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
           </span>
         </div>
         <div className="mt-2 flex w-full flex-col items-stretch sm:ml-3 sm:mt-0 sm:w-auto sm:items-end">
-          <Button type="button" onClick={() => void enviarTudo()} disabled={!total || !!progresso}>
-            {progresso ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-            {total ? `Enviar ${total} para aprovação` : "Nada para enviar"}
-          </Button>
+          <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center [&>*+*]:mb-2 sm:[&>*+*]:mb-0 sm:[&>*+*]:ml-2">
+            <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" />
+            <Button type="button" onClick={() => void enviarTudo()} disabled={!total || !!progresso}>
+              {progresso ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+              {total ? `Enviar ${total} para aprovação` : "Nada para enviar"}
+            </Button>
+          </div>
           {progresso && <span className="mt-1 text-center text-[11px] text-muted-foreground sm:text-right">{progresso}</span>}
         </div>
       </div>

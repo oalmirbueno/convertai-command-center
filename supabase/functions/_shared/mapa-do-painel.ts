@@ -44,6 +44,7 @@ export type ChaveDaArea =
   | "mesa_roteiros"
   | "mesa_videos"
   | "mesa_edicao"
+  | "mesa_identidade" | "mesa_proposta" | "mesa_site"
   | "financeiro"
   | "cofre"
   | "equipe";
@@ -81,7 +82,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   { chave: "execucao", nome: "Execução da equipe", rota: "/execucao", comCliente: false, faz: "quem está fazendo o quê", palavras: ["execucao", "quem esta fazendo", "operadores", "hermes"] },
   { chave: "pedidos", nome: "Pedidos", rota: "/pedidos", comCliente: true, faz: "pedidos dos clientes", palavras: ["pedido do cliente", "solicitacao"] },
   { chave: "briefings", nome: "Briefings", rota: "/briefings", comCliente: true, faz: "briefings", palavras: ["briefing"] },
-  { chave: "contratos", nome: "Contratos", rota: "/contratos", comCliente: true, faz: "contratos", palavras: ["contrato", "assinatura"] },
+  { chave: "contratos", nome: "Contratos", rota: "/contratos", comCliente: true, faz: "contratos por modelo, versões, assinatura", agente: "contratos", palavras: ["contrato", "assinatura", "clausula", "aditivo"] },
   { chave: "arquivos", nome: "Arquivos", rota: "/arquivos", comCliente: true, faz: "arquivos e versões", palavras: ["arquivos", "arquivo", "upload", "enviar arquivo"] },
   { chave: "workspace", nome: "Workspace", rota: "/workspace", comCliente: true, faz: "pastas e documentos", agente: "workspace", palavras: ["workspace", "pasta", "documento", "nota do workspace"] },
   { chave: "metricas", nome: "Métricas", rota: "/metricas", comCliente: true, faz: "números do Instagram", palavras: ["metrica", "seguidores", "alcance", "engajamento", "instagram numeros"] },
@@ -123,6 +124,23 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     faz: "edição de vídeo gravado", agente: "edicao",
     palavras: ["edicao", "editar video", "corte", "takes", "legenda"],
   },
+  {
+    chave: "mesa_identidade", nome: "Mesa Identidade", rota: "/mesa-identidade", parametro: "etapa", etapas: ["briefing", "pesquisa", "naming", "conceito", "sistema", "mockups", "guideline", "entrega"], comCliente: true,
+    faz: "marca, naming e brandbook", agente: "identidade",
+    palavras: ["identidade visual", "brandbook", "brand book", "manual da marca", "naming", "nome da marca", "rebranding", "guideline"],
+  },
+  // Frente PRO (30/09): proposta comercial do cliente (link público /proposta/:token).
+  {
+    chave: "mesa_proposta", nome: "Mesa Proposta", rota: "/mesa-proposta", parametro: "etapa", etapas: ["contexto", "rascunho", "revisao", "envio"], comCliente: true,
+    faz: "proposta comercial com link", agente: "proposta",
+    palavras: ["proposta", "proposta comercial", "aceite da proposta"],
+  },
+  // Frente SIT (30/09): criador de sites com o motor de código (prévia ao vivo, publicação com domínio).
+  {
+    chave: "mesa_site", nome: "Mesa Site", rota: "/mesa-site", parametro: "etapa", etapas: ["briefing", "referencias", "direcao", "conteudo", "imagens", "construcao", "revisao", "publicacao"], comCliente: true,
+    faz: "sites", agente: "site",
+    palavras: ["site", "landing", "pagina do site", "dominio", "hero", "secao do site"],
+  },
   { chave: "financeiro", nome: "Financeiro", rota: "/financeiro", comCliente: false, faz: "cobrança e caixa", soPessoa: true, palavras: ["financeiro", "cobranca", "mensalidade", "pagamento", "fatura", "boleto", "caixa"] },
   { chave: "cofre", nome: "Cofre", rota: "/cofre", comCliente: false, faz: "senhas", soPessoa: true, palavras: ["senha", "cofre", "credencial", "acesso salvo"] },
   { chave: "equipe", nome: "Equipe", rota: "/equipe", comCliente: false, faz: "pessoas", soPessoa: true, palavras: ["equipe", "permissao", "papel da pessoa"] },
@@ -146,8 +164,12 @@ export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "publicidade", nome: "diretor de campanha", area: "mesa_publicidade", funcao: "mesa-publicidade", faz: "campanha, territórios, tomadas, envio" },
   { chave: "roteiros", nome: "roteirista", area: "mesa_roteiros", funcao: "mesa-roteiros", faz: "gera, edita e aprova roteiros" },
   { chave: "videos", nome: "diretor de vídeo", area: "mesa_videos", funcao: "mesa-videos", faz: "gera vídeos" },
+  { chave: "identidade", nome: "diretor de marca", area: "mesa_identidade", funcao: "mesa-identidade", faz: "nomes e brandbook" },
   { chave: "edicao", nome: "agente de edição", area: "mesa_edicao", funcao: "editor-video", faz: "takes e edição" },
+  { chave: "proposta", nome: "estrategista comercial", area: "mesa_proposta", funcao: "mesa-proposta", faz: "escreve a proposta, pesquisa o mercado, itens e validade" },
+  { chave: "site", nome: "diretor de site", area: "mesa_site", funcao: "mesa-site", faz: "constrói e ajusta o site" },
   { chave: "workspace", nome: "agente do workspace", area: "workspace", funcao: "workspace-agent", faz: "documentos" },
+  { chave: "contratos", nome: "agente de contratos", area: "contratos", funcao: "contratos", faz: "monta contrato por blocos, preenche variáveis, cláusula só com diferença e Confirmar" },
 ];
 
 export const CHAVES_DAS_AREAS: ChaveDaArea[] = AREAS_DO_PAINEL.map((a) => a.chave);

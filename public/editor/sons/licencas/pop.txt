@@ -1,0 +1,38 @@
+EFEITO: pop  (arquivo assets/sfx/pop.wav)
+SOM: pop curto e macio, tipo bolha
+
+TITULO DO PACOTE: Interface Sounds (versao 1.0, de 11/02/2020)
+PAGINA:        https://kenney.nl/assets/interface-sounds
+ARQUIVO BAIXADO: https://kenney.nl/media/pages/assets/interface-sounds/fa43c1dd4d-1677589452/kenney_interface-sounds.zip
+ARQUIVO USADO: Audio/select_006.ogg (Ogg Vorbis 44,1 kHz, mono, 1,94 s)
+AUTOR:         Kenney (Kenney Vleugels, www.kenney.nl)
+LICENCA:       CC0 1.0 Universal (Creative Commons Zero)
+CITACAO DA LICENCA, do arquivo License.txt que vem dentro do .zip, palavra por palavra:
+               "License: (Creative Commons Zero, CC0)"
+               "http://creativecommons.org/publicdomain/zero/1.0/"
+               "This content is free to use in personal, educational and commercial projects."
+               "Support us by crediting Kenney or www.kenney.nl (this is not mandatory)"
+               A pagina do pacote mostra, na linha "License" da tabela:
+               "Creative Commons CC0", com link para
+               https://creativecommons.org/publicdomain/zero/1.0/
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). O proprio License.txt diz que creditar e bem-vindo mas nao
+               obrigatorio.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Arquivo inteiro, convertido de Ogg 44,1 kHz para WAV 48 kHz estereo.
+2. Tirada a corrente continua (DC).
+3. Tirado o silencio do comeco (4 ms antes do ataque), cortado em 0,250 s, subida de 2 ms e
+   descida de 90 ms (a descida mais longa aproxima o desenho do volume do efeito antigo).
+4. Volume acertado para a janela de 200 ms mais forte ficar em -16,92 LUFS no arquivo, que da
+   -14,0 LUFS com o volume 1.0 do editor.
+5. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,250 s, ponto forte em 0,003 s, pico -7,50 dBFS,
+janela de 200 ms -16,92 LUFS, janela de 3 s -28,68 LUFS.
+
+OBSERVACAO: este pop segura o corpo por uns 60 ms, enquanto o antigo caia em 25 ms. Ele soa um
+pouco mais redondo. O tom esta quase igual: o centro do som fica em 987 Hz contra 862 Hz do antigo,
+e os dois tem quase toda a energia entre 200 Hz e 1 kHz.

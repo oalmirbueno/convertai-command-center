@@ -18,6 +18,8 @@ import {
   type TrilhaDoProjeto,
   type VisaoDaFonte,
   type ReferenciaDeEdicao,
+  type OndaDaFonte,
+  type MixagemDoProjeto,
   MAX_REFERENCIAS,
 } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { arred, noQuadro, umQuadro } from "./tempo";
@@ -59,6 +61,8 @@ export type Operacao =
   | { op: "referencias"; lista: ReferenciaDeEdicao[] }
   | { op: "continuidade"; campos: Partial<ContinuidadeDoProjeto> }
   | { op: "marcador"; tempo_s: number; rotulo: string }
+  | { op: "onda"; fonte: string; onda: OndaDaFonte }
+  | { op: "mixagem"; campos: Partial<MixagemDoProjeto> }
   | { op: "registrar_skill"; skill: string; resumo: string; em: string };
 
 export class ErroDaOperacao extends Error {
@@ -390,6 +394,12 @@ export function aplicarOperacao(p: ProjetoDeEdicao, o: Operacao): ProjetoDeEdica
       while (p.marcadores.some((m) => m.id === `m${n}`)) n++;
       return { ...p, marcadores: p.marcadores.concat([{ id: `m${n}`, tempo_s: noQuadro(o.tempo_s, p.fps), rotulo: String(o.rotulo || "Marcador").slice(0, 80) }]) };
     }
+    case "onda": {
+      if (!p.fontes[o.fonte]) throw new ErroDaOperacao("A onda é de uma mídia que não está no projeto.");
+      return { ...p, ondas: { ...(p.ondas || {}), [o.fonte]: o.onda } };
+    }
+    case "mixagem":
+      return { ...p, mixagem: { ...p.mixagem, ...o.campos } };
     case "registrar_skill":
       return { ...p, skills_aplicadas: p.skills_aplicadas.concat([{ skill: o.skill, em: o.em, resumo: String(o.resumo || "").slice(0, 200) }]).slice(-MAX_SKILLS_NO_HISTORICO) };
     default:

@@ -85,6 +85,9 @@ Deno.serve(async (req) => {
       }
     }
     if (!contract.admin_signed_at) return json({ error: "admin must sign first" }, 400);
+    if (contract.origem === "modelo" && !contract.documento_hash) {
+      return json({ error: "contract must be frozen before sending" }, 409);
+    }
     if (
       contract.client_signed_at
       || contract.file_id
@@ -109,6 +112,9 @@ Deno.serve(async (req) => {
     const safeFullName = escapeHtml(client?.full_name || "cliente");
     const safeSignerName = escapeHtml(contract.admin_signature_name || "");
     const safeTitle = escapeHtml(contract.title || "");
+    const safeHash = contract.origem === "modelo" && contract.documento_hash
+      ? escapeHtml(String(contract.documento_hash).slice(0, 12))
+      : "";
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR" dir="ltr">
@@ -133,6 +139,7 @@ Deno.serve(async (req) => {
       <div style="margin:0 0 28px;padding:18px 20px;background-color:#F7F7F7;border-left:3px solid #00FF66;border-radius:8px;">
         <div style="font-size:11px;color:#8a8a8a;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600;">Contrato</div>
         <div style="font-size:16px;color:#0D0D0D;font-weight:600;">${safeTitle}</div>
+        ${safeHash ? `<div style="font-size:12px;color:#6b6b6b;margin-top:6px;">Código do documento: ${safeHash}</div>` : ""}
       </div>
       <p style="font-size:15px;color:#3a3a3a;line-height:1.65;margin:0 0 28px;">
         Para assinar, basta clicar no botão abaixo. Você será direcionado ao portal AcelerIQ, onde poderá ler o documento na íntegra e assiná-lo de forma segura.
@@ -198,6 +205,20 @@ Deno.serve(async (req) => {
     }).eq("id", contract_id);
     if (statusError) {
       return json({ error: "email sent but contract status was not recorded" }, 500);
+    }
+
+    // Frente CON (30/09): contrato de modelo guarda o envio na trilha (vai para a página de carimbo).
+    if (contract.origem === "modelo") {
+      const { error: trailError } = await supabase.from("contrato_eventos").insert({
+        contract_id: contract.id,
+        client_id: contract.client_id,
+        tipo: "enviado_email",
+        resumo: `Link enviado por e-mail para ${recipient}.`,
+        detalhe: { documento_hash: contract.documento_hash || null },
+      });
+      if (trailError) {
+        console.error("send-contract-email trail not recorded", { contract_id, message: trailError.message });
+      }
     }
 
     return json({ ok: true, signUrl });

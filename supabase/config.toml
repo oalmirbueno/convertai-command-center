@@ -97,6 +97,18 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.mesa-roteiros]
     verify_jwt = true
+  [functions.conselho]
+    verify_jwt = true
+  [functions.mesa-identidade]
+    verify_jwt = true
+  [functions.mesa-proposta]
+    verify_jwt = true
+  [functions.proposta-publica]
+    verify_jwt = false
+  [functions.mesa-site]
+    verify_jwt = true
+  [functions.motor-codigo]
+    verify_jwt = true
   [functions.agente-estilo]
     verify_jwt = true
   [functions.perfis-instagram]
@@ -137,6 +149,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.send-contract-email]
     verify_jwt = true
+  [functions.contratos]
+    verify_jwt = true
   [functions.voice-assistant-agent]
     verify_jwt = true
   [functions.workspace-agent]
@@ -147,3 +161,9 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.workspace-organizar]
     verify_jwt = true
+  [functions.documentos]
+    verify_jwt = true
+  [functions.briefing-agente]
+    verify_jwt = true
+  [functions.briefing-publico]
+    verify_jwt = false

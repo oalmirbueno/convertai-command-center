@@ -1,0 +1,47 @@
+EFEITO: count  (arquivo assets/sfx/count.wav)
+NOMES EM PORTUGUES: contagem (contagem, contador, numeros)
+SOM: tique-tique agudo e rapido de contador (numero subindo)
+
+TITULO DO PACOTE: Hi-Tech Button Sound Pack I (Non Themed), publicado em 03/07/2013
+PAGINA:        https://opengameart.org/content/hi-tech-button-sound-pack-i-non-themed
+ARQUIVO BAIXADO: https://opengameart.org/sites/default/files/SFX_0.zip
+ARQUIVO USADO: SFX.rar (dentro do .zip) -> Button Sound 9.wav (WAV 44,1 kHz, 16 bits, estereo, 1,51 s)
+AUTOR:         Circlerun (usuario do OpenGameArt; campo "Author" da pagina)
+LICENCA:       CC0 1.0 Universal (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina:
+               campo "License(s):" com uma unica licenca, "CC0", e link para
+               http://creativecommons.org/publicdomain/zero/1.0/
+               A descricao da pagina diz que os sons foram desenhados pelo autor ("custom designed
+               interface button/window sounds I had designed") e diz "Free to use." Ela cita uma voz
+               so no video de amostra; o arquivo usado aqui e um bipe eletronico, sem voz.
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). A pagina traz um pedido do autor, sem exigir:
+               "Attribution Instructions: Just "SFX by Circlerun" will do just fine." O
+               THIRD_PARTY_NOTICES.md (secao 4) tem uma linha pronta para quem quiser atender.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+Nenhum arquivo CC0 era um contador pronto, entao o som e UM bipe CC0 repetido.
+
+1. Button Sound 9.wav em mono, convertido para 48 kHz, tirada a corrente continua (DC).
+2. Os primeiros 28 ms do bipe, a partir de 1 ms antes do ataque, com subida de 0,5 ms e descida de
+   12 ms.
+3. Corte de agudos em 14 kHz (Butterworth de 4a ordem), que tira um parcial em 17,7 kHz.
+4. Repetido 14 vezes, um a cada 47 ms, com ganhos que se repetem 1,0 / 0,82 / 0,90 / 0,78.
+5. Descida de 20 ms no fim.
+6. Volume acertado para a janela de 200 ms ficar em -14,0 LUFS com o volume 1.0 do editor.
+7. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,643 s, ponto forte em 0,000 s, pico -11,18 dBFS,
+janela de 200 ms -16,92 LUFS e janela de 3 s -24,30 LUFS no arquivo
+(com o volume 1.0 do editor: -14,00 e -21,38 LUFS).
+NIVEL: janela de 200 ms em -14,0 LUFS com volume 1.0 (marca leve), sem passar de -20,0 na janela de
+3 s.
+
+OBSERVACAO HONESTA: os bipes ficam por volta de 12 kHz, como no modelo (centro do som 12048 Hz contra
+12635 Hz, e o mesmo ritmo de um bipe a cada 47 ms). Som tao agudo parece mais baixo do que o numero
+diz, some em caixinha de celular ruim e quem escuta pouco agudo pode nao ouvir. Se ficar fraco num
+video, use "volume": 1.5 no item de sfx.events.
+O som de referencia que serviu de modelo foi usado so para medir (duracao, volume, faixa de
+frequencia, ponto forte). Nenhum pedaco dele foi copiado, cortado, misturado ou entregue.

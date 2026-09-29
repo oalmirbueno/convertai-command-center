@@ -39,6 +39,12 @@
  * - receita_arquivar { id } -> { ok }
  *   Link de rede social nunca é baixado aqui (a tela manda só quadros de arquivo do painel).
  *
+ * Frente EDT (30/09):
+ * - render_pedir / render_status / render_cancelar (render.ts): fila render_pedidos para o
+ *   worker da máquina da agência (vídeo inteiro, amostra de 8 a 15 s, onda do áudio). Sem custo.
+ * - animacoes_sugerir (animacoes.ts): o Jev escolhe em quais frases ditas entra animação e qual peça.
+ * - elemento_estimar / elemento_gerar (elemento.ts): ícone ou objeto com fundo transparente, pago, custo antes.
+ *
  * Nada aqui grava o projeto: a tela junta o resultado e salva pela mesa-videos
  * (projeto_salvar). Sem travessão.
  */
@@ -90,6 +96,9 @@ import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, pedidoAponta, refer
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { rotasDoRender } from "./render.ts";
+import { rotasDoElemento } from "./elemento.ts";
+import { frasesDoCorpo, sugerirAnimacoes } from "./animacoes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -776,6 +785,44 @@ async function receitaArquivar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+// ------------------------------------------------------------------ frente EDT: render, animações, elemento
+
+const ROTAS_DO_RENDER = rotasDoRender({
+  servico,
+  garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId),
+  json,
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra || {}),
+  userId: (ch) => (ch as Chamador).userId,
+  auditar: (ch, f, input, ok) => auditar(ch as Chamador, f, input, ok),
+});
+
+const ROTAS_DO_ELEMENTO = rotasDoElemento({
+  servico,
+  garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId),
+  json,
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra || {}),
+  userId: (ch) => (ch as Chamador).userId,
+  folego: (f) => respostaComFolego(f, corsHeaders),
+  respostaDeErro: (e) => respostaDeErro(e),
+});
+
+/** Em quais frases ditas entra animação e qual peça (Jev; sem custo para o cliente). */
+async function animacoesSugerir(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const frases = frasesDoCorpo(corpo.frases);
+  if (!frases.length) return json({ sugestoes: [], fonte: "regra" });
+  const densidade = corpo.densidade === "poucas" ? "poucas" : "medias";
+  try {
+    const sugestoes = await sugerirAnimacoes(frases, densidade);
+    await auditar(ch, "editor_animacoes_sugerir", { client_id: clientId, frases: frases.length, sugestoes: sugestoes.length }, true);
+    return json({ sugestoes, fonte: "jev" });
+  } catch (e) {
+    registrarFalha("editor-video: Jev não sugeriu animações", e, { client_id: clientId, frases: frases.length });
+    throw new ErroHttp(503, "jev_indisponivel", "O julgamento das animações não respondeu agora. Peça as peças pelo nome (ex.: contador no 300).");
+  }
+}
+
 // ------------------------------------------------------------------ roteador
 
 function respostaDeErro(err: unknown): Response {
@@ -801,6 +848,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   receita_ler: receitaLer,
   receita_salvar: receitaSalvar,
   receita_arquivar: receitaArquivar,
+  render_pedir: ROTAS_DO_RENDER.render_pedir as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  render_status: ROTAS_DO_RENDER.render_status as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  render_cancelar: ROTAS_DO_RENDER.render_cancelar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  animacoes_sugerir: animacoesSugerir,
+  elemento_estimar: ROTAS_DO_ELEMENTO.elemento_estimar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  elemento_gerar: ROTAS_DO_ELEMENTO.elemento_gerar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
 };
 
 Deno.serve(async (req) => {

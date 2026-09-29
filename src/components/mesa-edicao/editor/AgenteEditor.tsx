@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, Eye, Loader2, Send, Square, Timer } from "lucide-react";
+import { Bot, Download, Eye, Film, Loader2, Send, Square, Timer, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -31,6 +31,15 @@ import { base64DoDataUrl, extrairQuadro, tempoDoQuadro } from "@/lib/editor/quad
 import { proporSkill, skillPorId, skillPorPalavras, type IdDaSkill, type PropostaDaSkill } from "@/lib/editor/skills";
 import { custoDaFala, fontesSemFala, lerFalaDaEntrada, marcarFalaDoProjeto, pedidoPrecisaDeFala, skillPrecisaDeFala } from "@/lib/editor/fala";
 import { tempoFino } from "@/lib/editor/tempo";
+import { aplicarOperacoes } from "@/lib/editor/operacoes";
+import { fontesSemOnda, pedirRender, uidDoClique, useFilaDeRender, type PedidoNaFila } from "@/lib/editor/render";
+import { acaoDaSaida, confirmarBroll, confirmarElemento, estimarBroll, estimarElemento, opsDoArquivoNoTrecho, sugerirAnimacoesNaTela, type ArquivoGerado } from "@/lib/editor/geracaoDoAgente";
+import type { MarcaParaOAgente, ResultadoDaFerramenta, SaidaDoAgente } from "@/lib/editor/agente";
+import { useKitDaMesa } from "@/components/mesa/kitDaMesa";
+import { chamarMesaVideos } from "@/components/mesa-videos/videosApi";
+import { supabase } from "@/integrations/supabase/client";
+import { janelaDaAmostra } from "../../../../supabase/functions/_shared/render-do-editor";
+import MensagemPadrao, { estilosLigados, lerMensagensPadrao, TIPO_DO_PADRAO, type MensagemPadraoDoEditor } from "./MensagemPadrao";
 import type { ControleDePropostas } from "./PainelDeSkills";
 import { pegarPedidoPendente, temPedidoPendente } from "./ponteDoAgente";
 
@@ -234,6 +243,60 @@ export function mensagemDoBanco(m: { id: string; papel: string; conteudo: string
 }
 
 const ehExportar = (a: AcaoDoAgente) => a.itens.length > 0 && a.itens.every((i) => i.operacao === "exportar");
+const ehGeracao = (a: AcaoDoAgente) => a.itens.length > 0 && a.itens.every((i) => i.operacao === "gerar_broll" || i.operacao === "gerar_elemento");
+const saidaDaAcao = (a: AcaoDoAgente): SaidaDoAgente | null => (a.contexto && (a.contexto as { saida?: unknown }).saida ? ((a.contexto as { saida: SaidaDoAgente }).saida) : null);
+
+/** Cor de destaque da marca aberta: a primária da paleta (ou a primeira). */
+export function corDaPaleta(paleta: { hex: string; papel: string }[] | null | undefined): string | null {
+  const l = (paleta || []).filter((c) => /^#[0-9a-fA-F]{6}$/.test(String(c.hex || "")));
+  const p = l.find((c) => /prim|principal|destaque/i.test(String(c.papel || ""))) || l[0];
+  return p ? p.hex : null;
+}
+
+/**
+ * B-roll pedido (frente EDT, F4): consultar o andamento só no clique (15 s entre
+ * consultas) e, pronto, pôr no trecho com um clique (um passo do desfazer).
+ */
+function AcompanharBroll({ acao, onPor }: { acao: AcaoDoAgente; onPor: (arq: ArquivoGerado, s: SaidaDoAgente) => void }) {
+  const s = saidaDaAcao(acao);
+  const pedidoId = acao.resultados && acao.resultados[0] ? String(acao.resultados[0].alvo_id || "") : "";
+  const [estado, setEstado] = useState<{ lendo: boolean; texto: string | null; arquivo: ArquivoGerado | null; ultima: number }>({ lendo: false, texto: null, arquivo: null, ultima: 0 });
+  if (!s || !pedidoId || !acao.executada_em) return null;
+  const conferir = async () => {
+    if (Date.now() - estado.ultima < 15000) return;
+    setEstado((x) => ({ ...x, lendo: true, ultima: Date.now() }));
+    try {
+      const r = await chamarMesaVideos<{ pedidos?: { estado?: string; resultado?: { envios?: { estado?: string; arquivo_id?: string | null; erro?: string | null }[] } }[] }>({ acao: "gerar_status", pedido_id: pedidoId });
+      const p = r && r.pedidos && r.pedidos[0];
+      const envio = p && p.resultado && p.resultado.envios ? p.resultado.envios.find((e) => e.estado === "pronto" && e.arquivo_id) : null;
+      if (!envio) {
+        const erro = p && p.resultado && p.resultado.envios ? p.resultado.envios.find((e) => e.estado === "erro") : null;
+        setEstado((x) => ({ ...x, lendo: false, texto: erro ? `Não saiu: ${erro.erro || "erro do motor"}` : "Ainda gerando. Confira de novo em uns minutos." }));
+        return;
+      }
+      const { data } = await (supabase as any).from("video_arquivos").select("id, nome, storage_bucket, storage_path, duracao_s, largura, altura").eq("id", envio.arquivo_id).maybeSingle();
+      setEstado((x) => ({ ...x, lendo: false, texto: data ? "Pronto." : "Pronto, mas o arquivo ainda não apareceu na Mídia.", arquivo: data || null }));
+    } catch (e) {
+      console.error("[agente editor] andamento do B-roll", e);
+      setEstado((x) => ({ ...x, lendo: false, texto: textoDoErro(e) }));
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center pl-1 text-[12px]" data-acompanhar-broll="">
+      {estado.arquivo ? (
+        <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8")} onClick={() => onPor(estado.arquivo as ArquivoGerado, s)}>
+          Pôr no trecho de {tempoFino(Number(s.argumentos.de_s))}
+        </button>
+      ) : (
+        <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => void conferir()} disabled={estado.lendo}>
+          {estado.lendo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+          Ver se ficou pronto
+        </button>
+      )}
+      {estado.texto && <span className="mb-1 text-muted-foreground">{estado.texto}</span>}
+    </div>
+  );
+}
 const textoDaMensagem = (m: Mensagem) => {
   if (m.quem === "dono") return m.itens.map((i) => i.texto).join(" ");
   const r = m.itens.filter((i) => i.tipo === "resposta");
@@ -288,6 +351,21 @@ export default function AgenteEditor({
   projetoRef.current = projeto;
   const mensagensRef = useRef<Mensagem[]>([]);
   mensagensRef.current = mensagens;
+  // Frente EDT: a marca aberta (logo e cor do kit) e a fila de render desta versão.
+  const kit = useKitDaMesa();
+  const marca: MarcaParaOAgente = { logo_path: (kit.data && kit.data.logo_path) || null, cor: corDaPaleta(kit.data ? kit.data.paleta : null), nome: kit.marca ? kit.marca.nome : null };
+  useFilaDeRender(clientId, versaoId || null, chamarEditorVideo, (p: PedidoNaFila) => {
+    if (p.estado !== "pronto" || p.tipo === "onda") return;
+    const atual = projetoRef.current;
+    const entrada = (p.entrada || {}) as { inicio_s?: number; fim_s?: number };
+    if (p.tipo === "amostra") {
+      const padrao: MensagemPadraoDoEditor = { tipo: TIPO_DO_PADRAO, forma: "amostra", url: p.url, inicio_s: Number(entrada.inicio_s) || 0, fim_s: Number(entrada.fim_s) || 0, estilos: atual ? estilosLigados(atual, marca.cor) : [] };
+      juntarMensagem({ quem: "agente", itens: [{ tipo: "resposta", texto: "Amostra pronta pra conferir. Se quiser mudar, me diz o tempo do trecho." }], acoes: [], mensagemId: null, anexos: [padrao], recemFeita: true });
+    } else {
+      juntarMensagem({ quem: "agente", itens: [{ tipo: "resposta", texto: `Vídeo inteiro pronto (no padrão aprovado). ${p.url ? "Está na barra do editor e na Mídia." : ""}` }], acoes: [], mensagemId: null, anexos: [], recemFeita: true });
+    }
+    rolarParaBaixo();
+  });
 
   const modelo = modelos.find((m) => m.id === escolha.modelo) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[0] || null;
   const raciocinios = (modelo && modelo.raciocinio) || [];
@@ -424,8 +502,29 @@ export default function AgenteEditor({
       if (pedido !== "confirmar") throw new Error("Exportar não tem Desfazer.");
       const p = projetoRef.current;
       if (!p) throw new Error("Abra o vídeo no editor para exportar.");
-      const nome = await baixarExportacao(p, urls, agora);
-      anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: i.alvo_id, titulo: `${i.titulo}: ${nome}`, operacao: i.operacao, ok: true, desfazer: null })) };
+      // Frente EDT: o Confirmar põe o vídeo inteiro na fila de render (o ZIP fica como opção ao lado).
+      if (!versaoId) throw new Error("Abra a versão no editor para renderizar.");
+      const c = controleRef.current;
+      if (c && c.salvarAgora) await c.salvarAgora();
+      const r = await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "render_final", uid: `x${acao.id}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80).padEnd(8, "0") });
+      anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: r.pedido.id, titulo: `${i.titulo}: ${r.ja_existia ? "já estava na fila" : "na fila da máquina da agência"}`, operacao: i.operacao, ok: true, desfazer: null })) };
+      resposta = { anexo, feitos: 1, falhas: 0 };
+    } else if (ehGeracao(acao)) {
+      if (pedido !== "confirmar") throw new Error("Geração não tem Desfazer: o que foi gerado fica na Mídia.");
+      const s = saidaDaAcao(acao);
+      if (!s) throw new Error("Este cartão é de antes de recarregar e perdeu o pedido. Peça de novo ao agente.");
+      const uid = `g${acao.id}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80).padEnd(8, "0");
+      if (s.tipo === "gerar_broll") {
+        const r = await confirmarBroll(chamarMesaVideos, clientId, s, uid);
+        anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: r.pedido_id, titulo: `${i.titulo}: pedido enviado (aparece na Mídia quando ficar pronto)`, operacao: i.operacao, ok: true, desfazer: null })) };
+      } else {
+        const r = await confirmarElemento(chamarEditorVideo, clientId, s, uid);
+        const p = projetoRef.current;
+        if (p && onAplicarProjeto) onAplicarProjeto(aplicarOperacoes(p, opsDoArquivoNoTrecho(p, r.arquivo, { tipo: "elemento", inicio_s: Number(s.argumentos.inicio_s) || 0, duracao_s: Number(s.argumentos.duracao_s) || 2.5 })), "Elemento gerado");
+        anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: r.arquivo.id, titulo: `${i.titulo}: gerado (US$ ${r.custo_usd.toFixed(2)}) e posto no trecho; Ctrl+Z tira da linha do tempo`, operacao: i.operacao, ok: true, desfazer: null })) };
+      }
+      setGasto((g) => g + (s.custo_usd || 0));
+      atualizarCusto();
       resposta = { anexo, feitos: 1, falhas: 0 };
     } else {
       const prop = PROPOSTAS_DA_ABA.get(acao.id);
@@ -472,6 +571,28 @@ export default function AgenteEditor({
     responder(pedidoTexto, { quem: "agente", itens: antes.concat([{ tipo: "resposta", texto: `${prop.titulo}: ${prop.resumo}${feita ? " Feito; o Desfazer volta tudo." : " Confira a lista e confirme."}` }]), acoes: [acao], mensagemId: null, anexos: [] });
   };
 
+  /** Frente EDT: ferramentas que chamam o servidor no meio do laço (sem custo) e as estimativas das gerações pagas. */
+  const ferramentaNoServidor = async (nome: string, a: Record<string, unknown>, trab: ProjetoDeEdicao): Promise<ResultadoDaFerramenta> => {
+    const nada = (texto: string, ok = true): ResultadoDaFerramenta => ({ projeto: trab, operacoes: [], texto, ok });
+    if (nome === "sugerir_animacoes") return sugerirAnimacoesNaTela(chamarEditorVideo, clientId, trab, a.densidade === "poucas" ? "poucas" : "medias");
+    if (nome === "medir_onda") {
+      if (!versaoId) return nada("Abra a versão no editor para medir a onda.", false);
+      const fontes = fontesSemOnda(trab);
+      if (!fontes.length) return nada("Todas as fontes já têm a onda medida.");
+      const r = await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "onda", uid: uidDoClique(), fontes });
+      return { ...nada(`Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} à máquina da agência (uns 30 s, sem custo). Quando voltar, o corte pela onda pode rodar.`), naFila: { tipo: "onda", pedido_id: r.pedido.id } };
+    }
+    if (nome === "amostra") {
+      const j = janelaDaAmostra(a.inicio_s, a.fim_s, trab.duracao_s);
+      return { ...nada(`Amostra de ${tempoFino(j.inicio_s)} a ${tempoFino(j.fim_s)}: vai para a fila depois de aplicar o que mudou.`), naFila: { tipo: "amostra", pedido_id: "", inicio_s: j.inicio_s, fim_s: j.fim_s } };
+    }
+    if (nome === "gerar_broll" || nome === "gerar_elemento") {
+      const s = nome === "gerar_broll" ? await estimarBroll(chamarMesaVideos, clientId, trab, a) : await estimarElemento(chamarEditorVideo, clientId, a);
+      return { ...nada(`Cartão pronto para o dono confirmar${s.custo_usd !== null ? ` (US$ ${s.custo_usd.toFixed(2)})` : " (sem custo conhecido: não gera)"}. Nada foi gerado ainda.`), saida: s };
+    }
+    return nada(`Ferramenta desconhecida: ${nome}.`, false);
+  };
+
   const rodarPedido = async (pr: Preparo, base: ProjetoDeEdicao) => {
     if (!modelo || !pr.pedido) return;
     setRodando("Pensando");
@@ -491,6 +612,8 @@ export default function AgenteEditor({
         cancelado: () => parar.current,
         tela: { selecionados: selecao || [], cursor_s: cursor ? cursor() : null },
         conversa: pr.conversa,
+        marca,
+        servidor: (ch, trab) => ferramentaNoServidor(ch.ferramenta, ch.argumentos || {}, trab),
         aoPasso: (log, g, passo) => {
           setGasto(antes + g);
           setRodando(`Passo ${passo} de até ${MAX_PASSOS}${log.length ? `: ${log[log.length - 1].texto.slice(0, 70)}` : ""}`);
@@ -508,12 +631,29 @@ export default function AgenteEditor({
         acoes.push(cartaoDaProposta(`agente-${Date.now().toString(36)}`, prop, base, d.direto));
       }
       if (r.exportar) acoes.push(acaoDeExportar(r.resultado));
+      r.saidas.forEach((s) => acoes.push(acaoDaSaida(s)));
       if (!acoes.length && !r.opcoes.length) {
         if (!r.resposta) itens.push({ tipo: "aviso", texto: "Nada mudou na linha do tempo. Use um atalho abaixo ou diga o que mudar (ex.: corta os silêncios)." });
         else if (respostaPromete(r.resposta)) itens.push({ tipo: "aviso", texto: "Nada mudou ainda: o agente só prometeu. Peça de novo ou use um atalho." });
       }
       const anexos = [r.aprendido, r.seguidas].filter(Boolean) as unknown[];
+      // Mensagens padrão (frente EDT): o cartão é o "O que mudei"; aqui vai o custo do pedido.
+      const aGerar = r.saidas.reduce((x, s) => x + (s.custo_usd || 0), 0);
+      anexos.push({ tipo: TIPO_DO_PADRAO, forma: "custo", pedido_usd: r.gasto_usd, conversa_usd: antes + r.gasto_usd, gerar_usd: r.saidas.length ? aGerar : null });
       responder(pr.texto, { quem: "agente", itens, acoes, mensagemId: null, anexos, opcoes: r.opcoes }, r.uso_id);
+      // Amostra pedida pelo agente: vai para a fila depois de aplicar e salvar (sai do projeto salvo).
+      const amostra = r.naFila.find((x) => x.tipo === "amostra" && !x.pedido_id);
+      if (amostra && versaoId) {
+        try {
+          const c = controleRef.current;
+          if (c && c.salvarAgora) await c.salvarAgora();
+          await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "amostra", uid: uidDoClique(), inicio_s: amostra.inicio_s, fim_s: amostra.fim_s });
+          falar("agente", [{ tipo: "resposta", texto: `Montando a amostra de ${tempoFino(amostra.inicio_s || 0)} a ${tempoFino(amostra.fim_s || 0)} na máquina da agência (uns 2 min). Aviso aqui quando ficar pronta.` }]);
+        } catch (e) {
+          console.error("[agente editor] amostra não pedida", e);
+          falar("agente", [{ tipo: "aviso", texto: `A amostra não foi para a fila: ${emPreparacao(e) ? "falta publicar a função editor-video." : textoDoErro(e)}` }]);
+        }
+      }
     } catch (e) {
       const causa = e instanceof ErroDoPrimeiroPasso ? e.causa : e;
       const t = emPreparacao(causa) ? "O agente editor está em preparação: falta publicar a função editor-video." : textoDoErro(causa);
@@ -865,6 +1005,7 @@ export default function AgenteEditor({
                 {i.texto}
               </p>
             ))}
+            {m.quem === "agente" && lerMensagensPadrao(m.anexos).map((x, k) => <MensagemPadrao key={k} m={x} />)}
             {m.quem === "agente" && (
               <AprendizadoDoAgente
                 anexos={m.anexos}
@@ -890,14 +1031,63 @@ export default function AgenteEditor({
             </div>
           )}
           {m.acoes.map((a) => (
-            <CartaoDeAcao
-              key={a.id}
-              acao={a}
-              titulo={ehExportar(a) ? "Exportar" : a.executada_direto ? "O agente mudou" : "O agente vai mudar"}
-              onPedido={aoPedidoDe(m.chave, a)}
-              recemFeita={m.recemFeita}
-              observacao={ehExportar(a) ? "Sem custo. Baixa um ZIP para o render na máquina da agência." : "Nada muda até confirmar. O Desfazer volta o pedido inteiro."}
-            />
+            <div key={a.id} className="min-w-0 space-y-1">
+              <CartaoDeAcao
+                acao={a}
+                titulo={ehExportar(a) ? "Renderizar" : ehGeracao(a) ? "Gerar (pago)" : a.executada_direto ? "O que mudei" : "O que vou mudar"}
+                onPedido={aoPedidoDe(m.chave, a)}
+                recemFeita={m.recemFeita}
+                renderConfirmar={
+                  ehExportar(a)
+                    ? (confirmar, ocupado) => (
+                        <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado} data-confirmar-render="">
+                          {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1.5 h-3.5 w-3.5" />}
+                          Renderizar
+                        </button>
+                      )
+                    : ehGeracao(a)
+                      ? (confirmar, ocupado) => (
+                          <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado || a.custo_estimado_usd === null || a.custo_estimado_usd === undefined} data-confirmar-geracao="">
+                            {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
+                            {typeof a.custo_estimado_usd === "number" ? `Gerar por ${usd(a.custo_estimado_usd)}` : "Sem custo conhecido"}
+                          </button>
+                        )
+                      : undefined
+                }
+                observacao={ehExportar(a) ? "Sem custo. Vai para a fila da máquina da agência." : ehGeracao(a) ? "Custo na carteira do cliente. Só gera com o seu clique." : "Nada muda até confirmar. O Desfazer volta o pedido inteiro."}
+              />
+              {ehExportar(a) && (
+                <button
+                  type="button"
+                  className={juntar(botao.discreto, "h-8 text-[12px]")}
+                  onClick={() => {
+                    const p = projetoRef.current;
+                    if (!p) return toast.info("Abra o vídeo no editor para baixar.");
+                    baixarExportacao(p, urls, new Date().toISOString()).catch((e) => toast.error("O ZIP não saiu", { description: textoDoErro(e) }));
+                  }}
+                  data-baixar-zip=""
+                  title="Projeto, edl.json e o passo a passo para renderizar à mão na máquina da agência."
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Baixar ZIP
+                </button>
+              )}
+              {ehGeracao(a) && a.itens[0] && a.itens[0].operacao === "gerar_broll" && (
+                <AcompanharBroll
+                  acao={a}
+                  onPor={(arq, s) => {
+                    const p = projetoRef.current;
+                    if (!p || !onAplicarProjeto) return;
+                    try {
+                      onAplicarProjeto(aplicarOperacoes(p, opsDoArquivoNoTrecho(p, arq, { tipo: "broll", inicio_s: Number(s.argumentos.de_s) || 0, duracao_s: Math.max(0.5, (Number(s.argumentos.ate_s) || 0) - (Number(s.argumentos.de_s) || 0)) })), "B-roll no trecho");
+                      toast.success("B-roll no trecho", { description: "Ctrl+Z tira." });
+                    } catch (e) {
+                      toast.error("Não coube no trecho", { description: textoDoErro(e) });
+                    }
+                  }}
+                />
+              )}
+            </div>
           ))}
         </div>
       ))}

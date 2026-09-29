@@ -15,7 +15,7 @@ export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_buc
     const lista: { chave: string; bucket: string; caminho: string }[] = [];
     Object.keys(projeto.fontes).forEach((k) => {
       const f = projeto.fontes[k];
-      if (f.storage_path) lista.push({ chave: k, bucket: f.storage_bucket || "mesa", caminho: f.storage_path });
+      if (f.storage_path && f.storage_bucket !== BUCKET_PUBLICO) lista.push({ chave: k, bucket: f.storage_bucket || "mesa", caminho: f.storage_path });
     });
     extras.forEach((x) => x.storage_path && lista.push({ chave: `@${x.storage_path}`, bucket: x.storage_bucket || "mesa", caminho: x.storage_path }));
     return lista.sort((a, b) => (a.chave < b.chave ? -1 : 1));
@@ -45,8 +45,20 @@ export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_buc
       return saida;
     },
   });
-  return q.data || {};
+  // Frente EDT: sons e letras da biblioteca moram no próprio painel (bucket "publico"), sem assinatura.
+  const publicas = useMemo(() => {
+    const saida: Record<string, string> = {};
+    Object.keys(projeto.fontes).forEach((k) => {
+      const f = projeto.fontes[k];
+      if (f.storage_bucket === BUCKET_PUBLICO && f.storage_path && /^editor\/[a-z0-9/_.-]+$/i.test(f.storage_path)) saida[k] = `/${f.storage_path}`;
+    });
+    return saida;
+  }, [projeto.fontes]);
+  return useMemo(() => ({ ...(q.data || {}), ...publicas }), [q.data, publicas]);
 }
+
+/** Fonte que mora no próprio painel (public/editor): sons da biblioteca. */
+export const BUCKET_PUBLICO = "publico";
 
 // ------------------------------------------------------------------ relógio do cursor
 

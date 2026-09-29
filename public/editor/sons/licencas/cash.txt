@@ -1,0 +1,76 @@
+EFEITO: cash  (arquivo assets/sfx/cash.wav)
+SOM: caixa registradora, gaveta batendo e o sino (o "ching") logo depois
+
+Este efeito foi montado a partir de DOIS arquivos CC0. Nenhum arquivo CC0 sozinho era uma caixa
+registradora de verdade (gaveta + sino brilhante), então a gaveta vem de uma gravacao e o sino de
+outra. As duas partes e a receita estao abaixo.
+
+-------------------------------------------------------------------------------
+PARTE 1 - a gaveta (o "ka")
+-------------------------------------------------------------------------------
+TITULO:        Metal drawer #1 (som numero 792)
+PAGINA:        https://bigsoundbank.com/metal-drawers-1-s0792.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/0792.wav
+                 (WAV 48 kHz, 16 bits, mono, 23,03 s)
+AUTOR:         Joseph SARDIN (BigSoundBank.com). A ficha tecnica da pagina do som traz
+               "Author : Joseph SARDIN".
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "CC0 license (public-domain equivalent). You can download and use it without paying,
+                without creating an account, and without asking for permission."
+               A pagina de licencas apontada pelos dados estruturados
+               (https://bigsoundbank.com/licenses.html) diz, em "You are allowed to":
+               "Use, including for commercial purposes."
+               "Share, copy, distribute and communicate the material by all means and in all formats."
+               "Adapt, remix, transform and create from material."
+               "Without any restrictions. Without asking permission."
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0)
+
+-------------------------------------------------------------------------------
+PARTE 2 - o sino (o "ching")
+-------------------------------------------------------------------------------
+TITULO:        Counter bell #4 (som numero 2532)
+PAGINA:        https://bigsoundbank.com/counter-bell-4-s2532.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/2532.wav
+                 (WAV 48 kHz, 24 bits, mono, 10,04 s)
+AUTOR:         Joseph SARDIN (BigSoundBank.com). A ficha tecnica da pagina do som traz
+               "Author : Joseph SARDIN".
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "CC0 license (public-domain equivalent). You can download and use it without paying,
+                without creating an account, and without asking for permission."
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0)
+
+-------------------------------------------------------------------------------
+CREDITO: O QUE O SITE PEDE (nao e obrigacao da licenca)
+-------------------------------------------------------------------------------
+A pagina de licencas da BigSoundBank (https://bigsoundbank.com/licenses.html, lida em 16/09/2026)
+chama a licenca de "Royalty-Free Sound License (CC0-like)" e "CC0 1.0 Universal", e diz que voce
+esta autorizado a "Share, copy, distribute and communicate the material by all means and in all
+formats", a "Use, including for commercial purposes", "Without any restrictions" e "Without asking
+permission". Na mesma pagina o autor PEDE um credito: "Add in your credits: 'Additional sounds:
+Joseph SARDIN - BigSoundBank.com'".
+
+Isso e um pedido, nao uma condicao da licenca: CC0 nao exige credito, entao ninguem precisa por
+nada em lugar nenhum para poder usar ou vender. Se voce quiser atender o pedido, o
+THIRD_PARTY_NOTICES.md (secao 4) ja tem uma linha pronta com os autores de todos os sons.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Gaveta: recorte de 0,55 s comecando em 8,00 s de 0792.wav. Tirado o silencio do comeco
+   (4 ms antes do ataque), tirada a corrente continua (DC), pico normalizado e depois ganho 0,9.
+2. Sino: recorte de 1,50 s comecando em 0,13 s de 2532.wav. Mesmo tratamento, ganho 1,0.
+3. Somados: o sino entra 50 ms depois da gaveta (e o intervalo entre a gaveta e o "ching").
+4. Limpeza leve do chiado de sala da gaveta: ffmpeg afftdn=nr=10:nf=-52:tn=1
+5. Cortado em 1,400 s, subida de 2 ms no comeco e descida de 120 ms no fim.
+6. Volume acertado para a janela de 200 ms mais forte ficar em -12,03 LUFS no arquivo, que da
+   -9,1 LUFS com o volume 1.0 do editor (o nivel aprovado de ouvido num anuncio real).
+7. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 1,400 s, ponto forte em 0,070 s, pico -1,16 dBFS,
+janela de 200 ms -12,03 LUFS, janela de 3 s -23,58 LUFS.

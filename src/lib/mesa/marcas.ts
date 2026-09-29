@@ -207,6 +207,16 @@ const FUNCOES_COM_MARCA = [
   "perfis-instagram",
   "mesa-roteiros",
   "mesa-videos",
+  // Frente CNS (30/09): o conselho lê o retrato da marca aberta (a CME não debate com o contexto da Acerbi).
+  "conselho",
+  // Frente DOC (29/09): o documento da entrega mostra só o que é da marca aberta.
+  "documentos",
+  // Frente IDV (30/09): a Mesa Identidade (projetos, naming e brandbook por marca).
+  "mesa-identidade",
+  // Frente PRO (30/09): a proposta nasce na marca aberta (logo e contexto da marca).
+  "mesa-proposta",
+  // Frente SIT (30/09): o site nasce na marca aberta (kit, contexto, fotos e logo da marca).
+  "mesa-site",
 ];
 
 /**

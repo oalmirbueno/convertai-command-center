@@ -192,6 +192,33 @@ export interface ReferenciaDeEdicao {
 export const MAX_REFERENCIAS = 12;
 const MAX_CHARS_DA_RECEITA = 40000;
 
+/**
+ * Onda medida de uma fonte (frente EDT, F2): o worker lê o áudio em janelas de
+ * 10 ms e guarda só o que o corte precisa (limiar pelo chão de ruído e as
+ * pausas, tempo DA FONTE). Loudness da voz (LUFS) para a mixagem da trilha.
+ */
+export interface OndaDaFonte {
+  janela_s: number;
+  limiar_db: number;
+  chao_db: number;
+  duracao_s: number | null;
+  pausas: { de_s: number; ate_s: number }[];
+  lufs: number | null;
+  em: string | null;
+}
+
+export const MAX_PAUSAS_POR_FONTE = 4000;
+
+/** Mixagem do render (frente EDT, F3): trilha abaixo da voz, subida nas pausas e loudness final. */
+export interface MixagemDoProjeto {
+  trilha_abaixo_da_voz_db: number;
+  subida_nas_pausas_db: number;
+  lufs_alvo: number;
+  duck: boolean;
+}
+
+export const mixagemPadrao = (): MixagemDoProjeto => ({ trilha_abaixo_da_voz_db: 22, subida_nas_pausas_db: 6, lufs_alvo: -14, duck: true });
+
 export interface SkillAplicada {
   skill: string;
   em: string;
@@ -259,6 +286,9 @@ export interface ProjetoDeEdicao {
   skills_aplicadas: SkillAplicada[];
   /** Vídeos de referência de edição com a receita de cada um. */
   referencias: ReferenciaDeEdicao[];
+  /** Frente EDT (opcionais, com padrão): onda medida por fonte e a mixagem do render. */
+  ondas: Record<string, OndaDaFonte>;
+  mixagem: MixagemDoProjeto;
 }
 
 // ------------------------------------------------------------------ utilidades
@@ -410,6 +440,8 @@ export function projetoDosTakes(e: {
     continuidade: continuidadeVazia(),
     skills_aplicadas: [],
     referencias: [],
+    ondas: {},
+    mixagem: mixagemPadrao(),
   };
 }
 
@@ -679,6 +711,52 @@ export function normalizarProjeto(v: unknown): ProjetoDeEdicao | null {
     continuidade: continuidade(o.continuidade, fontes),
     skills_aplicadas: skillsAplicadas(o.skills_aplicadas),
     referencias: referencias(o.referencias),
+    ondas: ondas(o.ondas, fontes),
+    mixagem: mixagem(o.mixagem),
+  };
+}
+
+function ondas(v: unknown, fontes: Record<string, FonteDoProjeto>): Record<string, OndaDaFonte> {
+  const saida: Record<string, OndaDaFonte> = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return saida;
+  const o = v as Record<string, unknown>;
+  Object.keys(o).forEach((k) => {
+    const chave = chaveDaFonte(k);
+    const x = o[k] && typeof o[k] === "object" ? (o[k] as Record<string, unknown>) : null;
+    if (!fontes[chave] || !x || !Array.isArray(x.pausas)) return;
+    const pausas: { de_s: number; ate_s: number }[] = [];
+    (x.pausas as unknown[]).slice(0, MAX_PAUSAS_POR_FONTE).forEach((p) => {
+      const y = p && typeof p === "object" ? (p as Record<string, unknown>) : null;
+      if (!y) return;
+      const de = seg(num(y.de_s, 0, MAX_DURACAO_S, -1));
+      const ate = seg(num(y.ate_s, 0, MAX_DURACAO_S, -1));
+      if (de >= 0 && ate > de) pausas.push({ de_s: de, ate_s: ate });
+    });
+    pausas.sort((a, b) => a.de_s - b.de_s);
+    const lufs = Number(x.lufs);
+    const d = Number(x.duracao_s);
+    saida[chave] = {
+      janela_s: num(x.janela_s, 0.001, 1, 0.01),
+      limiar_db: num(x.limiar_db, -120, 0, -40),
+      chao_db: num(x.chao_db, -120, 0, -60),
+      duracao_s: isFinite(d) && d > 0 ? seg(d) : null,
+      pausas,
+      lufs: x.lufs !== null && x.lufs !== undefined && isFinite(lufs) ? Math.max(-70, Math.min(0, lufs)) : null,
+      em: textoCurto(x.em, 40),
+    };
+  });
+  return saida;
+}
+
+function mixagem(v: unknown): MixagemDoProjeto {
+  const p = mixagemPadrao();
+  if (!v || typeof v !== "object" || Array.isArray(v)) return p;
+  const o = v as Record<string, unknown>;
+  return {
+    trilha_abaixo_da_voz_db: num(o.trilha_abaixo_da_voz_db, 12, 36, p.trilha_abaixo_da_voz_db),
+    subida_nas_pausas_db: num(o.subida_nas_pausas_db, 0, 12, p.subida_nas_pausas_db),
+    lufs_alvo: num(o.lufs_alvo, -24, -9, p.lufs_alvo),
+    duck: o.duck !== false,
   };
 }
 

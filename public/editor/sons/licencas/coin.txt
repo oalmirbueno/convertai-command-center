@@ -1,0 +1,50 @@
+EFEITO: coin  (arquivo assets/sfx/coin.wav)
+SOM: uma moeda caindo dentro de um copo e tilintando
+
+TITULO:        Coin in cup #1 (som numero 339)
+PAGINA:        https://bigsoundbank.com/coin-in-cup-1-s0339.html
+ARQUIVO BAIXADO: https://bigsoundbank.com/UPLOAD/bwf-en/0339.wav
+                 (WAV 44,1 kHz, 16 bits, estereo, 0,81 s)
+AUTOR:         DavidGreck (campo "Author" da pagina do som), publicado por BigSoundBank.com
+               (Joseph SARDIN)
+LICENCA:       CC0 (dominio publico)
+CITACAO DA LICENCA, como aparece na pagina do som:
+               "License CC0 (public domain): Free and royalty-free"
+               "CC0 license (public-domain equivalent). You can download and use it without paying,
+                without creating an account, and without asking for permission."
+               A pagina de licencas do site (https://bigsoundbank.com/licenses.html) diz, em
+               "You are allowed to": "Use, including for commercial purposes." / "Share, copy,
+               distribute and communicate the material by all means and in all formats." /
+               "Adapt, remix, transform and create from material." / "Without any restrictions.
+               Without asking permission."
+LIDO EM:       16/09/2026
+CREDITO:       nao e obrigatorio (CC0). A mesma pagina de licencas PEDE (nao exige) um credito:
+               "Add in your credits: 'Additional sounds: Joseph SARDIN - BigSoundBank.com'". CC0 nao
+               exige credito, entao isso e so um pedido do autor. O THIRD_PARTY_NOTICES.md (secao 4)
+               tem uma linha pronta para quem quiser atender.
+
+-------------------------------------------------------------------------------
+COMO O ARQUIVO FOI FEITO (receita, para poder refazer)
+-------------------------------------------------------------------------------
+1. Arquivo inteiro, convertido para 48 kHz estereo.
+2. Tirada a corrente continua (DC).
+3. Moeda de verdade soa mais brilhante que o efeito antigo, entao uma prateleira de -6 dB acima de
+   5 kHz aproxima o centro do som: ffmpeg highshelf=f=5000:g=-6
+   (centro do espectro 7848 -> 7116 Hz; o efeito antigo tinha 4087 Hz).
+4. Tirado o silencio do comeco (4 ms antes do ataque), cortado em 0,700 s, subida de 2 ms e
+   descida de 60 ms.
+5. Volume acertado para a janela de 200 ms mais forte ficar em -14,92 LUFS no arquivo, que da
+   -12,0 LUFS com o volume 1.0 do editor.
+6. Gravado em WAV 48 kHz, 16 bits, estereo.
+
+MEDIDAS DO ARQUIVO FINAL: 0,700 s, ponto forte em 0,020 s, pico -4,53 dBFS,
+janela de 200 ms -14,92 LUFS, janela de 3 s -25,13 LUFS.
+
+OBSERVACAO HONESTA: mesmo com a prateleira de -6 dB, esta moeda continua bem mais brilhante e
+tilinta por bem mais tempo que a do conjunto antigo. Medindo os dois: 73% da energia dela fica
+acima de 8 kHz, contra 2,6% da antiga, e ela leva 0,55 s para cair 20 dB abaixo do pico, contra
+0,08 s da antiga (o resto do desenho e igual: mesmo comeco, mesma duracao, mesmo volume, ponto
+forte em 0,020 s contra 0,026 s). Na pratica e um tilintar mais fino e mais longo. Se isso
+incomodar de ouvido, refaca por esta mesma receita com uma prateleira mais forte (por exemplo
+highshelf=f=4000:g=-12) ou com um corte mais curto, e confira de novo com
+helpers/make_sfx.py --measure.

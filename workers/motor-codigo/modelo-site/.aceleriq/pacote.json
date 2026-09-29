@@ -1,0 +1,14 @@
+{
+  "cliente": "Cliente",
+  "marca": { "nome": "Cliente" },
+  "paleta": [],
+  "fontes": [],
+  "dna": null,
+  "direcao": { "peca": "site de uma página" },
+  "copy": null,
+  "imagens": [],
+  "fotos_reais": [],
+  "logo": null,
+  "secoes": ["hero"],
+  "regras_da_equipe": []
+}

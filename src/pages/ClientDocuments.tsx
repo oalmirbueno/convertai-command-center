@@ -6,7 +6,9 @@ import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, etiqueta, foco, juntar, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Secao, SeletorCompacto, botao, etiqueta, foco, juntar, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+// Frente DOC (29/09): o registro de cada entrega aparece em destaque para o cliente.
+import { ehRegistroDeEntrega, tituloDoRegistro } from "@/lib/documentos/registrarEntrega";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -134,6 +136,7 @@ export default function ClientDocuments() {
   const filteredFiles = visibleFiles.filter((f: any) =>
     matchesFolderFilter(f, activeFolder, activeKind),
   );
+  const registrosDeEntrega = visibleFiles.filter(ehRegistroDeEntrega).slice(0, 6);
 
   const selectFolder = (folder: FolderId | "todos") => {
     setActiveFolder(folder);
@@ -260,6 +263,36 @@ export default function ClientDocuments() {
             <AjudaRecolhida rotulo={`O que tem em ${activeSummary.folder.label}`}>{activeSummary.folder.hint}</AjudaRecolhida>
           )}
         </div>
+      )}
+
+      {/* Registros de entrega (documento padrão da Aceleriq): o que foi feito, com as provas. */}
+      {registrosDeEntrega.length > 0 && (
+        <Secao
+          titulo="Registros de entrega"
+          descricao={`${registrosDeEntrega.length} ${registrosDeEntrega.length === 1 ? "documento" : "documentos"}`}
+          ajuda="O documento de cada entrega da equipe: o que foi feito, com as imagens reais e os números com a fonte. Toque para abrir."
+        >
+          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Registros de entrega">
+            {registrosDeEntrega.map((f: any) => (
+              <li
+                key={f.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir ${f.file_name}`}
+                className={juntar(lista.linha, "cursor-pointer", foco)}
+                onClick={() => setPreviewFile(f)}
+                onKeyDown={(e) => abrirComTeclado(e, f)}
+              >
+                <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <div className="ml-3 min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-foreground">{tituloDoRegistro(f)}</p>
+                  <p className={juntar(texto.auxiliar, "truncate")}>{formatDate(f.created_at)}</p>
+                </div>
+                {f.approval_status === "pending" && <span className={juntar(etiqueta, "ml-2", approvalBadge.pending.cls)}>{approvalBadge.pending.label}</span>}
+              </li>
+            ))}
+          </ul>
+        </Secao>
       )}
 
       {/* File list */}

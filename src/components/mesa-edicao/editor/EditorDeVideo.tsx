@@ -29,6 +29,7 @@ import PainelDeGeracao, { type PedidoDeGeracao } from "./PainelDeGeracao";
 import PainelTimestamp from "./PainelTimestamp";
 import PainelDeReferencias from "./PainelDeReferencias";
 import AgenteEditor from "./AgenteEditor";
+import Renderizar from "./Renderizar";
 import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
 
 /**
@@ -182,6 +183,11 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       setH((x) => desfazer(x));
       return true;
     },
+    salvarAgora: async () => {
+      // Espera o React entregar a mudança ao salvador (efeito do projeto) e grava sem os 1,5 s de respiro.
+      await new Promise((r) => window.setTimeout(r, 60));
+      if (salvador.current) await salvador.current.agora();
+    },
   };
 
   // Agente na lateral da mesa: publica o projeto e o jeito de aplicar a cada mudança.
@@ -328,6 +334,9 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
           </button>
         )}
       </span>
+      <div className="ml-2 min-w-0 shrink-0">
+        <Renderizar clientId={clientId} versaoId={versaoId} projeto={projeto} salvo={salvamento.estado === "salvo"} cursor={relogio.get} onOps={aplicarOps} />
+      </div>
     </div>
   );
 

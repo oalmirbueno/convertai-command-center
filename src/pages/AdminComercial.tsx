@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -1374,6 +1374,16 @@ function EditorDeLead({
 
           {lead && (
             <>
+              {/* Frente PRO: a proposta deste lead na Mesa Proposta (com o cliente quando o lead já tem ficha). */}
+              <section className="flex min-w-0 items-center justify-between border-t border-border pt-4" aria-label="Proposta">
+                <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Proposta</h3>
+                <Link
+                  to={`/mesa-proposta?lead=${encodeURIComponent(lead.id)}${lead.won_client_id ? `&client=${encodeURIComponent(lead.won_client_id)}` : ""}&etapa=contexto`}
+                  className={botao.secundario}
+                >
+                  Gerar proposta
+                </Link>
+              </section>
               <section className="border-t border-border pt-4" aria-label="Mover de etapa">
                 <h3 className={juntar(texto.tituloSecao, "mb-2")}>Mover para</h3>
                 <div className="-m-1 flex flex-wrap [&>*]:m-1">

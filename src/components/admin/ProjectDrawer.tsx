@@ -12,6 +12,9 @@ import { Secao, SeletorCompacto, botao, juntar, texto } from "@/components/siste
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { ProjectPipelineChecklist } from "./ProjectPipeline";
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
+// Frente DOC (29/09): projeto concluído registra a entrega e oferece o documento (gerar pede Confirmar).
+import BotaoDocumentoDaEntrega from "@/components/documentos/BotaoDocumentoDaEntrega";
+import { registrarEntregaSemTravar } from "@/lib/documentos/registrarEntrega";
 
 const STATUS_OPTIONS = [
   { value: "planning", label: "Planejamento" },
@@ -55,8 +58,20 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   const progress = localProgress ?? project.progress;
 
   const handleStatusChange = async (newStatus: string) => {
+    const anterior = currentStatus;
     setCurrentStatus(newStatus);
-    await supabase.from("projects").update({ status: newStatus }).eq("id", project.id);
+    const { error: erroDoStatus } = await supabase.from("projects").update({ status: newStatus }).eq("id", project.id);
+    if (erroDoStatus) {
+      setCurrentStatus(anterior);
+      toast.error("Status não atualizado", { description: erroDoStatus.message });
+      return;
+    }
+    // Gancho do documento da entrega: projeto concluído fica registrado (sem custo, nada vai ao cliente).
+    if (newStatus === "done" && anterior !== "done" && project.client_id) {
+      void registrarEntregaSemTravar({ clientId: project.client_id, tipo: "projeto", referencia: project.id, titulo: project.name }).then((r) => {
+        if (r.erro) toast.error("O documento da entrega não ficou registrado", { description: r.erro });
+      });
+    }
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser) {
       const { data: upd } = await supabase.from("updates").insert({
@@ -177,6 +192,12 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
                 onEscolher={(v) => void handleStatusChange(v)}
                 className="w-full"
               />
+              {currentStatus === "done" && project.client_id && (
+                <BotaoDocumentoDaEntrega
+                  className="mt-2 w-full"
+                  pedido={{ clientId: project.client_id, tipo: "projeto", referencia: project.id, titulo: project.name }}
+                />
+              )}
             </div>
             <div className="min-w-0">
               <div className="mb-1.5 flex items-center justify-between">

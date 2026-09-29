@@ -26,7 +26,7 @@ export type LinhaDaMemoria = {
 };
 
 /** Fontes das regras que o dono ensinou pedindo a um agente (esta frente, as mesas de mídia e a Central). */
-const FONTES_DE_PEDIDO = ["mesa_foto", "mesa_videos", "mesa_edicao", "mesa_publicidade", "mesa_roteiros", "estilo", "estudio_aprendizado"];
+const FONTES_DE_PEDIDO = ["mesa_foto", "mesa_videos", "mesa_edicao", "mesa_publicidade", "mesa_roteiros", "estilo", "estudio_aprendizado", "mesa_identidade", "mesa_naming", "mesa_site"];
 const ehFonteDePedido = (f: unknown) => typeof f === "string" && (f.indexOf("agente_") === 0 || f.indexOf("aprendeu:") === 0 || FONTES_DE_PEDIDO.indexOf(f) >= 0);
 
 /** 29/09: "pedido" = regra que o dono ensinou pedindo a um agente (fonte agente_*), com Esquecer na conversa. */
@@ -91,8 +91,11 @@ export const ROTULO_DA_ORIGEM: Record<string, string> = {
   mesa_edicao: "Mesa Edição",
   mesa_publicidade: "Mesa Publicidade",
   mesa_roteiros: "Mesa Roteiros",
+  mesa_site: "Mesa Site",
   estilo: "agente de estilo",
   estudio_aprendizado: "Estúdio",
+  mesa_identidade: "Mesa Identidade",
+  mesa_naming: "criador de nomes",
   "aprendeu:central": "agente da Central",
   "aprendeu:geral": "assistente geral",
   "aprendeu:workspace": "agente do Workspace",

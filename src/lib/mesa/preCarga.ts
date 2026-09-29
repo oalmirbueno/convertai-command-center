@@ -35,7 +35,7 @@ interface MesaDoPainel {
   semCliente?: Record<string, Carregar>;
 }
 
-export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-edicao" | "/mesa-publicidade" | "/mesa-roteiros", MesaDoPainel> = {
+export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-edicao" | "/mesa-publicidade" | "/mesa-roteiros" | "/mesa-identidade" | "/mesa-proposta" | "/mesa-site", MesaDoPainel> = {
   "/mesa": {
     prefixo: "mesa",
     pagina: () => import("@/pages/MesaDoCliente"),
@@ -177,6 +177,69 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       agente: () => import("@/components/mesa-roteiros/AgenteRoteirista"),
     },
   },
+  // Mesa Identidade (frente IDV, 30/09): etapas em sequência; fora de PRIMEIRAS e da pré-carga ociosa.
+  "/mesa-identidade": {
+    prefixo: "mesa-identidade",
+    pagina: () => import("@/pages/MesaIdentidade"),
+    parametro: "etapa",
+    padrao: "inicio",
+    onde: "mesa-identidade:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      inicio: () => import("@/components/mesa-identidade/EtapaInicio"),
+      briefing: () => import("@/components/mesa-identidade/EtapaBriefing"),
+      pesquisa: () => import("@/components/mesa-identidade/EtapaPesquisa"),
+      naming: () => import("@/components/mesa-identidade/EtapaNaming"),
+      conceito: () => import("@/components/mesa-identidade/EtapaConceito"),
+      sistema: () => import("@/components/mesa-identidade/EtapaSistema"),
+      mockups: () => import("@/components/mesa-identidade/EtapaMockups"),
+      guideline: () => import("@/components/mesa-identidade/EtapaGuideline"),
+      entrega: () => import("@/components/mesa-identidade/EtapaEntrega"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-identidade/AgenteDiretorDeMarca"),
+    },
+  },
+  // Mesa Proposta (frente PRO, 30/09): contexto, rascunho, revisão e envio. Fora da pré-carga ociosa.
+  "/mesa-proposta": {
+    prefixo: "mesa-proposta",
+    pagina: () => import("@/pages/MesaProposta"),
+    parametro: "etapa",
+    padrao: "contexto",
+    onde: "mesa-proposta:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      contexto: () => import("@/components/mesa-proposta/EtapaContexto"),
+      rascunho: () => import("@/components/mesa-proposta/EtapaRascunho"),
+      revisao: () => import("@/components/mesa-proposta/EtapaRevisao"),
+      envio: () => import("@/components/mesa-proposta/EtapaEnvio"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-proposta/AgenteDaProposta"),
+    },
+  },
+  // Mesa Site (frente SIT, 30/09): as 8 etapas do site e o diretor de site. Fora da pré-carga ociosa.
+  "/mesa-site": {
+    prefixo: "mesa-site",
+    pagina: () => import("@/pages/MesaSite"),
+    parametro: "etapa",
+    padrao: "briefing",
+    onde: "mesa-site:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      briefing: () => import("@/components/mesa-site/EtapaBriefing"),
+      referencias: () => import("@/components/mesa-site/EtapaReferencias"),
+      direcao: () => import("@/components/mesa-site/EtapaDirecao"),
+      conteudo: () => import("@/components/mesa-site/EtapaConteudo"),
+      imagens: () => import("@/components/mesa-site/EtapaImagens"),
+      construcao: () => import("@/components/mesa-site/EtapaConstrucao"),
+      revisao: () => import("@/components/mesa-site/EtapaRevisao"),
+      publicacao: () => import("@/components/mesa-site/EtapaPublicacao"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-site/AgenteDoSite"),
+    },
+  },
 };
 
 type Caminho = keyof typeof MESAS_DO_PAINEL;
@@ -186,7 +249,7 @@ export const chaveDaEtapa = (caminho: Caminho, etapa: string) => `${MESAS_DO_PAI
 
 function mesaDoCaminho(caminho: string): Caminho | null {
   const limpo = (caminho || "").replace(/\/+$/, "") || "/";
-  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-edicao" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" ? limpo : null;
+  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-edicao" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" || limpo === "/mesa-identidade" || limpo === "/mesa-proposta" || limpo === "/mesa-site" ? limpo : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -271,6 +334,9 @@ export const PaginaMesaVideos = paginaDaMesa("/mesa-videos");
 export const PaginaMesaEdicao = paginaDaMesa("/mesa-edicao");
 export const PaginaMesaPublicidade = paginaDaMesa("/mesa-publicidade");
 export const PaginaMesaRoteiros = paginaDaMesa("/mesa-roteiros");
+export const PaginaMesaIdentidade = paginaDaMesa("/mesa-identidade");
+export const PaginaMesaProposta = paginaDaMesa("/mesa-proposta");
+export const PaginaMesaSite = paginaDaMesa("/mesa-site");
 
 /** Primeira etapa de cada mesa, baixada no tempo ocioso do painel. */
 const PRIMEIRAS: Array<[Caminho, string]> = [

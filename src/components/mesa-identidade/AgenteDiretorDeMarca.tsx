@@ -1,0 +1,246 @@
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Loader2, Palette, Send } from "lucide-react";
+import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { Ditado } from "@/components/mesa/Ditado";
+import { useMesa } from "@/components/mesa/MesaContexto";
+import { chamarFuncao, usd } from "@/lib/mesa/api";
+import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
+import { TAMANHOS_DA_IDENTIDADE } from "../../../supabase/functions/_shared/identidade-etapas";
+import { modeloDoPapelNaTela } from "./Comuns";
+
+/**
+ * O diretor de marca (agente da Mesa Identidade, papel identidade), fixo ao
+ * lado das etapas. Conduz o projeto na sequência e, quando a equipe pede,
+ * age no contrato comum: concluir etapa, escolher nome ou caminho e montar o
+ * brandbook vão na hora, com Desfazer; gerar nomes e caminhos (IA), enviar
+ * para aprovação e levar ao kit pedem Confirmar, com o custo antes. Aprende
+ * o que a equipe ensina (identidade e naming em separado).
+ */
+
+export const ATALHOS_DO_DIRETOR = [
+  { rotulo: "O que falta?", texto: "O que falta para fechar a etapa atual?" },
+  { rotulo: "Gerar nomes", texto: "Gere uma rodada de nomes com os critérios do briefing." },
+  { rotulo: "Três caminhos", texto: "Gere 3 caminhos criativos." },
+  { rotulo: "Montar o brandbook", texto: "Monte o brandbook de 24 páginas." },
+  { rotulo: "Levar ao kit", texto: "Leve ao kit da marca a paleta, a tipografia e a logo do brandbook." },
+];
+
+const CAPACIDADES = [
+  "dizer o que falta em cada etapa e fechar a etapa (na hora)",
+  "gerar nomes por técnica e caminhos criativos (com custo no cartão)",
+  "escolher nome e caminho (na hora, com Desfazer)",
+  "montar o brandbook no modelo pedido (na hora)",
+  "enviar o brandbook para aprovação e levar ao kit (com Confirmar)",
+  "aprender o que você ensinar (\"nunca\", \"sempre\", \"não gostei\")",
+];
+
+export function observacaoDoDiretor(a: { itens: Array<{ operacao: string }>; custo_estimado_usd?: number | null; sem_desfazer?: boolean }): string {
+  const custo = typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0 ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira.` : "Sem custo.";
+  if (a.itens.some((i) => i.operacao === "enviar_para_aprovacao")) return `${custo} O PDF vai para Arquivos com a revisão da agência pedida e não volta pelo Desfazer.`;
+  return `${custo} ${a.custo_estimado_usd ? "O Desfazer volta o que havia; o gasto não volta." : "Dá para desfazer."}`;
+}
+
+interface Mensagem {
+  id: string | null;
+  papel: "usuario" | "agente" | "sistema";
+  conteudo: string;
+  anexos: unknown[];
+  custo_usd: number | null;
+  nova?: boolean;
+  aviso?: string | null;
+  local?: string;
+}
+
+export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }: { projetoId: string | null; rascunho: string; onRascunho: (v: string) => void }) {
+  const { clientId, atualizarCusto, catalogo } = useMesa();
+  const modelo = modeloDoPapelNaTela(catalogo, "identidade");
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [lida, setLida] = useState(false);
+  const [conversaId, setConversaId] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [nova, setNova] = useState(false);
+  const listaRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    chamarFuncao<any>("mesa-identidade", { acao: "agente_historico", client_id: clientId })
+      .then((d) => {
+        if (!vivo) return;
+        setConversaId(d && typeof d.conversa_id === "string" ? d.conversa_id : null);
+        setMensagens(((d && d.mensagens) || []).map((m: any) => ({ id: m.id ? String(m.id) : null, papel: m.papel, conteudo: String(m.conteudo || ""), anexos: Array.isArray(m.anexos) ? m.anexos : [], custo_usd: null })));
+        setLida(true);
+      })
+      .catch((e) => {
+        if (!vivo) return;
+        setLida(true);
+        avisarErro(e, "A conversa anterior não foi lida");
+      });
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  useEffect(() => {
+    if (listaRef.current) listaRef.current.scrollTop = listaRef.current.scrollHeight;
+  }, [mensagens.length, enviando]);
+
+  const reler = () => {
+    void queryClient.invalidateQueries({ queryKey: ["mesa-identidade"] });
+    atualizarCusto();
+  };
+
+  const enviar = async () => {
+    const m = rascunho.trim();
+    if (!m || enviando) return;
+    const local = `local-${Date.now()}`;
+    setEnviando(true);
+    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]));
+    onRascunho("");
+    try {
+      const d = await chamarFuncao<any>("mesa-identidade", { acao: "agente_conversar", client_id: clientId, mensagem: m, projeto_id: projetoId || undefined, conversa_id: conversaId || undefined, nova_conversa: nova || undefined });
+      setNova(false);
+      setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
+      if (d && acoesDaMensagem(Array.isArray(d.anexos) ? d.anexos : []).some((a) => !!a.executada_em)) reler();
+      setMensagens((l) =>
+        l.concat([
+          {
+            id: d && d.mensagem_id ? String(d.mensagem_id) : null,
+            papel: "agente",
+            conteudo: String((d && d.resposta) || ""),
+            anexos: d && Array.isArray(d.anexos) ? d.anexos : [],
+            custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null,
+            nova: true,
+            aviso: d && typeof d.aviso_registro === "string" && d.aviso_registro ? d.aviso_registro : null,
+          },
+        ]),
+      );
+      atualizarCusto();
+    } catch (e) {
+      // A mensagem que falhou volta ao campo (e a bolha otimista sai).
+      setMensagens((l) => l.filter((x) => x.local !== local));
+      avisarErro(e, "O diretor de marca não respondeu");
+      onRascunho(m);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col" data-agente-identidade="">
+      <PainelDoAgente
+        titulo="Diretor de marca"
+        icone={<Palette className="h-4 w-4" />}
+        descricao={projetoId ? "Conversa sobre o projeto aberto" : "Abra ou crie um projeto no Início"}
+        acoes={
+          <>
+            {mensagens.length > 0 && (
+              <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => { setMensagens([]); setConversaId(null); setNova(true); }}>
+                Nova conversa
+              </button>
+            )}
+            <AjudaRecolhida rotulo="Como o diretor de marca funciona">
+              Peça o que precisa. Fechar etapa, escolher nome ou caminho e montar o brandbook ele faz na hora, com Desfazer. Gerar nomes e caminhos usa IA e vem num cartão com o custo; enviar para aprovação e levar ao kit também pedem Confirmar. A logo final é sempre o arquivo da equipe. O que você ensinar vira regra; dá para esquecer.
+            </AjudaRecolhida>
+          </>
+        }
+        rotuloDasMensagens="Conversa com o diretor de marca"
+        refDasMensagens={listaRef}
+        compositor={
+          <>
+            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_DIRETOR} onAtalho={(t) => onRascunho(t)} />
+            <textarea
+              value={rascunho}
+              onChange={(e) => onRascunho(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void enviar();
+                }
+              }}
+              rows={2}
+              maxLength={4000}
+              placeholder="Ex.: gere 3 caminhos mais sóbrios"
+              className={juntar(campoTexto, "min-h-[60px] resize-none")}
+              aria-label="Mensagem ao diretor de marca"
+            />
+            <div className="flex min-w-0 items-center justify-between">
+              <div className="mr-2 min-w-0 truncate">
+                <EstimativaInline partes={modelo ? [{ modeloId: modelo.id, tipo: "texto", tokensEntrada: TAMANHOS_DA_IDENTIDADE.conversa.entrada, tokensSaida: TAMANHOS_DA_IDENTIDADE.conversa.saida }] : null} />
+              </div>
+              <div className="ml-auto flex min-w-0 items-center">
+                <Ditado valor={rascunho} onChange={onRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
+                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao diretor de marca">
+                  {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </>
+        }
+      >
+        {!mensagens.length && !lida && (
+          <div className="space-y-2" aria-label="Lendo a conversa">
+            <div className="mr-6 h-10 animate-pulse rounded-lg bg-muted" />
+            <div className="ml-6 h-8 animate-pulse rounded-lg bg-muted" />
+          </div>
+        )}
+        {!mensagens.length && lida && <p className={juntar(conversa.apoio, "leading-relaxed")}>Peça o que precisa. Quando for uma ação, eu mostro a lista com o custo e você confirma.</p>}
+        {mensagens.map((m, i) => {
+          const acoes = acoesDaMensagem(m.anexos);
+          return (
+            <div key={m.id || m.local || `m-${i}`} className="min-w-0">
+              <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : m.papel === "sistema" ? "bg-muted text-muted-foreground" : conversa.doAgente)}>
+                <TextoDoAgente texto={m.conteudo} clientId={clientId} />
+                {m.custo_usd !== null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
+              </div>
+              {m.papel === "agente" && m.aviso && (
+                <p className="mr-6 mt-1 flex min-w-0 items-start text-[12px] text-warning" role="alert">
+                  <AlertTriangle className="mr-1.5 mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{m.aviso}</span>
+                </p>
+              )}
+              {m.papel === "agente" && (
+                <AprendizadoDoAgente
+                  anexos={m.anexos}
+                  onEsquecer={(id) => chamarFuncao("mesa-identidade", { acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.id || undefined })}
+                  onGuardar={(texto, tipo) => chamarFuncao("mesa-identidade", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.id || undefined })}
+                />
+              )}
+              {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
+              {m.id &&
+                acoes.map((a) => (
+                  <div key={a.id} className="mt-2">
+                    <CartaoDeAcao
+                      acao={a}
+                      recemFeita={!!m.nova}
+                      titulo="O diretor de marca vai fazer"
+                      observacao={observacaoDoDiretor(a)}
+                      onPedido={(p) => chamarAcaoDoAgente("mesa-identidade", String(m.id), a.id, p)}
+                      onFeito={(p) => {
+                        if (p !== "descartar") reler();
+                      }}
+                    />
+                  </div>
+                ))}
+            </div>
+          );
+        })}
+        {enviando && (
+          <p className={juntar(conversa.apoio, "flex items-center")}>
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Pensando na marca...
+          </p>
+        )}
+      </PainelDoAgente>
+    </div>
+  );
+}

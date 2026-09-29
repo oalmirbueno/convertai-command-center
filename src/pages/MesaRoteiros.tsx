@@ -21,6 +21,8 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, superficie } from "@/components/sistema/estilos";
 import { Clapperboard } from "lucide-react";
+// Frente CNS (30/09): o conselho de agentes abre da Mesa Roteiros; a recomendação vai para o campo do agente.
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 
 /**
  * Mesa Roteiros (/mesa-roteiros, só equipe: admin, gestor e design), Frente
@@ -247,6 +249,17 @@ export default function MesaRoteiros() {
       }
       acoes={
         clientId ? (
+          <>
+          <BotaoDoConselho
+            clientId={clientId}
+            origem="mesa-roteiros"
+            tema={roteiroUrl ? "Roteiro aberto na mesa" : `Roteiros${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
+            contexto={roteiroUrl ? "O roteiro aberto vai junto no retrato do cliente." : "Ideias e roteiros de vídeo curto do cliente."}
+            referencia={roteiroUrl ? { tipo: "roteiro", id: roteiroUrl } : { tipo: "roteiros" }}
+            onUsar={(t) => setRascunhoDoAgente(t)}
+            rotuloDoUsar="Levar para o agente de roteiros"
+          />
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -264,6 +277,7 @@ export default function MesaRoteiros() {
               setModelosAbertos(true);
             }}
           />
+          </>
         ) : null
       }
     >
