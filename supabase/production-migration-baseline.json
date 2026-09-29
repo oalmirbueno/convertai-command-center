@@ -1505,6 +1505,14 @@
       "remote_name": "reagendar_sem_travar",
       "remote_statements_sha256": "980aeec16b6e48bbb4b02baeba3af8f73a2afd9f310c7b1741e1d56634ab1dea",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260929010000",
+      "path": "supabase/migrations/20260929010000_aviso_abre_o_conteudo.sql",
+      "local_sha256": "6128cb72c446258e0a6d12040c0d0ece39307f18b84ce5de48699aa8baf33fd2",
+      "remote_name": "aviso_abre_o_conteudo",
+      "remote_statements_sha256": "7959e52ac5ec0dd69fa4018bf42103b8820552e7317ecc78666729423e3e3866",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
