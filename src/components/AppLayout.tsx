@@ -28,6 +28,7 @@ import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPai
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
 import { quandoOcioso } from "@/lib/lazyComPreCarga";
 import CronometroDoTopo from "@/components/cronometro/CronometroDoTopo";
+import VoltarParaOndeEstava from "@/components/navegacao/VoltarParaOndeEstava";
 
 // O assistente de voz traz o leitor de PDF e as animações (mais de 1 MB de
 // código): fora da abertura do painel, baixa logo depois, sem segurar a tela.
@@ -458,6 +459,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Right: Icons */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* Voltar para onde eu estava (29/09): o lugar anterior num toque, com a lista dos últimos. */}
+          {isAdminOrTeam && <VoltarParaOndeEstava />}
           {/* Cronômetro por cliente (frente CR): o cliente em foco e o tempo do mês nele; clicar abre Horas e custos. */}
           {isAdminOrTeam && <CronometroDoTopo podeAbrirCentral={podeGestao} />}
           {/* "Gerando em N clientes": só aparece com geração na fila do servidor (frente G). */}
