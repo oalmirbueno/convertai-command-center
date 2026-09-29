@@ -30,9 +30,9 @@ import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { campo, foco, juntar, lista as linhaDeLista } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { Cartao, Moldura, useMesaFoto, Vazio } from "./Comuns";
 import SeletorDoPerfil from "./SeletorDoPerfil";
 import SeletorDeFotos from "./SeletorDeFotos";
@@ -100,7 +100,7 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
         type="button"
         onClick={onAbrir}
         aria-pressed={aberto}
-        className={juntar("flex w-full min-w-0 items-center rounded-lg border px-2.5 py-2 text-left transition-colors", foco, aberto ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40")}
+        className={juntar(linhaDeLista.linha, "w-full px-2.5 py-2 text-left", foco, aberto && juntar(linhaDeLista.destaque, "ring-1 ring-primary/40"))}
         data-post-de-fotos={post.id}
       >
         <span className="mr-2.5 w-10 shrink-0">
@@ -109,12 +109,12 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
           </Moldura>
         </span>
         <span className="mr-2 min-w-0 flex-1">
-          <span className="block truncate text-[12.5px] font-medium">{post.item ? post.item.title : "Post de fotos"}</span>
-          <span className="block truncate text-[11.5px] text-muted-foreground">
+          <span className="block truncate text-[13px] font-medium">{post.item ? post.item.title : "Post de fotos"}</span>
+          <span className="block truncate text-[12px] text-muted-foreground">
             {dataCurta(post.item ? post.item.due_date : null)} · {post.cards.length ? `${post.cards.length} ${post.cards.length === 1 ? "foto" : "fotos"}` : "sem fotos"}
           </span>
         </span>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
       </button>
     </li>
   );
@@ -247,7 +247,7 @@ function MontarOPost({
               <li key={f.id} className="mb-2 mr-2 w-24 min-w-0" data-foto-do-post={f.id}>
                 <Moldura proporcao={PROPORCAO_DO_FORMATO_DE_FOTOS[formato]} className="border border-border">
                   <ImagemDaMesa caminho={f.storage_path} bucket={f.storage_bucket || "mesa"} alt={f.nome} className="h-full w-full" />
-                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] font-semibold">{i + 1}</span>
+                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold">{i + 1}</span>
                 </Moldura>
                 <div className="mt-1 flex items-center justify-between">
                   <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40" disabled={i === 0} onClick={() => mover(i, -1)} aria-label={`Mover ${f.nome} para antes`}>
@@ -260,7 +260,7 @@ function MontarOPost({
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                {precisaDaEquipe(f) && <p className="text-center text-[10px] text-primary">gerada, a aprovar</p>}
+                {precisaDaEquipe(f) && <p className="text-center text-[11px] text-primary">gerada, a aprovar</p>}
               </li>
             ))}
             {ids.length < MAX_FOTOS_NO_POST && (
@@ -281,7 +281,7 @@ function MontarOPost({
           <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Formato</p>
           <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
             {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
-              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-2 py-1 text-[11.5px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+              <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
                 {ROTULO_DO_FORMATO_DE_FOTOS[f]}
               </button>
             ))}
@@ -408,6 +408,8 @@ function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTrocarFotos:
   return (
     <Cartao
       titulo={<span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
+      recolher={`mesa-foto:agenda:post:${post.id}`}
+      resumo={estado.rotulo}
       acao={<span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
       <div className="min-w-0 space-y-4" data-post-aberto={post.id}>
@@ -441,7 +443,7 @@ function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTrocarFotos:
                     <button type="button" className="block w-full" onClick={() => f && abrirNoEstudio && abrirNoEstudio(f.id)} disabled={!f || !abrirNoEstudio || !trocaFotos} title={f ? "Abrir no Estúdio de fotos" : undefined}>
                       <Moldura proporcao={PROPORCAO_DO_FORMATO_DE_FOTOS[post.formato]} className="border border-border">
                         <ImagemDaMesa caminho={c.storage_path} alt={f ? f.nome : `Foto ${c.ordem}`} className="h-full w-full" />
-                        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] font-semibold">{c.ordem}</span>
+                        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-semibold">{c.ordem}</span>
                       </Moldura>
                     </button>
                   </li>
@@ -637,15 +639,29 @@ export default function EtapaAgenda() {
 
   return (
     <div className="min-w-0 space-y-5" data-etapa-agenda="">
-      <div className="flex min-w-0 flex-wrap items-center justify-between">
-        <div className="mb-1 mr-3 min-w-0">
-          <h2 className="text-[14px] font-semibold">Post na Agenda</h2>
-          <p className="text-[12px] text-muted-foreground">Fotos → legenda → data → cliente aprova → publica sozinho.</p>
-        </div>
-        <SeletorDoPerfil />
-      </div>
+      {/* 28/09 (dono: "explicação no ?", "nada de linha para um botão só"): título com o "?", o perfil
+          e o post novo na mesma linha; o caminho do post fica no "?". */}
+      <CabecalhoDeSecao
+        titulo="Post na Agenda"
+        ajuda="Fotos, legenda e data; o cliente aprova e o post publica sozinho."
+        acao={
+          <>
+            <SeletorDoPerfil />
+            {!montando && (
+              <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("acervo")}>
+                Marcar as fotos em Fotos
+              </Button>
+            )}
+            {!montando && (
+              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => setMontando({ fotos: [], postId: null, task: null })}>
+                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Post novo com fotos
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      {montando ? (
+      {montando && (
         <MontarOPost
           fotosIniciais={montando.fotos}
           post={montando.postId ? lista.find((p) => p.id === montando.postId) || null : null}
@@ -661,15 +677,6 @@ export default function EtapaAgenda() {
             limparEndereco();
           }}
         />
-      ) : (
-        <div className="flex min-w-0 flex-wrap items-center">
-          <Button type="button" size="sm" className="mb-1 mr-2 h-8 text-[12px]" onClick={() => setMontando({ fotos: [], postId: null, task: null })}>
-            <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Post novo com fotos
-          </Button>
-          <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px]" onClick={() => irPara("acervo")}>
-            Marcar as fotos em Fotos
-          </Button>
-        </div>
       )}
 
       {postAberto && !montando && (
@@ -686,14 +693,13 @@ export default function EtapaAgenda() {
         {posts.isSuccess && !lista.length && (
           <Vazio titulo="Nenhum post de fotos ainda">Marque fotos em Fotos (ou no Estúdio) e use Preparar na Agenda.</Vazio>
         )}
+        {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
         {pendentes.length > 0 && (
-          <RegiaoRolavel modo="lg" sobre="cartao" memoria={`mesa-foto:agenda:posts:${clientId}`} classeDeFora="lg:max-h-[60vh]">
-            <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
-              {pendentes.map((p) => (
-                <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
-              ))}
-            </ul>
-          </RegiaoRolavel>
+          <ul className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-2">
+            {pendentes.map((p) => (
+              <LinhaDoPost key={p.id} post={p} aberto={p.id === aberto} onAbrir={() => setAberto(p.id)} />
+            ))}
+          </ul>
         )}
         {publicados.length > 0 && (
           <details className="mt-3">

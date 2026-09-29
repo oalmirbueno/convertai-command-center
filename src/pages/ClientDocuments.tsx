@@ -6,7 +6,7 @@ import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, etiqueta, foco, juntar, lista, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -206,10 +206,25 @@ export default function ClientDocuments() {
     <div className="min-w-0 space-y-5">
       <CabecalhoDePagina
         titulo="Documentos"
-        descricao={visibleFiles.length ? `${visibleFiles.length} ${visibleFiles.length === 1 ? "item" : "itens"}` : undefined}
-        ajuda="Tudo o que a equipe liberou para você: materiais, entregas e documentos. Toque num item para ver, baixar ou, quando estiver pendente, aprovar ou pedir ajuste."
-        acoes={
-          (projects || []).length > 0 && (
+        descricao={
+          [
+            visibleFiles.length ? `${visibleFiles.length} ${visibleFiles.length === 1 ? "item" : "itens"}` : "",
+            isReadOnly ? "somente leitura" : "",
+          ].filter(Boolean).join(" · ") || undefined
+        }
+        ajuda={
+          <>
+            Tudo o que a equipe liberou para você: materiais, entregas e documentos. Toque num item para ver, baixar ou, quando estiver pendente, aprovar ou pedir ajuste.
+            {isReadOnly && " Somente leitura: aprovar e pedir ajuste ficam bloqueados enquanto você vê como cliente."}
+          </>
+        }
+      />
+
+      {/* Uma barra só: projeto, pasta (com quantos itens tem em cada uma) e tipo.
+          Antes eram duas linhas de filtro. */}
+      {((projects || []).length > 0 || visibleFiles.length > 0) && (
+        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+          {(projects || []).length > 0 && (
             <SeletorCompacto
               modo="lista"
               rotulo="Projeto"
@@ -219,27 +234,18 @@ export default function ClientDocuments() {
               opcoes={opcoesDeProjeto}
               className="max-w-[180px] sm:max-w-[240px]"
             />
-          )
-        }
-      />
-      {isReadOnly && (
-        <p className={juntar(texto.auxiliar, "leading-5 text-sky-600")} role="note">
-          Somente leitura: aprovar e pedir ajuste ficam bloqueados enquanto você vê como cliente.
-        </p>
-      )}
-
-      {/* Pastas: o que é cada coisa, com quantos itens tem em cada uma. */}
-      {visibleFiles.length > 0 && (
-        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-          <SeletorCompacto
-            rotulo="Pasta"
-            icone={<FolderOpen className="h-3.5 w-3.5" />}
-            valor={activeFolder}
-            onEscolher={(v) => selectFolder(v as FolderId | "todos")}
-            opcoes={opcoesDePasta}
-          />
+          )}
+          {visibleFiles.length > 0 && (
+            <SeletorCompacto
+              rotulo="Pasta"
+              icone={<FolderOpen className="h-3.5 w-3.5" />}
+              valor={activeFolder}
+              onEscolher={(v) => selectFolder(v as FolderId | "todos")}
+              opcoes={opcoesDePasta}
+            />
+          )}
           {/* Dentro da pasta: carrossel, post, story, vídeo... */}
-          {kindChips.length > 0 && (
+          {visibleFiles.length > 0 && kindChips.length > 0 && (
             <SeletorCompacto
               modo="lista"
               rotulo="Tipo"
@@ -250,7 +256,7 @@ export default function ClientDocuments() {
               )}
             />
           )}
-          {activeSummary && activeSummary.folder.hint && (
+          {visibleFiles.length > 0 && activeSummary && activeSummary.folder.hint && (
             <AjudaRecolhida rotulo={`O que tem em ${activeSummary.folder.label}`}>{activeSummary.folder.hint}</AjudaRecolhida>
           )}
         </div>
@@ -266,7 +272,7 @@ export default function ClientDocuments() {
           descricao="Quando a equipe liberar um material ou pedir sua aprovação, ele aparece aqui na hora."
         />
       ) : (
-        <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Documentos">
+        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Documentos">
           {filteredFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 
@@ -276,7 +282,7 @@ export default function ClientDocuments() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver ${f.file_name}`}
-                className={juntar("min-w-0 cursor-pointer px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4", foco)}
+                className={juntar("min-w-0 cursor-pointer rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
@@ -285,7 +291,7 @@ export default function ClientDocuments() {
                   <div className="ml-3 min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">
                       {f.file_name}
-                      {f.version > 1 && <span className="ml-1 text-xs text-muted-foreground">v{f.version}</span>}
+                      {f.version > 1 && <span className="ml-1 text-[11px] text-muted-foreground">v{f.version}</span>}
                     </p>
                     <p className={juntar(texto.auxiliar, "truncate")}>
                       {fileLocationLabel(f)} · {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
@@ -314,7 +320,7 @@ export default function ClientDocuments() {
                 {f.approval_status === "rejected" && f.feedback && (
                   <div className={juntar(superficie.poco, "ml-[68px] mt-2 px-3 py-2")}>
                     <p className={texto.auxiliar}>Seu pedido de ajuste</p>
-                    <p className="text-xs text-foreground">{f.feedback}</p>
+                    <p className="text-[12px] text-foreground">{f.feedback}</p>
                   </div>
                 )}
               </li>
@@ -327,7 +333,7 @@ export default function ClientDocuments() {
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
-            <DialogTitle className="truncate pr-6 text-base">{previewFile?.file_name}</DialogTitle>
+            <DialogTitle className="truncate pr-6 text-[15px]">{previewFile?.file_name}</DialogTitle>
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -349,31 +355,31 @@ export default function ClientDocuments() {
                 </Button>
               </div>
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
               </p>
               {previewFile.caption && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Legenda</p>
-                  <p className="text-sm text-foreground">{previewFile.caption}</p>
+                  <p className="text-[13px] text-foreground">{previewFile.caption}</p>
                 </div>
               )}
               {previewFile.carousel_text && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Texto do carrossel</p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p>
+                  <p className="whitespace-pre-wrap text-[13px] text-foreground">{previewFile.carousel_text}</p>
                 </div>
               )}
               {previewFile.description && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Descrição</p>
-                  <p className="text-sm text-foreground">{previewFile.description}</p>
+                  <p className="text-[13px] text-foreground">{previewFile.description}</p>
                 </div>
               )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="rounded-md bg-destructive/5 px-3 py-2">
                   <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
-                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                  <p className="text-[12px] text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
             </div>
@@ -399,7 +405,7 @@ export default function ClientDocuments() {
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar aprovação?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
+          <p className="text-[13px] text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
             <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>

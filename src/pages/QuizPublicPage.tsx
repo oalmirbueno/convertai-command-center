@@ -408,6 +408,7 @@ export default function QuizPublicPage() {
     return (
       <CascaPublica
         titulo={current.label}
+        tituloQuebra
         descricao={current.helper}
         aoLadoDaMarca={salvo}
         acimaDoTitulo={<Progresso categoria={CATEGORY_META[current.category].label} passo={stepIdx} total={totalSteps} />}

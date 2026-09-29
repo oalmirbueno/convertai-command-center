@@ -563,7 +563,7 @@ export default function AgenteEditor({
       }
     >
       {!projeto && <div className={juntar(texto.auxiliar, "px-1 py-2")} data-agente-sem-editor="">{semEditor || "Abra um vídeo no editor para o agente editar."}</div>}
-      {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>Peça uma edição ou use um atalho. O agente mexe na linha do tempo e mostra a lista antes de mudar.</p>}
+      {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>Peça uma edição ou use um atalho. Você confere a lista antes.</p>}
       {mensagens.map((m, k) => (
         <div key={k} className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
           {m.itens.map((i, j) => (

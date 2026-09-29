@@ -12,7 +12,7 @@ import { Cartao, Moldura, Vazio } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, juntar, texto as textoDoSistema } from "@/components/sistema/estilos";
+import { campo, juntar, superficie, texto as textoDoSistema } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import {
@@ -200,7 +200,7 @@ function ExemploDoPrompt({ item, onAmpliar }: { item: ItemDaBiblioteca; onAmplia
         <Moldura proporcao={4 / 3}>
           <ImagemDaBiblioteca item={item} />
         </Moldura>
-        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" aria-hidden="true">
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground" aria-hidden="true">
           <ZoomIn className="mr-0.5 h-3 w-3" /> ver grande
         </span>
         {item.exemplo_gerado && (
@@ -245,7 +245,7 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
   const [ingles, setIngles] = useState(false);
   const texto = ingles ? item.prompt_en : item.prompt_pt || item.prompt_en;
   return (
-    <li className="flex min-w-0 flex-col rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-start" data-prompt={item.id}>
+    <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-3 sm:flex-row sm:items-start")} data-prompt={item.id}>
       <ExemploDoPrompt item={item} onAmpliar={onAmpliar} />
       <div className="mt-2 min-w-0 flex-1 space-y-2 sm:ml-3 sm:mt-0">
         <div className="flex min-w-0 items-start">
@@ -272,7 +272,7 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
         )}
         <p className="rounded-md bg-muted/60 px-2.5 py-2 font-mono text-[12px] leading-relaxed [overflow-wrap:anywhere]">{texto || "Sem texto"}</p>
         {item.negativo && (
-          <p className="text-[11.5px] leading-snug [overflow-wrap:anywhere]">
+          <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">
             <span className="text-muted-foreground">Evitar: </span>
             {item.negativo}
           </p>
@@ -283,7 +283,7 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
           {item.prompt_en && item.prompt_pt && <BotaoCopiar texto={item.prompt_en} rotulo="Copiar em inglês" />}
           {item.negativo && <BotaoCopiar texto={item.negativo} rotulo="Copiar o evitar" />}
           {!item.client_id && (
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-7 px-2 text-[11.5px]" disabled={salvando} onClick={onSalvar}>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-7 px-2 text-[12px]" disabled={salvando} onClick={onSalvar}>
               {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <BookmarkPlus className="mr-1 h-3.5 w-3.5" />}
               Salvar como meu
             </Button>
@@ -296,12 +296,12 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
 
 function CartaoDaReferencia({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaBiblioteca; onSalvar: () => void; salvando: boolean; onAmpliar: () => void }) {
   return (
-    <li className="min-w-0 rounded-lg border border-border bg-card p-1" data-referencia={item.id}>
+    <li className={juntar(superficie.painel, "min-w-0 p-1")} data-referencia={item.id}>
       <button type="button" onClick={onAmpliar} className="relative block w-full cursor-zoom-in" aria-label={`Ver grande ${item.titulo}`}>
         <Moldura proporcao={4 / 5}>
           <ImagemDaBiblioteca item={item} />
         </Moldura>
-        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" aria-hidden="true">
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground" aria-hidden="true">
           <ZoomIn className="h-3 w-3" />
         </span>
       </button>
@@ -309,13 +309,13 @@ function CartaoDaReferencia({ item, onSalvar, salvando, onAmpliar }: { item: Ite
         <p className="truncate text-[11px] font-medium" title={item.titulo}>
           {item.titulo}
         </p>
-        <p className="truncate text-[10px] text-muted-foreground">
+        <p className="truncate text-[11px] text-muted-foreground">
           {rotuloDaCategoriaDaBiblioteca(item.categoria)} · {item.client_id ? "deste cliente" : "da agência"}
         </p>
-        {item.uso && <p className="truncate text-[10.5px] text-muted-foreground" title={item.uso}>Quando usar: {item.uso}</p>}
+        {item.uso && <p className="truncate text-[11px] text-muted-foreground" title={item.uso}>Quando usar: {item.uso}</p>}
         <LicencaEAutor item={item} />
         {!item.client_id && (
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-1.5 text-[11.5px]" disabled={salvando} onClick={onSalvar}>
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-1.5 text-[12px]" disabled={salvando} onClick={onSalvar}>
             {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <BookmarkPlus className="mr-1 h-3.5 w-3.5" />}
             Salvar como meu
           </Button>

@@ -34,7 +34,7 @@ import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { foco, juntar } from "@/components/sistema/estilos";
+import { foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 
 /**
@@ -179,7 +179,7 @@ const ETAPAS_EM_COLUNA: string[] = ["acervo", "estudio"];
 
 function EsqueletoDoDiretor() {
   return (
-    <div aria-busy="true" aria-label="Abrindo o diretor" className="flex h-full min-h-[320px] flex-col rounded-lg border border-border bg-card p-3">
+    <div aria-busy="true" aria-label="Abrindo o diretor" className={juntar(superficie.painel, "flex h-full min-h-[320px] flex-col p-3")}>
       <div className="h-8 w-2/3 animate-pulse rounded-md bg-muted" />
       <div className="mt-auto h-20 animate-pulse rounded-md bg-muted/70" />
     </div>
@@ -425,6 +425,8 @@ export default function MesaFoto() {
   const memoriaDaLateral = noCanvas ? "mesa-foto-diretor-canvas" : "mesa-foto-diretor";
   const emColuna = ETAPAS_EM_COLUNA.indexOf(etapa) >= 0;
   const rotuloDaEtapa = (ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa) || { rotulo: "Etapa" }).rotulo;
+  // Passo 2: as formas de criar vão na barra do kit e do ensaio (cabeçalho), sem linha própria na etapa.
+  const formaDeCriar = etapa === "ensaio" || etapa === "campanha" || etapa === "preparar" || etapa === "estudio";
   // Etapa nova sem posição guardada começa no topo: a RegiaoRolavel do sistema
   // faz isso sozinha ao trocar a chave de memória (mesa-foto:<etapa>:<cliente>).
 
@@ -459,12 +461,12 @@ export default function MesaFoto() {
                     title={p.dica}
                     data-proximo={recomendado ? "" : undefined}
                     className={juntar(
-                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md px-1 text-[12.5px] font-medium transition-colors",
+                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md px-1 text-[13px] font-medium transition-colors",
                       foco,
                       ativo ? "bg-card text-foreground shadow-sm" : recomendado ? "text-primary hover:bg-card/60" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    <span className={`mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
+                    <span className={`mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
                       {p.passo}
                     </span>
                     <span className="truncate">{p.rotulo}</span>
@@ -520,7 +522,7 @@ export default function MesaFoto() {
           <MesaProvider valor={valor}>
             <MesaFotoProvider valor={valorDaFoto}>
               <Suspense fallback={<div className="mt-2 h-5" />}>
-                <BarraDoEnsaio />
+                <BarraDoEnsaio inicio={formaDeCriar ? <NavDoCriar atual={etapa} /> : undefined} />
               </Suspense>
             </MesaFotoProvider>
           </MesaProvider>
@@ -553,7 +555,6 @@ export default function MesaFoto() {
               }
             >
               <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
-                {(etapa === "ensaio" || etapa === "campanha" || etapa === "preparar" || etapa === "estudio") && <NavDoCriar atual={etapa} />}
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
                   {etapa === "acervo" && <EtapaAcervo />}
                   {etapa === "kits" && <EtapaKits />}

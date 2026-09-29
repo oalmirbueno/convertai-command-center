@@ -19,6 +19,7 @@ import { Cronometro } from "./Cronometro";
 import { Ditado } from "./Ditado";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { conversa as estiloDaConversa, juntar, lista as estiloDeLista, superficie } from "@/components/sistema/estilos";
 import {
   ajustarProposta,
   atualizarAgenda,
@@ -73,6 +74,7 @@ import {
   type CriacaoDeConteudos,
   type EdicaoDeTextoNaAgenda,
 } from "./planoDoMes";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Agente do mês (pedido do dono em 23/09 e 24/09): a conversa com o
@@ -158,11 +160,8 @@ const imagensDaMensagem = (m: MensagemDoAgente) =>
 
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
-    <div
-      className={`min-w-0 rounded-2xl px-3.5 py-2.5 text-[14px] leading-[1.6] [overflow-wrap:anywhere] ${
-        papel === "usuario" ? "ml-10 rounded-br-md bg-primary text-primary-foreground" : "mr-6 rounded-bl-md bg-muted text-foreground"
-      }`}
-    >
+    // Balão do sistema (SISTEMA.md seção 9): o mesmo em todo agente.
+    <div className={juntar(estiloDaConversa.balao, papel === "usuario" ? estiloDaConversa.doUsuario : estiloDaConversa.doAgente)}>
       {children}
     </div>
   );
@@ -218,14 +217,14 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
   };
 
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-mudanca={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-mudanca={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <Wand2 className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Mudança sugerida na proposta{mudanca.periodo ? ` de ${periodoCurto(mudanca.periodo.inicio, mudanca.periodo.fim)}` : ""}
       </p>
-      {mudanca.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{mudanca.resumo}</p>}
+      {mudanca.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{mudanca.resumo}</p>}
       {d && (
-        <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-background px-2.5 py-1">
+        <ul className="mt-2 divide-y divide-border/50">
           {d.entram.map((i) => <LinhaDaDiferenca key={`e-${i.tema_id}`} sinal="entra" titulo={i.tema} detalhe={`${diaCurto(i.data)} · ${formato(i.formato)}`} />)}
           {d.saem.map((i) => <LinhaDaDiferenca key={`s-${i.tema_id}`} sinal="sai" titulo={i.tema} detalhe={diaCurto(i.data)} />)}
           {d.mudam.map((i) => (
@@ -429,7 +428,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   };
 
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-destructive/30 bg-card p-3.5" data-acao-agenda={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-destructive/30 p-3.5")} data-acao-agenda={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
         Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
@@ -452,7 +451,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                   onClick={() => setEscolha(marcada ? null : o.task_id)}
                   disabled={!!fazendo}
                   aria-pressed={marcada}
-                  className={`mb-1 min-w-0 rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] leading-snug [overflow-wrap:anywhere] ${marcada ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/60"}`}
+                  className={`mb-1 min-w-0 rounded-md border px-2.5 py-1.5 text-left text-[13px] leading-snug [overflow-wrap:anywhere] ${marcada ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/60"}`}
                 >
                   <span className="font-medium">{o.titulo}</span>
                   <span className="block text-[11.5px] text-muted-foreground">{o.detalhe}</span>
@@ -467,7 +466,8 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           )}
         </div>
       )}
-      <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
+      {/* Sem caixa e sem rolagem própria dentro do cartão: a conversa já rola (uma rolagem por região). */}
+      <ul className="mt-2 divide-y divide-border/50">
         {atual.apagar.map((i) => linha(i, "sai"))}
         {atual.refazer.map((i) => linha(i, "refaz"))}
         {atual.mudar_data.map((i) => linha(i, "muda"))}
@@ -593,13 +593,13 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
   };
 
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-criacao={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-criacao={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Criar conteúdos · {criacao.itens.length}
       </p>
-      {criacao.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{criacao.resumo}</p>}
-      <ul className="mt-2 divide-y divide-border rounded-lg border border-border bg-background px-2.5 py-1">
+      {criacao.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{criacao.resumo}</p>}
+      <ul className="mt-2 divide-y divide-border/50">
         {visiveis.map((i, k) => (
           <li key={`${i.data}-${k}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
             <Plus className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
@@ -706,7 +706,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
   };
 
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-geracao={estado}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-geracao={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Gerar os conteúdos · {atual.meses.length} {atual.meses.length === 1 ? "mês" : "meses"}
@@ -762,9 +762,10 @@ function CartaoDoPlano({ plano, destaque, onEsquecer }: { plano: PlanoCombinado;
   const [aberto, setAberto] = useState(destaque);
   useEffect(() => setAberto(destaque), [destaque]);
   return (
-    <li className={`min-w-0 rounded-xl border px-3 py-2.5 ${destaque ? "border-primary/40 bg-card" : "border-border bg-background"}`}>
+    // Linha da lista de planos (sem caixa por linha); o do mês aberto ganha o fundo leve de destaque.
+    <li className={juntar(estiloDeLista.linha, "block px-3", destaque && estiloDeLista.destaque)}>
       <button type="button" onClick={() => setAberto((v) => !v)} className="flex w-full min-w-0 items-center text-left" aria-expanded={aberto}>
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold capitalize">{nomeDoMes(plano.mes)}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold capitalize">{nomeDoMes(plano.mes)}</span>
         <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
       </button>
       {aberto && (
@@ -785,11 +786,14 @@ function PainelDosPlanos({ planos, mes, onEsquecer }: { planos: PlanoCombinado[]
   const visiveis = planos.filter((p) => p.mes >= aPartir);
   return (
     <div className="min-w-0 space-y-2.5">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">O que ficou combinado</p>
+      <p className="flex items-center text-[12px] font-medium text-muted-foreground">
+        O que ficou combinado
+        <AjudaRecolhida className="ml-1" rotulo="O que aparece aqui">
+          Converse sobre o mês: o que ficar decidido aparece aqui e o gerador de meses segue.
+        </AjudaRecolhida>
+      </p>
       {visiveis.length === 0 ? (
-        <p className="text-[12px] leading-relaxed text-muted-foreground">
-          Nada combinado ainda. Converse sobre o mês: o que ficar decidido aparece aqui e o gerador de meses segue.
-        </p>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">Nada combinado ainda.</p>
       ) : (
         <ul className="space-y-2">
           {visiveis.map((p) => <CartaoDoPlano key={p.id} plano={p} destaque={p.mes === alvo} onEsquecer={() => onEsquecer(p)} />)}
@@ -1073,7 +1077,7 @@ export default function AgenteDoMes({
             </button>
           </div>
           {planoAberto && (
-            <div className={`mt-2 max-h-48 overflow-y-auto rounded-lg border border-border bg-card p-2.5 ${painelDoPlano ? "lg:hidden" : ""}`}>
+            <div className={`mt-2 max-h-48 overflow-y-auto overscroll-contain rounded-md bg-muted/50 p-2.5 ${painelDoPlano ? "lg:hidden" : ""}`}>
               {planoDoMes ? (
                 <>
                   <p className="whitespace-pre-wrap text-[12px] leading-relaxed [overflow-wrap:anywhere]">{corpoDoPlano(planoDoMes.texto)}</p>
@@ -1215,7 +1219,7 @@ export default function AgenteDoMes({
                 {andamento.mensagem && (
                   <Bolha papel="usuario"><p className="whitespace-pre-wrap">{andamento.mensagem}</p></Bolha>
                 )}
-                <div className="mr-6 rounded-2xl bg-muted px-3.5 py-2.5">
+                <div className={juntar(estiloDaConversa.balao, estiloDaConversa.doAgente)}>
                   <Cronometro desde={andamento.desde} rotulo={planejando ? "Pensando no mês" : "Preparando"} />
                 </div>
               </div>

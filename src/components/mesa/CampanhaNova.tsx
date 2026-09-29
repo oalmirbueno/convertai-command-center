@@ -31,6 +31,7 @@ import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from ".
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**
@@ -141,11 +142,12 @@ export default function CampanhaNova({
 
   return (
     <ZonaDeAnexos anexos={anexos} className="mx-auto w-full min-w-0 max-w-2xl">
-      <section className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6">
+      {/* O formulário é o assunto da tela: cartão com função (superficie.painel). Nada de outro cartão dentro. */}
+      <section className={juntar(superficie.painel, "min-w-0 p-4 sm:p-6")}>
         <div className="flex min-w-0 items-start">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center">
-              <h2 className="text-[16px] font-semibold">Nova campanha</h2>
+              <h2 className={juntar(estiloDeTexto.tituloSecao, "truncate")}>Nova campanha</h2>
               <AjudaRecolhida className="ml-1.5" rotulo="O que o agente faz na campanha">
                 Descreva a campanha. O agente cria o tema, a identidade com o selo e os conteúdos do período.
               </AjudaRecolhida>
@@ -177,7 +179,7 @@ export default function CampanhaNova({
         </div>
 
         {/* O campo grande, como uma conversa: texto, microfone e imagens. */}
-        <div className="mt-3 rounded-xl border border-border bg-background p-2.5 focus-within:border-primary/60">
+        <div className="mt-3 rounded-md bg-muted/50 p-2.5 ring-primary/60 focus-within:ring-1">
           <label htmlFor="pedido-da-campanha" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
             O que é a campanha?
           </label>
@@ -236,18 +238,20 @@ export default function CampanhaNova({
             type="button"
             onClick={() => setMaisOpcoes((v) => !v)}
             aria-expanded={maisOpcoes}
-            className="inline-flex items-center text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center text-[12px] font-medium text-muted-foreground hover:text-foreground"
           >
             <ChevronDown className={`mr-1 h-4 w-4 transition-transform ${maisOpcoes ? "" : "-rotate-90"}`} />
             Mais opções
-            {referencias.length > 0 && <span className="ml-1.5 font-normal">({referencias.length} referência(s))</span>}
-            <span className="ml-1.5 font-normal">(briefing e referências)</span>
+            {referencias.length > 0 ? <span className="ml-1.5 font-normal">({referencias.length} referência(s))</span> : <span className="ml-1.5 font-normal">(briefing e referências)</span>}
           </button>
           {maisOpcoes && (
             <div className="mt-3 space-y-2">
-              <div className="mb-3 rounded-lg border border-border bg-background p-3">
-                <p className="mb-2 text-[12px] font-medium text-muted-foreground">
-                  Briefing <span className="font-normal">(o que você preencher vale; o agente completa o resto)</span>
+              <div className="mb-3 rounded-md bg-muted/50 p-3">
+                <p className="mb-2 flex items-center text-[12px] font-medium text-muted-foreground">
+                  Briefing
+                  <AjudaRecolhida className="ml-1" rotulo="Como o briefing vale">
+                    O que você preencher vale; o agente completa o resto.
+                  </AjudaRecolhida>
                 </p>
                 <FormularioDoBriefing valor={briefing} onChange={setBriefing} prefixo="briefing-nova" desabilitado={desde !== null} />
               </div>

@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, dataEHora } from "@/lib/mesa/api";
-import { brl, decimal, humanizar, inteiro, partesDaAnaliseDaConta, porcento, type CampanhaAoVivo, type MetricasDaConta } from "./adsApi";
-import { Foto } from "./Comuns";
+import { EstadoVazio } from "@/components/sistema/Estados";
+import { juntar, superficie } from "@/components/sistema/estilos";
+import { brl, decimal, inteiro, partesDaAnaliseDaConta, porcento, type MetricasDaConta } from "./adsApi";
+import { CabecalhoDaParte, Foto, useParteRecolhida } from "./Comuns";
 import type { PeriodoDaConsulta } from "./periodoDaConta";
 import {
   chavesConta,
@@ -27,6 +29,12 @@ import {
  * tendência diária, a tabela de campanhas, o desempenho do cliente (orgânico
  * e anúncios juntos) e a evolução (vencedores, manter, descartar, próximos
  * testes e aprendizados). Números sempre do código; a IA só explica.
+ *
+ * 28/09 (padronização, lote L4): Desempenho e Evolução são seções abertas
+ * (sem caixa) que recolhem pela setinha do título, com a explicação no "?";
+ * KPI e saldo são itens de grade com o cartão do sistema; os poços são
+ * sólidos (superficie.poco). A tabela de campanhas, que já não aparecia em
+ * tela nenhuma (as campanhas moram no Gerenciador ao vivo), saiu.
  */
 
 // ------------------------------------------------------------------ resumo
@@ -45,7 +53,7 @@ function Seta({ valor, bomQuandoSobe }: { valor: number | null; bomQuandoSobe: b
 
 function Kpi({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-2" title={dica}>
+    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2")} title={dica}>
       <dt className="truncate text-[10.5px] uppercase tracking-wider text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 flex min-w-0 items-baseline">
         <span className="truncate text-[15px] font-semibold tabular-nums">{valor}</span>
@@ -87,8 +95,8 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
   return (
     <section aria-label="Saldo das contas" className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
       {contas.map((c) => (
-        <div key={c.external_account_id} className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5">
-          <p className="flex min-w-0 items-center text-[12.5px] font-semibold">
+        <div key={c.external_account_id} className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")}>
+          <p className="flex min-w-0 items-center text-[13px] font-semibold">
             <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
             {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-normal text-muted-foreground">{c.status}</span>}
@@ -140,7 +148,7 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
   const maiorRes = Math.max.apply(null, serie.map((p) => p.resultados).concat([1]));
   const pontos = serie.map((p, i) => `${(i + 0.5) * passo},${A - (p.resultados / maiorRes) * (A - 8) - 4}`).join(" ");
   return (
-    <section aria-label="Tendência diária" className="min-w-0 rounded-lg border border-border bg-card p-3">
+    <section aria-label="Tendência diária" className="min-w-0 pt-1">
       <div className="flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
         <TrendingUp className="mr-1.5 h-3.5 w-3.5 text-primary" />
         <span className="mr-3 font-medium uppercase tracking-wider">Por dia</span>
@@ -166,84 +174,6 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
   );
 }
 
-// ------------------------------------------------------------------ campanhas
-
-function statusCurto(s: string): string {
-  const t = String(s || "").toUpperCase();
-  if (t === "ACTIVE") return "Ativa";
-  if (t.indexOf("PAUSED") >= 0) return "Pausada";
-  if (t === "ARCHIVED" || t === "DELETED") return "Encerrada";
-  return s ? humanizar(s.toLowerCase()) : "";
-}
-
-const objetivoCurto = (o: string) => (o ? humanizar(o.toLowerCase().replace(/^outcome_/, "")) : "");
-
-/** Campanhas visíveis antes do "Mostrar todas" (a lista não rola sozinha dentro da página). */
-export const CAMPANHAS_VISIVEIS = 8;
-
-/**
- * Campanhas em linhas que se ajustam à largura (sem tabela larga: a rolagem
- * de lado no fim da tabela rolava a tela inteira, bug relatado em 26/09).
- * Clique numa linha filtra os anúncios dela.
- */
-export function TabelaDeCampanhas({
-  campanhas,
-  rotuloPorId,
-  selecionada,
-  onSelecionar,
-}: {
-  campanhas: CampanhaAoVivo[];
-  rotuloPorId: Record<string, string>;
-  selecionada: string;
-  onSelecionar: (id: string) => void;
-}) {
-  const [todas, setTodas] = useState(false);
-  if (!campanhas.length) return null;
-  const visiveis = todas ? campanhas : campanhas.slice(0, CAMPANHAS_VISIVEIS);
-  return (
-    <section className="min-w-0" aria-label="Campanhas">
-      <h3 className="mb-2 text-[12px] font-medium text-muted-foreground">Campanhas ({campanhas.length})</h3>
-      <ul className="min-w-0 divide-y divide-border rounded-lg border border-border bg-card">
-        {visiveis.map((c) => {
-          const ativa = selecionada === c.campaign_id;
-          const m = c.metricas;
-          const rotulo = rotuloPorId[c.campaign_id] || "Resultados";
-          return (
-            <li key={c.campaign_id || c.nome} className={`min-w-0 ${ativa ? "bg-primary/5" : ""}`}>
-              <button
-                type="button"
-                aria-pressed={ativa}
-                onClick={() => onSelecionar(ativa ? "" : c.campaign_id)}
-                className="grid w-full min-w-0 grid-cols-1 gap-x-3 gap-y-1 px-3 py-2 text-left md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
-                title="Filtrar os anúncios desta campanha"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-[12px] font-semibold">{c.nome}</span>
-                  <span className="block truncate text-[10.5px] text-muted-foreground">
-                    {[statusCurto(c.status), objetivoCurto(c.objetivo), c.orcamento_diario !== null ? `${brl(c.orcamento_diario)} por dia` : ""].filter(Boolean).join(" · ")}
-                  </span>
-                </span>
-                <span className="grid min-w-0 grid-cols-3 gap-x-2 text-[11.5px] tabular-nums sm:grid-cols-5">
-                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground">Investido</span>{brl(m.gasto)}</span>
-                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground" title={rotulo}>{rotulo}</span>{inteiro(m.resultados)}</span>
-                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground">Custo cada</span>{brl(m.custo_por_resultado)}</span>
-                  <span className="hidden min-w-0 sm:block"><span className="block truncate text-[10px] text-muted-foreground">CTR</span>{porcento(m.ctr_saida !== null ? m.ctr_saida : m.ctr)}</span>
-                  <span className="hidden min-w-0 sm:block"><span className="block truncate text-[10px] text-muted-foreground">CPM</span>{brl(m.cpm)}</span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {campanhas.length > CAMPANHAS_VISIVEIS && (
-        <button type="button" className="mt-1.5 text-[12px] text-primary hover:underline" onClick={() => setTodas(!todas)}>
-          {todas ? "Mostrar menos" : `Mostrar todas as ${campanhas.length} campanhas`}
-        </button>
-      )}
-    </section>
-  );
-}
-
 // ------------------------------------------------------------------ desempenho do cliente
 
 /** Orgânico + anúncios no mesmo período, carregado só quando a equipe abre. */
@@ -252,19 +182,23 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
   const [aberto, setAberto] = useState(false);
   const q = useQuery({ queryKey: chavesConta.desempenho(clientId, dias), queryFn: () => lerDesempenho(clientId, dias), enabled: aberto, staleTime: 5 * 60_000, retry: false });
   const d = q.data || null;
+  const parte = useParteRecolhida(`mesa-ads:conta:desempenho:${clientId}`);
   return (
-    <section aria-label="Desempenho do cliente" className="min-w-0 rounded-lg border border-border bg-card p-4">
-      <div className="flex min-w-0 flex-wrap items-center">
-        <div className="mb-1 mr-3 min-w-0 flex-1">
-          <h3 className="text-[13.5px] font-semibold">Desempenho do cliente: perfil e anúncios juntos</h3>
-          <p className="text-[11.5px] text-muted-foreground">Instagram orgânico e conta de anúncios no mesmo período. Grátis.</p>
-        </div>
-        {!aberto && (
-          <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => setAberto(true)}>
-            Ver desempenho
-          </Button>
-        )}
-      </div>
+    <section aria-label="Desempenho do cliente" className="min-w-0 border-t border-border pt-4">
+      <CabecalhoDaParte
+        titulo="Desempenho do cliente" nivel={3}
+        ajuda="Perfil e anúncios juntos: Instagram orgânico e conta de anúncios no mesmo período. Grátis."
+        recolher={parte}
+        acoes={
+          !aberto ? (
+            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setAberto(true)}>
+              Ver desempenho
+            </Button>
+          ) : undefined
+        }
+      />
+      {!parte.recolhido && (
+      <>
       {q.isError && <AvisoDeErro erro={q.error} />}
       {aberto && q.isLoading && <div className="mt-3 h-24 animate-pulse rounded-lg bg-muted/60" aria-busy="true" />}
       {d && (
@@ -314,8 +248,10 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
               </div>
             </div>
           )}
-          <p className="text-[10.5px] text-muted-foreground">{d.somado.explicacao}</p>
+          <p className="text-[11px] text-muted-foreground">{d.somado.explicacao}</p>
         </div>
+      )}
+      </>
       )}
     </section>
   );
@@ -325,7 +261,7 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
 
 function ListaDeItens({ titulo, tom, itens, porItem, vazio }: { titulo: string; tom: string; itens: ItemDaEvolucao[]; porItem: Record<string, string>; vazio: string }) {
   return (
-    <div className="min-w-0 rounded-md bg-background/60 p-3">
+    <div className={juntar(superficie.poco, "min-w-0 p-3")}>
       <p className={`text-[12px] font-semibold ${tom}`}>
         {titulo} ({itens.length})
       </p>
@@ -370,22 +306,21 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
   const chave = chavesConta.evolucao(clientId, dias);
   const q = useQuery({ queryKey: chave, queryFn: () => lerEvolucao(clientId, dias, false), enabled: aberto, staleTime: 10 * 60_000, retry: false });
   const l = explicada || q.data || null;
+  const parte = useParteRecolhida(`mesa-ads:conta:evolucao:${clientId}`);
   return (
-    <section aria-label="Evolução" className="min-w-0 space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-      <div className="flex min-w-0 flex-wrap items-start">
-        <TrendingUp className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <div className="mb-1 mr-3 min-w-0 flex-1">
-          <h3 className="text-[13.5px] font-semibold">Evolução: o que está funcionando</h3>
-          <p className="text-[11.5px] text-muted-foreground">
-            Regras em código comparam cada anúncio com a média da conta e cada post com a média do perfil. Grátis. O estrategista explica o porquê, se você pedir.
-          </p>
-        </div>
-        {!aberto ? (
-          <Button type="button" size="sm" className="mb-1 h-8" onClick={() => setAberto(true)}>
+    <section aria-label="Evolução" className="min-w-0 space-y-3 border-t border-border pt-4">
+      <CabecalhoDaParte
+        className="mb-0"
+        titulo="Evolução: o que está funcionando" nivel={3}
+        ajuda="Regras em código comparam cada anúncio com a média da conta e cada post com a média do perfil. Grátis. O estrategista explica o porquê, se você pedir."
+        recolher={parte}
+        acoes={
+        !aberto ? (
+          <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setAberto(true)}>
             Ler evolução
           </Button>
         ) : (
-          <span className="mb-1 inline-flex items-center">
+          <span className="inline-flex items-center">
             <BotaoComCusto
               rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Explicar com o estrategista</>}
               titulo="Explicar a evolução"
@@ -401,15 +336,18 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               }}
             />
           </span>
-        )}
-      </div>
+        )
+        }
+      />
+      {!parte.recolhido && (
+      <>
       {q.isError && <AvisoDeErro erro={q.error} />}
       {aberto && q.isLoading && (
         <p className="flex items-center text-[12px] text-muted-foreground" aria-busy="true">
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo anúncios e posts do período...
         </p>
       )}
-      {l && evolucaoVazia(l) && <p className="text-[12.5px] text-muted-foreground">Sem anúncios nem posts medidos no período para comparar. Troque o período ou sincronize a conta.</p>}
+      {l && evolucaoVazia(l) && <EstadoVazio compacto titulo="Sem anúncios nem posts medidos no período" descricao="Troque o período ou sincronize a conta." />}
       {l && !evolucaoVazia(l) && (
         <>
           {l.explicacao && l.explicacao.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{l.explicacao.resumo}</p>}
@@ -436,7 +374,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
               <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
                 {l.proximos_testes.map((t, k) => (
-                  <li key={`${t.titulo}-${k}`} className="min-w-0 rounded-md bg-background/60 p-3 text-[12px] leading-snug">
+                  <li key={`${t.titulo}-${k}`} className={juntar(superficie.poco, "min-w-0 p-3 text-[12px] leading-snug")}>
                     <p className="font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                     <p className="mt-0.5 text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>
                     <p className="mt-1 [overflow-wrap:anywhere]"><span className="font-medium">Como:</span> {t.como}</p>
@@ -447,7 +385,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
             </div>
           )}
           {l.aprendizados.length > 0 && (
-            <div className="min-w-0 rounded-md bg-background/60 p-3">
+            <div className={juntar(superficie.poco, "min-w-0 p-3")}>
               <p className="flex items-center text-[12px] font-semibold text-muted-foreground">
                 <BookOpen className="mr-1.5 h-3.5 w-3.5" /> Aprendizados para a Mesa
               </p>
@@ -475,6 +413,8 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
             </ul>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );

@@ -19,6 +19,7 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { abrirLateralDaArea } from "@/components/mesa-foto/lateralDaArea";
 import { Megaphone } from "lucide-react";
 import { ehEtapa, ETAPAS_DA_PUBLICIDADE, MesaPublicidadeProvider, type EtapaDaPublicidade, type MesaPublicidadeValor } from "@/components/mesa-publicidade/Comuns";
@@ -94,7 +95,7 @@ function EsqueletoDaEtapa() {
 
 /** Enquanto o agente baixa (primeira abertura): a casca dele, sem texto. */
 function EsqueletoDoAgente() {
-  return <div aria-busy="true" aria-label="Abrindo o agente" className="h-full min-h-[320px] animate-pulse rounded-lg border border-border bg-card" />;
+  return <div aria-busy="true" aria-label="Abrindo o agente" className={juntar(superficie.painel, "h-full min-h-[320px] animate-pulse")} />;
 }
 
 /** Leva o foco para o campo do agente (depois que a lateral ou a gaveta aparece). */
@@ -324,7 +325,7 @@ export default function MesaPublicidade() {
         <EstadoVazio
           icone={<Megaphone className="h-5 w-5" />}
           titulo="Escolha um cliente para abrir a Mesa Publicidade dele."
-          descricao="Produto, direção, tomadas, revisão e envio, com o custo à vista antes de gastar."
+          descricao="Campanhas de produto, com o custo antes."
         />
       )}
 
@@ -349,7 +350,7 @@ export default function MesaPublicidade() {
               }
             >
               {/* Uma região por etapa e cliente: trocar de etapa e voltar devolve a rolagem. */}
-              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-publicidade:${valor.clientId}:${etapa}`} className="pb-24 lg:pr-1" data-regiao-da-etapa={etapa}>
+              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-publicidade:${valor.clientId}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
                 <Suspense fallback={<EsqueletoDaEtapa />}>
                   {valorDaPublicidade.carregando ? (
                     <EsqueletoDaEtapa />

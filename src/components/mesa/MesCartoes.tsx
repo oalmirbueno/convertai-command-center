@@ -189,7 +189,7 @@ export function CartaoDoItem({
           {arte ? (
             <span className="mr-3 shrink-0"><Miniatura arte={arte} tamanho="grande" /></span>
           ) : (
-            <span className="mr-3 flex h-[104px] w-[84px] shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card/60 text-muted-foreground">
+            <span className="mr-3 flex h-[104px] w-[84px] shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-card text-muted-foreground">
               <Palette className="h-5 w-5" aria-hidden />
             </span>
           )}

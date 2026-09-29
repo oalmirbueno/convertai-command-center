@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, juntar, lista, superficie, texto } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -364,7 +364,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
         {loadingInstallments ? (
           <Carregando linhas={2} rotulo="Carregando parcelas" />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
           {(installments || []).map((inst: any) => {
             const status = getInstallmentStatus(inst);
             const config = statusConfig[status];
@@ -372,7 +372,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
             const paidAmt = Number(inst.paid_amount || 0);
             const isPartial = inst.status === "partial" || (paidAmt > 0 && paidAmt < inst.amount);
             return (
-              <li key={inst.id} className="flex min-w-0 items-center px-4 py-3">
+              <li key={inst.id} className="flex min-w-0 items-center px-2 py-3">
                 <span className={`mr-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${config.className}`}>
                   <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
@@ -410,13 +410,13 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           <DialogHeader><DialogTitle>Editar Parcela</DialogTitle></DialogHeader>
           {editingInst && (
             <div className="space-y-4">
-              <div className="bg-secondary/50 rounded-lg p-3 text-xs space-y-1">
+              <div className={juntar(superficie.poco, "space-y-1 p-3 text-[12px]")}>
                 <p><strong>{editingInst.description}</strong></p>
                 <p>Valor: {formatCurrency(editingInst.amount)}</p>
                 <p>Vencimento: {formatDate(editingInst.due_date)}</p>
               </div>
               <div>
-                <Label className="text-xs">Status</Label>
+                <Label className="text-[12px]">Status</Label>
                 <Select value={editInstStatus} onValueChange={setEditInstStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -427,7 +427,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Valor Pago (R$)</Label>
+                <Label className="text-[12px]">Valor Pago (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -435,13 +435,13 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
                   value={editInstPaidAmount}
                   onChange={e => setEditInstPaidAmount(e.target.value)}
                 />
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="mt-1 text-[11px] text-muted-foreground">
                   Deixe menor que {formatCurrency(editingInst.amount)} para pagamento parcial
                 </p>
               </div>
               {(editInstStatus === "paid" || editInstStatus === "partial") && (
                 <div>
-                  <Label className="text-xs">Data do Pagamento</Label>
+                  <Label className="text-[12px]">Data do Pagamento</Label>
                   <Input
                     type="date"
                     value={editInstPaidDate}
@@ -479,23 +479,23 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           <DialogHeader><DialogTitle>Criar Plano de Pagamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Valor Total do Projeto (R$)</Label>
+              <Label className="text-[12px]">Valor Total do Projeto (R$)</Label>
               <Input type="number" placeholder="5000" value={totalValue} onChange={e => setTotalValue(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Percentual de Entrada (%)</Label>
+              <Label className="text-[12px]">Percentual de Entrada (%)</Label>
               <Input type="number" min="0" max="100" placeholder="50" value={entryPercentage} onChange={e => setEntryPercentage(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Número de Parcelas (restante)</Label>
+              <Label className="text-[12px]">Número de Parcelas (restante)</Label>
               <Input type="number" min="1" max="24" placeholder="1" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Observações</Label>
+              <Label className="text-[12px]">Observações</Label>
               <Textarea placeholder="Ex: Pagamento na entrega do projeto" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
             </div>
             {total > 0 && (
-              <div className="bg-secondary/50 rounded-lg p-3 space-y-1 text-xs">
+              <div className={juntar(superficie.poco, "space-y-1 p-3 text-[12px]")}>
                 <p><strong>Entrada:</strong> {formatCurrency(entryAmount)} ({entryPct}%)</p>
                 <p><strong>Restante:</strong> {formatCurrency(remaining)} em {count}x de {formatCurrency(perInstallment)}</p>
               </div>
@@ -524,26 +524,26 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       <Dialog open={isAdmin && editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Editar Plano de Pagamento</DialogTitle></DialogHeader>
-          <p className="text-xs text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>
+          <p className="text-[12px] text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Valor Total do Projeto (R$)</Label>
+              <Label className="text-[12px]">Valor Total do Projeto (R$)</Label>
               <Input type="number" placeholder="5000" value={totalValue} onChange={e => setTotalValue(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Percentual de Entrada (%)</Label>
+              <Label className="text-[12px]">Percentual de Entrada (%)</Label>
               <Input type="number" min="0" max="100" placeholder="50" value={entryPercentage} onChange={e => setEntryPercentage(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Número de Parcelas (restante)</Label>
+              <Label className="text-[12px]">Número de Parcelas (restante)</Label>
               <Input type="number" min="1" max="24" placeholder="1" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Observações</Label>
+              <Label className="text-[12px]">Observações</Label>
               <Textarea placeholder="Ex: Pagamento na entrega do projeto" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
             </div>
             {total > 0 && (
-              <div className="bg-secondary/50 rounded-lg p-3 space-y-1 text-xs">
+              <div className={juntar(superficie.poco, "space-y-1 p-3 text-[12px]")}>
                 <p><strong>Entrada:</strong> {formatCurrency(entryAmount)} ({entryPct}%)</p>
                 <p><strong>Restante:</strong> {formatCurrency(remaining)} em {count}x de {formatCurrency(perInstallment)}</p>
               </div>

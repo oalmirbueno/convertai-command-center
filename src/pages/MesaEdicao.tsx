@@ -37,7 +37,7 @@ export default function MesaEdicao() {
       etapas={ETAPAS_DA_MESA_EDICAO}
       etapaValida={etapaValidaDaEdicao}
       prefixoOnde="mesa-edicao:onde:"
-      vazio={{ titulo: "Escolha um cliente", descricao: "Suba os vídeos, organize por cena e tomada e prepare a edição. Nada gasta sem o seu clique." }}
+      vazio={{ titulo: "Escolha um cliente", descricao: "Suba, organize e edite os vídeos." }}
       preCarregar={[EtapaEntrada, EtapaOrganizar, EtapaEditar, AgenteDeEdicao]}
       Agente={AgenteDeEdicao}
       rotuloDoAgente={(etapa) => (etapa === "editar" ? "Agente editor" : "Agente de edição")}

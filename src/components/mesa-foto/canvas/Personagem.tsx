@@ -149,9 +149,9 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
                     <span className="block overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }}>
                       <MiniaturaDoStorage bucket={v.storage_bucket} caminho={v.storage_path || v.url} alt={rotuloDaVista(v.vista)} largura={160} className="h-full w-full" />
                     </span>
-                    <span className="mt-0.5 block truncate text-[10px] text-zinc-400">{rotuloDaVista(v.vista)}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{rotuloDaVista(v.vista)}</span>
                     {decididas[v.id] ? (
-                      <span className={`block text-[10px] ${decididas[v.id] === "aprovar" ? "text-emerald-300" : "text-zinc-500"}`}>{decididas[v.id] === "aprovar" ? "aprovada" : "rejeitada"}</span>
+                      <span className={`block text-[11px] ${decididas[v.id] === "aprovar" ? "text-emerald-300" : "text-zinc-500"}`}>{decididas[v.id] === "aprovar" ? "aprovada" : "rejeitada"}</span>
                     ) : (
                       <span className="flex">
                         <button type="button" className="mr-1 flex h-6 w-7 items-center justify-center rounded-md border border-white/10 text-emerald-300 hover:bg-white/10" onClick={() => void decidir(v, "aprovar")} aria-label={`Aprovar ${rotuloDaVista(v.vista)}`}>

@@ -1,6 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, Download, Images, Layers, Loader2, ScanSearch, Wallet } from "lucide-react";
 import { rotuloDoMes, textoDoErro, usd } from "@/lib/mesa/api";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import Secao from "@/components/sistema/Secao";
+import { botao, campo, juntar } from "@/components/sistema/estilos";
 import {
   agruparPorCliente,
   agruparPorMes,
@@ -71,44 +75,23 @@ function baixarCsv(nome: string, conteudo: string) {
   }
 }
 
-function Numero({ rotulo, valor, detalhe, icone }: { rotulo: string; valor: string; detalhe?: string; icone: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-border bg-card p-3.5">
-      <div className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        <span className="mr-1.5 shrink-0">{icone}</span>
-        <span className="min-w-0 truncate">{rotulo}</span>
-      </div>
-      <p className="mt-1.5 text-[22px] font-semibold leading-tight tabular-nums text-foreground">{valor}</p>
-      {detalhe && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{detalhe}</p>}
-    </div>
-  );
-}
-
-function Medio({ rotulo, valor, base, unidade }: { rotulo: string; valor: number | null; base: string; unidade: string }) {
+/** Uma média por peça, para a FaixaDeNumeros: o valor e, no apoio, quanto US$ 1 faz. */
+function medio(rotulo: string, valor: number | null, base: string, unidade: string) {
   const q = porUmDolar(valor);
-  return (
-    <div className="min-w-0 rounded-xl border border-border bg-card p-3.5">
-      <p className="text-[12px] font-medium text-muted-foreground">{rotulo}</p>
-      <p className="mt-1 text-[19px] font-semibold leading-tight tabular-nums">{valor === null ? "sem peça" : usd(valor)}</p>
-      <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">
-        {q === null ? base : (
-          <>
-            US$ 1 faz <strong className="font-semibold text-foreground">{quantidadeCurta(q)}</strong> {unidade}
-            <span className="block">{base}</span>
-          </>
-        )}
-      </p>
-    </div>
-  );
+  return {
+    rotulo,
+    valor: valor === null ? "sem peça" : usd(valor),
+    apoio: q === null ? base : `US$ 1 faz ${quantidadeCurta(q)} ${unidade} · ${base}`,
+  };
 }
 
 function QuebraDoGasto({ totais }: { totais: Totais }) {
   const partes = quebraDoGasto(totais);
   const total = partes.reduce((s, p) => s + p.valor, 0);
   return (
-    <section aria-label="Para onde foi o gasto" className="rounded-xl border border-border bg-card p-4">
-      <h3 className="text-[13px] font-semibold">Para onde foi o dinheiro</h3>
-      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+    // Seção aberta (sem caixa), recolhível pelo título.
+    <Secao titulo="Para onde foi o dinheiro" nivel={3} data-quebra-do-gasto="">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
         {total > 0 &&
           partes.map((p) =>
             p.valor > 0 ? <div key={p.chave} className={CORES_DO_GASTO[p.chave]} style={{ width: `${(p.valor / total) * 100}%` }} /> : null,
@@ -120,36 +103,34 @@ function QuebraDoGasto({ totais }: { totais: Totais }) {
             <span className={`mr-2 mt-1.5 h-2 w-2 shrink-0 rounded-full ${CORES_DO_GASTO[p.chave]}`} />
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline justify-between">
-                <span className="mr-2 truncate text-[12.5px] font-medium">{p.rotulo}</span>
-                <span className="shrink-0 text-[12.5px] tabular-nums">
+                <span className="mr-2 truncate text-[13px] font-medium">{p.rotulo}</span>
+                <span className="shrink-0 text-[13px] tabular-nums">
                   {usd(p.valor)} <span className="text-muted-foreground">· {p.pct}%</span>
                 </span>
               </span>
-              <span className="block truncate text-[11.5px] text-muted-foreground">{p.detalhe}</span>
+              <span className="block truncate text-[12px] text-muted-foreground">{p.detalhe}</span>
             </span>
           </li>
         ))}
       </ul>
-    </section>
+    </Secao>
   );
 }
 
 const cel = "whitespace-nowrap px-3 py-2 text-right tabular-nums";
-const celTitulo = "whitespace-nowrap px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+const celTitulo = "whitespace-nowrap px-3 py-2 text-right text-[12px] font-medium text-muted-foreground";
 
 function TabelaPorCliente({ linhas, onEscolher }: { linhas: ReturnType<typeof agruparPorCliente>; onEscolher: (id: string) => void }) {
   if (!linhas.length) return null;
   return (
-    <section aria-label="Custos por cliente" className="min-w-0 rounded-xl border border-border bg-card">
-      <div className="flex items-baseline justify-between px-4 pt-4">
-        <h3 className="text-[13px] font-semibold">Por cliente</h3>
-        <p className="ml-3 text-[11.5px] text-muted-foreground">Toque num cliente para ver só ele</p>
-      </div>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[720px] text-[12.5px]">
+    // Tabela aberta (sem caixa), recolhível pelo título; a dica de uso fica no "?".
+    // A região nomeada é só a tabela (os botões dela são os clientes).
+    <Secao titulo="Por cliente" nivel={3} ajuda="Toque num cliente para ver só ele.">
+      <section aria-label="Custos por cliente" className="min-w-0 overflow-x-auto">
+        <table className="w-full min-w-[720px] text-[13px]">
           <thead className="border-b border-border">
             <tr>
-              <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cliente</th>
+              <th className="px-3 py-2 text-left text-[12px] font-medium text-muted-foreground">Cliente</th>
               <th className={celTitulo}>Posts</th>
               <th className={celTitulo}>Carrosséis</th>
               <th className={celTitulo}>Criativos</th>
@@ -186,21 +167,20 @@ function TabelaPorCliente({ linhas, onEscolher }: { linhas: ReturnType<typeof ag
             })}
           </tbody>
         </table>
-      </div>
-    </section>
+      </section>
+    </Secao>
   );
 }
 
 function TabelaPorMes({ meses }: { meses: ReturnType<typeof agruparPorMes> }) {
   if (meses.length < 2) return null;
   return (
-    <section aria-label="Custos por mês" className="min-w-0 rounded-xl border border-border bg-card">
-      <h3 className="px-4 pt-4 text-[13px] font-semibold">Por mês</h3>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[520px] text-[12.5px]">
+    <Secao titulo="Por mês" nivel={3}>
+      <section aria-label="Custos por mês" className="min-w-0 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-[13px]">
           <thead className="border-b border-border">
             <tr>
-              <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Mês</th>
+              <th className="px-3 py-2 text-left text-[12px] font-medium text-muted-foreground">Mês</th>
               <th className={celTitulo}>Peças</th>
               <th className={celTitulo}>Imagens</th>
               <th className={celTitulo}>Gasto</th>
@@ -223,8 +203,8 @@ function TabelaPorMes({ meses }: { meses: ReturnType<typeof agruparPorMes> }) {
             })}
           </tbody>
         </table>
-      </div>
-    </section>
+      </section>
+    </Secao>
   );
 }
 
@@ -276,19 +256,28 @@ export default function PainelDeCustos({
 
   return (
     <section aria-label="Custos de produção" className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-end justify-between">
-        <div className="mb-2 mr-4 min-w-0">
-          <h2 className="text-[18px] font-semibold tracking-tight">Custos de produção</h2>
-          <p className="text-[12.5px] text-muted-foreground">
-            {filtro ? `${nomeDoFiltro}. ` : "Todos os clientes. "}Quanto cada peça custou de IA, em dólar, direto da carteira.
-          </p>
-        </div>
-        <div className="mb-2 flex min-w-0 flex-wrap items-center">
+      {/* Cabeçalho do sistema: título, estado (quem está no filtro), o "?" com a explicação e as ações à direita. */}
+      <CabecalhoDePagina
+        nivel={2}
+        titulo="Custos de produção"
+        descricao={filtro ? nomeDoFiltro : "Todos os clientes"}
+        ajuda={
+          <>
+            <span className="block">Quanto cada peça custou de IA, em dólar, direto da carteira.</span>
+            <span className="mt-1.5 block">
+              Gasto é o que a carteira de IA registrou no período. Peça é um trabalho do Estúdio com arte gerada, contado no mês em que foi criado; o custo
+              dela soma tudo o que foi ligado a ela (direção, imagens, refações, correções e conferência). Planejamento do mês, leitura de referências e
+              contexto só entram na peça com tudo incluído.
+            </span>
+          </>
+        }
+        acoes={
+        <div className="flex min-w-0 flex-wrap items-center">
           <select
             aria-label="Cliente"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            className="mb-1 mr-2 h-8 max-w-[220px] rounded-lg border border-border bg-card px-2 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[220px] px-2")}
           >
             <option value="">Todos os clientes</option>
             {opcoes.map((c) => (
@@ -301,12 +290,13 @@ export default function PainelDeCustos({
             type="button"
             onClick={exportar}
             disabled={!linhas.length}
-            className="mb-1 inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12.5px] font-medium hover:border-primary/50 disabled:opacity-50"
+            className={juntar(botao.secundario, "mb-1 h-8 px-2.5 text-[12px]")}
           >
             <Download className="mr-1.5 h-3.5 w-3.5" /> Exportar CSV
           </button>
         </div>
-      </div>
+        }
+      />
 
       <div role="group" aria-label="Período" className="grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:inline-grid sm:grid-cols-5">
         {PERIODOS.map((p) => (
@@ -325,7 +315,7 @@ export default function PainelDeCustos({
       </div>
 
       {filtro && (
-        <button type="button" onClick={() => setFiltro("")} className="inline-flex items-center text-[12.5px] text-primary hover:underline">
+        <button type="button" onClick={() => setFiltro("")} className="inline-flex items-center text-[13px] text-primary hover:underline">
           <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Ver todos os clientes
         </button>
       )}
@@ -333,60 +323,60 @@ export default function PainelDeCustos({
       {custos.isLoading && (
         <div aria-busy="true" aria-label="Carregando custos" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />
+            <div key={i} className="h-24 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
       )}
 
       {custos.isError && (
-        <p className="rounded-xl border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">
+        <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">
           Não consegui ler os custos. {textoDoErro(custos.error)}
         </p>
       )}
 
       {custos.data && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Numero icone={<Wallet className="h-3.5 w-3.5" />} rotulo="Gasto no período" valor={usd(totais.gasto)} detalhe={`${totais.usos} chamadas de IA`} />
-            <Numero
-              icone={<Layers className="h-3.5 w-3.5" />}
-              rotulo="Peças feitas"
-              valor={String(pecas)}
-              detalhe={`${totais.posts} posts, ${totais.carrosseis} carrosséis (${totais.laminasCarrossel} lâminas), ${totais.criativos} criativos`}
-            />
-            <Numero
-              icone={<Images className="h-3.5 w-3.5" />}
-              rotulo="Imagens geradas"
-              valor={String(totais.imagensGeradas)}
-              detalhe={`${totais.refacoes} refações, ${totais.automaticas} por correção automática`}
-            />
-            <Numero
-              icone={<ScanSearch className="h-3.5 w-3.5" />}
-              rotulo="Conferências"
-              valor={String(totais.conferencias)}
-              detalhe={`${usd(totais.conferencia)} com Jev e leitura da arte`}
-            />
-          </div>
+          {/* Os quatro números numa faixa só (sem um cartão por número). */}
+          <FaixaDeNumeros
+            rotulo="Números do período"
+            colunas={4}
+            itens={[
+              { rotulo: "Gasto no período", valor: usd(totais.gasto), apoio: `${totais.usos} chamadas de IA` },
+              {
+                rotulo: "Peças feitas",
+                valor: String(pecas),
+                apoio: `${totais.posts} posts, ${totais.carrosseis} carrosséis (${totais.laminasCarrossel} lâminas), ${totais.criativos} criativos`,
+              },
+              { rotulo: "Imagens geradas", valor: String(totais.imagensGeradas), apoio: `${totais.refacoes} refações, ${totais.automaticas} por correção automática` },
+              { rotulo: "Conferências", valor: String(totais.conferencias), apoio: `${usd(totais.conferencia)} com Jev e leitura da arte` },
+            ]}
+          />
 
           {frase && (
-            <p className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-[14px] font-medium leading-snug text-foreground">{frase}</p>
+            <p className="rounded-lg bg-primary/10 px-4 py-3 text-[14px] font-medium leading-snug text-foreground">{frase}</p>
           )}
 
-          <section aria-label="Custo médio por peça" className="space-y-2">
-            <h3 className="text-[13px] font-semibold">Quanto custa cada peça, em média</h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-              <Medio rotulo="Post" valor={medias.post} unidade="posts" base={`${totais.posts} no período`} />
-              <Medio
-                rotulo="Carrossel"
-                valor={medias.carrossel}
-                unidade="carrosséis"
-                base={laminasPorCarrossel === null ? "0 no período" : `${totais.carrosseis} no período, ${quantidadeCurta(laminasPorCarrossel)} lâminas em média`}
+          <section aria-label="Custo médio por peça" className="min-w-0">
+            <Secao titulo="Quanto custa cada peça, em média" nivel={3}>
+              <FaixaDeNumeros
+                rotulo="Custo médio por peça"
+                colunas={6}
+                tamanho="compacto"
+                itens={[
+                  medio("Post", medias.post, `${totais.posts} no período`, "posts"),
+                  medio(
+                    "Carrossel",
+                    medias.carrossel,
+                    laminasPorCarrossel === null ? "0 no período" : `${totais.carrosseis} no período, ${quantidadeCurta(laminasPorCarrossel)} lâminas em média`,
+                    "carrosséis",
+                  ),
+                  medio("Lâmina", medias.lamina, `${totais.laminas} lâminas de posts e carrosséis`, "lâminas"),
+                  medio("Criativo de anúncio", medias.criativo, `${totais.criativos} no período`, "criativos"),
+                  medio("Imagem gerada", medias.imagem, "inclui refações e correções", "imagens"),
+                  medio("Peça, tudo incluído", medias.pecaCheia, "soma planejamento, leitura e conferência", "peças"),
+                ]}
               />
-              <Medio rotulo="Lâmina" valor={medias.lamina} unidade="lâminas" base={`${totais.laminas} lâminas de posts e carrosséis`} />
-              <Medio rotulo="Criativo de anúncio" valor={medias.criativo} unidade="criativos" base={`${totais.criativos} no período`} />
-              <Medio rotulo="Imagem gerada" valor={medias.imagem} unidade="imagens" base="inclui refações e correções" />
-              <Medio rotulo="Peça, tudo incluído" valor={medias.pecaCheia} unidade="peças" base="soma planejamento, leitura e conferência" />
-            </div>
+            </Secao>
           </section>
 
           <QuebraDoGasto totais={totais} />
@@ -395,18 +385,16 @@ export default function PainelDeCustos({
           <TabelaPorMes meses={porMes} />
 
           {!todas.length && (
-            <p className="rounded-xl border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">Nenhum gasto de IA neste período.</p>
+            <p className="rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">Nenhum gasto de IA neste período.</p>
           )}
 
-          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            Gasto é o que a carteira de IA registrou no período. Peça é um trabalho do Estúdio com arte gerada, contado no mês em que foi criado; o custo
-            dela soma tudo o que foi ligado a ela (direção, imagens, refações, correções e conferência). Planejamento do mês, leitura de referências e contexto
-            só entram na peça com tudo incluído.
-            {custos.data.origem === "direto" ? " Lido direto das tabelas: a função de custos do banco ainda não foi aplicada." : ""}
-            {custos.isFetching && !custos.isLoading ? (
-              <Loader2 className="ml-1 inline h-3 w-3 animate-spin" aria-label="Atualizando" />
-            ) : null}
-          </p>
+          {/* A explicação do que conta como gasto e peça foi para o "?" do título; aqui fica só o estado. */}
+          {(custos.data.origem === "direto" || (custos.isFetching && !custos.isLoading)) && (
+            <p className="text-[12px] text-muted-foreground">
+              {custos.data.origem === "direto" ? "Lido direto das tabelas: a função de custos do banco ainda não foi aplicada." : ""}
+              {custos.isFetching && !custos.isLoading ? <Loader2 className="ml-1 inline h-3 w-3 animate-spin" aria-label="Atualizando" /> : null}
+            </p>
+          )}
         </>
       )}
     </section>

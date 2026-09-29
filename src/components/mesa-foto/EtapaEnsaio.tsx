@@ -19,7 +19,7 @@ import { geraNoLote, useLote } from "./lote";
 import SeletorDeGuia from "./SeletorDeGuia";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campoTexto, juntar } from "@/components/sistema/estilos";
+import { campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   AZIMUTES,
@@ -108,7 +108,7 @@ function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
           return (
             <div key={`${r.imagem_id}-${r.papel}`} className="mb-1 mr-1 w-12" title={rotuloDoPapel(r.papel)}>
               {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-12 w-12 rounded-lg bg-muted" />}
-              <span className="block truncate text-center text-[9.5px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
+              <span className="block truncate text-center text-[11px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
             </div>
           );
         })}
@@ -146,6 +146,19 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const idDaReceita = receita ? receita.id : null;
   useEffect(() => setFora([]), [idDaReceita]);
 
+  // 28/09 (dono: "seletor pequeno não ganha linha própria"): "Como montar" vai na linha do título do bloco.
+  const comoMontar = (
+    <Pilulas
+      rotulo="Como montar"
+      className="-mb-1.5"
+      opcoes={[
+        { valor: "variacoes" as ModoDoNovo, rotulo: "Variações", dica: "Quantas fotos e de que tipos" },
+        { valor: "receita" as ModoDoNovo, rotulo: "Por receita", dica: "Tomadas de uma receita pronta por categoria" },
+      ]}
+      valor={modo}
+      onEscolher={setModo}
+    />
+  );
   const alternarFormato = (f: string) => setFormatos((l) => (l.indexOf(f) >= 0 ? (l.length > 1 ? l.filter((x) => x !== f) : l) : l.concat([f])));
 
   if (!kits.length) {
@@ -158,7 +171,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
           </Button>
         }
       >
-        As variações partem das fotos que provam como o produto é. Sem produto, não há o que preservar.
+        Sem produto, não há o que preservar.
       </Vazio>
     );
   }
@@ -170,15 +183,6 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   return (
     <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-5">
-        <Pilulas
-          rotulo="Como montar"
-          opcoes={[
-            { valor: "variacoes" as ModoDoNovo, rotulo: "Variações", dica: "Quantas fotos e de que tipos" },
-            { valor: "receita" as ModoDoNovo, rotulo: "Por receita", dica: "Tomadas de uma receita pronta por categoria" },
-          ]}
-          valor={modo}
-          onEscolher={setModo}
-        />
         <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome : "nenhum escolhido"}>
           <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
             <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Produto das variações">
@@ -203,6 +207,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         {modo === "variacoes" && (
           <Cartao
             titulo="Variações"
+            acao={comoMontar}
             recolher={`mesa-foto:ensaio:variacoes:${clientId}`}
             resumo={`${quantidade} ${quantidade === 1 ? "foto" : "fotos"} · ${tiposEscolhidos.length ? `${tiposEscolhidos.length} ${tiposEscolhidos.length === 1 ? "tipo" : "tipos"}` : "tipos pelo diretor"}`}
             dica="Quantas fotos e de que tipos. Cada uma sai realmente diferente: câmera, cenário e luz próprios.">
@@ -239,6 +244,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
         {modo === "receita" && (
           <Cartao
             titulo="Receita"
+            acao={comoMontar}
             recolher={`mesa-foto:ensaio:receita:${clientId}`}
             resumo={receita ? `${receita.nome} · ${tomadas.length} ${tomadas.length === 1 ? "tomada" : "tomadas"}` : "nenhuma escolhida"}
             dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
@@ -495,7 +501,7 @@ function CartaoDaTomada({
     }
   };
   return (
-    <li className={`min-w-0 rounded-lg border bg-card p-2 ${aprovada ? "border-success/50" : "border-border"}`} data-tomada={tomada.id}>
+    <li className={juntar(superficie.painel, "min-w-0 p-2", aprovada && "border-success/50")} data-tomada={tomada.id}>
       <div className="relative min-w-0">
         {mostrada && mostrada.storage_path ? (
           <button type="button" className="block w-full cursor-zoom-in" onClick={() => mostrada.storage_path && onAmpliar(mostrada.storage_path)} aria-label={`Ver grande: ${tomada.nome}`}>
@@ -503,7 +509,7 @@ function CartaoDaTomada({
               <div className="h-full w-full" style={emGeracao ? { filter: "blur(10px)", WebkitFilter: "blur(10px)" } : undefined}>
                 <ImagemDaMesa caminho={mostrada.storage_path} alt={`${tomada.nome}, versão ${mostrada.versao}`} className="h-full w-full !object-contain" />
               </div>
-              <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+              <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
                 gerada
               </span>
             </Moldura>
@@ -596,7 +602,7 @@ function CartaoDaTomada({
               }
               titulo={ultima ? "Variação gerada" : "Tomada gerada"}
               descricao="Gera uma versão desta foto, uma vez. Refazer pede uma variação nova; as versões antigas ficam."
-              variant={ultima ? "outline" : "default"}
+              variant="outline"
               className="mb-1 mr-1 h-8 text-[12px]"
               disabled={emGeracao || !modeloId}
               partes={() => partesDaGeracao(modeloId, qualidade)}
@@ -720,8 +726,8 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
         ) : visiveis.length === 0 ? (
           <EstadoVazio compacto titulo="Nenhuma foto com esse filtro." />
         ) : (
-          // Rolagem própria só no computador (no celular a página rola; caixa com rolagem prende o dedo).
-          <div className="min-w-0 lg:max-h-[75vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-1" data-rolagem-propria="" data-resultado-do-lote="">
+          // 28/09 (dono: "uma rolagem por região"): o resultado segue a rolagem da região principal, sem caixa própria.
+          <div className="min-w-0" data-resultado-do-lote="">
             {grupos.map((g) => (
               <section key={g.tipo || "sem-tipo"} className="mb-3 min-w-0 last:mb-0" data-grupo-do-tipo={g.tipo || "outras"}>
                 {comTipo && (
@@ -836,8 +842,8 @@ export default function EtapaEnsaio() {
           <Button
             type="button"
             size="sm"
-            variant={ensaio ? "outline" : "default"}
-            className="mb-1.5 h-9 text-[12.5px]"
+            variant="outline"
+            className="mb-1.5 h-9 text-[13px]"
             onClick={() => {
               setNovo(true);
               escolherEnsaio(null);

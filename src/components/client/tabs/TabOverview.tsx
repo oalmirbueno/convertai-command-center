@@ -97,17 +97,15 @@ export default function TabOverview({ project }: { project: any }) {
         )}
 
         {activeMilestone && (
-          <section aria-label="Etapa atual" className="min-w-0 rounded-lg border border-primary/25 bg-primary/[0.04] px-4 py-3">
-            <div className="flex min-w-0 items-center justify-between">
-              <p className={juntar(texto.rotulo, "flex items-center text-primary")}>
-                <Target className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                Etapa atual
-              </p>
-              <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
-                {completedMilestones.length} de {allMilestones.length} concluídas
-              </span>
-            </div>
-            <p className="mt-1 text-[15px] font-semibold leading-[22px] text-foreground">{activeMilestone.title}</p>
+          <Secao
+            titulo="Etapa atual"
+            divisoria
+            descricao={`${completedMilestones.length} de ${allMilestones.length} concluídas`}
+          >
+            <p className="flex min-w-0 items-center text-[15px] font-semibold leading-[22px] text-foreground">
+              <Target className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <span className="min-w-0 truncate">{activeMilestone.title}</span>
+            </p>
             {activeMilestone.target_date && (
               <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>
                 <Calendar className="mr-1.5 h-3 w-3" aria-hidden="true" />
@@ -115,7 +113,7 @@ export default function TabOverview({ project }: { project: any }) {
                 {daysUntil(activeMilestone.target_date) >= 0 && <span>&nbsp;· {daysUntil(activeMilestone.target_date)} dia(s)</span>}
               </p>
             )}
-          </section>
+          </Secao>
         )}
 
         {allMilestones.length > 0 && (

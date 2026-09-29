@@ -164,6 +164,8 @@ export default function EtapaPreparar() {
       <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
         <Cartao
           titulo={<span className="block truncate">{foto.nome}</span>}
+          recolher={`mesa-foto:preparar:foto:${clientId}`}
+          resumo={areas.length ? `${areas.length} ${areas.length === 1 ? "área protegida" : "áreas protegidas"}` : undefined}
           acao={
             <>
               <div role="group" aria-label="Como comparar" className="mb-1 mr-2 grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
@@ -179,7 +181,7 @@ export default function EtapaPreparar() {
                     type="button"
                     aria-pressed={vista === o.v}
                     onClick={() => setVista(o.v)}
-                    className={juntar("rounded px-2 py-1 text-[11.5px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}
+                    className={juntar("rounded px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}
                   >
                     {o.r}
                   </button>
@@ -202,8 +204,8 @@ export default function EtapaPreparar() {
             <Button
               type="button"
               size="sm"
-              variant={marcando ? "default" : "outline"}
-              className="mb-1.5 mr-2 h-8 text-[12px]"
+              variant="outline"
+              className={juntar("mb-1.5 mr-2 h-8 text-[12px]", marcando && "border-primary bg-primary/10")}
               onClick={() => {
                 setMarcando(!marcando);
                 if (!marcando && vista === "depois") setVista("lado");
@@ -220,7 +222,7 @@ export default function EtapaPreparar() {
                   : "Sem área: o gerador trata a foto inteira."}
             </span>
             {areas.length > 0 && (
-              <button type="button" className="mb-1.5 ml-2 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAreas([])}>
+              <button type="button" className="mb-1.5 ml-2 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setAreas([])}>
                 Limpar áreas
               </button>
             )}
@@ -272,9 +274,9 @@ export default function EtapaPreparar() {
                   onClick={() => setModo(m.valor)}
                   className={juntar("block w-full min-w-0 rounded-md border px-3 py-2 text-left transition-colors", foco, modo === m.valor ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}
                 >
-                  <span className="block text-[12.5px] font-semibold">{m.rotulo}</span>
+                  <span className="block text-[13px] font-semibold">{m.rotulo}</span>
                   {modo === m.valor && (
-                    <span className="mt-1 block space-y-0.5 text-[11.5px] leading-snug">
+                    <span className="mt-1 block space-y-0.5 text-[12px] leading-snug">
                       <span className="block">
                         <span className="text-muted-foreground">Muda: </span>
                         {m.muda}

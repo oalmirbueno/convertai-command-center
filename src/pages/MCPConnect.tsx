@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, Key, Lock, ShieldCheck } from "lucide-react";
-import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import CascaPublica from "@/components/publico/CascaPublica";
 import { toast } from "sonner";
 import { MCP_OAUTH_METADATA_URL, MCP_SERVER_URL } from "@/lib/mcp/endpoints";
 import { Secao, botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
@@ -37,21 +37,24 @@ function copy(value: string) {
 /**
  * Guia público para conectar agentes ao MCP. Minimalista: a marca, os dois
  * endereços que importam, os agentes numa lista e os passos do ChatGPT Work.
- * Sem caixas empilhadas.
+ * Sem caixas empilhadas. Usa a mesma casca das outras páginas públicas; a
+ * frase de apoio mora no "?" ao lado do título.
  */
 export default function MCPConnect() {
   return (
-    <main className="min-h-screen bg-background px-4 py-10 text-foreground sm:py-16">
-      <div className="mx-auto w-full min-w-0 max-w-3xl space-y-8">
-        <header className="min-w-0">
-          <MarcaAceleriq altura={28} />
-          <p className="mt-6 inline-flex items-center text-[12px] font-medium text-primary">
-            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-            MCP oficial
-          </p>
-          <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-[-0.01em] sm:text-[32px]">Conectar agentes ao Aceleriq OS</h1>
-          <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>Um endereço para ChatGPT Work, Codex, Claude Code, Hermes, OpenClaw e outros clientes MCP autorizados.</p>
-        </header>
+    <CascaPublica
+      largura="larga"
+      centralizar={false}
+      titulo="Conectar agentes ao Aceleriq OS"
+      ajuda="Um endereço para ChatGPT Work, Codex, Claude Code, Hermes, OpenClaw e outros clientes MCP autorizados."
+      acimaDoTitulo={
+        <p className="mb-1.5 inline-flex items-center text-[12px] font-medium text-primary">
+          <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+          MCP oficial
+        </p>
+      }
+    >
+      <div className="min-w-0 space-y-8">
 
         <Secao titulo="Endereços" divisoria>
           <ul className="divide-y divide-border">
@@ -106,6 +109,6 @@ export default function MCPConnect() {
           </ol>
         </Secao>
       </div>
-    </main>
+    </CascaPublica>
   );
 }

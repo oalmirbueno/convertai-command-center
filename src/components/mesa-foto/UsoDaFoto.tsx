@@ -359,7 +359,7 @@ export function DecisaoRapida({ ensaio, tomada, versao, compacta = false }: { en
 
   if (rejeitando) {
     return (
-      <div className="w-full min-w-0 space-y-1.5 rounded-lg border border-destructive/30 bg-card p-2" data-rejeitar="">
+      <div className="w-full min-w-0 space-y-1.5 rounded-md border border-destructive/30 p-2" data-rejeitar="">
         <div className="flex min-w-0 flex-wrap">
           {MOTIVOS_RAPIDOS.map((x) => (
             <button key={x} type="button" onClick={() => setMotivo(x)} className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${motivo === x ? "border-destructive text-destructive" : "border-border text-muted-foreground"}`}>
@@ -369,10 +369,10 @@ export function DecisaoRapida({ ensaio, tomada, versao, compacta = false }: { en
         </div>
         <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="O que está errado" aria-label="Motivo da rejeição" className="h-8 text-[12px]" />
         <div className="flex justify-end">
-          <Button type="button" size="sm" variant="ghost" className="mr-1 h-7 text-[11.5px]" onClick={() => setRejeitando(false)}>
+          <Button type="button" size="sm" variant="ghost" className="mr-1 h-7 text-[12px]" onClick={() => setRejeitando(false)}>
             Cancelar
           </Button>
-          <Button type="button" size="sm" variant="destructive" className="h-7 text-[11.5px]" disabled={!motivo.trim() || decidindo} onClick={() => void decidir("rejeitar", motivo)}>
+          <Button type="button" size="sm" variant="destructive" className="h-7 text-[12px]" disabled={!motivo.trim() || decidindo} onClick={() => void decidir("rejeitar", motivo)}>
             Rejeitar com motivo
           </Button>
         </div>
@@ -381,7 +381,7 @@ export function DecisaoRapida({ ensaio, tomada, versao, compacta = false }: { en
   }
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center" data-decisao-rapida="">
-      <Button type="button" size="sm" className={`mb-1 mr-1 h-8 text-[12px] ${compacta ? "px-2" : "px-2.5"}`} disabled={decidindo} onClick={() => void decidir("aprovar")}>
+      <Button type="button" size="sm" variant="outline" className={`mb-1 mr-1 h-8 border-success/50 text-[12px] text-success hover:bg-success/10 hover:text-success ${compacta ? "px-2" : "px-2.5"}`} disabled={decidindo} onClick={() => void decidir("aprovar")}>
         {decidindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Aprovar
       </Button>
       <Button

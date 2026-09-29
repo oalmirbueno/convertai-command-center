@@ -6,7 +6,8 @@ import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente, { BotaoDaArea } from "@/components/agentes/TextoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { chamarAcaoDoLancador, destinoDoAgente, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
-import { botao, campoTexto, juntar } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { AtalhosDoAgente, SeletorDeCliente, SeletorDeServico, nomeDoCliente } from "@/components/admin/agente/SeletoresDoAgente";
 import {
   ATALHO_DO_AGENTE,
@@ -1390,11 +1391,12 @@ export default function VoiceAssistant({
                 {phase === "input" && (
                   <>
                     {conversaVazia && (
-                      <div className="rounded-lg bg-muted/50 p-3 text-[12.5px] leading-5 text-muted-foreground">
-                        <p className="font-medium text-foreground">Diga o que precisa.</p>
-                        <p className="mt-1">
+                      <div className={juntar(superficie.poco, "flex min-w-0 items-center p-3 text-[12px] leading-5 text-muted-foreground")}>
+                        <p className="min-w-0 font-medium text-foreground">Diga o que precisa.</p>
+                        {/* Os exemplos e o que o agente faz sozinho ficam no "?" (28/09). */}
+                        <AjudaRecolhida className="ml-1.5" rotulo="Exemplos do que pedir">
                           Escolha o cliente e o serviço acima e fale ou escreva. Ex.: "Criar projeto de tráfego para Mirante com prazo de 30 dias", "Cria a tarefa revisar as artes para sexta" ou "Abre a Mesa Ads". Tarefa, lembrete e nota eu faço na hora, e dá para desfazer. Arraste contratos para cá e eu leio.
-                        </p>
+                        </AjudaRecolhida>
                       </div>
                     )}
 
@@ -1651,20 +1653,20 @@ export default function VoiceAssistant({
                     {gaps.map((g) => {
                       if (g.id === "client") {
                         return (
-                          <div key="client" className="rounded-xl border border-border bg-secondary/40 p-3">
-                            <p className="text-xs font-medium text-foreground mb-2">{g.label}</p>
+                          <div key="client" className={juntar(superficie.poco, "p-3")}>
+                            <p className="mb-2 text-[12px] font-medium text-foreground">{g.label}</p>
                             <input
                               value={clientSearch}
                               onChange={(e) => setClientSearch(e.target.value)}
                               placeholder="Buscar cliente…"
-                              className="w-full text-sm bg-background border border-border rounded p-2 mb-2"
+                              className={juntar(campo, "mb-2")}
                             />
-                            <ul className="space-y-1 max-h-[160px] overflow-y-auto">
+                            <ul className="space-y-1">
                               {filteredClients.map((c) => (
                                 <li key={c.id}>
                                   <button
                                     onClick={() => setAnswers((a) => ({ ...a, client_id: c.id }))}
-                                    className={`w-full text-left text-xs px-2 py-1.5 rounded transition ${
+                                    className={`w-full rounded px-2 py-1.5 text-left text-[12px] transition ${
                                       answers.client_id === c.id ? "bg-primary/20 text-foreground" : "hover:bg-secondary text-muted-foreground"
                                     }`}
                                   >
@@ -1678,8 +1680,8 @@ export default function VoiceAssistant({
                       }
                       if (g.id === "project_type") {
                         return (
-                          <div key="ptype" className="rounded-xl border border-border bg-secondary/40 p-3">
-                            <p className="text-xs font-medium text-foreground mb-2">{g.label}</p>
+                          <div key="ptype" className={juntar(superficie.poco, "p-3")}>
+                            <p className="mb-2 text-[12px] font-medium text-foreground">{g.label}</p>
                             <div className="flex flex-wrap gap-1.5">
                               {g.options.map((o) => (
                                 <button
@@ -1714,8 +1716,8 @@ export default function VoiceAssistant({
                           rawHint: (parsed as any).name,
                         });
                         return (
-                          <div key="pname" className="rounded-xl border border-border bg-secondary/40 p-3">
-                            <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-1">
+                          <div key="pname" className={juntar(superficie.poco, "p-3")}>
+                            <p className="mb-2 flex items-center text-[12px] font-medium text-foreground [&>svg]:mr-1">
                               <Edit3 className="w-3 h-3" /> Nome do projeto
                             </p>
                             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1737,7 +1739,7 @@ export default function VoiceAssistant({
                               value={answers.project_name || ""}
                               onChange={(e) => setAnswers((a) => ({ ...a, project_name: e.target.value }))}
                               placeholder="Ou digite um nome personalizado"
-                              className="w-full text-sm bg-background border border-border rounded p-2"
+                              className={campo}
                             />
                           </div>
                         );
@@ -1748,8 +1750,8 @@ export default function VoiceAssistant({
                       return null;
                     })}
                     {parsed.kind === "create_project" && answers.client_id && (
-                      <div className="rounded-xl border border-border bg-secondary/40 p-3">
-                        <p className="text-xs font-medium text-foreground mb-2">Projeto do cliente</p>
+                      <div className={juntar(superficie.poco, "p-3")}>
+                        <p className="mb-2 text-[12px] font-medium text-foreground">Projeto do cliente</p>
                         {clientProjectsLoading ? (
                           <p className="text-[11px] text-muted-foreground">Carregando projetos…</p>
                         ) : (
@@ -1758,14 +1760,14 @@ export default function VoiceAssistant({
                               <button
                                 key={p.id}
                                 onClick={() => setAnswers((a) => ({ ...a, project_id: p.id, project_name: p.name, project_type: p.project_type || a.project_type }))}
-                                className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === p.id ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                                className={`w-full text-left px-3 py-2 rounded-lg border text-[12px] transition ${answers.project_id === p.id ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
                               >
                                 <span className="font-medium">Atualizar existente:</span> {p.name}
                               </button>
                             ))}
                             <button
                               onClick={() => setAnswers((a) => ({ ...a, project_id: "new" }))}
-                              className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === "new" ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                              className={`w-full text-left px-3 py-2 rounded-lg border text-[12px] transition ${answers.project_id === "new" ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
                             >
                               <span className="font-medium">Criar novo projeto</span>
                             </button>
@@ -1776,8 +1778,8 @@ export default function VoiceAssistant({
                     {gaps.map((g) => {
                       if (g.id === "deadline") {
                         return (
-                          <div key="dl" className="rounded-xl border border-border bg-secondary/40 p-3">
-                            <p className="text-xs font-medium text-foreground mb-2">{g.label}</p>
+                          <div key="dl" className={juntar(superficie.poco, "p-3")}>
+                            <p className="mb-2 text-[12px] font-medium text-foreground">{g.label}</p>
                             <div className="flex flex-wrap gap-1.5">
                               {g.options.map((o) => (
                                 <button
@@ -1798,10 +1800,10 @@ export default function VoiceAssistant({
                       }
                       if (g.id === "apply_template") {
                         return (
-                          <div key="tpl" className="rounded-xl border border-border bg-secondary/40 p-3 flex items-center justify-between">
+                          <div key="tpl" className={juntar(superficie.poco, "flex items-center justify-between p-3")}>
                             <div>
-                              <p className="text-xs font-medium text-foreground">Aplicar template completo</p>
-                              <p className="text-[10px] text-muted-foreground">
+                              <p className="text-[12px] font-medium text-foreground">Aplicar template completo</p>
+                              <p className="text-[11px] text-muted-foreground">
                                 Cria milestones, tarefas e checklists do tipo selecionado
                               </p>
                             </div>
@@ -1817,12 +1819,12 @@ export default function VoiceAssistant({
                       if (g.id === "task_title" || g.id === "milestone_title") {
                         const k = g.id;
                         return (
-                          <div key={k} className="rounded-xl border border-border bg-secondary/40 p-3">
-                            <p className="text-xs font-medium text-foreground mb-2">{g.label}</p>
+                          <div key={k} className={juntar(superficie.poco, "p-3")}>
+                            <p className="mb-2 text-[12px] font-medium text-foreground">{g.label}</p>
                             <input
                               value={answers[k] || ""}
                               onChange={(e) => setAnswers((a) => ({ ...a, [k]: e.target.value }))}
-                              className="w-full text-sm bg-background border border-border rounded p-2"
+                              className={campo}
                             />
                           </div>
                         );
@@ -1983,8 +1985,8 @@ export default function VoiceAssistant({
                         aria-label={listening ? "Parar de ouvir" : "Falar"}
                         data-microfone={listening ? "ouvindo" : "parado"}
                         className={juntar(
-                          "mr-1.5 inline-flex h-9 shrink-0 items-center rounded-full px-3 text-[12.5px] font-medium transition-colors",
-                          listening ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90",
+                          "mr-1.5 inline-flex h-9 shrink-0 items-center rounded-full px-3 text-[12px] font-medium transition-colors",
+                          listening ? "bg-destructive text-destructive-foreground" : "border border-border bg-transparent text-foreground hover:bg-muted",
                         )}
                       >
                         {listening ? (

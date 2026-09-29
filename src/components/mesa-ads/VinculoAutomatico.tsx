@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Link2, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, Loader2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AvisoDeErro, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { usd } from "@/lib/mesa/api";
 import { brl, chavesAds } from "./adsApi";
-import { Foto } from "./Comuns";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CabecalhoDaParte, Foto, useParteRecolhida } from "./Comuns";
 import { chavesVinculo, confirmarVinculo, desfazerVinculo, lerVinculos, rotuloDaConfianca, type ItemDeVinculo } from "./vinculoApi";
 
 /**
@@ -39,6 +40,8 @@ export default function VinculoAutomatico() {
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [ocupado, setOcupado] = useState<string | null>(null);
+  // 28/09 (padronização, lote L4): seção aberta (sem caixa) que recolhe pela setinha; a explicação no "?".
+  const parte = useParteRecolhida(`mesa-ads:resultados:vinculo:${clientId}`);
   const q = useQuery({
     queryKey: chavesVinculo.vinculos(clientId),
     queryFn: async () => {
@@ -84,10 +87,10 @@ export default function VinculoAutomatico() {
               {Math.round(c.confianca * 100)}% ({rotuloDaConfianca(c.confianca)}){c.sinais.length ? `: ${c.sinais.join(", ")}` : ""}
             </span>
           </span>
-          <Button type="button" size="sm" className="mr-1 h-7 text-[11.5px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}`, () => confirmarVinculo(clientId, c.criativo_id, i.anuncio.ad_id), "Anúncio ligado ao criativo")}>
+          <Button type="button" size="sm" className="mr-1 h-7 text-[12px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}`, () => confirmarVinculo(clientId, c.criativo_id, i.anuncio.ad_id), "Anúncio ligado ao criativo")}>
             {ocupado === `${i.peca}:${c.criativo_id}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}É este
           </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}:n`, () => desfazerVinculo(clientId, c.criativo_id, i.anuncio.ad_id, true), "Guardado: não é este")}>
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}:n`, () => desfazerVinculo(clientId, c.criativo_id, i.anuncio.ad_id, true), "Guardado: não é este")}>
             <X className="mr-1 h-3 w-3" />Não é
           </Button>
         </li>
@@ -96,20 +99,21 @@ export default function VinculoAutomatico() {
   );
 
   return (
-    <section className="min-w-0 rounded-lg border border-border bg-card p-4" aria-label="Vínculo automático">
-      <div className="flex min-w-0 flex-wrap items-start">
-        <Link2 className="mb-1 mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <div className="mb-1 mr-3 min-w-0 flex-1">
-          <h3 className="text-[13.5px] font-semibold">Anúncios e criativos da Mesa Ads</h3>
-          <p className="text-[11.5px] text-muted-foreground">
-            Reconhecidos sozinhos pela imagem, pelo nome, pelo texto, pelo título, pela campanha e pelas datas. O Jev confere os incertos; só o que continua incerto pede a sua confirmação.
-          </p>
-        </div>
-        <Button type="button" size="sm" variant="outline" className="mb-1 h-8" disabled={q.isFetching} onClick={() => void q.refetch()} title="Reconhece de novo">
-          {q.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-          Reconhecer de novo
-        </Button>
-      </div>
+    <section className="min-w-0 border-t border-border pt-5" aria-label="Vínculo automático">
+      <CabecalhoDaParte
+        nivel={3}
+        titulo="Anúncios e criativos da Mesa Ads"
+        ajuda="Reconhecidos sozinhos pela imagem, pelo nome, pelo texto, pelo título, pela campanha e pelas datas. O Jev confere os incertos; só o que continua incerto pede a sua confirmação."
+        recolher={{ ...parte, resumo: v ? `${v.resumo.ja_ligados} já ligados${v.resumo.confirmar > 0 ? ` · ${v.resumo.confirmar} para confirmar` : ""}` : undefined }}
+        acoes={
+          <Button type="button" size="sm" variant="outline" className="h-8" disabled={q.isFetching} onClick={() => void q.refetch()} title="Reconhece de novo">
+            {q.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+            Reconhecer de novo
+          </Button>
+        }
+      />
+      {!parte.recolhido && (
+      <>
       {q.isError && <AvisoDeErro erro={q.error} />}
       {q.isLoading && (
         <p className="mt-2 flex items-center text-[12px] text-muted-foreground" aria-busy="true">
@@ -118,7 +122,7 @@ export default function VinculoAutomatico() {
       )}
       {v && (
         <>
-          <div className="mt-2 flex min-w-0 flex-wrap text-[11.5px]" aria-label="Resumo do vínculo">
+          <div className="mt-2 flex min-w-0 flex-wrap text-[12px]" aria-label="Resumo do vínculo">
             <span className="mb-1 mr-2 rounded-full bg-secondary px-2 py-0.5">{v.resumo.ja_ligados} já ligados</span>
             {v.resumo.automaticos > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.automaticos} reconhecidos agora</span>}
             {v.resumo.pelo_jev > 0 && <span className="mb-1 mr-2 rounded-full bg-success/10 px-2 py-0.5 text-success">{v.resumo.pelo_jev} pelo Jev</span>}
@@ -126,9 +130,16 @@ export default function VinculoAutomatico() {
             <span className="mb-1 mr-2 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{v.resumo.sem_par} feitos fora da Mesa Ads</span>
             {v.custo_usd > 0 && <span className="mb-1 mr-2 px-1 py-0.5 tabular-nums text-muted-foreground">Conferência do Jev: {usd(v.custo_usd)}</span>}
           </div>
-          {v.jev_erro && <p className="mt-1 text-[11.5px] text-muted-foreground">O Jev não respondeu agora; os incertos ficaram para você confirmar.</p>}
-          {v.impressoes.pendentes > 0 && <p className="mt-1 text-[11.5px] text-muted-foreground">{v.impressoes.pendentes} imagens ainda não foram comparadas: reconheça de novo para continuar.</p>}
-          {!v.historico_disponivel && <p className="mt-1 text-[11px] text-muted-foreground">As recusas ainda não ficam guardadas (banco sem a tabela nova): um par recusado pode voltar como sugestão.</p>}
+          {v.jev_erro && <p className="mt-1 text-[12px] text-muted-foreground">O Jev não respondeu agora; os incertos ficaram para você confirmar.</p>}
+          {v.impressoes.pendentes > 0 && <p className="mt-1 text-[12px] text-muted-foreground">{v.impressoes.pendentes} imagens ainda não foram comparadas: reconheça de novo para continuar.</p>}
+          {!v.historico_disponivel && (
+            <p className="mt-1 flex items-center text-[12px] text-muted-foreground">
+              As recusas ainda não ficam guardadas.
+              <AjudaRecolhida className="ml-1.5" rotulo="Por que as recusas não ficam">
+                O banco ainda não tem a tabela nova: um par recusado pode voltar como sugestão.
+              </AjudaRecolhida>
+            </p>
+          )}
 
           {confirmar.length > 0 && (
             <div className="mt-3 min-w-0 space-y-2">
@@ -138,11 +149,11 @@ export default function VinculoAutomatico() {
                   <div className="flex min-w-0 items-start">
                     <Miniatura src={i.anuncio.imagem_url} alt={i.anuncio.nome} />
                     <div className="ml-2.5 min-w-0 flex-1">
-                      <p className="truncate text-[12.5px] font-medium">{i.anuncio.nome}</p>
+                      <p className="truncate text-[13px] font-medium">{i.anuncio.nome}</p>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {[i.anuncio.campanha, `${brl(i.anuncio.gasto_90d)} em 90 dias`, i.anuncio.ad_ids.length > 1 ? `mesma arte em ${i.anuncio.ad_ids.length} anúncios` : ""].filter(Boolean).join(" · ")}
                       </p>
-                      {i.anuncio.corpo && <p className="mt-0.5 line-clamp-2 text-[11.5px] text-foreground/80 [overflow-wrap:anywhere]">{i.anuncio.corpo}</p>}
+                      {i.anuncio.corpo && <p className="mt-0.5 line-clamp-2 text-[12px] text-foreground/80 [overflow-wrap:anywhere]">{i.anuncio.corpo}</p>}
                     </div>
                   </div>
                   <Candidatos i={i} />
@@ -166,7 +177,7 @@ export default function VinculoAutomatico() {
                       </span>
                     </span>
                     {i.criativo && (
-                      <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 text-[11.5px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:d`, () => desfazerVinculo(clientId, i.criativo!.id, i.anuncio.ad_id, true), "Vínculo desfeito")}>
+                      <Button type="button" size="sm" variant="ghost" className="h-7 shrink-0 text-[12px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:d`, () => desfazerVinculo(clientId, i.criativo!.id, i.anuncio.ad_id, true), "Vínculo desfeito")}>
                         Desfazer
                       </Button>
                     )}
@@ -178,12 +189,12 @@ export default function VinculoAutomatico() {
 
           {semPar.length > 0 && (
             <details className="mt-3 min-w-0">
-              <summary className="cursor-pointer text-[11.5px] text-muted-foreground">
+              <summary className="cursor-pointer text-[12px] text-muted-foreground">
                 {semPar.length} anúncio{semPar.length === 1 ? "" : "s"} sem criativo da Mesa Ads (feitos fora da Mesa ou sem par seguro)
               </summary>
               <ul className="mt-2 space-y-1">
                 {semPar.slice(0, 30).map((i) => (
-                  <li key={i.peca} className="truncate text-[11.5px] text-muted-foreground">
+                  <li key={i.peca} className="truncate text-[12px] text-muted-foreground">
                     {i.anuncio.nome} · {brl(i.anuncio.gasto_90d)}
                   </li>
                 ))}
@@ -191,6 +202,8 @@ export default function VinculoAutomatico() {
             </details>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );

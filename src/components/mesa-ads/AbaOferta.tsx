@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Lightbulb, Loader2, Plus, RefreshCw, Rocket, Sparkles, X } from "lucide-react";
+import { Check, Lightbulb, Loader2, Plus, RefreshCw, Rocket, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,7 @@ import {
   type StatusDaOferta,
   type TipoDeProva,
 } from "./adsApi";
-import { Andamento, CabecalhoDaParte, useAndamento } from "./Comuns";
+import { Andamento, CabecalhoDaParte, useAndamento, useParteRecolhida } from "./Comuns";
 import AgenteDaOferta, { pedidoParaLapidar, type PedidoAoAgente } from "./AgenteDaOferta";
 import CartaoDaOferta from "./CartaoDaOferta";
 
@@ -115,7 +115,7 @@ function GrupoDoBriefing({ titulo, ajuda, acao, children }: { titulo: string; aj
   return (
     <section className="min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0 xl:[&:nth-child(2)]:border-t-0 xl:[&:nth-child(2)]:pt-0" aria-label={titulo}>
       <div className="mb-3 flex min-w-0 items-center">
-        <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate text-[14px]")}>{titulo}</h3>
+        <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{titulo}</h3>
         <AjudaRecolhida className="ml-1.5">{ajuda}</AjudaRecolhida>
         {acao && <div className="ml-auto shrink-0 pl-2">{acao}</div>}
       </div>
@@ -179,7 +179,7 @@ function Aviso({ children, acao, tom = "neutro", rotulo }: { children: ReactNode
   const cor = tom === "destaque" ? "bg-primary/5" : tom === "atencao" ? "bg-warning/5" : superficie.poco;
   return (
     <div className={juntar("flex min-w-0 flex-wrap items-center rounded-md px-3 py-2", cor)} role="note" aria-label={rotulo}>
-      <div className="mr-3 min-w-0 flex-1 py-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]">{children}</div>
+      <div className="mr-3 min-w-0 flex-1 py-0.5 text-[13px] leading-snug [overflow-wrap:anywhere]">{children}</div>
       {acao && <div className="shrink-0 py-0.5">{acao}</div>}
     </div>
   );
@@ -240,6 +240,9 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
   });
   const [briefingAberto, setBriefingAberto] = useEstadoDaTela(`mesa-ads:oferta:briefing-aberto:${clientId}`, true, { validar: (v) => typeof v === "boolean" });
   const briefingRef = useRef<HTMLDivElement>(null);
+  // Tudo recolhe (SISTEMA.md 4.3): Ofertas pela setinha do título; o briefing
+  // pela mesma setinha, com o estado que já era lembrado por cliente.
+  const partesDasOfertas = useParteRecolhida(`mesa-ads:oferta:ofertas:${clientId}`);
   const [doContexto, setDoContexto] = useState<OfertaDoContexto | null>(null);
   const [montando, setMontando] = useState(false);
   const [erroDoContexto, setErroDoContexto] = useState<string | null>(null);
@@ -448,26 +451,29 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
             titulo="Ofertas"
             ajuda="Converse com o agente ao lado. Cada oferta chega conferida pelo Jev; escolha uma e crie os criativos direto dela. O objetivo dos criativos vai junto para o Plano de teste."
             descricao={`${contagem.ativas} em uso · ${contagem.escolhidas} escolhida${contagem.escolhidas === 1 ? "" : "s"}`}
+            recolher={partesDasOfertas}
+            acoes={
+              <>
+                <SeletorCompacto
+                  rotulo="Filtrar ofertas"
+                  listaQuandoNaoCabe
+                  opcoes={FILTROS.map((f) => ({ valor: f, rotulo: f === "ativas" ? "Em uso" : f === "escolhidas" ? "Escolhidas" : "Arquivadas", contador: contagem[f] }))}
+                  valor={filtro}
+                  onEscolher={(v) => setFiltro(v as FiltroDeOferta)}
+                />
+                <select aria-label="Objetivo dos criativos" title="Objetivo dos criativos" value={objetivo} onChange={(e) => setObjetivoDosCriativos(e.target.value)} className={juntar(seletorNativo, "max-w-[160px]")}>
+                  {OBJETIVOS.map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </>
+            }
           />
-          <div className="-m-1 mb-2 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-            <SeletorCompacto
-              rotulo="Filtrar ofertas"
-              opcoes={FILTROS.map((f) => ({ valor: f, rotulo: f === "ativas" ? "Em uso" : f === "escolhidas" ? "Escolhidas" : "Arquivadas", contador: contagem[f] }))}
-              valor={filtro}
-              onEscolher={(v) => setFiltro(v as FiltroDeOferta)}
-            />
-            <label className="flex min-w-0 max-w-full items-center">
-              <span className={juntar(texto.auxiliar, "mr-2 shrink-0")}>Objetivo</span>
-              <select aria-label="Objetivo dos criativos" value={objetivo} onChange={(e) => setObjetivoDosCriativos(e.target.value)} className={seletorNativo}>
-                {OBJETIVOS.map((o) => (
-                  <option key={o.valor} value={o.valor}>
-                    {o.rotulo}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
 
+          {!partesDasOfertas.recolhido && (
+          <>
           <div className="min-w-0 space-y-2">
             {(montando || erroDoContexto || temOfertaDoContexto) && (
               <Aviso
@@ -555,11 +561,14 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               </div>
             )}
           </div>
+          </>
+          )}
         </section>
 
         <div ref={briefingRef} className="min-w-0 scroll-mt-4 border-t border-border pt-5">
           <CabecalhoDaParte
             titulo="Briefing de performance"
+            recolher={{ recolhido: !briefingAberto, onAlternar: () => setBriefingAberto((v) => !v) }}
             ajuda="O briefing que o estrategista usa no plano e na copy. Sugerir pelo contexto lê o kit, o contexto, o dossiê e as métricas de anúncios e propõe; o que não tiver dado fica como lacuna. Nada é gravado sem você salvar."
             descricao={
               <>
@@ -587,24 +596,15 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                     setBriefingAberto(true);
                   }}
                 />
-                <Button type="button" size="sm" className="h-9" disabled={!mudou || salvando} onClick={() => void salvar()}>
+                <Button type="button" size="sm" variant="outline" className="h-9" disabled={!mudou || salvando} onClick={() => void salvar()}>
                   {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
                   Salvar briefing
                 </Button>
-                <button
-                  type="button"
-                  onClick={() => setBriefingAberto((v) => !v)}
-                  aria-expanded={briefingAberto}
-                  aria-label={briefingAberto ? "Recolher o briefing" : "Abrir o briefing"}
-                  title={briefingAberto ? "Recolher o briefing" : "Abrir o briefing"}
-                  className={botao.icone}
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${briefingAberto ? "rotate-180" : ""}`} aria-hidden="true" />
-                </button>
               </>
             }
           />
 
+          {briefingAberto && (
           <div className="min-w-0 space-y-2">
             {salvo.isError && <AvisoDeErro erro={salvo.error} />}
             {aplicadoDe && mudou && (
@@ -620,7 +620,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                     <span className="text-muted-foreground"> Sem dado real para:</span>
                     <ul className="mt-1 flex flex-wrap">
                       {lacunasSugeridas.map((l) => (
-                        <li key={l} className="mb-1 mr-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[11.5px] text-warning">
+                        <li key={l} className="mb-1 mr-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[12px] text-warning">
                           {l}
                         </li>
                       ))}
@@ -632,8 +632,9 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               </Aviso>
             )}
           </div>
+          )}
 
-          {salvo.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo o briefing" className="mt-3" />}
+          {briefingAberto && salvo.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo o briefing" className="mt-3" />}
 
           {briefingAberto && !salvo.isLoading && (
             <div className={juntar(superficie.painel, "mt-3 grid min-w-0 grid-cols-1 gap-x-8 gap-y-5 p-4 sm:p-5 xl:grid-cols-2")}>
@@ -816,7 +817,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               no celular fica no fim do formulário (sem nada flutuando sobre os campos). */}
           {mudou && (
             <BarraDeAcoes
-              className="mt-3 border-t border-border bg-background/95 py-3 lg:sticky lg:bottom-0 lg:z-10"
+              className="mt-3 border-t border-border bg-background py-3 lg:sticky lg:bottom-0 lg:z-10"
               inicio={<span className="block truncate">Briefing com alterações não salvas</span>}
             >
               <Button type="button" size="sm" variant="ghost" className="h-8" onClick={descartar}>

@@ -247,7 +247,7 @@ function QuadroDaLogo({
       aria-label={`Ver ${rotulo.toLowerCase()} maior`}
       title="Ver maior"
       style={estiloDoFundo(fundo)}
-      className={`group relative flex ${altura} w-full items-center justify-center overflow-hidden rounded-xl border border-border p-3 transition-shadow hover:shadow-md`}
+      className={`group relative flex ${altura} w-full items-center justify-center overflow-hidden rounded-lg border border-border p-3 transition-colors hover:border-primary/60`}
     >
       <MiniaturaDoStorage bucket={imagem.bucket} caminho={imagem.caminho} alt={rotulo} largura={480} ajuste="contain" className="h-full w-full" />
       <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">

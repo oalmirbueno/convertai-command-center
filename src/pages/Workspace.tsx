@@ -20,7 +20,7 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
   ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent,
 } from "@/components/ui/context-menu";
-import { Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film, Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2, Search, Grid2X2, List, Loader2, MoreVertical, MoreHorizontal, Pencil, FolderInput, ArrowLeft, ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw, AlertCircle, ClipboardPaste, Layers } from "lucide-react";
+import { Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film, Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2, Search, Grid2X2, List, Loader2, MoreVertical, MoreHorizontal, Pencil, FolderInput, ArrowLeft, ArrowUpDown, ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw, AlertCircle, ClipboardPaste, Layers } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
@@ -40,6 +40,7 @@ import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
+import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
@@ -319,6 +320,10 @@ export default function Workspace() {
   });
   const [sortBy, setSortBy] = useEstadoDaTela<"recent" | "old" | "az" | "za">("workspace:ordem", "recent", {
     validar: (v) => v === "recent" || v === "old" || v === "az" || v === "za",
+  });
+  // Árvore de pastas recolhida para o lado (SISTEMA.md 4.3): lembra por pessoa.
+  const [pastasRecolhidas, setPastasRecolhidas] = useEstadoDaTela<boolean>("workspace:pastas-recolhidas", false, {
+    validar: (v) => typeof v === "boolean",
   });
   const [handoffNode, setHandoffNode] = useState<Node | null>(null);
   const [handoffName, setHandoffName] = useState("");
@@ -2373,9 +2378,21 @@ export default function Workspace() {
           e o conteúdo rolam cada um por conta própria, lembrando a posição. No
           celular a página rola normal e a árvore sai (o caminho faz o papel dela). */}
       <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Workspace" className="mt-4">
-        <div className="flex min-w-0 flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
-          <aside aria-label="Pastas" className="hidden min-h-0 min-w-0 border-r border-border pr-3 lg:flex lg:flex-col">
-            <p className={juntar(texto.rotulo, "mb-2 shrink-0 px-2")}>Pastas</p>
+        <div
+          className={juntar(
+            "flex min-w-0 flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
+            pastasRecolhidas
+              ? "lg:grid-cols-[32px_minmax(0,1fr)] lg:gap-3"
+              : "lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-5 xl:grid-cols-[260px_minmax(0,1fr)]",
+          )}
+        >
+          {/* Árvore de pastas: recolhe para o lado, numa tirinha (SISTEMA.md 4.3). */}
+          <LateralEsquerda
+            rotulo="Pastas"
+            icone={<Folder className="h-4 w-4" />}
+            recolhida={pastasRecolhidas}
+            onAlternar={() => setPastasRecolhidas(!pastasRecolhidas)}
+          >
             <RegiaoRolavel
               rotulo="Árvore de pastas"
               memoria={`workspace:arvore-rolagem:${scope}:${clientId || "-"}`}
@@ -2383,12 +2400,15 @@ export default function Workspace() {
             >
               {renderArvore()}
             </RegiaoRolavel>
-          </aside>
+          </LateralEsquerda>
 
           <div className="flex min-w-0 flex-col lg:min-h-0">
-            {/* Caminho + busca + visualização */}
+            {/* Uma barra só (SISTEMA.md 4.2): caminho com o estado do nível; seção e ordem;
+                busca e visualização. No computador cabe numa linha; quando falta largura,
+                cada grupo desce inteiro (celular: caminho, filtros, busca). */}
             <div className="flex min-w-0 shrink-0 flex-wrap items-center">
-              <nav aria-label="Caminho" className="flex w-full min-w-0 items-center overflow-x-auto scrollbar-hidden sm:w-auto sm:flex-1">
+              <div className="flex w-full min-w-0 items-center md:w-auto md:min-w-[220px] md:flex-1">
+              <nav aria-label="Caminho" className="flex min-w-0 items-center overflow-x-auto scrollbar-hidden">
                 {parent && (
                   <button type="button" onClick={() => nav.pop()} aria-label="Voltar uma pasta" className={juntar(botao.icone, "mr-1")}>
                     <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -2429,8 +2449,31 @@ export default function Workspace() {
                   );
                 })}
               </nav>
-              <div className="mt-2 flex w-full min-w-0 items-center sm:ml-3 sm:mt-0 sm:w-auto">
-                <div className="relative min-w-0 flex-1 sm:w-[200px] sm:flex-none">
+              <span className={juntar(texto.auxiliar, "ml-2 shrink-0 tabular-nums")}>
+                {estadoDoNivel}
+              </span>
+              </div>
+              <div className="mt-2 flex min-w-0 items-center md:ml-3 md:mt-0">
+                <SeletorCompacto
+                  modo="lista"
+                  rotulo="Seção"
+                  icone={<Layers className="h-4 w-4" />}
+                  opcoes={opcoesDeSecao}
+                  valor={tagFilter}
+                  onEscolher={escolherSecao}
+                />
+                <SeletorCompacto
+                  className="ml-2"
+                  modo="lista"
+                  rotulo="Ordem"
+                  icone={<ArrowUpDown className="h-3.5 w-3.5" />}
+                  opcoes={opcoesDeOrdem}
+                  valor={sortBy}
+                  onEscolher={(v) => setSortBy(v as "recent" | "old" | "az" | "za")}
+                />
+              </div>
+              <div className="mt-2 flex w-full min-w-0 items-center md:ml-2 md:mt-0 md:w-auto">
+                <div className="relative min-w-0 flex-1 md:w-[200px] md:flex-none">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                   <input
                     type="search"
@@ -2448,29 +2491,6 @@ export default function Workspace() {
                   valor={view}
                   onEscolher={(v) => setView(v === "list" ? "list" : "grid")}
                 />
-              </div>
-            </div>
-
-            {/* Seção + ordem + estado do nível */}
-            <div className="mt-2 shrink-0">
-              <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-                <SeletorCompacto
-                  modo="lista"
-                  rotulo="Seção"
-                  icone={<Layers className="h-4 w-4" />}
-                  opcoes={opcoesDeSecao}
-                  valor={tagFilter}
-                  onEscolher={escolherSecao}
-                />
-                <SeletorCompacto
-                  rotulo="Ordem"
-                  opcoes={opcoesDeOrdem}
-                  valor={sortBy}
-                  onEscolher={(v) => setSortBy(v as "recent" | "old" | "az" | "za")}
-                />
-                <span className={juntar(texto.auxiliar, "ml-auto truncate tabular-nums")}>
-                  {estadoDoNivel}
-                </span>
               </div>
             </div>
 
@@ -2635,7 +2655,7 @@ export default function Workspace() {
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <Icon className={juntar("h-10 w-10", isFolder ? "text-primary" : KIND_META[k].color)} aria-hidden="true" />
                             {!isFolder && extOf(n.name) && (
-                              <span className={juntar(etiqueta, "mt-2 bg-background/70 font-mono", KIND_META[k].accent)}>{extOf(n.name)}</span>
+                              <span className={juntar(etiqueta, "mt-2 bg-background font-mono", KIND_META[k].accent)}>{extOf(n.name)}</span>
                             )}
                           </div>
                         )}
@@ -2661,7 +2681,7 @@ export default function Workspace() {
                         )}
                       </div>
                       <div className="mt-1.5 min-w-0 pr-1">
-                        <p className="truncate text-[12.5px] font-medium leading-5 text-foreground">{n.name}</p>
+                        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{n.name}</p>
                         <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>
                           {isFolder
                             ? (n.__virtual ? "Seção" : total === 0 ? "Vazia" : `${total} ${total === 1 ? "item" : "itens"}`)

@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie, texto } from "@/components/sistema/estilos";
 import { AvisoDeErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
@@ -61,7 +63,7 @@ function ItemDaLista({
       <SeloPequeno campanha={campanha} />
       <span className="ml-2.5 min-w-0 flex-1">
         <span className={`block truncate text-[13px] ${ativa ? "font-semibold" : "font-medium"}`}>{campanha.nome}</span>
-        <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+        <span className="mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
           <span className="mr-1.5 min-w-0 truncate">
             {rotuloDoTipo(tipoDaCampanha(campanha.identidade)) ? `${rotuloDoTipo(tipoDaCampanha(campanha.identidade))} · ` : ""}
             {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
@@ -92,13 +94,16 @@ function EstadoVazio({
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl py-6 sm:py-10">
       <div className="text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
           <Megaphone className="h-5 w-5 text-primary" />
         </span>
-        <h2 className="mt-4 text-[17px] font-semibold">{lista.length ? "Abra uma campanha ou comece outra" : "A primeira campanha deste cliente"}</h2>
-        <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
-          Uma campanha junta o tema, a identidade com o selo e os conteúdos do período. O agente cria tudo a partir de uma frase e ajusta pela conversa.
-        </p>
+        {/* Só o título; o que é uma campanha fica no "?" (28/09). */}
+        <div className="mt-4 flex min-w-0 items-center justify-center">
+          <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{lista.length ? "Abra uma campanha ou comece outra" : "A primeira campanha deste cliente"}</h2>
+          <AjudaRecolhida className="ml-1.5" rotulo="O que é uma campanha">
+            Uma campanha junta o tema, a identidade com o selo e os conteúdos do período. O agente cria tudo a partir de uma frase e ajusta pela conversa.
+          </AjudaRecolhida>
+        </div>
         <Button type="button" className="mt-5 h-10" onClick={onNova}>
           <Plus className="mr-1.5 h-4 w-4" /> Nova campanha
         </Button>
@@ -111,7 +116,7 @@ function EstadoVazio({
       )}
       {recentes.length > 0 && (
         <div className="mt-8">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Recentes</p>
+          <p className={juntar(texto.rotulo, "mb-2")}>Recentes</p>
           <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2" aria-label="Campanhas recentes">
             {recentes.map((c) => {
               const n = contagem(c);
@@ -120,12 +125,12 @@ function EstadoVazio({
                   <button
                     type="button"
                     onClick={() => onAbrir(c.id)}
-                    className="flex w-full min-w-0 items-center rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50"
+                    className={juntar(superficie.painel, "flex w-full min-w-0 items-center p-3 text-left transition-colors hover:border-primary/50")}
                   >
                     <SeloPequeno campanha={c} tamanho="h-11 w-11" />
                     <span className="ml-3 min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium">{c.nome}</span>
-                      <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+                      <span className="mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
                         <span className="mr-1.5 min-w-0 truncate">
                           {periodoCurto(c.periodo_inicio, c.periodo_fim)}
                           {n !== null ? ` · ${n} conteúdo(s)` : ""}
@@ -231,8 +236,9 @@ export default function AbaCampanhas({
 
   // ---------------------------------------------------------------- partes
 
+  // Secundário: o primário da área é o do estado vazio ou o da campanha aberta (28/09, um primário por área).
   const botaoNova = (
-    <Button type="button" size="sm" className="h-8 shrink-0" onClick={comecarNova} disabled={nova}>
+    <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" onClick={comecarNova} disabled={nova}>
       <Plus className="mr-1 h-3.5 w-3.5" /> Nova campanha
     </Button>
   );
@@ -240,7 +246,7 @@ export default function AbaCampanhas({
   const listaLateral = (
     <nav aria-label="Campanhas do cliente" className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="flex shrink-0 items-center border-b border-border px-3 py-3">
-        <h2 className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">Campanhas</h2>
+        <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold">Campanhas</h2>
         {botaoNova}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
@@ -347,7 +353,7 @@ export default function AbaCampanhas({
         data-altura-que-cabe=""
       >
         {listaAoLado && (
-          <aside className="min-h-0 min-w-0 overflow-hidden rounded-xl border border-border bg-card">{listaLateral}</aside>
+          <aside className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")}>{listaLateral}</aside>
         )}
 
         <section className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" aria-label="Campanha">
@@ -356,7 +362,7 @@ export default function AbaCampanhas({
         </section>
 
         {agenteAoLado && (
-          <aside className="min-h-0 min-w-0 overflow-hidden rounded-xl border border-border bg-card" aria-label="Agente da campanha">
+          <aside className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")} aria-label="Agente da campanha">
             {agente}
           </aside>
         )}

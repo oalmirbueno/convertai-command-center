@@ -33,6 +33,7 @@ import {
   etiqueta,
   foco,
   juntar,
+  lista,
   superficie,
   texto,
   useEstadoDaTela,
@@ -278,7 +279,7 @@ export default function ClientJourneyDashboard({
               type="button"
               onClick={() => navigate(atalho.to)}
               className={juntar(
-                "flex h-10 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:justify-start",
+                "flex h-10 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:justify-start",
                 foco,
               )}
             >
@@ -354,7 +355,7 @@ export default function ClientJourneyDashboard({
               <button
                 type="button"
                 onClick={() => navigate("/aprovacoes")}
-                className={juntar(botao.primario.replace("bg-primary text-primary-foreground hover:bg-primary/90", ""), "bg-amber-500 text-white hover:bg-amber-500/90")}
+                className={juntar(botao.primario, "bg-amber-500 text-white hover:bg-amber-500/90")}
               >
                 Aprovar<span className="hidden sm:inline">&nbsp;agora</span>
               </button>
@@ -443,7 +444,12 @@ export default function ClientJourneyDashboard({
 
       {/* 6 · Em que ponto do processo o trabalho está agora */}
       <FadeUp>
-        <Secao divisoria titulo="Etapa do processo" descricao={`Etapa ${currentStage + 1} de ${STAGES.length}: ${STAGES[currentStage]}`}>
+        <Secao
+          divisoria
+          titulo="Etapa do processo"
+          descricao={`Etapa ${currentStage + 1} de ${STAGES.length}: ${STAGES[currentStage]}`}
+          ajuda={STAGE_HINTS[currentStage]}
+        >
           <ol className="flex min-w-0 items-start" aria-label="Etapas do trabalho">
             {STAGES.map((stage, index) => {
               const done = index < currentStage;
@@ -480,7 +486,6 @@ export default function ClientJourneyDashboard({
               );
             })}
           </ol>
-          <p className={juntar(texto.auxiliar, "mt-2 text-center")}>{STAGE_HINTS[currentStage]}</p>
         </Secao>
       </FadeUp>
 
@@ -572,7 +577,7 @@ export default function ClientJourneyDashboard({
               titulo="Projetos com prazo"
               descricao={`${closedProjects.length} ativo(s)${doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}`}
             >
-              <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+              <ul className={juntar(lista.aberta, lista.divisoria)}>
                 {projetosComPrazo.map((project: any) => {
                   const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
                   const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
@@ -582,7 +587,7 @@ export default function ClientJourneyDashboard({
                       <button
                         type="button"
                         onClick={() => onSelectProject(project)}
-                        className={juntar("group flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                        className={juntar("group flex w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
                         aria-label={`Abrir o projeto ${project.name}`}
                       >
                         <span className="mr-3 shrink-0">
@@ -623,9 +628,9 @@ export default function ClientJourneyDashboard({
             {deliveredFiles.length === 0 ? (
               <EstadoVazio compacto titulo="Nenhuma entrega liberada ainda." />
             ) : (
-              <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+              <ul className={juntar(lista.aberta, lista.divisoria)}>
                 {deliveredFiles.slice(0, 6).map((file: any) => (
-                  <li key={file.id} className="flex min-w-0 items-center px-4 py-2.5">
+                  <li key={file.id} className="flex min-w-0 items-center px-2 py-2.5">
                     <PackageCheck className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{file.file_name}</span>
@@ -648,7 +653,7 @@ export default function ClientJourneyDashboard({
             {/* Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
             {recurringFronts.length > 0 && (
               <Secao titulo="Frentes recorrentes" descricao="Ciclo mensal">
-                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                <ul className={juntar(lista.aberta, lista.divisoria)}>
                   {recurringFronts.map((project: any) => {
                     const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
                     const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
@@ -657,7 +662,7 @@ export default function ClientJourneyDashboard({
                         <button
                           type="button"
                           onClick={() => onSelectProject(project)}
-                          className={juntar("group flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                          className={juntar("group flex w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
                           aria-label={`Abrir a frente ${project.name}`}
                         >
                           <Repeat className="mr-3 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
@@ -707,15 +712,15 @@ export default function ClientJourneyDashboard({
                   </button>
                 }
               >
-                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                <ul className={juntar(lista.aberta, lista.divisoria)}>
                   {scheduled.length === 0 ? (
-                    <li className={juntar(texto.auxiliar, "px-4 py-3")}>Nenhuma publicação programada no momento.</li>
+                    <li className={juntar(texto.auxiliar, "px-2 py-3")}>Nenhuma publicação programada no momento.</li>
                   ) : (
                     scheduled
                       .filter((p: any) => p.scheduled_at)
                       .slice(0, 5)
                       .map((publication: any) => (
-                        <li key={publication.id} className="flex min-w-0 items-center px-4 py-2.5">
+                        <li key={publication.id} className="flex min-w-0 items-center px-2 py-2.5">
                           <Send className="mr-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{dataEHora(publication.scheduled_at)}</span>
@@ -735,7 +740,7 @@ export default function ClientJourneyDashboard({
                           href={publication.permalink}
                           target="_blank"
                           rel="noreferrer"
-                          className={juntar("flex min-w-0 items-center px-4 py-2.5 text-[12.5px] text-emerald-500 no-underline transition-colors hover:bg-muted/40", foco)}
+                          className={juntar("flex min-w-0 items-center rounded-lg px-2 py-2.5 text-[12px] text-emerald-500 no-underline transition-colors hover:bg-muted/40", foco)}
                         >
                           <CheckCircle2 className="mr-3 h-4 w-4 shrink-0" aria-hidden="true" />
                           <span className="min-w-0 flex-1 truncate">Publicado · ver no {platformLabel[publication.platform] || "perfil"}</span>
@@ -750,9 +755,9 @@ export default function ClientJourneyDashboard({
             {/* Próximas entregas (etapas com data) */}
             {upcomingMilestones.length > 0 && (
               <Secao titulo="Próximas entregas">
-                <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+                <ul className={juntar(lista.aberta, lista.divisoria)}>
                   {upcomingMilestones.map((milestone: any) => (
-                    <li key={milestone.id} className="min-w-0 px-4 py-2.5">
+                    <li key={milestone.id} className="min-w-0 px-2 py-2.5">
                       <p className="truncate text-[13px] font-medium leading-5 text-foreground">{milestone.title}</p>
                       <p className={juntar(texto.auxiliar, "truncate")}>
                         {milestone.project?.name || "Projeto"} · previsão {formatDateShort(milestone.target_date)}
@@ -772,14 +777,8 @@ export default function ClientJourneyDashboard({
           <Painel
             as="section"
             aria-label="Avaliação da experiência"
-            titulo={
-              <span className="flex min-w-0 items-center">
-                <span className="min-w-0">Como está sendo a experiência com a Aceleriq?</span>
-                <AjudaRecolhida className="ml-1.5">
-                  Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo.
-                </AjudaRecolhida>
-              </span>
-            }
+            titulo="Como está sendo a experiência com a Aceleriq?"
+            ajuda="Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo."
           >
             <div className="flex min-w-0 flex-wrap items-center">
               <div role="radiogroup" aria-label="Nota de 1 a 5" className="mr-3 inline-grid grid-cols-5 gap-2">

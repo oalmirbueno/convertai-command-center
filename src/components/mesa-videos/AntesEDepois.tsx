@@ -5,6 +5,8 @@ import { Loader2, Scissors, SplitSquareHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import Secao from "@/components/sistema/Secao";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
@@ -166,7 +168,9 @@ export default function AntesEDepois() {
         <textarea className={juntar(campoTexto, "min-h-[72px]")} value={r.descricao} maxLength={600} onChange={(e) => mudar({ descricao: e.target.value })} placeholder={r.direcao === "depois" ? "Ex.: cozinha com armários brancos foscos e bancada de quartzo" : "Ex.: parede com mofo e piso quebrado"} />
       </CampoDeFormulario>
       <div className="flex min-w-0 flex-wrap items-center justify-end">
-        <span className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>Modelo de imagem do painel, cobrado na carteira do cliente.</span>
+        <AjudaRecolhida rotulo="Custo da imagem" className="mr-2">
+          Modelo de imagem do painel, cobrado na carteira do cliente.
+        </AjudaRecolhida>
         <button type="button" className={botao.secundario} disabled={!r.foto || !r.descricao.trim() || gerandoImagem} onClick={() => void gerarImagem()}>
           {gerandoImagem ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <SplitSquareHorizontal className="mr-1.5 h-3.5 w-3.5" />}
           Gerar o {r.direcao}
@@ -188,8 +192,24 @@ export default function AntesEDepois() {
           <BotaoDeGerar custo={custo} rotulo="Gerar os dois vídeos" motivo={!motor ? "Escolha o motor." : estado && estado.estado !== "pronto" ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}.` : null} onConfirmar={gerarVideos} extra="Dois vídeos com o mesmo movimento e a mesma duração." />
         </>
       )}
-      <div className="border-t border-border pt-4">
-        <p className={juntar(texto.tituloSecao, "mb-2")}>Montar no editor</p>
+      {/* 28/09: o cabeçalho feito à mão virou Secao (recolhe) e os botões subiram para a linha do título. */}
+      <Secao
+        divisoria
+        nivel={3}
+        titulo="Montar no editor"
+        acao={
+          <>
+            <Link to={`/mesa-edicao?client=${clientId}&etapa=editar`} className={botao.discreto}>
+              <Scissors className="mr-1.5 h-3.5 w-3.5" />
+              Mesa Edição
+            </Link>
+            <button type="button" className={botao.secundario} disabled={!r.videoAntes || !r.videoDepois || r.videoAntes === r.videoDepois || montando} onClick={() => void montar()}>
+              {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              Montar
+            </button>
+          </>
+        }
+      >
         <GrupoDeCampos colunas={3}>
           {(["videoAntes", "videoDepois"] as const).map((k) => (
             <CampoDeFormulario key={k} rotulo={k === "videoAntes" ? "Vídeo do antes" : "Vídeo do depois"}>
@@ -208,17 +228,7 @@ export default function AntesEDepois() {
             <SeletorCompacto rotulo="Layout" larguraTotal opcoes={[{ valor: "lado_a_lado", rotulo: "Lado a lado" }, { valor: "cortina", rotulo: "Cortina" }, { valor: "sequencia", rotulo: "Sequência" }]} valor={r.layout} onEscolher={(v) => mudar({ layout: v as Rascunho["layout"] })} />
           </div>
         </GrupoDeCampos>
-        <div className="mt-3 flex min-w-0 items-center justify-end">
-          <Link to={`/mesa-edicao?client=${clientId}&etapa=editar`} className={juntar(botao.discreto, "mr-1")}>
-            <Scissors className="mr-1.5 h-3.5 w-3.5" />
-            Mesa Edição
-          </Link>
-          <button type="button" className={botao.secundario} disabled={!r.videoAntes || !r.videoDepois || r.videoAntes === r.videoDepois || montando} onClick={() => void montar()}>
-            {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            Montar
-          </button>
-        </div>
-      </div>
+      </Secao>
     </div>
   );
 }

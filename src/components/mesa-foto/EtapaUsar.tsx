@@ -8,6 +8,7 @@ import { BotoesDeUso } from "./AcoesDeUso";
 import { Cartao, MiniaturaDaFoto, Moldura, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { Carregando } from "@/components/sistema/Estados";
 import { DecisaoRapida, MenuDeUso, useLevarParaAsMesas } from "./UsoDaFoto";
 import { classeDaFoto, fotosParaRevisar, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
@@ -52,19 +53,20 @@ function ParaRevisar() {
         </Button>
       }
     >
-      <div className="min-w-0 lg:max-h-[60vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
+      {/* 28/09: sem caixa com rolagem própria; a grade segue a rolagem da região principal. */}
+      <div className="min-w-0">
         <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="">
           {pendentes.map((p, i) => (
-            <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className="min-w-0 rounded-lg border border-border bg-card p-1.5" data-pendente={p.tomada.id}>
+            <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className={juntar(superficie.painel, "min-w-0 p-1.5")} data-pendente={p.tomada.id}>
               <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${p.tomada.nome}`}>
                 <Moldura proporcao={proporcaoDoFormato(p.tomada.formato)} className="border border-border">
                   <ImagemDaMesa caminho={p.versao.storage_path || ""} alt={p.tomada.nome} className="h-full w-full !object-contain" />
-                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
                     gerada
                   </span>
                 </Moldura>
               </button>
-              <p className="mt-1 truncate px-0.5 text-[11.5px] font-medium" title={p.tomada.nome}>
+              <p className="mt-1 truncate px-0.5 text-[12px] font-medium" title={p.tomada.nome}>
                 {p.tomada.nome} <span className="font-normal text-muted-foreground">v{p.versao.versao}</span>
               </p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center">
@@ -129,21 +131,22 @@ export default function EtapaUsar() {
 
   return (
     <div className="min-w-0 space-y-5">
-      {prepararNaAgenda && (
-        <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" data-atalho-da-agenda="">
-          <CalendarPlus className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          <span className="mr-2">Posts de fotos (legenda, data e aprovação do cliente):</span>
-          <button type="button" className="font-medium text-primary hover:underline" onClick={() => irPara("agenda")}>
-            abrir o Post na Agenda
-          </button>
-        </div>
-      )}
       <ParaRevisar />
 
       <Cartao
         titulo="Prontas para usar"
         dica="Cada foto tem o menu Usar. Marque várias para levar juntas. Aprovar a foto não aprova a arte ou o anúncio feito com ela; foto gerada sai sempre marcada."
-        acao={<SeletorCompacto modo="lista" rotulo="Quais fotos" icone={<Filter className="h-4 w-4" />} opcoes={opcoes} valor={origem} onEscolher={(v) => setOrigem(v as Origem)} />}
+        acao={
+          <>
+            {/* 28/09: o atalho para os posts de fotos sai da linha própria e vem para a linha do título. */}
+            {prepararNaAgenda && (
+              <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("agenda")} title="Posts de fotos: legenda, data e aprovação do cliente" data-atalho-da-agenda="">
+                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Post na Agenda
+              </Button>
+            )}
+            <SeletorCompacto modo="lista" rotulo="Quais fotos" icone={<Filter className="h-4 w-4" />} opcoes={opcoes} valor={origem} onEscolher={(v) => setOrigem(v as Origem)} />
+          </>
+        }
       >
         {fotos.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo o acervo" />}
         {fotos.isError && <AvisoDeErro erro={fotos.error} />}
@@ -173,16 +176,16 @@ export default function EtapaUsar() {
                 Desmarcar
               </button>
             </div>
-            <div className="min-w-0 lg:max-h-[70vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
+            <div className="min-w-0">
               <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
                 {lista.map((f, i) => {
                   const marcada = escolhidasIds.indexOf(f.id) >= 0;
                   return (
-                    <li key={f.id} className={`relative min-w-0 rounded-lg border bg-card p-1.5 ${marcada ? "border-primary" : "border-border"}`} data-pronta={f.id}>
+                    <li key={f.id} className={juntar(superficie.painel, "relative min-w-0 p-1.5", marcada && "border-primary")} data-pronta={f.id}>
                       <button type="button" className="block w-full min-w-0 text-left" onClick={() => setAmpliada(i)} aria-label={`Ver ${f.nome} grande`}>
                         <MiniaturaDaFoto foto={f} />
                       </button>
-                      <span className="mt-1 block truncate px-0.5 text-[11.5px] font-medium" title={f.nome}>
+                      <span className="mt-1 block truncate px-0.5 text-[12px] font-medium" title={f.nome}>
                         {f.nome}
                       </span>
                       <div className="mt-1 flex min-w-0 flex-wrap items-center justify-between">

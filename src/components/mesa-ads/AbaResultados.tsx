@@ -12,9 +12,9 @@ import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Esta
 import { foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { chamarAds, chavesAds, lerAprendizados } from "./adsApi";
-import { CabecalhoDaParte, Diagnostico } from "./Comuns";
+import { CabecalhoDaParte, Diagnostico, useParteRecolhida } from "./Comuns";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
-import { CartaoCompacto, FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
+import { CartaoCompacto, FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo, SeletorDaAbaDeResultados, useAbaDosResultados } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type AnuncioDoResultado, type GrupoDeObjetivo } from "./resultadosApi";
 import VinculoAutomatico from "./VinculoAutomatico";
 
@@ -53,6 +53,8 @@ export default function AbaResultados() {
   });
   const [grupo, setGrupo] = useEstadoDaTela<GrupoDeObjetivo | "">(`mesa-ads:resultados:objetivo:${clientId}`, "", { validar: (v) => typeof v === "string", esperaMs: 0 });
   const [registrando, setRegistrando] = useState<string | null>(null);
+  const [abaDosAnuncios, setAbaDosAnuncios] = useAbaDosResultados(`mesa-ads:resultados:aba:${clientId}`);
+  const parteDosAnuncios = useParteRecolhida(`mesa-ads:resultados:anuncios:${clientId}`);
   const [textoDoAprendizado, setTextoDoAprendizado] = useState("");
   const conta = useQuery({
     queryKey: chaveDosResultados(clientId, dias),
@@ -75,7 +77,7 @@ export default function AbaResultados() {
           a={a}
           acao={
             criativoId ? (
-              <Button type="button" size="sm" variant={aberto ? "secondary" : "ghost"} className="h-7 text-[11.5px]" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }}>
+              <Button type="button" size="sm" variant={aberto ? "secondary" : "ghost"} className="h-7 text-[12px]" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }}>
                 <BookmarkCheck className="mr-1 h-3.5 w-3.5" /> Aprendizado
               </Button>
             ) : undefined
@@ -91,7 +93,7 @@ export default function AbaResultados() {
                 onChange={(e) => setTextoDoAprendizado(e.target.value)}
                 rows={2}
                 placeholder="Opcional: o que aprendemos. Em branco, o estrategista escreve no formato do dossiê a partir das métricas."
-                className="mb-1 mr-2 min-w-0 flex-1 text-[12.5px]"
+                className="mb-1 mr-2 min-w-0 flex-1 text-[13px]"
               />
               <BotaoComCusto
                 rotulo="Registrar"
@@ -158,8 +160,18 @@ export default function AbaResultados() {
           <>
             <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
             <section className="min-w-0 border-t border-border pt-5" aria-label="Anúncios">
-              <CabecalhoDaParte titulo="Anúncios" nivel={3} acoes={<FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />} />
-              <PainelDeResultados dados={dados} grupo={grupo} renderAnuncio={cartao} memoria={`mesa-ads:resultados:aba:${clientId}`} />
+              <CabecalhoDaParte
+                titulo="Anúncios"
+                nivel={3}
+                recolher={parteDosAnuncios}
+                acoes={
+                  <>
+                    <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
+                    <SeletorDaAbaDeResultados dados={dados} grupo={grupo} aba={abaDosAnuncios} onMudar={setAbaDosAnuncios} />
+                  </>
+                }
+              />
+              {!parteDosAnuncios.recolhido && <PainelDeResultados dados={dados} grupo={grupo} renderAnuncio={cartao} aba={abaDosAnuncios} onAba={setAbaDosAnuncios} />}
             </section>
             <VinculoAutomatico />
           </>
@@ -172,7 +184,7 @@ export default function AbaResultados() {
               {(aprendizados.data || []).map((a) => (
                 <li key={a.id} className="py-2">
                   <p className="text-[11px] text-muted-foreground">{a.evidencia} · {dataCurta(a.criado_em)}</p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{a.texto}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{a.texto}</p>
                 </li>
               ))}
             </ul>

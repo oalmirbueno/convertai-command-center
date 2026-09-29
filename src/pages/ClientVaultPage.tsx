@@ -8,7 +8,9 @@ import { MoreHorizontal, Search, Trash2, Users } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import {
+  AreaDeTrabalho,
   CabecalhoDePagina,
   Carregando,
   EstadoDeErro,
@@ -43,6 +45,10 @@ export default function ClientVaultPage() {
   const [selectedClientId, setSelectedClientId] = useEstadoDaTela<string | null>("cofre:cliente", null, { validar: idOuNada });
   const [search, setSearch] = useEstadoDaTela<string>("cofre:busca", "");
   const [confirmClearId, setConfirmClearId] = useState<string | null>(null);
+  // Lista de clientes recolhida para o lado (SISTEMA.md 4.3): lembra por pessoa.
+  const [clientesRecolhidos, setClientesRecolhidos] = useEstadoDaTela<boolean>("cofre:clientes-recolhidos", false, {
+    validar: (v) => typeof v === "boolean",
+  });
   const [clearing, setClearing] = useState(false);
   const qc = useQueryClient();
 
@@ -139,8 +145,46 @@ export default function ClientVaultPage() {
   const podeLimpar = isAdminOrTeam && !!effectiveClientId && isHubMode;
   const nomeDoCliente = (c: ClientOption) => c.company_name || c.full_name;
 
+  // No modo equipe o cliente é o título do bloco, com o "Novo item" na mesma linha.
+  // Celular e tablet: o título É o seletor do cliente (a lista lateral só aparece de
+  // 1024 px para cima); no computador, o nome (quem escolhe é a lista ao lado).
+  const tituloDoCofre = isHubMode && selectedClient && clients ? (
+    <>
+      <SeletorCompacto
+        modo="lista"
+        rotulo="Cliente"
+        icone={<Users className="h-3.5 w-3.5" />}
+        className="lg:hidden"
+        valor={selectedClient.id}
+        onEscolher={(id) => setSelectedClientId(id)}
+        opcoes={clients.map((c) => ({ valor: c.id, rotulo: nomeDoCliente(c), descricao: c.company_name ? c.full_name : undefined }))}
+      />
+      <span className="hidden lg:inline">
+        {selectedClient.full_name}
+        {selectedClient.company_name && <span className="font-normal text-muted-foreground"> · {selectedClient.company_name}</span>}
+      </span>
+    </>
+  ) : undefined;
+  const conteudo = effectiveClientId ? (
+    <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} titulo={tituloDoCofre} />
+  ) : isHubMode && loadingClients ? (
+    <Carregando forma="lista" linhas={4} rotulo="Carregando o cofre" />
+  ) : isHubMode && clientsFailed ? (
+    <EstadoDeErro
+      className="lg:hidden"
+      titulo="Não foi possível carregar os clientes."
+      acao={
+        <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
+          Tentar de novo
+        </button>
+      }
+    />
+  ) : (
+    <EstadoVazio icone={<Users className="h-5 w-5" />} titulo="Nenhum cliente" descricao="Cadastre um cliente para guardar os acessos dele." />
+  );
+
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="min-w-0">
       <CabecalhoDePagina
         titulo="Cofre"
         descricao={resumo}
@@ -177,133 +221,121 @@ export default function ClientVaultPage() {
         }
       />
 
-      {/* Celular e tablet: o cliente é escolhido aqui, logo abaixo do título (a lista lateral só aparece no computador). */}
-      {isHubMode && clients && clients.length > 0 && effectiveClientId && (
-        <div className="mb-4 min-w-0 lg:hidden">
-          <SeletorCompacto
-            modo="lista"
-            rotulo="Cliente"
-            icone={<Users className="h-3.5 w-3.5" />}
-            valor={effectiveClientId}
-            onEscolher={(id) => setSelectedClientId(id)}
-            opcoes={clients.map((c) => ({ valor: c.id, rotulo: nomeDoCliente(c), descricao: c.company_name ? c.full_name : undefined }))}
-          />
-        </div>
-      )}
-
-      <div className={isHubMode ? "grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]" : "min-w-0"}>
-        {/* Lista de clientes: só no computador, com rolagem própria (no celular vira o seletor abaixo do título). */}
-        {isHubMode && (
-          <aside className="hidden min-w-0 lg:block" aria-label="Clientes">
-            <div className="relative mb-2">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar cliente"
-                aria-label="Buscar cliente"
-                className={juntar(campo, "pl-8")}
-              />
-            </div>
-            <p className={juntar(texto.auxiliar, "mb-1 tabular-nums")}>
-              {clients ? `${filteredClients.length} de ${clients.length} clientes` : "Clientes"}
-            </p>
-            {loadingClients && !clients ? (
-              <Carregando forma="lista" linhas={6} rotulo="Carregando clientes" />
-            ) : clientsFailed && !clients ? (
-              <EstadoDeErro
-                titulo="Não foi possível carregar os clientes."
-                acao={
-                  <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
-                    Tentar de novo
-                  </button>
-                }
-              />
-            ) : filteredClients.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhum cliente encontrado." />
-            ) : (
-              <RegiaoRolavel memoria="cofre:clientes" rotulo="Lista de clientes" className="lg:max-h-[70vh]">
-                <ul className="divide-y divide-border">
-                  {filteredClients.map((c) => {
-                    const active = c.id === effectiveClientId;
-                    const initials = (c.full_name || "?")
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
-                    return (
-                      <li key={c.id} className="group flex min-w-0 items-center py-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedClientId(c.id)}
-                          aria-current={active ? "true" : undefined}
-                          className={juntar(
-                            "flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                          )}
-                        >
-                          <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-                            {c.avatar_url ? (
-                              <img src={c.avatar_url} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <span className="text-[10px] font-semibold text-primary">{initials}</span>
-                            )}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] font-medium">{c.full_name}</span>
-                            {c.company_name && <span className="block truncate text-[11.5px] text-muted-foreground">{c.company_name}</span>}
-                          </span>
-                          {active && <span className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
-                        </button>
-                        {isAdminOrTeam && (
+      {isHubMode ? (
+        // Área de trabalho (SISTEMA.md seção 8): de 1024 px para cima a lista de
+        // clientes e os itens do cofre rolam cada um por conta própria, até o fim
+        // da janela. No celular a página rola normal e o cliente é o seletor do título.
+        <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Cofre" className="mt-4">
+          <div
+            className={juntar(
+              "flex min-w-0 flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]",
+              clientesRecolhidos ? "lg:grid-cols-[32px_minmax(0,1fr)] lg:gap-3" : "lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6",
+            )}
+          >
+            {/* Lista de clientes: recolhe para o lado, numa tirinha (SISTEMA.md 4.3). */}
+            <LateralEsquerda
+              rotulo="Clientes"
+              icone={<Users className="h-4 w-4" />}
+              recolhida={clientesRecolhidos}
+              onAlternar={() => setClientesRecolhidos(!clientesRecolhidos)}
+              acao={
+                clients ? (
+                  <span className={juntar(texto.auxiliar, "ml-2 shrink-0 tabular-nums")}>
+                    {filteredClients.length === clients.length ? clients.length : `${filteredClients.length} de ${clients.length}`}
+                  </span>
+                ) : undefined
+              }
+            >
+              <div className="relative mb-2 shrink-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar cliente"
+                  aria-label="Buscar cliente"
+                  className={juntar(campo, "pl-8")}
+                />
+              </div>
+              {loadingClients && !clients ? (
+                <Carregando forma="lista" linhas={6} rotulo="Carregando clientes" />
+              ) : clientsFailed && !clients ? (
+                <EstadoDeErro
+                  titulo="Não foi possível carregar os clientes."
+                  acao={
+                    <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
+                      Tentar de novo
+                    </button>
+                  }
+                />
+              ) : filteredClients.length === 0 ? (
+                <EstadoVazio compacto titulo="Nenhum cliente encontrado." />
+              ) : (
+                <RegiaoRolavel memoria="cofre:clientes" rotulo="Lista de clientes">
+                  <ul className="divide-y divide-border">
+                    {filteredClients.map((c) => {
+                      const active = c.id === effectiveClientId;
+                      const initials = (c.full_name || "?")
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase();
+                      return (
+                        <li key={c.id} className="group flex min-w-0 items-center py-1">
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setConfirmClearId(c.id); }}
-                            className={juntar(botao.icone, "ml-1 hover:text-destructive")}
-                            aria-label={`Limpar cofre de ${c.full_name}`}
-                            title="Limpar cofre deste cliente"
+                            onClick={() => setSelectedClientId(c.id)}
+                            aria-current={active ? "true" : undefined}
+                            className={juntar(
+                              "flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                            )}
                           >
-                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                              {c.avatar_url ? (
+                                <img src={c.avatar_url} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="text-[11px] font-semibold text-primary">{initials}</span>
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-medium">{c.full_name}</span>
+                              {c.company_name && <span className="block truncate text-[12px] text-muted-foreground">{c.company_name}</span>}
+                            </span>
+                            {active && <span className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
                           </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                          {isAdminOrTeam && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setConfirmClearId(c.id); }}
+                              className={juntar(botao.icone, "ml-1 hover:text-destructive")}
+                              aria-label={`Limpar cofre de ${c.full_name}`}
+                              title="Limpar cofre deste cliente"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </RegiaoRolavel>
+              )}
+            </LateralEsquerda>
+
+            {/* Itens do cofre: rolam por dentro no computador, lembrando a posição por cliente. */}
+            <section className="flex min-w-0 flex-col lg:min-h-0" aria-label="Itens do cofre">
+              <RegiaoRolavel memoria={`cofre:itens:${effectiveClientId || "-"}`} rotulo="Itens do cofre" className="lg:pr-1">
+                {conteudo}
               </RegiaoRolavel>
-            )}
-          </aside>
-        )}
-
-        {/* Vault content */}
-        <section className="min-w-0" aria-label="Itens do cofre">
-          {isHubMode && selectedClient && (
-            <h2 className={juntar(texto.tituloSecao, "mb-3 truncate")}>
-              {selectedClient.full_name}
-              {selectedClient.company_name && <span className="font-normal text-muted-foreground"> · {selectedClient.company_name}</span>}
-            </h2>
-          )}
-
-          {effectiveClientId ? (
-            <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} />
-          ) : isHubMode && loadingClients ? (
-            <Carregando forma="lista" linhas={4} rotulo="Carregando o cofre" />
-          ) : isHubMode && clientsFailed ? (
-            <EstadoDeErro
-              className="lg:hidden"
-              titulo="Não foi possível carregar os clientes."
-              acao={
-                <button type="button" className={botao.secundario} onClick={() => void refetchClients()} disabled={fetchingClients}>
-                  Tentar de novo
-                </button>
-              }
-            />
-          ) : (
-            <EstadoVazio icone={<Users className="h-5 w-5" />} titulo="Nenhum cliente" descricao="Cadastre um cliente para guardar os acessos dele." />
-          )}
+            </section>
+          </div>
+        </AreaDeTrabalho>
+      ) : (
+        <section className="mt-5 min-w-0" aria-label="Itens do cofre">
+          {conteudo}
         </section>
-      </div>
+      )}
 
       <ConfirmModal
         open={!!confirmClearId}

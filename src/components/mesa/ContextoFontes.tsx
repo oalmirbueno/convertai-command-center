@@ -16,6 +16,8 @@ import BibliotecaDeFontes from "./ContextoBibliotecaDeFontes";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { Campo } from "./Seletores";
 import Secao from "@/components/sistema/Secao";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { chaveDasFontes, useInvalidarContexto } from "./contextoDoCliente";
 
 const PAPEIS_DA_FONTE = [
@@ -217,14 +219,19 @@ export default function ContextoFontes() {
           </>
         }
       >
-        {tipografia.isLoading && <p className="text-[12.5px] text-muted-foreground">Lendo fontes…</p>}
+        {tipografia.isLoading && <p className="text-[13px] text-muted-foreground">Lendo fontes…</p>}
         {tipografia.data && tipografia.data.usaDoCliente && marca && (
-          <p className="text-[12px] text-muted-foreground">A {marca.nome} não tem fonte própria: o Estúdio não gera com a letra da outra marca. Envie, escolha ou copie as do cliente para ela (no aviso do Estúdio).</p>
+          <div className="flex min-w-0 items-center text-[12px] text-muted-foreground">
+            <p className="min-w-0 truncate">A {marca.nome} não tem fonte própria</p>
+            <AjudaRecolhida className="ml-1" rotulo="Fonte da marca">
+              O Estúdio não gera com a letra da outra marca. Envie, escolha ou copie as do cliente para ela (no aviso do Estúdio).
+            </AjudaRecolhida>
+          </div>
         )}
-        {tipografia.data && lista.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma fonte ainda. Sem fonte, o Estúdio não gera a arte.</p>}
+        {tipografia.data && lista.length === 0 && <p className="text-[13px] text-muted-foreground">Nenhuma fonte ainda. Sem fonte, o Estúdio não gera a arte.</p>}
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {lista.map((f) => (
-            <li key={f.id} className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+            <li key={f.id} className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
               <button
                 type="button"
                 onClick={() => {
@@ -287,7 +294,7 @@ export default function ContextoFontes() {
           </Campo>
           <Campo rotulo="Papel">
             <Select value={papel} onValueChange={setPapel}>
-              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PAPEIS_DA_FONTE.map((p) => <SelectItem key={p.valor} value={p.valor}>{p.rotulo}</SelectItem>)}
               </SelectContent>

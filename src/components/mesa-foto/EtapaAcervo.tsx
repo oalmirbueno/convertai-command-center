@@ -15,7 +15,7 @@ import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, SeloCurto, SeloDaFoto
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import ProdutoDasFotos from "./ProdutoDasFotos";
@@ -102,7 +102,7 @@ export function ZonaDeEnvio({
   compacta: boolean;
   onArquivos: (a: File[]) => void;
   andamento: string | null;
-  /** Botão principal mesmo na versão compacta (o subir em lote do passo 1). */
+  /** "Subir fotos em lote" (o passo 1). Compacta, o botão é secundário: o primário da área é criar. */
   destaque?: boolean;
 }) {
   const [arrastando, setArrastando] = useState(false);
@@ -130,7 +130,7 @@ export function ZonaDeEnvio({
       }`}
     >
       {andamento ? (
-        <p role="status" className="inline-flex items-center text-[12.5px] text-muted-foreground">
+        <p role="status" className="inline-flex items-center text-[12px] text-muted-foreground">
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> {andamento}
         </p>
       ) : (
@@ -139,14 +139,12 @@ export function ZonaDeEnvio({
             <ClipboardPaste className="mr-1.5 h-4 w-4 shrink-0 text-primary" /> <span className="min-w-0 truncate">{compacta ? "Solte ou cole com Ctrl+V" : "Solte as fotos aqui ou cole com Ctrl+V"}</span>
           </p>
           {!compacta && (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Quantas quiser de uma vez. JPG, PNG ou WEBP até 25 MB cada. O original fica guardado como veio.
-            </p>
+            <p className="mt-1 text-[12px] text-muted-foreground">JPG, PNG ou WEBP, até 25 MB cada</p>
           )}
           <Button
             type="button"
             size="sm"
-            variant={compacta && !destaque ? "outline" : "default"}
+            variant={compacta ? "outline" : "default"}
             className={`${compacta ? "" : "mt-3"} h-8 text-[12px]`}
             onClick={() => entrada.current && entrada.current.click()}
           >
@@ -427,8 +425,8 @@ function CartaoDaFoto({
   const { irPara } = useMesaFoto();
   return (
     <div
-      className={`relative min-w-0 rounded-lg border bg-card p-1 transition-colors ${
-        aberta ? "border-primary ring-1 ring-primary" : marcada ? "border-primary/60" : "border-border hover:border-primary/40"
+      className={`relative min-w-0 rounded-lg p-1 transition-colors ${
+        aberta ? "bg-primary/[0.07] ring-1 ring-primary" : marcada ? "ring-1 ring-primary/60" : "hover:bg-muted/40"
       }`}
       data-foto={foto.id}
     >
@@ -446,7 +444,7 @@ function CartaoDaFoto({
           <Maximize2 className="h-3 w-3" />
         </button>
       </div>
-      <p className="mt-1 truncate px-0.5 text-[10.5px] font-medium" title={foto.nome}>
+      <p className="mt-1 truncate px-0.5 text-[11px] font-medium" title={foto.nome}>
         {foto.nome}
       </p>
       <div className="flex min-w-0 items-center justify-between px-0.5">
@@ -622,7 +620,7 @@ export default function EtapaAcervo() {
       <div className={todas.length > 0 ? "min-w-0 space-y-4 pb-4 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" : "min-w-0 space-y-4 pb-4"} data-topo-das-fotos="">
         <Cartao
           titulo="Fotos do produto"
-          dica="Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Quantas quiser de uma vez; o produto é identificado logo abaixo. É o mesmo acervo da Mesa e da Mesa Ads."
+          dica="Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Quantas quiser de uma vez; o original fica guardado como veio e o produto é identificado logo abaixo. É o mesmo acervo da Mesa e da Mesa Ads. Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Para pessoa, 6 a 12 fotos recentes e autorizadas, sem filtro de beleza. Para alimento, a porção real vista de cima, a 45 graus e de lado."
           acao={todas.length > 0 ? zona : undefined}
           recolher={todas.length > 0 ? `mesa-foto:acervo:envio-recolhido:${clientId}` : undefined}
           resumo={`${todas.length} ${todas.length === 1 ? "foto no acervo" : "fotos no acervo"}`}
@@ -641,15 +639,13 @@ export default function EtapaAcervo() {
         {fotos.isLoading && <Carregando forma="grade" linhas={8} rotulo="Lendo o acervo" />}
         {fotos.isError && <AvisoDeErro erro={fotos.error} />}
         {vazio && (
-          <Vazio titulo="O acervo deste cliente está vazio">
-            Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Para pessoa, 6 a 12 fotos recentes e autorizadas, sem filtro de beleza. Para alimento, a porção real vista de cima, a 45 graus e de lado.
-          </Vazio>
+          <Vazio titulo="O acervo deste cliente está vazio" />
         )}
       </div>
 
       {todas.length > 0 && (
         <section
-          className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:grid lg:min-h-[240px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_340px]"
+          className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-[240px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_340px]")}
           aria-label="Fotos do acervo"
           data-area-das-fotos=""
         >

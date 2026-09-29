@@ -223,7 +223,9 @@ describe("oferta: agente conversacional e ofertas", () => {
     expect(within(cartao).getByText("Descubra o tom ideal")).toBeTruthy();
     expect(within(cartao).getByRole("meter", { name: "Clareza" }).getAttribute("aria-valuenow")).toBe("9");
 
-    fireEvent.click(within(cartao).getByRole("button", { name: /Editar/ }));
+    // 28/09 (padronização L4): Editar e Arquivar moram no "..." do cartão (ações em até duas linhas); o teste abre o menu antes.
+    fireEvent.keyDown(within(cartao).getByRole("button", { name: "Mais ações da oferta Avaliação grátis" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Editar/ }));
     const edicao = screen.getByRole("article", { name: "Editar a oferta Avaliação grátis" });
     fireEvent.change(within(edicao).getByLabelText("Bônus"), { target: { value: "Escova\nFio dental" } });
     fireEvent.click(within(edicao).getByRole("button", { name: /Salvar oferta/ }));
@@ -233,7 +235,8 @@ describe("oferta: agente conversacional e ofertas", () => {
     expect(corpo.campos.bonus).toEqual(["Escova", "Fio dental"]);
     expect(corpo.campos.promessa).toBe("Descubra o tom ideal");
 
-    fireEvent.click(within(await screen.findByRole("article", { name: "Oferta Avaliação grátis" })).getByRole("button", { name: /Arquivar/ }));
+    fireEvent.keyDown(within(await screen.findByRole("article", { name: "Oferta Avaliação grátis" })).getByRole("button", { name: "Mais ações da oferta Avaliação grátis" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Arquivar/ }));
     await waitFor(() => expect(chamadasDe("oferta_salvar")).toHaveLength(2));
     expect(chamadasDe("oferta_salvar")[1]).toEqual({ acao: "oferta_salvar", client_id: CLIENTE, oferta_id: "of-9", status: "arquivada" });
   });

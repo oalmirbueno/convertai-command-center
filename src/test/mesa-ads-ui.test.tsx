@@ -277,6 +277,8 @@ describe("etapa 1, oferta", () => {
 describe("etapa 2, referências", () => {
   it("links úteis no topo e importar meus anúncios chama a ação grátis com o cliente", async () => {
     montar(h(AbaReferencias));
+    // 28/09 (padronização L4): os sites de busca saíram da fileira própria para o botão "Bibliotecas" da barra de filtros.
+    fireEvent.click(screen.getByRole("button", { name: "Bibliotecas" }));
     for (const l of LINKS_UTEIS) {
       const a = screen.getByRole("link", { name: new RegExp(l.rotulo) });
       expect(a.getAttribute("href")).toBe(l.url);

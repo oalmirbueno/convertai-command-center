@@ -10,6 +10,7 @@ import { avisarCustoReal, EstimativaInline, useAvisarErro } from "../Custo";
 import { destaquesLimpos, type DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import { modeloDaAba } from "./BioENome";
 import { chamarInstagram, type MensagemDaAba } from "./instagramApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Agente do Instagram, ao lado da aba (fixo no computador, gaveta no
@@ -142,7 +143,12 @@ export default function AgenteDoInstagram({
       }
     >
       {mensagens.length === 0 && !trabalhando && (
-        <p className={texto.auxiliar}>Peça destaques, uma leitura do perfil ou ajuda com a grade. O agente não edita o Instagram: a API não deixa.</p>
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Peça destaques, uma leitura do perfil ou ajuda com a grade
+          <AjudaRecolhida className="ml-1" rotulo="O que o agente não faz">
+            O agente não edita o Instagram: a API não deixa.
+          </AjudaRecolhida>
+        </p>
       )}
       {mensagens.map((m, i) => {
         if (m.papel === "sistema") {

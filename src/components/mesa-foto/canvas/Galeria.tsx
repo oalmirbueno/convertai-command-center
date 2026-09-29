@@ -37,7 +37,7 @@ export function MiniaturaDoModelo({ m, altura = 84 }: { m: ModeloPronto; altura?
             );
           })}
           <span className="ml-1.5 h-px w-4 bg-white/60" />
-          <span className="ml-1 flex h-9 w-7 items-center justify-center rounded-md border border-white/30 bg-white/90 text-[9px] font-bold text-black">{m.resultado && m.resultado.carrossel ? `${m.resultado.carrossel}x` : "1"}</span>
+          <span className="ml-1 flex h-9 w-7 items-center justify-center rounded-md border border-white/30 bg-white/90 text-[11px] font-bold text-black">{m.resultado && m.resultado.carrossel ? `${m.resultado.carrossel}x` : "1"}</span>
         </span>
       )}
     </span>
@@ -52,7 +52,7 @@ export function MiniaturaDoModelo({ m, altura = 84 }: { m: ModeloPronto; altura?
 export function GaleriaDeModelos({ onAplicar, onFechar, onMontarPeloContexto, compacta = false }: { onAplicar: (chave: string) => void; onFechar?: () => void; onMontarPeloContexto?: () => Promise<unknown>; compacta?: boolean }) {
   const { catalogo } = useMesa();
   return (
-    <div className={compacta ? "min-w-0" : `${PAINEL} min-w-0 rounded-2xl p-3`} data-modelos-prontos="">
+    <div className={compacta ? "min-w-0" : `${PAINEL} min-w-0 rounded-xl p-3`} data-modelos-prontos="">
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         {!compacta && (
           <>
@@ -87,7 +87,7 @@ export function GaleriaDeModelos({ onAplicar, onFechar, onMontarPeloContexto, co
           <button key={m.chave} type="button" onClick={() => onAplicar(m.chave)} data-modelo-pronto={m.chave} title={m.dica} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-1.5 text-left transition-colors hover:border-emerald-400/60">
             <MiniaturaDoModelo m={m} altura={compacta ? 64 : 84} />
             <span className="mt-1.5 block truncate text-[12px] font-semibold leading-snug">{m.rotulo}</span>
-            <span className="block truncate text-[10.5px] text-zinc-400">
+            <span className="block truncate text-[11px] text-zinc-400">
               {[m.resultado && m.resultado.acao && m.resultado.acao !== "livre" ? rotuloDaAcao(m.resultado.acao) : "", m.resultado && m.resultado.pose && m.resultado.pose !== "nenhuma" ? rotuloDaPose(m.resultado.pose) : "", m.resultado && m.resultado.formato ? m.resultado.formato : ""].filter(Boolean).join(" · ")}
             </span>
           </button>
@@ -106,7 +106,7 @@ export function ComoFunciona({ onFechar, noQuadro = true }: { onFechar: () => vo
   return (
     <div
       ref={roda}
-      className={`${PAINEL} ${FLUTUANTE} rounded-2xl p-3 ${noQuadro ? "absolute left-[76px] right-2 top-3 z-10 sm:right-auto sm:w-[300px]" : "relative w-full min-w-0"}`}
+      className={`${PAINEL} ${FLUTUANTE} rounded-xl p-3 ${noQuadro ? "absolute left-[76px] right-2 top-3 z-10 sm:right-auto sm:w-[300px]" : "relative w-full min-w-0"}`}
       data-como-funciona=""
     >
       <div className="mb-1.5 flex items-center">

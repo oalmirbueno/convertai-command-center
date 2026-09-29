@@ -193,10 +193,14 @@ function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
                     </button>
                   )}
                 </div>
-                {antigo && !fala && <p className={juntar(texto.auxiliar, "mt-1")}>Havia um pedido preparado antes. Agora a transcrição roda aqui.</p>}
+                {antigo && !fala && (
+                  <span className={juntar(etiqueta, "mt-1 bg-muted text-muted-foreground")} title="Havia um pedido preparado antes. Agora a transcrição roda aqui.">
+                    Pedido antigo
+                  </span>
+                )}
                 {confirmando === t.id && (
                   <div className="mt-2 flex flex-wrap items-center rounded-md bg-muted/50 px-2.5 py-2" data-confirmar-transcricao="">
-                    <span className="mb-1 mr-auto text-[12.5px]">
+                    <span className="mb-1 mr-auto text-[12px]">
                       {tipo === "legendar" ? "Legendar" : "Transcrever"} {duracaoCurta(t.duracao_s)}: <strong className="tabular-nums">{usd(custo)}</strong>
                     </span>
                     <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8")} onClick={() => void transcrever(t)}>
@@ -303,7 +307,8 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
             aria-label="Escolher vídeos"
             onChange={(e) => void enviar(e.target.files)}
           />
-          <button type="button" className={botao.primario} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}>
+          {/* Um primário por área: na Transcrição o primário é o "Marcar por US$" de cada take. */}
+          <button type="button" className={parte === "videos" ? botao.primario : botao.secundario} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}>
             {subindo ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Upload className="h-3.5 w-3.5 sm:mr-1.5" />}
             <span className="hidden sm:inline">{subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}</span>
           </button>

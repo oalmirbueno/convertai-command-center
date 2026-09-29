@@ -18,6 +18,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import { botao, juntar, lista, superficie } from "@/components/sistema/estilos";
 import {
   mensagemDeCobranca,
   montarFila,
@@ -138,7 +141,7 @@ function LinhaDaAcao({
           <button
             type="button"
             onClick={() => void cobrar()}
-            className="mr-1.5 inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium hover:border-primary/50"
+            className={juntar(botao.secundario, "mr-1.5 h-8 px-2.5 text-[12px]")}
             aria-label={`Copiar mensagem de cobrança para ${grupo.nome}`}
           >
             <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar mensagem
@@ -148,7 +151,7 @@ function LinhaDaAcao({
           type="button"
           disabled={gravando}
           onClick={() => onFeito(grupo, acao)}
-          className="mr-1.5 inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium text-muted-foreground hover:border-success/60 hover:text-foreground disabled:opacity-60"
+          className={juntar(botao.discreto, "mr-1.5 h-8 px-2.5 text-[12px]")}
           aria-label={`Marcar como feito: ${acao.titulo} de ${grupo.nome}`}
           title="Já fiz: some da fila até chegar coisa nova"
         >
@@ -157,7 +160,8 @@ function LinhaDaAcao({
         <button
           type="button"
           onClick={() => onAbrir(grupo.client_id, acao.aba, acao.mes)}
-          className="inline-flex h-8 items-center rounded-lg bg-primary px-2.5 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+          // Um primário por área (28/09): cada linha tem o seu Abrir, então ele é secundário.
+          className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
           aria-label={`${acao.titulo}: abrir ${grupo.nome}`}
         >
           Abrir <ArrowRight className="ml-1 h-3.5 w-3.5" />
@@ -221,12 +225,13 @@ export default function FilaDePrioridades({
 
   return (
     <section aria-label="Prioridades" className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-end justify-between">
-        <div className="mb-2 mr-4 min-w-0">
-          <h2 className="text-[18px] font-semibold tracking-tight">O que fazer agora</h2>
-          <p className="text-[12.5px] text-muted-foreground">Cada cliente com a próxima ação, do mais urgente para o menos.</p>
-        </div>
-        <div className="mb-2 flex items-center">
+      {/* Cabeçalho do sistema: título, o "?" com a explicação e o resumo à direita. */}
+      <CabecalhoDePagina
+        nivel={2}
+        titulo="O que fazer agora"
+        ajuda="Cada cliente com a próxima ação, do mais urgente para o menos."
+        acoes={
+        <div className="flex items-center">
           {fila && (
             <ul className="mr-2 flex items-center text-[12px]" aria-label="Resumo">
               {(["agora", "semana", "depois"] as Nivel[]).map((n) => (
@@ -248,7 +253,8 @@ export default function FilaDePrioridades({
             {consulta.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           </button>
         </div>
-      </div>
+        }
+      />
 
       {fila && fila.grupos.length > 0 && (
         <div role="group" aria-label="Filtrar por ação" className="flex flex-wrap">
@@ -276,19 +282,19 @@ export default function FilaDePrioridades({
       {(consulta.isLoading || (!consulta.data && !consulta.isError)) && (
         <div aria-busy="true" aria-label="Carregando prioridades" className="space-y-2">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
       )}
 
       {consulta.isError && (
-        <p className="rounded-xl border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">
+        <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">
           Não consegui montar a fila. {textoDoErro(consulta.error)}
         </p>
       )}
 
       {fila && fila.grupos.length === 0 && (
-        <div className="flex items-center rounded-xl border border-border bg-card p-5">
+        <div className="flex items-center py-3">
           <CheckCircle2 className="mr-3 h-5 w-5 shrink-0 text-success" />
           <p className="text-[13px]">Tudo em dia. Nenhum cliente precisa de ação agora.</p>
         </div>
@@ -299,16 +305,17 @@ export default function FilaDePrioridades({
           {grupos.map((g, i) => {
             const nivel = NIVEL[g.acoes[0].nivel];
             return (
-              <li key={g.client_id} className="relative overflow-hidden rounded-xl border border-border bg-card">
+              // Cada cliente é uma coisa só (grupo de ações): o cartão sólido do sistema, com a faixa do nível.
+              <li key={g.client_id} className={juntar(superficie.painel, "relative overflow-hidden")}>
                 <span className={`absolute bottom-0 left-0 top-0 w-1 ${nivel.barra}`} aria-hidden="true" />
                 <div className="px-4 pb-1.5 pl-5 pt-3">
                   <div className="flex min-w-0 items-center">
                     <span className="mr-2 w-5 shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">{i + 1}</span>
-                    <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold">{g.nome}</h3>
+                    <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{g.nome}</h3>
                     <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${nivel.selo}`}>{nivel.rotulo}</span>
                   </div>
                   {g.pronto && (
-                    <p className="ml-7 mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+                    <p className="ml-7 mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
                       <CheckCircle2 className="mr-1 h-3 w-3 shrink-0 text-success" />
                       <span className="truncate">{g.pronto}</span>
                     </p>
@@ -333,7 +340,7 @@ export default function FilaDePrioridades({
       )}
 
       {fila && fila.grupos.length > 0 && grupos.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border p-5 text-center text-[13px] text-muted-foreground">Nada com esse filtro.</p>
+        <p className="rounded-lg border border-dashed border-border p-5 text-center text-[13px] text-muted-foreground">Nada com esse filtro.</p>
       )}
 
       {fila && fila.emDia.length > 0 && (
@@ -368,11 +375,11 @@ export default function FilaDePrioridades({
             {fila.marcados.length === 1 ? "1 marcado como feito" : `${fila.marcados.length} marcados como feito`}
           </button>
           {verMarcados && (
-            <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-card px-3" aria-label="Marcados como feito">
+            <ul className={juntar(lista.aberta, lista.divisoria, "mt-2")} aria-label="Marcados como feito">
               {fila.marcados.map((m: MarcadoDaFila) => (
-                <li key={m.feito.id} className="flex min-w-0 items-center py-2">
+                <li key={m.feito.id} className={lista.linha}>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] text-foreground">
+                    <p className="truncate text-[13px] text-foreground">
                       <strong className="font-semibold">{m.nome}</strong>: {tituloComMes(m.acao)}
                     </p>
                     <p className="truncate text-[11.5px]">
@@ -397,8 +404,11 @@ export default function FilaDePrioridades({
       )}
 
       {consulta.data && consulta.data.origem === "direto" && (
-        <p className="text-[11.5px] text-muted-foreground">
-          Lido direto das tabelas: a função da fila ainda não foi aplicada no banco, então o último acesso de cada cliente não aparece.
+        <p className="flex items-center text-[12px] text-muted-foreground">
+          Lido direto das tabelas
+          <AjudaRecolhida className="ml-1" rotulo="Por que direto das tabelas">
+            A função da fila ainda não foi aplicada no banco, então o último acesso de cada cliente não aparece.
+          </AjudaRecolhida>
         </p>
       )}
     </section>

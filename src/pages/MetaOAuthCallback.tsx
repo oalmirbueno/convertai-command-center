@@ -6,6 +6,7 @@ import {
 } from "@/lib/socialMetaOAuth";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import CascaPublica from "@/components/publico/CascaPublica";
 import {
   completeMetaOAuth,
   META_OAUTH_CALLBACK_PATH,
@@ -134,23 +135,26 @@ export default function MetaOAuthCallback() {
     };
   }, []);
 
+  // A mesma casca das páginas públicas (logo, título curto, uma linha), sem
+  // o cartão com sombra de antes.
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 text-center shadow-sm">
-        {status === "loading" ? (
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-        ) : status === "success" ? (
-          <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
-        ) : (
-          <XCircle className="mx-auto h-8 w-8 text-destructive" />
-        )}
-        <h1 className="mt-4 text-base font-semibold text-foreground">
-          Conexão Meta
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground" role="status">
-          {message}
-        </p>
-      </div>
-    </main>
+    <CascaPublica
+      titulo="Conexão Meta"
+      acimaDoTitulo={
+        <span className="mb-3 block">
+          {status === "loading" ? (
+            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          ) : status === "success" ? (
+            <CheckCircle2 className="h-8 w-8 text-emerald-600" aria-hidden="true" />
+          ) : (
+            <XCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+          )}
+        </span>
+      }
+    >
+      <p className="-mt-4 text-[13px] leading-6 text-muted-foreground" role="status">
+        {message}
+      </p>
+    </CascaPublica>
   );
 }

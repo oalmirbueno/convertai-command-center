@@ -29,7 +29,7 @@ import {
   type TipoDeRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { atualizarNoCache, chamarRoteiros, gerarRoteiro, roteiroDaPeca, salvarVersao, useModelos, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, Cabecalho, OBJETIVOS, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, OBJETIVOS, RotuloLargo, SeloDoStatus } from "./Comuns";
 import { baixarBytes, itemSolto, montarPdf } from "./pdfNoNavegador";
 
 /**
@@ -186,11 +186,8 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
       as="section"
       data-formulario-de-roteiro=""
       titulo={peca ? `Roteiro de ${peca.titulo}` : tarefaId ? "Roteiro da peça" : "Roteiro avulso"}
-      descricao={
-        peca
-          ? `${ROTULO_DO_FORMATO[peca.formato] || peca.formato} · ${dataCurta(peca.data)}${peca.temRoteiroDaAgenda ? " · roteiro do calendário entra como base" : ""}`
-          : "Contexto do cliente, cérebro e campanha entram sozinhos."
-      }
+      descricao={peca ? `${ROTULO_DO_FORMATO[peca.formato] || peca.formato} · ${dataCurta(peca.data)}${peca.temRoteiroDaAgenda ? " · roteiro do calendário entra como base" : ""}` : undefined}
+      ajuda="Contexto do cliente, cérebro e campanha entram sozinhos."
       rodape={
         <>
           <button type="button" className={botao.secundario} onClick={() => void emBranco()} disabled={criando || semTema}>
@@ -424,7 +421,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
               onChange={(e) => mudar({ titulo: e.target.value })}
               disabled={desabilitado}
               aria-label="Título do roteiro"
-              className={juntar("w-full min-w-0 rounded-sm bg-transparent text-[18px] font-semibold leading-7 outline-none", foco)}
+              className={juntar("w-full min-w-0 rounded-sm bg-transparent text-[20px] font-semibold leading-7 outline-none", foco)}
             />
             <input
               value={rascunho.subtitulo}
@@ -458,13 +455,18 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
               <FileText className="h-3.5 w-3.5" />
               <RotuloLargo>PDF</RotuloLargo>
             </button>
-            <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={travado || !alterado || salvando}>
+            <button
+              type="button"
+              className={botao.primario}
+              onClick={() => void salvar()}
+              disabled={travado || !alterado || salvando}
+              title={linha.status === "aprovado" ? `Salvar cria a versão ${linha.versao_atual + 1} em rascunho. A aprovada continua guardada.` : undefined}
+            >
               {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}Salvar versão
             </button>
           </div>
         </div>
-        {bloqueio && <p className={juntar(superficie.poco, "px-3 py-2 text-[12.5px]")}>{bloqueio}</p>}
-        {!bloqueio && linha.status === "aprovado" && <p className={texto.auxiliar}>Salvar cria a versão {linha.versao_atual + 1} em rascunho. A aprovada continua guardada.</p>}
+        {bloqueio && <p className={juntar(superficie.poco, "px-3 py-2 text-[12px]")}>{bloqueio}</p>}
         {erro ? <AvisoDeErro erro={erro} /> : null}
         {faltas.length > 0 && <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Falta: {faltas.join(" ")}</p>}
         <AvisoDoJevCartao aviso={versao ? versao.aviso : null} />
@@ -524,20 +526,22 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         )}
       </BlocoRecolhivel>
 
-      <section className="min-w-0 space-y-3 border-t border-border pt-5" data-blocos="">
-        <Cabecalho
-          nivel={3}
-          titulo="Falas por bloco"
-          estado={`${rascunho.blocos.length} blocos`}
-          acoes={
-            !travado ? (
-              <button type="button" className={botao.discreto} onClick={novoBloco} aria-label="Novo bloco">
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Bloco
-              </button>
-            ) : null
-          }
-        />
+      {/* 28/09: o cabeçalho feito à mão das falas virou bloco recolhível, como os vizinhos. */}
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:blocos:${mesa.clientId}`}
+        titulo="Falas por bloco"
+        estado={`${rascunho.blocos.length} blocos`}
+        resumo={`${rascunho.blocos.length} blocos`}
+        data-blocos=""
+        acoes={
+          !travado ? (
+            <button type="button" className={botao.discreto} onClick={novoBloco} aria-label="Novo bloco">
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Bloco
+            </button>
+          ) : null
+        }
+      >
         <ol className="divide-y divide-border">
           {rascunho.blocos.map((b, i) => (
             <li key={b.id} className={juntar("min-w-0 py-3", i === 0 && "border-l-2 border-primary pl-3")} data-bloco={b.id}>
@@ -592,7 +596,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
             </li>
           ))}
         </ol>
-      </section>
+      </BlocoRecolhivel>
 
       <BlocoRecolhivel chave={`mesa-roteiros:direcao:${mesa.clientId}`} titulo="Direção de gravação" data-direcao="">
         <GrupoDeCampos colunas={3}>
@@ -647,7 +651,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
           chave={`mesa-roteiros:refazer:${mesa.clientId}`}
           titulo="Pedir ao roteirista"
           ajuda="Cada pedido gera uma versão nova. A atual fica no histórico da Revisão. Gerar de novo usa os comentários abertos da Revisão."
-          estado={alterado ? "Salve as mudanças antes." : undefined}
+          estado={alterado ? "Salve as mudanças antes" : undefined}
           data-refazer=""
           acoes={
             <BotaoComCusto

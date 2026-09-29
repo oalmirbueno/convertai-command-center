@@ -4,6 +4,7 @@ import { useInRouterContext, useNavigate } from "react-router-dom";
 import { Camera, Check, Megaphone, PenTool, Zap, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import MenuMais from "@/components/sistema/MenuMais";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
@@ -73,9 +74,11 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
     }
   };
 
-  const botao = "mb-1.5 mr-1.5 h-9 px-3 text-[12.5px]";
+  const botao = "mb-1.5 mr-1.5 h-9 px-3 text-[12px]";
+  // 28/09 (dono: "menos poluído"): sem caixa, uma linha só. Tipo, Usar nas mesas
+  // e o "Levar para" num menu (as cinco mesas eram cinco botões numa fileira).
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-3 sm:px-5" aria-label="Campanha nas mesas" data-campanha-nas-mesas={campanha.id}>
+    <section className="min-w-0" aria-label="Campanha nas mesas" data-campanha-nas-mesas={campanha.id}>
       <div className="flex min-w-0 flex-wrap items-center">
         <label className="mb-1.5 mr-2 inline-flex min-w-0 items-center text-[12px] text-muted-foreground">
           Tipo
@@ -84,7 +87,7 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
             onChange={(e) => void trocarTipo(e.target.value)}
             disabled={salvandoTipo}
             aria-label="Tipo da campanha"
-            className="ml-1.5 h-9 min-w-0 rounded-md border border-border bg-background px-2 text-[12.5px] text-foreground"
+            className="ml-1.5 h-9 min-w-0 rounded-md border border-border bg-background px-2 text-[13px] text-foreground"
           >
             <option value="">Sem tipo</option>
             {TIPOS_DE_CAMPANHA.map((t) => (
@@ -94,7 +97,7 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
         </label>
         <Button
           type="button"
-          variant={ativa ? "secondary" : "default"}
+          variant={ativa ? "secondary" : "outline"}
           className={botao}
           onClick={() => {
             setEmUso(ativa ? null : campanha.id);
@@ -108,25 +111,19 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
           {ativa ? <Check className="mr-1.5 h-4 w-4" /> : null}
           {ativa ? "Em uso nas mesas" : "Usar nas mesas"}
         </Button>
-      </div>
-
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Levar para</p>
-      <div className="mt-1 flex min-w-0 flex-wrap">
-        <Button type="button" variant="outline" className={botao} onClick={() => levar(linkDaArteRapida(clientId, "nova", { campanha: campanha.id }), "A arte rápida")}>
-          <Zap className="mr-1.5 h-4 w-4" /> Arte rápida
-        </Button>
-        <Button type="button" variant="outline" className={botao} onClick={() => levar(`/mesa-foto?client=${encodeURIComponent(clientId)}`, "A Mesa Foto")}>
-          <Camera className="mr-1.5 h-4 w-4" /> Mesa Foto
-        </Button>
-        <Button type="button" variant="outline" className={botao} onClick={() => levar(`/mesa-ads?client=${encodeURIComponent(clientId)}`, "A Mesa Ads")}>
-          <Megaphone className="mr-1.5 h-4 w-4" /> Mesa Ads
-        </Button>
-        <Button type="button" variant="outline" className={botao} onClick={() => levar(`/mesa?client=${encodeURIComponent(clientId)}&aba=mes`, "O Mês")}>
-          <CalendarDays className="mr-1.5 h-4 w-4" /> Mês
-        </Button>
-        <Button type="button" variant="ghost" className={botao} onClick={() => levar(`/mesa?client=${encodeURIComponent(clientId)}&aba=estudio`, "O Estúdio")}>
-          <PenTool className="mr-1.5 h-4 w-4" /> Estúdio
-        </Button>
+        <span className="mb-1.5 inline-flex items-center">
+          <span className="mr-0.5 text-[12px] text-muted-foreground">Levar para</span>
+          <MenuMais
+            rotulo="Levar para"
+            itens={[
+              { rotulo: "Arte rápida", icone: <Zap className="h-4 w-4" />, aoEscolher: () => levar(linkDaArteRapida(clientId, "nova", { campanha: campanha.id }), "A arte rápida") },
+              { rotulo: "Mesa Foto", icone: <Camera className="h-4 w-4" />, aoEscolher: () => levar(`/mesa-foto?client=${encodeURIComponent(clientId)}`, "A Mesa Foto") },
+              { rotulo: "Mesa Ads", icone: <Megaphone className="h-4 w-4" />, aoEscolher: () => levar(`/mesa-ads?client=${encodeURIComponent(clientId)}`, "A Mesa Ads") },
+              { rotulo: "Mês", icone: <CalendarDays className="h-4 w-4" />, aoEscolher: () => levar(`/mesa?client=${encodeURIComponent(clientId)}&aba=mes`, "O Mês") },
+              { rotulo: "Estúdio", icone: <PenTool className="h-4 w-4" />, aoEscolher: () => levar(`/mesa?client=${encodeURIComponent(clientId)}&aba=estudio`, "O Estúdio") },
+            ]}
+          />
+        </span>
       </div>
 
       {/* A base que as mesas puxam, em uma linha. */}

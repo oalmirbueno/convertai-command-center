@@ -53,7 +53,7 @@ function LinhaDoAprendizado({ a, onEsquecer, ocupado }: { a: AprendizadoNaTela; 
   return (
     <li className="flex min-w-0 items-start py-2">
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] leading-snug [overflow-wrap:anywhere]" title={a.motivo || undefined}>{a.texto}</p>
+        <p className="text-[13px] leading-snug [overflow-wrap:anywhere]" title={a.motivo || undefined}>{a.texto}</p>
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
           {ROTULO_DA_FONTE[a.fonte]}
           {a.forca > 1 ? ` · ${a.forca}x` : ""}
@@ -75,10 +75,40 @@ function LinhaDoAprendizado({ a, onEsquecer, ocupado }: { a: AprendizadoNaTela; 
   );
 }
 
-export default function ContextoAprendizados({ clientId }: { clientId: string }) {
+export type FiltroDosAprendizados = "todos" | FonteDoAprendizado;
+
+/**
+ * Filtro por origem. Vai na linha do título do hub (28/09: seletor pequeno não
+ * ganha linha própria); por isso a lista aceita o filtro de fora.
+ */
+export function SeletorDaOrigem({ valor, onEscolher }: { valor: FiltroDosAprendizados; onEscolher: (v: FiltroDosAprendizados) => void }) {
+  return (
+    <SeletorCompacto
+      rotulo="Origem"
+      opcoes={FILTROS_DOS_APRENDIZADOS.map((f) => ({ valor: f.valor, rotulo: f.rotulo }))}
+      valor={valor}
+      onEscolher={(v) => onEscolher(v as FiltroDosAprendizados)}
+      listaQuandoNaoCabe
+    />
+  );
+}
+
+export default function ContextoAprendizados({
+  clientId,
+  filtro: filtroDeFora,
+  onFiltro,
+}: {
+  clientId: string;
+  /** Filtro controlado por quem chama (o seletor fica no título do hub). Sem ele, o seletor aparece em cima da lista. */
+  filtro?: FiltroDosAprendizados;
+  onFiltro?: (v: FiltroDosAprendizados) => void;
+}) {
   const queryClient = useQueryClient();
   const consulta = useAprendizadosDoCliente(clientId);
-  const [filtro, setFiltro] = useState<"todos" | FonteDoAprendizado>("todos");
+  const [filtroLocal, setFiltroLocal] = useState<FiltroDosAprendizados>("todos");
+  const controlado = filtroDeFora !== undefined && !!onFiltro;
+  const filtro = controlado ? filtroDeFora! : filtroLocal;
+  const setFiltro = controlado ? onFiltro! : setFiltroLocal;
   const [ocupado, setOcupado] = useState<string | null>(null);
   const lista = aprendizadosDoPainel(consulta.data, filtro);
   const atualizar = () => void queryClient.invalidateQueries({ queryKey: chaveDosAprendizados(clientId) });
@@ -117,17 +147,11 @@ export default function ContextoAprendizados({ clientId }: { clientId: string })
   }
   return (
     <div className="min-w-0">
-      <SeletorCompacto
-        rotulo="Origem"
-        opcoes={FILTROS_DOS_APRENDIZADOS.map((f) => ({ valor: f.valor, rotulo: f.rotulo }))}
-        valor={filtro}
-        onEscolher={(v) => setFiltro(v as "todos" | FonteDoAprendizado)}
-        listaQuandoNaoCabe
-      />
+      {!controlado && <SeletorDaOrigem valor={filtro} onEscolher={setFiltro} />}
       {lista.length === 0 ? (
-        <EstadoVazio compacto titulo="Nada aqui ainda" descricao="Cada entrega, ajuste e número real ensina o painel." className="mt-3" />
+        <EstadoVazio compacto titulo="Nada aqui ainda" descricao="Cada entrega, ajuste e número real ensina o painel." className={controlado ? "" : "mt-3"} />
       ) : (
-        <ul className="mt-2 divide-y divide-border">
+        <ul className={juntar("divide-y divide-border", !controlado && "mt-2")}>
           {lista.map((a) => (
             <LinhaDoAprendizado key={a.id} a={a} ocupado={ocupado === a.id} onEsquecer={() => void esquecer(a)} />
           ))}

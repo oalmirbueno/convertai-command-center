@@ -8,13 +8,19 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { partesDoPlanoV2, ROTULOS_DAS_FONTES, type Oferta, type StatusDaOferta } from "./adsApi";
 import { BarraDeNota, BarraDePolitica } from "./Comuns";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
-import { texto } from "@/components/sistema/estilos";
+import MenuMais from "@/components/sistema/MenuMais";
+import { juntar, superficie, texto } from "@/components/sistema/estilos";
 
 /**
  * Uma oferta proposta pelo agente (ou editada pela equipe): promessa em
  * destaque, o que entra, bônus, garantia, urgência real e CTA, com as notas
  * do Jev (clareza, força e risco de política). Ações: Escolher, Editar,
  * Arquivar, Aplicar no briefing e Criar criativos desta oferta.
+ *
+ * 28/09 (padronização, lote L4): um primário por cartão (Lapidar na oferta do
+ * contexto, Criar criativos nas outras), título numa linha (o nome inteiro no
+ * title) e o secundário (Editar, Arquivar) no "..." do cartão, para as ações
+ * caberem em até duas linhas. Cartão com função (item de grade): superficie.painel.
  */
 
 const linhas = (t: string) => t.split("\n").map((x) => x.trim()).filter(Boolean);
@@ -23,7 +29,7 @@ function Bloco({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <p className={texto.rotulo}>{rotulo}</p>
-      <div className="mt-0.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>
+      <div className="mt-0.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
@@ -142,7 +148,7 @@ export default function CartaoDaOferta({
 
   if (editando) {
     return (
-      <article className="min-w-0 rounded-lg border border-primary/50 bg-card p-4" aria-label={`Editar a oferta ${o.nome}`}>
+      <article className={juntar(superficie.painel, "min-w-0 border-primary/50 p-4")} aria-label={`Editar a oferta ${o.nome}`}>
         <GrupoDeCampos titulo="Editar oferta">
           {CAMPOS.map((c) => (
             <CampoDeFormulario key={c.chave} rotulo={c.rotulo} apoio={c.dica} largo={c.longo}>
@@ -185,22 +191,22 @@ export default function CartaoDaOferta({
 
   return (
     <article
-      className={`min-w-0 rounded-lg border bg-card p-4 transition-colors ${o.status === "escolhida" ? "border-success/50 ring-1 ring-success/30" : nova ? "border-primary/50" : "border-border"} ${arquivada ? "opacity-70" : ""}`}
+      className={juntar(superficie.painel, "min-w-0 p-4 transition-colors", o.status === "escolhida" ? "border-success/50 ring-1 ring-success/30" : nova ? "border-primary/50" : "", arquivada && "opacity-70")}
       aria-label={`Oferta ${o.nome}`}
     >
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center">
-            <span className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[10.5px] font-medium ${st.tom}`}>{st.rotulo}</span>
-            {nova && <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-[10.5px] font-medium text-primary">Nova</span>}
+            <span className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${st.tom}`}>{st.rotulo}</span>
+            {nova && <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-[11px] font-medium text-primary">Nova</span>}
             {doContexto && (
-              <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full border border-primary/30 px-2 text-[10.5px] font-medium text-primary" title="Montada a partir do contexto do cliente, sem IA. Cada campo diz de onde veio.">
+              <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full border border-primary/30 px-2 text-[11px] font-medium text-primary" title="Montada a partir do contexto do cliente, sem IA. Cada campo diz de onde veio.">
                 Do contexto
               </span>
             )}
-            {o.para_quem && <span className="mb-1 min-w-0 truncate text-[11.5px] text-muted-foreground">para {o.para_quem}</span>}
+            {o.para_quem && <span className="mb-1 min-w-0 truncate text-[12px] text-muted-foreground">para {o.para_quem}</span>}
           </div>
-          <h3 className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{o.nome}</h3>
+          <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")} title={o.nome}>{o.nome}</h3>
         </div>
         {ocupada && <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
       </div>
@@ -257,49 +263,54 @@ export default function CartaoDaOferta({
         </div>
       )}
 
-      <div className="mt-3 flex min-w-0 flex-wrap items-center border-t border-border pt-3">
-        {!arquivada && (
-          <span className="mb-1.5 mr-1.5">
-            <BotaoComCusto
-              rotulo={<><Rocket className="mr-1 h-3.5 w-3.5" /> Criar criativos desta oferta</>}
-              titulo="Criar criativos desta oferta"
-              descricao="Leva para o Plano de teste e gera os ângulos desta oferta, já conferidos pelo Jev."
-              className="h-8"
-              fecharAoConfirmar
-              disabled={ocupada}
-              partes={() => partesDoPlanoV2(catalogo, 4)}
-              executar={async () => {
-                onCriar();
-                return null;
-              }}
-            />
-          </span>
-        )}
-        {onLapidar && !arquivada && (
-          <Button type="button" size="sm" variant={doContexto ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar.">
-            <Sparkles className="mr-1 h-3.5 w-3.5" /> Lapidar com o agente
+      <div className="mt-3 flex min-w-0 items-start border-t border-border pt-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center">
+          {!arquivada && (
+            <span className="mb-1.5 mr-1.5">
+              <BotaoComCusto
+                rotulo={<><Rocket className="mr-1 h-3.5 w-3.5" /> Criar criativos desta oferta</>}
+                titulo="Criar criativos desta oferta"
+                descricao="Leva para o Plano de teste e gera os ângulos desta oferta, já conferidos pelo Jev."
+                variant={doContexto && onLapidar ? "outline" : "default"}
+                className="h-8"
+                fecharAoConfirmar
+                disabled={ocupada}
+                partes={() => partesDoPlanoV2(catalogo, 4)}
+                executar={async () => {
+                  onCriar();
+                  return null;
+                }}
+              />
+            </span>
+          )}
+          {onLapidar && !arquivada && (
+            <Button type="button" size="sm" variant={doContexto ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar.">
+              <Sparkles className="mr-1 h-3.5 w-3.5" /> Lapidar com o agente
+            </Button>
+          )}
+          {o.status !== "escolhida" && !arquivada && (
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={() => onStatus("escolhida")}>
+              <Check className="mr-1 h-3.5 w-3.5" /> Escolher
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onAplicar} title="Preenche o briefing com esta oferta para você revisar e salvar">
+            <ClipboardList className="mr-1 h-3.5 w-3.5" /> Aplicar no briefing
           </Button>
-        )}
-        {o.status !== "escolhida" && !arquivada && (
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={() => onStatus("escolhida")}>
-            <Check className="mr-1 h-3.5 w-3.5" /> Escolher
-          </Button>
-        )}
-        <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onAplicar} title="Preenche o briefing com esta oferta para você revisar e salvar">
-          <ClipboardList className="mr-1 h-3.5 w-3.5" /> Aplicar no briefing
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={() => setEditando(paraRascunho(o))}>
-          <PenLine className="mr-1 h-3.5 w-3.5" /> Editar
-        </Button>
-        {arquivada ? (
-          <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8" disabled={ocupada} onClick={() => onStatus("rascunho")}>
-            <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restaurar
-          </Button>
-        ) : (
-          <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-muted-foreground" disabled={ocupada} onClick={() => onStatus("arquivada")}>
-            <Archive className="mr-1 h-3.5 w-3.5" /> Arquivar
-          </Button>
-        )}
+          {arquivada && (
+            <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8" disabled={ocupada} onClick={() => onStatus("rascunho")}>
+              <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restaurar
+            </Button>
+          )}
+        </div>
+        <MenuMais
+          rotulo={`Mais ações da oferta ${o.nome}`}
+          desativado={ocupada}
+          className="ml-1 shrink-0"
+          itens={[
+            { rotulo: "Editar", icone: <PenLine className="h-3.5 w-3.5" />, aoEscolher: () => setEditando(paraRascunho(o)) },
+            !arquivada && { rotulo: "Arquivar", icone: <Archive className="h-3.5 w-3.5" />, aoEscolher: () => onStatus("arquivada"), separadorAntes: true },
+          ]}
+        />
       </div>
     </article>
   );

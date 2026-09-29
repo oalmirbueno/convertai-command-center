@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
-import { Carregando, EstadoVazio, Secao, botao, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -226,7 +226,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
           </Link>
         }
       >
-      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+      <ul className={juntar(lista.aberta, lista.divisoria)}>
       {groups.map((group) => {
         const f = group.parent;
         const Icon = group.type === "carousel" ? Images : (fileIcons[f.file_type] || FileText);
@@ -237,7 +237,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
               role="button"
               tabIndex={0}
               aria-label={`Abrir ${f.file_name}`}
-              className={juntar("block min-w-0 cursor-pointer px-4 py-3 transition-colors hover:bg-muted/40", foco)}
+              className={juntar("block min-w-0 cursor-pointer rounded-lg px-2 py-3 transition-colors hover:bg-muted/40", foco)}
               onClick={() => { setPreviewGroup(group); setPreviewIndex(0); }}
               onKeyDown={(e) => {
                 if (e.target !== e.currentTarget) return;
@@ -284,11 +284,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
         <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
             <div className="flex items-center gap-3 pr-6">
-              <DialogTitle className="truncate text-base">
+              <DialogTitle className="truncate text-[15px]">
                 {currentPreviewFile?.file_name}
               </DialogTitle>
               {previewGroup && previewGroup.children.length > 1 && (
-                <span className="text-xs text-muted-foreground shrink-0">
+                <span className="shrink-0 text-[12px] text-muted-foreground">
                   {previewIndex + 1} / {previewGroup.children.length}
                 </span>
               )}
@@ -355,31 +355,31 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 Enviado por {previewGroup?.parent.uploader?.full_name || "-"} • {formatDate(previewGroup?.parent.created_at || "")}
               </p>
               {previewGroup?.parent.caption && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Legenda</p>
-                  <p className="text-sm text-foreground">{previewGroup.parent.caption}</p>
+                  <p className="text-[13px] text-foreground">{previewGroup.parent.caption}</p>
                 </div>
               )}
               {previewGroup?.parent.carousel_text && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Texto do carrossel</p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{previewGroup.parent.carousel_text}</p>
+                  <p className="whitespace-pre-wrap text-[13px] text-foreground">{previewGroup.parent.carousel_text}</p>
                 </div>
               )}
               {previewGroup?.parent.description && (
                 <div className="space-y-0.5">
                   <p className={texto.rotulo}>Descrição</p>
-                  <p className="text-sm text-foreground">{previewGroup.parent.description}</p>
+                  <p className="text-[13px] text-foreground">{previewGroup.parent.description}</p>
                 </div>
               )}
               {previewGroup?.parent.approval_status === "rejected" && previewGroup.parent.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
-                  <p className="text-xs text-foreground">{previewGroup.parent.feedback}</p>
+                  <p className="text-[12px] text-foreground">{previewGroup.parent.feedback}</p>
                 </div>
               )}
             </div>
@@ -406,7 +406,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar aprovação?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
+          <p className="text-[13px] text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
             <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>

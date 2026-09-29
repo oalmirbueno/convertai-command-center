@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { nomeDoProvedor, textoDoErro, usd } from "@/lib/mesa/api";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie } from "@/components/sistema/estilos";
 
 /**
  * Chaves de IA por cliente e cotas (SPEC 2.1). Só admin abre esta gaveta.
@@ -247,38 +249,50 @@ export default function ChavesECotas({
     <Sheet open={aberto} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Chaves de IA e cotas</SheetTitle>
-          <SheetDescription>{clientName}: cada provedor pode ter a chave do próprio cliente, para o custo sair na conta certa.</SheetDescription>
+          <div className="flex min-w-0 items-center">
+            <SheetTitle className="flex min-w-0 items-center truncate"><KeyRound className="mr-2 h-4 w-4 shrink-0" /> Chaves de IA e cotas</SheetTitle>
+            <AjudaRecolhida className="ml-1.5" rotulo="Para que servem as chaves">
+              Cada provedor pode ter a chave do próprio cliente, para o custo sair na conta certa.
+            </AjudaRecolhida>
+          </div>
+          {/* Na tela, só o estado (o cliente); a explicação inteira segue para o leitor de tela. */}
+          <SheetDescription className="truncate">
+            {clientName}
+            <span className="sr-only">: cada provedor pode ter a chave do próprio cliente, para o custo sair na conta certa.</span>
+          </SheetDescription>
         </SheetHeader>
 
-        {lista.isLoading && <p className="mt-6 text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo chaves…</p>}
-        {lista.isError && <p className="mt-6 rounded-lg bg-destructive/10 p-3 text-[12.5px] text-foreground">{textoDoErro(lista.error)}</p>}
+        {lista.isLoading && <p className="mt-6 text-[13px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo chaves…</p>}
+        {lista.isError && <p className="mt-6 rounded-lg bg-destructive/10 p-3 text-[13px] text-foreground">{textoDoErro(lista.error)}</p>}
 
         {lista.data && (
           <div className="mt-5 space-y-4">
-            <label className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card p-3.5">
-              <span className="min-w-0">
-                <span className="block text-[13px] font-medium">Usar chave da agência enquanto não houver própria</span>
-                <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+            {/* Um ajuste: linha aberta (sem cartão), a consequência no "?". */}
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <span className="mr-3 flex min-w-0 items-center">
+                <label htmlFor="usar-chave-da-agencia" className="min-w-0 text-[13px] font-medium">Usar chave da agência enquanto não houver própria</label>
+                <AjudaRecolhida className="ml-1" rotulo="O que acontece desligado">
                   Desligado, o cliente sem chave própria de um provedor fica sem IA daquele provedor.
-                </span>
+                </AjudaRecolhida>
               </span>
               <Switch
+                id="usar-chave-da-agencia"
                 checked={lista.data.usar_chave_agencia}
                 disabled={salvandoConfig}
                 onCheckedChange={(v) => void mudarUsoDaAgencia(v)}
               />
-            </label>
+            </div>
 
             {PROVEDORES.map((provedor) => {
               const ativa = chaves.find((c) => c.provedor === provedor && c.ativa) || null;
               const antigas = chaves.filter((c) => c.provedor === provedor && !c.ativa);
               const usoPct = ativa && ativa.cota_mensal_usd ? Math.min(100, Math.round((ativa.gasto_mes_usd / ativa.cota_mensal_usd) * 100)) : null;
               return (
-                <section key={provedor} className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-[13.5px] font-semibold">{nomeDoProvedor(provedor)}</h3>
-                    <span className={`rounded-full px-2 py-0.5 text-[10.5px] ${ativa ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
+                // Um provedor é uma coisa só: o cartão sólido do sistema.
+                <section key={provedor} className={juntar(superficie.painel, "space-y-3 p-3.5")}>
+                  <div className="flex min-w-0 items-center justify-between">
+                    <h3 className="mr-2 min-w-0 truncate text-[13px] font-semibold">{nomeDoProvedor(provedor)}</h3>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${ativa ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}>
                       {ativa ? "chave própria" : lista.data.usar_chave_agencia ? "usa a da agência" : "bloqueado"}
                     </span>
                   </div>

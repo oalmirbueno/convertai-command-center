@@ -152,7 +152,8 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
       )}
 
       {kits.length > 0 && (
-        <div className="min-w-0 lg:max-h-40 lg:overflow-y-auto lg:overscroll-contain" data-rolagem-propria="">
+        // 28/09: sem rolagem própria aqui dentro; quem rola é o topo da etapa (uma rolagem por região).
+        <div className="min-w-0">
           <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {kits.map((k) => (
               <ChipDoProduto key={String(k.id)} kit={k} capa={capaDe(k)} ativo={k.id === kitId} onEscolher={() => escolherKit(k.id)} />

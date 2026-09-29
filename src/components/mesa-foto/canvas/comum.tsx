@@ -25,7 +25,7 @@ export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border bo
 export const pilula = (ligada: boolean) =>
   `mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[11.5px] transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;
 /** Rótulo pequeno de seção nos painéis pretos. */
-export const ROTULO = "mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-zinc-400";
+export const ROTULO = "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400";
 /** Campo de texto sobre fundo preto. */
 export const CAMPO = "w-full min-w-0 rounded-lg border border-white/10 bg-zinc-900/70 px-2.5 py-2 text-[12.5px] text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-400/60 focus:outline-none";
 
@@ -166,7 +166,7 @@ export function Gaveta({
     return () => window.removeEventListener("keydown", tecla);
   }, []);
   return (
-    <section ref={roda} role="dialog" aria-modal="false" aria-label={rotulo} className={`${PAINEL} ${FLUTUANTE} ${LUGAR_DA_GAVETA[lugar]} flex min-w-0 flex-col rounded-2xl`} data-gaveta={lugar} {...dados}>
+    <section ref={roda} role="dialog" aria-modal="false" aria-label={rotulo} className={`${PAINEL} ${FLUTUANTE} ${LUGAR_DA_GAVETA[lugar]} flex min-w-0 flex-col rounded-xl`} data-gaveta={lugar} {...dados}>
       <div className="flex min-w-0 shrink-0 items-start border-b border-white/10 px-3 py-2">
         <div className="min-w-0 flex-1">{cabeca}</div>
         <button type="button" onClick={onFechar} aria-label={rotuloDoFechar} className="-mr-1 ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">

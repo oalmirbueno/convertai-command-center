@@ -154,7 +154,7 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
     >
       {!mensagens.length && !pensando && (
         <p className={juntar(conversa.apoio, "leading-relaxed")} data-diretor-vazio="">
-          Conte o vídeo que quer (nicho, lugar, jeito). Ou escolha um kit e peça para o diretor completar.
+          Conte o vídeo que quer (nicho, lugar, jeito) ou escolha um kit.
         </p>
       )}
       {mensagens.map((m) => (

@@ -8,7 +8,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "@/components/mesa/AnexosDoPedido";
 import { Ditado } from "@/components/mesa/Ditado";
 import { Cronometro } from "@/components/mesa/Cronometro";
-import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import PainelDoAgente, { BalaoDaConversa } from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -31,16 +31,9 @@ const ATALHOS = [
   { rotulo: "Janela mais curta", texto: "Encurte a janela de teste para " },
 ];
 
+/** Balão da conversa: o do sistema (14 px, linha 1,6), sem balão feito à mão. */
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
-  return (
-    <div
-      className={`min-w-0 rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
-        papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-6 rounded-bl-md bg-muted text-foreground"
-      }`}
-    >
-      {children}
-    </div>
-  );
+  return <BalaoDaConversa de={papel}>{children}</BalaoDaConversa>;
 }
 
 export default function ConversaDoPlano({ plano, className = "" }: { plano: PlanoAds; className?: string }) {
@@ -166,7 +159,7 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
       {conversa.isError && <AvisoDeErro erro={conversa.error} />}
       {conversa.data && mensagens.length === 0 && !envio && (
         <div className="px-1 py-6 text-center">
-          <p className="text-[12.5px] font-medium">Ajuste o plano conversando</p>
+          <p className="text-[13px] font-medium">Ajuste o plano conversando</p>
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Outro ângulo, outra prova, menos risco ou outra janela.</p>
         </div>
       )}
@@ -191,9 +184,9 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
       {envio && (
         <div className="min-w-0 space-y-2">
           {envio.mensagem && <Bolha papel="usuario"><p className="whitespace-pre-wrap">{envio.mensagem}</p></Bolha>}
-          <div className="mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
+          <BalaoDaConversa de="agente">
             <Cronometro desde={envio.desde} rotulo="Ajustando o plano" />
-          </div>
+          </BalaoDaConversa>
         </div>
       )}
     </PainelDoAgente>

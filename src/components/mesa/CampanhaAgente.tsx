@@ -17,6 +17,8 @@ import {
   partesDaConversaDaCampanha,
   usePedidoDaCampanha,
 } from "./campanhasApi";
+import { conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Agente da campanha (pedido do dono em 23/09, noite): a conversa com o
@@ -47,11 +49,8 @@ const mexeuNosConteudos = (m: MensagemDoAgente) => (m.anexos || []).some((a) => 
 
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
-    <div
-      className={`min-w-0 rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
-        papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-6 rounded-bl-md bg-muted text-foreground"
-      }`}
-    >
+    // Balão do sistema (SISTEMA.md seção 9): 14 px, o mesmo em todo agente.
+    <div className={juntar(estiloDaConversa.balao, papel === "usuario" ? estiloDaConversa.doUsuario : estiloDaConversa.doAgente)}>
       {children}
     </div>
   );
@@ -163,9 +162,11 @@ export default function CampanhaAgente({
         {conversa.isError && <AvisoDeErro erro={conversa.error} />}
         {conversa.data && lista.length === 0 && !envio && (
           <div className="px-1 py-6 text-center">
-            <p className="text-[12.5px] font-medium">Converse para ajustar a campanha</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              Peça mudanças no nome, no conceito, na identidade e nos conteúdos: mudar, acrescentar ou tirar. A tela atualiza na hora.
+            <p className="inline-flex items-center text-[13px] font-medium">
+              Converse para ajustar a campanha
+              <AjudaRecolhida className="ml-1" rotulo="O que dá para pedir">
+                Peça mudanças no nome, no conceito, na identidade e nos conteúdos: mudar, acrescentar ou tirar. A tela atualiza na hora.
+              </AjudaRecolhida>
             </p>
           </div>
         )}
@@ -201,7 +202,7 @@ export default function CampanhaAgente({
                 <p className="whitespace-pre-wrap">{envio.mensagem}</p>
               </Bolha>
             )}
-            <div className="mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
+            <div className={juntar(estiloDaConversa.balao, estiloDaConversa.doAgente)}>
               <Cronometro desde={envio.desde} rotulo="Trabalhando na campanha" />
             </div>
           </div>

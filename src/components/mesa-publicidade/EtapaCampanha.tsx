@@ -9,8 +9,9 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import Painel from "@/components/sistema/Painel";
+import Secao from "@/components/sistema/Secao";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
-import { botao, campo, campoTexto, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, foco, juntar, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { RECEITAS_DE_PUBLICIDADE, receitaDaCategoria, receitaParaProduto } from "../../../supabase/functions/_shared/receitas-de-publicidade.ts";
@@ -64,6 +65,7 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
   const [kitId, setKitId] = useEstadoDaTela<string>(`mesa-publicidade:produto:${clientId}`, "", { validar: (v) => typeof v === "string" });
   const [categoria, setCategoria] = useState<string>("");
   const [criando, setCriando] = useState(false);
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-publicidade:escolher-produto:${clientId}`, false);
   const kit = kits.find((k) => k.id === kitId) || null;
   const sugerida = kit ? receitaParaProduto(kit.nome, kit.tipo) : null;
 
@@ -85,36 +87,39 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
   };
 
   return (
-    <section className="min-w-0 space-y-3" data-escolher-produto="">
+    <section className="min-w-0 space-y-3" data-escolher-produto="" data-recolhido={recolhido ? "sim" : "nao"}>
       <CabecalhoDaEtapa
         nivel={3}
         titulo="Qual produto vai para a campanha?"
         ajuda="Os produtos vêm da Mesa Foto, com as fotos reais. A campanha nunca muda o produto."
         estado={`${kits.length} ${kits.length === 1 ? "produto" : "produtos"} na Mesa Foto`}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` }}
       />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-        {kits.map((k) => {
-          const capa = (fotos.data || []).find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id))) || null;
-          const ativo = k.id === kitId;
-          return (
-            <button
-              key={k.id || k.nome}
-              type="button"
-              onClick={() => {
-                setKitId(k.id || "");
-                setCategoria("");
-              }}
-              aria-pressed={ativo}
-              className={juntar("min-w-0 rounded-lg border p-1.5 text-left transition-colors", ativo ? "border-primary bg-primary/5" : "border-border hover:border-primary/50", foco)}
-            >
-              <MolduraDaFoto caminho={capa ? capa.storage_path : null} bucket={capa ? capa.storage_bucket : "mesa"} alt={k.nome} proporcao={1} />
-              <span className="mt-1 block truncate text-[12px] font-medium">{k.nome || "Produto"}</span>
-              {k.variante && <span className="block truncate text-[11px] text-muted-foreground">{k.variante}</span>}
-            </button>
-          );
-        })}
-      </div>
-      {kit && (
+      {!recolhido && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          {kits.map((k) => {
+            const capa = (fotos.data || []).find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id))) || null;
+            const ativo = k.id === kitId;
+            return (
+              <button
+                key={k.id || k.nome}
+                type="button"
+                onClick={() => {
+                  setKitId(k.id || "");
+                  setCategoria("");
+                }}
+                aria-pressed={ativo}
+                className={juntar("min-w-0 rounded-lg border p-1.5 text-left transition-colors", ativo ? "border-primary bg-primary/5" : "border-border hover:border-primary/50", foco)}
+              >
+                <MolduraDaFoto caminho={capa ? capa.storage_path : null} bucket={capa ? capa.storage_bucket : "mesa"} alt={k.nome} proporcao={1} />
+                <span className="mt-1 block truncate text-[12px] font-medium">{k.nome || "Produto"}</span>
+                {k.variante && <span className="block truncate text-[11px] text-muted-foreground">{k.variante}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {!recolhido && kit && (
         <div className="flex min-w-0 flex-wrap items-end">
           <CampoDeFormulario rotulo="Categoria da receita" ajuda="Dado de partida do diretor. Sem receita, o diretor decide." className="mb-2 mr-2 w-full sm:w-64">
             <select value={categoria || (sugerida ? sugerida.id : "")} onChange={(e) => setCategoria(e.target.value)} className={campo}>
@@ -288,13 +293,15 @@ function FormularioDoBriefing() {
           </CampoDeFormulario>
         </GrupoDeCampos>
 
-        <div className="border-t border-border pt-4" data-restricoes="">
-          <div className="mb-3 flex min-w-0 items-center">
-            <h4 className={juntar(texto.tituloSecao, "text-[14px]")}>O que não pode mudar no produto</h4>
-            <AjudaRecolhida className="ml-1.5" rotulo="Sobre o que não pode mudar">
-              A revisão reprova a foto que mudar qualquer um destes, mesmo bonita.
-            </AjudaRecolhida>
-          </div>
+        {/* 28/09: o cabeçalho feito à mão (h4 de 14 px) virou Secao: recolhe e o "?" fica ao lado do título. */}
+        <Secao
+          divisoria
+          nivel={3}
+          titulo="O que não pode mudar no produto"
+          ajuda="A revisão reprova a foto que mudar qualquer um destes, mesmo bonita."
+          recolher={`mesa-publicidade:restricoes:${clientId}`}
+          data-restricoes=""
+        >
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Logo e texto">
               <input value={b.restricoes.logo} onChange={(e) => mudar({ restricoes: { ...b.restricoes, logo: e.target.value } })} placeholder="Ex.: logo gravada na haste" className={campo} />
@@ -309,29 +316,21 @@ function FormularioDoBriefing() {
               <textarea value={b.proibido} onChange={(e) => mudar({ proibido: e.target.value })} rows={3} placeholder="Ex.: resultado clínico, desconto que não existe" className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-        </div>
+        </Secao>
 
+        {/* Estado em uma linha (o que falta) e a receita com o detalhe no "?": nada de texto empilhado. */}
         {lacunas.length > 0 && (
-          <ul className={juntar(texto.auxiliar, "space-y-0.5 leading-5")} data-lacunas="">
-            {lacunas.map((l) => (
-              <li key={l} className="[overflow-wrap:anywhere]">
-                Falta: {l}
-              </li>
-            ))}
-          </ul>
+          <p className={juntar(texto.auxiliar, "truncate")} title={lacunas.map((l) => `Falta: ${l}`).join(". ")} data-lacunas="">
+            {lacunas.length === 1 ? "Falta" : `Faltam ${lacunas.length}`}: {lacunas.join("; ")}
+          </p>
         )}
 
         {receita && (
-          <div className={juntar(superficie.poco, "px-3 py-2.5 text-[12px] leading-5")} data-receita={receita.id}>
-            <div className="flex min-w-0 items-center">
-              <p className="min-w-0 truncate font-semibold">Receita de {receita.categoria}</p>
-              <AjudaRecolhida className="ml-1.5" rotulo="Sobre a receita">
-                Receita de partida, não campanha vencedora.
-              </AjudaRecolhida>
-            </div>
-            <p className="text-muted-foreground [overflow-wrap:anywhere]">Territórios de partida: {receita.territorios.join(", ")}.</p>
-            <p className="text-muted-foreground [overflow-wrap:anywhere]">Não pode mudar: {receita.invariantes.join(", ")}.</p>
-            <p className="text-muted-foreground [overflow-wrap:anywhere]">Foco da revisão: {receita.foco_da_revisao}</p>
+          <div className="flex min-w-0 items-center text-[12px]" data-receita={receita.id}>
+            <p className="min-w-0 truncate font-semibold">Receita de {receita.categoria}</p>
+            <AjudaRecolhida className="ml-1.5" rotulo="Sobre a receita">
+              Receita de partida, não campanha vencedora. Territórios de partida: {receita.territorios.join(", ")}. Não pode mudar: {receita.invariantes.join(", ")}. Foco da revisão: {receita.foco_da_revisao}
+            </AjudaRecolhida>
           </div>
         )}
       </div>
@@ -385,7 +384,7 @@ export default function EtapaCampanha() {
               <RotuloLargo>Nova campanha</RotuloLargo>
             </button>
             {campanha && !nova && (
-              <button type="button" className={botao.primario} onClick={() => irPara("direcao")} aria-label="Seguir para a direção">
+              <button type="button" className={botao.secundario} onClick={() => irPara("direcao")} aria-label="Seguir para a direção">
                 <ArrowRight className="h-3.5 w-3.5" />
                 <RotuloLargo>Seguir para a direção</RotuloLargo>
               </button>
@@ -405,7 +404,7 @@ export default function EtapaCampanha() {
             <EstadoVazio
               icone={<Package className="h-5 w-5" />}
               titulo="Este cliente ainda não tem produto na Mesa Foto."
-              descricao="Suba as fotos reais e identifique o produto lá. Ele aparece aqui na hora."
+              descricao="Suba e identifique o produto lá: ele aparece aqui na hora."
               acao={
                 <Link to={`/mesa-foto?client=${clientId}&etapa=acervo`} className={botao.secundario}>
                   Abrir a Mesa Foto

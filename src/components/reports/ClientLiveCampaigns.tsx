@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Megaphone } from "lucide-react";
+import { FaixaDeNumeros, Secao, etiqueta, juntar, lista, texto } from "@/components/sistema";
 import { useAdsCampaigns, useAdsDaily, type AdsDaily } from "@/hooks/useAdsMetrics";
 import {
   clientCampaignLine,
@@ -32,13 +32,13 @@ export default function ClientLiveCampaigns({ clientId }: { clientId?: string })
   const porCampanha = useMemo(() => {
     const mapa = new Map<string, AdsDaily[]>();
     for (const row of rows || []) {
-      const lista = mapa.get(row.campaign_id) || [];
-      lista.push(row);
-      mapa.set(row.campaign_id, lista);
+      const dias = mapa.get(row.campaign_id) || [];
+      dias.push(row);
+      mapa.set(row.campaign_id, dias);
     }
     return [...mapa.entries()]
-      .map(([id, lista]) => ({
-        resumo: summarizeCampaign(lista)!,
+      .map(([id, dias]) => ({
+        resumo: summarizeCampaign(dias)!,
         ficha: (campaigns || []).find((item) => item.campaign_id === id),
       }))
       .filter((item) => item.resumo && item.resumo.investido > 0)
@@ -50,84 +50,49 @@ export default function ClientLiveCampaigns({ clientId }: { clientId?: string })
 
   const carteira = summarizeAccount(rows || []);
 
+  // Seção aberta (sem caixa), que recolhe; os números numa faixa e as
+  // campanhas numa lista com divisória. O que cada número quer dizer fica na
+  // linha de apoio embaixo dele (uma linha, o texto inteiro no "title").
   return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
-          <Megaphone className="h-4 w-4 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-sm font-bold text-foreground">Seus anúncios agora</h2>
-          <p className="text-[11px] text-muted-foreground">
-            Direto do Meta, atualizado ao longo do dia · últimos 30 dias
-          </p>
-        </div>
-      </div>
+    <Secao
+      titulo="Seus anúncios agora"
+      descricao="Últimos 30 dias"
+      ajuda="Direto do Meta, atualizado ao longo do dia."
+    >
+      <FaixaDeNumeros
+        rotulo="Seus anúncios nos últimos 30 dias"
+        itens={[
+          { rotulo: "Investido", valor: dinheiro(carteira.investido), apoio: EXPLICACOES.investido },
+          { rotulo: "Pessoas alcançadas", valor: numero(carteira.alcance), apoio: EXPLICACOES.alcance },
+          ...(carteira.resultados != null
+            ? [{ rotulo: "Resultados", valor: numero(carteira.resultados), apoio: EXPLICACOES.resultados }]
+            : []),
+        ]}
+      />
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Investido
-          </p>
-          <p className="mt-0.5 font-mono text-base font-semibold text-foreground">
-            {dinheiro(carteira.investido)}
-          </p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-            {EXPLICACOES.investido}
-          </p>
-        </div>
-        <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Pessoas alcançadas
-          </p>
-          <p className="mt-0.5 font-mono text-base font-semibold text-foreground">
-            {numero(carteira.alcance)}
-          </p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-            {EXPLICACOES.alcance}
-          </p>
-        </div>
-        {carteira.resultados != null && (
-          <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Resultados
-            </p>
-            <p className="mt-0.5 font-mono text-base font-semibold text-foreground">
-              {numero(carteira.resultados)}
-            </p>
-            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-              {EXPLICACOES.resultados}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 space-y-2">
+      <ul className={juntar(lista.aberta, lista.divisoria, "mt-4")} aria-label="Campanhas">
         {porCampanha.map(({ resumo, ficha }) => {
           const situacao = statusLabel(ficha?.status, ficha?.effective_status);
           return (
-            <div
-              key={resumo.campaignId}
-              className="rounded-lg border border-border/60 bg-secondary/40 p-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-foreground">{resumo.name}</p>
+            <li key={resumo.campaignId} className="min-w-0 px-2 py-2.5">
+              <div className="flex min-w-0 items-center">
+                <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">{resumo.name}</p>
                 {situacao.noAr && (
-                  <span className="rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success">
+                  <span className={juntar(etiqueta, "ml-2 bg-success/10 text-success")}>
                     No ar
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              <p className={juntar(texto.auxiliar, "mt-0.5")}>
                 Para {resumo.goal.label}.
               </p>
-              <p className="mt-1.5 text-[11px] font-medium leading-relaxed text-foreground">
+              <p className={juntar(texto.corpo, "mt-1")}>
                 {clientCampaignLine(resumo)}
               </p>
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ul>
+    </Secao>
   );
 }

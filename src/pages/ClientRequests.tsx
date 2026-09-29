@@ -19,7 +19,7 @@ import {
   campoTexto,
   etiqueta,
   juntar,
-  superficie,
+  lista,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -135,30 +135,34 @@ export default function ClientRequests() {
         descricao={todos.length ? `${emAberto} em aberto de ${todos.length}` : undefined}
         ajuda="Peça um ajuste ou algo novo para a equipe. Cada pedido mostra em que pé está: aberto, em andamento ou concluído."
         acoes={
-          !isImpersonating && (
-            <button type="button" onClick={() => setCreateOpen(true)} className={botao.primario} aria-label="Novo pedido">
-              <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Novo pedido</span>
-            </button>
+          (todos.length > 0 || !isImpersonating) && (
+            <>
+              {/* O filtro sobe para a linha do título (seletor pequeno não ganha linha própria). */}
+              {todos.length > 0 && (
+                <SeletorCompacto
+                  rotulo="Filtrar pedidos"
+                  valor={filtro}
+                  onEscolher={setFiltro}
+                  modo="segmentado"
+                  listaQuandoNaoCabe
+                  opcoes={[
+                    { valor: "todos", rotulo: "Todos", contador: contagem.todos },
+                    { valor: "abertos", rotulo: "Abertos", contador: contagem.abertos },
+                    { valor: "andamento", rotulo: "Andamento", contador: contagem.andamento },
+                    { valor: "concluidos", rotulo: "Concluídos", contador: contagem.concluidos },
+                  ]}
+                />
+              )}
+              {!isImpersonating && (
+                <button type="button" onClick={() => setCreateOpen(true)} className={botao.primario} aria-label="Novo pedido">
+                  <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Novo pedido</span>
+                </button>
+              )}
+            </>
           )
         }
       />
-
-      {todos.length > 0 && (
-        <SeletorCompacto
-          rotulo="Filtrar pedidos"
-          valor={filtro}
-          onEscolher={setFiltro}
-          modo="segmentado"
-          listaQuandoNaoCabe
-          opcoes={[
-            { valor: "todos", rotulo: "Todos", contador: contagem.todos },
-            { valor: "abertos", rotulo: "Abertos", contador: contagem.abertos },
-            { valor: "andamento", rotulo: "Andamento", contador: contagem.andamento },
-            { valor: "concluidos", rotulo: "Concluídos", contador: contagem.concluidos },
-          ]}
-        />
-      )}
 
       {isLoading ? (
         <Carregando linhas={3} rotulo="Carregando pedidos" />
@@ -181,14 +185,14 @@ export default function ClientRequests() {
       ) : visiveis.length === 0 ? (
         <EstadoVazio compacto titulo="Nenhum pedido neste filtro." />
       ) : (
-        <ul className={juntar(superficie.painel, "divide-y divide-border")} aria-label="Seus pedidos">
+        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Seus pedidos">
           {visiveis.map((r: any) => {
             const status = statusBadge[r.status] || statusBadge.new;
             const prio = priorityBadge[r.priority] || priorityBadge.normal;
             return (
-              <li key={r.id} className="min-w-0 px-4 py-3.5 sm:px-5">
+              <li key={r.id} className="min-w-0 px-2 py-3.5">
                 <div className="flex min-w-0 items-start justify-between">
-                  <p className="mr-3 min-w-0 flex-1 text-[14px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
+                  <p className="mr-3 min-w-0 flex-1 text-[13px] font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{r.title}</p>
                   <span className={juntar(etiqueta, "mt-0.5", status.cls)}>{status.label}</span>
                 </div>
                 {r.description && <p className={juntar(texto.corpo, "mt-1 text-muted-foreground [overflow-wrap:anywhere]")}>{r.description}</p>}

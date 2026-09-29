@@ -251,7 +251,7 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
       <LimiteDoEditor
         aoFalhar={
           <div className="space-y-3">
-            <p className="text-[13px]">O editor não abriu neste navegador. Atualize o navegador (Chrome, Edge ou Safari 14+) ou recarregue a página. A montagem continua aqui para ler.</p>
+            <p className="text-[13px]" title="Chrome, Edge ou Safari 14+. A montagem continua aqui para ler.">O editor não abriu neste navegador. Atualize-o ou recarregue a página.</p>
             <Montagem projeto={migrado.projeto} />
           </div>
         }

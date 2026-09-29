@@ -21,13 +21,14 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AjudaRecolhida,
+  AreaDeTrabalho,
+  BarraDeControles,
   CabecalhoDePagina,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
-  RegiaoRolavel,
   SeletorCompacto,
   botao,
   campo,
@@ -1485,8 +1486,41 @@ export default function AdminFiles() {
     </>
   );
 
+  const seletorDeCliente = (
+    <SeletorCompacto
+      modo="lista"
+      rotulo="Cliente"
+      icone={<Users className="h-3.5 w-3.5" />}
+      className="max-w-[220px]"
+      valor={selectedClient}
+      onEscolher={handleClientChange}
+      opcoes={[
+        { valor: "all", rotulo: "Todos os clientes" },
+        ...(clients || []).map((c: any) => ({ valor: c.id, rotulo: nomeDoCliente(c) })),
+      ]}
+    />
+  );
+  const seletorDePasta = (
+    <SeletorCompacto
+      modo="lista"
+      rotulo="Pasta"
+      icone={<Folder className="h-3.5 w-3.5" />}
+      className="max-w-[240px]"
+      valor={activeFolder}
+      onEscolher={handleFolderChange}
+      opcoes={folderSummaries.map((entry) => ({
+        valor: entry.folder.id,
+        rotulo: entry.folder.label,
+        contador: allFiles ? entry.total : null,
+        descricao: entry.folder.hint,
+      }))}
+    />
+  );
+  // Tipo e status ligados: o contador do botão "Filtros" quando a linha 2 não cabe.
+  const filtrosLigados = (kindEfetivo ? 1 : 0) + (statusFilter !== "todos" ? 1 : 0);
+
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0">
       <CabecalhoDePagina
         titulo="Arquivos"
         descricao={estadoDaLista}
@@ -1494,161 +1528,155 @@ export default function AdminFiles() {
         acoes={acoesDoTopo}
       />
 
-      {/* Filtros numa barra só: cliente, pasta, tipo, status, busca e visualização. */}
-      <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" role="group" aria-label="Filtros de arquivos">
-        <SeletorCompacto
-          modo="lista"
-          rotulo="Cliente"
-          icone={<Users className="h-3.5 w-3.5" />}
-          className="max-w-[220px]"
-          valor={selectedClient}
-          onEscolher={handleClientChange}
-          opcoes={[
-            { valor: "all", rotulo: "Todos os clientes" },
-            ...(clients || []).map((c: any) => ({ valor: c.id, rotulo: nomeDoCliente(c) })),
-          ]}
-        />
-        <SeletorCompacto
-          modo="lista"
-          rotulo="Pasta"
-          icone={<Folder className="h-3.5 w-3.5" />}
-          className="max-w-[240px]"
-          valor={activeFolder}
-          onEscolher={handleFolderChange}
-          opcoes={folderSummaries.map((entry) => ({
-            valor: entry.folder.id,
-            rotulo: entry.folder.label,
-            contador: allFiles ? entry.total : null,
-            descricao: entry.folder.hint,
-          }))}
-        />
-        {!emContratos && kindChips.length > 0 && (
-          <SeletorCompacto
-            rotulo="Tipo"
-            icone={<Tag className="h-3.5 w-3.5" />}
-            valor={kindEfetivo || "todos"}
-            onEscolher={(v) => setActiveKind(v === "todos" ? null : (v as FileKindId))}
-            opcoes={[
-              { valor: "todos", rotulo: "Todos os tipos" },
-              ...kindChips.map((entry) => ({ valor: entry.kind.id, rotulo: entry.kind.label, contador: entry.total })),
-            ]}
-          />
-        )}
-        {!emContratos && (
-          <SeletorCompacto
-            modo="lista"
-            rotulo="Status"
-            icone={<CircleDot className="h-3.5 w-3.5" />}
-            valor={statusFilter}
-            onEscolher={(v) => setStatusFilter(v as FiltroDeStatus)}
-            opcoes={FILTROS_DE_STATUS.map((filtro) => ({
-              valor: filtro.valor,
-              rotulo: filtro.rotulo,
-              contador: allFiles ? statusCounts[filtro.valor] : null,
-            }))}
-          />
-        )}
-        {!emContratos && (
-          <div className="relative w-full min-w-0 sm:w-56">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar pelo nome"
-              aria-label="Buscar arquivos"
-              className={juntar(campo, "pl-8")}
-            />
-          </div>
-        )}
-        {!emContratos && (
-          <SeletorCompacto
-            rotulo="Visualização"
-            valor={viewMode}
-            onEscolher={(v) => setViewMode(v === "list" ? "list" : "grid")}
-            opcoes={[
-              { valor: "grid", rotulo: "Grade", icone: <Grid2X2 className="h-3.5 w-3.5" /> },
-              { valor: "list", rotulo: "Lista", icone: <List className="h-3.5 w-3.5" /> },
-            ]}
-          />
-        )}
-      </div>
-
+      {/* Barra de controles (SISTEMA.md 4.2): busca e visualização na linha 1; cliente,
+          pasta, tipo e status na linha 2. Se a linha 2 não couber (celular), ela vira
+          o botão "Filtros" com os mesmos controles. Em Contratos, só cliente e pasta. */}
       {emContratos ? (
-        selectedClient === "all" ? (
-          <EstadoVazio
-            icone={<FolderOpen className="h-5 w-5" />}
-            titulo="Escolha um cliente"
-            descricao="Os contratos aparecem e são enviados por cliente."
+        <div className="mt-4 flex min-w-0 items-center [&>*+*]:ml-2" role="group" aria-label="Filtros de arquivos">
+          {seletorDeCliente}
+          {seletorDePasta}
+        </div>
+      ) : (
+        <BarraDeControles
+          className="mt-4"
+          rotulo="Filtros de arquivos"
+          inicio={
+            <div className="relative w-full min-w-0 sm:max-w-[320px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar pelo nome"
+                aria-label="Buscar arquivos"
+                className={juntar(campo, "pl-8")}
+              />
+            </div>
+          }
+          acoes={
+            <SeletorCompacto
+              rotulo="Visualização"
+              valor={viewMode}
+              onEscolher={(v) => setViewMode(v === "list" ? "list" : "grid")}
+              opcoes={[
+                { valor: "grid", rotulo: "Grade", icone: <Grid2X2 className="h-3.5 w-3.5" /> },
+                { valor: "list", rotulo: "Lista", icone: <List className="h-3.5 w-3.5" /> },
+              ]}
+            />
+          }
+          filtros={
+            <>
+              {seletorDeCliente}
+              {seletorDePasta}
+              {kindChips.length > 0 && (
+                <SeletorCompacto
+                  rotulo="Tipo"
+                  icone={<Tag className="h-3.5 w-3.5" />}
+                  valor={kindEfetivo || "todos"}
+                  onEscolher={(v) => setActiveKind(v === "todos" ? null : (v as FileKindId))}
+                  opcoes={[
+                    { valor: "todos", rotulo: "Todos os tipos" },
+                    ...kindChips.map((entry) => ({ valor: entry.kind.id, rotulo: entry.kind.label, contador: entry.total })),
+                  ]}
+                />
+              )}
+              <SeletorCompacto
+                modo="lista"
+                rotulo="Status"
+                icone={<CircleDot className="h-3.5 w-3.5" />}
+                valor={statusFilter}
+                onEscolher={(v) => setStatusFilter(v as FiltroDeStatus)}
+                opcoes={FILTROS_DE_STATUS.map((filtro) => ({
+                  valor: filtro.valor,
+                  rotulo: filtro.rotulo,
+                  contador: allFiles ? statusCounts[filtro.valor] : null,
+                }))}
+              />
+            </>
+          }
+          filtrosAtivos={filtrosLigados}
+          aoLimparFiltros={() => {
+            setActiveKind(null);
+            setStatusFilter("todos");
+          }}
+        />
+      )}
+
+      {/* Área de trabalho (SISTEMA.md seção 8): de 1024 px para cima a lista rola por
+          dentro até o fim da janela, lembrando a posição; no celular a página rola normal.
+          Os contratos do cliente entram na mesma região. */}
+      <AreaDeTrabalho className="mt-4" rotuloDoPrincipal="Lista de arquivos" memoriaDaRolagem="arquivos:lista">
+        {emContratos ? (
+          selectedClient === "all" ? (
+            <EstadoVazio
+              icone={<FolderOpen className="h-5 w-5" />}
+              titulo="Escolha um cliente"
+              descricao="Os contratos aparecem e são enviados por cliente."
+            />
+          ) : (
+            <AdminContracts clientId={selectedClient} />
+          )
+        ) : primeiraCarga ? (
+          <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
+        ) : filesReadFailed && !allFiles ? (
+          <EstadoDeErro
+            titulo="Não foi possível carregar os arquivos."
+            descricao={`A pasta não está vazia. Houve uma falha de leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
+            acao={tentarDeNovo}
           />
         ) : (
-          <div className="-mx-4 md:-mx-6">
-            <AdminContracts clientId={selectedClient} />
-          </div>
-        )
-      ) : primeiraCarga ? (
-        <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
-      ) : filesReadFailed && !allFiles ? (
-        <EstadoDeErro
-          titulo="Não foi possível carregar os arquivos."
-          descricao={`A pasta não está vazia. Houve uma falha de leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
-          acao={tentarDeNovo}
-        />
-      ) : (
-        <>
-          {filesReadFailed && (
-            <EstadoDeErro
-              titulo="Não foi possível atualizar a lista."
-              descricao={`Mostrando a última leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
-              acao={tentarDeNovo}
-            />
-          )}
-          {filteredFiles.length === 0 ? (
-            filtrosAtivos ? (
-              <EstadoVazio
-                icone={<Search className="h-5 w-5" />}
-                titulo="Nada com esses filtros"
-                descricao="Troque o tipo, o status ou a busca."
-                acao={
-                  <button type="button" className={botao.secundario} onClick={limparFiltros}>
-                    Limpar filtros
-                  </button>
-                }
+          <>
+            {filesReadFailed && (
+              <EstadoDeErro
+                className="mb-4"
+                titulo="Não foi possível atualizar a lista."
+                descricao={`Mostrando a última leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
+                acao={tentarDeNovo}
               />
-            ) : (
-              <EstadoVazio
-                icone={<FolderOpen className="h-5 w-5" />}
-                titulo="Nenhum arquivo nesta pasta"
-                descricao={selectedClient === "all" ? "Escolha um cliente para enviar." : undefined}
-                acao={
-                  envioBloqueado ? undefined : (
-                    <button type="button" className={botao.primario} onClick={abrirEnvio}>
-                      <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                      Novo conteúdo
+            )}
+            {filteredFiles.length === 0 ? (
+              filtrosAtivos ? (
+                <EstadoVazio
+                  icone={<Search className="h-5 w-5" />}
+                  titulo="Nada com esses filtros"
+                  descricao="Troque o tipo, o status ou a busca."
+                  acao={
+                    <button type="button" className={botao.secundario} onClick={limparFiltros}>
+                      Limpar filtros
                     </button>
-                  )
-                }
-              />
-            )
-          ) : (
-            <RegiaoRolavel memoria="arquivos:lista" rotulo="Lista de arquivos" className="lg:max-h-[70vh]">
-              {viewMode === "grid" ? (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-4 p-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
-                  {filteredFiles.map((f: any) => (
-                    <CartaoDoArquivo key={f.id} {...propsDoItem(f)} />
-                  ))}
-                </div>
+                  }
+                />
               ) : (
-                <ul className="divide-y divide-border border-y border-border">
-                  {filteredFiles.map((f: any) => (
-                    <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
-                  ))}
-                </ul>
-              )}
-            </RegiaoRolavel>
-          )}
-        </>
-      )}
+                <EstadoVazio
+                  icone={<FolderOpen className="h-5 w-5" />}
+                  titulo="Nenhum arquivo nesta pasta"
+                  descricao={selectedClient === "all" ? "Escolha um cliente para enviar." : undefined}
+                  acao={
+                    envioBloqueado ? undefined : (
+                      <button type="button" className={botao.primario} onClick={abrirEnvio}>
+                        <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                        Novo conteúdo
+                      </button>
+                    )
+                  }
+                />
+              )
+            ) : viewMode === "grid" ? (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4 p-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 desk:grid-cols-6">
+                {filteredFiles.map((f: any) => (
+                  <CartaoDoArquivo key={f.id} {...propsDoItem(f)} />
+                ))}
+              </div>
+            ) : (
+              <ul className="divide-y divide-border border-y border-border">
+                {filteredFiles.map((f: any) => (
+                  <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </AreaDeTrabalho>
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={(o) => { if (!o) { setPreviewFile(null); setEditingName(false); } }}>

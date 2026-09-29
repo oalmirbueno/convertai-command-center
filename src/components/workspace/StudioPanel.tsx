@@ -6,7 +6,7 @@ import {
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
   Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
-  Download, Radio, Zap, ArrowRight, ArrowLeft, Globe2, ChevronRight,
+  Download, Radio, Zap, ArrowRight, ArrowLeft, Globe2, ChevronRight, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -904,7 +904,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     onPaste: onNotesPaste,
   };
   const classeDoEditor = cn(
-    "block h-full w-full min-w-0 resize-none rounded-md border border-input bg-background px-4 py-3 font-sans text-[13.5px] leading-[1.8] text-foreground placeholder:text-muted-foreground transition-colors",
+    "block h-full w-full min-w-0 resize-none rounded-md border border-input bg-background px-4 py-3 font-sans text-[14px] leading-[1.8] text-foreground placeholder:text-muted-foreground transition-colors",
     foco,
   );
 
@@ -1779,124 +1779,44 @@ export function NotesPreview({ src, clientId, clientName, onChange }: { src: str
 function InlineHelpBlock() {
   const [tab, setTab] = useState<"slash" | "at">("slash");
   const items = tab === "slash" ? SLASH_HELP : MENTION_HELP;
+  // Um bloco só (28/09): lista com divisória, sem cartão por comando e sem rolagem
+  // própria (quem rola é o Documento). A dica foi para o "?" do título.
   return (
-    <div className="my-2 rounded-lg border border-primary/30 bg-primary/5 overflow-hidden">
-      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-primary/20 bg-primary/10">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary">
-          <Sparkles className="w-3 h-3" /> Guia de comandos
-        </div>
-        <div className="flex items-center gap-0.5 border border-border rounded p-0.5 bg-background/60">
-          <button
-            onClick={() => setTab("slash")}
-            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "slash" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
-          >/ comandos</button>
-          <button
-            onClick={() => setTab("at")}
-            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "at" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
-          >@ menções</button>
-        </div>
+    <div className="my-2 rounded-lg border border-primary/30 bg-primary/5">
+      <div className="flex min-w-0 items-center border-b border-primary/20 px-2.5 py-1.5">
+        <Sparkles className="mr-1.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 truncate text-[12px] font-semibold text-primary">Guia de comandos</span>
+        <AjudaRecolhida rotulo="Dicas das notas" className="ml-1.5 mr-auto">
+          Cole imagens (OCR automático) e links de vídeo (embed automático). Use Alt+↑/↓ para alternar conversas do agente.
+        </AjudaRecolhida>
+        <SeletorCompacto
+          className="ml-2"
+          rotulo="Guia"
+          modo="segmentado"
+          opcoes={[
+            { valor: "slash", rotulo: "/ comandos" },
+            { valor: "at", rotulo: "@ menções" },
+          ]}
+          valor={tab}
+          onEscolher={(v) => setTab(v === "at" ? "at" : "slash")}
+        />
       </div>
-      <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[260px] overflow-y-auto">
+      <ul className="grid grid-cols-1 gap-x-4 px-2.5 py-1 sm:grid-cols-2">
         {items.map(it => (
-          <div key={it.cmd} className="rounded-md border border-border bg-background/60 p-2">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <code className="text-[11px] font-mono font-semibold text-primary">{it.cmd}</code>
-              <span className="text-[10px] text-muted-foreground">{it.label}</span>
+          <li key={it.cmd} className="min-w-0 border-b border-border/50 py-1.5 last:border-b-0">
+            <div className="flex min-w-0 items-baseline">
+              <code className="shrink-0 font-mono text-[11px] font-semibold text-primary">{it.cmd}</code>
+              <span className="ml-1.5 min-w-0 truncate text-[11px] text-muted-foreground">{it.label}</span>
             </div>
-            <p className="text-[10.5px] leading-snug text-muted-foreground">{it.desc}</p>
-          </div>
+            <p className="text-[12px] leading-snug text-muted-foreground">{it.desc}</p>
+          </li>
         ))}
-      </div>
-      <div className="px-2.5 py-1.5 border-t border-primary/20 bg-primary/5 text-[10px] text-muted-foreground">
-        Dica: cole imagens (OCR automático) e links de vídeo (embed automático). Use <b>Alt+↑/↓</b> para alternar conversas do agente.
-      </div>
+      </ul>
     </div>
   );
 }
 
 
-
-// Kanban inline: mostra as tasks reais do projeto ativo do cliente (tabela tasks via projects)
-function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: string | null; clientName: string | null }) {
-  const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string }>>([]);
-  const [projectName, setProjectName] = useState<string>("");
-
-  useEffect(() => {
-    if (!open || !clientId) return;
-    (async () => {
-      setLoading(true);
-      const { data: projs } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1);
-      const pid = projs?.[0]?.id;
-      setProjectName(projs?.[0]?.name || "");
-      if (!pid) { setTasks([]); setLoading(false); return; }
-      const { data: ts } = await supabase.from("tasks").select("id, title, status, priority, due_date, project_id").eq("project_id", pid).order("created_at", { ascending: false });
-      setTasks((ts as any) || []);
-      setLoading(false);
-    })();
-  }, [open, clientId]);
-
-  const cols: Array<{ key: string; title: string }> = [
-    { key: "todo", title: "A fazer" },
-    { key: "doing", title: "Em andamento" },
-    { key: "review", title: "Revisão" },
-    { key: "done", title: "Feito" },
-  ];
-
-  async function move(taskId: string, next: string) {
-    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, status: next } : t));
-    await supabase.from("tasks").update({ status: next }).eq("id", taskId);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
-        <DialogHeader>
-          <DialogTitle className="text-sm flex items-center gap-2">
-            <Columns3 className="w-4 h-4 text-primary" /> Kanban · {clientName || "cliente"} {projectName && <span className="text-muted-foreground font-normal">/ {projectName}</span>}
-          </DialogTitle>
-        </DialogHeader>
-        {loading ? (
-          <div className="p-8 flex items-center justify-center text-muted-foreground text-xs"><Loader2 className="w-4 h-4 animate-spin mr-2" /> carregando…</div>
-        ) : !clientId ? (
-          <p className="text-xs text-muted-foreground">Selecione um cliente no Workspace primeiro.</p>
-        ) : tasks.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Este projeto ainda não tem tarefas. Use <b>/tarefa</b> nas Notas para criar.</p>
-        ) : (
-          <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
-            {cols.map(col => (
-              <div key={col.key} className="bg-secondary/30 rounded-lg p-2 space-y-1.5">
-                <div className="text-[11px] font-semibold text-muted-foreground px-1 flex items-center justify-between">
-                  <span>{col.title}</span>
-                  <span className="text-[9px] opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
-                </div>
-                {tasks.filter(t => t.status === col.key).map(t => (
-                  <div key={t.id} className="bg-background rounded p-2 border border-border text-[11px] space-y-1">
-                    <div className="font-medium">{t.title}</div>
-                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
-                      {t.priority && <span className={cn("px-1.5 py-0.5 rounded",
-                        t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
-                        t.priority === "high" ? "bg-amber-500/20 text-amber-600" : "bg-secondary")}>{t.priority}</span>}
-                      {t.due_date && <span>· {t.due_date}</span>}
-                    </div>
-                    <div className="flex gap-1 pt-1">
-                      {cols.filter(c => c.key !== t.status).map(c => (
-                        <button key={c.key} onClick={() => move(t.id, c.key)}
-                          className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
-                          Mover para {c.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // Bloco Kanban vivo embutido no fluxo das Notas.
 function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
@@ -2005,23 +1925,30 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
   }
 
   return (
-    <div className="my-3 border border-border rounded-lg bg-secondary/20 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
-        <Columns3 className="w-3.5 h-3.5 text-primary" />
-        <span className="font-semibold">Kanban</span>
-        <span className="text-muted-foreground truncate">· {clientName || "cliente"}</span>
+    <div className="my-3 overflow-hidden rounded-lg border border-border bg-secondary/20">
+      {/* Cabeçalho numa linha: nome, cliente e projeto, o "?" com o como usar e recarregar. */}
+      <div className="flex min-w-0 items-center border-b border-border bg-secondary/40 px-3 py-2 text-[12px]">
+        <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="shrink-0 font-semibold">Kanban</span>
+        <span className="ml-1.5 min-w-0 truncate text-muted-foreground">· {clientName || "cliente"}</span>
         {projects.length > 1 ? (
           <select
             value={projectId ?? ""}
             onChange={e => { const v = e.target.value || null; setProjectId(v); if (v && projStorageKey) localStorage.setItem(projStorageKey, v); }}
-            className="ml-1 h-6 px-1.5 rounded border border-border bg-background text-[10.5px] max-w-[160px]"
+            aria-label="Projeto do Kanban"
+            className="ml-2 h-7 max-w-[160px] rounded border border-border bg-background px-1.5 text-[12px]"
           >
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         ) : projects[0] && (
-          <span className="text-muted-foreground truncate">/ {projects[0].name}</span>
+          <span className="ml-1.5 min-w-0 truncate text-muted-foreground">/ {projects[0].name}</span>
         )}
-        <button onClick={() => void reload()} className="ml-auto text-[10px] px-2 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground" title="Recarregar">↻</button>
+        <AjudaRecolhida rotulo="Como usar o Kanban" className="ml-1.5">
+          Arraste os cards entre colunas. Clique em prioridade ou prazo para editar. As alterações são salvas em tempo real.
+        </AjudaRecolhida>
+        <button type="button" onClick={() => void reload()} aria-label="Recarregar o Kanban" title="Recarregar" className={cn(botao.icone, "ml-auto h-7 w-7")}>
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
       {!clientId ? (
         <p className="p-3 text-[11px] text-muted-foreground">Selecione um cliente no Workspace para ver o Kanban.</p>
@@ -2047,7 +1974,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                 onDrop={() => onDrop(col.key)}
                 className={cn(
                   "rounded-md p-1.5 space-y-1 transition-colors min-h-[80px]",
-                  dropCol === col.key ? "bg-primary/10 ring-1 ring-primary/40" : "bg-background/60"
+                  dropCol === col.key ? "bg-primary/10 ring-1 ring-primary/40" : "bg-muted/50"
                 )}
               >
                 <div className="text-[11px] font-semibold text-muted-foreground px-1 flex items-center justify-between">
@@ -2111,9 +2038,6 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                 ))}
               </div>
             ))}
-          </div>
-          <div className="px-3 py-1.5 border-t border-border bg-secondary/30 text-[9.5px] text-muted-foreground">
-            Arraste os cards entre colunas · clique em prioridade/prazo para editar · alterações salvas em tempo real
           </div>
         </>
       )}
@@ -2382,10 +2306,18 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
           </>
         }
       >
-        <p className={cn(texto.rotulo, "mb-1.5")}>Contexto preparado</p>
-        <pre className={cn(superficie.poco, "max-h-[220px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-foreground/80")}>
-          {contextText}
-        </pre>
+        {/* Uma rolagem só (a do modo GPT): o contexto não rola por dentro. Nasce recolhido
+            (o "Copiar" já leva tudo) para a resposta do GPT ficar à vista; a setinha mostra. */}
+        <Secao
+          titulo="Contexto preparado"
+          nivel={3}
+          recolhidaDeInicio
+          resumo={`${availableFiles.length} ${availableFiles.length === 1 ? "arquivo" : "arquivos"}${notes?.trim() ? " · notas" : ""}${script?.trim() ? " · roteiro" : ""}`}
+        >
+          <pre className={cn(superficie.poco, "whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-foreground/80")}>
+            {contextText}
+          </pre>
+        </Secao>
       </Secao>
 
       <Secao divisoria className="mt-5" titulo="Retorno do GPT" nivel={3}>
@@ -3288,9 +3220,12 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                   <Settings className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
-              <button type="button" onClick={newThread} aria-label="Nova conversa" title="Nova conversa (Alt+N)" className={botao.icone}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-              </button>
+              {/* Com as conversas abertas, o "+" já está no topo delas: um botão só por vez. */}
+              {!sidebarOpen && (
+                <button type="button" onClick={newThread} aria-label="Nova conversa" title="Nova conversa (Alt+N)" className={botao.icone}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </>
           }
         >
@@ -3338,16 +3273,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
                 <Bot className="h-4 w-4" />
               </span>
+              {/* Só o título: o que o agente faz está no "?" do cabeçalho. */}
               <p className="text-[14px] font-semibold leading-5 text-foreground">Converse com o agente</p>
-              <p className={cn(texto.auxiliar, "mt-1 leading-5")}>
-                Ele reúne o contexto de {clientName || "este escopo"} e devolve diagnóstico e perguntas.
-              </p>
             </div>
           )}
           {msgs.map(m => (
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-[14px] leading-[1.6] text-primary-foreground">
+                <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-xl rounded-br-md bg-primary px-3.5 py-2.5 text-[14px] leading-[1.6] text-primary-foreground">
                   {m.content}
                 </div>
               </div>
@@ -3819,196 +3752,6 @@ function AttachPicker({
   );
 }
 
-
-// =========================
-// MINI KANBAN (drag-drop entre colunas + log de contexto)
-// =========================
-function MiniKanban({ board, onChange, onReset, log }: {
-  board: BoardCol[];
-  onChange: (next: BoardCol[], logEntry?: string) => void;
-  onReset: () => void;
-  log: string[];
-}) {
-  const [drag, setDrag] = useState<{ cardId: string; fromCol: string } | null>(null);
-  const [editing, setEditing] = useState<{ colId: string; cardId: string } | null>(null);
-  const [editVal, setEditVal] = useState("");
-  const [addingIn, setAddingIn] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState("");
-  const [showLog, setShowLog] = useState(false);
-
-  const now = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-  function moveCard(cardId: string, fromCol: string, toCol: string) {
-    if (fromCol === toCol) return;
-    let title = "";
-    const next = board.map(c => {
-      if (c.id === fromCol) {
-        const card = c.cards.find(k => k.id === cardId);
-        if (card) title = card.title;
-        return { ...c, cards: c.cards.filter(k => k.id !== cardId) };
-      }
-      return c;
-    }).map(c => {
-      if (c.id === toCol) {
-        const card = board.find(b => b.id === fromCol)?.cards.find(k => k.id === cardId);
-        return card ? { ...c, cards: [...c.cards, card] } : c;
-      }
-      return c;
-    });
-    const fromT = board.find(b => b.id === fromCol)?.title || fromCol;
-    const toT = board.find(b => b.id === toCol)?.title || toCol;
-    onChange(next, `[${now()}] "${title}" movido de ${fromT} para ${toT}`);
-  }
-
-  function addCard(colId: string) {
-    const t = newTitle.trim();
-    if (!t) { setAddingIn(null); return; }
-    const card: BoardCard = { id: crypto.randomUUID(), title: t };
-    const next = board.map(c => c.id === colId ? { ...c, cards: [...c.cards, card] } : c);
-    const colT = board.find(b => b.id === colId)?.title || colId;
-    onChange(next, `[${now()}] card criado "${t}" em ${colT}`);
-    setNewTitle(""); setAddingIn(null);
-  }
-
-  function saveEdit() {
-    if (!editing) return;
-    const t = editVal.trim();
-    if (!t) { setEditing(null); return; }
-    let old = "";
-    const next = board.map(c => c.id === editing.colId
-      ? { ...c, cards: c.cards.map(k => {
-          if (k.id === editing.cardId) { old = k.title; return { ...k, title: t }; }
-          return k;
-        }) }
-      : c);
-    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" para "${t}"` : undefined);
-    setEditing(null);
-  }
-
-  function delCard(colId: string, cardId: string) {
-    let title = "";
-    const next = board.map(c => c.id === colId
-      ? { ...c, cards: c.cards.filter(k => { if (k.id === cardId) title = k.title; return k.id !== cardId; }) }
-      : c);
-    const colT = board.find(b => b.id === colId)?.title || colId;
-    onChange(next, `[${now()}] card removido "${title}" de ${colT}`);
-  }
-
-  function renameColumn(colId: string, title: string) {
-    const t = title.trim();
-    if (!t) return;
-    let old = "";
-    const next = board.map(c => { if (c.id === colId) { old = c.title; return { ...c, title: t }; } return c; });
-    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" para "${t}"` : undefined);
-  }
-
-  return (
-    <div className="p-2 h-full flex flex-col gap-2">
-      <div className="flex items-center gap-2 px-1">
-        <p className="text-[10px] text-muted-foreground flex-1">
-          Arraste cards entre colunas. Cada movimento vira contexto do agente.
-        </p>
-        <button onClick={() => setShowLog(v => !v)}
-          className="text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-secondary text-muted-foreground">
-          <History className="w-3 h-3" /> Log ({log.length})
-        </button>
-        <button onClick={onReset} className="text-[10px] text-muted-foreground hover:text-destructive">Reset</button>
-      </div>
-
-      {showLog && (
-        <div className="bg-secondary/40 border border-border rounded-md p-2 max-h-[110px] overflow-y-auto text-[10px] font-mono space-y-0.5">
-          {log.length === 0 && <p className="text-muted-foreground">Sem atividade ainda.</p>}
-          {[...log].reverse().map((l, i) => <p key={i} className="text-foreground/80">{l}</p>)}
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0 flex gap-2 overflow-x-auto pb-2">
-        {board.map(col => (
-          <div
-            key={col.id}
-            onDragOver={e => e.preventDefault()}
-            onDrop={() => { if (drag) { moveCard(drag.cardId, drag.fromCol, col.id); setDrag(null); } }}
-            className="min-w-[180px] w-[180px] shrink-0 bg-secondary/30 border border-border rounded-lg flex flex-col"
-          >
-            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border">
-              <input
-                defaultValue={col.title}
-                onBlur={e => renameColumn(col.id, e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                className="flex-1 text-[11px] font-semibold bg-transparent focus:outline-none focus:bg-background/60 rounded px-1"
-              />
-              <span className="text-[10px] text-muted-foreground">{col.cards.length}</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
-              {col.cards.map(card => (
-                <div
-                  key={card.id}
-                  draggable
-                  onDragStart={() => setDrag({ cardId: card.id, fromCol: col.id })}
-                  onDragEnd={() => setDrag(null)}
-                  className="group bg-card border border-border rounded-md p-1.5 cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
-                >
-                  {editing?.cardId === card.id ? (
-                    <Input
-                      autoFocus value={editVal}
-                      onChange={e => setEditVal(e.target.value)}
-                      onBlur={saveEdit}
-                      onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditing(null); }}
-                      className="h-6 text-[11px] py-0"
-                    />
-                  ) : (
-                    <div className="flex items-start gap-1">
-                      <GripVertical className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
-                      <p className="text-[11px] leading-snug flex-1 break-words">{card.title}</p>
-                      <button onClick={() => { setEditing({ colId: col.id, cardId: card.id }); setEditVal(card.title); }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-foreground">
-                        <Pencil className="w-2.5 h-2.5" />
-                      </button>
-                      <button onClick={() => delCard(col.id, card.id)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {addingIn === col.id ? (
-                <div className="space-y-1">
-                  <Input
-                    autoFocus value={newTitle}
-                    onChange={e => setNewTitle(e.target.value)}
-                    onBlur={() => addCard(col.id)}
-                    onKeyDown={e => { if (e.key === "Enter") addCard(col.id); if (e.key === "Escape") { setNewTitle(""); setAddingIn(null); } }}
-                    placeholder="Título do card…"
-                    className="h-7 text-[11px]"
-                  />
-                </div>
-              ) : (
-                <button onClick={() => setAddingIn(col.id)}
-                  className="w-full flex items-center gap-1 px-1.5 py-1 rounded text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground">
-                  <Plus className="w-3 h-3" /> Novo card
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-
-        <button
-          onClick={() => {
-            const t = window.prompt("Nome da coluna");
-            if (!t?.trim()) return;
-            const next = [...board, { id: crypto.randomUUID(), title: t.trim(), cards: [] }];
-            onChange(next, `[${now()}] coluna criada "${t.trim()}"`);
-          }}
-          className="min-w-[140px] w-[140px] shrink-0 border border-dashed border-border rounded-lg flex items-center justify-center text-[11px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" /> Coluna
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // =========================
 // QuickTaskDialog cria tarefa no Kanban do cliente via slash /tarefa

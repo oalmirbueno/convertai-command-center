@@ -100,6 +100,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
   return (
     <Cartao
       titulo={titulo}
+      resumo={campanha ? campanha.nome : "sem campanha"}
       dica="A Mesa é a principal: as fotos nascem dentro da campanha que ela usa. A do mês vem marcada pelo calendário editorial."
     >
       {consulta.isLoading && (
@@ -107,7 +108,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo as campanhas da Mesa...
         </p>
       )}
-      {consulta.isError && <p className="text-[12px] text-muted-foreground">Não deu para ler as campanhas agora. O plano segue com a marca e a campanha do mês, se houver.</p>}
+      {consulta.isError && <p className="text-[12px] text-muted-foreground">Não deu para ler as campanhas agora; o plano segue com a marca.</p>}
       {consulta.isSuccess && ativas.length === 0 && (
         <p className="text-[12px] text-muted-foreground">
           Nenhuma campanha na Mesa deste cliente: as fotos seguem a marca.{" "}
@@ -118,7 +119,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
       )}
       {ativas.length > 0 && (
         <>
-          <div role="radiogroup" aria-label="Campanha da Mesa" className="flex min-w-0 flex-wrap lg:max-h-32 lg:overflow-y-auto lg:overscroll-contain" data-campanhas-da-mesa="">
+          <div role="radiogroup" aria-label="Campanha da Mesa" className="flex min-w-0 flex-wrap" data-campanhas-da-mesa="">
             {ativas.map((c) => (
               <button
                 key={c.id}
@@ -134,7 +135,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
               >
                 <span className="truncate">{c.nome}</span>
                 {c.do_mes && (
-                  <span className={`ml-1.5 inline-flex shrink-0 items-center rounded-full px-1.5 text-[10px] font-semibold ${valor === c.id ? "bg-primary-foreground/20" : "bg-primary/10 text-primary"}`} data-do-mes="">
+                  <span className={`ml-1.5 inline-flex shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold ${valor === c.id ? "bg-primary-foreground/20" : "bg-primary/10 text-primary"}`} data-do-mes="">
                     <CalendarDays className="mr-0.5 h-2.5 w-2.5" /> do mês
                   </span>
                 )}
@@ -150,7 +151,7 @@ export function SeletorDaCampanha({ escolhida, titulo = "Campanha da Mesa" }: { 
               Sem campanha
             </button>
           </div>
-          {campanha ? <DetalheDaCampanha c={campanha} /> : <p className="mt-1 text-[11.5px] text-muted-foreground">Sem campanha: o diretor segue só a marca e o brief do cliente.</p>}
+          {campanha ? <DetalheDaCampanha c={campanha} /> : <p className="mt-1 text-[12px] text-muted-foreground">Sem campanha: o diretor segue só a marca e o brief do cliente.</p>}
         </>
       )}
     </Cartao>

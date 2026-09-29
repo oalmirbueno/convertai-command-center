@@ -1,6 +1,6 @@
 import { X, ChevronDown, ChevronUp, RotateCw, CheckCircle2, AlertCircle, Loader2, Upload as UploadIcon, XCircle } from "lucide-react";
 import type { UploadItem } from "@/hooks/useWorkspaceUploads";
-import { botao, foco, juntar, texto, useEstadoDaTela } from "@/components/sistema";
+import { botao, foco, juntar, rolagem, texto, useEstadoDaTela } from "@/components/sistema";
 
 const fmtBytes = (n: number) => {
   if (!n) return "0 B";
@@ -78,13 +78,13 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
 
       {!collapsed && (
         <>
-          <ul className="max-h-[45vh] divide-y divide-border overflow-y-auto overscroll-contain sm:max-h-[320px]">
+          <ul className={juntar(rolagem.janela, "max-h-[45vh] divide-y divide-border sm:max-h-[320px]")}>
             {items.map(item => (
               <li key={item.id} className="px-3 py-2.5">
                 <div className="flex min-w-0 items-start">
                   <StatusIcon status={item.status} />
                   <div className="ml-2 min-w-0 flex-1">
-                    <p className={juntar(texto.corpo, "truncate text-[12.5px] font-medium")}>{item.name}</p>
+                    <p className={juntar(texto.corpo, "truncate font-medium")}>{item.name}</p>
                     <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                       <div
                         className={juntar(

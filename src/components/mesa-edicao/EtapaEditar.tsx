@@ -198,6 +198,19 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
     }
   };
 
+  // 28/09 (dono: "seletor pequeno não ganha linha própria"): Pacote | Versões vai na linha do título da parte aberta.
+  const trocaDeParte = (
+    <SeletorCompacto
+      rotulo="Parte do editar"
+      valor={parte}
+      onEscolher={(v) => setParte(v as ParteDoEditar)}
+      opcoes={[
+        { valor: "pacote", rotulo: "Pacote", icone: <Package className="h-3.5 w-3.5" /> },
+        { valor: "versoes", rotulo: "Versões", icone: <History className="h-3.5 w-3.5" /> },
+      ]}
+    />
+  );
+
   return (
     <div className="min-w-0 space-y-6 pb-6">
       <Secao
@@ -226,25 +239,15 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
         )}
       </Secao>
 
-      <div className="border-t border-border pt-5">
-        <SeletorCompacto
-          rotulo="Parte do editar"
-          valor={parte}
-          onEscolher={(v) => setParte(v as ParteDoEditar)}
-          opcoes={[
-            { valor: "pacote", rotulo: "Pacote", icone: <Package className="h-3.5 w-3.5" /> },
-            { valor: "versoes", rotulo: "Versões", icone: <History className="h-3.5 w-3.5" /> },
-          ]}
-        />
-      </div>
-
       {parte === "pacote" && (
         <Secao
+          divisoria
           titulo="Pacote para editar"
           descricao={`${pacote.pendencias.length} ${pacote.pendencias.length === 1 ? "pendência" : "pendências"}`}
           ajuda="Roteiro, takes na ordem de montar, legendas, direção de edição dinâmica, o projeto de edição e o edl.json dos projetos Remotion, num ZIP para o editor ou para o pipeline Remotion local."
           acao={
             <>
+              {trocaDeParte}
               <button type="button" className={botao.secundario} onClick={() => void salvarVersao()} disabled={salvando || !pacote.resumo.takes} aria-label="Salvar como versão">
                 {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Save className="h-3.5 w-3.5 sm:mr-1.5" />}
                 <span className="hidden sm:inline">Salvar versão</span>
@@ -334,7 +337,7 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
           <ComputadorDoAgente />
         </Secao>
       )}
-      {parte === "versoes" && <Versoes />}
+      {parte === "versoes" && <Versoes troca={trocaDeParte} />}
     </div>
   );
 }

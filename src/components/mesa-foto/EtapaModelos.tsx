@@ -759,7 +759,7 @@ function ColunaDoMotor({
                   </button>
                   <SeloGerada />
                   {ehAncora && (
-                    <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-primary/40 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary">
+                    <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-primary/40 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">
                       <Crown className="mr-0.5 h-2.5 w-2.5" /> âncora
                     </span>
                   )}
@@ -767,7 +767,7 @@ function ColunaDoMotor({
               </div>
               <div className="mt-1 flex min-w-0 flex-wrap items-center">
                 {!ehAncora && (
-                  <Button type="button" size="sm" className="mb-1 mr-1 h-7 px-2 text-[11px]" disabled={!!escolhendo} onClick={() => void escolher(img)}>
+                  <Button type="button" size="sm" variant="outline" className="mb-1 mr-1 h-7 px-2 text-[11px]" disabled={!!escolhendo} onClick={() => void escolher(img)}>
                     {escolhendo === img.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Crown className="mr-1 h-3 w-3" />} Âncora
                   </Button>
                 )}
@@ -1143,7 +1143,12 @@ export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; i
 
   return (
     <div className="min-w-0 space-y-2 border-t border-border pt-3" data-ampliar-e-usar-da-persona={imagem.id}>
-      <p className={texto.rotulo}>Ampliar fiel e usar esta imagem</p>
+      <p className="flex min-w-0 items-center">
+        <span className={texto.rotulo}>Ampliar fiel e usar esta imagem</span>
+        <AjudaRecolhida className="ml-1.5" rotulo="Sobre ampliar e usar">
+          A imagem entra no acervo do cliente como gerada (pessoa sintética), sem custo. O preço do Ampliar aparece antes de gastar.
+        </AjudaRecolhida>
+      </p>
       {!noAcervo ? (
         <div className="flex min-w-0 flex-wrap items-center">
           <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir()}>
@@ -1159,7 +1164,6 @@ export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; i
               Agenda
             </Button>
           )}
-          <p className={juntar(texto.auxiliar, "mb-1.5 w-full")}>A imagem entra no acervo do cliente como gerada (pessoa sintética), sem custo. O preço do Ampliar aparece antes de gastar.</p>
         </div>
       ) : (
         <div className="min-w-0 space-y-2">

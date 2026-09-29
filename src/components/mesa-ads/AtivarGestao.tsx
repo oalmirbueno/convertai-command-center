@@ -4,6 +4,7 @@ import { CheckCircle2, ChevronDown, KeyRound, Loader2, RefreshCw } from "lucide-
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { META_OAUTH_MESSAGE_TYPE, startAdsOAuth, type MetaOAuthPopupMessage } from "@/lib/socialMetaOAuth";
 import { tempoDesde } from "./adsApi";
@@ -128,12 +129,12 @@ export default function AtivarGestao({
 
   const ativa = !!(g && g.disponivel);
   return (
-    <section className={`min-w-0 rounded-lg border border-border bg-card px-4 py-3 ${className}`} aria-label="Gestão de campanhas">
+    <section className={juntar(superficie.painel, "min-w-0 px-4 py-3", className)} aria-label="Gestão de campanhas">
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" className="mb-1 mr-3 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
           <span className="min-w-0">
             <span className="block text-[13px] font-semibold">Gestão de campanhas pelo agente</span>
-            <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground">
+            <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
               {gestao.isLoading ? <span className="h-3 w-40 animate-pulse rounded bg-muted" /> : g ? <Situacao g={g} /> : <span>Situação não lida</span>}
               {g && g.conferido_em && <span className="ml-2">conferido {tempoDesde(g.conferido_em)}</span>}
             </span>
@@ -147,9 +148,12 @@ export default function AtivarGestao({
       </div>
 
       {!ativa && aberto && (
-        <div className="mt-2 min-w-0 space-y-2 text-[12.5px] leading-snug">
+        <div className="mt-2 min-w-0 space-y-2 text-[13px] leading-snug">
           <p className="text-muted-foreground [overflow-wrap:anywhere]">
-            {g && g.motivo ? g.motivo : "Hoje o acesso é só de leitura."} Enquanto isso, o agente trabalha em modo ensaio: propõe as ações e mostra como seria, sem mexer na conta.
+            {g && g.motivo ? g.motivo : "Hoje o acesso é só de leitura."}
+            <AjudaRecolhida className="ml-1.5 align-middle" rotulo="O que o agente faz enquanto isso">
+              Enquanto isso, o agente trabalha em modo ensaio: propõe as ações e mostra como seria, sem mexer na conta.
+            </AjudaRecolhida>
           </p>
           {g && g.faltam.length > 0 && (
             <p className="[overflow-wrap:anywhere]">
@@ -178,7 +182,14 @@ export default function AtivarGestao({
             </AjudaRecolhida>
           </div>
           )}
-          {g && !g.guardada && <p className="text-[11px] text-muted-foreground">A conferência ainda não fica guardada no banco (SQL pendente): o painel confere de novo a cada 10 minutos.</p>}
+          {g && !g.guardada && (
+            <p className="flex items-center text-[12px] text-muted-foreground">
+              Conferência não guardada (SQL pendente).
+              <AjudaRecolhida className="ml-1.5" rotulo="Conferência não guardada">
+                A conferência ainda não fica guardada no banco: o painel confere de novo a cada 10 minutos.
+              </AjudaRecolhida>
+            </p>
+          )}
         </div>
       )}
     </section>

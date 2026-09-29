@@ -10,6 +10,8 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import CampanhaConteudos from "./CampanhaConteudos";
 import CampanhaReferencias, { MAX_REFERENCIAS, ReferenciasEscolhidas } from "./CampanhaReferencias";
 import { Cronometro } from "./Cronometro";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { juntar, texto } from "@/components/sistema/estilos";
 import {
   campanhaSelo,
   chaves,
@@ -91,17 +93,12 @@ function Secao({
   acao?: ReactNode;
   children: ReactNode;
 }) {
+  // Seção ABERTA (28/09, dono: "não encaixotar"): título que recolhe, divisória fina em cima, sem caixa.
+  // O estado continua o daqui (lembrado por navegador, o mesmo de antes).
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card">
-      <div className="flex min-w-0 items-center px-4 py-3 sm:px-5">
-        <button type="button" onClick={onAlternar} aria-expanded={aberta} className="flex min-w-0 flex-1 items-center text-left">
-          <ChevronDown className={`mr-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "" : "-rotate-90"}`} />
-          <span className="mr-2 shrink-0 text-[13.5px] font-semibold">{titulo}</span>
-          {resumo && <span className="min-w-0 truncate text-[12px] text-muted-foreground">{resumo}</span>}
-        </button>
-        {acao && <span className="ml-2 flex shrink-0 items-center">{acao}</span>}
-      </div>
-      {aberta && <div className="min-w-0 border-t border-border px-4 pb-4 pt-3.5 sm:px-5">{children}</div>}
+    <section className="min-w-0 border-t border-border pt-4" data-recolhido={aberta ? "nao" : "sim"}>
+      <CabecalhoDeSecao titulo={titulo} acao={acao} recolher={{ recolhido: !aberta, onAlternar, resumo }} />
+      {aberta && <div className="mt-3 min-w-0">{children}</div>}
     </section>
   );
 }
@@ -109,7 +106,7 @@ function Secao({
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">{rotulo}</dt>
+      <dt className={texto.rotulo}>{rotulo}</dt>
       <dd className="mt-0.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );
@@ -255,16 +252,17 @@ export default function CampanhaDetalhe({
   return (
     <div className="min-w-0 space-y-3">
       {onVoltar && (
-        <button type="button" onClick={onVoltar} className="inline-flex items-center text-[12.5px] text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onVoltar} className="inline-flex items-center text-[12px] text-muted-foreground hover:text-foreground">
           <ChevronLeft className="mr-0.5 h-4 w-4" /> Campanhas
         </button>
       )}
 
       {/* Cabeçalho: selo pequeno, nome, período, estado e o próximo passo. */}
-      <header className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:p-5">
+      {/* Cabeçalho aberto (sem caixa): o espaço e a divisória da primeira seção separam. */}
+      <header className="flex min-w-0 flex-col pb-1 sm:flex-row sm:items-center">
         <div className="mb-3 flex min-w-0 flex-1 items-center sm:mb-0">
           <span
-            className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background text-[16px] font-semibold"
+            className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-[15px] font-semibold"
             style={!campanha.selo_path && corDoSelo ? { color: corDoSelo } : undefined}
           >
             {campanha.selo_path ? (
@@ -275,15 +273,16 @@ export default function CampanhaDetalhe({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center">
-              <h2 className="mr-2 min-w-0 text-[17px] font-semibold leading-snug [overflow-wrap:anywhere]">{campanha.nome}</h2>
+              {/* Título numa linha (28/09); inteiro no title. */}
+              <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
               {tipoDaCampanha(campanha.identidade) && (
-                <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+                <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
                   {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
                 </span>
               )}
               <SeloDoEstado estado={campanha.status} />
             </div>
-            <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
+            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
               {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
               {itens.length ? ` · ${itens.length} conteúdo(s)` : ""}
               {campanha.custo_usd ? ` · ${usd(Number(campanha.custo_usd))}` : ""}
@@ -385,13 +384,13 @@ export default function CampanhaDetalhe({
                 type="button"
                 onClick={() => setSeloAberto(true)}
                 aria-label="Ver o selo grande"
-                className="block h-40 w-40 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-background"
+                className="block h-40 w-40 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-background"
               >
                 <ImagemDaMesa caminho={campanha.selo_path} alt={`Selo da campanha ${campanha.nome}`} className="h-full w-full !object-contain p-2" />
               </button>
             ) : (
               <div
-                className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-background p-3 text-center text-[13px] font-semibold leading-tight [overflow-wrap:anywhere]"
+                className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-background p-3 text-center text-[13px] font-semibold leading-tight [overflow-wrap:anywhere]"
                 style={corDoSelo ? { color: corDoSelo } : undefined}
               >
                 {selo.texto || campanha.nome}
@@ -408,7 +407,7 @@ export default function CampanhaDetalhe({
             {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}
             {paleta.length > 0 && (
               <div className="min-w-0">
-                <dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">Cores de apoio</dt>
+                <dt className={texto.rotulo}>Cores de apoio</dt>
                 <dd className="mt-1.5 flex flex-wrap">
                   {paleta.map((c, i) => (
                     <span key={`${c.hex}-${i}`} className="mb-2 mr-3 inline-flex min-w-0 items-center">

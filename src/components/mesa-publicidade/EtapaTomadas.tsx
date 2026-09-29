@@ -18,6 +18,7 @@ import {
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AvisoDoRascunho, CabecalhoDaEtapa, RotuloLargo, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { FORMATOS_DA_CAMPANHA, FUNCOES_DAS_TOMADAS, pedirTomadas, salvarTomadas, type CampanhaDePublicidade, type TomadaDePublicidade } from "./publicidadeApi";
 
@@ -87,15 +88,17 @@ function TomadasNaMesaFoto({ ensaio, campanha }: { ensaio: Ensaio; campanha: Cam
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [progresso, setProgresso] = useState<{ feitos: number; total: number } | null>(null);
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-publicidade:na-mesa-foto:${clientId}`, false);
   const pendentes = ensaio.tomadas.filter((t) => !t.versoes.length && t.status !== "bloqueada" && t.status !== "gerando");
   const modeloImagem = padraoPara(catalogo, "imagem");
   return (
-    <section className="min-w-0 space-y-3" data-ensaio-da-campanha={ensaio.id}>
+    <section className="min-w-0 space-y-3" data-ensaio-da-campanha={ensaio.id} data-recolhido={recolhido ? "sim" : "nao"}>
       <CabecalhoDaEtapa
         nivel={3}
         titulo="Na Mesa Foto"
         ajuda="As fotos saem uma a uma, pelo motor da Mesa Foto, na carteira do cliente."
         estado={`${ensaio.tomadas.length} ${ensaio.tomadas.length === 1 ? "tomada" : "tomadas"}${pendentes.length ? ` · ${pendentes.length} sem foto` : ""}`}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: `${ensaio.tomadas.length} ${ensaio.tomadas.length === 1 ? "tomada" : "tomadas"}${pendentes.length ? ` · ${pendentes.length} sem foto` : ""}` }}
         acoes={
           <>
             <Link to={`/mesa-foto?client=${clientId}&etapa=campanha&ensaio=${ensaio.id}`} className={botao.discreto} aria-label="Abrir o ensaio na Mesa Foto">
@@ -141,25 +144,28 @@ function TomadasNaMesaFoto({ ensaio, campanha }: { ensaio: Ensaio; campanha: Cam
           </>
         }
       />
-      <ul className={juntar(superficie.painel, "divide-y divide-border")}>
-        {ensaio.tomadas.map((t, i) => {
-          const nossa = campanha.tomadas.find((x) => x.foto_tomada_id === t.id) || null;
-          const estado = ESTADOS_DA_TOMADA[t.status] || { rotulo: t.status, cor: "" };
-          return (
-            <li key={t.id} className="flex min-w-0 items-center px-4 py-2 text-[12.5px]">
-              <span className="mr-2 w-5 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
-              <span className="min-w-0 flex-1 truncate">
-                {t.nome}
-                {nossa && <span className="text-muted-foreground"> · {rotuloDaFuncao(nossa.funcao)}</span>}
-              </span>
-              <span className="ml-2 shrink-0 text-[11.5px] text-muted-foreground">
-                {estado.rotulo}
-                {t.versoes.length ? ` · v${t.versoes[t.versoes.length - 1].versao}` : ""}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      {/* Lista aberta (28/09, dono: "não encaixotar"): sem cartão em volta, só a divisória entre as linhas. */}
+      {!recolhido && (
+        <ul className="divide-y divide-border">
+          {ensaio.tomadas.map((t, i) => {
+            const nossa = campanha.tomadas.find((x) => x.foto_tomada_id === t.id) || null;
+            const estado = ESTADOS_DA_TOMADA[t.status] || { rotulo: t.status, cor: "" };
+            return (
+              <li key={t.id} className="flex min-w-0 items-center py-2 text-[13px]">
+                <span className="mr-2 w-5 shrink-0 tabular-nums text-muted-foreground">{i + 1}.</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {t.nome}
+                  {nossa && <span className="text-muted-foreground"> · {rotuloDaFuncao(nossa.funcao)}</span>}
+                </span>
+                <span className="ml-2 shrink-0 text-[12px] text-muted-foreground">
+                  {estado.rotulo}
+                  {t.versoes.length ? ` · v${t.versoes[t.versoes.length - 1].versao}` : ""}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
@@ -200,6 +206,8 @@ export default function EtapaTomadas() {
   }
 
   const mudou = assinatura(lista) !== assinatura(campanha.tomadas);
+  // Um primário por área: enquanto falta foto, o primário é o "Gerar" da Mesa Foto; depois, seguir.
+  const faltaFoto = !!ensaio && ensaio.tomadas.some((t) => !t.versoes.length && t.status !== "bloqueada" && t.status !== "gerando");
   const mudar = (i: number, parcial: Partial<TomadaDePublicidade>) => setLista((l) => l.map((t, j) => (j === i ? { ...t, ...parcial } : t)));
 
   const salvar = async () => {
@@ -225,7 +233,7 @@ export default function EtapaTomadas() {
         estado={`Território aprovado: ${territorio.nome}`}
         acoes={
           campanha.ensaio_id ? (
-            <button type="button" className={botao.primario} onClick={() => irPara("revisao")} aria-label="Seguir para a revisão">
+            <button type="button" className={faltaFoto ? botao.secundario : botao.primario} onClick={() => irPara("revisao")} aria-label="Seguir para a revisão">
               <ArrowRight className="h-3.5 w-3.5" />
               <RotuloLargo>Seguir para a revisão</RotuloLargo>
             </button>

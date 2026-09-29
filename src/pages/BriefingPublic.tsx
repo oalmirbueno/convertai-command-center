@@ -7,7 +7,6 @@ import { safeStorage } from "@/lib/safeStorage";
 import { QUESTIONS, type Question } from "@/components/briefing/questions";
 import {
   BarraDeAcoes,
-  CabecalhoDePagina,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
@@ -22,7 +21,7 @@ import {
   superficie,
   texto,
 } from "@/components/sistema";
-import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
+import CascaPublica from "@/components/publico/CascaPublica";
 
 /**
  * Fases da página pública do diagnóstico.
@@ -89,19 +88,24 @@ const PROXIMOS_PASSOS = [
   { titulo: "Conversa de apresentação", texto: "Uma chamada para apresentar tudo e alinhar." },
 ];
 
-function Casca({ children }: { children: React.ReactNode }) {
+/** A casca das páginas públicas (logo, título curto, "?" e uma linha), na largura de leitura. */
+function Casca({
+  children,
+  titulo,
+  descricao,
+  ajuda,
+  acimaDoTitulo,
+}: {
+  children: React.ReactNode;
+  titulo?: React.ReactNode;
+  descricao?: React.ReactNode;
+  ajuda?: React.ReactNode;
+  acimaDoTitulo?: React.ReactNode;
+}) {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-3xl items-center px-4 sm:px-6">
-          {/* O bitmap é quadrado com margem transparente: recorta na altura da barra (como no painel). */}
-          <div className="-ml-5 flex h-full shrink-0 items-center overflow-hidden">
-            <img src={aceleriqLogo} alt="Aceleriq" className="h-28 w-auto" />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-4 pb-10 pt-6 sm:px-6">{children}</main>
-    </div>
+    <CascaPublica largura="larga" centralizar={false} titulo={titulo} descricao={descricao} ajuda={ajuda} acimaDoTitulo={acimaDoTitulo}>
+      {children}
+    </CascaPublica>
   );
 }
 
@@ -283,16 +287,16 @@ export default function BriefingPublic() {
 
   if (phase === "complete") {
     return (
-      <Casca>
-        <div className="flex flex-col items-center px-2 py-8 text-center">
+      <Casca
+        titulo="Diagnóstico enviado"
+        descricao="Obrigado pelo tempo."
+        ajuda="Cada resposta ajuda a montar a melhor estratégia para o seu negócio."
+        acimaDoTitulo={
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary" aria-hidden="true">
             <CheckCircle2 className="h-6 w-6" />
           </div>
-          <h1 className={texto.tituloPagina}>Diagnóstico enviado</h1>
-          <p className={juntar(texto.corpo, "mt-2 max-w-md text-muted-foreground")}>
-            Obrigado pelo tempo. Cada resposta ajuda a montar a melhor estratégia para o seu negócio.
-          </p>
-        </div>
+        }
+      >
         <Secao divisoria titulo="O que acontece agora">
           <ol className="divide-y divide-border">
             {PROXIMOS_PASSOS.map((p, i) => (
@@ -314,26 +318,23 @@ export default function BriefingPublic() {
   const pct = Math.round((respondidas / QUESTIONS.length) * 100);
 
   return (
-    <Casca>
-      <CabecalhoDePagina
-        titulo="Diagnóstico da Aceleriq"
-        descricao={`${QUESTIONS.length} perguntas · cerca de 8 minutos · confidencial`}
-        ajuda={
-          <>
-            Como funciona: você responde sobre o seu negócio, a equipe analisa cada resposta e, em até 48h, você recebe um plano sob medida com o orçamento. As respostas ficam salvas neste aparelho enquanto você preenche.
-          </>
-        }
-      />
-      <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>
-        Conte um pouco sobre o seu negócio. Não existe resposta certa: quanto mais sincero, melhor a estratégia.
-      </p>
+    <Casca
+      titulo="Diagnóstico da Aceleriq"
+      descricao={`${QUESTIONS.length} perguntas · cerca de 8 minutos · confidencial`}
+      ajuda={
+        <>
+          Conte um pouco sobre o seu negócio. Não existe resposta certa: quanto mais sincero, melhor a estratégia.
+          {" "}Como funciona: você responde sobre o seu negócio, a equipe analisa cada resposta e, em até 48h, você recebe um plano sob medida com o orçamento. As respostas ficam salvas neste aparelho enquanto você preenche.
+        </>
+      }
+    >
       {hasRestoredProgress && (
-        <p className={juntar(superficie.poco, texto.corpo, "mt-4 px-3 py-2")}>
+        <p className={juntar(superficie.poco, texto.corpo, "px-3 py-2")}>
           Você já tinha começado. As respostas salvas estão abaixo: continue de onde parou.
         </p>
       )}
 
-      <div className="mt-6 space-y-8">
+      <div className={juntar(hasRestoredProgress && "mt-6", "space-y-8")}>
         {BLOCOS.map((bloco, i) => (
           <Secao key={bloco.label} divisoria={i > 0}>
             <GrupoDeCampos titulo={bloco.label}>

@@ -30,7 +30,7 @@ function Novidade({ entry }: { entry: ReleaseEntry }) {
         >
           {building ? <Hammer className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
         </span>
-        <h3 className={juntar(texto.tituloSecao, "mr-3 min-w-0 flex-1 [overflow-wrap:anywhere]")}>{entry.title}</h3>
+        <h3 className={juntar(texto.tituloSecao, "mr-3 min-w-0 flex-1 truncate")} title={entry.title}>{entry.title}</h3>
         <time dateTime={entry.date} className={juntar(texto.auxiliar, "mt-0.5 shrink-0 tabular-nums")}>
           {formatReleaseDate(entry.date)}
         </time>
@@ -43,7 +43,7 @@ function Novidade({ entry }: { entry: ReleaseEntry }) {
           {entry.items.map((item) => (
             <li key={item.title} className="min-w-0">
               <p className={juntar(texto.corpo, "font-medium")}>{item.title}</p>
-              <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">{item.description}</p>
+              <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{item.description}</p>
             </li>
           ))}
         </ul>
@@ -67,6 +67,7 @@ export default function Novidades() {
       <div className="max-w-3xl space-y-6">
         {building.length > 0 && (
           <Secao
+            recolher="novidades:chegando"
             titulo={
               <span className="inline-flex items-center">
                 <Hammer className="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" /> Chegando nesta semana
@@ -84,6 +85,7 @@ export default function Novidades() {
         {live.length > 0 && (
           <Secao
             divisoria={building.length > 0}
+            recolher="novidades:no-ar"
             titulo={
               <span className="inline-flex items-center">
                 <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" /> Já está no ar

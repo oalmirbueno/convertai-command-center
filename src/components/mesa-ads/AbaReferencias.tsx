@@ -1,17 +1,19 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, ImagePlus, Library, Link2, Loader2, ShieldCheck, Star, X } from "lucide-react";
+import { Download, ExternalLink, Globe, ImagePlus, Library, Link2, Loader2, ShieldCheck, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { imagensDoColar } from "@/components/mesa/EstudioFotos";
 import { ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import BarraDeControles from "@/components/sistema/BarraDeControles";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { botao, foco, juntar, texto } from "@/components/sistema/estilos";
+import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   adicionarLink,
@@ -39,7 +41,7 @@ import {
   type Evidencia,
   type ReferenciaAds,
 } from "./adsApi";
-import { Andamento, CabecalhoDaParte, Foto, SeloDeEvidencia, useAndamento } from "./Comuns";
+import { Andamento, CabecalhoDaParte, Foto, SeloDeEvidencia, useAndamento, useParteRecolhida } from "./Comuns";
 import JanelaDaReferencia, { CartaoTipografico } from "./JanelaDaReferencia";
 
 export { CAMPOS_DA_FICHA } from "./adsApi";
@@ -55,6 +57,11 @@ export { CAMPOS_DA_FICHA } from "./adsApi";
  * 26/09 (sistema de design): área de trabalho (no computador a biblioteca rola
  * por dentro, com a posição lembrada), explicação no "?", filtros em
  * seletores compactos e lembrados por cliente.
+ *
+ * 28/09 (padronização, lote L4): a parte recolhe pela setinha do título; os
+ * filtros numa BarraDeControles (evidência e dono à vista, o resto na linha 2,
+ * que vira "Filtros (n)" quando não cabe); os sites de busca num botão
+ * "Bibliotecas" em vez de uma fileira própria; um primário por vez.
  */
 
 export const LINKS_UTEIS = [
@@ -109,7 +116,7 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
         }
       }}
       aria-label={`Abrir ${r.titulo}`}
-      className="group min-w-0 cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={juntar(superficie.painel, "group min-w-0 cursor-pointer overflow-hidden text-left transition-colors hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
     >
       <div className="relative w-full" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
@@ -191,6 +198,7 @@ export default function AbaReferencias() {
   const [importando, setImportando] = useState(false);
   const [arrastando, setArrastando] = useState(false);
   const [desdePadroes, rodarPadroes] = useAndamento();
+  const parte = useParteRecolhida(`mesa-ads:referencias:biblioteca:${clientId}`);
   const entrada = useRef<HTMLInputElement>(null);
 
   const todas = useMemo(() => referencias.data || [], [referencias.data]);
@@ -349,18 +357,19 @@ export default function AbaReferencias() {
           titulo="Referências"
           ajuda="Clique numa referência para abrir aqui mesmo. Cole um print com Ctrl+V ou arraste para cá. Destaque as melhores: o estrategista usa no plano. Importar meus anúncios traz imagem, copy e métricas reais, sem custo de IA."
           descricao={`${todas.length} na biblioteca · ${todas.filter((r) => r.destaque).length} em destaque`}
+          recolher={parte}
           acoes={
             <>
               {enviando > 0 && (
-                <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
+                <span className="inline-flex items-center text-[12px] text-muted-foreground">
                   <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> guardando
                 </span>
               )}
               <Button type="button" size="sm" variant="outline" className="h-9" onClick={() => setColarLink((v) => !v)} aria-expanded={colarLink}>
-                <Link2 className="mr-1 h-3.5 w-3.5" /> Adicionar por link
+                <Link2 className="h-3.5 w-3.5 sm:mr-1" /> <span className="sr-only sm:not-sr-only">Adicionar por link</span>
               </Button>
               <Button type="button" size="sm" variant="outline" className="h-9" onClick={() => entrada.current && entrada.current.click()}>
-                <ImagePlus className="mr-1 h-3.5 w-3.5" /> Subir print
+                <ImagePlus className="h-3.5 w-3.5 sm:mr-1" /> <span className="sr-only sm:not-sr-only">Subir print</span>
               </Button>
               <input
                 ref={entrada}
@@ -376,7 +385,7 @@ export default function AbaReferencias() {
                 }}
               />
               <BotaoComCusto
-                rotulo={<><Library className="mr-1 h-3.5 w-3.5" /> Padrões do nicho</>}
+                rotulo={<><Library className="h-3.5 w-3.5 sm:mr-1" /> <span className="sr-only sm:not-sr-only">Padrões do nicho</span></>}
                 titulo="Padrões do nicho"
                 descricao={`O estrategista cria ${QUANTIDADE_DE_PADROES} padrões de criativo do nicho deste cliente, com a ficha completa e conferidos pelo Jev (risco de política). Entram como E0: inspiração, não prova.`}
                 variant="outline"
@@ -395,7 +404,7 @@ export default function AbaReferencias() {
                   void atualizar();
                 }}
               />
-              <Button type="button" size="sm" className="h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
+              <Button type="button" size="sm" variant={colarLink ? "outline" : "default"} className="h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
                 {importando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
                 Importar meus anúncios
               </Button>
@@ -429,97 +438,124 @@ export default function AbaReferencias() {
           </div>
         )}
 
-        <nav aria-label="Bibliotecas de anúncios" className="mb-3 flex min-w-0 flex-wrap items-center">
-          <span className={juntar(texto.auxiliar, "mb-1 mr-2")}>Buscar em</span>
-          {LINKS_UTEIS.map((l) => (
-            <a
-              key={l.url}
-              href={l.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={juntar("mb-1 mr-3 inline-flex items-center rounded text-[12px] text-foreground/90 underline-offset-2 hover:text-primary hover:underline", foco)}
-            >
-              {l.rotulo} <ExternalLink className="ml-1 h-3 w-3 text-muted-foreground" />
-            </a>
-          ))}
-        </nav>
-
-        <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" aria-label="Filtros">
-          <SeletorCompacto
-            rotulo="Filtrar por evidência"
-            icone={<ShieldCheck className="h-3.5 w-3.5" />}
-            modo="lista"
-            opcoes={[{ valor: "", rotulo: "Toda evidência" }].concat(ESCALA_DE_EVIDENCIA.map((e) => ({ valor: e.valor, rotulo: `${e.valor} ${e.rotulo}`, descricao: e.dica })))}
-            valor={filtroEvidencia}
-            onEscolher={(v) => setFiltroEvidencia(v as Evidencia | "")}
+        {!parte.recolhido && (
+          <BarraDeControles
+            rotulo="Filtros"
+            filtrosAtivos={[filtroOrigem, filtroNicho, filtroEstilo, filtroMecanismo].filter(Boolean).length}
+            aoLimparFiltros={limparFiltros}
+            inicio={
+              <div className="-m-1 flex min-w-0 items-center [&>*]:m-1">
+                <SeletorCompacto
+                  rotulo="Filtrar por evidência"
+                  icone={<ShieldCheck className="h-3.5 w-3.5" />}
+                  modo="lista"
+                  opcoes={[{ valor: "", rotulo: "Toda evidência" }].concat(ESCALA_DE_EVIDENCIA.map((e) => ({ valor: e.valor, rotulo: `${e.valor} ${e.rotulo}`, descricao: e.dica })))}
+                  valor={filtroEvidencia}
+                  onEscolher={(v) => setFiltroEvidencia(v as Evidencia | "")}
+                />
+                <SeletorCompacto
+                  rotulo="Filtrar por dono"
+                  listaQuandoNaoCabe
+                  opcoes={[
+                    { valor: "todas", rotulo: "Todas" },
+                    { valor: "cliente", rotulo: "Do cliente" },
+                    { valor: "agencia", rotulo: "Da agência" },
+                  ]}
+                  valor={deQuem}
+                  onEscolher={(v) => setDeQuem(v as FiltroDaAgencia)}
+                />
+              </div>
+            }
+            acoes={
+              <>
+                {temFiltro && (
+                  <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={limparFiltros}>
+                    Limpar filtros
+                  </button>
+                )}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className={juntar(botao.secundario, "px-3")} title="Bibliotecas de anúncios para buscar referências" aria-label="Bibliotecas">
+                      <Globe className="h-4 w-4 shrink-0 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">Bibliotecas</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[280px] p-1">
+                    <nav aria-label="Bibliotecas de anúncios">
+                      {LINKS_UTEIS.map((l) => (
+                        <a
+                          key={l.url}
+                          href={l.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={juntar("flex min-h-8 items-center rounded px-2 py-1.5 text-[13px] text-foreground hover:bg-muted", foco)}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{l.rotulo}</span>
+                          <ExternalLink className="ml-2 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        </a>
+                      ))}
+                    </nav>
+                  </PopoverContent>
+                </Popover>
+              </>
+            }
+            filtros={
+              <>
+                <select aria-label="Filtrar por origem" value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)} className={seletor}>
+                  <option value="">Toda origem</option>
+                  {origensUsadas.map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.rotulo}
+                    </option>
+                  ))}
+                  {filtroOrigem && !origensUsadas.some((o) => o.valor === filtroOrigem) && <option value={filtroOrigem}>{rotuloDaOrigem(filtroOrigem)}</option>}
+                </select>
+                {nichos.length > 0 && (
+                  <select aria-label="Filtrar por nicho" value={filtroNicho} onChange={(e) => setFiltroNicho(e.target.value)} className={seletor}>
+                    <option value="">Todo nicho</option>
+                    {nichos.map((n) => (
+                      <option key={n} value={n}>
+                        {nomesDosNichos[n] || humanizar(n)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {estilos.length > 0 && (
+                  <select aria-label="Filtrar por estilo" value={filtroEstilo} onChange={(e) => setFiltroEstilo(e.target.value)} className={seletor}>
+                    <option value="">Todo estilo</option>
+                    {estilos.map((n) => (
+                      <option key={n} value={n}>
+                        {humanizar(n)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {mecanismos.length > 0 && (
+                  <select aria-label="Filtrar por mecanismo" value={filtroMecanismo} onChange={(e) => setFiltroMecanismo(e.target.value)} className={seletor}>
+                    <option value="">Todo mecanismo</option>
+                    {mecanismos.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
+            }
           />
-          <SeletorCompacto
-            rotulo="Filtrar por dono"
-            opcoes={[
-              { valor: "todas", rotulo: "Todas" },
-              { valor: "cliente", rotulo: "Do cliente" },
-              { valor: "agencia", rotulo: "Da agência" },
-            ]}
-            valor={deQuem}
-            onEscolher={(v) => setDeQuem(v as FiltroDaAgencia)}
-          />
-          <select aria-label="Filtrar por origem" value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)} className={seletor}>
-            <option value="">Toda origem</option>
-            {origensUsadas.map((o) => (
-              <option key={o.valor} value={o.valor}>
-                {o.rotulo}
-              </option>
-            ))}
-            {filtroOrigem && !origensUsadas.some((o) => o.valor === filtroOrigem) && <option value={filtroOrigem}>{rotuloDaOrigem(filtroOrigem)}</option>}
-          </select>
-          {nichos.length > 0 && (
-            <select aria-label="Filtrar por nicho" value={filtroNicho} onChange={(e) => setFiltroNicho(e.target.value)} className={seletor}>
-              <option value="">Todo nicho</option>
-              {nichos.map((n) => (
-                <option key={n} value={n}>
-                  {nomesDosNichos[n] || humanizar(n)}
-                </option>
-              ))}
-            </select>
-          )}
-          {estilos.length > 0 && (
-            <select aria-label="Filtrar por estilo" value={filtroEstilo} onChange={(e) => setFiltroEstilo(e.target.value)} className={seletor}>
-              <option value="">Todo estilo</option>
-              {estilos.map((n) => (
-                <option key={n} value={n}>
-                  {humanizar(n)}
-                </option>
-              ))}
-            </select>
-          )}
-          {mecanismos.length > 0 && (
-            <select aria-label="Filtrar por mecanismo" value={filtroMecanismo} onChange={(e) => setFiltroMecanismo(e.target.value)} className={seletor}>
-              <option value="">Todo mecanismo</option>
-              {mecanismos.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          )}
-          {temFiltro && (
-            <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={limparFiltros}>
-              Limpar filtros
-            </button>
-          )}
-        </div>
+        )}
       </section>
 
       {referencias.isError && <AvisoDeErro erro={referencias.error} />}
-      {referencias.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo as referências" />}
-      {referencias.data && filtradas.length === 0 && (
+      {!parte.recolhido && referencias.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo as referências" />}
+      {!parte.recolhido && referencias.data && filtradas.length === 0 && (
         <EstadoVazio
           icone={<Library className="h-5 w-5" />}
           titulo={todas.length ? "Nenhuma referência com esses filtros" : "A biblioteca ainda está vazia"}
           descricao={todas.length ? "Limpe os filtros para ver todas." : "Importe os anúncios do cliente, peça os padrões do nicho, cole um link ou suba um print."}
         />
       )}
-      {filtradas.length > 0 && (
+      {!parte.recolhido && filtradas.length > 0 && (
         <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {filtradas.map((r) => (
             <CartaoDaReferencia key={r.id} r={r} onAbrir={() => setAberta(r.id)} onEstrela={() => void alternarDestaque(r)} />

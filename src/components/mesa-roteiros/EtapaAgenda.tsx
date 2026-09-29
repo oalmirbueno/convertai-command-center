@@ -4,11 +4,11 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, textoDoErro } from "@/lib/mesa/api";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
-import { botao, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ROTULO_DO_FORMATO, ROTULO_DO_STATUS, modoDoTipo, type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { roteiroDaPeca, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, BlocoRecolhivel, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel, RotuloLargo, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 1: a agenda. Lista as peças de vídeo da agenda do cliente (Reels,
@@ -49,19 +49,23 @@ export default function EtapaAgenda({
     <div className="min-w-0 space-y-6" data-etapa-agenda="">
       {roteirosQ.data && roteirosQ.data.indisponivel && <AvisoDoBanco />}
 
-      <section className="min-w-0 space-y-3">
-        <Cabecalho
-          icone={<CalendarDays className="h-4 w-4" />}
-          titulo="Peças de vídeo da agenda"
-          ajuda={`Reels, vídeo, short e story da agenda, da semana passada até seis semanas à frente. O roteiro gravado no calendário, o contexto, o cérebro e a campanha entram como base. Estados: ${estados}. Aprovado fica ligado à peça da agenda.`}
-          estado={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
-          acoes={
-            <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
-              <Plus className="h-3.5 w-3.5" />
-              <RotuloLargo>Roteiro avulso</RotuloLargo>
-            </button>
-          }
-        />
+      {/* 28/09 (dono: "tudo recolhe"): o cabeçalho das peças virou bloco recolhível, e as listas ficaram abertas (sem cartão). */}
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:pecas:${clientId}`}
+        nivel={2}
+        divisoria={false}
+        icone={<CalendarDays className="h-4 w-4" />}
+        titulo="Peças de vídeo da agenda"
+        ajuda={`Reels, vídeo, short e story da agenda, da semana passada até seis semanas à frente. O roteiro gravado no calendário, o contexto, o cérebro e a campanha entram como base. Estados: ${estados}. Aprovado fica ligado à peça da agenda.`}
+        estado={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
+        resumo={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
+        acoes={
+          <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
+            <Plus className="h-3.5 w-3.5" />
+            <RotuloLargo>Roteiro avulso</RotuloLargo>
+          </button>
+        }
+      >
         {pecasQ.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo a agenda" />}
         {pecasQ.isError && (
           <EstadoDeErro
@@ -75,11 +79,11 @@ export default function EtapaAgenda({
         )}
         {pecasQ.isSuccess && !pecas.length && <EstadoVazio compacto titulo="Nenhuma peça de vídeo na agenda." descricao="Use o roteiro avulso." />}
         {pecas.length > 0 && (
-          <ul className={juntar(superficie.painel, "divide-y divide-border")} data-pecas-de-video="">
+          <ul className="divide-y divide-border" data-pecas-de-video="">
             {pecas.map((p) => {
               const r = roteiroDaPeca(lista, p.id);
               return (
-                <li key={p.id} className="flex min-w-0 flex-wrap items-center px-4 py-2.5" data-peca={p.id}>
+                <li key={p.id} className="flex min-w-0 flex-wrap items-center py-2.5" data-peca={p.id}>
                   <div className="mr-3 w-[64px] shrink-0 text-[12px] tabular-nums text-muted-foreground">{p.data ? dataCurta(p.data) : "sem data"}</div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">{p.titulo}</p>
@@ -90,7 +94,7 @@ export default function EtapaAgenda({
                     </p>
                   </div>
                   <div className="mt-1.5 flex w-full items-center justify-end sm:ml-2 sm:mt-0 sm:w-auto">
-                    {r ? <SeloDoStatus status={r.status} /> : <span className="text-[11.5px] text-muted-foreground">Sem roteiro</span>}
+                    {r ? <SeloDoStatus status={r.status} /> : <span className="text-[12px] text-muted-foreground">Sem roteiro</span>}
                     {r ? (
                       <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id)}>
                         <FileText className="mr-1 h-3.5 w-3.5" /> Abrir
@@ -106,7 +110,7 @@ export default function EtapaAgenda({
             })}
           </ul>
         )}
-      </section>
+      </BlocoRecolhivel>
 
       <BlocoRecolhivel
         chave={`mesa-roteiros:avulsos:${clientId}`}
@@ -142,9 +146,9 @@ export default function EtapaAgenda({
         )}
         {roteirosQ.isSuccess && !outros.length && <EstadoVazio compacto titulo="Nenhum roteiro avulso ainda." />}
         {outros.length > 0 && (
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          <ul className="divide-y divide-border">
             {outros.map((r: LinhaDoRoteiro) => (
-              <li key={r.id} className="flex min-w-0 items-center px-4 py-2.5" data-roteiro={r.id}>
+              <li key={r.id} className="flex min-w-0 items-center py-2.5" data-roteiro={r.id}>
                 <div className="mr-2 min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{r.titulo}</p>
                   <p className="truncate text-[12px] text-muted-foreground">

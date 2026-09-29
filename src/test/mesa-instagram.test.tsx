@@ -467,6 +467,9 @@ describe("tela: prévia do perfil", () => {
     expect(screen.getByText("aceleriq.com")).toBeTruthy();
     const grade = screen.getByRole("list", { name: "Grade do perfil" });
     expect(within(grade).getAllByRole("listitem").length).toBe(2);
+    // 28/09 (L3, padrão visual: explicação vai para o "?"): na tela fica o estado; a explicação abre no "?".
+    expect(screen.getByText("Sem destaques ainda")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Por que os destaques não aparecem" }));
     expect(screen.getByText(/A API do Instagram não entrega os destaques do perfil/)).toBeTruthy();
     rerender(
       <MemoryRouter>
@@ -672,6 +675,9 @@ describe("tela: grade e simulador (rodada 3, rascunho de datas)", () => {
 
   it("sem posts prontos: explica de onde eles vêm", () => {
     montar(<GradeDeTeste itens={[]} />);
+    // 28/09 (L3, padrão visual: explicação vai para o "?"): na tela fica o estado; de onde vêm abre no "?".
+    expect(screen.getByText("Nenhum post pronto para ir ao ar")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "O que aparece aqui" }));
     expect(screen.getByText(/Agenda, do Estúdio e os posts de fotos da Mesa Foto/)).toBeTruthy();
   });
 });
@@ -858,7 +864,8 @@ describe("tela: a aba inteira", () => {
       </MemoryRouter>,
     );
     // O bloco do caminho abre a ferramenta: o gerador de destaques aparece.
-    expect(await screen.findByText(/A API do Instagram não lê nem cria destaques/)).toBeTruthy();
+    // 28/09 (L3, padrão visual): a explicação do gerador mora no "?"; o botão dele prova que o gerador abriu.
+    expect(await screen.findByRole("button", { name: "Como subir os destaques" })).toBeTruthy();
     expect(chamadasDe("painel").length).toBe(1);
     expect(chamadasDe("painel")[0]).toMatchObject({ client_id: CLIENTE });
     // Contas no topo: as duas do Instagram e a página do Facebook; a principal aberta.

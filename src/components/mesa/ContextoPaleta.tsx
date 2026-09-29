@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { temTexto, type CorDoKit } from "./contextoDoCliente";
+import { superficie } from "@/components/sistema/estilos";
 
 /**
  * Paleta da marca em amostras grandes (pedido do dono em 23/09: "colocar
@@ -120,7 +121,7 @@ export function PaletaDaMarca({ paleta, carregando = false }: { paleta: CorDoKit
               disabled={!valida}
               title={valida ? `Copiar ${hex}` : "Cor inválida"}
               aria-label={valida ? `Copiar ${hex}${temTexto(c.nome) ? `, ${c.nome}` : ""}` : `Cor inválida: ${c.hex}`}
-              className="group flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={`group flex w-full min-w-0 flex-col overflow-hidden text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${superficie.painel}`}
             >
               <span className="relative flex h-16 w-full items-end px-2.5 pb-2 sm:h-[72px]" style={{ backgroundColor: cor }}>
                 <span className="font-mono text-[12px] font-semibold tracking-wide" style={{ color: tinta }}>

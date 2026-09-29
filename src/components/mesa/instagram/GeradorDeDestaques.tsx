@@ -24,6 +24,7 @@ import { baixarDoStorage, baixarZipDasCapas, capaComFoto, capaComIcone, capaComL
 import { useFonteDaMarca } from "./fonteDaMarca";
 import NavegadorDePastas, { type ImagemEscolhida } from "../NavegadorDePastas";
 import { supabase } from "@/integrations/supabase/client";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Gerador de destaques. A lista (nome e ícone) vem da equipe, das sugestões
@@ -267,8 +268,11 @@ export default function GeradorDeDestaques({
         descricao="Uma foto real do cliente. Ela entra inteira, só recortada para o círculo do destaque."
         onEscolher={(e) => void escolherFoto(e)}
       />
-      <p className={juntar(texto.auxiliar, "leading-5")}>
-        A API do Instagram não lê nem cria destaques: gere as capas aqui, baixe e suba pelo app (Novo destaque, Editar capa). Nome até {LIMITES_DO_PERFIL.destaqueVisivel} letras para não cortar.
+      <p className={juntar(texto.auxiliar, "flex items-center")}>
+        Nome até {LIMITES_DO_PERFIL.destaqueVisivel} letras
+        <AjudaRecolhida className="ml-1" rotulo="Como subir os destaques">
+          A API do Instagram não lê nem cria destaques: gere as capas aqui, baixe e suba pelo app (Novo destaque, Editar capa). Nome até {LIMITES_DO_PERFIL.destaqueVisivel} letras para não cortar.
+        </AjudaRecolhida>
       </p>
 
       <div className="min-w-0">
@@ -395,7 +399,7 @@ export default function GeradorDeDestaques({
               <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
             </div>
           ) : (
-            <div className="min-w-0 rounded-md bg-muted/50 px-3 py-2 text-[12.5px] leading-5 text-muted-foreground">
+            <div className="min-w-0 rounded-md bg-muted/50 px-3 py-2 text-[13px] leading-5 text-muted-foreground">
               {modo === "logo" && "A logo do kit vai inteira no centro, sobre a cor escolhida. Montado no navegador, sem custo e sem redesenhar a logo."}
               {modo === "foto" && "Escolha uma foto do acervo em cada destaque. Ela entra inteira, só recortada para o círculo. Sem custo."}
               {modo === "tipografia" && (fonte.motivo || `O nome de cada destaque na fonte ${fonte.nome || "da marca"}, na cor escolhida, sobre o fundo do kit. Sem custo.`)}

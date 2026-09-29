@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie, texto as tipo } from "@/components/sistema/estilos";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { custoDaResposta, estimarLocal, textoDoErro, usd } from "@/lib/mesa/api";
 import {
@@ -101,8 +103,12 @@ function Galeria({ imagens, r }: { imagens: ImagemDaGaleria[]; r: ReferenciaAds 
     }
     return (
       <div className="flex h-[40vh] flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 text-center">
-        <p className="text-[13.5px] font-medium">Sem imagem guardada ainda</p>
-        <p className="mt-1 text-[12px] text-muted-foreground">O painel busca as imagens do link ao abrir. Se a página não deixar, suba um print em Referências.</p>
+        <p className="inline-flex items-center text-[13px] font-medium">
+          Sem imagem guardada ainda
+          <AjudaRecolhida className="ml-1.5" rotulo="Como trazer as imagens">
+            O painel busca as imagens do link ao abrir. Se a página não deixar, suba um print em Referências.
+          </AjudaRecolhida>
+        </p>
       </div>
     );
   }
@@ -192,7 +198,7 @@ export function Indicadores({ m, className = "" }: { m: MetricasDaConta; classNa
   return (
     <dl className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${className}`}>
       {visiveis.map((k) => (
-        <div key={k.chave} className="min-w-0 rounded-lg border border-border bg-card px-3 py-2">
+        <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-3 py-2")}>
           <dt className="truncate text-[10.5px] uppercase tracking-wider text-muted-foreground">{k.rotulo}</dt>
           <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums">{k.formato(m[k.chave])}</dd>
         </div>
@@ -205,8 +211,8 @@ function SerieDiaria({ serie }: { serie: PontoDaSerie[] }) {
   if (!serie.length) return null;
   const maior = Math.max.apply(null, serie.map((p) => p.gasto || 0).concat([0.0001]));
   return (
-    <section aria-label="Série diária" className="rounded-lg border border-border bg-card p-4">
-      <h4 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Gasto por dia e resultados</h4>
+    <section aria-label="Série diária" className="min-w-0 border-t border-border pt-4">
+      <h4 className={tipo.rotulo}>Gasto por dia e resultados</h4>
       <div className="mt-3 flex h-32 items-end">
         {serie.map((p) => (
           <div key={p.dia} className="mr-px flex h-full min-w-0 flex-1 flex-col justify-end" title={`${p.dia}: ${brl(p.gasto)} · ${inteiro(p.resultados)} resultados`}>
@@ -393,13 +399,15 @@ export default function JanelaDaReferencia({
 
   const blocoCompletar = (r && !lida) || desde !== null || lendoSozinho ? (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-      <p className="text-[12.5px] font-medium">{lendoSozinho || desde !== null ? "Completando a ficha" : "Ficha ainda não lida"}</p>
-      <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
-        O leitor usa a galeria, a página, a copy e as métricas para preencher situação, gancho, argumento e o que transportar. Não inventa número; a evidência continua a que está.
+      <p className="flex min-w-0 items-center text-[13px] font-medium">
+        <span className="min-w-0 truncate">{lendoSozinho || desde !== null ? "Completando a ficha" : "Ficha ainda não lida"}</span>
+        <AjudaRecolhida className="ml-1.5" rotulo="Como a ficha é completada">
+          O leitor usa a galeria, a página, a copy e as métricas para preencher situação, gancho, argumento e o que transportar. Não inventa número; a evidência continua a que está.
+        </AjudaRecolhida>
       </p>
       <div className="mt-2 flex flex-wrap items-center">
         {lendoSozinho ? (
-          <span role="status" className="inline-flex items-center text-[11.5px] text-muted-foreground">
+          <span role="status" className="inline-flex items-center text-[12px] text-muted-foreground">
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Lendo o anúncio
           </span>
         ) : (
@@ -428,7 +436,7 @@ export default function JanelaDaReferencia({
         <div className="shrink-0 border-b border-border px-4 pb-0 pt-4 sm:px-5">
           <div className="flex min-w-0 items-start pr-8">
             <div className="min-w-0 flex-1">
-              <DialogTitle className="text-[16px] font-semibold leading-snug [overflow-wrap:anywhere]">{titulo}</DialogTitle>
+              <DialogTitle className="truncate text-[15px] font-semibold leading-snug" title={titulo}>{titulo}</DialogTitle>
               <DialogDescription asChild>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                   {r && <SeloDeEvidencia valor={r.evidencia} className="mb-1 mr-2" />}
@@ -476,8 +484,12 @@ export default function JanelaDaReferencia({
           {d && d.aviso && <p className="mb-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[12px]">{d.aviso}</p>}
           {r && aba === "visao" && !r.ad_id && (galeria.length === 0 || (d && d.aviso)) && (
             <div className="mb-3 rounded-lg border border-border/70 bg-muted/30 p-3">
-              <p className="text-[12px] font-medium">Adicionar imagens</p>
-              <p className="mb-2 text-[11.5px] text-muted-foreground">Cole os links das imagens, um por linha. No Behance: botão direito na imagem, Copiar endereço da imagem.</p>
+              <p className="mb-2 flex items-center text-[12px] font-medium">
+                Adicionar imagens
+                <AjudaRecolhida className="ml-1.5" rotulo="Como adicionar imagens">
+                  Cole os links das imagens, um por linha. No Behance: botão direito na imagem, Copiar endereço da imagem.
+                </AjudaRecolhida>
+              </p>
               <Textarea aria-label="Links das imagens" className="min-h-[64px] text-[12px]" placeholder="https://mir-s3-cdn-cf.behance.net/project_modules/..." value={coladas} onChange={(e) => setColadas(e.target.value)} />
               <div className="mt-2 flex justify-end">
                 <Button type="button" size="sm" disabled={colando || !coladas.trim()} onClick={() => void adicionarImagens()}>
@@ -490,7 +502,7 @@ export default function JanelaDaReferencia({
           {detalhe.isError && (
             <div className="mb-3">
               <AvisoDeErro erro={detalhe.error} />
-              <p className="mt-1 text-[11.5px] text-muted-foreground">Mostrando o que já está guardado na biblioteca.</p>
+              <p className="mt-1 text-[12px] text-muted-foreground">Mostrando o que já está guardado na biblioteca.</p>
             </div>
           )}
           {!r && detalhe.isLoading && (
@@ -505,7 +517,7 @@ export default function JanelaDaReferencia({
               {detalhe.isLoading && !galeria.length ? <div className="h-[44vh] animate-pulse rounded-lg bg-muted/70 sm:h-[56vh]" aria-label="Carregando as imagens" /> : <Galeria imagens={galeria} r={r} />}
               <div className="min-w-0 space-y-3">
                 {blocoCompletar}
-                <div className="rounded-lg border border-border bg-card px-4 py-1">
+                <div className="min-w-0">
                   <Linha rotulo="Mecanismo" valor={r.mecanismo || texto(r.ficha.mecanismo)} copiar={false} />
                   <Linha rotulo="Primeira fala ou headline" valor={texto(r.ficha.gancho_verbal)} />
                   <Linha rotulo="Gancho visual" valor={texto(r.ficha.gancho_visual)} copiar={false} />
@@ -516,8 +528,8 @@ export default function JanelaDaReferencia({
                   )}
                 </div>
                 {temMetricas(metricas) && (
-                  <button type="button" onClick={() => setAba("metricas")} className="w-full rounded-lg border border-border bg-card px-4 py-3 text-left hover:border-primary/40">
-                    <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">Resultado real</span>
+                  <button type="button" onClick={() => setAba("metricas")} className={juntar(superficie.poco, "w-full px-4 py-3 text-left transition-colors hover:bg-muted")}>
+                    <span className={juntar(tipo.rotulo, "block")}>Resultado real</span>
                     <span className="mt-0.5 block text-[13px] tabular-nums">
                       {brl(metricas.gasto)} · {inteiro(metricas.resultados)} resultados · {brl(metricas.custo_por_resultado)} cada
                     </span>
@@ -531,8 +543,13 @@ export default function JanelaDaReferencia({
             <div className="mx-auto max-w-3xl space-y-4">
               {blocoCompletar}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block min-w-0">
-                  <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Evidência</span>
+                <div className="block min-w-0">
+                  <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
+                    Evidência
+                    <AjudaRecolhida className="ml-1.5" rotulo="Regra da evidência">
+                      E3 e E4 só com resultado documentado (importação dos anúncios ou aprendizado registrado).
+                    </AjudaRecolhida>
+                  </span>
                   <select
                     aria-label="Evidência"
                     value={evidencia}
@@ -546,13 +563,12 @@ export default function JanelaDaReferencia({
                       </option>
                     ))}
                   </select>
-                </label>
+                </div>
                 <label className="block min-w-0">
                   <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Mecanismo</span>
                   <Input aria-label="Mecanismo" className="h-9 text-[12.5px]" value={mecanismo} readOnly={daAgencia} placeholder="Sem citar a marca" onChange={(e) => setMecanismo(e.target.value)} />
                 </label>
               </div>
-              <p className="-mt-2 text-[11px] leading-snug text-muted-foreground">E3 e E4 só com resultado documentado (importação dos anúncios ou aprendizado registrado).</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {CAMPOS_DA_FICHA.map((c) => {
                   const valor = typeof ficha[c.chave] === "string" ? String(ficha[c.chave]) : "";
@@ -571,7 +587,12 @@ export default function JanelaDaReferencia({
                 })}
               </div>
               {daAgencia ? (
-                <p className="text-[11.5px] text-muted-foreground">Biblioteca da agência: a ficha é só leitura aqui. Completar com IA grava a leitura na própria biblioteca.</p>
+                <p className="flex items-center text-[12px] text-muted-foreground">
+                  Biblioteca da agência: só leitura.
+                  <AjudaRecolhida className="ml-1.5" rotulo="Ficha da agência">
+                    A ficha da biblioteca da agência é só leitura aqui. Completar com IA grava a leitura na própria biblioteca.
+                  </AjudaRecolhida>
+                </p>
               ) : (
                 <div className="sticky bottom-0 flex justify-end border-t border-border bg-background py-3">
                   <Button type="button" size="sm" disabled={salvando} onClick={() => void salvar()}>
@@ -587,11 +608,11 @@ export default function JanelaDaReferencia({
             <div className="mx-auto max-w-3xl">
               {semCopy ? (
                 <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                  <p className="text-[13.5px] font-medium">Sem copy registrada</p>
+                  <p className="text-[13px] font-medium">Sem copy registrada</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">Complete a ficha com IA ou escreva na aba Ficha o que o anúncio diz.</p>
                 </div>
               ) : (
-                <div className="rounded-lg border border-border bg-card px-4 py-1">
+                <div className="min-w-0">
                   <Linha rotulo="Título" valor={copy.titulo} />
                   <Linha rotulo="Texto principal" valor={copy.corpo} />
                   <Linha rotulo="Descrição" valor={copy.descricao} />
@@ -615,15 +636,15 @@ export default function JanelaDaReferencia({
                   <Indicadores m={metricas} />
                   {anuncio && <SerieDiaria serie={anuncio.serie} />}
                   {anuncio && (
-                    <section className="rounded-lg border border-border bg-card p-4" aria-label="Diagnóstico">
-                      <h4 className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Diagnóstico</h4>
+                    <section className="min-w-0 border-t border-border pt-4" aria-label="Diagnóstico">
+                      <h4 className={juntar(tipo.rotulo, "mb-1.5")}>Diagnóstico</h4>
                       <Diagnostico valor={anuncio.diagnostico} />
                     </section>
                   )}
                 </>
               ) : (
                 <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                  <p className="text-[13.5px] font-medium">{temAnuncio ? "Sem entrega no período" : "Referência externa, sem métricas"}</p>
+                  <p className="text-[13px] font-medium">{temAnuncio ? "Sem entrega no período" : "Referência externa, sem métricas"}</p>
                   <p className="mt-1 text-[12px] text-muted-foreground">
                     {temAnuncio ? "O anúncio não teve números recentes na conta." : "Longevidade, curtidas e bibliotecas de vencedores não são prova de retorno. Só anúncio próprio traz resultado real."}
                   </p>
@@ -635,7 +656,7 @@ export default function JanelaDaReferencia({
           {r && aba === "original" && (
             <div className="mx-auto max-w-3xl space-y-3">
               {pagina && (pagina.titulo || pagina.descricao) && (
-                <section className="rounded-lg border border-border bg-card px-4 py-1" aria-label="Página de origem">
+                <section className="min-w-0" aria-label="Página de origem">
                   <Linha rotulo="Título da página" valor={pagina.titulo} copiar={false} />
                   <Linha rotulo="Descrição" valor={pagina.descricao} copiar={false} />
                   <Linha rotulo="Site" valor={[pagina.site, pagina.tipo ? humanizar(pagina.tipo) : ""].filter(Boolean).join(" · ")} copiar={false} />
@@ -646,13 +667,13 @@ export default function JanelaDaReferencia({
                   })}
                 </section>
               )}
-              <section className="rounded-lg border border-border bg-card px-4 py-1">
+              <section className={juntar("min-w-0", pagina && (pagina.titulo || pagina.descricao) ? "border-t border-border" : "")}>
                 <Linha rotulo="Origem" valor={daAgencia ? "Biblioteca da agência" : rotuloDaOrigem(r.origem)} copiar={false} />
                 <Linha rotulo="Plataforma e formato" valor={[r.plataforma, r.formato].filter(Boolean).join(" · ")} copiar={false} />
                 <Linha rotulo="Anúncio no Meta" valor={r.ad_id || (anuncio ? anuncio.ad_id : "")} />
               </section>
               {r.url ? (
-                <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-[12.5px] font-medium hover:bg-secondary">
+                <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-[13px] font-medium hover:bg-secondary">
                   Abrir o original em outra aba <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
                 </a>
               ) : (

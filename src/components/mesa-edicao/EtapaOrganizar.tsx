@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Check, FolderTree, Loader2, Pencil, Star, X } from "lucide-react";
+import MenuMais from "@/components/sistema/MenuMais";
 import { toast } from "sonner";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
@@ -124,19 +125,21 @@ function LinhaDoTake({ take, podeEditar, roteiros }: { take: ArquivoDeVideo; pod
               )}
             </select>
           )}
-          <button type="button" className={botao.icone} aria-label={`Renomear ${take.nome}`} onClick={() => setEditando(true)} disabled={ocupado}>
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={botao.icone}
-            aria-label={`Arquivar ${take.nome}`}
-            title="Arquivar (não apaga o arquivo)"
-            onClick={() => void mudar({ estado: "arquivado" }, "Take arquivado")}
-            disabled={ocupado || take.melhor}
-          >
-            <Archive className="h-3.5 w-3.5" />
-          </button>
+          {/* 28/09 (dono: "menos poluído"): renomear e arquivar ficam no "..." da linha. */}
+          <MenuMais
+            rotulo={`Mais ações de ${take.nome}`}
+            desativado={ocupado}
+            itens={[
+              { rotulo: "Renomear", icone: <Pencil className="h-3.5 w-3.5" />, aoEscolher: () => setEditando(true) },
+              {
+                rotulo: "Arquivar",
+                icone: <Archive className="h-3.5 w-3.5" />,
+                dica: take.melhor ? "O melhor take não arquiva: desmarque antes." : "Arquivar (não apaga o arquivo)",
+                desativado: take.melhor,
+                aoEscolher: () => void mudar({ estado: "arquivado" }, "Take arquivado"),
+              },
+            ]}
+          />
         </div>
       )}
     </li>

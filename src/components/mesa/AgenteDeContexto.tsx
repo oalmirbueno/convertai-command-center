@@ -148,7 +148,7 @@ export default function AgenteDeContexto({
         mudanca || (erro && erro.clientId === clientId) ? (
           <>
             {mudanca && (
-              <p className="rounded-md bg-muted/60 px-3 py-2 text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+              <p className="rounded-md bg-muted/60 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                 {nomesDoQueMudou.length ? `Mudou no kit: ${nomesDoQueMudou.join(", ")}.` : "Nada mudou no kit."}
                 {mudanca.memorias > 0 && ` ${mudanca.memorias === 1 ? "1 memória guardada" : `${mudanca.memorias} memórias guardadas`} para os agentes.`}
               </p>
@@ -219,8 +219,11 @@ export default function AgenteDeContexto({
       )}
       {historico.isError && <AvisoDeErro erro={historico.error} />}
       {historico.data && mensagens.length === 0 && !pendente && (
-        <p className={conversa.apoio}>
-          Nenhuma conversa ainda. Exemplos: "a cor principal é o verde da fachada", "o público são mães de 30 a 45 anos", "nunca usar fundo preto".
+        <p className={juntar(conversa.apoio, "flex items-center")}>
+          Nenhuma conversa ainda
+          <AjudaRecolhida className="ml-1" rotulo="Exemplos do que contar">
+            Exemplos: "a cor principal é o verde da fachada", "o público são mães de 30 a 45 anos", "nunca usar fundo preto".
+          </AjudaRecolhida>
         </p>
       )}
       {mensagens.map((m, i) =>

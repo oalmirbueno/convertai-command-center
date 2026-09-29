@@ -119,6 +119,7 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
         <CabecalhoDePagina
           titulo={project.name}
           descricao={`${typeLabels[project.project_type] || "Projeto"} · ${statusLabels[project.status] || project.status}${previsao ? ` · ${previsao}` : ""}`}
+          ajuda={project.description ? summarizeProjectText(project.description) : undefined}
           acoes={
             <>
               <span className="hidden items-center sm:flex" title="Progresso">
@@ -128,11 +129,6 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             </>
           }
         />
-        {project.description && (
-          <p className={juntar(texto.corpo, "mt-1 max-w-3xl text-muted-foreground")}>
-            {summarizeProjectText(project.description)}
-          </p>
-        )}
       </FadeUp>
 
       <FadeUp>

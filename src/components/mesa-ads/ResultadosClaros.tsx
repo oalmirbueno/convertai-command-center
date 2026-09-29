@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, LayoutList, Link2, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { juntar, superficie, texto } from "@/components/sistema/estilos";
 import { brl, inteiro, porcento } from "./adsApi";
 import { Foto, SeloDoSinal } from "./Comuns";
 import {
@@ -30,6 +31,12 @@ import {
  *
  * 26/09 (sistema de design): objetivo e abas viram seletores compactos (até 4
  * opções, segmentado; mais, lista); a aba escolhida fica lembrada.
+ *
+ * 28/09 (padronização, lote L4): o seletor "Ver anúncios" sobe para a linha do
+ * título de quem usa (SeletorDaAbaDeResultados + useAbaDosResultados, com o
+ * PainelDeResultados controlado), em vez de ocupar uma linha própria. KPI e
+ * cartões são itens de grade com o cartão do sistema; a miniatura não tem
+ * moldura extra (nada de cartão dentro de cartão).
  */
 
 export const ITENS_POR_PAGINA = 12;
@@ -48,10 +55,10 @@ function Variacao({ valor, bomQuandoSobe }: { valor: number | null | undefined; 
 
 function NumeroGrande({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5" title={dica}>
+    <div className={juntar(superficie.painel, "min-w-0 px-3 py-2.5")} title={dica}>
       <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 flex min-w-0 items-baseline">
-        <span className="truncate text-[18px] font-semibold tabular-nums">{valor}</span>
+        <span className="truncate text-[20px] font-semibold tabular-nums">{valor}</span>
         <Variacao valor={variacao} bomQuandoSobe={bomQuandoSobe} />
       </dd>
     </div>
@@ -72,13 +79,13 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
         <NumeroGrande rotulo="Ativos agora" valor={`${inteiro(r.ativos)} de ${inteiro(r.anuncios)}`} dica="Anúncios rodando agora, do total com entrega no período." />
       </dl>
       {!grupo && r.misturado && (
-        <p className="truncate text-[11.5px] text-muted-foreground" title="O resultado e o custo acima são do objetivo com mais investimento. Escolha um objetivo para ver o número certo de cada um.">
+        <p className="truncate text-[12px] text-muted-foreground" title="O resultado e o custo acima são do objetivo com mais investimento. Escolha um objetivo para ver o número certo de cada um.">
           Objetivos misturados: números do objetivo com mais investimento.
         </p>
       )}
       {!grupo && mix && mix.por_grupo.length > 0 && (
-        <div className="min-w-0 rounded-lg border border-border bg-card px-3 py-2.5" aria-label="Onde está o investimento">
-          <p className="text-[11px] font-medium text-muted-foreground">Onde está o investimento</p>
+        <div className="min-w-0 pt-1" aria-label="Onde está o investimento">
+          <p className={texto.rotulo}>Onde está o investimento</p>
           <div className="mt-1.5 flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
             {mix.por_grupo.map((g, i) => (
               <span key={g.grupo} className={i % 2 === 0 ? "bg-primary" : "bg-primary/50"} style={{ width: `${Math.max(1, g.pct)}%` }} />
@@ -86,7 +93,7 @@ export function ResumoDoTopo({ dados, grupo, onGrupo }: { dados: ResultadosDaCon
           </div>
           <div className="mt-1.5 flex min-w-0 flex-wrap">
             {mix.por_grupo.map((g) => (
-              <button key={g.grupo} type="button" onClick={() => onGrupo(g.grupo)} className="mb-1 mr-3 text-left text-[11.5px] hover:underline" title={`Ver só ${g.rotulo.toLowerCase()}`}>
+              <button key={g.grupo} type="button" onClick={() => onGrupo(g.grupo)} className="mb-1 mr-3 text-left text-[12px] hover:underline" title={`Ver só ${g.rotulo.toLowerCase()}`}>
                 <span className="font-medium">{g.rotulo}</span> <span className="tabular-nums text-muted-foreground">{inteiro(g.pct)}% · {brl(g.gasto)}{g.resultados ? ` · ${inteiro(g.resultados)} ${g.resultado_rotulo.toLowerCase()}` : ""}</span>
               </button>
             ))}
@@ -130,8 +137,8 @@ const statusCurto = (s: string) => {
 export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: ReactNode }) {
   const m = a.metricas;
   return (
-    <article className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card p-2.5" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
-      <div className="relative w-14 overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "125%" }}>
+    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[56px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+      <div className="relative w-14 overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
         </div>
@@ -139,7 +146,7 @@ export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: Reac
       <div className="min-w-0">
         <div className="flex min-w-0 items-start">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12.5px] font-semibold" title={a.nome}>{a.nome}</p>
+            <p className="truncate text-[13px] font-semibold" title={a.nome}>{a.nome}</p>
             <p className="truncate text-[11px] text-muted-foreground">{[a.campanha, statusCurto(a.status), a.grupo ? grupoDe(a.grupo)!.rotulo : ""].filter(Boolean).join(" · ")}</p>
           </div>
           <SeloDoSinal sinal={a.sinal} className="ml-2" />
@@ -152,7 +159,7 @@ export function CartaoCompacto({ a, acao }: { a: AnuncioDoResultado; acao?: Reac
         </dl>
         <div className="mt-1 flex min-w-0 flex-wrap items-center">
           {a.criativo && (
-            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
+            <span className="mb-0.5 mr-2 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary" title={a.criativo.origem === "mesma_peca" ? "Mesma arte de um anúncio ligado" : "Ligado ao criativo da Mesa Ads"}>
               <Link2 className="mr-1 h-3 w-3 shrink-0" />
               <span className="truncate">{a.criativo.nome}</span>
             </span>
@@ -174,14 +181,14 @@ function textoDoIndice(indice: number | null): string {
 /** Uma peça (a mesma arte em vários anúncios), somada. */
 export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
   return (
-    <article className="grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card p-2.5" aria-label={`Criativo ${p.nome}`}>
-      <div className="relative w-[72px] overflow-hidden rounded-lg border border-border bg-secondary/40" style={{ paddingTop: "125%" }}>
+    <article className={juntar(superficie.painel, "grid min-w-0 grid-cols-[72px_minmax(0,1fr)] gap-3 p-2.5")} aria-label={`Criativo ${p.nome}`}>
+      <div className="relative w-[72px] overflow-hidden rounded-md bg-secondary/40" style={{ paddingTop: "125%" }}>
         <div className="absolute inset-0">
           <Foto src={p.imagem_url} alt={p.nome} className="h-full w-full" />
         </div>
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[12.5px] font-semibold" title={p.nome}>{p.nome}</p>
+        <p className="truncate text-[13px] font-semibold" title={p.nome}>{p.nome}</p>
         <p className="truncate text-[11px] text-muted-foreground">
           {p.anuncios.length} anúncio{p.anuncios.length === 1 ? "" : "s"}
           {p.ativos ? ` (${p.ativos} ativo${p.ativos === 1 ? "" : "s"})` : ""} · {p.grupo ? grupoDe(p.grupo)!.rotulo : "Sem objetivo"}
@@ -193,7 +200,7 @@ export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
         </dl>
         <p className={`mt-1 text-[11px] ${p.indice !== null && p.indice < 1 ? "text-success" : p.indice !== null && p.indice > 1.2 ? "text-destructive" : "text-muted-foreground"}`}>{textoDoIndice(p.indice)}</p>
         {p.criativo && (
-          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary">
+          <span className="mt-1 inline-flex min-w-0 max-w-full items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
             <Link2 className="mr-1 h-3 w-3 shrink-0" />
             <span className="truncate">Criativo da Mesa Ads</span>
           </span>
@@ -203,9 +210,34 @@ export function CartaoDaPeca({ p }: { p: PecaAgrupada }) {
   );
 }
 
+/** A aba escolhida ("Ver anúncios"), lembrada pela chave (ponha o cliente nela). */
+export function useAbaDosResultados(memoria?: string, abaInicial: AbaDeResultado = "ativos"): [AbaDeResultado, (v: AbaDeResultado) => void] {
+  const [aba, setAba] = useEstadoDaTela<AbaDeResultado>(memoria || "mesa-ads:resultados:aba", abaInicial, {
+    validar: (v) => typeof v === "string" && ABAS_DE_RESULTADO.some((x) => x.valor === v),
+  });
+  return [aba, setAba];
+}
+
+/** O seletor "Ver anúncios" (para a linha do título de quem mostra o painel). */
+export function SeletorDaAbaDeResultados({ dados, grupo, aba, onMudar, className = "" }: { dados: ResultadosDaConta; grupo: GrupoDeObjetivo | ""; aba: AbaDeResultado; onMudar: (v: AbaDeResultado) => void; className?: string }) {
+  const base = filtrarPorGrupo(dados.anuncios, grupo);
+  const contagem = (v: AbaDeResultado) => (v === "melhores_criativos" ? criativosAgrupados(base).length : anunciosDaAba(base, v).length);
+  return (
+    <SeletorCompacto
+      rotulo="Ver anúncios"
+      icone={<LayoutList className="h-3.5 w-3.5" />}
+      className={className}
+      opcoes={ABAS_DE_RESULTADO.map((o) => ({ valor: o.valor, rotulo: `${o.rotulo} (${contagem(o.valor)})`, descricao: o.dica }))}
+      valor={aba}
+      onEscolher={(v) => onMudar(v as AbaDeResultado)}
+    />
+  );
+}
+
 /**
  * As abas de resultado com a lista paginada. `renderAnuncio` troca o cartão
- * (a aba Conta usa o cartão completo, com variações e ficha).
+ * (a aba Conta usa o cartão completo, com variações e ficha). Com `aba` e
+ * `onAba` (controlado), o seletor fica com quem chama (na linha do título).
  */
 export function PainelDeResultados({
   dados,
@@ -213,6 +245,8 @@ export function PainelDeResultados({
   abaInicial = "ativos",
   renderAnuncio,
   memoria,
+  aba: abaDeFora,
+  onAba,
   className = "",
 }: {
   dados: ResultadosDaConta;
@@ -221,31 +255,35 @@ export function PainelDeResultados({
   renderAnuncio?: (a: AnuncioDoResultado) => ReactNode;
   /** Chave (com o cliente) para lembrar a aba escolhida ao sair e voltar. */
   memoria?: string;
+  /** Aba controlada por quem chama (o seletor mora no título). */
+  aba?: AbaDeResultado;
+  onAba?: (v: AbaDeResultado) => void;
   className?: string;
 }) {
-  const [aba, setAba] = useEstadoDaTela<AbaDeResultado>(memoria || "mesa-ads:resultados:aba", abaInicial, {
-    validar: (v) => typeof v === "string" && ABAS_DE_RESULTADO.some((x) => x.valor === v),
-  });
+  const [abaPropria, setAbaPropria] = useAbaDosResultados(memoria, abaInicial);
+  const controlada = abaDeFora !== undefined;
+  const aba = controlada ? abaDeFora : abaPropria;
   const [mostrando, setMostrando] = useState(ITENS_POR_PAGINA);
+  // Trocou de aba (aqui ou no título): a lista volta para a primeira página.
+  const abaAnterior = useRef(aba);
+  useEffect(() => {
+    if (abaAnterior.current !== aba) {
+      abaAnterior.current = aba;
+      setMostrando(ITENS_POR_PAGINA);
+    }
+  }, [aba]);
   const base = filtrarPorGrupo(dados.anuncios, grupo);
   const pecas = aba === "melhores_criativos" ? criativosAgrupados(base) : [];
   const anuncios = aba === "melhores_criativos" ? [] : anunciosDaAba(base, aba);
   const total = aba === "melhores_criativos" ? pecas.length : anuncios.length;
-  const contagem = (v: AbaDeResultado) => (v === "melhores_criativos" ? criativosAgrupados(base).length : anunciosDaAba(base, v).length);
   const mudar = (v: AbaDeResultado) => {
-    setAba(v);
-    setMostrando(ITENS_POR_PAGINA);
+    if (controlada) {
+      if (onAba) onAba(v);
+    } else setAbaPropria(v);
   };
   return (
     <section className={`min-w-0 ${className}`} aria-label="Anúncios por aba">
-      <SeletorCompacto
-        rotulo="Ver anúncios"
-        icone={<LayoutList className="h-3.5 w-3.5" />}
-        className="mb-3"
-        opcoes={ABAS_DE_RESULTADO.map((o) => ({ valor: o.valor, rotulo: `${o.rotulo} (${contagem(o.valor)})`, descricao: o.dica }))}
-        valor={aba}
-        onEscolher={(v) => mudar(v as AbaDeResultado)}
-      />
+      {!controlada && <SeletorDaAbaDeResultados dados={dados} grupo={grupo} aba={aba} onMudar={mudar} className="mb-3" />}
       {total === 0 ? (
         <EstadoVazio compacto titulo="Nada aqui." descricao={base.length ? "Troque de lista ou de objetivo." : "Nenhum anúncio com entrega no período. Troque o período ou sincronize."} />
       ) : (

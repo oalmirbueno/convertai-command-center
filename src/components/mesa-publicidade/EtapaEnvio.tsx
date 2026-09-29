@@ -9,7 +9,8 @@ import { guardarFotosParaUsar } from "@/components/mesa-foto/UsoDaFoto";
 import { invalidarFotos } from "@/components/mesa-foto/fotoApi";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { AvisoDoRascunho, CabecalhoDaEtapa, MolduraDaFoto, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { DESTINOS, encaminhar, enderecoDoDestino, FUNCOES_DAS_TOMADAS, paraEncaminhar, type DestinoDoAtivo } from "./publicidadeApi";
 
@@ -95,18 +96,23 @@ export default function EtapaEnvio() {
               );
             })}
           </div>
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          {/* Lista aberta (28/09): sem cartão em volta; a dica de cada destino fica no "?"; um primário só (o primeiro destino com foto a mandar). */}
+          <ul className="divide-y divide-border border-y border-border">
             {DESTINOS.map((d) => {
               const faltam = paraEncaminhar(campanha.revisoes, d.id, campanha.encaminhamentos).vao.length;
+              const primeiroQueFalta = DESTINOS.find((x) => paraEncaminhar(campanha.revisoes, x.id, campanha.encaminhamentos).vao.length > 0);
+              const principal = !!faltam && !!primeiroQueFalta && primeiroQueFalta.id === d.id;
               return (
-                <li key={d.id} className="flex min-w-0 items-center px-4 py-3" data-destino={d.id}>
-                  <div className="mr-3 min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold">{d.rotulo}</p>
-                    <p className={juntar(texto.auxiliar, "truncate")} title={d.dica}>
-                      {d.dica}
-                    </p>
+                <li key={d.id} className="flex min-w-0 items-center py-3" data-destino={d.id}>
+                  <div className="mr-3 flex min-w-0 flex-1 items-center">
+                    <p className="min-w-0 truncate text-[13px] font-semibold">{d.rotulo}</p>
+                    {d.dica && (
+                      <AjudaRecolhida className="ml-1.5" rotulo={`Sobre ${d.rotulo}`}>
+                        {d.dica}
+                      </AjudaRecolhida>
+                    )}
                   </div>
-                  <button type="button" className={juntar(faltam ? botao.primario : botao.secundario, "max-w-[55%]")} disabled={!!enviando} onClick={() => void enviar(d.id)}>
+                  <button type="button" className={juntar(principal ? botao.primario : botao.secundario, "max-w-[55%]")} disabled={!!enviando} onClick={() => void enviar(d.id)}>
                     {enviando === d.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin" /> : faltam ? <Send className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
                     <span className="min-w-0 truncate">{faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"}` : "Abrir com as fotos enviadas"}</span>
                   </button>
@@ -122,7 +128,7 @@ export default function EtapaEnvio() {
             nivel={3}
             titulo="Linhagem"
             ajuda="Cada foto enviada guarda de onde veio. Anúncio e verba seguem sem aprovação até a Mesa Ads aprovar."
-            estado={!campanha.persistida ? "Rascunho: vale só nesta aba até o banco ser publicado." : `${campanha.encaminhamentos.length} ${campanha.encaminhamentos.length === 1 ? "envio" : "envios"}`}
+            estado={!campanha.persistida ? "Rascunho nesta aba" : `${campanha.encaminhamentos.length} ${campanha.encaminhamentos.length === 1 ? "envio" : "envios"}`}
             recolher={{
               recolhido: linhagemRecolhida,
               onAlternar: () => setLinhagemRecolhida(!linhagemRecolhida),

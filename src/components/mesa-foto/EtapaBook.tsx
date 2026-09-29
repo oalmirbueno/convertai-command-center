@@ -907,7 +907,7 @@ function BookAbertoNaTela({ id, seletor }: { id: string; seletor: ReactNode }) {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center">
-                  <h2 className={juntar(texto.tituloPagina, "min-w-0 truncate text-[18px]")}>{aberto.book.nome}</h2>
+                  <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{aberto.book.nome}</h2>
                   <AjudaRecolhida className="ml-1.5">Estúdio fotográfico de UM assunto: o arsenal de prompts fica à esquerda, o diretor monta os pedidos, você gera com o custo antes, marca as boas e fecha o book em ordem (baixar em alta, aprovação e Arquivos).</AjudaRecolhida>
                 </div>
                 <p className={juntar(texto.auxiliar, "truncate")}>

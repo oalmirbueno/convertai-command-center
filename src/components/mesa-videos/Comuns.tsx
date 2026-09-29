@@ -60,7 +60,7 @@ export function SeloDoTipo({ tipo }: { tipo: string }) {
   const gerado = tipo === "gerado";
   return (
     <span
-      className={`mr-1 inline-flex items-center rounded-full border bg-card px-1.5 py-px text-[10px] font-medium ${gerado ? "border-primary/30 text-primary" : "border-border text-muted-foreground"}`}
+      className={`mr-1 inline-flex items-center rounded-full border bg-card px-1.5 py-px text-[11px] font-medium leading-4 ${gerado ? "border-primary/30 text-primary" : "border-border text-muted-foreground"}`}
       title={gerado ? "Gerado por IA" : undefined}
     >
       {ROTULO_DO_TIPO[tipo] || tipo}

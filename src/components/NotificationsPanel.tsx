@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
 import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
 import TesteDeAvisos from "@/components/avisos/TesteDeAvisos";
+import { AjudaRecolhida, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 
 function getNotifIcon(type: string) {
   switch (categoriaDoAviso(type)) {
@@ -156,31 +157,25 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <SheetTitle className="label-sm text-foreground truncate">Notificações</SheetTitle>
+            <SheetTitle className={juntar(texto.tituloSecao, "truncate")}>Notificações</SheetTitle>
           </div>
         </SheetHeader>
 
-        {/* Tabs + Mark all */}
-        <div className="px-5 pb-3 space-y-3 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setTab("all")}
-              className={`text-[12px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
-                tab === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              onClick={() => setTab("unread")}
-              className={`text-[12px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
-                tab === "unread" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Não lidas{unreadCount > 0 ? ` (${unreadCount})` : ""}
-            </button>
+        {/* Filtro (segmentado do sistema, sem pílulas verdes) e "marcar todas" na mesma linha */}
+        <div className="px-5 pb-3 pt-3 space-y-3 shrink-0">
+          <div className="flex min-w-0 items-center">
+            <SeletorCompacto
+              rotulo="Filtrar notificações"
+              modo="segmentado"
+              valor={tab}
+              onEscolher={(v) => setTab(v as typeof tab)}
+              opcoes={[
+                { valor: "all", rotulo: "Todas" },
+                { valor: "unread", rotulo: "Não lidas", contador: unreadCount > 0 ? unreadCount : null },
+              ]}
+            />
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none ml-auto">
+              <button type="button" onClick={markAllRead} className={juntar(botao.discreto, "ml-auto h-8 px-2 text-[12px] text-primary hover:text-primary")}>
                 Marcar todas como lidas
               </button>
             )}
@@ -188,22 +183,31 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
           {/* Aviso fora do painel: o sino nao alcanca quem esta em outra aba.
               O e-mail ja sai sozinho para a equipe; aqui e o aviso na tela. */}
           {eEquipe && avisosDoNavegador === "pedir" && (
-            <button
-              type="button"
-              onClick={async () => {
-                const estado = await pedirPermissaoDeAvisos();
-                setAvisosDoNavegador(estado);
-                if (estado === "ligado") toast.success("Avisos do navegador ligados. Você recebe o aviso mesmo em outra aba.");
-                else if (estado === "bloqueado") toast.error("O navegador bloqueou os avisos. Libere nas configurações do site.");
-              }}
-              className="w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-left text-[11.5px] text-foreground"
-            >
-              <span className="font-medium text-primary">Ativar avisos no navegador</span>
-              <span className="block text-[10.5px] text-muted-foreground">Aprovações e pedidos de clientes aparecem na tela mesmo com o painel em outra aba. Por e-mail eles já chegam.</span>
-            </button>
+            <div className="flex min-w-0 items-center">
+              <button
+                type="button"
+                onClick={async () => {
+                  const estado = await pedirPermissaoDeAvisos();
+                  setAvisosDoNavegador(estado);
+                  if (estado === "ligado") toast.success("Avisos do navegador ligados. Você recebe o aviso mesmo em outra aba.");
+                  else if (estado === "bloqueado") toast.error("O navegador bloqueou os avisos. Libere nas configurações do site.");
+                }}
+                className={juntar(botao.secundario, "h-8 min-w-0 px-3 text-[12px] text-primary")}
+              >
+                <span className="truncate">Ativar avisos no navegador</span>
+              </button>
+              <AjudaRecolhida className="ml-1.5" rotulo="Sobre os avisos do navegador">
+                Aprovações e pedidos de clientes aparecem na tela mesmo com o painel em outra aba. Por e-mail eles já chegam.
+              </AjudaRecolhida>
+            </div>
           )}
           {eEquipe && avisosDoNavegador === "bloqueado" && (
-            <p className="text-[10.5px] text-muted-foreground">Avisos do navegador bloqueados neste site. Os avisos importantes continuam chegando por e-mail.</p>
+            <div className="flex min-w-0 items-center">
+              <p className="min-w-0 truncate text-[11px] text-muted-foreground">Avisos do navegador bloqueados neste site.</p>
+              <AjudaRecolhida className="ml-1.5" rotulo="Sobre os avisos bloqueados">
+                Os avisos importantes continuam chegando por e-mail. Para ligar de novo, libere as notificações nas configurações do site.
+              </AjudaRecolhida>
+            </div>
           )}
           {eAdmin && <TesteDeAvisos idsNoSino={listaCarregada.map((n: any) => n.id)} />}
         </div>
@@ -211,12 +215,12 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
         {/* Notifications list */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma notificação.</p>
+            <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
           ) : (
             groups.map((group) => (
               <div key={group.label}>
                 <div className="px-5 py-2">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{group.label}</p>
+                  <p className={juntar(texto.etiqueta, "text-muted-foreground")}>{group.label}</p>
                 </div>
                 {group.items.map((n: any) => {
                   const { icon, bg } = getNotifIcon(n.notification_type);

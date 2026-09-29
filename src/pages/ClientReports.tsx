@@ -5,9 +5,9 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import {
   FileText, BarChart3, TrendingUp, Calendar,
   Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
-  ChevronRight, ChevronDown,
+  ChevronRight,
 } from "lucide-react";
-import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { CabecalhoDePagina, CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVazio, botao, etiqueta, foco, juntar, lista, texto, useEstadoDaTela } from "@/components/sistema";
 import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
@@ -118,25 +118,27 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
   return (
     <div className="space-y-6">
       {modelKeys.map((model, gi) => (
-        <Secao
+        // Um controle só de recolher (antes a Secao já trazia a setinha dela e
+        // ainda havia um botão à direita). A memória continua a mesma:
+        // "relatorios:grupos-fechados".
+        <section
           key={model}
-          divisoria={gi > 0}
-          titulo={model}
-          descricao={`${groups[model].length} ${groups[model].length === 1 ? "relatório" : "relatórios"}`}
-          acao={
-            <button
-              type="button"
-              onClick={() => toggle(model)}
-              className={botao.icone}
-              aria-expanded={!!open[model]}
-              aria-label={open[model] ? `Recolher ${model}` : `Mostrar ${model}`}
-            >
-              <ChevronDown className={juntar("h-4 w-4 transition-transform", !open[model] && "-rotate-90")} />
-            </button>
-          }
+          className={juntar("min-w-0", gi > 0 && "border-t border-border pt-5")}
+          data-recolhido={open[model] ? "nao" : "sim"}
         >
+          <CabecalhoDeSecao
+            className={open[model] ? "mb-3" : ""}
+            titulo={model}
+            descricao={`${groups[model].length} ${groups[model].length === 1 ? "relatório" : "relatórios"}`}
+            recolher={{
+              recolhido: !open[model],
+              onAlternar: () => toggle(model),
+              resumo: `${groups[model].length} ${groups[model].length === 1 ? "relatório" : "relatórios"}`,
+              modo: "icone",
+            }}
+          />
           {open[model] && (
-            <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+            <ul className={juntar(lista.aberta, lista.divisoria)}>
               {groups[model].map((r: any) => {
                 const m = (r.metrics || {}) as Record<string, any>;
                 const visibleMetrics = Object.entries(m)
@@ -158,14 +160,14 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                   <li key={r.id} className="min-w-0">
                     <button
                       type="button"
-                      className={juntar("group flex w-full min-w-0 items-start px-4 py-3.5 text-left transition-colors hover:bg-muted/40 sm:px-5", foco)}
+                      className={juntar("group flex w-full min-w-0 items-start rounded-lg px-2 py-3.5 text-left transition-colors hover:bg-muted/40", foco)}
                       onClick={() => navigate(`/relatorios/${r.id}`)}
                       aria-label={`Abrir o relatório ${r.title}`}
                     >
                       <TrendingUp className="mr-3 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                       <span className="block min-w-0 flex-1">
                         <span className="flex min-w-0 items-center">
-                          <span className="mr-2 min-w-0 truncate text-[14px] font-medium leading-5 text-foreground">{r.title}</span>
+                          <span className="mr-2 min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{r.title}</span>
                           <span className={juntar(etiqueta, "border", kind.cls)}>{kind.label}</span>
                         </span>
                         <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
@@ -216,7 +218,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
               })}
             </ul>
           )}
-        </Secao>
+        </section>
       ))}
     </div>
   );

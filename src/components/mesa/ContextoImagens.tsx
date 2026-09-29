@@ -24,6 +24,7 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ExploradorDePastas, Quadrado } from "./NavegadorDePastas";
 import { Campo } from "./Seletores";
 import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { invalidarAcervo, useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
 import { pastaDaFoto, pastasDoAcervo, useArvoreDoWorkspace } from "@/lib/mesa/pastas";
 
@@ -142,12 +143,13 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
 function CartaoDoAcervo({ imagem, onAbrir, onAmpliar }: { imagem: ImagemDoAcervo; onAbrir: () => void; onAmpliar: () => void }) {
   const tags = imagem.tags || [];
   return (
-    <div className={`relative min-w-0 rounded-xl border border-border bg-card p-1.5 transition-colors hover:border-primary/60 ${imagem.ativa ? "" : "opacity-60"}`}>
+    // Item de grade de mídia: cartão com função (superficie.painel), nada dentro dele que seja outro cartão.
+    <div className={juntar(superficie.painel, "relative min-w-0 p-1.5 transition-colors hover:border-primary/60", !imagem.ativa && "opacity-60")}>
       <button type="button" onClick={onAbrir} title={imagem.descricao || imagem.nome} className="block w-full min-w-0 text-left">
         <Quadrado>
           <MiniaturaDoStorage bucket={imagem.storage_bucket || "mesa"} caminho={imagem.storage_path} alt={imagem.nome} className="h-full w-full" />
           {!imagem.ativa && (
-            <span className="absolute left-1.5 top-1.5 flex items-center rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <span className="absolute left-1.5 top-1.5 flex items-center rounded-full bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground">
               <EyeOff className="mr-1 h-3 w-3" /> desativada
             </span>
           )}
@@ -159,7 +161,7 @@ function CartaoDoAcervo({ imagem, onAbrir, onAmpliar }: { imagem: ImagemDoAcervo
         {tags.length > 0 && (
           <span className="mt-1 flex flex-wrap px-0.5">
             {tags.slice(0, 3).map((t) => (
-              <span key={t} className="mb-0.5 mr-1 max-w-full truncate rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{t}</span>
+              <span key={t} className="mb-0.5 mr-1 max-w-full truncate rounded-full bg-muted px-1.5 py-px text-[11px] text-muted-foreground">{t}</span>
             ))}
           </span>
         )}
@@ -254,7 +256,7 @@ export default function ContextoImagens() {
           titulo="Fotos reais do cliente"
           descricao={
             todas.length
-              ? `${ativas.length} ${ativas.length === 1 ? "ativa" : "ativas"} de ${todas.length}. ${semDescricao.length ? `${semDescricao.length} sem descrição.` : "Todas organizadas."}`
+              ? `${ativas.length} ${ativas.length === 1 ? "ativa" : "ativas"} de ${todas.length} · ${semDescricao.length ? `${semDescricao.length} sem descrição` : "todas organizadas"}`
               : "Acervo ainda vazio"
           }
           ajuda="Traga as imagens de todas as pastas do Workspace e de Arquivos (fora os materiais entregues). Organizar com IA preenche descrição, categoria e tags das que ainda não têm."
@@ -328,16 +330,15 @@ export default function ContextoImagens() {
       )}
       {acervo.isError && <AvisoDeErro erro={acervo.error} />}
       {acervo.data && todas.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-[12.5px] text-muted-foreground">
-          O acervo está vazio. Clique em "Buscar imagens do workspace e de Arquivos" para trazer as fotos do cliente.
-        </p>
+        <p className="rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-muted-foreground">Acervo vazio. Use "Buscar imagens" para trazer as fotos.</p>
       )}
       {todas.length > 0 && grupos.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma imagem com essa busca.</p>
+        <p className="rounded-lg border border-dashed border-border p-4 text-center text-[13px] text-muted-foreground">Nenhuma imagem com essa busca.</p>
       )}
 
       {agrupar === "pasta" && !termo && todas.length > 0 && (
-        <section className="min-w-0 rounded-xl border border-border bg-card p-3">
+        // Sem caixa em volta (28/09): as fotos já são cartões; a seção fica aberta.
+        <section className="min-w-0">
           <ExploradorDePastas<ImagemDoAcervo>
             pastas={espelho.pastas}
             itens={noExplorador}

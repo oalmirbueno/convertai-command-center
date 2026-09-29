@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,10 +61,44 @@ function normalizeUrl(url: string | null) {
   return url.startsWith("http") ? url : `https://${url}`;
 }
 
+/**
+ * Um grupo do cofre (Senhas, Links úteis, Sistemas): título pequeno com o ícone
+ * e a contagem, que recolhe e volta com a setinha (SISTEMA.md 4.3). A escolha
+ * fica guardada por pessoa, tela e cliente.
+ */
+function GrupoDoCofre({ clientId, categoria, total, children }: { clientId: string; categoria: Category; total: number; children: ReactNode }) {
+  const Meta = CATEGORY_META[categoria];
+  const [recolhido, setRecolhido] = useRecolhido(`cofre:grupo:${categoria}:${clientId}`, false);
+  const contagem = `${total} ${total === 1 ? "item" : "itens"}`;
+  return (
+    <section className="min-w-0" aria-label={Meta.plural}>
+      <CabecalhoDeSecao
+        nivel={3}
+        className="mb-1"
+        icone={<Meta.icon className={`h-3.5 w-3.5 ${Meta.color}`} />}
+        titulo={
+          <>
+            {Meta.plural}
+            <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">{total}</span>
+          </>
+        }
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: contagem, modo: "icone" }}
+      />
+      {!recolhido && children}
+    </section>
+  );
+}
+
 interface Props {
   clientId: string;
   /** When true, shows admin/team add/edit/delete controls. */
   canManage: boolean;
+  /**
+   * Título do bloco (a página do Cofre passa o nome do cliente). Com ele, o
+   * "Novo item" sobe para a linha do título e a contagem sai (o cabeçalho da
+   * página já mostra). Sem ele (gaveta do cliente), fica a linha de contagem.
+   */
+  titulo?: ReactNode;
 }
 
 /**
@@ -70,7 +106,7 @@ interface Props {
  * agrupada por categoria. Usado na página /cofre e dentro da gaveta do
  * cliente (EditClientDrawer): tem de caber numa coluna estreita.
  */
-export default function ClientVault({ clientId, canManage }: Props) {
+export default function ClientVault({ clientId, canManage, titulo }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Partial<VaultItem> | null>(null);
@@ -159,6 +195,12 @@ export default function ClientVault({ clientId, canManage }: Props) {
 
   return (
     <div className="min-w-0">
+      {titulo ? (
+        <div className="mb-3 flex min-w-0 items-center">
+          <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{titulo}</h2>
+          {total > 0 && novoItem ? <div className="ml-3 shrink-0">{novoItem}</div> : null}
+        </div>
+      ) : null}
       {isLoading && !items ? (
         <Carregando forma="lista" linhas={3} rotulo="Carregando o cofre" />
       ) : isError && !items ? (
@@ -174,24 +216,20 @@ export default function ClientVault({ clientId, canManage }: Props) {
         <EstadoVazio compacto titulo="Cofre vazio." descricao="Nenhum acesso guardado ainda." acao={novoItem} />
       ) : (
         <>
-          <div className="mb-3 flex min-w-0 items-center justify-between">
-            <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate tabular-nums")}>
-              {total} {total === 1 ? "item" : "itens"}
-            </p>
-            {novoItem}
-          </div>
+          {!titulo && (
+            <div className="mb-3 flex min-w-0 items-center justify-between">
+              <p className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate tabular-nums")}>
+                {total} {total === 1 ? "item" : "itens"}
+              </p>
+              {novoItem}
+            </div>
+          )}
           <div className="space-y-5">
             {(Object.keys(CATEGORY_META) as Category[]).map((cat) => {
               const list = grouped[cat];
               if (!list || list.length === 0) return null;
-              const Meta = CATEGORY_META[cat];
               return (
-                <section key={cat} className="min-w-0">
-                  <h3 className={juntar(texto.rotulo, "mb-1 flex items-center")}>
-                    <Meta.icon className={`mr-1.5 h-3.5 w-3.5 ${Meta.color}`} aria-hidden="true" />
-                    {Meta.plural}
-                    <span className="ml-1 tabular-nums">{list.length}</span>
-                  </h3>
+                <GrupoDoCofre key={cat} clientId={clientId} categoria={cat} total={list.length}>
                   <ul className="divide-y divide-border border-y border-border">
                     {list.map((it) => {
                       const fav = it.icon_url || faviconFor(it.url);
@@ -279,7 +317,7 @@ export default function ClientVault({ clientId, canManage }: Props) {
                       );
                     })}
                   </ul>
-                </section>
+                </GrupoDoCofre>
               );
             })}
           </div>

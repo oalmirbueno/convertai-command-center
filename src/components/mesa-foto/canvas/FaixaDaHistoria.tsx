@@ -73,8 +73,8 @@ export function HistoriaDoCanvas({
 
   const caixa =
     lugar === "quadro"
-      ? `${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[62%] min-w-0 flex-col rounded-2xl sm:left-[72px] sm:right-3`
-      : "min-w-0 rounded-2xl border border-white/10 bg-zinc-950 text-zinc-100";
+      ? `${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[62%] min-w-0 flex-col rounded-xl sm:left-[72px] sm:right-3`
+      : "min-w-0 rounded-xl border border-white/10 bg-zinc-950 text-zinc-100";
 
   return (
     <section ref={roda} aria-label="História do canvas" className={caixa} data-historia={lugar}>
@@ -144,7 +144,7 @@ export function HistoriaDoCanvas({
                   data-numero={h.numero}
                 >
                   <div className="mb-1.5 flex min-w-0 items-center">
-                    <span className="mr-1.5 flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10.5px] font-bold text-black">{h.numero}</span>
+                    <span className="mr-1.5 flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-emerald-400 px-1 text-[11px] font-bold text-black">{h.numero}</span>
                     <button type="button" className="min-w-0 flex-1 truncate text-left text-[12px] font-semibold hover:underline" onClick={() => acoes.onAbrir(h.no.id)} title="Abrir os ajustes da cena">
                       {h.cena.titulo.trim() || `Cena ${h.numero}`}
                     </button>
@@ -216,7 +216,7 @@ export function HistoriaDoCanvas({
           </ol>
         )}
       </div>
-      <div className="flex min-w-0 shrink-0 flex-wrap items-center border-t border-white/10 px-3 py-1.5 text-[10.5px] text-zinc-500">
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-500">
         <Film className="mr-1 h-3 w-3" /> Mesa Vídeos (em breve): {NOS_DE_VIDEO_EM_BREVE.map((v) => v.rotulo.toLowerCase()).join(", ")} por cena, a partir desta história.
       </div>
     </section>

@@ -40,11 +40,11 @@ function Opcao({ miniatura, titulo, subtitulo, aviso, desligada, onEscolher, atr
       className={`min-w-0 rounded-lg border p-1 text-left transition-colors ${desligada ? "cursor-not-allowed border-dashed border-white/10 opacity-60" : "border-white/10 bg-white/[0.03] hover:border-emerald-400/60"}`}
     >
       <Moldura proporcao={1} className="!rounded-md !bg-zinc-900">
-        {miniatura ? <MiniaturaGrande m={miniatura} alt={titulo} /> : <span className="flex h-full w-full items-center justify-center text-[10px] text-zinc-500">sem foto</span>}
+        {miniatura ? <MiniaturaGrande m={miniatura} alt={titulo} /> : <span className="flex h-full w-full items-center justify-center text-[11px] text-zinc-500">sem foto</span>}
       </Moldura>
       <p className="mt-1 truncate text-[11px] font-medium text-zinc-100">{titulo}</p>
-      {subtitulo && <p className="truncate text-[10px] text-zinc-400">{subtitulo}</p>}
-      {aviso && <p className="truncate text-[10px] text-amber-300">{aviso}</p>}
+      {subtitulo && <p className="truncate text-[11px] text-zinc-400">{subtitulo}</p>}
+      {aviso && <p className="truncate text-[11px] text-amber-300">{aviso}</p>}
     </button>
   );
 }
@@ -204,7 +204,7 @@ export function EscolherCartao({
                 </button>
               </div>
             )}
-            <p className="text-[10.5px] text-zinc-500">Produto de outro cliente: arraste da esteira no topo do quadro.</p>
+            <p className="text-[11px] text-zinc-500">Produto de outro cliente: arraste da esteira no topo do quadro.</p>
           </div>
         )}
 
@@ -319,10 +319,10 @@ export function EscolherCartao({
               </div>
             )}
             {fotosDoAcervo((id) => escolher({ imagem_id: id, biblioteca_id: null }), "Mandar referência")}
-            <p className="text-[10.5px] text-zinc-500">Só paleta, luz e enquadramento. Estilo nunca vira identidade.</p>
+            <p className="text-[11px] text-zinc-500">Só paleta, luz e enquadramento. Estilo nunca vira identidade.</p>
           </div>
         )}
-        <p className="flex items-center text-[10.5px] text-zinc-500">
+        <p className="flex items-center text-[11px] text-zinc-500">
           <ImagePlus className="mr-1 h-3 w-3 shrink-0" /> Foto mandada daqui entra no acervo do cliente como original.
         </p>
       </div>

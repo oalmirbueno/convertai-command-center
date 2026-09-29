@@ -183,7 +183,7 @@ export default function Lancador({
           aria-expanded={aberto}
           data-botao-do-lancador=""
           className={juntar(
-            "flex h-full flex-1 flex-col items-center justify-center text-[10px] font-medium transition-colors",
+            "flex h-full flex-1 flex-col items-center justify-center text-[11px] font-medium transition-colors",
             aberto ? "text-primary" : "text-muted-foreground",
             foco,
           )}
@@ -219,10 +219,10 @@ export default function Lancador({
                       <IconeDaOpcao className={juntar("mr-2.5 h-4 w-4 shrink-0", o.chave === "agente" ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{o.rotulo}</span>
-                        <span className="block truncate text-[11.5px] leading-4 text-muted-foreground">{o.detalhe}</span>
+                        <span className="block truncate text-[12px] leading-4 text-muted-foreground">{o.detalhe}</span>
                       </span>
                       {o.atalho && (
-                        <kbd className="ml-2 hidden shrink-0 rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted-foreground md:inline">{o.atalho}</kbd>
+                        <kbd className="ml-2 hidden shrink-0 rounded border border-border px-1 font-mono text-[11px] leading-4 text-muted-foreground md:inline">{o.atalho}</kbd>
                       )}
                     </button>
                   </li>
@@ -247,9 +247,9 @@ export default function Lancador({
                 <ol className="max-h-64 space-y-2 overflow-y-auto pr-1">
                   {passosDaTela.slice(0, 6).map((p, i) => (
                     <li key={`${i}-${p.title}`} className="flex min-w-0 items-start">
-                      <span className="mr-2 mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">{i + 1}</span>
+                      <span className="mr-2 mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">{i + 1}</span>
                       <span className="min-w-0">
-                        <span className="block text-[12.5px] font-medium leading-5 text-foreground">{p.title}</span>
+                        <span className="block text-[13px] font-medium leading-5 text-foreground">{p.title}</span>
                         <span className="line-clamp-3 block text-[12px] leading-4 text-muted-foreground">{p.description}</span>
                       </span>
                     </li>
@@ -281,9 +281,9 @@ export default function Lancador({
               </div>
               <ul className="space-y-1.5">
                 {ATALHOS_DO_PAINEL.filter((a) => podeUsarAgente || a.teclas !== ATALHO_DO_AGENTE).map((a) => (
-                  <li key={a.teclas} className="flex min-w-0 items-center justify-between text-[12.5px]">
+                  <li key={a.teclas} className="flex min-w-0 items-center justify-between text-[12px]">
                     <span className="mr-2 min-w-0 truncate text-foreground">{a.o_que}</span>
-                    <kbd className="shrink-0 rounded border border-border px-1.5 font-mono text-[10.5px] leading-5 text-muted-foreground">{a.teclas}</kbd>
+                    <kbd className="shrink-0 rounded border border-border px-1.5 font-mono text-[11px] leading-5 text-muted-foreground">{a.teclas}</kbd>
                   </li>
                 ))}
               </ul>

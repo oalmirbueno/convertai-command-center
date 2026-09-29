@@ -11,6 +11,7 @@ import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import {
   AjudaRecolhida,
   CabecalhoDePagina,
+  CampoDeBusca,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
@@ -303,16 +304,13 @@ export default function Team() {
       />
 
       <div className="flex min-w-0 flex-wrap items-center">
-        <div className="relative mb-2 mr-2 min-w-0 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou e-mail"
-            aria-label="Buscar membro"
-            className={juntar(campo, "pl-8")}
-          />
-        </div>
+        <CampoDeBusca
+          valor={busca}
+          onMudar={setBusca}
+          placeholder="Buscar por nome ou e-mail"
+          rotulo="Buscar membro"
+          className="mb-2 mr-2 flex-1 sm:max-w-xs"
+        />
         <div className="mb-2 shrink-0">
           <SeletorCompacto rotulo="Papel" icone={<Filter className="h-3.5 w-3.5" />} opcoes={opcoesDePapel} valor={papel} onEscolher={setPapel} />
         </div>

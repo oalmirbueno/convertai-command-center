@@ -109,12 +109,6 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
           ajuda={h.sinopse || "O mesmo Canvas da Mesa Foto: a foto de cada cena é o primeiro quadro do vídeo."}
           recolher={`mesa-videos:historia:${h.canvas_id}:${clientId}`}
           resumo={`${h.cenas.length} ${h.cenas.length === 1 ? "cena" : "cenas"}`}
-          acao={
-            <Link to={linkDoCanvas} className={botao.discreto} aria-label="Abrir no Canvas">
-              <ExternalLink className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Canvas</span>
-            </Link>
-          }
         >
           <ol className={GRADE} aria-label={`Cenas de ${h.nome}`}>
             {h.cenas.map((c) => {
@@ -314,19 +308,29 @@ export default function EtapaBase({ irPara }: { irPara: IrPara }) {
 
   return (
     <div className="min-w-0 space-y-6 pb-6">
-      <SeletorCompacto
-        rotulo="Parte da base"
-        larguraTotal
-        className="sm:w-auto"
-        valor={parte}
-        onEscolher={(v) => setParte(v as ParteDaBase)}
-        opcoes={[
-          { valor: "cenas", rotulo: "Cenas" },
-          { valor: "roteiros", rotulo: "Roteiros" },
-          { valor: "pessoas", rotulo: "Pessoas", contador: fotosQ.data && pessoas ? pessoas : null },
-          { valor: "produtos", rotulo: "Produtos", contador: fotosQ.data && (grupos.produto || []).length ? (grupos.produto || []).length : null },
-        ]}
-      />
+      {/* 28/09 (dono: "seletor pequeno não ganha linha própria"): a troca de parte é a barra da Base e leva a
+          ação da parte aberta (o Canvas, que antes se repetia em cada História). */}
+      <div className="flex min-w-0 items-center" data-barra-da-base="">
+        <SeletorCompacto
+          rotulo="Parte da base"
+          listaQuandoNaoCabe
+          className="mr-auto min-w-0"
+          valor={parte}
+          onEscolher={(v) => setParte(v as ParteDaBase)}
+          opcoes={[
+            { valor: "cenas", rotulo: "Cenas" },
+            { valor: "roteiros", rotulo: "Roteiros" },
+            { valor: "pessoas", rotulo: "Pessoas", contador: fotosQ.data && pessoas ? pessoas : null },
+            { valor: "produtos", rotulo: "Produtos", contador: fotosQ.data && (grupos.produto || []).length ? (grupos.produto || []).length : null },
+          ]}
+        />
+        {parte === "cenas" && (
+          <Link to={`/mesa-foto?client=${clientId}&etapa=canvas`} className={juntar(botao.discreto, "ml-2")} aria-label="Abrir no Canvas">
+            <ExternalLink className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Canvas</span>
+          </Link>
+        )}
+      </div>
       {parte === "cenas" && <Cenas irPara={irPara} fotosDeCena={grupos.cena || []} />}
       {parte === "roteiros" && <Roteiros irPara={irPara} />}
       {parte === "pessoas" &&

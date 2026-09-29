@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
-import { botao, campo, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { brl, decimal, inteiro, porcento, type AnuncioAoVivo } from "./adsApi";
 import { Diagnostico, Foto, SeloDoSinal } from "./Comuns";
@@ -591,7 +591,7 @@ function PainelDoAnuncio({
         <span className={juntar("mr-2 mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full", COR_DO_NIVEL.anuncio.ponto)} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className={juntar("text-[11px] font-medium", COR_DO_NIVEL.anuncio.texto)}>Anúncio</p>
-          <h3 className="line-clamp-2 text-[14px] font-semibold leading-5 [overflow-wrap:anywhere]">{n.nome}</h3>
+          <h3 className="truncate text-[15px] font-semibold leading-5" title={n.nome}>{n.nome}</h3>
           <div className="mt-1 flex min-w-0 flex-wrap items-center">
             <span className="mr-2">
               <SeloDaEntrega n={n} />
@@ -855,10 +855,10 @@ export function SituacaoDaConta({ leitura, carregando, erro }: { leitura: Leitur
   const algumaTravada = leitura.contas.some((c) => c.situacao.travada);
   const g = leitura.gestao;
   return (
-    <section className="min-w-0 divide-y divide-border rounded-lg border border-border bg-card" aria-label="Situação da conta">
+    <section className={juntar(superficie.painel, "min-w-0 divide-y divide-border")} aria-label="Situação da conta">
       {leitura.contas.map((c) => <LinhaDaConta key={c.id} c={c} gestao={g} />)}
       {((g && !g.disponivel && !algumaTravada) || semMeta.length > 0) && (
-        <p className="flex min-w-0 flex-wrap items-center px-3 py-1.5 text-[11.5px] leading-snug text-muted-foreground">
+        <p className="flex min-w-0 flex-wrap items-center px-3 py-1.5 text-[12px] leading-snug text-muted-foreground">
           {g && !g.disponivel && !algumaTravada && <span className="mr-3 min-w-0 [overflow-wrap:anywhere]">Só leitura agora: {g.motivo || "sem permissão de gestão."}</span>}
           {semMeta.length > 0 && <span className="min-w-0">{semMeta.map((p) => `${p.nome}: ${p.conectada ? "ligado, leitura ainda não feita" : "não conectado"}`).join(" · ")}</span>}
         </p>
@@ -978,7 +978,7 @@ export default function GerenciadorAoVivo({
               {r.gasto_hoje !== null ? ` · hoje ${brl(r.gasto_hoje)}` : ""}
             </p>
           )}
-          <p className="text-[11.5px] leading-snug text-muted-foreground">
+          <p className="text-[12px] leading-snug text-muted-foreground">
             {l && l.lido_em
               ? `${l.fonte === "coleta" ? "Da última coleta do painel" : "Lido na Meta"} às ${horaDeBrasilia(l.lido_em)}${rotuloDoPeriodo ? ` · ${rotuloDoPeriodo}` : l.periodo ? ` · números de ${l.periodo.inicio.split("-").reverse().slice(0, 2).join("/")} a ${l.periodo.fim.split("-").reverse().slice(0, 2).join("/")}` : ""}${l.sincronizado_em ? ` (coleta das ${horaDeBrasilia(l.sincronizado_em)})` : ""}`
               : q.isLoading
@@ -1022,16 +1022,16 @@ export default function GerenciadorAoVivo({
         </ul>
       )}
 
-      {q.isError && !l && <p className="text-[12.5px] text-muted-foreground">O gerenciador não abriu agora. Tente Atualizar agora.</p>}
+      {q.isError && !l && <p className="text-[13px] text-muted-foreground">O gerenciador não abriu agora. Tente Atualizar agora.</p>}
       {q.isLoading && <div className="h-24 w-full animate-pulse rounded-lg bg-muted/70" aria-busy="true" aria-label="Lendo o gerenciador" />}
       {l && !campanhas.length && (
-        <p className="rounded-md bg-muted/40 px-3 py-3 text-[12.5px] text-muted-foreground">
+        <p className={juntar(superficie.poco, "px-3 py-3 text-[13px] text-muted-foreground")}>
           {l.contas.length ? "Nenhuma campanha nesta conta de anúncios." : l.plataformas.length && l.plataformas[0].motivo ? l.plataformas[0].motivo : "Nenhuma conta de anúncios ligada."}
         </p>
       )}
 
       {l && campanhas.length > 0 && (
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+        <div className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
           {/* Abas por nível, cada uma com a cor do nível; o escolhido ao descer aparece ao lado, com o x para sair. */}
           <div className="flex min-w-0 flex-wrap items-center border-b border-border px-2 pt-1.5">
             <div className="-mb-px flex min-w-0 items-center" role="tablist" aria-label="Nível do gerenciador">

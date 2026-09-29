@@ -4,6 +4,7 @@ import { ChevronDown, ExternalLink, Flame, Megaphone, RefreshCw } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { superficie } from "@/components/sistema/estilos";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
@@ -77,9 +78,11 @@ function CartaoDoHype({
   };
 
   return (
-    <article className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3.5">
+    // Item de grade (cartão com função): o cartão sólido do sistema.
+    <article className={`flex min-w-0 flex-col p-3.5 ${superficie.painel}`}>
       <div className="flex min-w-0 items-start">
-        <h3 className="min-w-0 flex-1 text-[13.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{hype.titulo}</h3>
+        {/* Título numa linha (28/09); inteiro no title. */}
+        <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-snug" title={hype.titulo}>{hype.titulo}</h3>
         {nota !== null && (
           <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${corDaNota(nota)}`} title="Quanto serve a este cliente, de 0 a 10">
             {nota.toLocaleString("pt-BR")}
@@ -94,13 +97,13 @@ function CartaoDoHype({
       {detalhes && (
         <dl className="mt-2 space-y-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere]">
           {hype.por_que_agora && (
-            <div><dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">Por que agora</dt><dd>{hype.por_que_agora}</dd></div>
+            <div><dt className="text-[11px] font-medium text-muted-foreground">Por que agora</dt><dd>{hype.por_que_agora}</dd></div>
           )}
           {hype.como_usar && (
-            <div><dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">Como usar</dt><dd>{hype.como_usar}</dd></div>
+            <div><dt className="text-[11px] font-medium text-muted-foreground">Como usar</dt><dd>{hype.como_usar}</dd></div>
           )}
           {hype.cuidado && (
-            <div><dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">Cuidado</dt><dd>{hype.cuidado}</dd></div>
+            <div><dt className="text-[11px] font-medium text-muted-foreground">Cuidado</dt><dd>{hype.cuidado}</dd></div>
           )}
           {link && (
             <div>
@@ -224,7 +227,8 @@ export default function HypesDaSemana({
                 partes={() => partesDosHypes(catalogo)}
                 executar={() => buscar(false)}
                 aoConcluir={aoBuscar}
-                variant={dados ? "outline" : "default"}
+                // Um primário por área (28/09): o da aba é o "Agente do mês".
+                variant="outline"
                 className="h-8"
               />
             )}
@@ -240,10 +244,10 @@ export default function HypesDaSemana({
           {hypes.isError && <AvisoDeErro erro={hypes.error} />}
           {hypes.isLoading && <div className="h-24 animate-pulse rounded-lg bg-muted" />}
           {hypes.isSuccess && !dados && buscandoDesde === null && (
-            <p className="text-[12.5px] text-muted-foreground">Nenhuma busca ainda. Um clique traz o que está em alta para este cliente.</p>
+            <p className="text-[13px] text-muted-foreground">Nenhuma busca ainda.</p>
           )}
           {dados && !daSemana && itens.length > 0 && (
-            <p className="text-[11.5px] text-muted-foreground">Estes são da semana de {periodoCurto(dados.semana)}. Busque os desta semana.</p>
+            <p className="text-[12px] text-muted-foreground">Estes são da semana de {periodoCurto(dados.semana)}. Busque os desta semana.</p>
           )}
           {dados && dados.resumo && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
           {visiveis.length > 0 && (

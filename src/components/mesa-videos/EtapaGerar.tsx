@@ -285,7 +285,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
             <EstadoVazio
               icone={<Clapperboard className="h-5 w-5" />}
               titulo="Nenhuma cena para gerar"
-              descricao="Monte a História no Canvas ou aprove um roteiro. Para gerar sem cena, use o modo Livre."
+              descricao="Monte a História no Canvas, aprove um roteiro ou use o modo Livre."
               acao={
                 <button type="button" className={botao.secundario} onClick={() => irPara("base")}>
                   Abrir a Base

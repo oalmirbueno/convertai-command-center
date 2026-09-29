@@ -119,7 +119,8 @@ function CartaoDaRevisao({ r }: { r: RevisaoDePublicidade }) {
             </label>
           )}
           <div className="flex min-w-0 items-center">
-            <button type="button" className={juntar(botao.primario, "mr-2 h-8 px-3")} disabled={!pode.pode || !!fazendo} onClick={() => void decidir("aprovar")} title={pode.motivo || "Aprovar esta versão"}>
+            {/* Um primário por área (28/09): o "Aprovar" se repete em cada foto, então é secundário; o primário da etapa é seguir para o envio. */}
+            <button type="button" className={juntar(botao.secundario, "mr-2 h-8 px-3")} disabled={!pode.pode || !!fazendo} onClick={() => void decidir("aprovar")} title={pode.motivo || "Aprovar esta versão"}>
               {fazendo === "aprovar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
               Aprovar
             </button>
@@ -228,7 +229,7 @@ export default function EtapaRevisao() {
       {!banco && <AvisoDoRascunho />}
       {semConferencia.length > 0 && (
         <div className="flex min-w-0 flex-wrap items-center rounded-md bg-primary/5 px-3 py-2" data-conferir="">
-          <p className="mr-2 min-w-0 flex-1 text-[12.5px] font-medium">
+          <p className="mr-2 min-w-0 flex-1 text-[12px] font-medium">
             {semConferencia.length} {semConferencia.length === 1 ? "foto sem conferência" : "fotos sem conferência"} com as fontes
           </p>
           <AjudaRecolhida className="mr-2" rotulo="Sobre a conferência">

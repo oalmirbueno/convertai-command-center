@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Compass, Search } from "lucide-react";
+import { Check, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Ditado } from "@/components/mesa/Ditado";
@@ -28,6 +28,8 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
   const { clientId } = useMesa();
   const biblioteca = useBiblioteca(clientId, guia.modo === "biblioteca" || guia.modo === "referencia");
   const [busca, setBusca] = useState("");
+  // 28/09 (uma rolagem por região): a lista mostra um tanto e cresce no "Ver mais", sem caixa com rolagem própria.
+  const [limite, setLimite] = useState(12);
   const itens = useMemo(() => biblioteca.data || [], [biblioteca.data]);
   const termo = busca.trim().toLowerCase();
   const tipo = guia.modo === "referencia" ? "referencia" : "prompt";
@@ -54,9 +56,6 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
 
   return (
     <div className="min-w-0 space-y-3" data-guia={guia.modo}>
-      <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        <Compass className="mr-1 h-3.5 w-3.5" /> Como guiar esta foto
-      </p>
       <div role="radiogroup" aria-label="Como guiar esta foto" className="grid min-w-0 grid-cols-2 gap-1.5 md:grid-cols-4">
         {MODOS_DO_GUIA.map((m) => (
           <button
@@ -65,12 +64,12 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
             role="radio"
             aria-checked={guia.modo === m.valor}
             onClick={() => trocarModo(m.valor)}
-            className={`min-w-0 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+            title={m.dica}
+            className={`min-w-0 rounded-md border px-2.5 py-2 text-left transition-colors ${
               guia.modo === m.valor ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/40"
             }`}
           >
-            <span className="block truncate text-[12.5px] font-medium">{m.rotulo}</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{m.dica}</span>
+            <span className="block truncate text-[13px] font-medium">{m.rotulo}</span>
           </button>
         ))}
       </div>
@@ -89,21 +88,21 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
           </div>
           {biblioteca.isError && <AvisoDeErro erro={biblioteca.error} />}
           {biblioteca.isSuccess && lista.length === 0 && (
-            <p className="text-[12px] text-muted-foreground">Nada na biblioteca com essa busca. A etapa Biblioteca traz prompts e referências públicas.</p>
+            <p className="text-[12px] text-muted-foreground">Nada na biblioteca com essa busca.</p>
           )}
           {guia.modo === "biblioteca" ? (
-            <ul className="space-y-1 lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Prompts da biblioteca">
-              {lista.map((i) => (
+            <ul className="space-y-1" aria-label="Prompts da biblioteca">
+              {lista.slice(0, limite).map((i) => (
                 <li key={i.id}>
                   <button
                     type="button"
                     onClick={() => onMudar({ modo: "biblioteca", prompt_id: i.id })}
                     aria-pressed={guia.prompt_id === i.id}
-                    className={`block w-full min-w-0 rounded-lg border px-2.5 py-1.5 text-left ${guia.prompt_id === i.id ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
+                    className={`block w-full min-w-0 rounded-md border px-2.5 py-1.5 text-left ${guia.prompt_id === i.id ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                   >
-                    <span className="flex min-w-0 items-center text-[12.5px] font-medium">
+                    <span className="flex min-w-0 items-center text-[13px] font-medium">
                       <span className="min-w-0 flex-1 truncate">{i.titulo}</span>
-                      <span className="ml-2 shrink-0 text-[10.5px] font-normal text-muted-foreground">{rotuloDaCategoriaDaBiblioteca(i.categoria)}</span>
+                      <span className="ml-2 shrink-0 text-[11px] font-normal text-muted-foreground">{rotuloDaCategoriaDaBiblioteca(i.categoria)}</span>
                     </span>
                     <span className="block truncate text-[11px] text-muted-foreground">{i.prompt_pt || i.prompt_en}</span>
                   </button>
@@ -111,8 +110,8 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
               ))}
             </ul>
           ) : (
-            <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:max-h-72 lg:overflow-y-auto lg:overscroll-contain" aria-label="Referências da biblioteca">
-              {lista.map((i) => {
+            <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6" aria-label="Referências da biblioteca">
+              {lista.slice(0, limite * 2).map((i) => {
                 const marcada = refs.indexOf(i.id) >= 0;
                 return (
                   <button
@@ -122,7 +121,7 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
                     aria-pressed={marcada}
                     aria-label={`Referência ${i.titulo}`}
                     disabled={!marcada && refs.length >= MAX_REFERENCIAS_NO_GUIA}
-                    className={`relative min-w-0 rounded-lg border p-0.5 text-left disabled:opacity-40 ${marcada ? "border-primary" : "border-transparent hover:border-border"}`}
+                    className={`relative min-w-0 rounded-md border p-0.5 text-left disabled:opacity-40 ${marcada ? "border-primary" : "border-transparent hover:border-border"}`}
                   >
                     <Moldura proporcao={1}>
                       <ImagemDaBiblioteca item={i} />
@@ -132,17 +131,22 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
                         <Check className="h-3 w-3" />
                       </span>
                     )}
-                    <span className="mt-0.5 block truncate text-[10.5px]">{i.titulo}</span>
+                    <span className="mt-0.5 block truncate text-[11px]">{i.titulo}</span>
                     <LicencaEAutor item={i} compacta />
                   </button>
                 );
               })}
             </div>
           )}
+          {lista.length > (guia.modo === "biblioteca" ? limite : limite * 2) && (
+            <button type="button" className="text-[12px] font-medium text-primary hover:underline" onClick={() => setLimite((n) => n + 12)}>
+              Ver mais
+            </button>
+          )}
           {escolhido && (
-            <div className="rounded-lg border border-border bg-background p-2.5 text-[12px] leading-relaxed">
+            <div className="rounded-md border border-border bg-background p-2.5 text-[12px] leading-relaxed">
               <p className="[overflow-wrap:anywhere]">{escolhido.prompt_pt || escolhido.prompt_en}</p>
-              {escolhido.negativo && <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Evitar: {escolhido.negativo}</p>}
+              {escolhido.negativo && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Evitar: {escolhido.negativo}</p>}
             </div>
           )}
         </div>

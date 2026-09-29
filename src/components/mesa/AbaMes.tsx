@@ -55,6 +55,8 @@ import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import Painel from "@/components/sistema/Painel";
+import { conversa, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 // Frente AP (27/09): selo da memória editorial, "Trocar ângulo" e a linha de evolução por pilar.
 import LinhaDeEvolucaoDoMes, { avisoDaPauta, BotaoDeTrocarAngulo, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
@@ -167,14 +169,12 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       type="button"
       onClick={onToggle}
       aria-pressed={marcado}
-      className={`relative flex min-w-0 flex-col space-y-2 rounded-xl border p-3.5 text-left transition-colors ${
-        marcado ? "border-primary bg-card ring-1 ring-primary" : "border-border bg-card hover:border-primary/50"
-      }`}
+      className={juntar(superficie.painel, "relative flex min-w-0 flex-col space-y-2 p-3.5 text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/50")}
     >
       <span className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
         {marcado && <Check className="h-3 w-3" />}
       </span>
-      <p className="pr-7 text-[13.5px] font-medium leading-snug [overflow-wrap:anywhere]">{tema.tema}</p>
+      <p className="pr-7 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{tema.tema}</p>
       <p className="text-[11px] text-muted-foreground">
         {[tema.pilar, tema.fase ? `fase ${tema.fase}` : null, tema.objetivo].filter(Boolean).join(" · ")}
       </p>
@@ -204,16 +204,16 @@ function LinhaDoItem({
 }) {
   const texto = item.copy || item.legenda || item.resumo;
   return (
-    <Collapsible className="rounded-xl border border-border bg-card">
-      <div className="flex min-w-0 items-start">
-        <CollapsibleTrigger className="flex min-w-0 flex-1 items-start px-3.5 py-3 text-left">
-          <div className="mr-3 w-16 shrink-0 text-[11.5px] text-muted-foreground">
+    <Collapsible className="min-w-0">
+      <div className="flex min-w-0 items-start rounded-lg transition-colors hover:bg-muted/40">
+        <CollapsibleTrigger className="flex min-w-0 flex-1 items-start px-2 py-2.5 text-left">
+          <div className="mr-3 w-16 shrink-0 text-[12px] text-muted-foreground">
             <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
             <p>{item.formato === "estatico" ? "estático" : item.formato || "formato?"}</p>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
-            {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
+            {item.tema && item.gancho && <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
             {item.evolucao ? <SeloDaPauta evolucao={item.evolucao} className="mt-1" /> : null}
             {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
           </div>
@@ -222,19 +222,19 @@ function LinhaDoItem({
         {onTrocarAngulo ? <BotaoDeTrocarAngulo evolucao={item.evolucao} onTrocarAngulo={onTrocarAngulo} className="mr-1 mt-2.5 shrink-0" /> : null}
         {apagar && <BotaoDeApagar onApagar={apagar} className="mr-2 mt-2.5 shrink-0" />}
       </div>
-      <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
-        {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
-        <p className="text-[11.5px] text-muted-foreground">
+      <CollapsibleContent className="space-y-3 px-2 pb-3 sm:pl-[84px]">
+        {texto && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
+        <p className="text-[12px] text-muted-foreground">
           {[rotuloEditorial(item.tipo_editorial, item.framework) || null, item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}
         </p>
         {(item.cards || []).length > 0 && (
           <ol className="space-y-2">
             {(item.cards || []).slice().sort((a, b) => a.ordem - b.ordem).map((c) => (
-              <li key={c.ordem} className="rounded-lg border border-border bg-muted p-2.5">
+              <li key={c.ordem} className={juntar(superficie.poco, "p-2.5")}>
                 <p className="text-[11px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
-                {c.texto && <p className="mt-0.5 text-[12.5px] [overflow-wrap:anywhere]">{c.texto}</p>}
+                {c.texto && <p className="mt-0.5 text-[13px] [overflow-wrap:anywhere]">{c.texto}</p>}
                 {(c.ilustracao || c.estilo) && (
-                  <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{[c.ilustracao, c.estilo].filter(Boolean).join(" · ")}</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{[c.ilustracao, c.estilo].filter(Boolean).join(" · ")}</p>
                 )}
               </li>
             ))}
@@ -299,12 +299,18 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
   const lista = (mensagens.data && mensagens.data.length ? mensagens.data : locais).filter((m) => m.papel !== "sistema");
 
   return (
-    <div className="flex min-w-0 flex-col space-y-3 rounded-xl border border-border bg-card p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Conversa com o estrategista</p>
-      <div className="space-y-2 sm:max-h-[420px] sm:overflow-y-auto">
-        {lista.length === 0 && <p className="text-[12px] text-muted-foreground">Peça ajustes em português: "troque o tema 3 por algo sobre entrega", "menos carrossel na primeira semana".</p>}
+    <Painel
+      as="section"
+      titulo="Conversa com o estrategista"
+      ajuda={'Peça ajustes em português: "troque o tema 3 por algo sobre entrega", "menos carrossel na primeira semana".'}
+      className="flex min-w-0 flex-col"
+    >
+      <div className="space-y-3">
+      {/* Rola por dentro só de 1024 px para cima (no celular a página rola). */}
+      <div className="space-y-2 lg:max-h-[420px] lg:overflow-y-auto lg:overscroll-contain">
+        {lista.length === 0 && <p className={conversa.apoio}>Peça ajustes em português.</p>}
         {lista.map((m) => (
-          <div key={m.id} className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 bg-muted"}`}>
+          <div key={m.id} className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
             <p className="whitespace-pre-wrap">{m.conteudo}</p>
           </div>
         ))}
@@ -319,7 +325,8 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
           Enviar
         </Button>
       </div>
-    </div>
+      </div>
+    </Painel>
   );
 }
 
@@ -479,8 +486,9 @@ function PlanejarComEstrategista() {
 
   // ------------------------------------------------------------ formulário
   const formulario = (
-    <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
-      <CabecalhoDeSecao nivel={3} icone={<CalendarRange className="h-4 w-4" />} titulo="Período e objetivo" />
+    // O formulário é o assunto desta parte: um Painel (cartão com função, SISTEMA.md 4.1).
+    <Painel as="section" titulo="Período e objetivo">
+      <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Campo rotulo="Início"><Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9" /></Campo>
         <Campo rotulo="Fim"><Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9" /></Campo>
@@ -549,14 +557,15 @@ function PlanejarComEstrategista() {
           }}
         />
       </div>
-    </section>
+      </div>
+    </Painel>
   );
 
-  if (propostas.isLoading) return <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo propostas…</p>;
+  if (propostas.isLoading) return <p className="text-[13px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo propostas…</p>;
   if (propostas.isError) return <AvisoDeErro erro={propostas.error} />;
   if (acompanhando && !proposta) {
     return (
-      <div className="rounded-xl border border-border bg-card px-3.5 py-3">
+      <div className="min-w-0 py-1">
         <Cronometro desde={acompanhando.desde} rotulo="O estrategista está pesquisando e propondo os temas das três fases" previsao="~1 min" />
       </div>
     );
@@ -572,12 +581,14 @@ function PlanejarComEstrategista() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center rounded-xl border border-border bg-card px-3.5 py-2.5 text-[12px]">
-        <span className="mr-2 min-w-0 flex-1 text-muted-foreground">
-          <strong className="font-medium text-foreground">{dataCurta(proposta.periodo_inicio)} a {dataCurta(proposta.periodo_fim)}</strong>
-          {" · "}
-          {({ temas: "escolha os temas", detalhando: "detalhando", pronta: "pronta para gravar", gravada: "gravada na agenda" } as Record<string, string>)[proposta.status] || proposta.status}
-        </span>
+      {/* A barra da proposta é um cabeçalho (sem caixa): período no título, situação na linha de estado, ações à direita. */}
+      <CabecalhoDeSecao
+        nivel={3}
+        icone={<CalendarRange className="h-4 w-4" />}
+        titulo={`${dataCurta(proposta.periodo_inicio)} a ${dataCurta(proposta.periodo_fim)}`}
+        descricao={({ temas: "escolha os temas", detalhando: "detalhando", pronta: "pronta para gravar", gravada: "gravada na agenda" } as Record<string, string>)[proposta.status] || proposta.status}
+        acao={
+          <>
         {(propostas.data || []).length > 1 && (
           <Select value={proposta.id} onValueChange={(v) => { setPropostaId(v); setNova(false); }}>
             <SelectTrigger className="h-8 w-auto min-w-[150px] text-[12px]"><SelectValue /></SelectTrigger>
@@ -595,7 +606,9 @@ function PlanejarComEstrategista() {
         <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setNova(true)}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Nova proposta
         </Button>
-      </div>
+          </>
+        }
+      />
 
       <div className={`grid grid-cols-1 gap-5 ${conversaAberta ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""}`}>
         <div className="min-w-0 space-y-5">
@@ -607,7 +620,7 @@ function PlanejarComEstrategista() {
               titulo="Temas propostos"
               recolher={`mesa:mes:proposta:temas:${clientId}`}
               resumo={`${escolhidos.size} de ${temas.length} escolhidos`}
-              acao={<span className="text-[11.5px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}
+              acao={<span className="text-[12px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}
             >
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {temas.map((t) => <CartaoDeTema key={t.id} tema={t} marcado={escolhidos.has(t.id)} onToggle={() => alternarTema(t.id)} />)}
@@ -642,7 +655,7 @@ function PlanejarComEstrategista() {
           )}
 
           {acompanhando ? (
-            <div className="rounded-xl border border-border bg-card px-3.5 py-2.5">
+            <div className="min-w-0 py-1">
               <Cronometro
                 desde={acompanhando.desde}
                 rotulo={
@@ -654,7 +667,7 @@ function PlanejarComEstrategista() {
             </div>
           ) : (
             proposta.status === "detalhando" && itens.length === 0 && (
-              <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />O estrategista está detalhando. Atualize em instantes.</p>
+              <p className="text-[13px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />O estrategista está detalhando. Atualize em instantes.</p>
             )
           )}
           {!acompanhando && proposta.parametros && proposta.parametros.aviso && (
@@ -668,7 +681,8 @@ function PlanejarComEstrategista() {
               recolher={`mesa:mes:proposta:publicacoes:${clientId}`}
               resumo={`${dataCurta(proposta.periodo_inicio)} a ${dataCurta(proposta.periodo_fim)}`}
             >
-              <div className="space-y-2">
+              {/* Lista com traço leve entre as linhas (sem caixa por linha). */}
+              <div className="-mx-2 min-w-0 divide-y divide-border/50">
                 {itens.map((it, i) => (
                   <LinhaDoItem
                     key={it.tema_id || it.id || i}
@@ -686,10 +700,10 @@ function PlanejarComEstrategista() {
           )}
 
           {itens.length > 0 && proposta.status !== "gravada" && (
-            <section className="flex flex-col rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-end">
+            <section className="flex flex-col border-t border-border pt-4 sm:flex-row sm:items-end">
               <Campo rotulo="Projeto do cliente" className="mb-3 flex-1 sm:mb-0 sm:mr-3">
                 <Select value={projetoId} onValueChange={setProjetoId}>
-                  <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder={projetos.data?.length ? "Escolha o projeto" : "Cliente sem projeto ativo"} /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder={projetos.data?.length ? "Escolha o projeto" : "Cliente sem projeto ativo"} /></SelectTrigger>
                   <SelectContent>
                     {(projetos.data || []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
@@ -703,7 +717,7 @@ function PlanejarComEstrategista() {
           )}
 
           {proposta.status === "gravada" && (
-            <p className="rounded-xl border border-success/50 bg-card px-3.5 py-3 text-[12.5px] text-foreground">
+            <p className="rounded-md bg-success/10 px-3 py-2 text-[13px] text-foreground">
               Gravada na agenda{proposta.gravada_em ? ` em ${new Date(proposta.gravada_em).toLocaleDateString("pt-BR")}` : ""} com {proposta.task_ids?.length || 0} item(ns).{" "}
               <Link to={`/calendario?client=${clientId}`} className="text-primary underline-offset-2 hover:underline">Abrir o calendário</Link>
             </p>
@@ -763,13 +777,13 @@ function PlanoDoMesEmDestaque({
     <section className="min-w-0 border-b border-border pb-5" aria-label={`Plano de ${nome}`}>
       <div className="flex min-w-0 flex-col sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1 sm:mr-4">
-          <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p className={juntar(estiloDeTexto.rotulo, "flex items-center")}>
             <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
-            Plano de <span className="ml-1 normal-case">{nome}</span>
+            Plano de <span className="ml-1">{nome}</span>
           </p>
           {doMes ? (
             <>
-              <p className={`mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-3"}`}>{corpo}</p>
+              <p className={`mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-3"}`}>{corpo}</p>
               {corpo.length > 180 && (
                 <button type="button" onClick={() => setAberto((v) => !v)} className="mt-1 text-[12px] font-medium text-primary hover:underline">
                   {aberto ? "Mostrar menos" : "Ver o plano inteiro"}
@@ -788,13 +802,14 @@ function PlanoDoMesEmDestaque({
           )}
         </div>
         <div className="mt-3 flex shrink-0 flex-wrap items-center sm:mt-0 sm:justify-end">
+          {/* Um primário por área (28/09): o da aba é o "Agente do mês" que flutua; aqui tudo é secundário. */}
           {onRapido && (
-            <Button type="button" size="sm" className="mb-1 mr-1.5 h-9" onClick={onRapido}>
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={onRapido} aria-label="Conteúdo rápido">
               <Zap className="mr-1.5 h-4 w-4" />
               Conteúdo rápido
             </Button>
           )}
-          <Button type="button" size="sm" variant={onRapido ? "outline" : "default"} className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
             <MessagesSquare className="mr-1.5 h-4 w-4" />
             {doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
           </Button>
@@ -813,7 +828,7 @@ function PlanoDoMesEmDestaque({
               key={m}
               type="button"
               onClick={() => onConversar("planejar", m)}
-              className={`my-0.5 mr-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] capitalize transition-colors ${
+              className={`my-0.5 mr-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[12px] capitalize transition-colors ${
                 tem ? "bg-success/15 text-foreground hover:bg-success/25" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
               title={tem ? "Plano combinado. Clique para conversar sobre ele." : "Sem plano. Clique para planejar com o agente."}
@@ -967,16 +982,20 @@ export default function AbaMes({
         resumo={modo === "automatico" ? "Planejar e preencher a agenda" : "Uma proposta por vez"}
         ajuda="O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês."
         corpoClassName="space-y-3"
+        // Seletor pequeno não ganha linha própria (28/09): vai na linha do título.
+        acao={
+          <SeletorCompacto
+            rotulo="Como planejar"
+            opcoes={[
+              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+              { valor: "proposta", rotulo: "Uma proposta por vez" },
+            ]}
+            valor={modo}
+            onEscolher={(v) => trocarModo(v as ModoDePlanejar)}
+            listaQuandoNaoCabe
+          />
+        }
       >
-        <SeletorCompacto
-          rotulo="Como planejar"
-          opcoes={[
-            { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
-            { valor: "proposta", rotulo: "Uma proposta por vez" },
-          ]}
-          valor={modo}
-          onEscolher={(v) => trocarModo(v as ModoDePlanejar)}
-        />
         {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
       </Secao>
       </div>
@@ -985,25 +1004,15 @@ export default function AbaMes({
       {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
       {!agenteAberto && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[72px] z-40 flex justify-center px-4 md:bottom-6">
-          {/* Ação rápida ao lado do agente: um pedido vira conteúdo no dia. */}
-          <button
-            type="button"
-            onClick={() => setRapidoAberto(true)}
-            className="pointer-events-auto mr-2 inline-flex h-12 shrink-0 items-center rounded-full bg-card px-4 text-[13px] font-semibold text-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
-            aria-label="Conteúdo rápido"
-          >
-            <Zap className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" />
-            <span className="hidden sm:inline">Rápido</span>
-          </button>
+          {/* 28/09: o "Rápido" que flutuava repetia o "Conteúdo rápido" do topo; ficou um só (o do topo). */}
           <button
             type="button"
             onClick={() => abrirAgente()}
-            className="pointer-events-auto inline-flex h-12 max-w-full items-center rounded-full bg-primary px-5 text-[13.5px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
+            className="pointer-events-auto inline-flex h-12 max-w-full items-center rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
             aria-label="Abrir o Agente do mês"
           >
             {pendente ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 shrink-0" />}
             <span className="truncate">Agente do mês</span>
-            <span className="ml-2 hidden rounded-full bg-primary-foreground/15 px-2 py-0.5 text-[11px] font-medium sm:inline">planejar e criar</span>
           </button>
         </div>
       )}

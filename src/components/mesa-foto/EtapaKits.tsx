@@ -645,14 +645,14 @@ export default function EtapaKits() {
                 </Button>
               }
             >
-              O kit guarda a identidade do assunto: quais fotos provam como ele é, o que não pode mudar e o que ainda falta fotografar.
+              O kit guarda como o assunto é, o que não muda e o que falta fotografar.
             </Vazio>
           ) : (
             <Cartao
               titulo={editando.id ? "Editar kit" : "Novo kit"}
               acao={
                 editando.id ? (
-                  <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("criar", { kit: editando.id })}>
+                  <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => irPara("criar", { kit: editando.id })}>
                     <Camera className="mr-1.5 h-3.5 w-3.5" /> Criar fotos
                   </Button>
                 ) : undefined
@@ -748,7 +748,7 @@ export default function EtapaKits() {
                   )}
                 </div>
 
-                <GrupoDeCampos titulo="Atributos" descricao="Um por linha." colunas={3}>
+                <GrupoDeCampos titulo="Atributos" descricao="Um por linha" colunas={3}>
                   {(
                     [
                       { campo: "observado", rotulo: "Observado", dica: "Visto nas fotos. Ex.: logo no topo, 2 botões laterais." },
@@ -792,7 +792,7 @@ export default function EtapaKits() {
                         ))}
                     </span>
                   )}
-                  <Button type="button" size="sm" className="mb-1.5 h-9 text-[12.5px]" disabled={salvando || faltaAutorizacao(editando)} onClick={() => void salvar()}>
+                  <Button type="button" size="sm" className="mb-1.5 h-9 text-[13px]" disabled={salvando || faltaAutorizacao(editando)} onClick={() => void salvar()}>
                     {salvando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                     {editando.id ? "Salvar kit" : "Criar kit"}
                   </Button>

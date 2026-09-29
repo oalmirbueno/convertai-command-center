@@ -28,13 +28,12 @@ import {
   CabecalhoDePagina,
   Carregando,
   EstadoDeErro,
-  Painel,
   Secao,
   botao,
   etiqueta,
   foco,
   juntar,
-  superficie,
+  lista,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -86,7 +85,7 @@ function MonthNarrative({ clientId }: { clientId: string }) {
       titulo={`O seu mês${data.month ? ` de ${data.month}` : ""}`}
       ajuda="Contado pela Aceleriq a partir do que aconteceu de verdade no seu painel neste mês."
     >
-      <p className={juntar(texto.corpo, "max-w-3xl text-[14px] leading-6 text-foreground/90")}>{data.narrative}</p>
+      <p className={juntar(texto.corpo, "max-w-3xl leading-6 text-foreground/90")}>{data.narrative}</p>
     </Secao>
   );
 }
@@ -124,9 +123,9 @@ function WeekBackstage({ clientId }: { clientId: string }) {
       descricao={`${data.total} ${data.total === 1 ? "etapa concluída" : "etapas concluídas"}`}
       ajuda="Este é o trabalho de bastidor da semana, atualizado conforme a equipe avança. O que chega até você, como conteúdo e publicações, nasce daqui."
     >
-      <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+      <ul className={juntar(lista.aberta, lista.divisoria)}>
         {data.fronts.map((front) => (
-          <li key={front.area} className="min-w-0 px-4 py-3">
+          <li key={front.area} className="min-w-0 px-2 py-3">
             <div className="flex min-w-0 items-center justify-between">
               <p className="min-w-0 truncate text-[13px] font-medium text-foreground">{front.label}</p>
               <p className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>
@@ -516,8 +515,8 @@ export default function ClientJourneyUpdates() {
 
       {/* ── Retrato automático do momento: o assunto da página ── */}
       {narrative && (
-        <section aria-label="Retrato de agora" className="min-w-0 space-y-4">
-          <h2 className="max-w-3xl text-[17px] font-semibold leading-6 text-foreground">{narrative.headline}</h2>
+        <Secao titulo="Retrato de agora" corpoClassName="space-y-4">
+          <p className={juntar(texto.tituloSecao, "max-w-3xl")}>{narrative.headline}</p>
           <FaixaDeNumeros
             rotulo="Sinais do momento"
             itens={narrative.signals.map((signal) => {
@@ -538,7 +537,7 @@ export default function ClientJourneyUpdates() {
           />
           <div className="max-w-3xl space-y-2">
             {narrative.paragraphs.map((paragraph) => (
-              <p key={paragraph} className={juntar(texto.corpo, "text-[13.5px] leading-6")}>
+              <p key={paragraph} className={juntar(texto.corpo, "leading-6")}>
                 {paragraph}
               </p>
             ))}
@@ -549,7 +548,7 @@ export default function ClientJourneyUpdates() {
             </p>
             <p className={juntar(texto.corpo, "mt-1 leading-6")}>{narrative.nextStep}</p>
           </div>
-        </section>
+        </Secao>
       )}
 
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
@@ -559,7 +558,7 @@ export default function ClientJourneyUpdates() {
       {/* ── Frentes ativas ── */}
       {activeProjects.length > 0 && (
         <Secao divisoria titulo="Suas frentes" descricao={`${activeProjects.length} ${activeProjects.length === 1 ? "ativa" : "ativas"}`}>
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
             {activeProjects.map((project: any) => {
               const view = buildProgressView(project, (snapshot?.tasks || []) as any[]);
               // Contexto real: o que esta em producao nesta frente agora
@@ -568,7 +567,7 @@ export default function ClientJourneyUpdates() {
                   !["done", "completed", "concluido", "concluída"].includes((task.status || "").toLowerCase()))
                 .slice(0, 3);
               return (
-                <li key={project.id} className="min-w-0 px-4 py-3">
+                <li key={project.id} className="min-w-0 px-2 py-3">
                   <div className="flex min-w-0 items-center justify-between">
                     <p className="flex min-w-0 items-center text-[14px] font-medium text-foreground">
                       <span className="mr-2 min-w-0 truncate">{project.name}</span>
@@ -612,9 +611,9 @@ export default function ClientJourneyUpdates() {
       {/* ── O que já foi ao ar ── */}
       {published.length > 0 && (
         <Secao divisoria titulo="Já publicado" descricao={`${published.length} mais recentes`}>
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
             {published.map((publication: any, index: number) => (
-              <li key={`${publication.published_at}-${index}`} className="flex min-w-0 items-center px-4 py-2.5">
+              <li key={`${publication.published_at}-${index}`} className="flex min-w-0 items-center px-2 py-2.5">
                 <CheckCircle2 className="mr-3 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
                 <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
                   Publicado em{" "}
@@ -674,39 +673,37 @@ export default function ClientJourneyUpdates() {
             titulo="A sua história com a Aceleriq"
             descricao={`${monthsTogether === 1 ? "No primeiro mês" : `Em ${monthsTogether} meses`} de trabalho, isto foi construído`}
           >
-            <Painel semEspaco>
-              <div className="grid grid-cols-1 sm:grid-cols-2">
-                <div className="min-w-0 px-4 py-4 sm:px-5">
-                  <p className={texto.rotulo}>
-                    Quando começou · {started.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
-                  </p>
-                  <ul className={juntar(texto.corpo, "mt-2 space-y-1 text-muted-foreground")}>
-                    <li>Nenhum material produzido por aqui</li>
-                    <li>Nenhuma publicação registrada</li>
-                    <li>Sem medição de resultados</li>
-                  </ul>
-                </div>
-                <div className="min-w-0 border-t border-border px-4 py-4 sm:border-l sm:border-t-0 sm:px-5">
-                  <p className={juntar(texto.rotulo, "flex items-center text-primary")}>
-                    Hoje <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
-                  </p>
-                  <ul className={juntar(texto.corpo, "mt-2 space-y-1")}>
-                    {materials > 0 && (
-                      <li><span className="font-semibold tabular-nums text-primary">{materials}</span> materia(is) produzidos e entregues</li>
-                    )}
-                    {postsLive > 0 && (
-                      <li><span className="font-semibold tabular-nums text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
-                    )}
-                    {reportsCount > 0 && (
-                      <li><span className="font-semibold tabular-nums text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
-                    )}
-                    {contactsGrowth !== null && contactsGrowth > 0 && (
-                      <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
-                    )}
-                  </ul>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2">
+              <div className="min-w-0 pb-4 sm:pb-0 sm:pr-5">
+                <p className={texto.rotulo}>
+                  Quando começou · {started.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                </p>
+                <ul className={juntar(texto.corpo, "mt-2 space-y-1 text-muted-foreground")}>
+                  <li>Nenhum material produzido por aqui</li>
+                  <li>Nenhuma publicação registrada</li>
+                  <li>Sem medição de resultados</li>
+                </ul>
               </div>
-            </Painel>
+              <div className="min-w-0 border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                <p className={juntar(texto.rotulo, "flex items-center text-primary")}>
+                  Hoje <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                </p>
+                <ul className={juntar(texto.corpo, "mt-2 space-y-1")}>
+                  {materials > 0 && (
+                    <li><span className="font-semibold tabular-nums text-primary">{materials}</span> materia(is) produzidos e entregues</li>
+                  )}
+                  {postsLive > 0 && (
+                    <li><span className="font-semibold tabular-nums text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
+                  )}
+                  {reportsCount > 0 && (
+                    <li><span className="font-semibold tabular-nums text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
+                  )}
+                  {contactsGrowth !== null && contactsGrowth > 0 && (
+                    <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
+                  )}
+                </ul>
+              </div>
+            </div>
           </Secao>
         );
       })()}
@@ -734,30 +731,28 @@ export default function ClientJourneyUpdates() {
               </span>
             }
           >
-            <Painel semEspaco>
-              <div className="px-2 py-4 sm:px-4">
-                <ResponsiveContainer width="100%" height={220}>
-                  <ComposedChart data={series} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="contacts" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <YAxis yAxisId="reach" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
-                    <Tooltip
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))" }}
-                      itemStyle={{ color: "hsl(var(--foreground))" }}
-                      labelStyle={{ color: "hsl(var(--primary))", fontSize: 10 }}
-                      formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name === "contacts" ? "Contatos" : "Alcance"]}
-                    />
-                    <Bar yAxisId="contacts" dataKey="contacts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
-                    <Line yAxisId="reach" type="monotone" dataKey="reach" stroke="#0EA5E9" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap px-3 pt-1 text-[11px] text-muted-foreground [&>*]:mr-4">
-                  <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-sm bg-primary" aria-hidden="true" /> Pessoas que chamaram vocês</span>
-                  <span className="flex items-center"><span className="mr-1.5 h-0.5 w-3 rounded bg-sky-500" aria-hidden="true" /> Pessoas alcançadas</span>
-                </div>
+            <div className="min-w-0">
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={series} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="contacts" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <YAxis yAxisId="reach" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                    labelStyle={{ color: "hsl(var(--primary))", fontSize: 10 }}
+                    formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name === "contacts" ? "Contatos" : "Alcance"]}
+                  />
+                  <Bar yAxisId="contacts" dataKey="contacts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+                  <Line yAxisId="reach" type="monotone" dataKey="reach" stroke="#0EA5E9" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap px-3 pt-1 text-[11px] text-muted-foreground [&>*]:mr-4">
+                <span className="flex items-center"><span className="mr-1.5 h-2 w-2 rounded-sm bg-primary" aria-hidden="true" /> Pessoas que chamaram vocês</span>
+                <span className="flex items-center"><span className="mr-1.5 h-0.5 w-3 rounded bg-sky-500" aria-hidden="true" /> Pessoas alcançadas</span>
               </div>
-            </Painel>
+            </div>
           </Secao>
         );
       })()}
@@ -804,7 +799,7 @@ export default function ClientJourneyUpdates() {
               </div>
             }
           >
-            <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+            <ul className={juntar(lista.aberta, lista.divisoria)}>
               {rows.map((row) => {
                 const isOpen = expandedMonth === row.key;
                 return (
@@ -813,7 +808,7 @@ export default function ClientJourneyUpdates() {
                     type="button"
                     onClick={() => setExpandedMonth(isOpen ? null : row.key)}
                     aria-expanded={isOpen}
-                    className={juntar("flex w-full min-w-0 items-center px-4 py-2.5 text-left transition-colors", isOpen ? "bg-muted/40" : "hover:bg-muted/30", foco)}
+                    className={juntar("flex w-full min-w-0 items-center rounded-lg px-2 py-2.5 text-left transition-colors", isOpen ? "bg-muted/40" : "hover:bg-muted/30", foco)}
                   >
                     <span className="mr-3 w-14 shrink-0 text-[12px] font-medium text-muted-foreground">
                       {monthLabel(row.key)}
@@ -834,7 +829,7 @@ export default function ClientJourneyUpdates() {
                     <ChevronDown className={juntar("ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")} aria-hidden="true" />
                   </button>
                   {isOpen && (
-                    <div className="mb-2 ml-[72px] mr-4 space-y-1 border-l border-border pb-1 pl-3">
+                    <div className="mb-2 ml-[64px] mr-2 space-y-1 border-l border-border pb-1 pl-3">
                       {/* Entregas com nome: o mês deixa de ser só um número. */}
                       {(snapshot?.allFiles || [])
                         .filter((file: any) => file.created_at?.startsWith(row.key))
@@ -910,7 +905,7 @@ export default function ClientJourneyUpdates() {
       {/* ── Atualizações escritas pela Aceleriq ── */}
       {rituals.length > 0 && (
         <Secao divisoria titulo="Atualizações da Aceleriq" descricao={`${rituals.length} ${rituals.length === 1 ? "atualização" : "atualizações"}`}>
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
           {rituals.map((update: any, index: number) => {
             const ritualType = (update.metrics as any)?.ritual_type as string;
             const badge = RITUAL_LABELS[ritualType] || {
@@ -920,7 +915,7 @@ export default function ClientJourneyUpdates() {
             const isLatest = index === 0;
             return (
               <li key={update.id} className="min-w-0">
-              <article className={juntar("min-w-0 px-4 py-4 sm:px-5", isLatest && "border-l-2 border-primary")}>
+              <article className={juntar("min-w-0 px-2 py-4", isLatest && "border-l-2 border-primary pl-3")}>
                 <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
                   <span className={juntar(etiqueta, badge.cls)}>{badge.label}</span>
                   {isLatest && <span className={juntar(etiqueta, "bg-primary text-primary-foreground")}>Mais recente</span>}

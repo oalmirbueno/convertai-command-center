@@ -8,7 +8,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "@/components/mesa/AnexosDoPedido";
 import { Ditado } from "@/components/mesa/Ditado";
 import { Cronometro } from "@/components/mesa/Cronometro";
-import PainelDoAgente from "@/components/sistema/PainelDoAgente";
+import PainelDoAgente, { BalaoDaConversa } from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, foco as focoVisivel, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -54,16 +54,9 @@ function guardarConversa(clientId: string, id: string | null) {
   }
 }
 
+/** Balão da conversa: o do sistema (14 px, linha 1,6), sem balão feito à mão. */
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
-  return (
-    <div
-      className={`min-w-0 rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
-        papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-6 rounded-bl-md bg-muted text-foreground"
-      }`}
-    >
-      {children}
-    </div>
-  );
+  return <BalaoDaConversa de={papel}>{children}</BalaoDaConversa>;
 }
 
 /** Pedido que chega de fora (Lapidar com o agente): texto pronto e a oferta em foco. */
@@ -215,7 +208,7 @@ export default function AgenteDaOferta({
             ))}
           </div>
           {foco && (
-            <div className="flex min-w-0 items-center rounded-md bg-primary/10 px-2.5 py-1.5 text-[11.5px]" role="note">
+            <div className="flex min-w-0 items-center rounded-md bg-primary/10 px-2.5 py-1.5 text-[12px]" role="note">
               <span className="min-w-0 flex-1 truncate">
                 Lapidando: <span className="font-medium">{foco.nome}</span>
               </span>
@@ -273,7 +266,7 @@ export default function AgenteDaOferta({
       {conversa.isError && <AvisoDeErro erro={conversa.error} />}
       {vazia && !envio && !conversa.isLoading && (
         <div className="px-1 py-6 text-center">
-          <p className="text-[12.5px] font-medium">Conte o que o cliente vende</p>
+          <p className="text-[13px] font-medium">Conte o que o cliente vende</p>
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">Produto, preço confirmado, para quem e o que trava a venda.</p>
         </div>
       )}
@@ -304,9 +297,9 @@ export default function AgenteDaOferta({
               <p className="whitespace-pre-wrap">{envio.mensagem}</p>
             </Bolha>
           )}
-          <div className="mr-6 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
+          <BalaoDaConversa de="agente">
             <Cronometro desde={envio.desde} rotulo="Montando e conferindo as ofertas" />
-          </div>
+          </BalaoDaConversa>
         </div>
       )}
     </PainelDoAgente>

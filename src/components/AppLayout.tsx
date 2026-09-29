@@ -384,7 +384,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {isAdminOrTeam ? (
                   gruposDoMenu.map((group) => (
                     <div key={group.label} className="mb-1 last:mb-0">
-                      <p className="px-3 pb-0.5 pt-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                      <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
                         {group.label}
                       </p>
                       {group.items.map((item) => (
@@ -487,7 +487,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1 tabular-nums">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center px-1 tabular-nums">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -503,7 +503,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Avatar className="w-7 h-7 cursor-pointer">
-                <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-semibold">
+                <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-semibold">
                   {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
@@ -511,7 +511,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {userMenuOpen && (
               <div className="absolute top-full right-0 mt-2 w-48 rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in">
                 <div className="px-3 py-2 border-b border-border mb-1">
-                  <p className="text-xs font-medium text-foreground">{profile?.full_name}</p>
+                  <p className="text-[12px] font-medium text-foreground">{profile?.full_name}</p>
                   <p className="text-[11px] text-muted-foreground">{profile?.role === "admin" ? "Administrador" : profile?.company_name}</p>
                 </div>
                 <button

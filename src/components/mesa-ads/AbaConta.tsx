@@ -9,7 +9,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, dataEHora, textoDoErro } from "@/lib/mesa/api";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import { botao, foco, juntar } from "@/components/sistema/estilos";
+import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   brl,
@@ -34,7 +34,7 @@ import {
   type PedidoDePlano,
   type SinalDoAnuncio,
 } from "./adsApi";
-import { Andamento, CabecalhoDaParte, Diagnostico, Foto, SeloDoSinal, useAndamento } from "./Comuns";
+import { Andamento, CabecalhoDaParte, Diagnostico, Foto, SeloDoSinal, useAndamento, useParteRecolhida } from "./Comuns";
 import JanelaDaReferencia from "./JanelaDaReferencia";
 import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TendenciaDiaria } from "./ContaPaineis";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
@@ -43,13 +43,13 @@ import AtivarGestao from "./AtivarGestao";
 import RotinaDoAgente from "./RotinaDoAgente";
 import { esquecerPlanoParaOAgente, verPlanoParaOAgente } from "./ponteDoAgente";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
-import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
+import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo, SeletorDaAbaDeResultados, useAbaDosResultados } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
 import GerenciadorAoVivo, { BotaoAtualizarAgora, SituacaoDaConta, useAtualizarGerenciador, useGerenciador } from "./GerenciadorAoVivo";
 import { gerarRelatorioDeAnuncios, pedidoDeOtimizar, type NoNoGerenciador, type RelatorioGerado } from "./gerenciadorApi";
 import SeletorDePeriodo from "./SeletorDePeriodo";
 import { corpoDoPeriodo, ehEscolhaDoPeriodo, PERIODO_PADRAO, resolverPeriodo, trechoDoPeriodo, type EscolhaDoPeriodo } from "./periodoDaConta";
-import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
 /**
  * Conta ao vivo: tudo o que está rodando na conta de anúncios do cliente
@@ -173,9 +173,9 @@ function CartaoDoAnuncio({
   const { catalogo } = useMesa();
   const m = a.metricas;
   return (
-    <article className="min-w-0 rounded-lg border border-border bg-card p-3" aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
+    <article className={juntar(superficie.painel, "min-w-0 p-3")} aria-label={`Anúncio ${a.nome}`} data-ad={a.ad_id}>
       <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[112px_minmax(0,1fr)]">
-        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-lg border border-border bg-secondary/40" aria-label={`Ver ${a.nome}`}>
+        <button type="button" onClick={onFicha} className="block min-w-0 self-start overflow-hidden rounded-md bg-secondary/40" aria-label={`Ver ${a.nome}`}>
           <div className="relative w-full" style={{ paddingTop: "125%" }}>
             <div className="absolute inset-0">
               <Foto src={a.imagem_url} alt={a.nome} className="h-full w-full" />
@@ -251,7 +251,7 @@ function CartaoDoAnuncio({
               {abrindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileSearch className="mr-1 h-3.5 w-3.5" />}
               Abrir ficha
             </Button>
-            {a.cta && <span className="mb-1 ml-auto text-[10.5px] text-muted-foreground">{rotuloDoCta(a.cta)}</span>}
+            {a.cta && <span className="mb-1 ml-auto text-[11px] text-muted-foreground">{rotuloDoCta(a.cta)}</span>}
           </div>
         </div>
       </div>
@@ -281,14 +281,14 @@ function PainelDaAnalise({
       <div className="flex min-w-0 items-start">
         <Sparkles className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[13.5px] font-semibold">Leitura do estrategista</h3>
+          <h3 className="truncate text-[13px] font-semibold">Leitura do estrategista</h3>
           {quando && <p className="truncate text-[11px] text-muted-foreground" title="Os números vêm da conta; a leitura, do estrategista.">Feita {dataEHora(quando)}</p>}
         </div>
       </div>
       {analise.resumo && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{analise.resumo}</p>}
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
         {grupos.map((g) => (
-          <div key={g.titulo} className="min-w-0 rounded-md bg-background/60 p-3">
+          <div key={g.titulo} className={juntar(superficie.poco, "min-w-0 p-3")}>
             <p className={`text-[12px] font-semibold ${g.tom}`}>
               {g.titulo} ({g.itens.length})
             </p>
@@ -309,11 +309,11 @@ function PainelDaAnalise({
         ))}
       </div>
       {analise.copy.length > 0 && (
-        <div className="min-w-0 rounded-md bg-background/60 p-3">
+        <div className={juntar(superficie.poco, "min-w-0 p-3")}>
           <p className="text-[12px] font-semibold text-muted-foreground">Estratégia de copy</p>
           <ul className="mt-1.5 space-y-2">
             {analise.copy.map((c, k) => (
-              <li key={k} className="min-w-0 text-[12.5px] leading-snug [overflow-wrap:anywhere]">
+              <li key={k} className="min-w-0 text-[13px] leading-snug [overflow-wrap:anywhere]">
                 <span className="font-medium">{c.achado}</span>
                 {c.recomendacao && <span className="block text-muted-foreground">{c.recomendacao}</span>}
               </li>
@@ -326,8 +326,8 @@ function PainelDaAnalise({
           <p className="mb-1.5 text-[12px] font-semibold text-muted-foreground">Próximos testes</p>
           <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
             {analise.proximos_testes.map((t, k) => (
-              <li key={`${t.titulo}-${k}`} className="flex min-w-0 flex-col rounded-md bg-background/60 p-3">
-                <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
+              <li key={`${t.titulo}-${k}`} className={juntar(superficie.poco, "flex min-w-0 flex-col p-3")}>
+                <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
                   {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[10.5px]">{humanizar(t.estilo_visual)}</span>}
@@ -443,6 +443,8 @@ export default function AbaConta({
   const [feitoRecolhido, setFeitoRecolhido] = useRecolhido("mesa-ads:conta:bloco:agente", false);
   const [resultadosRecolhido, setResultadosRecolhido] = useRecolhido("mesa-ads:conta:bloco:resultados", false);
   const resultadosRef = useRef<HTMLElement>(null);
+  const [abaDosCriativos, setAbaDosCriativos] = useAbaDosResultados(`mesa-ads:conta:aba:${clientId}`);
+  const parteDosCriativos = useParteRecolhida(`mesa-ads:conta:criativos:${clientId}`);
   const verCriativosDaCampanha = (id: string) => {
     setCampanha(id);
     setResultadosRecolhido(false);
@@ -607,7 +609,7 @@ export default function AbaConta({
             }
           />
           {relatorio && (
-            <p className="flex min-w-0 flex-wrap items-center rounded-md bg-success/10 px-3 py-2 text-[12.5px] leading-snug" role="status" data-relatorio={relatorio.id}>
+            <p className="flex min-w-0 flex-wrap items-center rounded-md bg-success/10 px-3 py-2 text-[13px] leading-snug" role="status" data-relatorio={relatorio.id}>
               <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" />
               <span className="mr-2 min-w-0 [overflow-wrap:anywhere]">
                 {relatorio.atualizado ? "Relatório atualizado" : "Relatório criado"} em Relatórios, como rascunho{relatorio.projeto ? ` (projeto ${relatorio.projeto})` : ""}: {relatorio.titulo}
@@ -649,12 +651,13 @@ export default function AbaConta({
         {/* 2. O Gerenciador ao vivo: campanha, conjunto e anúncio, com as ações e a prova. */}
         {(!dados || dados.conta.conectada) && (
           <section className="min-w-0" aria-label="Gerenciador">
-            <TituloRecolhivel
+            <CabecalhoDaParte
               titulo="Gerenciador"
-              recolhido={gerRecolhido}
-              onAlternar={() => setGerRecolhido(!gerRecolhido)}
-              resumo={gerenciador.data ? `${gerenciador.data.resumo.campanhas_entregando} de ${gerenciador.data.resumo.campanhas_ativas} campanhas ativas entregando` : undefined}
-              className="mb-2"
+              recolher={{
+                recolhido: gerRecolhido,
+                onAlternar: () => setGerRecolhido(!gerRecolhido),
+                resumo: gerenciador.data ? `${gerenciador.data.resumo.campanhas_entregando} de ${gerenciador.data.resumo.campanhas_ativas} campanhas ativas entregando` : undefined,
+              }}
             />
             {!gerRecolhido && (
               <GerenciadorAoVivo
@@ -672,17 +675,18 @@ export default function AbaConta({
 
         {/* 3. O agente: a rotina e tudo o que ele fez (e o que não deu, com o motivo), com a prova e o Desfazer. */}
         <section className="min-w-0" aria-label="O agente">
-          <TituloRecolhivel titulo="O que o agente faz e fez" recolhido={feitoRecolhido} onAlternar={() => setFeitoRecolhido(!feitoRecolhido)} className="mb-2" />
+          <CabecalhoDaParte titulo="O que o agente faz e fez" recolher={{ recolhido: feitoRecolhido, onAlternar: () => setFeitoRecolhido(!feitoRecolhido) }} />
           {!feitoRecolhido && <RotinaDoAgente onPedirAoAgente={levarAoAgente} abrirFeito={verFeito} />}
         </section>
 
         {/* 4. Resultados e criativos (o que já existia, num bloco que recolhe). */}
         {dados && dados.conta.conectada && extras && (
           <section className="min-w-0 space-y-4" aria-label="Resultados e criativos" ref={resultadosRef}>
-            <div className="flex min-w-0 flex-wrap items-center">
-              <TituloRecolhivel titulo="Resultados e criativos" recolhido={resultadosRecolhido} onAlternar={() => setResultadosRecolhido(!resultadosRecolhido)} className="mr-3" />
-              {!resultadosRecolhido && (
-                <span className="ml-auto">
+            <CabecalhoDaParte
+              className="mb-0"
+              titulo="Resultados e criativos"
+              recolher={{ recolhido: resultadosRecolhido, onAlternar: () => setResultadosRecolhido(!resultadosRecolhido) }}
+              acoes={
                   <BotaoComCusto
                     rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Analisar com o estrategista</>}
                     titulo="Analisar a conta"
@@ -697,15 +701,14 @@ export default function AbaConta({
                       void queryClient.invalidateQueries({ queryKey: chavesAds.analise(clientId) });
                     }}
                   />
-                </span>
-              )}
-            </div>
+              }
+            />
             {desdeAnalise !== null && <Andamento desde={desdeAnalise} rotulo="O estrategista está lendo a conta" />}
             {!resultadosRecolhido && (
               <>
                 <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
                 <details className="min-w-0 border-y border-border py-2">
-                  <summary className={juntar("cursor-pointer rounded text-[12.5px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
+                  <summary className={juntar("cursor-pointer rounded text-[13px] text-muted-foreground hover:text-foreground", foco)}>Mais números do período</summary>
                   <div className="mt-3 min-w-0 space-y-3">
                     <ResumoDaConta totais={dados.conta.totais} extras={extras} />
                     <SaldosDasContas contas={extras.contas} />
@@ -719,10 +722,12 @@ export default function AbaConta({
                   <CabecalhoDaParte
                     titulo="Criativos"
                     nivel={3}
+                    recolher={parteDosCriativos}
                     descricao={campanha ? `Só a campanha ${(dados.conta.campanhas.filter((c) => c.campaign_id === campanha)[0] || { nome: null }).nome || "escolhida"}` : undefined}
                     acoes={
                       <>
                         <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
+                        {dadosDaLista && <SeletorDaAbaDeResultados dados={dadosDaLista} grupo={grupo} aba={abaDosCriativos} onMudar={setAbaDosCriativos} />}
                         {campanha && (
                           <button type="button" className={juntar(botao.discreto, "h-9 text-primary")} onClick={() => setCampanha("")}>
                             Todas as campanhas
@@ -731,12 +736,13 @@ export default function AbaConta({
                       </>
                     }
                   />
-                  {dadosDaLista && (
+                  {dadosDaLista && !parteDosCriativos.recolhido && (
                     <PainelDeResultados
                       key={`${grupo}|${campanha}`}
                       dados={dadosDaLista}
                       grupo={grupo}
-                      memoria={`mesa-ads:conta:aba:${clientId}`}
+                      aba={abaDosCriativos}
+                      onAba={setAbaDosCriativos}
                       renderAnuncio={(a) => (
                         <CartaoDoAnuncio
                           a={a}

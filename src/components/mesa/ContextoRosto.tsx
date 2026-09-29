@@ -13,6 +13,7 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { Campo } from "./Seletores";
 import Secao from "@/components/sistema/Secao";
 import { AvisoDeErro } from "./Custo";
+import { superficie } from "@/components/sistema/estilos";
 
 interface Rosto {
   id: string;
@@ -146,10 +147,10 @@ export default function ContextoRosto() {
         corpoClassName="space-y-3"
       >
         {rostos.isError && <AvisoDeErro erro={rostos.error} />}
-        {rostos.data && rostos.data.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhum rosto registrado.</p>}
+        {rostos.data && rostos.data.length === 0 && <p className="text-[13px] text-muted-foreground">Nenhum rosto registrado.</p>}
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(rostos.data || []).map((r) => (
-            <li key={r.id} className={`flex min-w-0 rounded-xl border border-border bg-card p-2.5 ${r.ativa ? "" : "opacity-60"}`}>
+            <li key={r.id} className={`flex min-w-0 p-2.5 ${superficie.painel} ${r.ativa ? "" : "opacity-60"}`}>
               <ImagemDaMesa caminho={r.storage_path} alt={r.pessoa} className="mr-3 h-20 w-16 shrink-0 rounded-lg" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium">{r.pessoa}</p>

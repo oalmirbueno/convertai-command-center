@@ -317,12 +317,12 @@ export function FotoDoResultado({
         <div className="ml-2 min-w-0 flex-1">
           <p className="flex items-center text-[12px] font-semibold">
             <span className="min-w-0 truncate">{rotuloDoMotor(catalogo, r.motor_id)}</span>
-            <span className="ml-1.5 inline-flex shrink-0 items-center rounded-full border border-emerald-400/40 px-1.5 py-px text-[9.5px] font-semibold text-emerald-300" data-selo="gerada">
+            <span className="ml-1.5 inline-flex shrink-0 items-center rounded-full border border-emerald-400/40 px-1.5 py-px text-[11px] font-semibold text-emerald-300" data-selo="gerada">
               gerada
             </span>
-            {r.tipo !== "foto" && <span className="ml-1 shrink-0 text-[10px] text-zinc-400">{r.tipo === "carrossel" ? `carrossel ${r.quadro || ""}` : "variação"}</span>}
+            {r.tipo !== "foto" && <span className="ml-1 shrink-0 text-[11px] text-zinc-400">{r.tipo === "carrossel" ? `carrossel ${r.quadro || ""}` : "variação"}</span>}
           </p>
-          <p className="text-[10.5px] text-zinc-400">{r.custo_usd ? `${usd(r.custo_usd)} · ` : ""}no acervo</p>
+          <p className="text-[11px] text-zinc-400">{r.custo_usd ? `${usd(r.custo_usd)} · ` : ""}no acervo</p>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {foto && <AprovarFoto foto={foto} />}
             <BotaoComCusto
@@ -439,9 +439,9 @@ export function PedidoMontado({ m, fotos, onFechar }: { m: Montagem; fotos: Foto
               <li key={`${r.ordem}-${r.imagem_id || r.origem_id}`} className="mb-1.5 mr-1.5 w-12" title={r.legenda || r.papel}>
                 <span className="relative block overflow-hidden rounded-md bg-zinc-900" style={{ width: 48, height: 48 }}>
                   {caminho ? <MiniaturaDoStorage bucket={r.storage_bucket || (f ? f.storage_bucket : "mesa")} caminho={caminho} alt={r.legenda || r.papel} largura={160} className="h-full w-full" /> : null}
-                  <span className="absolute left-0.5 top-0.5 rounded-full bg-zinc-950/85 px-1 text-[9.5px] font-semibold text-white">{r.ordem}</span>
+                  <span className="absolute left-0.5 top-0.5 rounded-full bg-zinc-950/85 px-1 text-[11px] font-semibold text-white">{r.ordem}</span>
                 </span>
-                <span className="mt-0.5 block truncate text-[10px] text-zinc-400">{r.papel || r.origem_tipo}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{r.papel || r.origem_tipo}</span>
               </li>
             );
           })}
@@ -556,7 +556,7 @@ export function AjustesDoResultado({
       <div className="min-w-0">
         <div className="mb-1.5 flex items-center">
           <p className={`${ROTULO} mb-0 flex-1`}>Motores {d.carrossel ? "(o carrossel usa o 1º)" : "(uma foto por motor)"}</p>
-          <button type="button" className="text-[10.5px] text-zinc-400 hover:text-white" onClick={() => setTodosOsMotores(!todosOsMotores)}>
+          <button type="button" className="text-[11px] text-zinc-400 hover:text-white" onClick={() => setTodosOsMotores(!todosOsMotores)}>
             {todosOsMotores ? "Só os principais" : "Ver todos"}
           </button>
         </div>
@@ -608,7 +608,7 @@ export function AjustesDoResultado({
           <ol className="min-w-0 space-y-1" aria-label="Entradas do Resultado">
             {entradas.map((e) => (
               <li key={e.ligacao.id} className="flex min-w-0 items-center text-[11.5px]">
-                <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold">{e.numero}</span>
+                <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold">{e.numero}</span>
                 <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: e.no.tipo === "gerar" ? "#34d399" : TIPOS_DE_NO[e.no.tipo].cor }} />
                 <span className="min-w-0 flex-1 truncate">
                   {e.no.tipo === "gerar" ? `${rotuloDoPapel(e.ligacao.papel)}: foto de ${nomeDoResultado(canvas, e.no)}` : `${ROTULOS_DAS_ENTRADAS[e.entrada]}: ${descrever(e.no, fontes).titulo}`}

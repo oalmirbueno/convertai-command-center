@@ -1807,7 +1807,7 @@ describe("25/09: campanha da Mesa reconhecida pelo calendário", () => {
 });
 
 describe("25/09: variações organizadas, com rolagem própria e revisar no resultado", () => {
-  it("resultado por tipo numa caixa com rolagem própria; aprovar e filtrar ali mesmo", async () => {
+  it("resultado por tipo na rolagem da região (sem caixa com rolagem própria); aprovar e filtrar ali mesmo", async () => {
     mock.tabelas.foto_ensaios = [
       {
         ...ENSAIO_BRUTO,
@@ -1823,8 +1823,11 @@ describe("25/09: variações organizadas, com rolagem própria e revisar no resu
     montar(h(EtapaEnsaio), { kitId: KIT, ensaioId: ENSAIO });
     await screen.findByText("Herói verde");
     const caixa = document.querySelector("[data-resultado-do-lote]") as HTMLElement;
-    expect(caixa.className).toContain("overflow-y-auto");
-    expect(caixa.className).toContain("max-h-[75vh]");
+    // 28/09 (dono: "uma rolagem por região, nada de rolagem dentro de rolagem"): a caixa com
+    // rolagem própria (lg:max-h-[75vh] lg:overflow-y-auto) saiu; o resultado segue a rolagem da
+    // região principal da área de trabalho, que já rola por dentro no computador.
+    expect(caixa.className).not.toContain("overflow-y-auto");
+    expect(caixa.className).not.toContain("max-h-");
     expect(caixa.className).toContain("min-w-0");
     expect(Array.from(caixa.querySelectorAll("[data-grupo-do-tipo]")).map((g) => g.getAttribute("data-grupo-do-tipo"))).toEqual(["heroi_fundo_cor", "na_mao"]);
     const h1 = screen.getByText("Herói verde").closest("[data-tomada]") as HTMLElement;

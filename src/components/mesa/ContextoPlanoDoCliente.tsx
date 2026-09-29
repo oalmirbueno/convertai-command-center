@@ -9,6 +9,8 @@ import { acaoDoAnexo, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { textoDoErro } from "@/lib/mesa/api";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { campo as classeDeCampo, juntar } from "@/components/sistema/estilos";
 import { AvisoDeErro, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { chaveDoHistorico, useInvalidarContexto } from "./contextoDoCliente";
@@ -73,13 +75,14 @@ export function VisorDoPacote({ pacote }: { pacote: PacoteExterno }) {
   return (
     <div className="min-w-0" data-pacote-externo="">
       {pacote.avisos.length > 0 && (
-        <ul className="mb-1.5 text-[11.5px] text-muted-foreground">
+        <ul className="mb-1.5 text-[12px] text-muted-foreground">
           {pacote.avisos.map((a) => (
             <li key={a} className="[overflow-wrap:anywhere]">{a}</li>
           ))}
         </ul>
       )}
-      <pre className="max-h-72 min-w-0 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2.5 text-[11.5px] leading-relaxed [overflow-wrap:anywhere]">{pacote.markdown}</pre>
+      {/* Rola por dentro só de 1024 px para cima (no celular a página rola; nada prende o dedo). */}
+      <pre className="min-w-0 whitespace-pre-wrap rounded-md bg-muted/50 p-2.5 text-[12px] leading-relaxed [overflow-wrap:anywhere] lg:max-h-72 lg:overflow-auto lg:overscroll-contain">{pacote.markdown}</pre>
       <div className="mt-2 flex flex-wrap items-center">
         <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void copiar()}>
           <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar
@@ -147,7 +150,7 @@ function Caminho({ clientId, caminho, onPedirAoAgente }: { clientId: string; cam
   if (editando) {
     const campo = (k: keyof typeof editando, rotulo: string, dica: string, linhas: number) => (
       <label className="mb-2 block min-w-0">
-        <span className="text-[11.5px] font-medium">{rotulo}</span>
+        <span className="text-[12px] font-medium">{rotulo}</span>
         <span className="block text-[11px] text-muted-foreground">{dica}</span>
         <Textarea className="mt-1 text-[12px]" rows={linhas} value={editando[k]} onChange={(e) => setEditando({ ...editando, [k]: e.target.value })} />
       </label>
@@ -194,13 +197,13 @@ function Caminho({ clientId, caminho, onPedirAoAgente }: { clientId: string; cam
                 <li key={`${s.ferramenta}-${i}`} className="px-2.5 py-1.5 [overflow-wrap:anywhere]">
                   <span className="font-medium">{s.ferramenta}</span>
                   {s.para_que && <span> · {s.para_que}</span>}
-                  {s.custo && <span className="block text-[11.5px] text-muted-foreground">Custo: {s.custo}{s.fonte ? ` (fonte: ${s.fonte})` : ""}</span>}
-                  {s.porque && <span className="block text-[11.5px] text-muted-foreground">{s.porque}</span>}
+                  {s.custo && <span className="block text-[12px] text-muted-foreground">Custo: {s.custo}{s.fonte ? ` (fonte: ${s.fonte})` : ""}</span>}
+                  {s.porque && <span className="block text-[12px] text-muted-foreground">{s.porque}</span>}
                 </li>
               ))}
             </ul>
           )}
-          {(caminho.cuidados || []).length > 0 && <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Cuidados: {(caminho.cuidados || []).join("; ")}</p>}
+          {(caminho.cuidados || []).length > 0 && <p className="text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Cuidados: {(caminho.cuidados || []).join("; ")}</p>}
           {caminho.atualizado_em && <p className="text-[11px] text-muted-foreground">Atualizado em {dataCurta(caminho.atualizado_em)}.</p>}
         </div>
       )}
@@ -244,7 +247,7 @@ function Pacote({ clientId, tarefas }: { clientId: string; tarefas: { id: string
       <div className="flex min-w-0 flex-wrap items-center">
         <label className="mb-1.5 mr-2 min-w-0">
           <span className="sr-only">Tipo do pacote</span>
-          <select className="h-8 max-w-full rounded-lg border border-border bg-card px-2 text-[12px]" value={tipo} onChange={(e) => setTipo(e.target.value as TipoDePacote)}>
+          <select className={juntar(classeDeCampo, "h-8 w-auto max-w-full px-2 text-[12px]")} value={tipo} onChange={(e) => setTipo(e.target.value as TipoDePacote)}>
             {TIPOS_DE_PACOTE.map((t) => (
               <option key={t.valor} value={t.valor}>{t.rotulo}</option>
             ))}
@@ -253,7 +256,7 @@ function Pacote({ clientId, tarefas }: { clientId: string; tarefas: { id: string
         {tipo === "tarefa" && (
           <label className="mb-1.5 min-w-0 max-w-full">
             <span className="sr-only">Tarefa do plano</span>
-            <select className="h-8 max-w-full rounded-lg border border-border bg-card px-2 text-[12px]" value={tarefa} onChange={(e) => setTarefa(e.target.value)}>
+            <select className={juntar(classeDeCampo, "h-8 w-auto max-w-full px-2 text-[12px]")} value={tarefa} onChange={(e) => setTarefa(e.target.value)}>
               <option value="">{tarefas.length ? "Escolha a tarefa" : "Sem tarefa aberta"}</option>
               {tarefas.map((t) => (
                 <option key={t.id} value={t.id}>{t.titulo}{t.prazo ? ` (até ${dataCurta(t.prazo)})` : ""}</option>
@@ -268,7 +271,7 @@ function Pacote({ clientId, tarefas }: { clientId: string; tarefas: { id: string
           {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Package className="mr-1.5 h-3.5 w-3.5" />}
           Montar pacote
         </Button>
-        <label className="mb-1 flex items-center text-[11.5px] text-muted-foreground">
+        <label className="mb-1 flex items-center text-[12px] text-muted-foreground">
           <input type="checkbox" className="mr-1.5" checked={comIa} onChange={(e) => setComIa(e.target.checked)} />
           Escrever o pedido com IA (centavos)
         </label>
@@ -367,15 +370,17 @@ function Identidade({
           Importar brand book
         </Button>
         <input ref={arquivo} type="file" multiple accept={TIPOS_DO_BRAND_BOOK} className="hidden" onChange={(e) => void importar(e.target.files)} aria-label="Arquivos do brand book" />
+        <AjudaRecolhida className="mb-1 ml-1" rotulo="O que importar">
+          PDF e as logos em PNG. O agente lê cores, fontes e logos e propõe o kit para você confirmar.
+        </AjudaRecolhida>
       </div>
-      <p className="text-[11px] text-muted-foreground">PDF e as logos em PNG. O agente lê cores, fontes e logos e propõe o kit para você confirmar.</p>
       {etapa && <p className="mt-1.5 flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />{etapa}</p>}
       {erro !== null && <AvisoDeErro erro={erro} className="mt-2" />}
       {proposta && proposta.clientId === clientId && <PropostaNaHora r={proposta.r} onFeito={onMudou} />}
       {preparado && preparado.clientId === clientId && (
         <div className="mt-2.5 min-w-0">
           {preparado.lacunas.length > 0 && (
-            <p className="mb-1.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Perguntar ao dono antes de gerar: {preparado.lacunas.join("; ")}.</p>
+            <p className="mb-1.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Perguntar ao dono antes de gerar: {preparado.lacunas.join("; ")}.</p>
           )}
           <VisorDoPacote pacote={preparado.pacote} />
         </div>
@@ -438,7 +443,7 @@ export default function ContextoPlanoDoCliente({ onPedirAoAgente }: { onPedirAoA
             {d.estagio && <p className="[overflow-wrap:anywhere]"><span className="font-medium">Estágio:</span> {d.estagio}</p>}
             {d.posicionamento && <p className="[overflow-wrap:anywhere]"><span className="font-medium">Posicionamento:</span> {d.posicionamento}</p>}
             {d.projetos.length > 0 ? (
-              <ul className="mt-1 text-[11.5px] text-muted-foreground">
+              <ul className="mt-1 text-[12px] text-muted-foreground">
                 {d.projetos.map((p, i) => (
                   <li key={`${p.nome}-${i}`} className="[overflow-wrap:anywhere]">
                     {p.nome} · {p.marcos} {p.marcos === 1 ? "marco" : "marcos"} · {p.tarefas_abertas} {p.tarefas_abertas === 1 ? "tarefa aberta" : "tarefas abertas"}{p.prazo ? ` · até ${dataCurta(p.prazo)}` : ""}
@@ -446,7 +451,7 @@ export default function ContextoPlanoDoCliente({ onPedirAoAgente }: { onPedirAoA
                 ))}
               </ul>
             ) : (
-              <p className="text-[11.5px] text-muted-foreground">Ainda sem projeto no painel.</p>
+              <p className="text-[12px] text-muted-foreground">Ainda sem projeto no painel.</p>
             )}
           </div>
         )}

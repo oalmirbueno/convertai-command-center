@@ -4,42 +4,20 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSegundos, tempoCurto } from "@/components/mesa/Cronometro";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
-import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
-import { juntar, superficie, texto } from "@/components/sistema/estilos";
+import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { juntar, texto } from "@/components/sistema/estilos";
 import { AVISO_DA_EVIDENCIA, copiarTexto, ESCALA_DE_EVIDENCIA, sinalDe, type DiagnosticoDoCriativo, type Evidencia } from "./adsApi";
-
-/** Cartão das etapas (sistema de design): um painel, título curto, a explicação no "?" e a ação à direita. */
-export function Cartao({
-  titulo,
-  dica,
-  acao,
-  children,
-  className = "",
-}: {
-  titulo: ReactNode;
-  dica?: ReactNode;
-  acao?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={juntar(superficie.painel, "min-w-0 p-4", className)}>
-      <div className="mb-3 flex min-w-0 items-center">
-        <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate text-[14px]")}>{titulo}</h3>
-        {dica && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
-        {acao && <div className="ml-auto shrink-0 pl-2">{acao}</div>}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 /**
  * Cabeçalho de uma parte da etapa: título curto, o "?" com a explicação, uma
  * linha de estado e as ações na mesma linha. Diferente do `acao` da Secao do
  * sistema, as ações aqui quebram de linha por dentro no celular (várias ações
  * com custo não passam da borda em 375 px). A promover para o sistema.
+ *
+ * Tudo recolhe (28/09, SISTEMA.md 4.3): com `recolher` (de `useParteRecolhida`)
+ * ganha a setinha pequena antes do título ("Recolher"/"Mostrar"); recolhida,
+ * fica o título e, embaixo, o `resumo` (ou a `descricao`), e as ações somem.
  */
 export function CabecalhoDaParte({
   titulo,
@@ -48,6 +26,7 @@ export function CabecalhoDaParte({
   acoes,
   nivel = 2,
   className = "",
+  recolher,
 }: {
   titulo: ReactNode;
   ajuda?: ReactNode;
@@ -56,21 +35,35 @@ export function CabecalhoDaParte({
   acoes?: ReactNode;
   nivel?: 2 | 3;
   className?: string;
+  /** A parte recolhe (de `useParteRecolhida`). */
+  recolher?: { recolhido: boolean; onAlternar: () => void; resumo?: ReactNode };
 }) {
+  const recolhido = !!(recolher && recolher.recolhido);
   // O cabeçalho do sistema (título com "?", estado e ações que quebram por
   // dentro no celular). Promovido em 26/09 (frente C); o nome local fica.
   return (
     <CabecalhoDeSecao
-      className={juntar("mb-3 items-center py-0.5", className)}
+      className={juntar(recolhido ? "items-center py-0.5" : "mb-3 items-center py-0.5", className)}
       titulo={titulo}
       ajuda={ajuda}
       descricao={descricao}
-      acao={acoes}
+      acao={recolhido ? undefined : acoes}
+      recolher={recolher ? { recolhido, onAlternar: recolher.onAlternar, resumo: recolher.resumo !== undefined ? recolher.resumo : descricao, modo: "icone" } : undefined}
       nivel={nivel}
       classeDoTitulo={texto.tituloSecao}
       truncar
     />
   );
+}
+
+/**
+ * Estado de recolher de uma parte da etapa, lembrado por pessoa e chave (ponha
+ * o cliente na chave). Devolve o que o `recolher` do CabecalhoDaParte pede e se
+ * o corpo está à vista.
+ */
+export function useParteRecolhida(chave: string, inicial = false): { recolhido: boolean; onAlternar: () => void } {
+  const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
+  return { recolhido, onAlternar: () => setRecolhido(!recolhido) };
 }
 
 /** Selo E0 a E4 com cor e a escala inteira no tooltip (a atual em destaque). */
@@ -244,7 +237,7 @@ export function Abas<T extends string>({ valor, opcoes, onMudar, rotulo, classNa
             role="tab"
             aria-selected={ativa}
             onClick={() => onMudar(o.valor)}
-            className={`-mb-px mr-1 border-b-2 px-3 py-2 text-[12.5px] font-medium transition-colors ${ativa ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`-mb-px mr-1 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${ativa ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             {o.rotulo}
           </button>

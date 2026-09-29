@@ -16,6 +16,7 @@ import {
   type SocialMetricsWeek,
   type SocialPostMetric,
 } from "@/hooks/useSocialMetrics";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Métricas do perfil e dos posts, organizadas (rodada 2, 28/09): os números
@@ -92,7 +93,14 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
 
   if (semanas.isLoading) return <p className={texto.auxiliar}>Carregando as métricas...</p>;
   if (!ultima) {
-    return <p className={juntar(texto.auxiliar, "leading-5")}>O robô semanal ainda não coletou números desta conta. Eles aparecem aqui depois da primeira semana com o Instagram conectado.</p>;
+    return (
+      <p className={juntar(texto.auxiliar, "flex items-center")}>
+        Sem números coletados ainda
+        <AjudaRecolhida className="ml-1" rotulo="Quando os números chegam">
+          O robô semanal ainda não coletou números desta conta. Eles aparecem aqui depois da primeira semana com o Instagram conectado.
+        </AjudaRecolhida>
+      </p>
+    );
   }
 
   return (

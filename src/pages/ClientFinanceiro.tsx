@@ -6,7 +6,7 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight } from "lucide-react";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -244,36 +244,34 @@ export default function ClientFinanceiro() {
       <>
       {/* ========== SEÇÃO 1: MEU PLANO ========== */}
       <Secao titulo="Plano">
-        <Painel>
-          {latestPlan ? (
-            <>
-              <div className="flex min-w-0 flex-wrap items-end justify-between">
-                <div className="mr-4 min-w-0">
-                  <p className={juntar(texto.tituloSecao, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
-                  <p className="mt-1 text-2xl font-light tabular-nums text-foreground">
-                    {formatCurrency(Number(latestPlan.amount))}
-                    <span className="ml-1 text-sm text-muted-foreground">/mês</span>
-                  </p>
-                </div>
-                <div className="mt-2 flex items-center">
-                  <span className={juntar(etiqueta, planStatusColor)}>{planStatusLabel}</span>
-                  {renewalDate && <span className={juntar(texto.auxiliar, "ml-2")}>Renova em {formatDate(renewalDateStr!)}</span>}
-                </div>
+        {latestPlan ? (
+          <>
+            <div className="flex min-w-0 flex-wrap items-end justify-between">
+              <div className="mr-4 min-w-0">
+                <p className={juntar(texto.tituloSecao, "truncate")}>{latestPlan.description || "Plano Mensal"}</p>
+                <p className={juntar(texto.numero, "mt-1 font-light")}>
+                  {formatCurrency(Number(latestPlan.amount))}
+                  <span className="ml-1 text-[13px] font-normal text-muted-foreground">/mês</span>
+                </p>
               </div>
+              <div className="mt-2 flex items-center">
+                <span className={juntar(etiqueta, planStatusColor)}>{planStatusLabel}</span>
+                {renewalDate && <span className={juntar(texto.auxiliar, "ml-2")}>Renova em {formatDate(renewalDateStr!)}</span>}
+              </div>
+            </div>
 
-              {renewalDate && (
-                <div className="mt-4">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${timePercent}%` }} />
-                  </div>
-                  <p className={juntar(texto.auxiliar, "mt-1.5")}>{daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}</p>
+            {renewalDate && (
+              <div className="mt-4">
+                <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${timePercent}%` }} />
                 </div>
-              )}
-            </>
-          ) : (
-            <p className={texto.auxiliar}>Nenhum plano encontrado</p>
-          )}
-        </Painel>
+                <p className={juntar(texto.auxiliar, "mt-1.5")}>{daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className={texto.auxiliar}>Nenhum plano encontrado</p>
+        )}
       </Secao>
 
       {/* ========== SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ========== */}
@@ -331,20 +329,22 @@ export default function ClientFinanceiro() {
       {pendingRecharges.length > 0 && (
         <Secao
           divisoria
+          recolher={`financeiro:recargas:${clientId || ""}`}
           titulo={
-            <span className="inline-flex items-center">
-              <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-warning" aria-hidden="true" /> Recargas para confirmar
+            <span className="inline-flex min-w-0 items-center">
+              <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <span className="truncate">Recargas para confirmar</span>
             </span>
           }
           descricao={`${pendingRecharges.length} ${pendingRecharges.length === 1 ? "pedido" : "pedidos"} da equipe`}
         >
-          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden border-warning/30")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
             {pendingRecharges.map((r: any) => (
               <li key={r.id}>
                 <button
                   type="button"
                   onClick={() => setRechargePopup(r)}
-                  className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                  className={juntar("flex w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40", foco)}
                 >
                   <Zap className="mr-3 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
@@ -385,8 +385,8 @@ export default function ClientFinanceiro() {
                       <p className="mt-1 text-xl font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
                     </div>
                     <div className="text-right tabular-nums">
-                      <p className="text-xs text-success">{formatCurrency(paid)} pago</p>
-                      {remaining > 0 && <p className="text-xs text-warning">{formatCurrency(remaining)} restante</p>}
+                      <p className="text-[12px] text-success">{formatCurrency(paid)} pago</p>
+                      {remaining > 0 && <p className="text-[12px] text-warning">{formatCurrency(remaining)} restante</p>}
                     </div>
                   </div>
 
@@ -408,10 +408,10 @@ export default function ClientFinanceiro() {
                             <p className={texto.auxiliar}>{formatDate(inst.due_date)}</p>
                           </div>
                           <div className="ml-2 whitespace-nowrap text-right tabular-nums">
-                            <p className={`text-sm ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
+                            <p className={`text-[13px] ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
                               {formatCurrency(inst.status === "pending" ? Number(inst.amount) : receivedOf(inst))}
                             </p>
-                            {inst.status === "partial" && <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
+                            {inst.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
                           </div>
                           <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
                         </li>
@@ -430,21 +430,21 @@ export default function ClientFinanceiro() {
         {(!billing || billing.length === 0) ? (
           <EstadoVazio compacto titulo="Nenhum pagamento registrado." />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
+          <ul className={juntar(lista.aberta, lista.divisoria)}>
             {billing.map((b: any) => {
               const st = statusDoPagamento(b.status, b.due_date);
               return (
-                <li key={b.id} className="flex min-w-0 items-center px-4 py-3 sm:px-5">
+                <li key={b.id} className="flex min-w-0 items-center px-2 py-3">
                   <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-foreground">{b.description || typeLabels[b.type] || b.type}</p>
                     <p className={texto.auxiliar}>{formatDate(b.due_date)}</p>
                   </div>
                   <div className="ml-2 whitespace-nowrap text-right tabular-nums">
-                    <p className={`text-sm ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
+                    <p className={`text-[13px] ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
                       {formatCurrency(b.status === "pending" ? Number(b.amount) : receivedOf(b))}
                     </p>
-                    {b.status === "partial" && <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
+                    {b.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
                   </div>
                   <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
                 </li>
@@ -493,13 +493,13 @@ export default function ClientFinanceiro() {
                   {r.reason && (
                     <div className={juntar(superficie.poco, "px-3 py-2.5")}>
                       <p className={juntar(texto.rotulo, "mb-0.5")}>Observação da equipe</p>
-                      <p className="text-sm text-foreground">{r.reason}</p>
+                      <p className="text-[13px] text-foreground">{r.reason}</p>
                     </div>
                   )}
 
                   {/* Actions */}
                   {isImpersonating ? (
-                    <p className="text-center text-xs text-sky-500" role="note">
+                    <p className="text-center text-[12px] text-sky-500" role="note">
                       Somente leitura: nenhuma decisão pode ser registrada neste modo.
                     </p>
                   ) : (

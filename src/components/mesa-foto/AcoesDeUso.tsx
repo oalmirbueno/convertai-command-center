@@ -131,7 +131,7 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
   };
   if (foto.aprovada) {
     return (
-      <span className="inline-flex flex-wrap items-center text-[11.5px]" data-aprovar-foto="">
+      <span className="inline-flex flex-wrap items-center text-[12px]" data-aprovar-foto="">
         <span className="mb-1 mr-2 inline-flex items-center font-medium text-success">
           <Check className="mr-1 h-3.5 w-3.5" /> Aprovada pela equipe
         </span>
@@ -142,7 +142,8 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
     );
   }
   return (
-    <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={decidindo} onClick={() => void decidir("aprovar")} data-aprovar-foto="">
+    // 28/09 (um primário por área): aprovar é secundário, com a cor do "aprovada".
+    <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 border-success/50 text-[12px] text-success hover:bg-success/10 hover:text-success" disabled={decidindo} onClick={() => void decidir("aprovar")} data-aprovar-foto="">
       {decidindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
       Aprovar esta foto
     </Button>

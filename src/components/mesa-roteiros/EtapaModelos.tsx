@@ -10,7 +10,7 @@ import { botao, campo, juntar, superficie, texto } from "@/components/sistema/es
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modoDoTipo, type EstruturaDoModelo } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useModelos, useRoteiros, type ModeloDeRoteiro } from "./roteirosApi";
-import { AvisoDoBanco, BlocoRecolhivel, Cabecalho } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel } from "./Comuns";
 
 /**
  * Etapa 5: memória (MEMORIA-E-TEMPLATES.md, de forma simples). Todo roteiro
@@ -109,7 +109,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
       >
         {modelosQ.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os modelos" />}
         {!modelosQ.isLoading && !doCliente.length && <EstadoVazio compacto titulo="Nenhum ainda." descricao="Aprove um roteiro na Revisão." />}
-        {doCliente.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{doCliente.map(linha)}</ul>}
+        {doCliente.length > 0 && <ul className="divide-y divide-border">{doCliente.map(linha)}</ul>}
       </BlocoRecolhivel>
 
       <BlocoRecolhivel
@@ -122,10 +122,10 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
         resumo={modelosQ.isSuccess ? `${daAgencia.length} ${daAgencia.length === 1 ? "modelo" : "modelos"}` : undefined}
       >
         {!modelosQ.isLoading && !daAgencia.length && <EstadoVazio compacto titulo="Nenhum ainda." />}
-        {daAgencia.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border")}>{daAgencia.map(linha)}</ul>}
+        {daAgencia.length > 0 && <ul className="divide-y divide-border">{daAgencia.map(linha)}</ul>}
 
-        <div className="min-w-0 space-y-3 pt-2">
-          <Cabecalho nivel={3} icone={<Layers className="h-4 w-4" />} titulo="Levar um roteiro aprovado para a agência" />
+        {/* 28/09: o cabeçalho feito à mão virou bloco recolhível; listas abertas, sem cartão. */}
+        <BlocoRecolhivel chave={`mesa-roteiros:modelos:levar:${clientId}`} nivel={3} icone={<Layers className="h-4 w-4" />} titulo="Levar um roteiro aprovado para a agência">
           <div className="flex min-w-0 items-end">
             <CampoDeFormulario rotulo="Roteiro aprovado de origem" className="mr-2 min-w-0 flex-1 sm:max-w-md">
               <select
@@ -152,7 +152,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
           {previa && (
             <div className={juntar(superficie.poco, "min-w-0 space-y-2 px-3 py-3")} data-previa-do-modelo="">
               <div className="flex min-w-0 flex-wrap items-center justify-between">
-                <p className="mb-1 mr-2 flex min-w-0 items-center text-[12.5px] font-medium">
+                <p className="mb-1 mr-2 flex min-w-0 items-center text-[12px] font-medium">
                   <ShieldCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                   <span className="min-w-0 [overflow-wrap:anywhere]">Sai do modelo: {previa.removidos.join(", ")}.</span>
                 </p>
@@ -160,7 +160,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
                   {ocupado === "salvar" && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Salvar como modelo da agência
                 </button>
               </div>
-              <ol className="space-y-1 text-[12.5px]">
+              <ol className="space-y-1 text-[12px]">
                 {previa.estrutura.blocos.map((b, i) => (
                   <li key={i} className="[overflow-wrap:anywhere]">
                     <span className="font-medium">
@@ -175,7 +175,7 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
               )}
             </div>
           )}
-        </div>
+        </BlocoRecolhivel>
       </BlocoRecolhivel>
     </div>
   );

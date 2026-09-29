@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MiniaturaDaFoto, Pilulas } from "./Comuns";
 import { classeDaFoto, type FotoDoAcervo } from "./fotoApi";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { FILTROS_DA_CLASSE, filtrarFotos, type FiltroDaClasse } from "./EtapaAcervo";
 
 /**
@@ -41,9 +42,21 @@ export default function SeletorDeFotos({
   };
 
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-primary/40 bg-card p-3.5" aria-label={titulo}>
+    // Escolha aberta dentro da etapa: é uma janela no lugar (cartão com função). 28/09: sem rolagem
+    // própria (uma por região); as ações ficam na linha do título, à vista mesmo com muitas fotos.
+    <section className={juntar(superficie.painel, "min-w-0 space-y-3 border-primary/40 p-3.5")} aria-label={titulo}>
       <div className="flex min-w-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
+        {multiplas && (
+          <>
+            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 shrink-0 text-[12px]" onClick={onFechar}>
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" className="ml-1 h-8 shrink-0 text-[12px]" disabled={!marcadas.length} onClick={() => onUsar(marcadas)}>
+              Usar {marcadas.length ? marcadas.length : ""} {marcadas.length === 1 ? "foto" : "fotos"}
+            </Button>
+          </>
+        )}
         <button type="button" onClick={onFechar} aria-label="Fechar" className="ml-2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
           <X className="h-4 w-4" />
         </button>
@@ -56,7 +69,7 @@ export default function SeletorDeFotos({
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
-        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain">
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
           {lista.map((f) => {
             const ja = jaEscolhidas.indexOf(f.id) >= 0;
             const marcada = marcadas.indexOf(f.id) >= 0;
@@ -68,7 +81,7 @@ export default function SeletorDeFotos({
                 onClick={() => alternar(f.id)}
                 aria-pressed={marcada}
                 aria-label={`${ja ? "Já no kit: " : ""}${f.nome}${classeDaFoto(f) === "gerada" ? " (gerada)" : ""}`}
-                className={`relative min-w-0 rounded-lg border p-0.5 text-left ${marcada ? "border-primary" : "border-transparent hover:border-border"} ${ja ? "opacity-40" : ""}`}
+                className={`relative min-w-0 rounded-lg p-0.5 text-left ${marcada ? "ring-1 ring-primary" : "hover:bg-muted/40"} ${ja ? "opacity-40" : ""}`}
               >
                 <MiniaturaDaFoto foto={f} />
                 {marcada && (
@@ -76,20 +89,10 @@ export default function SeletorDeFotos({
                     <Check className="h-3 w-3" />
                   </span>
                 )}
-                <span className="mt-0.5 block truncate text-[10.5px] text-muted-foreground">{f.nome}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{f.nome}</span>
               </button>
             );
           })}
-        </div>
-      )}
-      {multiplas && (
-        <div className="flex items-center justify-end">
-          <Button type="button" size="sm" variant="ghost" className="mr-2 h-8 text-[12px]" onClick={onFechar}>
-            Cancelar
-          </Button>
-          <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!marcadas.length} onClick={() => onUsar(marcadas)}>
-            Usar {marcadas.length ? marcadas.length : ""} {marcadas.length === 1 ? "foto" : "fotos"}
-          </Button>
         </div>
       )}
     </section>

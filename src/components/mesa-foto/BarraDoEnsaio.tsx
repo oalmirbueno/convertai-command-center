@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowRight, Camera, Check, ChevronDown, Layers, Loader2, Plus, Wallet } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -12,8 +13,14 @@ import { resumoDoLote, useLotes } from "./lote";
  * aparecem), o ensaio aberto, o custo, o lote que está gerando (em qualquer
  * etapa) e o próximo passo do caminho principal, sempre em destaque. O kit
  * escolhido vai para o endereço (?kit=), então fica ao recarregar.
+ *
+ * 28/09 (dono: "menos poluído"): sem ensaio aberto, o "Criando: nenhum" sai
+ * (o passo 2 já leva a Criar); sem nada para mostrar, a barra não ocupa linha.
+ * No passo 2 as formas de criar entram no começo desta linha (`inicio`), em
+ * vez de uma linha própria na etapa. O próximo passo fica em destaque sem ser
+ * o primário da tela.
  */
-export default function BarraDoEnsaio() {
+export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
   const { clientId, catalogo } = useMesa();
   const { kitId, ensaioId, irPara, escolherKit, proximo, etapa } = useMesaFoto();
   const kits = useKits(clientId);
@@ -31,50 +38,54 @@ export default function BarraDoEnsaio() {
     .map((k) => lotes[k])
     .filter((l) => l.client_id === clientId && l.ativo);
   const mostrarProximo = !!proximo && proximo.etapa !== etapa;
+  if (!inicio && kits.isSuccess && !lista.length && !kit && !ensaio && !ativos.length && !mostrarProximo) return null;
 
   return (
-    <div className="mt-2 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground" aria-label="Kit, ensaio e custo" data-barra-do-ensaio="">
+    <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" aria-label="Kit, ensaio e custo" data-barra-do-ensaio="">
+      {inicio ? <div className="mr-3 min-w-0">{inicio}</div> : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground" aria-label="Trocar o produto (kit)">
             <Layers className="mr-1 h-3.5 w-3.5 shrink-0" />
             <span className="mr-1 hidden sm:inline">Produto:</span>
             <span className={`min-w-0 truncate ${kit ? "font-medium text-foreground" : ""}`}>{kit ? `${kit.nome} · ${rotuloDoTipo(kit.tipo)}` : "nenhum"}</span>
-            {kit && kit.status === "rascunho" && <span className="ml-1 shrink-0 rounded-full border border-border px-1.5 text-[10px]">rascunho</span>}
+            {kit && kit.status === "rascunho" && <span className="ml-1 shrink-0 rounded-full border border-border px-1.5 text-[11px]">rascunho</span>}
             <ChevronDown className="ml-0.5 h-3 w-3 shrink-0" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-[60vh] w-72 max-w-[calc(100vw-24px)] overflow-y-auto">
           {lista.length === 0 && <p className="px-2 py-1.5 text-[12px] text-muted-foreground">Nenhum produto ainda.</p>}
           {lista.map((k) => (
-            <DropdownMenuItem key={String(k.id)} onSelect={() => escolherKit(k.id)} className="text-[12.5px]" data-kit-na-barra={k.id}>
+            <DropdownMenuItem key={String(k.id)} onSelect={() => escolherKit(k.id)} className="text-[13px]" data-kit-na-barra={k.id}>
               <span className="mr-2 flex h-3.5 w-3.5 shrink-0 items-center justify-center">{k.id === kitId && <Check className="h-3.5 w-3.5" />}</span>
               <span className="min-w-0 flex-1 truncate">{k.nome}</span>
-              <span className="ml-2 shrink-0 text-[10.5px] text-muted-foreground">{k.status === "rascunho" ? "rascunho" : rotuloDoTipo(k.tipo)}</span>
+              <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{k.status === "rascunho" ? "rascunho" : rotuloDoTipo(k.tipo)}</span>
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => irPara("acervo")} className="text-[12.5px]">
+          <DropdownMenuItem onSelect={() => irPara("acervo")} className="text-[13px]">
             <Plus className="mr-2 h-3.5 w-3.5" /> Identificar um produto pelas fotos
           </DropdownMenuItem>
           {kit && (
-            <DropdownMenuItem onSelect={() => irPara("kits")} className="text-[12.5px]">
+            <DropdownMenuItem onSelect={() => irPara("kits")} className="text-[13px]">
               <Layers className="mr-2 h-3.5 w-3.5" /> Detalhes deste produto
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <button
-        type="button"
-        onClick={() => irPara(ensaio ? (ensaio.receita_id === "campanha-com-modelo" ? "campanha" : "ensaio") : "criar", ensaio ? { ensaio: ensaio.id } : undefined)}
-        className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground"
-      >
-        <Camera className="mr-1 h-3.5 w-3.5 shrink-0" />
-        <span className="mr-1 hidden sm:inline">Criando:</span>
-        <span className={`min-w-0 truncate ${ensaio ? "font-medium text-foreground" : ""}`}>
-          {ensaio ? `${nomeDaReceita(receitas.data ? receitas.data.receitas : null, ensaio.receita_id)} · ${rotuloDoEstadoDoEnsaio(ensaio.status)}` : "nenhum"}
-        </span>
-      </button>
+      {ensaio && (
+        <button
+          type="button"
+          onClick={() => irPara(ensaio.receita_id === "campanha-com-modelo" ? "campanha" : "ensaio", { ensaio: ensaio.id })}
+          className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground"
+        >
+          <Camera className="mr-1 h-3.5 w-3.5 shrink-0" />
+          <span className="mr-1 hidden sm:inline">Criando:</span>
+          <span className="min-w-0 truncate font-medium text-foreground">
+            {`${nomeDaReceita(receitas.data ? receitas.data.receitas : null, ensaio.receita_id)} · ${rotuloDoEstadoDoEnsaio(ensaio.status)}`}
+          </span>
+        </button>
+      )}
       {ensaio && (
         <span className="mr-3 whitespace-nowrap tabular-nums">
           {resumo.aprovadas}/{resumo.total} aprovadas{resumo.paraRevisar ? ` · ${resumo.paraRevisar} para revisar` : ""}
@@ -111,7 +122,7 @@ export default function BarraDoEnsaio() {
         <button
           type="button"
           onClick={() => irPara(proximo.etapa as EtapaDaMesaFoto, proximo.extras)}
-          className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-md bg-primary px-2.5 py-1 text-[12px] font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-md border border-primary/50 px-2.5 py-1 text-[12px] font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-proximo-passo=""
         >
           <span className="truncate">Próximo: {proximo.rotulo}</span>

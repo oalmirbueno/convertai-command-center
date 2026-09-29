@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AjudaRecolhida, EstadoVazio, botao, foco, juntar, texto } from "@/components/sistema";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
 /**
@@ -17,8 +16,9 @@ import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecol
  * A explicação vai no "?" (ajuda).
  *
  * 28/09 (dono: "tudo organizado para recolher"): com `recolher` (chave por
- * cliente), o título recolhe a lista e deixa à vista só o escolhido; a lista
- * longa rola por dentro no computador (RegiaoRolavel, nada disso no celular).
+ * cliente), o título recolhe a lista e deixa à vista só o escolhido.
+ * Uma rolagem por região: a lista segue a rolagem da região principal (sem
+ * caixa com rolagem própria dentro dela).
  */
 
 export interface ItemDoSeletor {
@@ -100,7 +100,6 @@ export default function SeletorLateral({
             </Select>
           </div>
           <div className="hidden min-w-0 lg:block">
-          <RegiaoRolavel modo="lg" memoria={recolher ? `${recolher}:rolagem` : undefined} classeDeFora="lg:max-h-[60vh]">
           <ul className="min-w-0 space-y-0.5" aria-label={titulo}>
             {itens.map((i) => {
               const ativo = i.id === escolhido;
@@ -130,7 +129,6 @@ export default function SeletorLateral({
               );
             })}
           </ul>
-          </RegiaoRolavel>
           </div>
         </>
       )}

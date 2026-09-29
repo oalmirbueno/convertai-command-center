@@ -7,7 +7,6 @@ import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import Secao from "@/components/sistema/Secao";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
@@ -279,9 +278,10 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
         {!planos.length ? (
           <EstadoVazio titulo="Nenhum plano ainda" descricao="Use um kit ou peça ao diretor para montar o roteiro." acao={<button type="button" className={botao.secundario} onClick={() => irPara("kit")}>Escolher kit</button>} />
         ) : (
-          <RegiaoRolavel rotulo="Planos do roteiro" memoria={`mesa-videos:roteiro:${clientId}`}>
-            {/* 28/09: sem altura fixa. A principal da AreaDeTrabalho já rola; a caixa
-                de 100vh-260px criava rolagem dentro de rolagem e sobra ou corte na tela cheia. */}
+          <>
+            {/* 28/09: sem altura fixa e sem região própria. A principal da AreaDeTrabalho já rola
+                (e guarda a posição por etapa); a caixa de 100vh-260px criava rolagem dentro de
+                rolagem e sobra ou corte na tela cheia. */}
             <ol className="divide-y divide-border" aria-label="Planos">
               {planos.map((p, i) => {
                 const m = motorPorId(p.motor, motores.motores);
@@ -435,7 +435,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                 );
               })}
             </ol>
-          </RegiaoRolavel>
+          </>
         )}
       </Secao>
       <p className="sr-only" aria-live="polite">

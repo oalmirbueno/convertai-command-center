@@ -83,6 +83,10 @@ export const CampoDeSenha = forwardRef<
 const LARGURAS = {
   estreita: "max-w-[400px]",
   media: "max-w-[600px]",
+  /** Guias de leitura (ex.: conectar agentes ao MCP, diagnóstico). */
+  larga: "max-w-3xl",
+  /** Documento para ler inteiro na tela (contrato em PDF). */
+  documento: "max-w-5xl",
 } as const;
 
 /**
@@ -100,6 +104,7 @@ export default function CascaPublica({
   acimaDoTitulo,
   largura = "estreita",
   centralizar = true,
+  tituloQuebra = false,
   children,
 }: {
   titulo?: ReactNode;
@@ -114,6 +119,11 @@ export default function CascaPublica({
   largura?: keyof typeof LARGURAS;
   /** Centraliza na altura do tablet para cima (telas curtas de formulário). */
   centralizar?: boolean;
+  /**
+   * O título numa linha só (com reticências) é o padrão (28/09). Só quando o
+   * título É o conteúdo (a pergunta do quiz) ele pode quebrar em mais linhas.
+   */
+  tituloQuebra?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -133,7 +143,12 @@ export default function CascaPublica({
         {titulo ? (
           <div className="mb-6 min-w-0">
             <div className="flex min-w-0 items-start">
-              <h1 className={juntar(texto.tituloPagina, "min-w-0 [overflow-wrap:anywhere]")}>{titulo}</h1>
+              <h1
+                className={juntar(texto.tituloPagina, "min-w-0", tituloQuebra ? "[overflow-wrap:anywhere]" : "truncate")}
+                title={!tituloQuebra && typeof titulo === "string" ? titulo : undefined}
+              >
+                {titulo}
+              </h1>
               {ajuda ? <AjudaRecolhida className="ml-1.5 mt-1">{ajuda}</AjudaRecolhida> : null}
             </div>
             {descricao ? <p className={juntar(texto.corpo, "mt-1 text-muted-foreground [overflow-wrap:anywhere]")}>{descricao}</p> : null}

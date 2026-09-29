@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, CircleDashed, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { Check, Circle, CircleDashed, FileText, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,14 @@ import FotosDoCliente from "./ContextoFotos";
 import GaleriaDeReferencias from "./ContextoGaleriaDeReferencias";
 import { BarraDoScore, Hub, useHubsAbertos } from "./ContextoHub";
 // Frente AP (27/09): o que o painel aprendeu com as entregas, os ajustes, as reprovações e os números reais.
-import ContextoAprendizados, { useAprendizadosDoCliente } from "./ContextoAprendizados";
+import ContextoAprendizados, { SeletorDaOrigem, useAprendizadosDoCliente, type FiltroDosAprendizados } from "./ContextoAprendizados";
 import { aprendizadosDoPainel, resumoDosAprendizados } from "./aprendizadosDoPainel";
 import { useMesa } from "./MesaContexto";
 import type { ParteDoContexto } from "./AbaContexto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import Painel from "@/components/sistema/Painel";
+import { juntar, lista, superficie, texto } from "@/components/sistema/estilos";
 import {
   chaveDasReferencias,
   chaveDoAcervo,
@@ -189,7 +193,7 @@ function Completude({ itens, onIr }: { itens: ItemDoChecklist[]; onIr: (secao: S
               onClick={() => onIr(i.secao)}
               title={i.detalhe}
               aria-label={`${i.rotulo}: ${NOME_DA_SITUACAO[i.situacao]}. ${i.detalhe}`}
-              className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11.5px] transition-colors hover:border-primary/60 ${
+              className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[12px] transition-colors hover:border-primary/60 ${
                 i.situacao === "feito" ? "border-border bg-muted text-muted-foreground" : "border-border bg-card text-foreground"
               }`}
             >
@@ -270,18 +274,18 @@ function CampoRecolhido({ campo, onEditar }: { campo: CampoDoConsolidado; onEdit
   const [aberto, setAberto] = useState(false);
   const longo = campo.texto.length > 110 || campo.texto.indexOf("\n") >= 0;
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-background/40 p-2.5">
+    <div className={juntar(superficie.poco, "min-w-0 p-2.5")}>
       <div className="mb-0.5 flex min-w-0 items-center justify-between">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{campo.rotulo}</p>
+        <p className={texto.rotulo}>{campo.rotulo}</p>
         {campo.editavel && onEditar && (
           <button type="button" onClick={onEditar} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
             Editar
           </button>
         )}
       </div>
-      <p className={`whitespace-pre-line text-[12.5px] leading-relaxed text-foreground [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-2"}`}>{campo.texto}</p>
+      <p className={`whitespace-pre-line text-[13px] leading-relaxed text-foreground [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-2"}`}>{campo.texto}</p>
       {longo && (
-        <button type="button" onClick={() => setAberto((v) => !v)} className="mt-0.5 text-[11.5px] font-medium text-primary hover:underline" aria-expanded={aberto}>
+        <button type="button" onClick={() => setAberto((v) => !v)} className="mt-0.5 text-[12px] font-medium text-primary hover:underline" aria-expanded={aberto}>
           {aberto ? "ver menos" : "ver mais"}
         </button>
       )}
@@ -299,15 +303,15 @@ function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 rounded-md bg-muted/40 p-3 md:grid-cols-[180px_minmax(0,1fr)]">
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Score do contexto</p>
+        <p className={texto.rotulo}>Score do contexto</p>
         <p className="mt-0.5 flex items-baseline">
-          <span className="text-[30px] font-semibold leading-none tabular-nums text-foreground">{r.score}</span>
+          <span className={texto.numero}>{r.score}</span>
           <span className="ml-1 text-[12px] text-muted-foreground">de 100</span>
         </p>
         <div className="mt-2 flex items-center">
           <BarraDoScore score={r.score} />
         </div>
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+        <p className={juntar(texto.auxiliar, "mt-1.5")}>
           {r.completos} de {r.campos.length} campos completos
         </p>
         <ul className="mt-2 flex min-w-0 flex-wrap" aria-label="Campos do score">
@@ -315,7 +319,7 @@ function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
             <li
               key={c.chave}
               title={`${c.rotulo}: ${NOME_DO_NIVEL[c.nivel]} (${c.pontos} de ${c.peso})`}
-              className={`mb-1 mr-1 rounded-full px-1.5 py-px text-[10.5px] ${
+              className={`mb-1 mr-1 rounded-full px-1.5 py-px text-[11px] ${
                 c.nivel === "completo" ? "bg-success/15 text-foreground" : c.nivel === "vazio" ? "bg-card text-muted-foreground" : "bg-warning/15 text-foreground"
               }`}
             >
@@ -325,27 +329,29 @@ function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
         </ul>
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Para subir o score</p>
+        <div className="flex min-w-0 items-center">
+          <p className={texto.rotulo}>Para subir o score</p>
+          <AjudaRecolhida className="ml-1" rotulo="Como subir o score">
+            Conte ao agente de contexto ao lado (dá para falar no microfone) ou clique em Atualizar contexto. O agente segue aprendendo com cada conversa.
+          </AjudaRecolhida>
+        </div>
         {r.faltas.length === 0 ? (
-          <p className="mt-1.5 text-[12.5px] text-foreground">Contexto completo. O agente segue aprendendo com cada conversa.</p>
+          <p className="mt-1.5 text-[13px] text-foreground">Contexto completo.</p>
         ) : (
           <>
             <ul className="mt-1.5 space-y-1">
               {faltas.map((f) => (
-                <li key={f.chave} className="flex min-w-0 items-start text-[12.5px] leading-snug">
-                  <span className="mr-2 mt-px shrink-0 rounded-full bg-card px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-primary">+{f.ganho}</span>
+                <li key={f.chave} className="flex min-w-0 items-start text-[13px] leading-snug">
+                  <span className="mr-2 mt-px shrink-0 rounded-full bg-card px-1.5 py-px text-[11px] font-semibold tabular-nums text-primary">+{f.ganho}</span>
                   <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{f.texto}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[11.5px] text-muted-foreground">
-              Conte ao agente de contexto ao lado (dá para falar no microfone) ou clique em Atualizar contexto.
-              {r.faltas.length > 4 && (
-                <button type="button" onClick={() => setTodas((v) => !v)} className="ml-1 font-medium text-foreground hover:underline" aria-expanded={todas}>
-                  {todas ? "Ver menos" : `Ver as ${r.faltas.length}`}
-                </button>
-              )}
-            </p>
+            {r.faltas.length > 4 && (
+              <button type="button" onClick={() => setTodas((v) => !v)} className="mt-2 text-[12px] font-medium text-foreground hover:underline" aria-expanded={todas}>
+                {todas ? "Ver menos" : `Ver as ${r.faltas.length}`}
+              </button>
+            )}
           </>
         )}
       </div>
@@ -361,7 +367,7 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
     return (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-lg border border-border p-2.5">
+          <div key={i} className={juntar(superficie.poco, "p-2.5")}>
             <Esqueleto linhas={2} />
           </div>
         ))}
@@ -372,24 +378,23 @@ function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto 
     <div className="min-w-0 space-y-3">
       <PainelDoScore kit={kit} />
       {cheios.length === 0 ? (
-        <p className="text-[12.5px] text-muted-foreground">Ainda não há contexto montado. Clique em "Montar contexto" ou conte ao agente o que sabe da marca.</p>
+        <p className="text-[13px] text-muted-foreground">Ainda não há contexto montado.</p>
       ) : (
-        <div className="-mr-1.5 max-h-[55vh] min-w-0 overflow-y-auto overscroll-contain pr-1.5">
-          <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
-            {cheios.map((campo) => (
-              <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
-            ))}
-          </div>
+        // Sem rolagem própria (28/09): quem rola é a área de trabalho; cada campo já vem em duas linhas.
+        <div className="grid min-w-0 grid-cols-1 items-start gap-2 sm:grid-cols-2">
+          {cheios.map((campo) => (
+            <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
+          ))}
         </div>
       )}
       <div className="flex min-w-0 flex-wrap items-center justify-between">
         {cheios.length > 0 && vazios.length > 0 ? (
-          <p className="mr-2 min-w-0 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Ainda sem: {vazios.join(", ")}.</p>
+          <p className={juntar(texto.auxiliar, "mr-2 min-w-0 truncate")} title={`Ainda sem: ${vazios.join(", ")}`}>Ainda sem: {vazios.join(", ")}</p>
         ) : (
           <span />
         )}
         {fontesLidas.length > 0 && (
-          <button type="button" onClick={() => setVerFontes((v) => !v)} className="text-[11.5px] font-medium text-foreground hover:underline" aria-expanded={verFontes}>
+          <button type="button" onClick={() => setVerFontes((v) => !v)} className="shrink-0 text-[12px] font-medium text-foreground hover:underline" aria-expanded={verFontes}>
             {verFontes ? "Esconder fontes lidas" : `Ver as ${fontesLidas.length} fontes lidas`}
           </button>
         )}
@@ -427,15 +432,18 @@ function SugestoesPendentes({
   if (!campos.length) return null;
   const rotulos: Record<string, string> = { paleta: "Paleta", estilo: "Estilo visual", regras: "Regras" };
   return (
-    <section className="min-w-0 space-y-3 rounded-lg border border-primary/50 bg-card p-3.5 sm:p-4">
-      <div>
-        <p className="flex items-center text-[13px] font-semibold"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" /> Sugestões do agente</p>
-        <p className="text-[11.5px] text-muted-foreground">A equipe já tinha preenchido estes campos, então o agente não trocou nada. Aplique o que fizer sentido.</p>
-      </div>
-      <ul className="space-y-2">
+    // Lista que é uma coisa só (28/09): um Painel, a explicação no "?", itens separados por traço.
+    <Painel
+      as="section"
+      titulo="Sugestões do agente"
+      descricao={`${campos.length} ${campos.length === 1 ? "campo" : "campos"}`}
+      ajuda="A equipe já tinha preenchido estes campos, então o agente não trocou nada. Aplique o que fizer sentido."
+      className="border-primary/50"
+    >
+      <ul className={juntar(lista.divisoria, "min-w-0")}>
         {campos.map((campo) => (
-          <li key={campo} className="min-w-0 space-y-2 rounded-md bg-muted/60 p-2.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{rotulos[campo]}</p>
+          <li key={campo} className="min-w-0 space-y-2 py-2.5 first:pt-0 last:pb-0">
+            <p className={texto.rotulo}>{rotulos[campo]}</p>
             {campo === "paleta" ? (
               <div className="space-y-1.5">
                 <ChipsDaPaleta paleta={sugestoes.paleta || []} />
@@ -445,7 +453,7 @@ function SugestoesPendentes({
               </div>
             ) : (
               <div className="space-y-1">
-                <p className="line-clamp-4 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{String(sugestoes[campo] || "")}</p>
+                <p className="line-clamp-4 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{String(sugestoes[campo] || "")}</p>
                 {temTexto(campo === "estilo" ? kit?.estilo : kit?.regras) && (
                   <p className="line-clamp-2 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                     Hoje: {campo === "estilo" ? kit?.estilo : kit?.regras}
@@ -454,10 +462,11 @@ function SugestoesPendentes({
               </div>
             )}
             <div className="flex flex-wrap justify-end">
-              <Button type="button" size="sm" variant="ghost" className="mr-2 h-7 text-[11.5px]" onClick={() => onIgnorar(campo)} disabled={aplicando === campo}>
+              <Button type="button" size="sm" variant="ghost" className="mr-2 h-7 text-[12px]" onClick={() => onIgnorar(campo)} disabled={aplicando === campo}>
                 Ignorar
               </Button>
-              <Button type="button" size="sm" className="h-7 text-[11.5px]" onClick={() => onAplicar(campo)} disabled={!!aplicando}>
+              {/* Um primário por área: cada sugestão tem o seu Aplicar, então ele é secundário. */}
+              <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => onAplicar(campo)} disabled={!!aplicando}>
                 {aplicando === campo && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                 Aplicar
               </Button>
@@ -465,7 +474,7 @@ function SugestoesPendentes({
           </li>
         ))}
       </ul>
-    </section>
+    </Painel>
   );
 }
 
@@ -518,6 +527,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const [aplicando, setAplicando] = useState<string | null>(null);
   const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO, clientId);
   const aprendizados = useAprendizadosDoCliente(clientId);
+  const [filtroDosAprendizados, setFiltroDosAprendizados] = useState<FiltroDosAprendizados>("todos");
 
   const dados = leitura.data;
   // O kit da tabela responde antes do "ler"; o do "ler" cobre enquanto isso.
@@ -662,27 +672,28 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
 
   return (
     <div className="min-w-0 space-y-4">
-      {/* Título curto e ações na mesma linha, também no celular (o cliente já está na barra da mesa). */}
-      <div className="flex min-w-0 items-center justify-between">
-        <div className="mr-3 min-w-0 flex-1">
-          <h2 className="truncate text-[20px] font-semibold leading-7 tracking-[-0.01em] text-foreground" title={clientName ? `Contexto de ${clientName}` : undefined}>
-            Contexto
-          </h2>
-          <p className="flex items-center text-[12px] text-muted-foreground">
+      {/* Título curto e ações na mesma linha, também no celular (o cliente já está na barra da mesa). A explicação fica no "?". */}
+      <CabecalhoDePagina
+        nivel={2}
+        titulo="Contexto"
+        ajuda={`O que a Mesa já sabe ${clientName ? `de ${clientName}` : "do cliente"}: montado sozinho com documentos, dossiê, artes aprovadas e referências. Complete e corrija conversando com o agente ao lado.`}
+        descricao={
+          <span className="flex min-w-0 items-center">
             {leitura.isFetching && <Loader2 className="mr-1.5 h-3 w-3 shrink-0 animate-spin" />}
             {leitura.isLoading
               ? "Lendo o que o painel já tem..."
               : contextoMontado
                 ? `Montado ${dataEHora(kit!.contexto_atualizado_em!)}`
                 : "Contexto ainda não montado"}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center">
+          </span>
+        }
+        acoes={
+          <>
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            className="mr-1.5 h-8 w-8 p-0"
+            className="h-8 w-8 p-0"
             onClick={() => {
               void leitura.refetch();
               void kitQuery.refetch();
@@ -707,20 +718,21 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
             executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId })}
             aoConcluir={(data) => depoisDeMontar(clientId, data)}
           />
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Completude itens={itens} onIr={irParaSecao} />
 
       {montando && (
-        <p className="flex items-center rounded-md bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
+        <p className="flex items-center text-[12px] text-muted-foreground">
           <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
           Montando o contexto a partir do que o cliente já tem...
         </p>
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
       {leitura.isError && (
-        <div className="flex min-w-0 flex-col rounded-md bg-muted/40 p-3 sm:flex-row sm:items-center">
+        <div className={juntar(superficie.poco, "flex min-w-0 flex-col p-3 sm:flex-row sm:items-center")}>
           <div className="min-w-0 flex-1">
             <AvisoDeErro erro={leitura.error} />
           </div>
@@ -730,9 +742,12 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         </div>
       )}
       {dados && !temMaterial && !contextoMontado && (
-        <p className="rounded-md bg-muted/40 px-3 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
-          Ainda não há documentos, dossiê nem artes aprovadas deste cliente no painel. Envie a identidade em Arquivos ou conte ao agente de contexto o que já sabe da marca.
-        </p>
+        <div className="flex min-w-0 items-center text-[12px] text-muted-foreground">
+          <p className="min-w-0 truncate">Sem documentos, dossiê nem artes aprovadas no painel</p>
+          <AjudaRecolhida className="ml-1" rotulo="Como começar o contexto">
+            Envie a identidade em Arquivos ou conte ao agente de contexto o que já sabe da marca.
+          </AjudaRecolhida>
+        </div>
       )}
 
       <SugestoesPendentes
@@ -762,7 +777,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         onAlternar={() => hubs.alternar("ctx-marca")}
         acao={
           onIrPara ? (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => onIrPara("marca")}>
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => onIrPara("marca")}>
               Editar
             </Button>
           ) : undefined
@@ -806,7 +821,6 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         }
         aberto={hubs.aberto("ctx-referencias")}
         onAlternar={() => hubs.alternar("ctx-referencias")}
-        rolagem
       >
         <GaleriaDeReferencias
           contextoMontado={contextoMontado}
@@ -822,7 +836,6 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         resumo={(item("imagens") || { detalhe: "" }).detalhe}
         aberto={hubs.aberto("ctx-fotos")}
         onAlternar={() => hubs.alternar("ctx-fotos")}
-        rolagem
       >
         <FotosDoCliente onOrganizar={onIrPara ? () => onIrPara("imagens") : undefined} />
       </Hub>
@@ -833,9 +846,9 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         resumo={aprendizados.data ? resumoDosAprendizados(aprendizadosDoPainel(aprendizados.data)) : aprendizados.isError ? "Não foi possível ler agora" : "Lendo..."}
         aberto={hubs.aberto("ctx-aprendizados")}
         onAlternar={() => hubs.alternar("ctx-aprendizados")}
-        rolagem
+        acao={hubs.aberto("ctx-aprendizados") ? <SeletorDaOrigem valor={filtroDosAprendizados} onEscolher={setFiltroDosAprendizados} /> : undefined}
       >
-        <ContextoAprendizados clientId={clientId} />
+        <ContextoAprendizados clientId={clientId} filtro={filtroDosAprendizados} onFiltro={setFiltroDosAprendizados} />
       </Hub>
 
       <Hub
@@ -853,41 +866,42 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         }
         aberto={hubs.aberto("ctx-documentos")}
         onAlternar={() => hubs.alternar("ctx-documentos")}
+        ajuda="Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho e aponta o que falta."
       >
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           <div className="min-w-0">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Documentos</p>
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Documentos</p>
             {dados && (
-              <p className="mb-2 text-[11.5px] text-muted-foreground">
+              <p className={juntar(texto.auxiliar, "mb-2 truncate")}>
                 Dossiê {dados.encontrado.tem_dossie ? "lido" : "ainda não existe"} · {dados.encontrado.artes_aprovadas} artes aprovadas
               </p>
             )}
             {!documentos ? (
               <Esqueleto linhas={3} />
             ) : documentos.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho.</p>
+              <p className="text-[12px] text-muted-foreground">Nenhum documento em Arquivos.</p>
             ) : (
-              <ul className="-mr-1.5 space-y-1 pr-1.5 lg:max-h-[40vh] lg:overflow-y-auto lg:overscroll-contain">
+              <ul className="space-y-1">
                 {documentos.map((d) => (
-                  <li key={d.file_id} className="flex min-w-0 items-center rounded-lg px-1.5 py-1 text-[12.5px] hover:bg-muted/50">
+                  <li key={d.file_id} className="flex min-w-0 items-center rounded-lg px-1.5 py-1 text-[13px] hover:bg-muted/50">
                     <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate" title={d.nome}>{d.nome}</span>
-                    {d.prioridade && <span className="ml-2 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">identidade</span>}
+                    {d.prioridade && <span className="ml-2 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[11px] text-primary-foreground">identidade</span>}
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <div className="min-w-0">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pendências do agente</p>
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Pendências do agente</p>
             {!(dados || kit) ? (
               <Esqueleto linhas={2} />
             ) : lacunas.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">O agente não aponta nada faltando.</p>
             ) : (
-              <ul className="-mr-1.5 space-y-1.5 pr-1.5 lg:max-h-[40vh] lg:overflow-y-auto lg:overscroll-contain">
+              <ul className="space-y-1.5">
                 {lacunas.map((l) => (
-                  <li key={l} className="flex min-w-0 items-start text-[12.5px] leading-relaxed">
+                  <li key={l} className="flex min-w-0 items-start text-[13px] leading-relaxed">
                     <Circle className="mr-2 mt-1.5 h-2.5 w-2.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 [overflow-wrap:anywhere]">{l}</span>
                   </li>

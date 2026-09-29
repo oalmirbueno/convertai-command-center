@@ -25,7 +25,7 @@ import { padraoPara } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AprovarFoto } from "./AcoesDeUso";
@@ -177,7 +177,9 @@ function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: strin
   }, [destaque]);
   return (
     <section
-      className={juntar("min-w-0 rounded-lg border p-3 transition-colors", destaque ? "border-primary/60 bg-primary/5" : "border-border bg-card")}
+      // 28/09 (dono: "sem caixa dentro de caixa"): o grupo é aberto dentro do painel do Estúdio, separado por
+      // uma linha fina; o pedido pelo endereço só pinta o fundo de leve.
+      className={juntar("min-w-0 border-t border-border pt-3 transition-colors first:border-t-0 first:pt-0", destaque && "rounded-md bg-primary/5 px-2 pb-2")}
       data-grupo-do-estudio={id}
       data-recolhido={recolhido ? "sim" : "nao"}
       aria-label={titulo}
@@ -210,7 +212,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }:
   const cheio = r.largura >= 0.999 && r.altura >= 0.999;
   return (
     <div className="mx-auto min-w-0 max-w-full" style={largura ? { width: largura } : undefined}>
-      <p className="mb-1 flex min-w-0 items-center text-[11.5px] font-medium text-muted-foreground">
+      <p className="mb-1 flex min-w-0 items-center text-[12px] font-medium text-muted-foreground">
         <span className="mr-1.5 shrink-0">{rotulo}</span>
         <SeloDaFoto foto={foto} compacto />
       </p>
@@ -227,7 +229,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }:
             style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.largura * 100}%`, height: `${r.altura * 100}%` }}
             data-recorte-do-post={formato}
           >
-            <span className="absolute left-1 top-1 rounded-full border border-primary/40 bg-card px-1.5 py-px text-[10px] font-semibold text-primary">
+            <span className="absolute left-1 top-1 rounded-full border border-primary/40 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">
               vai ao ar: {ROTULO_DO_FORMATO_DE_FOTOS[formato]}
             </span>
           </span>
@@ -288,7 +290,7 @@ export default function EtapaEstudio() {
   };
 
   if (!atual) {
-    if (fotos.isLoading) return <p className="text-[12.5px] text-muted-foreground">Abrindo o acervo...</p>;
+    if (fotos.isLoading) return <p className="text-[12px] text-muted-foreground">Abrindo o acervo...</p>;
     return (
       <RegiaoRolavel modo="lg" memoria={`mesa-foto:estudio:escolher:${clientId}`} classeDeFora="lg:min-h-0 lg:flex-1" className="min-w-0 space-y-4" data-estudio-de-fotos="">
         {fotos.isSuccess && todas.length === 0 ? (
@@ -380,7 +382,7 @@ export default function EtapaEstudio() {
         </div>
       )}
       <section
-        className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:grid lg:min-h-[320px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]"
+        className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-[320px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]")}
         aria-label="Estúdio de fotos"
       >
         {/* Palco: a barra da foto, a foto inteira e as versões. */}
@@ -398,7 +400,7 @@ export default function EtapaEstudio() {
                     { v: "antes", r: "Antes" },
                   ] as { v: Vista; r: string }[]
                 ).map((o) => (
-                  <button key={o.v} type="button" aria-pressed={vista === o.v} onClick={() => setVista(o.v)} className={juntar("rounded px-2 py-1 text-[11.5px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+                  <button key={o.v} type="button" aria-pressed={vista === o.v} onClick={() => setVista(o.v)} className={juntar("rounded px-2 py-1 text-[12px]", foco, vista === o.v ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
                     {o.r}
                   </button>
                 ))}
@@ -412,7 +414,7 @@ export default function EtapaEstudio() {
             </Button>
           </div>
           {daInternet && (
-            <p className="mx-3 mt-2 shrink-0 rounded-md border border-warning/40 bg-card px-3 py-2 text-[12px]">Referência da internet: uso interno para o produto sair fiel. Não passa pelas ferramentas e não vai ao ar.</p>
+            <p className="mx-3 mt-2 shrink-0 rounded-md border border-warning/40 px-3 py-2 text-[12px]">Referência da internet: uso interno, fora das ferramentas e fora do ar.</p>
           )}
           <div ref={areaDoPalco} className="min-w-0 p-3 lg:min-h-0 lg:flex-1 lg:overflow-hidden" data-area-da-foto="">
             <div className={juntar("grid min-w-0 gap-3", ladoALado ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1", "lg:h-full lg:content-center")}>
@@ -451,7 +453,7 @@ export default function EtapaEstudio() {
                     className={juntar("mr-1.5 w-14 shrink-0 rounded-md border p-0.5", foco, f.id === atual.id ? "border-primary" : "border-transparent hover:border-border")}
                   >
                     <MiniaturaDaFoto foto={f} />
-                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{i === 0 ? "original" : `versão ${linhagem.length - i}`}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{i === 0 ? "original" : `versão ${linhagem.length - i}`}</span>
                   </button>
                 ))}
               </div>
@@ -496,7 +498,7 @@ export default function EtapaEstudio() {
 
           <Grupo id="melhorar" titulo="Melhorar" icone={<SunMedium className="h-4 w-4" />} destaque={destaque === "melhorar"} ajuda="Luz e cor sem mudar forma, texto nem rosto; limpar tira poeira e reflexo. A nitidez vem do Ampliar fiel (pro), que não redesenha a foto.">
             <div className="flex min-w-0 flex-wrap items-center">
-              {preparar("luz_cor", "Luz e cor", <SunMedium className="mr-1.5 h-3.5 w-3.5" />, { instrucao: ajuste }, "default")}
+              {preparar("luz_cor", "Luz e cor", <SunMedium className="mr-1.5 h-3.5 w-3.5" />, { instrucao: ajuste })}
               {preparar("limpar", "Limpar", <Eraser className="mr-1.5 h-3.5 w-3.5" />, { instrucao: ajuste })}
             </div>
             <CampoDeFormulario rotulo="Ajuste fino (opcional)" className="mt-1">
@@ -552,7 +554,7 @@ export default function EtapaEstudio() {
           <Grupo id="formato" titulo="Formato do post" icone={<Crop className="h-4 w-4" />} destaque={destaque === "formato"} ajuda="A moldura na foto mostra o recorte que vai ao ar (o centro da foto). O arquivo original não é cortado.">
             <div role="radiogroup" aria-label="Formato do post" className="grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
               {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
-                <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-1.5 py-1 text-[11.5px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
+                <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-1.5 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
                   {ROTULO_DO_FORMATO_DE_FOTOS[f]}
                 </button>
               ))}
@@ -563,7 +565,7 @@ export default function EtapaEstudio() {
             </label>
           </Grupo>
 
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             Áreas protegidas e guia de estilo:{" "}
             <button type="button" className="font-medium text-primary hover:underline" onClick={() => irPara("preparar", { imagem: atual.id })}>
               ajuste fino no Preparar

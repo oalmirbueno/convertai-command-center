@@ -20,6 +20,7 @@ import {
   type CorDoKit,
   type KitDoContexto,
 } from "./contextoDoCliente";
+import { superficie } from "@/components/sistema/estilos";
 
 /**
  * Hub Marca do Contexto: paleta em amostras grandes (clique copia o hex),
@@ -105,7 +106,7 @@ export function FontesDaMarca() {
           const f = lista.find((x) => x.papel === papel);
           const indice = f ? comAmostra.indexOf(f) : -1;
           return (
-            <li key={papel} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <li key={papel} className={`flex min-w-0 flex-col overflow-hidden ${superficie.painel}`}>
               <button
                 type="button"
                 onClick={() => (indice >= 0 ? setAmpliada(indice) : setGaleria(papel))}

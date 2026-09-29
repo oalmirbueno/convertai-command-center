@@ -5,12 +5,13 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, juntar, texto } from "@/components/sistema/estilos";
+import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { ehImagem, textoDoErro } from "@/lib/mesa/api";
 import { FILE_FOLDERS } from "@/lib/fileMetadata";
 import { Ampliar, type ImagemAmpliavel } from "../Ampliar";
 import { MiniaturaDoStorage } from "../ContextoMiniatura";
 import { useMesa } from "../MesaContexto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Pastas e arquivos do cliente, dentro da aba Redes (rodada 3, 28/09: "ver a
@@ -259,10 +260,11 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
 
   const Pasta = ({ nome, detalhe, onClick, onSoltar }: { nome: string; detalhe?: string; onClick: () => void; onSoltar: () => void }) => (
     <li onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onSoltar(); }}>
-      <button type="button" onClick={onClick} className="flex w-full min-w-0 items-center rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:border-primary/60">
+      {/* Pasta é item de grade (cartão com função): o cartão sólido do sistema. */}
+      <button type="button" onClick={onClick} className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-3 py-2.5 text-left hover:border-primary/60")}>
         <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{nome}</span>
-        {detalhe && <span className="ml-2 shrink-0 text-[11.5px] tabular-nums text-muted-foreground">{detalhe}</span>}
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{nome}</span>
+        {detalhe && <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">{detalhe}</span>}
       </button>
     </li>
   );
@@ -397,8 +399,11 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
         </div>
       )}
 
-      <p className={juntar(texto.auxiliar, "leading-5")}>
-        Arraste um arquivo para uma pasta para mover{fonte === "workspace" ? ", ou para cima de outro para reordenar" : ""}. Imagem abre aqui; outros arquivos abrem numa aba nova. Nada se apaga daqui.
+      <p className={juntar(texto.auxiliar, "flex items-center")}>
+        Arraste para mover
+        <AjudaRecolhida className="ml-1" rotulo="Como organizar os arquivos">
+          Arraste um arquivo para uma pasta para mover{fonte === "workspace" ? ", ou para cima de outro para reordenar" : ""}. Imagem abre aqui; outros arquivos abrem numa aba nova. Nada se apaga daqui.
+        </AjudaRecolhida>
       </p>
       <Ampliar imagens={ampliada ? ampliada.lista : []} indice={ampliada ? ampliada.indice : null} onFechar={() => setAmpliada(null)} />
     </div>

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, Send, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import {
   CabecalhoDePagina,
   CampoDeFormulario,
   EstadoDeErro,
+  FaixaDeNumeros,
   GrupoDeCampos,
   Painel,
   RegiaoRolavel,
@@ -71,9 +72,9 @@ export default function AdminBackfillPage() {
 
   const numeros = result
     ? [
-        { rotulo: "Total", valor: result.total ?? 0, cor: "text-foreground", icone: null },
-        { rotulo: "Sucesso", valor: result.success ?? 0, cor: "text-primary", icone: <CheckCircle2 className="mr-1 h-3 w-3 text-primary" aria-hidden="true" /> },
-        { rotulo: "Falhas", valor: result.failed ?? 0, cor: "text-destructive", icone: <XCircle className="mr-1 h-3 w-3 text-destructive" aria-hidden="true" /> },
+        { rotulo: "Total", valor: result.total ?? 0, cor: "text-foreground", ponto: undefined },
+        { rotulo: "Sucesso", valor: result.success ?? 0, cor: "text-primary", ponto: "verde" as const },
+        { rotulo: "Falhas", valor: result.failed ?? 0, cor: "text-destructive", ponto: "perigo" as const },
       ]
     : [];
 
@@ -140,17 +141,11 @@ export default function AdminBackfillPage() {
 
         {result && !errorMsg && (
           <>
-            <div className="grid grid-cols-3 gap-3">
-              {numeros.map((n) => (
-                <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 px-3 py-3 sm:px-4")}>
-                  <p className={juntar(texto.rotulo, "flex items-center truncate")}>
-                    {n.icone}
-                    {n.rotulo}
-                  </p>
-                  <p className={juntar("mt-1 text-[22px] font-semibold leading-7 tabular-nums", n.cor)}>{n.valor}</p>
-                </div>
-              ))}
-            </div>
+            <FaixaDeNumeros
+              rotulo="Resultado do backfill"
+              colunas={3}
+              itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: n.valor, corDoValor: n.cor, ponto: n.ponto }))}
+            />
 
             {result.errors && result.errors.length > 0 && (
               <Secao titulo="Erros" descricao={`${result.errors.length} ${result.errors.length === 1 ? "registro" : "registros"}`} divisoria>

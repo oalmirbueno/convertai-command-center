@@ -197,7 +197,7 @@ export default function AgenteDoPerfil({
       }
     >
       {mensagens.length === 0 && !trabalhando && (
-        <p className={texto.auxiliar}>Escolha posts e leve ao estilo, peça um plano igual, compare com o cliente ou peça ideias de resposta.</p>
+        <p className={texto.auxiliar}>Escolha posts e peça: estilo, plano igual, comparação ou ideias de resposta.</p>
       )}
       {mensagens.map((m, i) => {
         const acoes = m.papel === "agente" ? acoesDaMensagem(m.anexos) : [];

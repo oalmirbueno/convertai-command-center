@@ -45,7 +45,7 @@ export default function MesaVideos() {
       etapas={ETAPAS_DA_MESA_VIDEOS}
       etapaValida={etapaValida}
       prefixoOnde="mesa-videos:onde:"
-      vazio={{ titulo: "Escolha um cliente", descricao: "Gere cenas e vídeos com IA a partir da História, dos roteiros e das fotos do cliente. Nada gasta sem o seu clique." }}
+      vazio={{ titulo: "Escolha um cliente", descricao: "Cenas e vídeos com IA, com o custo antes." }}
       preCarregar={[EtapaBase, EtapaKit, EtapaBiblia, EtapaRoteiro, EtapaGerar, EtapaResultados, AgenteDaMesaDeVideo]}
       Agente={AgenteDaMesaDeVideo}
       rotuloDoAgente="Agente de vídeo"

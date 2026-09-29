@@ -17,6 +17,10 @@ import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./Apag
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import Painel from "@/components/sistema/Painel";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useArtesDoMes, SEM_ARTES } from "./MesArtes";
 import {
@@ -157,20 +161,20 @@ function hojeLocal(): string {
 
 function RoteiroResumido({ roteiro }: { roteiro: RoteiroDoItem }) {
   if (!roteiro.detalhado) {
-    return <p className="text-[11.5px] text-muted-foreground">Roteiro gravado numa proposta, sem os detalhes deste item.</p>;
+    return <p className="text-[12px] text-muted-foreground">Roteiro gravado numa proposta, sem os detalhes deste item.</p>;
   }
   const texto = roteiro.copy || roteiro.legenda || roteiro.resumo;
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-muted p-2.5">
-      <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Roteiro</p>
-      {roteiro.gancho && <p className="text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{roteiro.gancho}</p>}
+    <div className="space-y-2 border-l-2 border-border pl-2.5">
+      <p className="text-[11px] font-medium text-muted-foreground">Roteiro</p>
+      {roteiro.gancho && <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{roteiro.gancho}</p>}
       {texto && <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{resumir(texto, 320)}</p>}
-      {roteiro.cta && <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">CTA: {roteiro.cta}</p>}
+      {roteiro.cta && <p className="text-[12px] text-muted-foreground [overflow-wrap:anywhere]">CTA: {roteiro.cta}</p>}
       {roteiro.cards.length > 0 && (
         <ol className="space-y-1.5">
           {roteiro.cards.map((c, i) => (
-            <li key={`${c.ordem}-${i}`} className="rounded-md border border-border bg-card px-2 py-1.5">
-              <p className="text-[10.5px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
+            <li key={`${c.ordem}-${i}`} className="min-w-0">
+              <p className="text-[11px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
               {c.texto && <p className="mt-0.5 text-[12px] leading-snug [overflow-wrap:anywhere]">{c.texto}</p>}
             </li>
           ))}
@@ -205,13 +209,13 @@ function ItemSelecionado({
   const [aberto, setAberto] = useState(abertoDeInicio);
   const deArte = ehFormatoDeArte(item.delivery_type);
   return (
-    <li className="min-w-0 rounded-xl border border-border bg-card">
+    <li className={juntar(superficie.poco, "min-w-0")}>
       <div className="flex min-w-0 items-start px-3 py-2.5">
         <button type="button" onClick={() => setAberto((v) => !v)} className="flex min-w-0 flex-1 items-start text-left" aria-expanded={aberto}>
           <ChevronDown className={`mr-1.5 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
             <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.title}</span>
-            <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+            <span className="mt-0.5 block text-[12px] text-muted-foreground">
               {dataCurta(item.due_date)} · {formatoDoItem(item.delivery_type)}
             </span>
             {arte ? <SeloDaArte arte={arte} className="mt-1" /> : <SeloDiscreto selo={selo} className="mt-1" />}
@@ -224,15 +228,16 @@ function ItemSelecionado({
       {aberto && (
         <div className="space-y-2.5 px-3 pb-3 pl-9">
           {item.description && item.description.trim() ? (
-            <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-2.5 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            // Sem rolagem própria: a lista da seleção já rola (uma rolagem por região).
+            <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
               {item.description.trim()}
             </p>
           ) : (
-            <p className="text-[11.5px] text-muted-foreground">Sem descrição na agenda.</p>
+            <p className="text-[12px] text-muted-foreground">Sem descrição na agenda.</p>
           )}
           {roteiro && <RoteiroResumido roteiro={roteiro} />}
           {posts.length > 0 && (
-            <p className="text-[11.5px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               {posts.map((p) => `${rotuloDaPublicacao(p.status)} em ${dataCurta(p.dia)} às ${horaCurta(p.scheduled_at)}`).join(" · ")}
             </p>
           )}
@@ -248,7 +253,7 @@ function ItemSelecionado({
             )}
             {onApagar && (
               <span className="mb-1 ml-auto inline-flex min-w-0 items-center">
-                <span className="mr-1 text-[11.5px] text-muted-foreground">Apagar da agenda</span>
+                <span className="mr-1 text-[12px] text-muted-foreground">Apagar da agenda</span>
                 <BotaoDeApagar onApagar={onApagar} pergunta="Apagar este conteúdo da agenda?" rotulo="Apagar da agenda" />
               </span>
             )}
@@ -511,7 +516,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   const cabecalhoDosDias = (
     <div className="grid grid-cols-7 border-b border-border bg-muted">
       {DIAS_DA_SEMANA.map((d, i) => (
-        <p key={d} className={`min-w-0 px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider ${i >= 5 ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
+        <p key={d} className={`min-w-0 px-2.5 py-2 text-[11px] font-medium ${i >= 5 ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
           {d}
         </p>
       ))}
@@ -520,7 +525,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   const numeroDoDia = (dia: string) => (
     <span
-      className={`inline-flex h-7 min-w-[28px] items-center justify-center rounded-full px-1 text-[12.5px] tabular-nums ${
+      className={`inline-flex h-7 min-w-[28px] items-center justify-center rounded-full px-1 text-[13px] tabular-nums ${
         dia === hoje ? "bg-primary font-semibold text-primary-foreground" : "text-muted-foreground"
       }`}
     >
@@ -571,7 +576,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
               {dia && (
                 <>
                   <p className="mb-2 flex items-center">{numeroDoDia(dia)}</p>
-                  <div className="max-h-[70vh] overflow-y-auto overscroll-contain pr-0.5">{entradasDoDia(dia, "mes", false)}</div>
+                  {/* Rola por dentro só de 1024 px para cima (no celular a página rola). */}
+                  <div className="pr-0.5 lg:max-h-[70vh] lg:overflow-y-auto lg:overscroll-contain">{entradasDoDia(dia, "mes", false)}</div>
                 </>
               )}
             </div>
@@ -583,10 +589,10 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   // Lista: só os dias com conteúdo, cartões grandes; rolagem própria.
   const lista = (
-    <div className="max-h-[75vh] min-w-0 divide-y divide-border overflow-y-auto overscroll-contain" data-vista="lista">
+    <div className="min-w-0 divide-y divide-border lg:max-h-[75vh] lg:overflow-y-auto lg:overscroll-contain" data-vista="lista">
       {diasComConteudo.map((dia) => (
         <div key={dia} className="min-w-0 px-3 py-3 md:flex md:px-4">
-          <p className={`mb-2 text-[12.5px] font-medium first-letter:uppercase md:mb-0 md:mr-4 md:w-36 md:shrink-0 md:pt-1 ${dia === hoje ? "text-primary" : "text-muted-foreground"}`}>
+          <p className={`mb-2 text-[13px] font-medium first-letter:uppercase md:mb-0 md:mr-4 md:w-36 md:shrink-0 md:pt-1 ${dia === hoje ? "text-primary" : "text-muted-foreground"}`}>
             {diaPorExtenso(dia)}
             {dia === hoje ? " · hoje" : ""}
           </p>
@@ -643,13 +649,14 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
       <>
       {agenda.isError && <AvisoDeErro erro={agenda.error} />}
 
-      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+      {/* O calendário é um cartão com função (SISTEMA.md 4.1): Painel sem espaço. */}
+      <Painel semEspaco className="overflow-hidden">
         {/* Cabeçalho: mês (ou semana), vistas, contagem e seleção. */}
         <div className="flex min-w-0 flex-wrap items-center border-b border-border px-2 py-2">
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={voltar} aria-label={vista === "semana" ? "Semana anterior" : "Mês anterior"}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <p className="mx-1 min-w-[140px] text-center text-[14.5px] font-semibold capitalize">
+          <p className="mx-1 min-w-[140px] text-center text-[15px] font-semibold capitalize">
             {rotuloDoMes(mes)}
             {vista === "semana" && rotuloDaSemana && <span className="ml-1.5 text-[12px] font-normal normal-case text-muted-foreground">dias {rotuloDaSemana}</span>}
           </p>
@@ -657,28 +664,20 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
             <ChevronRight className="h-4 w-4" />
           </Button>
           {(mes !== mesAtual || (vista === "semana" && semanaAtual.indexOf(hoje) < 0)) && (
-            <Button type="button" variant="outline" size="sm" className="ml-1 h-7 px-2 text-[11.5px]" onClick={irParaHoje}>
+            <Button type="button" variant="outline" size="sm" className="ml-1 h-7 px-2 text-[12px]" onClick={irParaHoje}>
               Hoje
             </Button>
           )}
-          <div role="tablist" aria-label="Vista da agenda" className="ml-2 hidden rounded-lg bg-muted p-0.5 md:flex">
-            {VISTAS.map((v) => (
-              <button
-                key={v.valor}
-                type="button"
-                role="tab"
-                aria-selected={vista === v.valor}
-                onClick={() => trocarVista(v.valor)}
-                className={`inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium ${
-                  vista === v.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <v.Icone className="mr-1 h-3.5 w-3.5" />
-                {v.rotulo}
-              </button>
-            ))}
+          {/* Vistas: o seletor compacto do sistema (no celular a vista é sempre a lista). */}
+          <div className="ml-2 hidden md:block">
+            <SeletorCompacto
+              rotulo="Vista da agenda"
+              opcoes={VISTAS.map((v) => ({ valor: v.valor, rotulo: v.rotulo, icone: <v.Icone className="h-3.5 w-3.5" /> }))}
+              valor={vista}
+              onEscolher={(v) => trocarVista(v as Vista)}
+            />
           </div>
-          <span className="ml-auto flex min-w-0 items-center px-2 text-[11.5px] text-muted-foreground">
+          <span className="ml-auto flex min-w-0 items-center px-2 text-[12px] text-muted-foreground">
             {agenda.isFetching ? (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {agenda.isLoading ? "lendo a agenda" : "atualizando"}
@@ -688,7 +687,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
             ) : null}
           </span>
           {escolhidos.length > 0 && (
-            <Button type="button" size="sm" variant="secondary" className="mr-1 h-7 px-2.5 text-[11.5px]" onClick={irParaSelecao}>
+            <Button type="button" size="sm" variant="secondary" className="mr-1 h-7 px-2.5 text-[12px]" onClick={irParaSelecao}>
               {escolhidos.length} {escolhidos.length === 1 ? "selecionado" : "selecionados"}
             </Button>
           )}
@@ -706,13 +705,16 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
         )}
 
         {vazio && (
-          <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
-            Nenhuma peça (arte ou vídeo) neste mês. Planeje abaixo com o estrategista ou crie o item na Agenda.
+          <p className="flex items-center justify-center px-4 py-8 text-center text-[13px] text-muted-foreground">
+            Nenhuma peça (arte ou vídeo) neste mês
+            <AjudaRecolhida className="ml-1" rotulo="Como preencher o mês">
+              Planeje abaixo com o estrategista ou crie o item na Agenda.
+            </AjudaRecolhida>
           </p>
         )}
 
         {outrosTipos > 0 && (
-          <p data-outros-tipos={outrosTipos} className="border-t border-border px-3 py-1.5 text-[11.5px] text-muted-foreground">
+          <p data-outros-tipos={outrosTipos} className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
             {outrosTipos === 1 ? "1 tarefa de outro tipo fica" : `${outrosTipos} tarefas de outros tipos ficam`} na{" "}
             <Link to={`/calendario?client=${clientId}`} className="text-primary underline-offset-2 hover:underline">
               Agenda
@@ -732,10 +734,11 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
             <Clock className="mr-1 h-3 w-3" /> horário do post
           </span>
         </div>
-      </div>
+      </Painel>
 
-      {/* Seleção: abaixo do calendário, na largura toda, com rolagem própria. */}
-      <div id="selecao-do-mes" className="scroll-mt-40 lg:scroll-mt-4 overflow-hidden rounded-xl border border-border bg-card">
+      {/* Seleção: abaixo do calendário, na largura toda (lista que é uma coisa só: Painel sem espaço). */}
+      <div id="selecao-do-mes" className="scroll-mt-40 lg:scroll-mt-4">
+      <Painel semEspaco className="overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-center border-b border-border px-3 py-2.5">
           <p className="mr-3 min-w-0 text-[13px] font-medium">
             Selecionados
@@ -754,7 +757,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                 descricao="O estrategista escreve e melhora o roteiro de cada item (gancho, copy e o texto de cada card) sem trocar o tema, a data nem o formato, e deixa a direção pronta no Estúdio."
                 disabled={idsParaCompletar.length === 0 || demais}
                 fecharAoConfirmar
-                className="my-0.5 mr-1.5 h-8 text-[12.5px]"
+                className="my-0.5 mr-1.5 h-8 text-[12px]"
                 partes={() => [
                   {
                     modeloId: modeloEstrategista?.id,
@@ -772,7 +775,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                 }}
               />
               {unicoDeArte && (
-                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12.5px]" onClick={() => abrirNoEstudio(unicoDeArte)}>
+                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(unicoDeArte)}>
                   <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
                 </Button>
               )}
@@ -784,22 +787,29 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
         </div>
 
         {escolhidos.length === 0 ? (
-          <p className="px-3 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
-            Clique nos itens do calendário para ver o que já existe, completar e melhorar com o agente e abrir no Estúdio. A seleção fica guardada neste mês.
+          <p className="flex items-center px-3 py-3 text-[13px] text-muted-foreground">
+            Nenhum item selecionado
+            <AjudaRecolhida className="ml-1" rotulo="Como usar a seleção">
+              Clique nos itens do calendário para ver o que já existe, completar e melhorar com o agente e abrir no Estúdio. A seleção fica guardada neste mês.
+            </AjudaRecolhida>
           </p>
         ) : (
           <>
             {(demais || foraDoEstudio > 0) && (
               <div className="space-y-1 border-b border-border px-3 py-2">
-                {demais && <p className="text-[11.5px] text-muted-foreground">O agente completa até {MAX_COMPLETAR} itens por vez. Tire alguns da seleção.</p>}
+                {demais && <p className="text-[12px] text-muted-foreground">O agente completa até {MAX_COMPLETAR} itens por vez. Tire alguns da seleção.</p>}
                 {foraDoEstudio > 0 && (
-                  <p className="text-[11.5px] leading-snug text-muted-foreground">
-                    {foraDoEstudio} item(ns) em formato fora do estúdio: o agente completa só carrossel, post estático e design.
+                  <p className="flex items-center text-[12px] text-muted-foreground">
+                    {foraDoEstudio} item(ns) fora do estúdio
+                    <AjudaRecolhida className="ml-1" rotulo="O que o agente completa">
+                      O agente completa só carrossel, post estático e design.
+                    </AjudaRecolhida>
                   </p>
                 )}
               </div>
             )}
-            <ul className="grid max-h-[560px] grid-cols-1 gap-2 overflow-y-auto overscroll-contain p-3 lg:grid-cols-2">
+            {/* rolagem.longa: só rola por dentro de 1024 px para cima. */}
+            <ul className="grid grid-cols-1 gap-2 p-3 lg:max-h-[560px] lg:grid-cols-2 lg:overflow-y-auto lg:overscroll-contain">
               {escolhidos.map((i) => (
                 <ItemSelecionado
                   key={i.id}
@@ -821,6 +831,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
             </ul>
           </>
         )}
+      </Painel>
       </div>
       </>
       )}

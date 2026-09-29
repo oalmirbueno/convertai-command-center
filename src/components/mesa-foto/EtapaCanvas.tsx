@@ -248,13 +248,13 @@ function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
       <span className="pointer-events-none absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full" style={{ background: tipo.cor }} />
       <div className="flex h-6 items-center pl-3 pr-2 pt-1">
         <Icone className={`mr-1 h-3 w-3 shrink-0 ${tipo.texto}`} />
-        <span className={`min-w-0 flex-1 truncate text-[9.5px] font-semibold uppercase tracking-wider ${tipo.texto}`}>{tipo.rotulo}</span>
+        <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider ${tipo.texto}`}>{tipo.rotulo}</span>
         {numero !== null && (
-          <span className="rounded-full bg-white/10 px-1.5 text-[9.5px] font-semibold text-white" title="Ordem em que vai ao gerador">
+          <span className="rounded-full bg-white/10 px-1.5 text-[11px] font-semibold text-white" title="Ordem em que vai ao gerador">
             {numero}
           </span>
         )}
-        {!ligado && <span className="ml-1 rounded-full bg-white/10 px-1.5 text-[9px] text-zinc-400">solto</span>}
+        {!ligado && <span className="ml-1 rounded-full bg-white/10 px-1.5 text-[11px] text-zinc-400">solto</span>}
       </div>
       <div className="flex items-center px-2 pb-2 pl-3 pt-1">
         {no.tipo === "texto" ? null : semMiniatura && !(no.tipo === "ambiente" && (texto || no.dados.modo === "contexto")) && !(no.tipo === "modelo" && no.dados.imagem_id) ? (
@@ -282,7 +282,7 @@ function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
           ) : (
             <>
               <p className="truncate text-[12px] font-semibold leading-snug">{descricao.titulo}</p>
-              <p className={`truncate text-[10.5px] ${falta ? "text-amber-300" : "text-zinc-400"}`}>{descricao.subtitulo}</p>
+              <p className={`truncate text-[11px] ${falta ? "text-amber-300" : "text-zinc-400"}`}>{descricao.subtitulo}</p>
             </>
           )}
         </div>
@@ -308,7 +308,7 @@ function NoAgente({ data, selected }: NodeProps<NoDeCartao>) {
         <Icone className="h-6 w-6 text-violet-300" />
         {temPedido && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-emerald-400" title="Já escreveu o pedido" />}
       </span>
-      <span className="mt-1 max-w-full truncate rounded-full bg-zinc-950 px-2 text-[10.5px] font-semibold text-violet-200">{ligado ? "Agente" : "Agente (solto)"}</span>
+      <span className="mt-1 max-w-full truncate rounded-full bg-zinc-950 px-2 text-[11px] font-semibold text-violet-200">{ligado ? "Agente" : "Agente (solto)"}</span>
       {selected && <FerramentasDoNo noId={no.id} tipo="agente" />}
       <Handle type="source" position={Position.Right} id="saida" style={{ top: 30, width: ALCA, height: ALCA, background: tipo.cor, border: "2px solid #09090b" }} />
     </div>
@@ -371,7 +371,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   return (
     <div
       style={{ width: TAMANHO_DA_SAIDA.largura, height: TAMANHO_DA_SAIDA.altura }}
-      className={`relative flex flex-col overflow-visible rounded-2xl border bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
+      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
       data-no-do-canvas={no.id}
       data-tipo="gerar"
     >
@@ -381,7 +381,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         </span>
         {cena ? (
           <span className="min-w-0 flex-1 truncate text-[11px] font-semibold" data-cena-no-quadro={cena.numero} title="Cena da história">
-            <span className="mr-1 rounded-full bg-emerald-400 px-1.5 text-[10px] font-bold text-black">Cena {cena.numero}</span>
+            <span className="mr-1 rounded-full bg-emerald-400 px-1.5 text-[11px] font-bold text-black">Cena {cena.numero}</span>
             {cena.titulo}
           </span>
         ) : (
@@ -390,23 +390,23 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         {gerando.length > 0 ? (
           <Loader2 className="h-4 w-4 animate-spin text-emerald-300" aria-label="Gerando" />
         ) : (
-          <span className="text-[10px] text-zinc-400">
+          <span className="text-[11px] text-zinc-400">
             {prontos.length} {prontos.length === 1 ? "foto" : "fotos"}
           </span>
         )}
       </div>
-      <p className="h-8 shrink-0 overflow-hidden px-3 text-[10.5px] leading-snug text-zinc-400 [overflow-wrap:anywhere]" data-junta="" title={junta || undefined}>
+      <p className="h-8 shrink-0 overflow-hidden px-3 text-[11px] leading-snug text-zinc-400 [overflow-wrap:anywhere]" data-junta="" title={junta || undefined}>
         {junta ? <span className="text-zinc-100">{junta}</span> : "Junta o que você puser no quadro. Comece por um produto ou uma pessoa."}
       </p>
       <div className="relative mx-2.5 mt-0.5 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: ALTURA_DA_FOTO }} data-foto-do-resultado={atual ? atual.geracao_id : ""}>
         {atual ? (
           <button type="button" className="nodrag block h-full w-full cursor-zoom-in" onClick={() => setAmpliada(true)} aria-label="Ver a foto grande">
             <ImagemDaMesa caminho={caminho} bucket={atual.storage_bucket} alt="Foto gerada no Canvas" className="h-full w-full !object-contain" />
-            <span className="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[9px] font-semibold text-emerald-300" data-selo="gerada">
+            <span className="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[11px] font-semibold text-emerald-300" data-selo="gerada">
               <Sparkles className="mr-0.5 h-2.5 w-2.5" /> gerada
             </span>
             {foto && foto.aprovada && (
-              <span className="pointer-events-none absolute right-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[9px] font-semibold text-emerald-300">
+              <span className="pointer-events-none absolute right-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[11px] font-semibold text-emerald-300">
                 <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
               </span>
             )}
@@ -415,11 +415,11 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
           <div className="flex h-full flex-col items-center justify-center px-5 text-center">
             <Loader2 className="mb-2 h-6 w-6 animate-spin text-emerald-300" />
             <p className="text-[12px] font-medium">Gerando {gerando.length > 1 ? `${gerando.length} fotos` : "a foto"}</p>
-            <p className="mt-0.5 text-[10.5px] text-zinc-400">De 30 s a 2 min por foto. Pode sair da aba: fica salvo.</p>
+            <p className="mt-0.5 text-[11px] text-zinc-400">De 30 s a 2 min por foto. Pode sair da aba: fica salvo.</p>
           </div>
         ) : entradas === 0 && ctx ? (
           <div className="flex h-full flex-col justify-center px-2.5 text-left" data-comece-rapido="">
-            <p className="mb-1.5 text-center text-[10.5px] text-zinc-400">A foto aparece aqui. Comece por um modelo pronto:</p>
+            <p className="mb-1.5 text-center text-[11px] text-zinc-400">A foto aparece aqui. Comece por um modelo pronto:</p>
             {destaque.map((m) => (
               <button
                 key={m.chave}
@@ -444,7 +444,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
       <div className="mx-2.5 mt-1.5 h-8 shrink-0" data-andamento-do-resultado="">
         {gerando.length > 0 ? (
           <div className="min-w-0">
-            <div className="mb-1 flex items-center text-[10.5px]">
+            <div className="mb-1 flex items-center text-[11px]">
               <span className="min-w-0 flex-1 truncate text-zinc-100">{gerando.length > 1 ? `Gerando ${gerando.length} fotos` : `Gerando no ${rotuloDoMotor(catalogo, gerando[0].motor)}`}</span>
               <span className="text-zinc-400">{segundos} s</span>
             </div>
@@ -472,11 +472,11 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
               ))}
           </div>
         ) : falhas.length > 0 ? (
-          <p className="truncate pt-1.5 text-[10.5px] text-red-400" role="alert" title={falhas.map((f) => `${rotuloDoMotor(catalogo, f.motor)}: ${f.a.erro}`).join("\n")}>
+          <p className="truncate pt-1.5 text-[11px] text-red-400" role="alert" title={falhas.map((f) => `${rotuloDoMotor(catalogo, f.motor)}: ${f.a.erro}`).join("\n")}>
             {rotuloDoMotor(catalogo, falhas[0].motor)} falhou: {falhas[0].a.erro}
           </p>
         ) : (
-          <p className="truncate pt-1.5 text-[10.5px] text-zinc-400">
+          <p className="truncate pt-1.5 text-[11px] text-zinc-400">
             {motores.length} {motores.length === 1 ? "motor" : "motores"} · {String(no.dados.formato || "4:5")} · {entradas} {entradas === 1 ? "cartão" : "cartões"}
             {detalhes.length ? ` · ${detalhes.join(" · ")}` : ""}
           </p>
@@ -509,7 +509,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
                 titulo="Variações desta foto"
                 descricao={`Variações desta: ${VARIACOES_POR_VEZ} fotos com a mesma pessoa, o mesmo produto e o mesmo estilo, em ângulos diferentes.`}
                 variant="outline"
-                className="nodrag mr-1 h-7 border-white/10 bg-white/5 px-1.5 text-[10.5px] text-zinc-100 hover:bg-white/15"
+                className="nodrag mr-1 h-7 border-white/10 bg-white/5 px-1.5 text-[11px] text-zinc-100 hover:bg-white/15"
                 fecharAoConfirmar
                 disabled={gerando.length > 0}
                 partes={() => partesDaSerie(atual.motor_id, no.dados.qualidade || "alta", entradas, VARIACOES_POR_VEZ, true)}
@@ -521,7 +521,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
             </button>
           </>
         ) : (
-          <p className={`truncate text-[10.5px] ${bloqueios.length ? "text-amber-300" : "text-zinc-400"}`} title={bloqueios.join("\n") || undefined}>
+          <p className={`truncate text-[11px] ${bloqueios.length ? "text-amber-300" : "text-zinc-400"}`} title={bloqueios.join("\n") || undefined}>
             {bloqueios.length ? bloqueios[0] : "Tudo pronto para gerar."}
           </p>
         )}
@@ -593,7 +593,7 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
     <nav
       ref={roda}
       aria-label="Cartões para o quadro"
-      className={`${PAINEL} ${FLUTUANTE} absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] overflow-y-auto rounded-2xl p-1`}
+      className={`${PAINEL} ${FLUTUANTE} absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] overflow-y-auto rounded-xl p-1`}
       data-paleta-lateral=""
       data-rolagem-propria=""
     >
@@ -621,7 +621,7 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
             <span className={`flex h-7 w-7 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} border ${tipo.borda} ${tipo.fundo}`}>
               <Icone className={`h-3.5 w-3.5 ${tipo.texto}`} />
             </span>
-            <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">{tipo.rotulo}</span>
+            <span className="mt-0.5 text-[11px] font-medium leading-none text-zinc-200">{tipo.rotulo}</span>
           </button>
         );
       })}
@@ -630,8 +630,8 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-white/20">
             <ICONE_DO_VIDEO className="h-3.5 w-3.5 text-zinc-400" />
           </span>
-          <span className="mt-0.5 text-[10px] leading-none text-zinc-400">{t.rotulo}</span>
-          <span className="text-[8.5px] leading-none text-zinc-500">em breve</span>
+          <span className="mt-0.5 text-[11px] leading-none text-zinc-400">{t.rotulo}</span>
+          <span className="text-[11px] leading-none text-zinc-500">em breve</span>
         </button>
       ))}
       <span className="mx-1 my-1 block h-px bg-white/10" />
@@ -639,9 +639,9 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400 text-black">
           <Plus className="h-4 w-4" />
         </span>
-        <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">Adicionar</span>
+        <span className="mt-0.5 text-[11px] font-medium leading-none text-zinc-200">Adicionar</span>
       </button>
-      <button type="button" onClick={onResultado} data-paleta="gerar" className="flex w-full items-center justify-center rounded-lg px-0.5 py-1 text-[9.5px] text-zinc-400 hover:bg-white/10 hover:text-white" title="Outro Resultado, para outra combinação no mesmo quadro">
+      <button type="button" onClick={onResultado} data-paleta="gerar" className="flex w-full items-center justify-center rounded-lg px-0.5 py-1 text-[11px] text-zinc-400 hover:bg-white/10 hover:text-white" title="Outro Resultado, para outra combinação no mesmo quadro">
         <Plus className="mr-0.5 h-3 w-3" /> Result.
       </button>
     </nav>
@@ -657,12 +657,12 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
   const roda = useRodaPresa<HTMLElement>();
   if (recolhida) {
     return (
-      <div ref={roda} className={`${PAINEL} ${FLUTUANTE} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-2xl px-1 py-1.5`} data-ajustes="recolhidos">
+      <div ref={roda} className={`${PAINEL} ${FLUTUANTE} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-xl px-1 py-1.5`} data-ajustes="recolhidos">
         <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10" title="Ajustes do cartão ou do Resultado">
           <SlidersHorizontal className="h-4 w-4" />
         </button>
-        <span className="mt-0.5 text-center text-[9.5px] leading-tight text-zinc-400">Ajustes</span>
-        <span className="mt-1.5 text-center text-[10px] font-semibold leading-tight">{custoCurto}</span>
+        <span className="mt-0.5 text-center text-[11px] leading-tight text-zinc-400">Ajustes</span>
+        <span className="mt-1.5 text-center text-[11px] font-semibold leading-tight">{custoCurto}</span>
       </div>
     );
   }
@@ -670,14 +670,14 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
     <aside
       ref={roda}
       aria-label="Ajustes"
-      className={`${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[60%] min-w-0 flex-col rounded-2xl sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-3 sm:z-10 sm:max-h-[calc(100%-24px)] sm:w-[272px] xl:w-[296px]`}
+      className={`${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[60%] min-w-0 flex-col rounded-xl sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-3 sm:z-10 sm:max-h-[calc(100%-24px)] sm:w-[272px] xl:w-[296px]`}
       data-ajustes="abertos"
     >
       <div className="flex shrink-0 items-center border-b border-white/10 px-3 py-2">
         <SlidersHorizontal className="mr-2 h-3.5 w-3.5 text-zinc-400" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[12px] font-semibold">{titulo}</h3>
-          <p className="truncate text-[10.5px] text-zinc-400">{custo}</p>
+          <p className="truncate text-[11px] text-zinc-400">{custo}</p>
         </div>
         <button type="button" onClick={() => onRecolher(true)} aria-label="Recolher os ajustes" className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">
           <ChevronRight className="h-4 w-4" />
@@ -986,7 +986,7 @@ function Quadro({
           </ControlButton>
         </Controls>
       </ReactFlow>
-      <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 md:block" data-ajuda-do-quadro="">
+      <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-zinc-500 md:block" data-ajuda-do-quadro="">
         Rolar move o quadro. Ctrl (ou Cmd) + rolar, ou pinça: zoom. Nos painéis, rola só o painel.
       </p>
     </div>

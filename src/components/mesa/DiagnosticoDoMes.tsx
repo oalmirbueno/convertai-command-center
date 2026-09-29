@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CalendarDays, CheckCircle2, ChevronDown, Compass, ExternalLink, Lightbulb, Loader2, Target, TrendingUp, XCircle } from "lucide-react";
+import { superficie } from "@/components/sistema/estilos";
 
 /**
  * Diagnóstico do mês organizado (Frente O, pedido do dono em 26/09: "está
@@ -197,7 +198,7 @@ function ComLinks({ texto }: { texto: string }) {
 function Secao({ titulo, icone, children }: { titulo: string; icone?: ReactNode; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <h3 className="mb-2 flex items-center text-[12px] font-medium text-muted-foreground">
         {icone && <span className="mr-1.5 inline-flex">{icone}</span>}
         {titulo}
       </h3>
@@ -299,7 +300,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
   if (!d && !texto) {
     if (!pesquisando) return null;
     return (
-      <section className="flex items-center rounded-xl border border-dashed border-border bg-card px-4 py-3 text-[12.5px] text-muted-foreground" aria-live="polite">
+      <section className="flex items-center rounded-lg border border-dashed border-border bg-card px-4 py-3 text-[13px] text-muted-foreground" aria-live="polite">
         <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
         Pesquisando tendências, datas e números do perfil para o diagnóstico do mês...
       </section>
@@ -314,28 +315,29 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
   const idDoCorpo = `diagnostico-do-mes-${id || "atual"}`;
 
   return (
-    <section className="rounded-xl border border-border bg-card" data-testid="diagnostico-do-mes">
+    // Uma coisa só (o resumo que abre o relatório): cartão sólido do sistema.
+    <section className={superficie.painel} data-testid="diagnostico-do-mes">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
         aria-controls={idDoCorpo}
-        className="flex w-full min-w-0 items-start rounded-xl px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
+        className="flex w-full min-w-0 items-start rounded-lg px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
       >
         <span className="mr-3 mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Compass className="h-4 w-4" />
         </span>
         <span className="block min-w-0 flex-1">
           <span className="flex flex-wrap items-center">
-            <span className="mr-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Diagnóstico do mês</span>
-            {d && d.origem === "frentes" && <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[10.5px] text-muted-foreground">resumo das frentes</span>}
+            <span className="mr-2 text-[12px] font-medium text-muted-foreground">Diagnóstico do mês</span>
+            {d && d.origem === "frentes" && <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">resumo das frentes</span>}
             {pesquisando && (
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10.5px] text-muted-foreground">
+              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" /> pesquisando o mês
               </span>
             )}
           </span>
-          <span className={`mt-1 block text-[13.5px] font-medium leading-snug [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-2"}`}>{resumo}</span>
+          <span className={`mt-1 block text-[13px] font-medium leading-snug [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-2"}`}>{resumo}</span>
           {chips.length > 0 && (
             <span className="mt-2 flex flex-wrap">
               {chips.map((c) => (
@@ -344,7 +346,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
             </span>
           )}
         </span>
-        <span className="ml-3 mt-1 flex shrink-0 items-center text-[11.5px] text-muted-foreground">
+        <span className="ml-3 mt-1 flex shrink-0 items-center text-[12px] text-muted-foreground">
           <span className="mr-1 hidden sm:inline">{aberto ? "Recolher" : "Ver tudo"}</span>
           <ChevronDown className={`h-4 w-4 transition-transform ${aberto ? "rotate-180" : ""}`} />
         </span>
@@ -354,7 +356,8 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
         <div
           id={idDoCorpo}
           data-testid="diagnostico-rolagem"
-          className="max-h-[420px] space-y-5 overflow-y-auto overscroll-contain border-t border-border px-4 py-4 [-webkit-overflow-scrolling:touch]"
+          // Rola por dentro só de 1024 px para cima (rolagem.lista); no celular a página rola.
+          className="space-y-5 border-t border-border px-4 py-4 lg:max-h-[420px] lg:overflow-y-auto lg:overscroll-contain [-webkit-overflow-scrolling:touch]"
         >
           {d ? (
             <>
@@ -421,7 +424,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                 <Secao titulo="Sinais para medir" icone={<Target className="h-3.5 w-3.5" />}>
                   <div className="flex flex-wrap">
                     {d.sinais_para_medir.map((s) => (
-                      <span key={s} className="mb-1.5 mr-1.5 rounded-lg border border-border px-2 py-1 text-[11.5px] leading-snug [overflow-wrap:anywhere]">{s}</span>
+                      <span key={s} className="mb-1.5 mr-1.5 rounded-md bg-muted px-2 py-1 text-[12px] leading-snug [overflow-wrap:anywhere]">{s}</span>
                     ))}
                   </div>
                 </Secao>

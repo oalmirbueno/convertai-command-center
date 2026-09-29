@@ -35,7 +35,9 @@ function CartaoDoTerritorio({ t, podeAprovar, onAprovar, aprovando }: { t: Terri
       data-aprovado={aprovado ? "" : undefined}
     >
       <div className="flex min-w-0 items-start">
-        <h3 className="mr-2 min-w-0 flex-1 text-[14px] font-semibold leading-5 [overflow-wrap:anywhere]">{t.nome}</h3>
+        <h3 className="mr-2 min-w-0 flex-1 truncate text-[14px] font-semibold leading-5" title={t.nome}>
+          {t.nome}
+        </h3>
         {aprovado ? (
           <span className={juntar(etiqueta, "bg-success/15 text-foreground")}>
             <Check className="mr-1 h-3 w-3" aria-hidden="true" /> Aprovado
@@ -63,7 +65,7 @@ function CartaoDoTerritorio({ t, podeAprovar, onAprovar, aprovando }: { t: Terri
             HEX.test(c) ? (
               <span key={c} title={c} className="mb-1 mr-1 inline-block h-5 w-5 rounded-full border border-border" style={{ backgroundColor: c }} />
             ) : (
-              <span key={c} className="mb-1 mr-1 rounded-full bg-muted px-1.5 py-px text-[10.5px]">
+              <span key={c} className="mb-1 mr-1 rounded-full bg-muted px-1.5 py-px text-[11px]">
                 {c}
               </span>
             ),
@@ -100,17 +102,18 @@ export default function EtapaDirecao() {
     }
   };
 
+  // Na tela só o estado curto; o porquê fica no "?" (28/09).
   const estado = travado
-    ? "Tomadas já pedidas com o território aprovado. Outra direção pede campanha nova."
+    ? "Tomadas já pedidas"
     : lacunas.length
-      ? `O briefing tem ${lacunas.length} ${lacunas.length === 1 ? "lacuna" : "lacunas"}. O diretor aponta, não inventa.`
+      ? `${lacunas.length} ${lacunas.length === 1 ? "lacuna" : "lacunas"} no briefing`
       : `${campanha.territorios.length} ${campanha.territorios.length === 1 ? "território" : "territórios"}`;
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-publicidade="direcao">
       <CabecalhoDaEtapa
         titulo="Direção"
-        ajuda="Três territórios criativos com conceito, direção de arte, casting, ambiente e luz. A equipe aprova um; só então as tomadas saem."
+        ajuda={`Três territórios criativos com conceito, direção de arte, casting, ambiente e luz. A equipe aprova um; só então as tomadas saem.${travado ? " As tomadas já foram pedidas com o território aprovado: outra direção pede campanha nova." : lacunas.length ? " O diretor aponta as lacunas do briefing, não inventa." : ""}`}
         estado={estado}
         acoes={
           <>

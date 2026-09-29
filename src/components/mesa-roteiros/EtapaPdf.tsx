@@ -11,7 +11,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { paginasDoPdf } from "../../../supabase/functions/_shared/pdf-roteiro";
 import { type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, Cabecalho, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel, SeloDoStatus } from "./Comuns";
 import { baixarBytes, itemDoPdf, montarPdf, urlDoPdf } from "./pdfNoNavegador";
 
 /**
@@ -104,16 +104,21 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" data-etapa-pdf="">
-      <aside className="min-w-0 space-y-3">
-        <Cabecalho
-          titulo="Roteiros no PDF"
-          ajuda="Um documento com capa, uma página de fala por vídeo, técnico, direção, publicação e captação. Exportar não aprova nem muda o roteiro."
-          estado={`${linhas.length} de ${vivos.length} escolhidos`}
-        />
+      {/* 28/09: a coluna do PDF recolhe; a lista não rola por dentro (a etapa já rola: uma rolagem por região). */}
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:pdf:lista:${mesa.clientId}`}
+        nivel={2}
+        divisoria={false}
+        className="xl:self-start"
+        titulo="Roteiros no PDF"
+        ajuda="Um documento com capa, uma página de fala por vídeo, técnico, direção, publicação e captação. Exportar não aprova nem muda o roteiro. Sem versão aprovada, a atual sai como rascunho."
+        estado={`${linhas.length} de ${vivos.length} escolhidos`}
+        resumo={`${linhas.length} de ${vivos.length} escolhidos`}
+      >
         {roteirosQ.isLoading && <Carregando forma="lista" linhas={3} rotulo="Lendo os roteiros" />}
         {!roteirosQ.isLoading && !vivos.length && <EstadoVazio compacto titulo="Nenhum roteiro ainda." />}
         {vivos.length > 0 && (
-          <ul className="divide-y divide-border border-y border-border xl:max-h-[340px] xl:overflow-y-auto xl:overscroll-contain">
+          <ul className="divide-y divide-border border-y border-border">
             {vivos.map((r) => (
               <li key={r.id}>
                 <label className="flex min-w-0 cursor-pointer items-center px-1 py-2 hover:bg-muted/50">
@@ -125,9 +130,9 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
             ))}
           </ul>
         )}
-        <label className="flex items-start text-[12.5px]">
+        <label className="flex items-start text-[12px]" title="Sem versão aprovada, a atual sai como rascunho.">
           <input type="checkbox" className="mr-2 mt-0.5 shrink-0" checked={usarAprovada} onChange={(e) => setUsarAprovada(e.target.checked)} />
-          <span className="min-w-0">Usar a versão aprovada quando houver (senão, a atual sai como rascunho)</span>
+          <span className="min-w-0">Usar a versão aprovada quando houver</span>
         </label>
         <BarraDeAcoes inicio={pdf ? <span className="block truncate">{paginasDoPdf(pdf.bytes)} páginas · {Math.max(1, Math.round(pdf.bytes.length / 1024))} KB</span> : null}>
           <button type="button" className={botao.primario} disabled={!pdf} onClick={() => pdf && baixarBytes(pdf.bytes, pdf.nome)}>
@@ -146,12 +151,14 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
           </button>
         </BarraDeAcoes>
         {!podeCompartilhar && linhas.length > 0 && (
-          <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Só roteiro aprovado vai para o cliente. Falta aprovar: {semAprovacao.map((l) => l.titulo).join(", ")}.</p>
+          <p className={juntar(texto.auxiliar, "truncate")} title={`Falta aprovar: ${semAprovacao.map((l) => l.titulo).join(", ")}`}>
+            Só roteiro aprovado vai para o cliente. Falta aprovar: {semAprovacao.map((l) => l.titulo).join(", ")}.
+          </p>
         )}
         {erro ? <AvisoDeErro erro={erro} /> : null}
         {pdf && <p className={juntar(texto.auxiliar, "truncate")}>{pdf.nome}</p>}
-      </aside>
-      <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/40" data-previa-do-pdf="">
+      </BlocoRecolhivel>
+      <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted" data-previa-do-pdf="">
         {url ? (
           <iframe title="Prévia do PDF do roteiro" src={url} className="block h-[70vh] w-full bg-white lg:h-[78vh]" />
         ) : (

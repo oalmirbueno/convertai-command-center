@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { WEBHOOK_BASE } from "@/lib/webhooks";
 import {
+  AjudaRecolhida,
   CabecalhoDePagina,
   CampoDeFormulario,
   Carregando,
@@ -258,8 +259,8 @@ function Copiavel({ valor, rotulo }: { valor: string; rotulo: string }) {
 }
 
 /** Nome técnico curto no meio do texto (tabela, rota, coluna). */
-const codigo = "rounded bg-muted px-1 font-mono text-[11.5px] text-foreground";
-const aviso = "rounded-md border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-muted-foreground";
+const codigo = "rounded bg-muted px-1 font-mono text-[12px] text-foreground";
+const aviso = "flex min-w-0 items-center rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] leading-5 text-muted-foreground";
 
 /* ─── SHA-256 ───────────────────────────────────────────── */
 async function sha256(input: string): Promise<string> {
@@ -429,10 +430,10 @@ function ApiKeysSection() {
     >
       {keys.some((key) => key.audience !== API_GATEWAY_AUDIENCE) && (
         <div className={juntar(aviso, "mb-3")}>
-          <p className="font-medium text-foreground">Rotação obrigatória para chaves legadas</p>
-          <p className="mt-0.5">
+          <p className="min-w-0 truncate font-medium text-foreground">Rotação obrigatória para chaves legadas</p>
+          <AjudaRecolhida className="ml-1.5" rotulo="Por que rotacionar">
             Chaves sem audiência explícita ficam bloqueadas pelo gateway. Gere uma nova com o perfil mínimo, atualize a integração e revogue a antiga.
-          </p>
+          </AjudaRecolhida>
         </div>
       )}
 
@@ -1068,7 +1069,7 @@ Body (JSON):
     { rotulo: "Base URL", icone: <Globe className="h-3.5 w-3.5" />, corpo: <Copiavel valor={GATEWAY_URL} rotulo="Copiar base URL" /> },
     { rotulo: "Método", icone: <FileJson className="h-3.5 w-3.5" />, corpo: <p className={texto.corpo}><span className="font-mono font-semibold">POST</span> <span className="text-muted-foreground">· ação no body JSON</span></p> },
     { rotulo: "Autenticação", icone: <Shield className="h-3.5 w-3.5" />, corpo: <p className={texto.corpo}><code className={codigo}>X-API-Key</code> <span className="text-muted-foreground">· hash SHA-256</span></p> },
-    { rotulo: "Ações", icone: <Hash className="h-3.5 w-3.5" />, corpo: <p className={texto.corpo}><span className="text-[20px] font-semibold tabular-nums text-primary">{totalActions}</span> <span className="text-muted-foreground">· {actionDocs.length} categorias + {webhookRoutes.length} webhooks</span></p> },
+    { rotulo: "Ações", icone: <Hash className="h-3.5 w-3.5" />, corpo: <p className={texto.corpo}><span className="text-[15px] font-semibold tabular-nums text-primary">{totalActions}</span> <span className="text-muted-foreground">· {actionDocs.length} categorias + {webhookRoutes.length} webhooks</span></p> },
   ];
 
   const referencia: { rotulo: string; valor: ReactNode }[] = [
@@ -1132,9 +1133,9 @@ Body (JSON):
       <Tabs value={secao} onValueChange={(v) => setSecao(v as SecaoDaPagina)} className="w-full min-w-0">
         {/* ── Visão geral ─────────────────────────────────── */}
         <TabsContent value="overview" className="mt-0 space-y-6">
-          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
             {kpis.map((k) => (
-              <div key={k.rotulo} className={juntar(superficie.painel, "min-w-0 p-4")}>
+              <div key={k.rotulo} className="min-w-0">
                 <p className={juntar(texto.rotulo, "mb-2 flex items-center")}>
                   <span className="mr-1.5 text-primary" aria-hidden="true">{k.icone}</span>
                   {k.rotulo}
@@ -1148,15 +1149,15 @@ Body (JSON):
             <ul className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-3">
               <li className="min-w-0">
                 <p className={juntar(texto.corpo, "font-medium")}>API Gateway</p>
-                <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">Função única (<code className={codigo}>api-gateway</code>) com {totalActions} ações via POST, audiência e escopo por ação.</p>
+                <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">Função única (<code className={codigo}>api-gateway</code>) com {totalActions} ações via POST, audiência e escopo por ação.</p>
               </li>
               <li className="min-w-0">
                 <p className={juntar(texto.corpo, "font-medium")}>Webhooks n8n</p>
-                <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{webhookRoutes.length} rotas de automação. Base: <code className={codigo}>{WEBHOOK_BASE_LABEL}</code></p>
+                <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{webhookRoutes.length} rotas de automação. Base: <code className={codigo}>{WEBHOOK_BASE_LABEL}</code></p>
               </li>
               <li className="min-w-0">
                 <p className={juntar(texto.corpo, "font-medium")}>Edge Functions</p>
-                <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">{edgeFunctions.length} funções de backend (cron, IA, gestão de equipe).</p>
+                <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{edgeFunctions.length} funções de backend (cron, IA, gestão de equipe).</p>
               </li>
             </ul>
           </Secao>
@@ -1345,10 +1346,10 @@ Body (JSON):
               <li>Atualiza <code className={codigo}>last_used_at</code> e registra no <code className={codigo}>api_audit_log</code></li>
             </ol>
             <div className={juntar(aviso, "mt-4")}>
-              <p className="font-medium text-foreground">Rotacione credenciais legadas</p>
-              <p className="mt-0.5">
+              <p className="min-w-0 truncate font-medium text-foreground">Rotacione credenciais legadas</p>
+              <AjudaRecolhida className="ml-1.5" rotulo="Como rotacionar">
                 Chaves sem audiência/origem explícitas são recusadas. A chave de ambiente legada fica restrita à descoberta. Gere substitutas escopadas, atualize os consumidores, revogue as antigas e retire o fallback.
-              </p>
+              </AjudaRecolhida>
             </div>
           </Secao>
 

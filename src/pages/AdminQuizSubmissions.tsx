@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Eye, CheckCircle2, Copy, Loader2, Search, Filter,
+  Eye, CheckCircle2, Copy, Loader2, Filter,
   Mail, Phone, Building2, ArrowDownToLine, Hash, Lock, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,17 +15,17 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   CabecalhoDePagina,
+  CampoDeBusca,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
+  FaixaDeNumeros,
   RegiaoRolavel,
   SeletorCompacto,
   botao,
-  campo,
   etiqueta,
   foco,
   juntar,
-  superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
@@ -283,28 +283,22 @@ export default function AdminQuizSubmissions() {
         ajuda={<>Leads que responderam o quiz público em <span className="text-foreground">{APP_PUBLIC_HOST}/quiz</span>. Clique numa linha para ver as respostas.</>}
       />
 
-      {/* Números (grade de um nível) */}
-      <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {numeros.map((n) => (
-          <div key={n.rotulo} className={juntar(superficie.painel, "min-w-0 px-4 py-3")}>
-            <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
-            <p className={juntar("mt-1 text-[22px] font-semibold leading-7 tabular-nums", n.cor)}>{submissions ? n.valor : "-"}</p>
-          </div>
-        ))}
-      </div>
+      {/* Números: uma faixa só (sem um cartão por número) */}
+      <FaixaDeNumeros
+        rotulo="Números dos diagnósticos"
+        colunas={5}
+        itens={numeros.map((n) => ({ rotulo: n.rotulo, valor: submissions ? n.valor : "-", corDoValor: n.cor }))}
+      />
 
       {/* Filtros (lembram ao sair e voltar) */}
       <div className="flex min-w-0 flex-wrap items-center">
-        <div className="relative mb-2 mr-2 min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, e-mail, empresa ou WhatsApp"
-            aria-label="Buscar diagnóstico"
-            className={juntar(campo, "pl-8")}
-          />
-        </div>
+        <CampoDeBusca
+          valor={search}
+          onMudar={setSearch}
+          placeholder="Buscar por nome, e-mail, empresa ou WhatsApp"
+          rotulo="Buscar diagnóstico"
+          className="mb-2 mr-2 flex-1 basis-full sm:basis-auto sm:max-w-sm"
+        />
         <div className="mb-2 flex min-w-0 flex-wrap items-center [&>*]:mb-0 [&>*+*]:ml-2">
           <SeletorCompacto
             rotulo="Status"

@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, CalendarClock, Facebook, Instagram, Lock } from "lucide-react";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import Secao from "@/components/sistema/Secao";
 import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
 import { estadoNoCalendario, noFuso } from "../../../../supabase/functions/_shared/calendario-da-grade";
@@ -11,6 +12,7 @@ import TelaAgenda from "./TelaAgenda";
 import TelaArquivos from "./TelaArquivos";
 import { numeroDoPerfil, type ItemDaGradeNaAba, type PainelDoInstagram } from "./instagramApi";
 import { dataCurtaOuSem, type Planejamento } from "./usePlanejamento";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Telas do cliente dentro da aba Redes (rodada 3, 28/09: "já abrir outra tela
@@ -41,15 +43,16 @@ export function proximosPosts(itens: ItemDaGradeNaAba[], agora = new Date(), qua
 
 export { semanasDoMes } from "./TelaAgenda";
 
-function Cartao({ titulo, children, acao, className = "" }: { titulo: string; children: ReactNode; acao?: ReactNode; className?: string }) {
+/**
+ * Bloco do resumo: seção ABERTA (28/09, dono: "não encaixotar"), que recolhe
+ * pela setinha do título. Os blocos ficam lado a lado com o ritmo de
+ * espaco.colunas, sem caixa em volta.
+ */
+function Bloco({ titulo, children, acao, className = "" }: { titulo: string; children: ReactNode; acao?: ReactNode; className?: string }) {
   return (
-    <section className={juntar(superficie.painel, "min-w-0 px-4 py-3", className)}>
-      <div className="flex min-w-0 items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-foreground">{titulo}</h3>
-        {acao}
-      </div>
-      <div className="mt-2 min-w-0">{children}</div>
-    </section>
+    <Secao nivel={3} titulo={titulo} acao={acao} className={className}>
+      {children}
+    </Secao>
   );
 }
 
@@ -68,8 +71,8 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
   const proximos = plano.ordenados.filter((i) => !!i.data && Date.parse(i.data) > Date.now()).slice(0, 4);
   const semData = plano.ordenados.filter((i) => !i.data).length;
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 desk:grid-cols-3" data-tela-resumo="">
-      <Cartao titulo="Empresa" className="lg:row-span-2">
+    <div className="grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-7 lg:grid-cols-2 desk:grid-cols-3" data-tela-resumo="">
+      <Bloco titulo="Empresa" className="lg:row-span-2">
         {r.negocio || r.oferta || r.publico ? (
           <div className="space-y-3">
             <Campo rotulo="Nome">{r.nome}</Campo>
@@ -88,11 +91,16 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
             )}
           </div>
         ) : (
-          <p className={juntar(texto.auxiliar, "leading-5")}>Sem contexto ainda. Monte o contexto na aba Contexto para a bio, os destaques e o agente ficarem certeiros.</p>
+          <p className={juntar(texto.auxiliar, "flex items-center")}>
+            Sem contexto ainda
+            <AjudaRecolhida className="ml-1" rotulo="Por que montar o contexto">
+              Monte o contexto na aba Contexto para a bio, os destaques e o agente ficarem certeiros.
+            </AjudaRecolhida>
+          </p>
         )}
-      </Cartao>
+      </Bloco>
 
-      <Cartao titulo="Perfil agora">
+      <Bloco titulo="Perfil agora">
         <div className="space-y-2">
           <p className="text-[13px] font-semibold text-foreground">{p.username ? `@${p.username}` : "Sem Instagram conectado"}</p>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -103,17 +111,17 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
             ].map(([rotulo, v]) => (
               <div key={String(rotulo)} className="rounded-md bg-muted/50 px-2 py-1.5">
                 <p className="text-[15px] font-semibold tabular-nums">{numeroDoPerfil(v as number | null)}</p>
-                <p className="text-[11.5px] text-muted-foreground">{rotulo}</p>
+                <p className="text-[12px] text-muted-foreground">{rotulo}</p>
               </div>
             ))}
           </div>
-          {p.bio && <p className="whitespace-pre-line text-[12.5px] leading-5 text-foreground">{p.bio}</p>}
-          {p.site && <p className="truncate text-[12.5px] text-primary">{p.site.replace(/^https?:\/\//, "")}</p>}
+          {p.bio && <p className="whitespace-pre-line text-[13px] leading-5 text-foreground">{p.bio}</p>}
+          {p.site && <p className="truncate text-[13px] text-primary">{p.site.replace(/^https?:\/\//, "")}</p>}
         </div>
-      </Cartao>
+      </Bloco>
 
-      <Cartao titulo="Contas conectadas">
-        <ul className="space-y-1.5 text-[12.5px]">
+      <Bloco titulo="Contas conectadas">
+        <ul className="space-y-1.5 text-[13px]">
           {painel.contas.map((c) => (
             <li key={c.id} className="flex items-center">
               <Instagram className="mr-2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />@{c.username}
@@ -127,9 +135,9 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
           ))}
           {!painel.contas.length && !painel.paginas.length && <li className={texto.auxiliar}>Nenhuma conta conectada.</li>}
         </ul>
-      </Cartao>
+      </Bloco>
 
-      <Cartao titulo="Kit da marca">
+      <Bloco titulo="Kit da marca">
         {painel.kit.paleta.length ? (
           <div className="flex flex-wrap">
             {painel.kit.paleta.map((c) => (
@@ -143,9 +151,9 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
           <p className={texto.auxiliar}>Sem paleta no kit.</p>
         )}
         {painel.kit.estilo && <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>{painel.kit.estilo}</p>}
-      </Cartao>
+      </Bloco>
 
-      <Cartao
+      <Bloco
         titulo="O que vai ao ar"
         acao={
           <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => onVista("proximos")}>
@@ -156,7 +164,7 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
         {proximos.length ? (
           <ul className="space-y-1.5">
             {proximos.map((i) => (
-              <li key={i.id} className="flex min-w-0 items-center text-[12.5px]">
+              <li key={i.id} className="flex min-w-0 items-center text-[13px]">
                 <span className="mr-2 w-[74px] shrink-0 tabular-nums text-muted-foreground">{dataCurtaOuSem(i.data)}</span>
                 <span className="min-w-0 flex-1 truncate">{i.titulo}</span>
               </li>
@@ -166,7 +174,7 @@ function TelaResumo({ painel, plano, onVista }: { painel: PainelDoInstagram; pla
           <p className={texto.auxiliar}>Nada com data daqui para a frente.</p>
         )}
         {semData > 0 && <p className={juntar(texto.auxiliar, "mt-1.5")}>{semData} sem data.</p>}
-      </Cartao>
+      </Bloco>
     </div>
   );
 }

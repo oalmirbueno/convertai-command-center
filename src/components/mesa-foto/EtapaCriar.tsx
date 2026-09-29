@@ -1,9 +1,9 @@
 import { Aperture, ArrowRight, BookOpen, CalendarDays, CalendarPlus, Images, Library, Megaphone, Shapes, UserRound, UsersRound, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { MiniaturaDaFoto, useMesaFoto, type EtapaDaMesaFoto } from "./Comuns";
+import { Cartao, MiniaturaDaFoto, useMesaFoto, type EtapaDaMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { foco, juntar } from "@/components/sistema/estilos";
+import { foco, juntar, superficie } from "@/components/sistema/estilos";
 import { periodoDaCampanha, rotuloDoTipo, useCampanhasDaMesa, useEnsaios, useFotos, useKits } from "./fotoApi";
 
 /**
@@ -87,12 +87,19 @@ export default function EtapaCriar() {
       <div className="flex min-w-0 items-center" data-produto-aberto="">
         <span className="mr-2.5 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-md bg-muted" />}</span>
         <div className="mr-2 min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold">{kit ? kit.nome : semProduto ? "Sem produto identificado" : "Nenhum produto escolhido"}</p>
-          <p className="truncate text-[11.5px] text-muted-foreground">
-            {kit
-              ? `${rotuloDoTipo(kit.tipo)}${kit.variante ? ` · ${kit.variante}` : ""} · ${doKit} ${doKit === 1 ? "lote criado" : "lotes criados"}`
-              : "Variações e Campanha partem do produto; o Estúdio e o Post na Agenda funcionam com qualquer foto."}
-          </p>
+          <div className="flex min-w-0 items-center">
+            <p className="min-w-0 truncate text-[13px] font-semibold">{kit ? kit.nome : semProduto ? "Sem produto identificado" : "Nenhum produto escolhido"}</p>
+            {!kit && (
+              <AjudaRecolhida className="ml-1.5" rotulo="Precisa de produto?">
+                Variações e Campanha partem do produto; o Estúdio e o Post na Agenda funcionam com qualquer foto.
+              </AjudaRecolhida>
+            )}
+          </div>
+          {kit && (
+            <p className="truncate text-[12px] text-muted-foreground">
+              {`${rotuloDoTipo(kit.tipo)}${kit.variante ? ` · ${kit.variante}` : ""} · ${doKit} ${doKit === 1 ? "lote criado" : "lotes criados"}`}
+            </p>
+          )}
         </div>
         <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 text-[12px]" onClick={() => irPara("acervo")}>
           {kit ? "Trocar" : semProduto ? "Identificar" : "Escolher"}
@@ -111,8 +118,7 @@ export default function EtapaCriar() {
         </div>
       )}
 
-      <div className="min-w-0">
-        <h2 className="mb-2 text-[13px] font-semibold">O que você quer fazer?</h2>
+      <Cartao titulo="O que você quer fazer?" className="border-t-0 pt-0">
         <ul className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {FORMAS.map((f) => {
             const Icone = f.icone;
@@ -123,7 +129,7 @@ export default function EtapaCriar() {
                   type="button"
                   onClick={() => abrir(f.etapa)}
                   disabled={travada}
-                  className={juntar("flex h-full w-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 disabled:opacity-60", foco)}
+                  className={juntar(superficie.painel, "flex h-full w-full min-w-0 flex-col p-4 text-left transition-colors hover:border-primary/50 disabled:opacity-60", foco)}
                   data-forma-de-criar={f.etapa}
                 >
                   <Icone className="h-5 w-5 text-primary" />
@@ -137,7 +143,7 @@ export default function EtapaCriar() {
             );
           })}
         </ul>
-      </div>
+      </Cartao>
 
       {pedirAoDiretor && (
         <div className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" data-pedir-ao-diretor="">
@@ -167,7 +173,7 @@ export default function EtapaCriar() {
         {APOIOS.map((a) => {
           const Icone = a.icone;
           return (
-            <button key={a.etapa} type="button" onClick={() => irPara(a.etapa)} className={juntar("mb-1 mr-1.5 inline-flex h-7 items-center rounded-full border border-border bg-background px-2.5 text-[11.5px] text-foreground hover:border-primary/50", foco)}>
+            <button key={a.etapa} type="button" onClick={() => irPara(a.etapa)} className={juntar("mb-1 mr-1.5 inline-flex h-7 items-center rounded-full border border-border bg-background px-2.5 text-[12px] text-foreground hover:border-primary/50", foco)}>
               <Icone className="mr-1 h-3.5 w-3.5 text-primary" /> {a.rotulo}
             </button>
           );

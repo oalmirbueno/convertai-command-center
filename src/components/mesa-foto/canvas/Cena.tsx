@@ -31,7 +31,7 @@ function FotosParaEscolher({ no, escolhida, onEscolher, rotulo }: { no: NoDoCanv
   if (!prontas.length) return <p className="text-[11px] text-zinc-400">Ainda sem foto. Gere a foto para escolher.</p>;
   return (
     <div className="flex min-w-0 flex-wrap" role="radiogroup" aria-label={rotulo}>
-      <button type="button" role="radio" aria-checked={!escolhida} onClick={() => onEscolher(null)} className={`mb-1 mr-1 flex h-12 items-center rounded-lg border px-2 text-[10.5px] ${!escolhida ? "border-emerald-400 text-white" : "border-white/10 text-zinc-400 hover:text-white"}`} title="A foto da cena, senão a mais nova aprovada, senão a mais nova">
+      <button type="button" role="radio" aria-checked={!escolhida} onClick={() => onEscolher(null)} className={`mb-1 mr-1 flex h-12 items-center rounded-lg border px-2 text-[11px] ${!escolhida ? "border-emerald-400 text-white" : "border-white/10 text-zinc-400 hover:text-white"}`} title="A foto da cena, senão a mais nova aprovada, senão a mais nova">
         Automática
       </button>
       {prontas.map((r) => (
@@ -85,7 +85,7 @@ export function AjustesDaCena({ canvas, no, onMudar }: { canvas: Canvas; no: NoD
             Cena {minha ? minha.numero : cena.ordem} de {historia.length}
           </span>
         </p>
-        <button type="button" className="text-[10.5px] text-zinc-400 hover:text-white" onClick={() => onMudar({ cena: null })} title="O Resultado continua no quadro">
+        <button type="button" className="text-[11px] text-zinc-400 hover:text-white" onClick={() => onMudar({ cena: null })} title="O Resultado continua no quadro">
           Tirar da história
         </button>
       </div>
@@ -123,7 +123,7 @@ export function AjustesDaCena({ canvas, no, onMudar }: { canvas: Canvas; no: NoD
         </p>
         <div className="flex min-w-0 flex-wrap">
           {NOS_DE_VIDEO_EM_BREVE.map((v) => (
-            <span key={v.chave} title={v.dica} className="mb-1 mr-1 inline-flex h-6 cursor-not-allowed items-center rounded-full border border-dashed border-white/20 px-2 text-[10.5px] text-zinc-500">
+            <span key={v.chave} title={v.dica} className="mb-1 mr-1 inline-flex h-6 cursor-not-allowed items-center rounded-full border border-dashed border-white/20 px-2 text-[11px] text-zinc-500">
               {v.rotulo}
             </span>
           ))}

@@ -64,22 +64,22 @@ type Metrica =
  * O que cada número conta está em `medir` abaixo e em src/components/sistema/regras.ts.
  */
 const TETO: Record<Metrica, number> = {
-  fonteForaDaEscala: 1789, // L2 (Execução, Aprovações, Pedidos, Briefings): -6; L1: -49; L9: -47; L7 (Projetos, Kanban, Agenda, Timeline): -89
-  fonteComNomeDoTailwind: 353, // L2: -2; L1: -3; L9: -1; L7 (Projetos, Kanban, Agenda, Timeline): -124
-  translucidoEmBloco: 23, // L7 (Projetos, Kanban, Agenda, Timeline): -4
-  rolagemPresaNoCelular: 23, // L7 (Projetos, Kanban, Agenda, Timeline): -7
-  rolagemDentroDeRolagem: 4, // L7 (Projetos, Kanban, Agenda, Timeline): -1
-  alturaFixaDaJanela: 2,
-  cartaoFeitoAMao: 172, // L2: -1; L1: -3; L9: -5; L7 (Projetos, Kanban, Agenda, Timeline): -15
+  fonteForaDaEscala: 1316, // 28/09: ondas 1 e 2 da padronização somadas
+  fonteComNomeDoTailwind: 280, // 28/09: ondas 1 e 2 da padronização somadas
+  translucidoEmBloco: 7, // 28/09: ondas 1 e 2 da padronização somadas
+  rolagemPresaNoCelular: 11, // 28/09: ondas 1 e 2 da padronização somadas
+  rolagemDentroDeRolagem: 2, // 28/09: ondas 1 e 2 da padronização somadas
+  alturaFixaDaJanela: 0, // 28/09: ondas 1 e 2 da padronização somadas
+  cartaoFeitoAMao: 54, // 28/09: ondas 1 e 2 da padronização somadas
   secaoEmCartao: 0,
-  cartaoDentroDeCartao: 69, // L1: -2; L9: -6; L7 (Projetos, Kanban, Agenda, Timeline): -51
-  paragrafoFixo: 101, // L2: -3; L1: -14; L9: -9; L7 (Projetos, Kanban, Agenda, Timeline): -3
-  descricaoExplicativa: 2, // L9: -2
-  cantoForaDoToken: 41, // L1: -3; L9: -2; L7 (Projetos, Kanban, Agenda, Timeline): -11
-  tituloQueQuebra: 11,
-  sombraForte: 42, // L7 (Projetos, Kanban, Agenda, Timeline): -7
-  caixaAlta: 165, // L1: -4; L9: -2; L7 (Projetos, Kanban, Agenda, Timeline): -80
-  h1FeitoAMao: 14, // L7 (Projetos, Kanban, Agenda, Timeline): -1
+  cartaoDentroDeCartao: 40, // 28/09: ondas 1 e 2 da padronização somadas
+  paragrafoFixo: 35, // 28/09: ondas 1 e 2 da padronização somadas
+  descricaoExplicativa: 1, // 28/09: ondas 1 e 2 da padronização somadas
+  cantoForaDoToken: 13, // 28/09: ondas 1 e 2 da padronização somadas
+  tituloQueQuebra: 4, // 28/09: ondas 1 e 2 da padronização somadas
+  sombraForte: 39, // 28/09: ondas 1 e 2 da padronização somadas
+  caixaAlta: 126, // 28/09: ondas 1 e 2 da padronização somadas
+  h1FeitoAMao: 10, // 28/09: ondas 1 e 2 da padronização somadas
 };
 
 const METRICAS = Object.keys(TETO) as Metrica[];

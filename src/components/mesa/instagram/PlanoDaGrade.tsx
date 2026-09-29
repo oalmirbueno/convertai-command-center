@@ -13,6 +13,7 @@ import DetalheDoPost, { bucketDoItem, TOM_DO_CALENDARIO } from "./DetalheDoPost"
 import PainelDeMudancas from "./PainelDeMudancas";
 import type { ItemDaGradeNaAba } from "./instagramApi";
 import { dataCurtaOuSem, type Planejamento } from "./usePlanejamento";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Grade e simulador (rodada 3, 28/09: "liberdade total"). Os posts que vão ao
@@ -91,8 +92,11 @@ export default function PlanoDaGrade({
       </div>
 
       {!lista.length && (
-        <p className={juntar(texto.auxiliar, "leading-5")}>
-          Nenhum post pronto para ir ao ar. Os aprovados ou prontos da Agenda, do Estúdio e os posts de fotos da Mesa Foto aparecem aqui para simular; dá também para pôr uma arte do acervo.
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Nenhum post pronto para ir ao ar
+          <AjudaRecolhida className="ml-1" rotulo="O que aparece aqui">
+            Os aprovados ou prontos da Agenda, do Estúdio e os posts de fotos da Mesa Foto aparecem aqui para simular; dá também para pôr uma arte do acervo.
+          </AjudaRecolhida>
         </p>
       )}
 

@@ -650,9 +650,10 @@ function NovoClone({ fotoInicial, onCriado, onCancelar }: { fotoInicial: string 
             <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta acima do lábio, à esquerda dela\ncabelo cacheado na altura do ombro"} aria-label="Traços que nunca mudam" className="text-[13px]" />
           </CampoDeFormulario>
         </div>
-        <div className={juntar("min-w-0 rounded-lg border p-4", a.confirmada ? "border-success/40" : "border-warning/50")} data-autorizacao-do-clone="">
-          <p className="mb-3 flex items-center text-[14px] font-semibold">
-            <ShieldCheck className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Autorização de uso de imagem
+        {/* 28/09 (sem caixa dentro de caixa): a autorização é um poço; o escudo diz se está confirmada. */}
+        <div className={juntar(superficie.poco, "min-w-0 p-4")} data-autorizacao-do-clone="">
+          <p className="mb-3 flex items-center text-[13px] font-semibold">
+            <ShieldCheck className={juntar("mr-1.5 h-4 w-4", a.confirmada ? "text-success" : "text-warning")} aria-hidden="true" /> Autorização de uso de imagem
           </p>
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Quem autorizou">
@@ -1087,7 +1088,7 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
                   type="button"
                   aria-pressed={marcada}
                   onClick={() => onMarcar(i)}
-                  className={`block w-full min-w-0 rounded-lg border p-2 text-left transition-colors ${marcada ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40"}`}
+                  className={`block w-full min-w-0 rounded-md border p-2 text-left transition-colors ${marcada ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
                 >
                   <span className="flex min-w-0 items-center text-[12px] font-semibold">
                     <span className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${marcada ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
@@ -1133,7 +1134,7 @@ function VariacaoAberta({
   const { clientId } = useMesa();
   const [conferencia, setConferencia] = useState<ConferenciaDoClone | null>(null);
   return (
-    <section className="mb-3 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-primary/40 p-3 sm:grid-cols-[180px_minmax(0,1fr)]" aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
+    <section className={juntar(superficie.poco, "mb-3 grid min-w-0 grid-cols-1 gap-3 p-3 sm:grid-cols-[180px_minmax(0,1fr)]")} aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
       <div className="min-w-0">
         <Moldura proporcao={foto.largura && foto.altura ? foto.largura / foto.altura : 0.8} className="border border-border">
           <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="h-full w-full !object-contain" />
@@ -1982,7 +1983,7 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
       <div className="flex min-w-0 items-start">
         <div className="mr-3 min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center">
-            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate text-[18px]")}>{c.nome}</h2>
+            <h2 className={juntar(texto.tituloSecao, "mr-2 min-w-0 truncate")}>{c.nome}</h2>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[11px] font-medium ${st.cor}`}>{st.rotulo}</span>
             <span className="inline-flex items-center rounded-full border border-primary/30 px-1.5 py-px text-[11px] font-semibold text-primary">
               <ShieldCheck className="mr-0.5 h-2.5 w-2.5" aria-hidden="true" /> pessoa real autorizada

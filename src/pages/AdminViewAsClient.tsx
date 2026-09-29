@@ -25,7 +25,7 @@ import {
   botao,
   foco,
   juntar,
-  superficie,
+  lista,
   texto,
 } from "@/components/sistema";
 import ClientVaultPage from "@/pages/ClientVaultPage";
@@ -208,33 +208,32 @@ export default function AdminViewAsClient() {
           ajuda="Selecione um cliente para navegar pelo painel completo como se fosse ele, em modo somente leitura."
         />
 
-        {/* Lista única em duas colunas no computador (linhas finas entre os
-            clientes, sem um cartão por cliente). */}
+        {/* Lista aberta em duas colunas no computador (sem caixa em volta e sem
+            um cartão por cliente). */}
         {loadingClients ? (
           <Carregando linhas={4} rotulo="Carregando clientes" />
         ) : ativos.length === 0 ? (
           <EstadoVazio icone={<Eye className="h-5 w-5" />} titulo="Nenhum cliente ativo" descricao="Clientes com plano ativo aparecem aqui." />
         ) : (
-          <ul aria-label="Clientes ativos" className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          <ul aria-label="Clientes ativos" className={juntar(lista.aberta, "grid grid-cols-1 gap-x-6 sm:grid-cols-2")}>
             {ativos.map((c: any) => (
-              <li key={c.id} className="min-w-0 bg-card">
+              <li key={c.id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => selectClient(c)}
-                  className={juntar("group flex h-full w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
+                  className={juntar("group flex h-full w-full min-w-0 items-center rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/40", foco)}
                 >
                   <Avatar className="mr-3 h-8 w-8 shrink-0">
                     <AvatarFallback className="bg-primary/15 text-[11px] font-semibold text-primary">{iniciais(c)}</AvatarFallback>
                   </Avatar>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-medium leading-5 text-foreground">{c.company_name || c.full_name}</span>
+                    <span className="block truncate text-[13px] font-medium leading-5 text-foreground">{c.company_name || c.full_name}</span>
                     <span className={juntar(texto.auxiliar, "block truncate")}>{c.email}</span>
                   </span>
                   <Eye className="ml-3 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
                 </button>
               </li>
             ))}
-            {ativos.length % 2 === 1 && <li aria-hidden="true" className="hidden bg-card sm:block" />}
           </ul>
         )}
       </div>
@@ -290,7 +289,7 @@ export default function AdminViewAsClient() {
           </button>
           <Eye className="ml-1 mr-2 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
           {/* No celular o nome do cliente fica só no seletor (sem repetir e cortar). */}
-          <p className="mr-2 shrink-0 truncate text-[12.5px] font-medium text-sky-500 sm:min-w-0 sm:flex-1 sm:shrink">
+          <p className="mr-2 shrink-0 truncate text-[12px] font-medium text-sky-500 sm:min-w-0 sm:flex-1 sm:shrink">
             Somente leitura<span className="hidden sm:inline"> · visualizando como: {nomeDoCliente}</span>
           </p>
           <div className="ml-auto flex min-w-0 flex-1 justify-end sm:flex-none">

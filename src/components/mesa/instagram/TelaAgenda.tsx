@@ -8,6 +8,7 @@ import { bucketDoItem, TOM_DO_CALENDARIO } from "./DetalheDoPost";
 import PainelDeMudancas from "./PainelDeMudancas";
 import type { ItemDaGradeNaAba, PerfilDaAba } from "./instagramApi";
 import type { Planejamento } from "./usePlanejamento";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Agenda de verdade (rodada 3, 28/09): mês ou semana, com a miniatura, o
@@ -219,7 +220,12 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
             </tbody>
           </table>
         </div>
-        <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>Arraste um post para outro dia (a hora fica a mesma). Com cadeado: já agendado na Meta ou publicado.</p>
+        <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>
+          Arraste para mudar o dia
+          <AjudaRecolhida className="ml-1" rotulo="Como mudar a data">
+            Arraste um post para outro dia (a hora fica a mesma). Com cadeado: já agendado na Meta ou publicado.
+          </AjudaRecolhida>
+        </p>
       </div>
 
       <aside className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:block 2xl:space-y-3">

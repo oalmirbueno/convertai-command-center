@@ -99,7 +99,7 @@ function LinhaDoPerfil({
           </span>
           <span className={juntar(texto.auxiliar, "block truncate")}>{partes.join(" · ")}</span>
           {p.ultimo_erro && (
-            <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-destructive" title={p.ultimo_erro}>
+            <span className="mt-0.5 flex min-w-0 items-center text-[12px] text-destructive" title={p.ultimo_erro}>
               <AlertTriangle className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
               <span className="truncate">{p.ultimo_erro}</span>
             </span>

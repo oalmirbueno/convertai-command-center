@@ -10,6 +10,7 @@ import { useMesa } from "./MesaContexto";
 import type { BriefingDaCampanha, Campanha } from "./mesaV4Api";
 import { briefingEstaVazio } from "./mesaV4Api";
 import { campanhaSalvar, normalizarBriefing, trocarCampanhaNoCache } from "./campanhasApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Briefing da campanha (25/09): o que torna a campanha concreta. Produto(s) em
@@ -196,8 +197,11 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
   return (
     <div className="min-w-0">
       {vazio ? (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          Sem briefing ainda. Diga qual produto a campanha vende, a oferta, a mensagem e para quem: o agente e o Estúdio passam a seguir isso.
+        <p className="flex items-center text-[13px] text-muted-foreground">
+          Sem briefing ainda
+          <AjudaRecolhida className="ml-1" rotulo="O que pôr no briefing">
+            Diga qual produto a campanha vende, a oferta, a mensagem e para quem: o agente e o Estúdio passam a seguir isso.
+          </AjudaRecolhida>
         </p>
       ) : (
         <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">

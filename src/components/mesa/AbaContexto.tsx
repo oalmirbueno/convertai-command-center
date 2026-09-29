@@ -18,6 +18,7 @@ import { useMesa } from "./MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { Carregando } from "@/components/sistema/Estados";
+import { botao, juntar } from "@/components/sistema/estilos";
 
 // Frente P: Perfis do Instagram (referências e concorrentes). Carrega só ao abrir o grupo.
 const PerfisDoInstagram = lazy(() => import("@/components/perfis/PerfisDoInstagram"));
@@ -39,26 +40,34 @@ const PARTES = [
 
 export type ParteDoContexto = (typeof PARTES)[number]["valor"];
 
-/** Os editores de cada parte do contexto: uma parte por vez. */
-function DetalhesDoContexto({ parte, onParte }: { parte: ParteDoContexto; onParte: (p: ParteDoContexto) => void }) {
+/**
+ * Seletor das sete partes: vai na linha do título do hub "Editar em detalhe"
+ * (28/09: seletor pequeno não ganha linha própria), com a explicação no "?".
+ */
+function SeletorDaParte({ parte, onParte }: { parte: ParteDoContexto; onParte: (p: ParteDoContexto) => void }) {
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
+  return (
+    <div className="flex min-w-0 items-center">
+      <SeletorCompacto
+        rotulo="Parte do contexto"
+        opcoes={PARTES.map((p) => ({ valor: p.valor, rotulo: p.rotulo, descricao: p.dica }))}
+        valor={parte}
+        onEscolher={(v) => onParte(v as ParteDoContexto)}
+      />
+      <AjudaRecolhida className="ml-2" rotulo={`O que é ${atual.rotulo}`}>
+        {atual.dica}
+      </AjudaRecolhida>
+    </div>
+  );
+}
+
+/** Os editores de cada parte do contexto: uma parte por vez. */
+function DetalhesDoContexto({ parte }: { parte: ParteDoContexto }) {
   // Marca por projeto: com outra marca aberta no topo (ex.: CME), a parte Marca edita o kit dela.
   const { marca } = useMarcaDaMesa();
   const outraMarca = marca && !marca.principal ? marca : null;
   return (
-    <div className="min-w-0 space-y-3">
-      {/* Sete partes: seletor compacto (docs/design/SISTEMA.md), a explicação no "?". */}
-      <div className="flex min-w-0 items-center">
-        <SeletorCompacto
-          rotulo="Parte do contexto"
-          opcoes={PARTES.map((p) => ({ valor: p.valor, rotulo: p.rotulo, descricao: p.dica }))}
-          valor={parte}
-          onEscolher={(v) => onParte(v as ParteDoContexto)}
-        />
-        <AjudaRecolhida className="ml-2" rotulo={`O que é ${atual.rotulo}`}>
-          {atual.dica}
-        </AjudaRecolhida>
-      </div>
+    <div className="min-w-0">
       <div className="min-w-0">
         {parte === "marca" && (outraMarca ? <ContextoKitDaMarca marca={outraMarca} /> : <ContextoMarca />)}
         {parte === "fontes" && <ContextoFontes />}
@@ -122,11 +131,14 @@ export default function AbaContexto() {
     >
       <div className="min-w-0 space-y-4 pb-6">
         {marca && !marca.principal && (
-          <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-[12.5px]" data-aviso-da-marca="">
-            <p className="mr-3 min-w-0 flex-1 [overflow-wrap:anywhere]">
-              Marca <strong>{marca.nome}</strong> aberta: logo, cores, estilo e referências dela ficam em Editar em detalhe, Marca. Documentos, dossiê e o agente ao lado são do cliente.
+          <div className="flex min-w-0 items-center rounded-md bg-primary/5 px-3 py-1.5 text-[13px]" data-aviso-da-marca="">
+            <p className="min-w-0 flex-1 truncate">
+              Marca <strong>{marca.nome}</strong> aberta
             </p>
-            <button type="button" onClick={() => irPara("marca")} className="mt-1 shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground sm:mt-0">
+            <AjudaRecolhida className="ml-1.5 mr-2" rotulo="O que muda com a marca aberta">
+              Logo, cores, estilo e referências da marca ficam em Editar em detalhe, Marca. Documentos, dossiê e o agente ao lado são do cliente.
+            </AjudaRecolhida>
+            <button type="button" onClick={() => irPara("marca")} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
               Editar o kit da {marca.nome}
             </button>
           </div>
@@ -136,7 +148,7 @@ export default function AbaContexto() {
           <Hub
             id="ctx-plano"
             titulo="Plano do cliente"
-            resumo="Começo do cliente, caminho e stack, pacote para LLM externo, identidade visual e organizar arquivos"
+            ajuda="Começo do cliente, caminho e stack, pacote para LLM externo, identidade visual e organizar arquivos."
             aberto={hubs.aberto("ctx-plano")}
             onAlternar={() => hubs.alternar("ctx-plano")}
           >
@@ -145,7 +157,7 @@ export default function AbaContexto() {
           <Hub
             id="ctx-perfis"
             titulo="Perfis do Instagram"
-            resumo="Referências de estilo e editorial, concorrentes monitorados"
+            ajuda="Referências de estilo e editorial e concorrentes monitorados."
             aberto={hubs.aberto("ctx-perfis")}
             onAlternar={() => hubs.alternar("ctx-perfis")}
           >
@@ -156,10 +168,9 @@ export default function AbaContexto() {
           <Hub
             id="ctx-mcp"
             titulo="MCP"
-            resumo="O que chegou pelo MCP e o que vale para o planejamento"
+            ajuda="O que chegou pelo MCP e o que vale para o planejamento."
             aberto={hubs.aberto("ctx-mcp")}
             onAlternar={() => hubs.alternar("ctx-mcp")}
-            rolagem
           >
             <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Carregando o MCP" />}>
               <ContextoMcp />
@@ -169,11 +180,13 @@ export default function AbaContexto() {
             <Hub
               id="ctx-detalhes"
               titulo="Editar em detalhe"
-              resumo={`Marca, fontes, imagens, referências, rosto, prompt e memória · aberto em ${atual.rotulo}`}
+              resumo={`Aberto em ${atual.rotulo}`}
+              ajuda="Marca, fontes, imagens, referências, rosto, prompt e memória: os editores completos, uma parte por vez."
               aberto={hubs.aberto("ctx-detalhes")}
               onAlternar={() => hubs.alternar("ctx-detalhes")}
+              acao={hubs.aberto("ctx-detalhes") ? <SeletorDaParte parte={parte} onParte={setParte} /> : undefined}
             >
-              <DetalhesDoContexto parte={parte} onParte={setParte} />
+              <DetalhesDoContexto parte={parte} />
             </Hub>
           </div>
         </div>

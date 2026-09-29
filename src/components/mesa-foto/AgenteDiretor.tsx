@@ -347,7 +347,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
           })}
         </div>
       </div>
-      {!kit && <p className="text-[12.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
+      {!kit && <p className="text-[12px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -416,7 +416,13 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
   };
   return (
     <li className="min-w-0 space-y-2 rounded-md border border-primary/40 p-2.5" data-sugestao={sugestao.chave} data-campanha="">
-      <p className="text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      <div className="flex min-w-0 items-start">
+        <p className="min-w-0 text-[14px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+        {/* 28/09 (dono: "explicação no ?"): a regra da modelo sintética fica no "?" ao lado do título. */}
+        <AjudaRecolhida className="ml-1.5 mt-0.5" rotulo="Sobre a modelo da campanha">
+          Pessoa sintética, adulta, sem parecer com ninguém real. O produto não muda. Toda foto sai marcada como gerada.
+        </AjudaRecolhida>
+      </div>
       {sugestao.descricao && <p className="text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <GuiaDeEstiloNaTela guia={plano.guia_de_estilo} modelo={plano.modelo} compacto />
       {plano.fotos.length > 0 && (
@@ -429,9 +435,8 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
           ))}
         </ol>
       )}
-      <p className="text-[12px] leading-snug text-muted-foreground">Pessoa sintética, adulta, sem parecer com ninguém real. O produto não muda. Toda foto sai marcada como gerada.</p>
       <Pilulas rotulo="Quantidade de fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
-      {!kit && <p className="text-[12.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
+      {!kit && <p className="text-[12px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -573,7 +578,7 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
     <div className="mr-2 min-w-0">
       <div className={juntar(conversa.balao, "space-y-2 bg-muted/60")}>
         {m.entendi && (
-          <p className="rounded-md bg-background/60 px-2.5 py-1.5 text-[13px]" data-entendi="">
+          <p className="rounded-md bg-card px-2.5 py-1.5 text-[13px]" data-entendi="">
             <span className="font-semibold">Entendi: </span>
             {m.entendi}
           </p>
@@ -713,7 +718,7 @@ function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDireto
     <>
       {mensagens.length === 0 && !pendente && (
         <p className={juntar(conversa.apoio, "leading-relaxed")} data-diretor-vazio="">
-          Ele já conhece o cliente e o que está aberto na tela. Peça o que quer: melhorar uma foto, variações, campanha, book, um carrossel na Agenda. O que é claro e sem custo ele já faz (dá para desfazer); o que custa mostra o preço antes. No fim ele deixa o botão para ir à área certa.
+          Peça o que quer: melhorar uma foto, variações, campanha, book ou um carrossel na Agenda.
         </p>
       )}
       {mensagens.map((m) => (

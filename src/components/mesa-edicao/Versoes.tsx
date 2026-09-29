@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, History, Loader2, MessageSquare, Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import Secao from "@/components/sistema/Secao";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, campo as campoDoSistema, juntar } from "@/components/sistema/estilos";
 import { motivoParaNaoMudar, resumoPorVideo, ROTULO_DO_ESTADO, tempoDoVideo, type ResumoDoVideo, type VersaoDeVideo } from "../../../supabase/functions/_shared/memoria-de-video";
 import { AvisoDeAtivacao } from "@/components/mesa-videos/Comuns";
 import { chamarMesaVideos, chaveDasVersoes, useArquivosDeVideo, useVersoes } from "@/components/mesa-videos/videosApi";
@@ -20,7 +20,8 @@ import { chamarMesaVideos, chaveDasVersoes, useArquivosDeVideo, useVersoes } fro
  * Aprovação estética não é resultado de campanha.
  */
 
-const campo = "h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[12px]";
+/** Campo compacto das versões: o campo do sistema em 32 px (lista densa). */
+const campo = juntar(campoDoSistema, "h-8 px-2 text-[12px]");
 
 /** "1:05" ou "65" viram segundos; vazio é null. */
 export function segundosDoTexto(t: string): number | null {
@@ -241,7 +242,8 @@ function NovaVersao({ videos, onFechar }: { videos: ResumoDoVideo[]; onFechar: (
   );
 }
 
-export default function Versoes() {
+/** `troca`: o seletor Pacote | Versões da etapa Editar, na linha do título (sem linha própria). */
+export default function Versoes({ troca }: { troca?: ReactNode } = {}) {
   const { clientId } = useMesa();
   const versoesQ = useVersoes(clientId);
   const [nova, setNova] = useState(false);
@@ -254,11 +256,15 @@ export default function Versoes() {
       titulo="Versões"
       descricao={versoesQ.data ? `${videos.length} ${videos.length === 1 ? "vídeo" : "vídeos"}` : undefined}
       ajuda="Versões, comentários com o tempo do vídeo, custo e aprovação. Aprovada fica imutável; corrigir é registrar a próxima versão."
+      divisoria
       acao={
-        <button type="button" className={botao.secundario} onClick={() => setNova(true)} disabled={!disponivel || nova} aria-label="Registrar versão">
-          <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
-          <span className="hidden sm:inline">Registrar versão</span>
-        </button>
+        <>
+          {troca}
+          <button type="button" className={botao.secundario} onClick={() => setNova(true)} disabled={!disponivel || nova} aria-label="Registrar versão">
+            <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">Registrar versão</span>
+          </button>
+        </>
       }
     >
       {!disponivel && <AvisoDeAtivacao>A memória de vídeos ainda não foi ativada no banco (SQL V2-01).</AvisoDeAtivacao>}

@@ -14,6 +14,7 @@ import {
   type SugestaoDeNome,
 } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import { chamarInstagram, copiarTexto, type AnaliseDaBio, type PerfilDaAba } from "./instagramApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Bio e nome inteligentes. O Jev julga a bio de hoje contra o contexto do
@@ -167,7 +168,14 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
         />
       </div>
 
-      {!analise && <p className={juntar(texto.auxiliar, "leading-5")}>O Jev confere se a bio diz o que o negócio faz, tem chamada, cidade e prova, e se bate com o contexto do cliente. Só sugere quando precisa.</p>}
+      {!analise && (
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          Bio ainda não analisada
+          <AjudaRecolhida className="ml-1" rotulo="O que a análise confere">
+            O Jev confere se a bio diz o que o negócio faz, tem chamada, cidade e prova, e se bate com o contexto do cliente. Só sugere quando precisa.
+          </AjudaRecolhida>
+        </p>
+      )}
       {velha && <p className="text-[12px] leading-4 text-warning">A bio mudou desde a última análise. Analise de novo para valer a de hoje.</p>}
 
       {v && (

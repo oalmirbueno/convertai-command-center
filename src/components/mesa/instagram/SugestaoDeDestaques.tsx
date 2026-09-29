@@ -9,6 +9,7 @@ import { useMesa } from "../MesaContexto";
 import type { DestaqueSugerido } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
 import { modeloDaAba } from "./BioENome";
 import { chamarInstagram, type CapaGuardada, type DestaqueProposto } from "./instagramApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Destaques certos para o perfil, já sugeridos (pedido do dono, 28/09). Ao
@@ -106,14 +107,21 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
       </div>
       {!recolhido && (
         <div className="mt-2 min-w-0 space-y-2">
-          {!guardada && !rodando && <p className={juntar(texto.auxiliar, "leading-5")}>Crie os destaques da marca: nomes e capas a partir dos produtos, ofertas, campanhas e jeito de falar deste cliente. O Jev escolhe, na ordem de quem chega.</p>}
+          {!guardada && !rodando && (
+            <p className={juntar(texto.auxiliar, "flex items-center")}>
+              Nenhum destaque da marca ainda
+              <AjudaRecolhida className="ml-1" rotulo="Como nascem os destaques">
+                Crie os destaques da marca: nomes e capas a partir dos produtos, ofertas, campanhas e jeito de falar deste cliente. O Jev escolhe, na ordem de quem chega.
+              </AjudaRecolhida>
+            </p>
+          )}
           {guardada && !guardada.com_ia && <p className="rounded-md bg-muted px-2.5 py-1.5 text-[12px] leading-4 text-muted-foreground">Esta é só a estrutura base (típicos). Crie os da marca para nomes próprios do cliente.</p>}
           {rodando && !guardada && <p className={texto.auxiliar}>Escolhendo os destaques deste perfil...</p>}
           {guardada && (
             <>
               <ol className="min-w-0 space-y-1">
                 {guardada.destaques.map((d, i) => (
-                  <li key={d.nome} className="flex min-w-0 items-center text-[12.5px]">
+                  <li key={d.nome} className="flex min-w-0 items-center text-[13px]">
                     <span className="mr-2 w-4 shrink-0 text-right tabular-nums text-muted-foreground">{i + 1}</span>
                     <span className="w-[104px] shrink-0 truncate font-medium text-foreground" title={d.nome}>{d.nome}</span>
                     <span className="min-w-0 flex-1 truncate text-muted-foreground" title={d.conceito || d.para || d.icone}>{d.conceito || d.para || d.icone}</span>

@@ -9,7 +9,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { gravarEstadoDaTela, lerEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMotoresDaMesa, useProjetoDoDiretor, useProjetosSalvos, useTemplatesDeVideo } from "@/lib/mesa-videos/api";
 import { KITS_DE_VIDEO, kitPorId, duracaoDoKit } from "../../../supabase/functions/_shared/video-kits";
@@ -126,13 +126,10 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
       <Secao
         titulo="Kit"
         descricao={`${kit.cenas.length} cenas · ${duracaoDoKit(kit)} s · ${semCotacao ? "~" : ""}US$ ${total.toFixed(2).replace(".", ",")}`}
-        ajuda={kit.ajuda}
+        ajuda={`${kit.resumo} ${kit.ajuda} Usar não gera nem cobra.`}
         acao={<SeletorCompacto rotulo="Kit" icone={<LayoutTemplate className="h-3.5 w-3.5" />} opcoes={KITS_DE_VIDEO.map((k) => ({ valor: k.id, rotulo: k.nome, descricao: k.resumo }))} valor={kit.id} onEscolher={(v) => setR((x) => ({ ...x, kit: v, variante: "" }))} className="max-w-[62vw] sm:max-w-none" />}
         data-kit={kit.id}
       >
-        <p className={juntar(texto.corpo, "mb-4")}>
-          <span className="font-medium">{kit.nome}.</span> {kit.resumo}
-        </p>
         <GrupoDeCampos>
           <div className="min-w-0">
             <p className={juntar(texto.rotulo, "mb-1.5")}>Formato</p>
@@ -166,24 +163,23 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
           ))}
         </ol>
 
-        <div className={juntar(superficie.poco, "mt-4 px-3 py-2.5")}>
-          <div className="flex min-w-0 items-center">
-            <p className={juntar(texto.rotulo, "flex-1")}>Consistência e o que evitar</p>
-            <AjudaRecolhida rotulo="Regras do kit">{kit.consistencia.concat(kit.evitar.map((e) => `Evitar: ${e}`)).join(" ")}</AjudaRecolhida>
-          </div>
-          <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{kit.consistencia[0]}</p>
-          {kit.pede_pessoa && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>Pede pessoa: gerada pela folha, ou real só com autorização registrada.</p>}
-        </div>
-
+        {/* 28/09 (dono: "menos poluído"): as regras do kit ficam no "?" da linha das ações, sem caixa nem texto à vista. */}
         <div className="mt-4 flex min-w-0 items-center justify-end">
-          <span className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>Usar não gera nem cobra.</span>
+          <span className={juntar(texto.rotulo, "min-w-0 truncate")}>Consistência e o que evitar</span>
+          <AjudaRecolhida rotulo="Regras do kit" className="ml-1 mr-3">
+            {kit.consistencia
+              .concat(kit.evitar.map((e) => `Evitar: ${e}`))
+              .concat(kit.pede_pessoa ? ["Pede pessoa: gerada pela folha, ou real só com autorização registrada."] : [])
+              .join(" ")}
+          </AjudaRecolhida>
+          <span className="flex-1" />
           {kit.id === "ugc" && (
             <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={usarComAvatar} aria-label="Fazer o UGC com avatar falando">
               <Mic className="h-3.5 w-3.5 sm:mr-1.5" />
               <span className="hidden sm:inline">Avatar falando</span>
             </button>
           )}
-          <button type="button" className={botao.primario} onClick={usarKit}>
+          <button type="button" className={botao.primario} onClick={usarKit} title="Usar não gera nem cobra">
             <Wand2 className="mr-1.5 h-3.5 w-3.5" />
             Usar o kit
           </button>

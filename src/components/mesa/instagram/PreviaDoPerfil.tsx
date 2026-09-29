@@ -4,6 +4,7 @@ import { etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
 import { iniciaisDe } from "@/components/admin/LogoDoCliente";
 import { numeroDoPerfil, type CapaGuardada, type DestaqueProposto, type ItemDaGradeNaAba, type PerfilDaAba } from "./instagramApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Prévia do perfil como aparece no app: foto, números, nome, bio, link, a
@@ -222,12 +223,17 @@ export default function PreviaDoPerfil({
                     </span>
                   )}
                 </span>
-                <span className="mt-1 w-full truncate text-center text-[11.5px] leading-4 text-foreground">{b.nome}</span>
+                <span className="mt-1 w-full truncate text-center text-[12px] leading-4 text-foreground">{b.nome}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className={juntar(texto.auxiliar, "leading-5")}>Sem destaques ainda. A API do Instagram não entrega os destaques do perfil: os planejados e as capas geradas aparecem aqui.</p>
+          <p className={juntar(texto.auxiliar, "flex items-center")}>
+            Sem destaques ainda
+            <AjudaRecolhida className="ml-1" rotulo="Por que os destaques não aparecem">
+              A API do Instagram não entrega os destaques do perfil: os planejados e as capas geradas aparecem aqui.
+            </AjudaRecolhida>
+          </p>
         )}
       </div>
 

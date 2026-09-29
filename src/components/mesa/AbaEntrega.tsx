@@ -31,6 +31,7 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { dataEHoraCurta, JanelaDaPublicacao, TOM_DO_ESTADO, useEstadoDaPeca } from "./PublicacaoDaPeca";
 
 /**
@@ -137,6 +138,8 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
   const dados = useItensDoMes(clientId, mes);
+  // Tudo recolhe (28/09): a lista de artes recolhe pelo título (lembrado por cliente).
+  const [artesRecolhidas, setArtesRecolhidas] = useRecolhido(`mesa:entrega:artes:${clientId}`, false);
   const itens = dados.data?.itens || [];
   const trabalhoDe = (i: ItemDoMes) => dados.data?.trabalhos.get(i.id) || null;
   const publicacaoDe = (t: Trabalho | null) => (t?.post_id ? dados.data?.publicacoes.get(t.post_id) || null : null);
@@ -245,7 +248,7 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="ml-2 min-w-0 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+          <span className="ml-2 min-w-0 truncate text-[12px] text-muted-foreground" title={resumo || undefined}>
             {resumo || `${itens.length} ${itens.length === 1 ? "item" : "itens"} com arte`}
           </span>
         </div>
@@ -262,16 +265,27 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         <AjustesDaEntrega podeEditar={podeRecarregar} />
       </div>
 
-      <section className="mt-5 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:min-h-[240px] lg:flex-1">
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-3.5 py-2.5">
-          <h2 className="text-[14px] font-semibold">Artes do mês</h2>
-          <span className="text-[11.5px] text-muted-foreground">{itens.length} {itens.length === 1 ? "item" : "itens"}</span>
-        </div>
+      {/* A lista de artes é uma coisa só: o cartão sólido do sistema. Recolhida, não ocupa a altura. */}
+      <section className={juntar(superficie.painel, "mt-5 flex min-w-0 flex-col overflow-hidden", !artesRecolhidas && "lg:min-h-[240px] lg:flex-1")}>
+        <CabecalhoDeSecao
+          nivel={3}
+          titulo="Artes do mês"
+          className={juntar("shrink-0 px-3.5 py-2.5", !artesRecolhidas && "border-b border-border")}
+          acao={artesRecolhidas ? undefined : <span className="text-[12px] text-muted-foreground">{itens.length} {itens.length === 1 ? "item" : "itens"}</span>}
+          recolher={{
+            recolhido: artesRecolhidas,
+            onAlternar: () => setArtesRecolhidas(!artesRecolhidas),
+            resumo: `${itens.length} ${itens.length === 1 ? "item" : "itens"}`,
+            modo: "icone",
+          }}
+        />
+        {!artesRecolhidas && (
+        <>
         {dados.isLoading && (
-          <p className="px-3.5 py-4 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda...</p>
+          <p className="px-3.5 py-4 text-[13px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda...</p>
         )}
-        {dados.isError && <p className="m-3 rounded-lg border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">{textoDoErro(dados.error)}</p>}
-        {dados.data && itens.length === 0 && <p className="px-3.5 py-6 text-center text-[12.5px] text-muted-foreground">Nenhum item com arte na agenda deste mês.</p>}
+        {dados.isError && <p className="m-3 rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">{textoDoErro(dados.error)}</p>}
+        {dados.data && itens.length === 0 && <p className="px-3.5 py-6 text-center text-[13px] text-muted-foreground">Nenhum item com arte na agenda deste mês.</p>}
 
         {/* Rolagem própria só no computador (RegiaoRolavel): a lista longa não
             arrasta a página e a posição volta ao trocar de aba. No celular a
@@ -295,6 +309,8 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
             })}
           </ul>
           </RegiaoRolavel>
+        )}
+        </>
         )}
       </section>
 
@@ -351,11 +367,11 @@ function LinhaDaArte({
         <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
-          <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+          <span className="mt-0.5 block text-[12px] text-muted-foreground">
             {dataCurta(i.due_date)} · {TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type}
             {totalCards ? ` · ${versoes.size}/${totalCards} cards` : ""}
           </span>
-          {detalhe && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</span>}
+          {detalhe && <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</span>}
         </span>
       </button>
       <span className="ml-3 flex shrink-0 flex-col items-end">
@@ -481,7 +497,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   };
 
   if (previsao.isLoading) return null;
-  if (previsao.isError) return <p className="rounded-lg border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">{textoDoErro(previsao.error)}</p>;
+  if (previsao.isError) return <p className="rounded-md bg-destructive/10 p-3 text-[13px] text-destructive">{textoDoErro(previsao.error)}</p>;
 
   const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];
   tipos.sort((a, b) => ORDEM_DOS_TIPOS.indexOf(a) - ORDEM_DOS_TIPOS.indexOf(b));
@@ -490,8 +506,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       <div className="flex items-start">
         <Clock className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-medium">Melhores horários por tipo</p>
-          <p className="text-[11.5px] leading-snug text-muted-foreground">
+          <p className="text-[13px] font-medium">Melhores horários por tipo</p>
+          <p className="text-[12px] leading-snug text-muted-foreground">
             {melhores.isLoading
               ? "Calculando..."
               : melhores.isError
@@ -505,14 +521,14 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       {tipos.length > 0 && (
         <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {tipos.map((t) => (
-            <li key={t} className="min-w-0 rounded-md bg-background/60 px-2.5 py-1.5">
+            <li key={t} className="min-w-0 rounded-md bg-background px-2.5 py-1.5">
               <p className="truncate text-[11px] text-muted-foreground">{ROTULO_DO_TIPO[t] || t}</p>
               <p className="text-[14px] font-semibold tabular-nums">{melhores.data!.por_tipo[t]}</p>
             </li>
           ))}
         </ul>
       )}
-      <label className={`flex items-center text-[12.5px] ${podeEditar ? "" : "opacity-70"}`}>
+      <label className={`flex items-center text-[13px] ${podeEditar ? "" : "opacity-70"}`}>
         <Switch
           checked={horarioAutomatico}
           onCheckedChange={(v) => void trocarAutomatico(v)}

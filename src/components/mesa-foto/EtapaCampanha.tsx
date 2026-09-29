@@ -21,7 +21,7 @@ import { ZonaDeEnvio } from "./EtapaAcervo";
 import { GuiaDeEstiloNaTela } from "./GuiaDeEstilo";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
-import { campo, campoTexto, juntar } from "@/components/sistema/estilos";
+import { campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeFotos from "./SeletorDeFotos";
 import {
@@ -183,7 +183,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
         <div className="mt-2 min-w-0">
           {biblioteca.isError && <AvisoDeErro erro={biblioteca.error} />}
           {biblioteca.isSuccess && referencias.length === 0 && <EstadoVazio compacto titulo="Nenhuma referência de imagem na biblioteca ainda." />}
-          <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6 lg:max-h-56 lg:overflow-y-auto lg:overscroll-contain" aria-label="Referências da biblioteca">
+          <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6" aria-label="Referências da biblioteca">
             {referencias.slice(0, 60).map((i) => {
               const marcada = refs.some((r) => r.id === i.id);
               return (
@@ -241,7 +241,7 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
   const fotoAprovada = aprovadaV ? fotoDaVersao(fotos.data || [], aprovadaV) : null;
   const gerando = tomada.status === "gerando";
   return (
-    <li className={`min-w-0 rounded-lg border bg-card p-1.5 ${aprovadaV ? "border-success/50" : "border-border"}`} data-foto-da-campanha={tomada.id}>
+    <li className={juntar(superficie.painel, "min-w-0 p-1.5", aprovadaV && "border-success/50")} data-foto-da-campanha={tomada.id}>
       <button type="button" className="block w-full cursor-zoom-in text-left disabled:cursor-default" disabled={!mostrada} onClick={onAmpliar} aria-label={`Ver grande: ${tomada.nome}`}>
         <Moldura proporcao={proporcaoDoFormato(tomada.formato)} className="border border-border">
           {mostrada && mostrada.storage_path ? (
@@ -252,16 +252,16 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
             </span>
           )}
           {mostrada && (
-            <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+            <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
               gerada
             </span>
           )}
         </Moldura>
       </button>
-      <p className="mt-1 truncate text-[11.5px] font-medium" title={tomada.nome}>
+      <p className="mt-1 truncate text-[12px] font-medium" title={tomada.nome}>
         {tomada.nome}
       </p>
-      <span className={`inline-block rounded-full px-1.5 py-px text-[10px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
+      <span className={`inline-block rounded-full px-1.5 py-px text-[11px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
       <div className="mt-1 flex min-w-0 flex-wrap items-center">
         {pendente && !gerando && <DecisaoRapida ensaio={ensaio} tomada={tomada} versao={pendente} compacta />}
         {!aprovadaV && ultima && tomada.status !== "bloqueada" && (
@@ -311,7 +311,7 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
 
   return (
     <div className="min-w-0 space-y-3" data-campanha-aberta={ensaio.id}>
-      <GuiaDeEstiloNaTela guia={ensaio.direcao.guia_de_estilo} modelo={ensaio.direcao.modelo} />
+      <GuiaDeEstiloNaTela guia={ensaio.direcao.guia_de_estilo} modelo={ensaio.direcao.modelo} recolher={`mesa-foto:campanha:guia:${ensaio.client_id || ""}`} />
       <AndamentoDoLote ensaioId={ensaio.id} />
       <Cartao
         titulo={`Fotos da campanha · ${r.total}`}
@@ -331,14 +331,12 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
         {ensaio.tomadas.length === 0 ? (
           <EstadoVazio compacto titulo="O diretor não montou fotos." descricao="Planeje de novo com outro pedido." />
         ) : (
-          // Rolagem própria só no computador (no celular a página rola).
-          <div className="min-w-0 lg:max-h-[75vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-0.5" data-rolagem-propria="">
-            <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {ensaio.tomadas.map((t) => (
-                <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
-              ))}
-            </ul>
-          </div>
+          // 28/09 (dono: "uma rolagem por região"): a grade segue a rolagem da região principal.
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {ensaio.tomadas.map((t) => (
+              <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
+            ))}
+          </ul>
         )}
         <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
           <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
@@ -392,7 +390,7 @@ export default function EtapaCampanha() {
           </Button>
         }
       >
-        A campanha põe o produto na mão de um modelo sintético. Sem o produto identificado, não há o que preservar.
+        Sem o produto identificado, não há o que preservar.
       </Vazio>
     );
   }

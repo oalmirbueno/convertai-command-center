@@ -11,7 +11,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, FotoInteira, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { Carregando } from "@/components/sistema/Estados";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { MenuDeUso, MOTIVOS_RAPIDOS } from "./UsoDaFoto";
 import {
   chaveDosEnsaios,
@@ -101,7 +101,7 @@ function Rejeitar({ onRejeitar, ocupado }: { onRejeitar: (motivo: string) => voi
     );
   }
   return (
-    <div className="w-full min-w-0 space-y-1.5 rounded-lg border border-destructive/30 p-2" data-rejeitar="">
+    <div className="w-full min-w-0 space-y-1.5 rounded-md border border-destructive/30 p-2" data-rejeitar="">
       <div className="flex min-w-0 flex-wrap">
         {MOTIVOS_RAPIDOS.map((m) => (
           <button key={m} type="button" onClick={() => setMotivo(m)} className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] ${motivo === m ? "border-destructive text-destructive" : "border-border text-muted-foreground"}`}>
@@ -164,7 +164,7 @@ function CartaoDaVersao({
   const leitor = padraoPara(catalogo, "leitura");
   return (
     <li
-      className={`min-w-0 rounded-lg border bg-card p-2 ${versao.aprovada ? "border-success/60" : versao.rejeitada ? "border-destructive/30 opacity-80" : "border-border"}`}
+      className={juntar(superficie.painel, "min-w-0 p-2", versao.aprovada ? "border-success/60" : versao.rejeitada ? "border-destructive/30 opacity-80" : "")}
       data-versao={versao.versao}
     >
       <button type="button" onClick={onAmpliar} className="block w-full cursor-zoom-in" aria-label={`Ver a versão ${versao.versao} grande`}>
@@ -172,13 +172,13 @@ function CartaoDaVersao({
           <ImagemDaMesa caminho={versao.storage_path} alt={`${tomada.nome}, versão ${versao.versao}`} className="h-full w-full !object-contain" />
         </Moldura>
       </button>
-      <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[11.5px]">
+      <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[12px]">
         <span className="mr-1.5 font-semibold">v{versao.versao}</span>
-        <span className="mr-1.5 rounded-full border border-primary/30 px-1.5 py-px text-[10px] font-semibold text-primary" data-selo="gerada">
+        <span className="mr-1.5 rounded-full border border-primary/30 px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
           gerada
         </span>
-        {versao.aprovada && <span className="mr-1.5 rounded-full bg-success/15 px-1.5 py-px text-[10px] font-medium text-success">aprovada</span>}
-        {versao.rejeitada && <span className="mr-1.5 rounded-full bg-destructive/10 px-1.5 py-px text-[10px] font-medium text-destructive">rejeitada</span>}
+        {versao.aprovada && <span className="mr-1.5 rounded-full bg-success/15 px-1.5 py-px text-[11px] font-medium text-success">aprovada</span>}
+        {versao.rejeitada && <span className="mr-1.5 rounded-full bg-destructive/10 px-1.5 py-px text-[11px] font-medium text-destructive">rejeitada</span>}
         {versao.custo_usd !== null && <span className="text-muted-foreground">{usd(versao.custo_usd)}</span>}
       </div>
       {versao.rejeitada && versao.motivo_rejeicao && <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Motivo: {versao.motivo_rejeicao}</p>}
@@ -216,7 +216,7 @@ function CartaoDaVersao({
         {fotoAprovada && <MenuDeUso foto={fotoAprovada} className="mb-1 mr-1" />}
         {!travada && !versao.rejeitada && (
           <>
-            <Button type="button" size="sm" className="mb-1 mr-1 h-8 px-2.5 text-[12px]" disabled={decidindo} onClick={() => void decidir("aprovar")}>
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1 h-8 border-success/50 px-2.5 text-[12px] text-success hover:bg-success/10 hover:text-success" disabled={decidindo} onClick={() => void decidir("aprovar")}>
               {decidindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Aprovar
             </Button>
             <Rejeitar ocupado={decidindo} onRejeitar={(m) => void decidir("rejeitar", m)} />
@@ -236,7 +236,7 @@ function FontesDoKit({ kit, fotos, onAbrir }: { kit: KitDeFoto | null; fotos: Fo
         return (
           <button key={`${r.imagem_id}-${r.papel}`} type="button" onClick={() => f && onAbrir(f)} className="min-w-0 text-left" title={`${rotuloDoPapel(r.papel)}${f ? `: ${f.nome}` : ""}`}>
             {f ? <MiniaturaDaFoto foto={f} /> : <div className="rounded-lg bg-muted" style={{ paddingBottom: "100%" }} />}
-            <span className="block truncate text-[10px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
           </button>
         );
       })}
@@ -400,15 +400,15 @@ export default function EtapaRevisar() {
           <Carregando linhas={3} rotulo="Lendo os ensaios" />
         ) : lista.length ? (
           <Cartao titulo="Qual ensaio revisar?">
-            <RegiaoRolavel modo="lg" sobre="cartao" memoria={`mesa-foto:revisar:lista:${clientId}`} classeDeFora="lg:max-h-[65vh]">
+            {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
             <ul className="space-y-1.5">
               {lista.map((e) => {
                 const r = resumoDoEnsaio(e);
                 return (
                   <li key={e.id}>
                     <button type="button" onClick={() => escolherEnsaio(e.id)} className="flex w-full min-w-0 items-center rounded-md border border-border px-3 py-2 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{nomeDaReceita(receitas.data ? receitas.data.receitas : null, e.receita_id)}</span>
-                      <span className="ml-2 shrink-0 text-[11.5px] text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{nomeDaReceita(receitas.data ? receitas.data.receitas : null, e.receita_id)}</span>
+                      <span className="ml-2 shrink-0 text-[12px] text-muted-foreground">
                         {r.paraRevisar} para revisar · {r.aprovadas} aprovadas
                       </span>
                     </button>
@@ -416,7 +416,6 @@ export default function EtapaRevisar() {
                 );
               })}
             </ul>
-            </RegiaoRolavel>
           </Cartao>
         ) : (
           <Vazio

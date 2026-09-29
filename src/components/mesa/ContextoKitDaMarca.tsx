@@ -13,7 +13,8 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { PaletaDaMarca } from "./ContextoPaleta";
 import { Campo } from "./Seletores";
 import Secao from "@/components/sistema/Secao";
-import { superficie } from "@/components/sistema/estilos";
+import { juntar, superficie } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useFontesDoCliente, useInvalidarContexto, useReferenciasDoCliente } from "./contextoDoCliente";
 import { gravarTomDaLogo, reduzirArquivoDeLogo } from "./ContextoLogos";
 import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
@@ -251,12 +252,12 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
     const ocupado = enviando === (alternativa ? "alt" : "logo");
     return (
       <div className={`min-w-0 p-2.5 ${superficie.poco}`}>
-        <p className="text-[11.5px] font-medium text-foreground">{alternativa ? "Logo alternativa (fundo oposto)" : `Logo da ${marca.nome}`}</p>
+        <p className="truncate text-[12px] font-medium text-foreground">{alternativa ? "Logo alternativa (fundo oposto)" : `Logo da ${marca.nome}`}</p>
         {caminho ? (
           <PreviaDaLogoDaMarca caminho={caminho} alt={alternativa ? "Logo alternativa" : "Logo"} />
         ) : (
           <div className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-md bg-secondary/60">
-            <span className="px-2 text-center text-[11.5px] text-muted-foreground">Sem logo. A arte sai sem logo até enviar (nunca usa a do cliente).</span>
+            <span className="px-2 text-center text-[12px] text-muted-foreground">Sem logo, nunca usa a do cliente</span>
           </div>
         )}
         <input
@@ -285,10 +286,15 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
   return (
     <div className="space-y-6" data-kit-da-marca={marca.id}>
       {conferencia}
-      <p className="rounded-lg bg-muted px-3 py-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
-        Kit próprio da marca <strong className="text-foreground">{marca.nome}</strong>. Logo e cores vêm só daqui; estilo, regras e tom vazios usam os do cliente.
-        As artes, o mês e os agentes usam este kit enquanto a {marca.nome} estiver escolhida no topo.
-      </p>
+      {/* Uma linha de estado; a explicação fica no "?" (28/09). */}
+      <div className="flex min-w-0 items-center text-[12px] text-muted-foreground">
+        <p className="min-w-0 truncate">
+          Kit próprio da marca <strong className="text-foreground">{marca.nome}</strong>
+        </p>
+        <AjudaRecolhida className="ml-1" rotulo="Como o kit da marca vale">
+          Logo e cores vêm só daqui; estilo, regras e tom vazios usam os do cliente. As artes, o mês e os agentes usam este kit enquanto a {marca.nome} estiver escolhida no topo.
+        </AjudaRecolhida>
+      </div>
 
       <Secao titulo="Logo" recolher={`mesa:contexto:kit:${marca.id}:logo:${clientId}`} resumo={marca.logo_path ? "com logo" : "sem logo"}>
         <div className="grid max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
@@ -308,7 +314,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
           </Button>
         }
       >
-        {paleta.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma cor ainda. Comece pela cor principal da {marca.nome}.</p>}
+        {paleta.length === 0 && <p className="text-[13px] text-muted-foreground">Nenhuma cor ainda. Comece pela cor principal da {marca.nome}.</p>}
         {paleta.length > 0 && <PaletaDaMarca paleta={paleta.filter((c) => HEX.test(c.hex))} />}
         <ul className="space-y-2">
           {paleta.map((cor, i) => (
@@ -366,7 +372,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
           {refs.map((r) => {
             const daMarca = mapaRefs[r.id] === marca.id;
             return (
-              <li key={r.id} className={`min-w-0 overflow-hidden rounded-lg border bg-card ${daMarca ? "border-primary" : "border-border"}`}>
+              <li key={r.id} className={juntar(superficie.painel, "min-w-0 overflow-hidden", daMarca && "border-primary")}>
                 <ImagemDaMesa caminho={r.imagem ? r.imagem.caminho : null} bucket={r.imagem ? r.imagem.bucket : "mesa"} alt={r.nome} className="h-20 w-full" />
                 <label className="flex cursor-pointer items-center px-1.5 py-1 text-[11px]">
                   <input

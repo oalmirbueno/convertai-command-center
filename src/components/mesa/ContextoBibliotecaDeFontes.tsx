@@ -20,6 +20,7 @@ import {
   type FonteDaBiblioteca,
   type FonteDoClienteLinha,
 } from "./contextoDoCliente";
+import { juntar, superficie } from "@/components/sistema/estilos";
 
 /**
  * Galeria da biblioteca de fontes da agência (fontes_biblioteca): busca,
@@ -140,9 +141,7 @@ function CartaoDaFamilia({
       onClick={onEscolher}
       aria-pressed={marcado}
       title={f.familia}
-      className={`relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left transition-colors ${
-        marcado ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/60"
-      }`}
+      className={juntar(superficie.painel, "relative flex min-w-0 flex-col overflow-hidden text-left transition-colors", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/60")}
     >
       <span className="flex h-24 w-full items-center justify-center overflow-hidden border-b border-border bg-white px-3 sm:h-28">
         {f.amostra_path ? (

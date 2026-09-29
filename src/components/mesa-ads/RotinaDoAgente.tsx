@@ -8,6 +8,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Campo } from "@/components/mesa/Seletores";
 import { dataEHora, usd } from "@/lib/mesa/api";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { brl, inteiro, porcento } from "./adsApi";
@@ -210,13 +211,15 @@ function Ajustes({ l, fazendo, onSalvar }: { l: LeituraDaRotina; fazendo: string
         {entrada("Gasto mínimo antes de julgar (R$)", minimo, setMinimo, "15")}
         {entrada("Pausar sem resultado ao gastar (x o alvo)", multiplo, setMultiplo, "2")}
       </div>
-      <p className="text-[11.5px] leading-snug text-muted-foreground">
-        Sem teto, a rotina só pausa o que queima e nunca sobe verba. Com teto, sobe no máximo {subida || "20"}% por vez no vencedor, a cada 72 horas, sem passar do teto. Custo-alvo automático: o do plano de teste, do briefing, a média da conta ou a referência do nicho, nesta ordem.
-      </p>
-      <Button type="submit" size="sm" variant="outline" className="h-8" disabled={!!fazendo}>
-        {fazendo === "ajustes" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-        Salvar ajustes
-      </Button>
+      <div className="flex min-w-0 items-center">
+        <Button type="submit" size="sm" variant="outline" className="h-8" disabled={!!fazendo}>
+          {fazendo === "ajustes" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Salvar ajustes
+        </Button>
+        <AjudaRecolhida className="ml-2" rotulo="Como os ajustes valem">
+          Sem teto, a rotina só pausa o que queima e nunca sobe verba. Com teto, sobe no máximo {subida || "20"}% por vez no vencedor, a cada 72 horas, sem passar do teto. Custo-alvo automático: o do plano de teste, do briefing, a média da conta ou a referência do nicho, nesta ordem.
+        </AjudaRecolhida>
+      </div>
     </form>
   );
 }
@@ -260,7 +263,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
   const l = leitura.data;
   if (!l || !l.disponivel) {
     return (
-      <section className="min-w-0 rounded-lg border border-border bg-card px-4 py-3" aria-label="Rotina do agente de tráfego">
+      <section className="min-w-0" aria-label="Rotina do agente de tráfego">
         <p className="text-[13px] font-semibold">Rotina de monitoramento</p>
         <p className="mt-0.5 text-[12px] text-muted-foreground">{l ? l.motivo : leitura.isError ? "Não foi possível ler a rotina agora." : "Sem leitura."}</p>
       </section>
@@ -287,21 +290,22 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
   };
 
   return (
-    <section className="min-w-0 rounded-lg border border-border bg-card px-4 py-3" aria-label="Rotina do agente de tráfego" data-rotina={ligada ? "ligada" : "desligada"}>
+    <section className="min-w-0" aria-label="Rotina do agente de tráfego" data-rotina={ligada ? "ligada" : "desligada"}>
       <div className="flex min-w-0 flex-wrap items-start">
         <div className="mb-2 mr-3 min-w-0 flex-1">
-          <p className="flex items-center text-[13.5px] font-semibold">
+          <p className="flex min-w-0 items-center text-[13px] font-semibold">
             <span className={juntar("mr-2 inline-block h-2 w-2 shrink-0 rounded-full", ligada ? "bg-success" : "bg-muted-foreground/40")} aria-hidden="true" />
-            {ligada ? "O agente está cuidando desta conta" : r && r.pausada_em ? "Rotina pausada" : "Rotina de monitoramento"}
+            <span className="min-w-0 truncate">{ligada ? "O agente está cuidando desta conta" : r && r.pausada_em ? "Rotina pausada" : "Rotina de monitoramento"}</span>
+            <AjudaRecolhida className="ml-1.5" rotulo="Como a rotina funciona">
+              Ligada, ela olha a conta a cada hora: pausa o que gasta sem resultado, prepara estratégia quando precisa e só avisa quando faz algo.
+            </AjudaRecolhida>
           </p>
-          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
-            {ligada
-              ? e && e.olhando
-                ? `Olhando: ${e.olhando}`
-                : "Liga e começa: a primeira rodada acontece em até 1 hora."
-              : "Ligada, ela olha a conta a cada hora: pausa o que gasta sem resultado, prepara estratégia quando precisa e só avisa quando faz algo."}
-          </p>
-          {ligada && proxima && <p className="mt-0.5 text-[11.5px] text-muted-foreground">Próxima rodada às {horaCurta(proxima)}.</p>}
+          {ligada && (
+            <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+              {e && e.olhando ? `Olhando: ${e.olhando}` : "Liga e começa: a primeira rodada acontece em até 1 hora."}
+            </p>
+          )}
+          {ligada && proxima && <p className="mt-0.5 text-[12px] text-muted-foreground">Próxima rodada às {horaCurta(proxima)}.</p>}
         </div>
         <div className="mb-2 flex shrink-0 flex-wrap items-center">
           {ligada && (
@@ -356,7 +360,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
 
       <form onSubmit={interferir} className="flex min-w-0 flex-wrap items-center border-t border-border pt-2.5" aria-label="Interferir na rotina">
         <input
-          className={juntar(campo, "mb-1 mr-2 h-9 min-w-0 flex-1 text-[12.5px]")}
+          className={juntar(campo, "mb-1 mr-2 h-9 min-w-0 flex-1 text-[13px]")}
           value={instrucao}
           onChange={(ev) => setInstrucao(ev.target.value)}
           placeholder="Interferir: ex. não mexe no conjunto Raio 5 km até sexta"
@@ -390,7 +394,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
         </p>
       )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" ref={feitoRef}>
-        <button type="button" className={juntar("mr-4 inline-flex items-center rounded text-[12.5px] font-medium", foco)} onClick={() => setFeitoAberto(!feitoAberto)} aria-expanded={feitoAberto}>
+        <button type="button" className={juntar("mr-4 inline-flex items-center rounded text-[13px] font-medium", foco)} onClick={() => setFeitoAberto(!feitoAberto)} aria-expanded={feitoAberto}>
           <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${feitoAberto ? "rotate-180" : ""}`} />
           O que foi feito ({feitas.length}){naoDeram ? ` · ${naoDeram} não ${naoDeram === 1 ? "deu" : "deram"}` : ""}{propostas ? ` · ${propostas} ${propostas === 1 ? "proposta" : "propostas"}` : ""}
         </button>

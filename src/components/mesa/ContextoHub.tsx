@@ -1,13 +1,13 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { faixaDoScore } from "./contextoDoCliente";
 
 /**
  * Grupos recolhíveis da aba Contexto (pedido do dono em 23/09: "muito
- * solta, tudo misturado"). Cada hub tem título, uma linha de resumo, o score
- * dele e as ações à direita; aberto, mostra o conteúdo com rolagem própria
- * quando a lista é longa (só no computador; no celular a página rola normal).
+ * solta, tudo misturado"). Cada hub tem título, uma linha de estado, o score
+ * dele, o "?" com a explicação e as ações à direita; aberto, mostra o conteúdo
+ * sem rolagem própria (28/09: uma rolagem por região, a da área de trabalho).
  * Quais hubs ficam abertos é lembrado no navegador, por cliente quando a tela
  * passa o `escopo` (só conveniência de quem usa; sem armazenamento, volta ao
  * padrão). Cliente sem escolha guardada herda a escolha antiga, sem cliente.
@@ -106,8 +106,8 @@ export function Hub({
   aberto,
   onAlternar,
   acao,
+  ajuda,
   children,
-  rolagem = false,
 }: {
   id?: string;
   titulo: string;
@@ -117,9 +117,9 @@ export function Hub({
   aberto: boolean;
   onAlternar: () => void;
   acao?: ReactNode;
+  /** Explicação do hub: vira o "?" ao lado do título (na tela fica só o estado). */
+  ajuda?: ReactNode;
   children: ReactNode;
-  /** Conteúdo com altura máxima e rolagem própria (listas longas). */
-  rolagem?: boolean;
 }) {
   const corpo = id ? `${id}-corpo` : undefined;
   // Sistema de design (docs/design/SISTEMA.md): sem caixa. Os hubs formam uma
@@ -144,17 +144,13 @@ export function Hub({
             {resumo && <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">{resumo}</span>}
           </span>
         </button>
+        {/* O nome do "?" não leva o título: o botão do hub é o único com o nome dele. */}
+        {ajuda && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
         {acao && <div className="ml-2 flex shrink-0 items-center">{acao}</div>}
       </div>
       {aberto && (
         <div id={corpo} className="min-w-0 pb-5 pt-1 sm:pl-[26px]">
-          {rolagem ? (
-            <RegiaoRolavel className="-mr-1.5 pr-1.5 lg:max-h-[70vh]">
-              {children}
-            </RegiaoRolavel>
-          ) : (
-            children
-          )}
+          {children}
         </div>
       )}
     </section>

@@ -2,7 +2,8 @@ import { createContext, useContext, type ReactNode } from "react";
 import { Check, Globe, Sparkles } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import TituloRecolhivel, { useChaveDeRecolher, useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
@@ -145,9 +146,14 @@ export function useMesaFoto(): MesaFotoValor {
 
 /**
  * Bloco das etapas (sistema de design, docs/design/SISTEMA.md: "nada de caixa
- * dentro de caixa"): título curto, a explicação no "?" ao lado (AjudaRecolhida),
- * ação na linha do título e o corpo livre. Sem moldura: blocos vizinhos se
- * separam por espaço e por uma linha fina em cima.
+ * dentro de caixa"): título curto numa linha, a explicação no "?" ao lado
+ * (AjudaRecolhida), ação na linha do título e o corpo livre. Sem moldura:
+ * blocos vizinhos se separam por espaço e por uma linha fina em cima.
+ *
+ * 28/09 (dono: "tudo recolhe"): todo bloco recolhe. Com `recolher` o título
+ * vira o botão (a chave é da tela, com o cliente); sem ela, título em texto
+ * ganha a chave automática do sistema (rota, cliente e título) e uma setinha
+ * pequena antes do título. `recolher={false}` desliga (bloco que não pode sumir).
  */
 export function Cartao({
   titulo,
@@ -165,13 +171,14 @@ export function Cartao({
   acao?: ReactNode;
   children: ReactNode;
   className?: string;
-  /** Chave para lembrar se o bloco está recolhido (28/09: todo bloco grande pode recolher). */
-  recolher?: string;
+  /** Chave para lembrar se o bloco está recolhido; `false` não recolhe. Sem ela, título em texto recolhe pela chave automática. */
+  recolher?: string | false;
   /** Linha curta que fica à vista com o bloco recolhido. */
   resumo?: ReactNode;
   /** Começa recolhido enquanto a pessoa não escolheu (bloco claramente secundário). */
   recolhidoDeInicio?: boolean;
 }) {
+  const chaveAutomatica = useChaveDeRecolher(titulo, recolher === false ? false : undefined);
   if (recolher) {
     return (
       <CartaoRecolhivel titulo={titulo} dica={dica} acao={acao} className={className} chave={recolher} resumo={resumo} inicial={recolhidoDeInicio}>
@@ -179,16 +186,55 @@ export function Cartao({
       </CartaoRecolhivel>
     );
   }
+  if (chaveAutomatica) {
+    return (
+      <CartaoComSetinha titulo={titulo} dica={dica} acao={acao} className={className} chave={chaveAutomatica} resumo={resumo} inicial={recolhidoDeInicio}>
+        {children}
+      </CartaoComSetinha>
+    );
+  }
   return (
-    <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="">
-      <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between">
-        <div className="mr-2 flex min-w-0 flex-1 items-center">
-          <h3 className="min-w-0 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">{titulo}</h3>
-          {dica && <AjudaRecolhida className="ml-1.5">{dica}</AjudaRecolhida>}
-        </div>
-        {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end">{acao}</div>}
-      </div>
+    <section className={juntar(BLOCO, className)} data-bloco-da-etapa="">
+      <CabecalhoDeSecao className="mb-2.5" nivel={3} titulo={titulo} ajuda={dica} acao={acao} />
       {children}
+    </section>
+  );
+}
+
+const BLOCO = "min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0";
+
+/** Bloco com a chave automática: setinha "Recolher"/"Mostrar" antes do título (o título não vira botão). */
+function CartaoComSetinha({
+  titulo,
+  dica,
+  acao,
+  children,
+  className,
+  chave,
+  resumo,
+  inicial,
+}: {
+  titulo: ReactNode;
+  dica?: ReactNode;
+  acao?: ReactNode;
+  children: ReactNode;
+  className: string;
+  chave: string;
+  resumo?: ReactNode;
+  inicial: boolean;
+}) {
+  const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
+  return (
+    <section className={juntar(BLOCO, className)} data-bloco-da-etapa="" data-recolhido={recolhido ? "sim" : "nao"}>
+      <CabecalhoDeSecao
+        className={recolhido ? "" : "mb-2.5"}
+        nivel={3}
+        titulo={titulo}
+        ajuda={dica}
+        acao={acao}
+        recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo, modo: "icone" }}
+      />
+      {!recolhido && children}
     </section>
   );
 }
@@ -214,7 +260,7 @@ function CartaoRecolhivel({
 }) {
   const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
   return (
-    <section className={juntar("min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0", className)} data-bloco-da-etapa="" data-recolhido={recolhido ? "sim" : "nao"}>
+    <section className={juntar(BLOCO, className)} data-bloco-da-etapa="" data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={juntar("flex min-w-0 flex-wrap items-center justify-between", recolhido ? "" : "mb-2.5")}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
           {/* O título continua heading (h3), como no Cartao sem recolher: quem navega por títulos acha o bloco. */}
@@ -243,7 +289,7 @@ export function SeloDaFoto({
     <span className="inline-flex min-w-0 flex-wrap items-center">
       {foto.referencia_web && (
         <span
-          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[10px] font-semibold text-warning"
+          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[11px] font-semibold text-warning"
           title="Referência da internet: uso interno para fidelidade, não publicar"
           data-selo="internet"
         >
@@ -252,7 +298,7 @@ export function SeloDaFoto({
       )}
       {classe === "gerada" && (
         <span
-          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10px] font-semibold text-primary"
+          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary"
           title="Imagem gerada por IA: pode ter partes que não existem nas fotos originais"
           data-selo="gerada"
         >
@@ -260,18 +306,18 @@ export function SeloDaFoto({
         </span>
       )}
       {classe === "derivada" && (
-        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] font-medium text-foreground" data-selo="derivada">
+        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-foreground" data-selo="derivada">
           {foto.tags && (foto.tags.indexOf("sem_fundo") >= 0 || foto.tags.indexOf("preparo:fundo_transparente") >= 0) ? "sem fundo" : "tratada"}
           {!compacto && foto.modo && !(foto.tags && foto.tags.indexOf("sem_fundo") >= 0) ? ` · ${rotuloDoModo(foto.modo)}` : ""}
         </span>
       )}
       {classe === "original" && !compacto && !foto.referencia_web && (
-        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo="original">
+        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground" data-selo="original">
           original
         </span>
       )}
       {foto.aprovada && (
-        <span className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[10px] font-medium text-success" data-selo="aprovada">
+        <span className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo="aprovada">
           <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
         </span>
       )}
@@ -288,27 +334,27 @@ export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "deriv
   const classe = classeDaFoto(foto);
   if (foto.referencia_web) {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[10px] font-semibold text-warning" data-selo-curto="internet" title="Referência da internet: uso interno, não publicar">
+      <span className="mb-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[11px] font-semibold text-warning" data-selo-curto="internet" title="Referência da internet: uso interno, não publicar">
         <Globe className="mr-0.5 h-2.5 w-2.5" /> uso interno
       </span>
     );
   }
   if (foto.aprovada) {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[10px] font-medium text-success" data-selo-curto="aprovada">
+      <span className="mb-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[11px] font-medium text-success" data-selo-curto="aprovada">
         <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
       </span>
     );
   }
   if (classe === "gerada") {
     return (
-      <span className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
+      <span className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
         a aprovar
       </span>
     );
   }
   return (
-    <span className="mb-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo-curto={classe}>
+    <span className="mb-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground" data-selo-curto={classe}>
       {classe === "derivada" ? (foto.tags && foto.tags.indexOf("sem_fundo") >= 0 ? "sem fundo" : "tratada") : "original"}
     </span>
   );
@@ -361,7 +407,7 @@ export function ListaCurta({ titulo, itens, vazio, tom = "normal" }: { titulo: s
           ))}
         </ul>
       ) : (
-        vazio && <p className="mt-1 text-[11.5px] text-muted-foreground">{vazio}</p>
+        vazio && <p className="mt-1 text-[12px] text-muted-foreground">{vazio}</p>
       )}
     </div>
   );
@@ -420,15 +466,16 @@ export function Pilulas<T extends string | number>({
  * Variações, Campanha e Preparar usam o mesmo produto (kit) aberto; o
  * Estúdio de fotos trabalha numa foto (com ou sem produto).
  */
-export function NavDoCriar({ atual }: { atual: EtapaDaMesaFoto }) {
+export function NavDoCriar({ atual, className = "" }: { atual: EtapaDaMesaFoto; className?: string }) {
   const { irPara } = useMesaFoto();
+  // 28/09 (dono: "seletor pequeno não ganha linha própria"): mora na barra do kit e do ensaio, no cabeçalho da mesa.
   return (
-    <nav aria-label="Formas de criar" className="mb-3 flex min-w-0 flex-wrap items-center" data-nav-do-criar="">
-      <button type="button" onClick={() => irPara("criar")} className="mb-1 mr-2 h-7 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground">
+    <nav aria-label="Formas de criar" className={juntar("flex min-w-0 flex-wrap items-center", className)} data-nav-do-criar="">
+      <button type="button" onClick={() => irPara("criar")} className="mr-1 h-7 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground">
         Criar
       </button>
-      <span aria-hidden="true" className="mb-1 mr-2 text-[11px] text-muted-foreground/60">/</span>
-      <div className="mb-1 grid min-w-0 grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5">
+      <span aria-hidden="true" className="mr-1 text-[11px] text-muted-foreground/60">/</span>
+      <div className="grid min-w-0 grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5">
         {FORMAS_DE_CRIAR.map((f) => (
           <button
             key={f.etapa}
@@ -436,7 +483,7 @@ export function NavDoCriar({ atual }: { atual: EtapaDaMesaFoto }) {
             onClick={() => irPara(f.etapa)}
             aria-current={atual === f.etapa ? "page" : undefined}
             title={f.dica}
-            className={`min-w-0 truncate rounded-md px-2.5 py-1 text-[12px] font-medium ${atual === f.etapa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`min-w-0 truncate rounded-md px-2.5 py-0.5 text-[12px] font-medium ${atual === f.etapa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {f.rotulo}
           </button>

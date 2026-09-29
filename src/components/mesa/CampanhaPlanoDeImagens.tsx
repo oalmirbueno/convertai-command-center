@@ -16,6 +16,7 @@ import {
   rotuloDoPapelDaImagem,
   usePedidoDaCampanha,
 } from "./campanhasApi";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * Plano de imagens da campanha (25/09): o estrategista olha as imagens de
@@ -105,10 +106,13 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
 
   return (
     <div className="min-w-0 space-y-3">
-      {semConteudos && <p className="text-[12.5px] text-muted-foreground">O plano precisa dos conteúdos da campanha. Peça os conteúdos ao agente primeiro.</p>}
+      {semConteudos && <p className="text-[13px] text-muted-foreground">O plano precisa dos conteúdos da campanha. Peça os conteúdos ao agente primeiro.</p>}
       {!semConteudos && !imagens.length && (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          A campanha ainda não tem imagens escolhidas: o plano usa as fotos reais mais recentes do acervo. Para mandar no resultado, escolha as imagens na seção acima.
+        <p className="flex items-center text-[13px] text-muted-foreground">
+          Sem imagens escolhidas: usa as do acervo
+          <AjudaRecolhida className="ml-1" rotulo="De onde vêm as imagens">
+            A campanha ainda não tem imagens escolhidas: o plano usa as fotos reais mais recentes do acervo. Para mandar no resultado, escolha as imagens na seção acima.
+          </AjudaRecolhida>
         </p>
       )}
       {velho && (
@@ -131,9 +135,14 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
         <div className="min-w-0 space-y-4">
           {plano.resumo && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{plano.resumo}</p>}
           {plano.fonte === "acervo" && (
-            <p className="text-[11.5px] text-muted-foreground">Feito com fotos do acervo: a campanha não tinha imagens escolhidas quando o plano foi montado.</p>
+            <p className="flex items-center text-[12px] text-muted-foreground">
+              Feito com fotos do acervo
+              <AjudaRecolhida className="ml-1" rotulo="Por que fotos do acervo">
+                A campanha não tinha imagens escolhidas quando o plano foi montado.
+              </AjudaRecolhida>
+            </p>
           )}
-          {plano.jev_erro && <p className="text-[11.5px] text-muted-foreground">O Jev não respondeu desta vez: ficou a ordem do estrategista.</p>}
+          {plano.jev_erro && <p className="text-[12px] text-muted-foreground">O Jev não respondeu desta vez: ficou a ordem do estrategista.</p>}
 
           {ordenados.map((it) => {
             const pecas = plano.pecas.filter((p) => p.tema_id === it.tema_id).sort((a, b) => a.ordem - b.ordem);

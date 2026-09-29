@@ -7,7 +7,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import { dataEHora, usd } from "@/lib/mesa/api";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { botao, campo, campoTexto, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   duracaoEstimada,
@@ -43,14 +43,20 @@ export default function EtapaRevisao({ roteiroId, onAbrirRoteiro }: { roteiroId:
   if (!linha) {
     const vivos = lista.filter((r) => !r.arquivado_em);
     return (
-      <section className="min-w-0 space-y-3">
-        <Cabecalho titulo="Escolha o roteiro para revisar" estado={`${vivos.length} ${vivos.length === 1 ? "roteiro" : "roteiros"}`} />
+      <BlocoRecolhivel
+        chave={`mesa-roteiros:revisao:escolher:${clientId}`}
+        nivel={2}
+        divisoria={false}
+        titulo="Escolha o roteiro para revisar"
+        estado={`${vivos.length} ${vivos.length === 1 ? "roteiro" : "roteiros"}`}
+        resumo={`${vivos.length} ${vivos.length === 1 ? "roteiro" : "roteiros"}`}
+      >
         {!vivos.length ? (
           <EstadoVazio compacto titulo="Nenhum roteiro ainda." descricao="Comece pela Agenda." />
         ) : (
-          <ul className={juntar(superficie.painel, "divide-y divide-border")}>
+          <ul className="divide-y divide-border">
             {vivos.map((r) => (
-              <li key={r.id} className="flex min-w-0 items-center px-4 py-2.5">
+              <li key={r.id} className="flex min-w-0 items-center py-2.5">
                 <span className="mr-2 min-w-0 flex-1 truncate text-[13px]">{r.titulo}</span>
                 <SeloDoStatus status={r.status} />
                 <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id, "revisao")}>
@@ -60,7 +66,7 @@ export default function EtapaRevisao({ roteiroId, onAbrirRoteiro }: { roteiroId:
             ))}
           </ul>
         )}
-      </section>
+      </BlocoRecolhivel>
     );
   }
   return <Revisao key={linha.id} linha={linha} onAbrirRoteiro={onAbrirRoteiro} />;
@@ -105,24 +111,19 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
     <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]" data-revisao={linha.id}>
       <div className="min-w-0 space-y-6">
         <section className="min-w-0 space-y-3">
-          <div className="flex min-w-0 items-start">
-            <div className="mr-3 min-w-0 flex-1">
-              <h2 className="truncate text-[18px] font-semibold leading-7">{linha.titulo}</h2>
-              <p className={juntar(texto.auxiliar, "truncate")}>
-                {modoDoTipo(linha.tipo).rotulo} · v{linha.versao_atual}
-                {linha.versao_aprovada ? ` · aprovada v${linha.versao_aprovada}${linha.aprovado_em ? ` em ${dataEHora(linha.aprovado_em)}` : ""}` : " · ainda não aprovada"}
-                {linha.task_id ? " · ligado à peça da agenda" : " · avulso"}
-                {arquivado ? " · arquivado" : ""}
-              </p>
-            </div>
-            <SeloDoStatus status={linha.status} />
-          </div>
+          {/* 28/09: o h2 de 18 px feito à mão virou o cabeçalho do sistema (título numa linha, estado embaixo). */}
+          <Cabecalho
+            titulo={linha.titulo}
+            estado={`${modoDoTipo(linha.tipo).rotulo} · v${linha.versao_atual}${linha.versao_aprovada ? ` · aprovada v${linha.versao_aprovada}${linha.aprovado_em ? ` em ${dataEHora(linha.aprovado_em)}` : ""}` : " · ainda não aprovada"}${linha.task_id ? " · ligado à peça da agenda" : " · avulso"}${arquivado ? " · arquivado" : ""}`}
+            acoes={<SeloDoStatus status={linha.status} />}
+          />
           <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" data-acoes-de-status="">
             {podeIr("aprovado") && (
               <button
                 type="button"
                 className={botao.primario}
                 disabled={!!ocupado}
+                title={linha.status === "rascunho" ? `Aprovar trava a versão ${linha.versao_atual}: corrigir depois cria outra versão.` : undefined}
                 onClick={() => void status("aprovado", linha.status === "gravado" ? "Voltou para aprovado" : `Versão ${linha.versao_atual} aprovada`)}
               >
                 {ocupado === "status:aprovado" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
@@ -156,34 +157,34 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
               <RotuloLargo>Editar roteiro</RotuloLargo>
             </button>
           </div>
-          {linha.status === "rascunho" && <p className={texto.auxiliar}>Aprovar trava a versão {linha.versao_atual}: corrigir depois cria outra versão.</p>}
         </section>
 
         {versao && (
-          <section className="min-w-0 space-y-3 border-t border-border pt-5" data-versao-vista={versao.numero}>
-            <Cabecalho
-              nivel={3}
-              titulo={`Versão ${versao.numero}${versao.numero === linha.versao_atual ? " (atual)" : ""}`}
-              estado={`${duracaoEstimada(versao.conteudo).min_s} a ${duracaoEstimada(versao.conteudo).max_s}s · código ${versao.hash}`}
-              acoes={
-                versao.numero !== linha.versao_atual && !arquivado && linha.status !== "gravado" ? (
-                  <button
-                    type="button"
-                    className={botao.secundario}
-                    disabled={!!ocupado}
-                    aria-label="Restaurar esta versão"
-                    onClick={() =>
-                      void rodar("restaurar", () => chamarRoteiros("versao_restaurar", { roteiro_id: linha.id, versao: versao.numero }), `Versão ${versao.numero} restaurada como nova versão`).then(
-                        (r) => r && r.versao && setVendo(r.versao.numero),
-                      )
-                    }
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    <RotuloLargo>Restaurar esta versão</RotuloLargo>
-                  </button>
-                ) : null
-              }
-            />
+          <BlocoRecolhivel
+            chave={`mesa-roteiros:versao-vista:${clientId}`}
+            data-versao-vista={String(versao.numero)}
+            titulo={`Versão ${versao.numero}${versao.numero === linha.versao_atual ? " (atual)" : ""}`}
+            estado={`${duracaoEstimada(versao.conteudo).min_s} a ${duracaoEstimada(versao.conteudo).max_s}s · código ${versao.hash}`}
+            resumo={`${versao.conteudo.blocos.length} blocos`}
+            acoes={
+              versao.numero !== linha.versao_atual && !arquivado && linha.status !== "gravado" ? (
+                <button
+                  type="button"
+                  className={botao.secundario}
+                  disabled={!!ocupado}
+                  aria-label="Restaurar esta versão"
+                  onClick={() =>
+                    void rodar("restaurar", () => chamarRoteiros("versao_restaurar", { roteiro_id: linha.id, versao: versao.numero }), `Versão ${versao.numero} restaurada como nova versão`).then(
+                      (r) => r && r.versao && setVendo(r.versao.numero),
+                    )
+                  }
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <RotuloLargo>Restaurar esta versão</RotuloLargo>
+                </button>
+              ) : null
+            }
+          >
             <AvisoDoJevCartao aviso={versao.aviso} />
             <ol className="divide-y divide-border">
               {versao.conteudo.blocos.map((b, i) => (
@@ -203,7 +204,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
                 <span className="font-medium">CTA:</span> {versao.conteudo.cta}
               </p>
             )}
-          </section>
+          </BlocoRecolhivel>
         )}
       </div>
 
@@ -218,7 +219,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
           resumo={`${linha.versoes.length} ${linha.versoes.length === 1 ? "versão" : "versões"}`}
           data-versoes=""
         >
-          <ul className="space-y-0.5 xl:max-h-[320px] xl:overflow-y-auto xl:overscroll-contain">
+          <ul className="space-y-0.5">
             {linha.versoes
               .slice()
               .reverse()
@@ -259,7 +260,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
           resumo={abertos.length ? `${abertos.length} ${abertos.length === 1 ? "aberto" : "abertos"}` : "Nenhum aberto"}
           data-comentarios=""
         >
-          <ul className="divide-y divide-border xl:max-h-[320px] xl:overflow-y-auto xl:overscroll-contain">
+          <ul className="divide-y divide-border">
             {linha.comentarios
               .slice()
               .reverse()
@@ -305,7 +306,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
             </select>
             <button
               type="button"
-              className={botao.primario}
+              className={botao.secundario}
               disabled={!comentario.trim() || !!ocupado}
               onClick={() => void rodar("comentar", () => chamarRoteiros("comentar", { roteiro_id: linha.id, texto: comentario.trim(), bloco_id: bloco || undefined })).then((r) => r && setComentario(""))}
             >

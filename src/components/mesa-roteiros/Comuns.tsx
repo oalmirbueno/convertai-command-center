@@ -68,7 +68,6 @@ export function Cabecalho({
       nivel={nivel}
       icone={icone}
       recolher={recolher}
-      classeDoTitulo={nivel === 3 ? "text-[13.5px]" : ""}
       truncar
     />
   );

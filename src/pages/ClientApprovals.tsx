@@ -290,30 +290,36 @@ export default function ClientApprovals() {
     <div className="min-w-0 space-y-5">
       <CabecalhoDePagina
         titulo="Aprovações"
-        descricao={approvalFiles.length ? (contagem.pending ? `${contagem.pending} ${contagem.pending === 1 ? "esperando você" : "esperando você"}` : "Nada esperando você") : undefined}
-        ajuda="Os materiais que a equipe preparou para você conferir antes de publicar. Toque num item para ver em tamanho grande e aprovar ou pedir ajuste. Aprovar não tem volta."
+        descricao={
+          [
+            approvalFiles.length ? (contagem.pending ? `${contagem.pending} esperando você` : "Nada esperando você") : "",
+            isReadOnly ? "somente leitura" : "",
+          ].filter(Boolean).join(" · ") || undefined
+        }
+        ajuda={
+          <>
+            Os materiais que a equipe preparou para você conferir antes de publicar. Toque num item para ver em tamanho grande e aprovar ou pedir ajuste. Aprovar não tem volta.
+            {isReadOnly && " Somente leitura: dá para conferir a experiência do cliente, mas não aprovar nem pedir ajuste por ele."}
+          </>
+        }
+        acoes={
+          approvalFiles.length > 0 ? (
+            <SeletorCompacto
+              rotulo="Filtrar aprovações"
+              valor={filtro}
+              onEscolher={setFiltro}
+              modo="segmentado"
+              listaQuandoNaoCabe
+              opcoes={[
+                { valor: "todos", rotulo: "Todos", contador: contagem.todos },
+                { valor: "pending", rotulo: "Pendentes", contador: contagem.pending },
+                { valor: "approved", rotulo: "Aprovados", contador: contagem.approved },
+                { valor: "rejected", rotulo: "Com ajuste", contador: contagem.rejected },
+              ]}
+            />
+          ) : undefined
+        }
       />
-      {isReadOnly && (
-        <p className={juntar(texto.auxiliar, "leading-5 text-sky-600")} role="note">
-          Somente leitura: dá para conferir a experiência do cliente, mas não aprovar nem pedir ajuste por ele.
-        </p>
-      )}
-
-      {approvalFiles.length > 0 && (
-        <SeletorCompacto
-          rotulo="Filtrar aprovações"
-          valor={filtro}
-          onEscolher={setFiltro}
-          modo="segmentado"
-          listaQuandoNaoCabe
-          opcoes={[
-            { valor: "todos", rotulo: "Todos", contador: contagem.todos },
-            { valor: "pending", rotulo: "Pendentes", contador: contagem.pending },
-            { valor: "approved", rotulo: "Aprovados", contador: contagem.approved },
-            { valor: "rejected", rotulo: "Com ajuste", contador: contagem.rejected },
-          ]}
-        />
-      )}
 
       {isLoading ? (
         <Carregando forma="grade" linhas={3} rotulo="Carregando aprovações" />
