@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, ClipboardCheck, Compass, Megaphone, Package, RefreshCw, Share2, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -90,6 +91,8 @@ export default function AdminEsteira() {
   const clientesParaFoto = useMemo(() => clientes.map((c) => ({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })), [clientes]);
   const { fotoDe } = useFotosDosClientes(clientesParaFoto);
   const [detalheId, setDetalheId] = useState<string | null>(null);
+  // Cronômetro por cliente (frente CR): a ficha do cliente aberta no Ciclo conta no tempo dele.
+  useClienteEmFoco(detalheId);
   const [quemEntraAberto, setQuemEntraAberto] = useState(false);
   const [comecarAberto, setComecarAberto] = useState(false);
 

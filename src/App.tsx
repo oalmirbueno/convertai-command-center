@@ -16,6 +16,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import AppLayout from "@/components/AppLayout";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
+import { CronometroProvider } from "@/components/cronometro/CronometroProvider";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
 const Login = lazy(() => import("@/pages/Login"));
@@ -69,6 +70,7 @@ const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
 const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
+const AdminHoras = lazy(() => import("@/pages/AdminHoras"));
 // As três mesas baixam antes do clique (painel ocioso, mouse no link) e a
 // etapa que vai abrir baixa junto com a página: src/lib/mesa/preCarga.ts.
 const MesaDoCliente = PaginaMesaDoCliente;
@@ -295,6 +297,8 @@ export function AppRoutes() {
             ser mandado para alguem. */}
         <Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
         <Route path="/financeiro/projecao" element={<StaffRoute><AdminProjection /></StaffRoute>} />
+        {/* Horas e custos (frente CR): tempo por cliente, custo de IA, entregas e capacidade. Só admin e gestor; o RPC repete a trava. */}
+        <Route path="/horas" element={<>{profile?.role === "admin" || profile?.role === "manager" ? <AdminHoras /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/api-docs" element={<StaffRoute><ApiDocs /></StaffRoute>} />
         <Route path="/admin/quiz" element={<StaffRoute><AdminQuizSubmissions /></StaffRoute>} />
         <Route path="/admin/backfill" element={<StaffRoute><AdminBackfillPage /></StaffRoute>} />
@@ -342,7 +346,10 @@ const App = () => (
           <ImpersonationProvider profile={null} clientId={null}>
             <ConfirmDialogProvider>
               <BrowserRouter>
-                <AppRoutes />
+                {/* Cronômetro por cliente no painel inteiro (inclusive o Ciclo, fora da casca). */}
+                <CronometroProvider>
+                  <AppRoutes />
+                </CronometroProvider>
               </BrowserRouter>
             </ConfirmDialogProvider>
           </ImpersonationProvider>

@@ -19,7 +19,7 @@ import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock,
+  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
@@ -27,6 +27,7 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPainel";
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
 import { quandoOcioso } from "@/lib/lazyComPreCarga";
+import CronometroDoTopo from "@/components/cronometro/CronometroDoTopo";
 
 // O assistente de voz traz o leitor de PDF e as animações (mais de 1 MB de
 // código): fora da abertura do painel, baixa logo depois, sem segurar a tela.
@@ -98,6 +99,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Equipe", url: "/equipe", icon: UsersRound },
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+      // Horas e custos (frente CR): tempo por cliente, custo de IA e capacidade. Só admin e gestor.
+      { title: "Horas e custos", url: "/horas", icon: Timer, soGestao: true },
       { title: "Arquivos", url: "/arquivos", icon: FileArchive },
       { title: "Workspace", url: "/workspace", icon: HardDrive },
       { title: "Cofre", url: "/cofre", icon: KeyRound },
@@ -455,6 +458,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Right: Icons */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* Cronômetro por cliente (frente CR): o cliente em foco e o tempo do mês nele; clicar abre Horas e custos. */}
+          {isAdminOrTeam && <CronometroDoTopo podeAbrirCentral={podeGestao} />}
           {/* "Gerando em N clientes": só aparece com geração na fila do servidor (frente G). */}
           {isAdminOrTeam && <IndicadorDeGeracoes userId={user?.id} />}
           <button

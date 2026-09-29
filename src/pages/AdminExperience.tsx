@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -2252,6 +2253,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   };
 
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
+  // Cronômetro por cliente (frente CR): perfil aberto ou linha aberta na carteira conta no tempo do cliente.
+  useClienteEmFoco(
+    activeTab === "perfis"
+      ? profileClientId || (healthRows[0] ? healthRows[0].client.id : null)
+      : activeTab === "carteira"
+        ? expandedHealth
+        : null,
+  );
 
   // Sistema de design (E3, 26/09; docs/design/SISTEMA.md): as seis abas são
   // Etapas com o número no item, e o que a aba faz mora no "?" ao lado.

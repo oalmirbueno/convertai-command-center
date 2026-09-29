@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useClientFinancialSummaries, useFinancePlans, useFinanceSettings } from "@/hooks/useFinanceV2";
@@ -608,6 +609,8 @@ export default function Clients() {
   const financialError = financialQuery.isError;
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<ClientRecord | null>(null);
+  // Cronômetro por cliente (frente CR): a ficha aberta conta no tempo do cliente.
+  useClienteEmFoco(editClient ? editClient.id : null);
 
   /** Botão direito na linha do cliente: abrir e copiar os contatos. */
   const [menuCliente, setMenuCliente] = useState<{ x: number; y: number; cliente: any } | null>(null);

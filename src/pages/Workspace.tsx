@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { useSearchParams } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -262,6 +263,8 @@ export default function Workspace() {
     { validar: navGuardadaValida },
   );
   const { scope, clientId, stack: parentStack } = navState;
+  // Cronômetro por cliente (frente CR): o workspace do cliente conta no tempo dele.
+  useClienteEmFoco(scope === "client" ? clientId : null);
   const parent = parentStack[parentStack.length - 1] || null;
   const navToken = `${scope}::${clientId || "-"}::${parent?.id || "-"}`;
 
