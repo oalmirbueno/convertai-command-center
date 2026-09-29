@@ -323,12 +323,18 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   });
   // O dossiê fica no FIM dos fatos: o corte preserva o fim (o mais recente), nunca só o começo.
   const fatosNoLimite = recortarDossie(fatos, LIMITE_FATOS);
+  // Frente LR (29/09): o ritual que não sai tem motivo no log e na resposta (antes: null em silêncio).
+  let ritualErro: string | null = null;
   const escrito = RITUAL_BRIEF[ritual]
     ? await escreverRitual({
       ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto,
       estado: estadoAplicar ? estadoRealComoTexto(estadoAplicar, { ritual }) : "",
       clientId, criadoPor: uid, escolha,
-    }).catch(() => null)
+    }).catch((e) => {
+      ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
+      console.error("agente-central: ritual não escrito", { clientId, ritual, erro: ritualErro });
+      return null;
+    })
     : null;
   const repeticao = escrito
     ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))
@@ -345,6 +351,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
         fase: contexto.fase,
       }
       : null,
+    ritual_erro: ritualErro,
   });
 }
 

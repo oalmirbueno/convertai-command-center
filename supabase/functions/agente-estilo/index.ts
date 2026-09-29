@@ -601,7 +601,13 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (leituraDoAgente) anexosDoAgente.push({ tipo: "leitura_de_referencias", texto: leituraDoAgente });
   if (acao) anexosDoAgente.push(acao);
   // Frente T: cartão dos templates (e o da combinação, quando pedida) ao lado do cartão do estilo.
-  const doTemplate = tpl && saida.json ? await acoesDosTemplatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, j, tpl, { candidatas: alvos.candidatas, gerador, conversaId }).catch(() => null) : null;
+  // Frente LR: cartão que não sai tem log e aviso (antes: null em silêncio, e a resposta podia citar um cartão que não veio).
+  const doTemplate = tpl && saida.json
+    ? await acoesDosTemplatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, j, tpl, { candidatas: alvos.candidatas, gerador, conversaId }).catch((e) => {
+      console.error("agente-estilo: cartões de template falharam", { clientId: p.clientId, erro: String((e as Error)?.message ?? e) });
+      return { anexos: [] as AcaoDoAgente[], custo: 0, aviso: "Os cartões de template não saíram desta vez. Peça de novo." };
+    })
+    : null;
   if (doTemplate) anexosDoAgente.push(...doTemplate.anexos);
   // Frente AG (27/09): cada cartão leva o "Ir para"; sem cartão, a área que a resposta citou.
   const comCaminhos = anexosComCaminho(

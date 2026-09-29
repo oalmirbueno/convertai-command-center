@@ -339,7 +339,7 @@ export default function AgenteDaCentral() {
           atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, situacao: "pronto" }));
           if (pub.avisos.length) toast.warning(`${c.nome}: ${pub.avisos.join(" ")}`);
         } else {
-          atualizarItem(c.id, (i) => ({ ...i, erro: "Dossiê atualizado, mas a IA não escreveu o ritual agora." }));
+          atualizarItem(c.id, (i) => ({ ...i, erro: `Dossiê atualizado, mas a IA não escreveu o ritual agora.${ap.ritual_erro ? ` Motivo: ${ap.ritual_erro}` : ""}` }));
         }
       } catch (e) {
         atualizarItem(c.id, (i) => ({ ...i, situacao: "erro", erro: e instanceof Error ? e.message : "Falha ao aplicar." }));

@@ -55,6 +55,7 @@ import { JevErro, jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 // Frente AP (27/09): na rodada da semana, as entregas do Estúdio aprendem com os números reais (sem IA, sem cron novo).
 import { aprenderComOsNumerosDaSemana, type BancoDoAprendizado } from "../_shared/aprendizado-das-entregas.ts";
@@ -1055,8 +1056,20 @@ async function imagemDoPost(p: Post, nome: string): Promise<ImagemEntrada | null
     pedirCopia: true,
     maxPixels: 1_500_000,
     aceitarCopiaMaiorAte: MAX_BYTES_ANEXO_DO_ESTILO,
-  }).catch(() => null);
-  if (!r || !r.cabe || r.bytes.byteLength > MAX_BYTES_ANEXO_DO_ESTILO) return null;
+  }).catch((e) => {
+    console.warn("perfis-instagram: imagem do post não abriu", { post: p.id, erro: String((e as Error)?.message ?? e) });
+    return null;
+  });
+  if (!r || !r.cabe || r.bytes.byteLength > MAX_BYTES_ANEXO_DO_ESTILO) {
+    console.warn("perfis-instagram: post sem imagem para a leitura", { post: p.id, abriu: !!r, cabe: !!r?.cabe });
+    return null;
+  }
+  // Frente LR (29/09): arquivo cortado derruba o lote inteiro no provedor (400 "not a valid image").
+  const defeito = defeitoDaImagem(r.bytes, MAX_BYTES_ANEXO_DO_ESTILO);
+  if (defeito) {
+    console.warn("perfis-instagram: imagem do post com defeito fica de fora", { post: p.id, defeito });
+    return null;
+  }
   const mime = mimeDe(r.bytes);
   return mime ? { bytes: r.bytes, mime, nome: `${nome}.${extensao(mime)}` } : null;
 }

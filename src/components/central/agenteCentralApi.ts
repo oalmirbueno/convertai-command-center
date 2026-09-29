@@ -75,6 +75,8 @@ export interface Aplicado {
   confirmacoes: string[];
   aprovacao: { por: string; em: string; via: string };
   ritual: RitualDoAgente | null;
+  /** Frente LR: motivo quando a IA não escreveu o ritual (null quando escreveu ou não havia ritual). */
+  ritual_erro?: string | null;
 }
 
 async function chamar<T>(body: Record<string, unknown>): Promise<T> {

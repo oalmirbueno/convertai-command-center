@@ -218,7 +218,8 @@ describe("restante da auditoria (23/09 noite)", () => {
     expect(c).toContain("await conversaDaCampanha(servico, campanha as Campanha, chamador.userId)");
   });
   it("filas do contexto não travam em arquivo que não abre; contagem de artes igual", () => {
-    expect(contexto).toContain('update({ ativa: false, tags: ["arquivo_indisponivel"] })');
+    // Frente LR (29/09): arquivo quebrado (PNG cortado) também sai da fila, com o motivo nas tags.
+    expect(contexto).toContain('.update({ ativa: false, tags: s.motivo === "arquivo_indisponivel" ? ["arquivo_indisponivel"] : ["arquivo_invalido", s.motivo] })');
     expect(contexto).toContain('descricao: "Arquivo indisponível: não foi possível abrir a imagem."');
     expect(contexto).not.toContain("...(imagens.length ? [`${imagens.length} artes publicadas`] : [])");
   });

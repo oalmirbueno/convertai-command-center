@@ -715,7 +715,8 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
             partes={() => [
               { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
             ]}
-            executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId })}
+            // Frente LR: "Atualizar" refaz a montagem de verdade (sem o atualizar, o servidor só lia as pendentes quando não havia fonte nova).
+            executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId, ...(contextoMontado ? { atualizar: true } : {}) })}
             aoConcluir={(data) => depoisDeMontar(clientId, data)}
           />
           </>

@@ -122,13 +122,45 @@ export function EstimativaInline({ partes, prefixo = "~" }: { partes: ParteDaEst
   return <span className="text-[11px] text-muted-foreground">{prefixo}{usd(data)} por envio</span>;
 }
 
+/**
+ * Frente LR (29/09): resposta 200 que diz que a ação NÃO fez o que foi pedido
+ * (`falhou: true`) ou fez só uma parte (`parcial: true`), com o `motivo`; ou
+ * que não havia nada a fazer (`aviso_da_acao`). Sem isto a tela dizia "Custo
+ * real: US$ 0,00" como se tivesse dado certo.
+ */
+export function situacaoDaResposta(data: any): { tipo: "falhou" | "parcial" | "aviso"; texto: string } | null {
+  if (!data || typeof data !== "object") return null;
+  const motivo = typeof data.motivo === "string" && data.motivo.trim() ? data.motivo.trim() : null;
+  if (data.falhou === true) return { tipo: "falhou", texto: motivo || "A ação não fez nada. Tente de novo." };
+  if (data.parcial === true) return { tipo: "parcial", texto: motivo || "Parte da ação não foi feita." };
+  if (typeof data.aviso_da_acao === "string" && data.aviso_da_acao.trim()) return { tipo: "aviso", texto: data.aviso_da_acao.trim() };
+  return null;
+}
+
+/** Toast do fim da ação: erro com o motivo quando falhou, alerta quando foi parcial, sucesso com o custo real no resto. */
+export function avisarFimDaAcao(rotulo: string, data: any, custo: number | null) {
+  const custoTexto = custo === null ? "Custo registrado na carteira do cliente." : `Custo real: ${usd(custo)}.`;
+  const s = situacaoDaResposta(data);
+  if (s && s.tipo === "falhou") {
+    toast.error(`${rotulo}: não concluído`, { description: `${s.texto}${custo ? ` ${custoTexto}` : ""}`, duration: 12000 });
+    return;
+  }
+  if (s && s.tipo === "parcial") {
+    toast.warning(`${rotulo}: concluído em parte`, { description: `${s.texto} ${custoTexto}`, duration: 12000 });
+    return;
+  }
+  if (s && s.tipo === "aviso") {
+    toast.info(rotulo, { description: custo ? `${s.texto} ${custoTexto}` : s.texto, duration: 9000 });
+    return;
+  }
+  toast.success(rotulo, { description: custoTexto });
+}
+
 /** Avisa o custo real que veio na resposta e atualiza a barra de custo. */
 export function avisarCustoReal(rotulo: string, data: any, atualizar: () => void) {
   const custo = custoDaResposta(data);
   atualizar();
-  toast.success(rotulo, {
-    description: custo === null ? "Custo registrado na carteira do cliente." : `Custo real: ${usd(custo)}.`,
-  });
+  avisarFimDaAcao(rotulo, data, custo);
   return custo;
 }
 
@@ -204,11 +236,8 @@ export function BotaoComCusto({
       const data = await executar();
       const custo = custoDaResposta(data);
       mesa.atualizarCusto();
-      if (!fecharAoConfirmar) {
-        toast.success(titulo, {
-          description: custo === null ? "Custo registrado na carteira do cliente." : `Custo real: ${usd(custo)}.`,
-        });
-      }
+      // Frente LR: resposta que diz que falhou (ou fez só parte) não vira toast de sucesso.
+      if (!fecharAoConfirmar) avisarFimDaAcao(titulo, data, custo);
       aoConcluir?.(data, custo);
     } catch (e) {
       // Falha depois de a IA responder também é cobrada (ex.: detalhar

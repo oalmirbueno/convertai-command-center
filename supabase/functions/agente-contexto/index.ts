@@ -48,6 +48,8 @@ import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { colunasComMarca, fontesDaMarca, type MarcaLeve, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+// Frente LR (29/09): leitura das referências em lotes, sem falha em silêncio.
+import { camposDaLeitura, defeitoDaImagem, lerEmLotes, PRAZO_DA_LEITURA_MS, type ResultadoDaLeitura, textoDoMotivo } from "./leitura-em-lotes.ts";
 import {
   artesAprovadas,
   caminhoDoArquivo,
@@ -230,8 +232,15 @@ async function baixarImagem(bucket: string, caminho: string, nome: string): Prom
     if (bytes.byteLength > MAX_BYTES) return null;
     const mime = mimeDe(bytes);
     if (!mime) return null;
+    // Frente LR: arquivo cortado no envio faz o provedor recusar o pedido inteiro.
+    const defeito = defeitoDaImagem(bytes, MAX_BYTES);
+    if (defeito) {
+      console.warn("agente-contexto: imagem com defeito fica de fora", { bucket, caminho, defeito });
+      return null;
+    }
     return { bytes, mime, nome };
-  } catch {
+  } catch (e) {
+    console.warn("agente-contexto: imagem não baixou", { bucket, caminho, erro: String((e as Error)?.message ?? e) });
     return null;
   }
 }
@@ -246,23 +255,62 @@ type Referencia = {
   leitura: string | null;
 };
 
-/** Bytes de uma referência, venha ela do bucket mesa, do workspace ou de Arquivos. */
-async function imagemDaReferencia(clientId: string, r: Referencia): Promise<ImagemEntrada | null> {
-  if (r.storage_path) return await baixarImagem("mesa", r.storage_path, `ref-${r.id.slice(0, 8)}`);
+/** Onde está o arquivo de uma referência: bucket mesa, workspace ou Arquivos. */
+async function localDaReferencia(clientId: string, r: Referencia): Promise<{ bucket: string; caminho: string } | null> {
+  if (r.storage_path) return { bucket: "mesa", caminho: r.storage_path };
   if (r.workspace_node_id) {
     const { data } = await servico().from("workspace_nodes").select("client_id, storage_path").eq("id", r.workspace_node_id).maybeSingle();
     const n = data as { client_id: string | null; storage_path: string | null } | null;
     if (!n || n.client_id !== clientId || !n.storage_path) return null;
-    return await baixarImagem("workspace", n.storage_path, `ref-${r.id.slice(0, 8)}`);
+    return { bucket: "workspace", caminho: n.storage_path };
   }
   if (r.file_id) {
     const { data } = await servico().from("files").select("client_id, storage_bucket, storage_path, file_url").eq("id", r.file_id).maybeSingle();
     const f = data as { client_id: string; storage_bucket: string | null; storage_path: string | null; file_url: string | null } | null;
     if (!f || f.client_id !== clientId) return null;
-    const c = caminhoDoArquivo(f);
-    return c ? await baixarImagem(c.bucket, c.caminho, `arte-${r.id.slice(0, 8)}`) : null;
+    return caminhoDoArquivo(f);
   }
   return null;
+}
+
+/** Caixa da cópia leve que o leitor recebe (o provedor reduz para perto disso de qualquer jeito). */
+const LADO_DA_LEITURA = 1024;
+/** Cópia média (JPEG de até 2048 px) aceita como está, sem abrir aqui (CPU). */
+const COPIA_ACEITA_ATE = 4 * 1024 * 1024;
+
+/**
+ * Imagem de uma referência para o leitor, em cópia leve (a mesma da
+ * copias-leves de 26/09: nada de abrir foto grande aqui). O original é
+ * conferido antes (arquivo cortado ou formato que o provedor recusa sai da
+ * fila com o motivo, sem gastar). Nunca lança.
+ */
+async function imagemDaReferencia(clientId: string, r: Referencia): Promise<{ imagem: ImagemEntrada } | { motivo: string }> {
+  const nome = `ref-${r.id.slice(0, 8)}`;
+  try {
+    const onde = await localDaReferencia(clientId, r);
+    if (!onde) return { motivo: "arquivo_indisponivel" };
+    const { data, error } = await servico().storage.from(onde.bucket).download(onde.caminho);
+    if (error || !data) return { motivo: "arquivo_indisponivel" };
+    const original = new Uint8Array(await data.arrayBuffer());
+    const defeito = defeitoDaImagem(original, 30 * 1024 * 1024);
+    if (defeito) return { motivo: defeito };
+    const leve = await reduzidaSemTransformacao(servico(), onde.bucket, onde.caminho, LADO_DA_LEITURA, LADO_DA_LEITURA, {
+      maxBytes: 30 * 1024 * 1024,
+      pedirCopia: true,
+      maxPixels: 700_000,
+      aceitarCopiaMaiorAte: COPIA_ACEITA_ATE,
+    }).catch((e) => {
+      console.warn("agente-contexto: cópia leve falhou; vai o original", { referencia: r.id, erro: String((e as Error)?.message ?? e) });
+      return null;
+    });
+    if (leve && leve.cabe && !defeitoDaImagem(leve.bytes, MAX_BYTES)) return { imagem: { bytes: leve.bytes, mime: leve.mime, nome } };
+    // Sem cópia: o original como veio, se couber no pedido.
+    if (original.byteLength > MAX_BYTES) return { motivo: "grande_demais" };
+    return { imagem: { bytes: original, mime: mimeDe(original) ?? "image/png", nome } };
+  } catch (e) {
+    console.error("agente-contexto: referência não abriu", { referencia: r.id, erro: String((e as Error)?.message ?? e) });
+    return { motivo: "arquivo_indisponivel" };
+  }
 }
 
 async function modeloDoPapel(papel: string): Promise<ModeloIa> {
@@ -391,61 +439,135 @@ const ESQUEMA_LEITURAS = {
 
 const SISTEMA_LEITURA = `Você é o leitor de referências de um estúdio de direção de arte. Para cada imagem anexada, descreva a TÉCNICA, não o assunto, em 4 a 6 frases objetivas, para outro diretor reaproveitar sem copiar: grid e margens, posição e escala da headline, hierarquia (quantos níveis de texto), tipografia (classificação, peso, caixa, espacejamento), paleta com hex aproximados, relação entre foto e texto (recorte, sobreposição, área de respiro), profundidade e luz, e o que faz a peça funcionar. Tags curtas em minúsculas com hífen (ex.: tipografia-grande, foto-integrada, grid-assimetrico, recorte, numero-dominante, minimalista, colagem). Escreva sem travessão.`;
 
-/** Lê em lote (uma chamada com várias imagens) as referências ainda sem leitura. */
-async function lerReferenciasPendentes(ch: Chamador, clientId: string): Promise<{ lidas: number; custo: number }> {
-  const { data } = await servico()
-    .from("cliente_referencias")
-    .select("id, origem, papel, workspace_node_id, file_id, storage_path, leitura")
-    .eq("client_id", clientId)
-    .eq("ativa", true)
-    .is("leitura", null)
-    .order("papel", { ascending: true })
-    .limit(MAX_LEITURAS_POR_VEZ);
-  const pendentes = (data as Referencia[] | null) ?? [];
-  if (!pendentes.length) return { lidas: 0, custo: 0 };
+/** Erros do motor que param a leitura inteira (nenhum lote seguinte passaria). */
+const paraTudo = (e: unknown) => e instanceof IaMotorErro && !!STATUS_MOTOR[e.codigo];
 
-  const comImagem: { ref: Referencia; imagem: ImagemEntrada }[] = [];
-  const semArquivo: string[] = [];
-  for (const r of pendentes) {
-    const imagem = await imagemDaReferencia(clientId, r);
-    if (imagem) comImagem.push({ ref: r, imagem });
-    else semArquivo.push(r.id);
-  }
-  // Referência cujo arquivo não abre sai da fila (fica inativa e marcada), senão travava a leitura para sempre.
-  if (semArquivo.length) {
-    await servico().from("cliente_referencias").update({ ativa: false, tags: ["arquivo_indisponivel"] }).in("id", semArquivo).eq("client_id", clientId);
-  }
-  if (!comImagem.length) return { lidas: 0, custo: 0 };
+/** Provedor recusou a imagem (400 falando de imagem) ou o tamanho do pedido (413): vale ler uma por uma. */
+function recusouImagem(e: unknown): boolean {
+  if (!(e instanceof IaMotorErro) || e.codigo !== "provedor_erro") return false;
+  const st = Number(e.detalhes?.status_provedor);
+  return st === 413 || (st === 400 && /image|imagem|picture/i.test(e.message));
+}
 
+function descreverErro(e: unknown): string {
+  if (e instanceof IaMotorErro) return MENSAGEM_MOTOR[e.codigo] ?? e.message;
+  if (e instanceof ErroContexto) return e.message;
+  return String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
+}
+
+const leituraVazia = (motivo: string | null = null): ResultadoDaLeitura => ({ tentadas: 0, lidas: 0, custo: 0, falharam: [], restantes: 0, motivo });
+
+/**
+ * Lê as referências ainda sem leitura (até 12 por clique) em lotes pequenos
+ * (leitura-em-lotes.ts). Nunca lança: toda falha volta com o motivo e vai para
+ * o log. Saldo, cota ou chave param a leitura e voltam em erroQueParou.
+ */
+async function lerReferenciasPendentes(ch: Chamador, clientId: string): Promise<ResultadoDaLeitura> {
+  const inicio = Date.now();
+  try {
+    const { data, error } = await servico()
+      .from("cliente_referencias")
+      .select("id, origem, papel, workspace_node_id, file_id, storage_path, leitura")
+      .eq("client_id", clientId)
+      .eq("ativa", true)
+      .is("leitura", null)
+      .order("papel", { ascending: true })
+      .limit(MAX_LEITURAS_POR_VEZ);
+    if (error) {
+      console.error("agente-contexto: pendentes não carregaram", { clientId, erro: error.message });
+      return { ...leituraVazia("Não foi possível carregar as referências pendentes. Tente de novo."), tentadas: 1 };
+    }
+    const pendentes = (data as Referencia[] | null) ?? [];
+    if (!pendentes.length) return leituraVazia();
+
+    // Imagens em paralelo (4 por vez): cópia leve de cada uma, original conferido antes.
+    const abertas: ({ imagem: ImagemEntrada } | { motivo: string })[] = new Array(pendentes.length);
+    let proxima = 0;
+    await Promise.all(Array.from({ length: Math.min(4, pendentes.length) }, async () => {
+      while (proxima < pendentes.length) {
+        const i = proxima++;
+        abertas[i] = await imagemDaReferencia(clientId, pendentes[i]);
+      }
+    }));
+    const comImagem: { id: string; ref: Referencia; imagem: ImagemEntrada }[] = [];
+    const semImagem: { ref: Referencia; motivo: string }[] = [];
+    pendentes.forEach((ref, i) => {
+      const a = abertas[i];
+      if (a && "imagem" in a) comImagem.push({ id: ref.id, ref, imagem: a.imagem });
+      else semImagem.push({ ref, motivo: a ? a.motivo : "arquivo_indisponivel" });
+    });
+    // Arquivo que não abre ou está quebrado sai da fila (inativa, com o motivo nas tags), senão travava a leitura para sempre.
+    for (const s of semImagem) {
+      console.warn("agente-contexto: referência sai da fila", { clientId, referencia: s.ref.id, motivo: s.motivo });
+      const { error: e } = await servico().from("cliente_referencias")
+        .update({ ativa: false, tags: s.motivo === "arquivo_indisponivel" ? ["arquivo_indisponivel"] : ["arquivo_invalido", s.motivo] })
+        .eq("id", s.ref.id).eq("client_id", clientId);
+      if (e) console.error("agente-contexto: não marcou a referência sem arquivo", { referencia: s.ref.id, erro: e.message });
+    }
+
+    // O tempo de abrir as imagens sai do teto da leitura (a função tem 150 s de parede).
+    const prazoMs = Math.max(20_000, PRAZO_DA_LEITURA_MS - (Date.now() - inicio));
+    const r = comImagem.length ? await lerComOLeitor(ch, clientId, comImagem, prazoMs) : leituraVazia();
+
+    // As que saíram da fila antes de ler contam como falha, com o motivo.
+    for (const s of semImagem) r.falharam.unshift({ id: s.ref.id, motivo: textoDoMotivo(s.motivo) });
+    r.tentadas = pendentes.length;
+    if (semImagem.length) {
+      const motivos = Array.from(new Set(semImagem.map((s) => textoDoMotivo(s.motivo))));
+      const frase = `${semImagem.length} ${semImagem.length === 1 ? "referência saiu da fila" : "referências saíram da fila"} (${motivos.join("; ")}).`;
+      r.motivo = r.motivo ? `${frase} ${r.motivo}` : frase;
+    }
+    if (r.motivo) console.error("agente-contexto: leitura com falhas", { clientId, lidas: r.lidas, falharam: r.falharam.length, restantes: r.restantes, motivo: r.motivo });
+    return r;
+  } catch (e) {
+    console.error("agente-contexto: leitura das referências falhou", { clientId, erro: descreverErro(e) });
+    if (paraTudo(e)) return { ...leituraVazia(descreverErro(e)), tentadas: 1, erroQueParou: e };
+    return { ...leituraVazia(`A leitura não rodou: ${descreverErro(e)}`), tentadas: 1 };
+  }
+}
+
+async function lerComOLeitor(ch: Chamador, clientId: string, itens: { id: string; ref: Referencia; imagem: ImagemEntrada }[], prazoMs: number): Promise<ResultadoDaLeitura> {
   const leitor = await modeloDoPapel("leitura");
-  const r = await chamarTexto({
-    clientId,
-    tarefa: "leitura_referencia",
-    agente: "leitor",
-    modeloId: leitor.id,
-    raciocinio: raciocinioPara(leitor, ["low", "minimal"]),
-    sistema: SISTEMA_LEITURA,
-    mensagens: [{
-      papel: "usuario",
-      conteudo: `Leia as ${comImagem.length} imagens anexadas, na ordem (imagem 1, 2, 3...). ` +
-        comImagem.map((c, i) => `Imagem ${i + 1}: ${c.ref.papel === "identidade" ? "arte já publicada pela própria marca" : "referência de técnica"}.`).join(" "),
-      imagens: comImagem.map((c) => c.imagem),
-    }],
-    esquemaJson: ESQUEMA_LEITURAS,
-    maxTokensSaida: 4000,
-    referencia: { tipo: REF_TIPO, id: clientId },
-    criadoPor: ch.userId,
+  return await lerEmLotes(itens, {
+    lerLote: async (lote) => {
+      const resposta = await chamarTexto({
+        clientId,
+        tarefa: "leitura_referencia",
+        agente: "leitor",
+        modeloId: leitor.id,
+        raciocinio: raciocinioPara(leitor, ["low", "minimal"]),
+        sistema: SISTEMA_LEITURA,
+        mensagens: [{
+          papel: "usuario",
+          conteudo: `Leia as ${lote.length} imagens anexadas, na ordem (imagem 1, 2, 3...). ` +
+            lote.map((c, i) => `Imagem ${i + 1}: ${c.ref.papel === "identidade" ? "arte já publicada pela própria marca" : "referência de técnica"}.`).join(" "),
+          imagens: lote.map((c) => c.imagem),
+        }],
+        esquemaJson: ESQUEMA_LEITURAS,
+        maxTokensSaida: 4000,
+        // Lote de até 4 imagens: 45 s bastam; o lote não passa do teto da função.
+        timeoutMs: 45_000,
+        referencia: { tipo: REF_TIPO, id: clientId },
+        criadoPor: ch.userId,
+      });
+      const leituras = ((resposta.json as { leituras?: { imagem: number; tecnica: string; tags: string[] }[] } | undefined)?.leituras) ?? [];
+      return { leituras, custo: resposta.custoUsd };
+    },
+    gravar: async (item, l) => {
+      const { error: e } = await servico().from("cliente_referencias").update({ leitura: l.tecnica, tags: l.tags }).eq("id", item.id).eq("client_id", clientId);
+      if (e) console.error("agente-contexto: leitura não gravada", { referencia: item.id, erro: e.message });
+      return !e;
+    },
+    marcarInvalida: async (item, motivo) => {
+      const { error: e } = await servico().from("cliente_referencias").update({ ativa: false, tags: ["arquivo_invalido", motivo] }).eq("id", item.id).eq("client_id", clientId);
+      if (e) console.error("agente-contexto: não marcou a referência recusada", { referencia: item.id, erro: e.message });
+    },
+    erroQueParaTudo: paraTudo,
+    recusouImagem,
+    descrever: descreverErro,
+    log: (mensagem, dados) => console.error(mensagem, { clientId, ...dados }),
+    prazoMs,
   });
-  const leituras = ((r.json as { leituras?: { imagem: number; tecnica: string; tags: string[] }[] } | undefined)?.leituras) ?? [];
-  let lidas = 0;
-  for (const l of leituras) {
-    const alvo = comImagem[Math.round(l.imagem) - 1];
-    if (!alvo || !texto(l.tecnica)) continue;
-    const tags = Array.from(new Set([...(Array.isArray(l.tags) ? l.tags : []).map((t) => texto(t, 40).toLowerCase()).filter(Boolean)])).slice(0, 12);
-    await servico().from("cliente_referencias").update({ leitura: texto(l.tecnica, 1500), tags }).eq("id", alvo.ref.id);
-    lidas++;
-  }
-  return { lidas, custo: r.custoUsd };
 }
 
 // ------------------------------------------------------------------ montar
@@ -507,13 +629,30 @@ Devolva:
 
 Português do Brasil, sem travessão.`;
 
+/** Par de fontes da biblioteca quando o cliente não tem nenhuma: opcional, a falha só vai para o log. */
+async function fontesOpcionais(ch: Chamador, clientId: string) {
+  try {
+    return await escolherFontesDaBiblioteca(ch, clientId);
+  } catch (e) {
+    console.warn("agente-contexto: fontes da biblioteca não escolhidas (segue sem)", { clientId, erro: descreverErro(e) });
+    return null;
+  }
+}
+
 async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
   const forcar = corpo.forcar === true;
   const db = servico();
 
-  await Promise.all([sincronizarReferencias(db, clientId), sincronizarAcervo(db, clientId).catch(() => null)]);
+  await Promise.all([
+    sincronizarReferencias(db, clientId),
+    // Opcional: o acervo não é o que a pessoa pediu aqui; a falha só vai para o log.
+    sincronizarAcervo(db, clientId).catch((e) => {
+      console.warn("agente-contexto: acervo não sincronizou (segue sem)", { clientId, erro: descreverErro(e) });
+      return null;
+    }),
+  ]);
   const [kit, docs, dossie, artes, nome] = await Promise.all([
     lerKit(clientId),
     lerDocumentosDeMarca(db, clientId, 20_000),
@@ -534,38 +673,53 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!forcar && corpo.atualizar !== true && semNovidade) {
     // Contexto já montado: só completa o que falta (referências sem leitura e
     // fonte, se o cliente ainda não tem), sem refazer a montagem.
+    // Frente LR: a leitura nunca falha em silêncio; saldo, cota ou chave sem nada lido viram o erro da resposta (402/403).
     const [leitura, qtdFontes] = await Promise.all([
-      lerReferenciasPendentes(ch, clientId).catch((e) => {
-        if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
-        return { lidas: 0, custo: 0 };
-      }),
+      lerReferenciasPendentes(ch, clientId),
       db.from("cliente_fontes").select("id", { count: "exact", head: true }).eq("client_id", clientId),
     ]);
-    const fontesEscolhidas = qtdFontes.count ? null : await escolherFontesDaBiblioteca(ch, clientId).catch(() => null);
+    if (leitura.erroQueParou && leitura.lidas === 0) throw leitura.erroQueParou;
+    const fontesEscolhidas = qtdFontes.count ? null : await fontesOpcionais(ch, clientId);
     return json({
       kit: await lerKit(clientId),
       sugestoes: {},
       fontes_escolhidas: fontesEscolhidas,
-      referencias_lidas: leitura.lidas,
+      ...camposDaLeitura(leitura),
       custo_usd: leitura.custo,
       saldo_usd: null,
       ja_atualizado: true,
+      aviso_da_acao: leitura.tentadas
+        ? `Referências lidas: ${leitura.lidas} de ${leitura.tentadas}. O contexto não foi refeito (nenhuma fonte nova desde a última montagem).`
+        : "Nenhuma fonte nova desde a última montagem e nenhuma referência pendente: nada a fazer. Para refazer mesmo assim, use Atualizar contexto.",
     });
   }
 
   // Leitura das referências pendentes corre junto com a montagem, não antes.
-  const leituraEmCurso = lerReferenciasPendentes(ch, clientId).catch((e) => {
-    if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
-    return { lidas: 0, custo: 0 };
-  });
+  // Frente LR: lerReferenciasPendentes nunca rejeita (toda falha volta como
+  // motivo), então esta promise não vira "event loop error" se a montagem
+  // lançar antes de alguém esperar por ela.
+  const leituraEmCurso: Promise<ResultadoDaLeitura> = lerReferenciasPendentes(ch, clientId);
   const baixadas = await Promise.all(artes.map((a, i) => {
     const c = caminhoDoArquivo(a);
     return c ? baixarImagem(c.bucket, c.caminho, `arte-publicada-${i + 1}`) : Promise.resolve(null);
   }));
   const imagens = baixadas.filter(Boolean) as ImagemEntrada[];
   if (!docs.length && !dossie && !imagens.length) {
-    await leituraEmCurso;
-    throw new ErroContexto(409, "sem_fontes", "Ainda não há documentos, dossiê nem artes deste cliente no painel para ler.");
+    const leitura = await leituraEmCurso;
+    const semFontes = "Ainda não há documentos, dossiê nem artes deste cliente no painel para montar o contexto.";
+    if (!leitura.tentadas) throw new ErroContexto(409, "sem_fontes", semFontes);
+    if (leitura.erroQueParou && leitura.lidas === 0) throw leitura.erroQueParou;
+    // Sem fonte para montar, mas havia referências: devolve a leitura com o motivo.
+    return json({
+      kit: await lerKit(clientId),
+      sugestoes: {},
+      fontes_escolhidas: null,
+      ...camposDaLeitura(leitura),
+      custo_usd: leitura.custo,
+      saldo_usd: null,
+      ja_atualizado: true,
+      aviso_da_acao: semFontes,
+    });
   }
 
   const leitor = await modeloDoContexto();
@@ -590,6 +744,12 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     maxTokensSaida: 6000,
     referencia: { tipo: REF_TIPO, id: clientId },
     criadoPor: ch.userId,
+  }).catch(async (e) => {
+    // A montagem falhou: espera a leitura terminar (o que ela leu fica gravado) e devolve o erro da montagem.
+    console.error("agente-contexto: montagem do contexto falhou", { clientId, erro: descreverErro(e) });
+    const l = await leituraEmCurso;
+    if (l.lidas) console.error("agente-contexto: leitura gravada apesar da montagem ter falhado", { clientId, lidas: l.lidas });
+    throw e;
   });
   const leitura = await leituraEmCurso;
 
@@ -667,13 +827,14 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   // Fonte: sem nenhuma, escolhe um par da biblioteca da agência.
   let fontesEscolhidas: unknown = null;
   const { count } = await db.from("cliente_fontes").select("id", { count: "exact", head: true }).eq("client_id", clientId);
-  if (!count) fontesEscolhidas = await escolherFontesDaBiblioteca(ch, clientId).catch(() => null);
+  if (!count) fontesEscolhidas = await fontesOpcionais(ch, clientId);
 
   return json({
     kit: await lerKit(clientId),
     sugestoes,
     fontes_escolhidas: fontesEscolhidas,
-    referencias_lidas: leitura.lidas,
+    // O contexto foi montado: falha só na leitura das referências é parcial, não erro.
+    ...camposDaLeitura(leitura, { principalFeito: true }),
     custo_usd: r.custoUsd + leitura.custo,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,

@@ -611,6 +611,7 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
     res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
     const nome = err instanceof Error ? err.name : "";
+    console.warn("[ia-motor] provedor não respondeu", { provedor, erro: nome || String(err).slice(0, 200), prazo_ms: timeoutMs });
     if (nome === "TimeoutError" || nome === "AbortError") {
       throw new IaMotorErro("provedor_timeout", `O provedor ${provedor} nao respondeu em ${Math.round(timeoutMs / 1000)} s.`, { provedor });
     }
@@ -620,9 +621,24 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
     // A mensagem do provedor vai no erro (nao no log) e cortada.
     let msg = "";
     try {
-      const corpo = await res.json() as { error?: { message?: string } | string; message?: string };
+      const corpo = await res.json() as { error?: { message?: string; metadata?: { raw?: unknown } } | string; message?: string };
       msg = typeof corpo.error === "string" ? corpo.error : corpo.error?.message || corpo.message || "";
+      // Frente LR (29/09): o OpenRouter devolve só "Provider returned error"; o motivo real (ex.: "The image
+      // data you provided does not represent a valid image") vem em error.metadata.raw.
+      const raw = typeof corpo.error === "object" ? corpo.error?.metadata?.raw : undefined;
+      if (raw != null) {
+        let interno = "";
+        try {
+          const r = typeof raw === "string" ? JSON.parse(raw) : raw;
+          interno = String(r?.error?.message || r?.message || "");
+        } catch {
+          interno = String(raw);
+        }
+        if (interno && interno !== msg) msg = msg ? `${msg} (${interno.slice(0, 240)})` : interno;
+      }
     } catch { /* corpo sem JSON */ }
+    // Frente LR: toda recusa do provedor fica no log da função (antes só ia no erro, e um catch que engolia apagava o rastro).
+    console.warn("[ia-motor] provedor recusou", { provedor, status: res.status, motivo: String(msg).slice(0, 300) });
     // Chave do OpenRouter no limite de gasto DELA (limite por chave, não o saldo da conta). 26/09: a conta
     // estava recarregada e o painel dizia "sem crédito"; o motivo real era "Key limit exceeded (total limit)".
     if (provedor === "openrouter" && (res.status === 403 || res.status === 402) && /key limit/i.test(String(msg))) {

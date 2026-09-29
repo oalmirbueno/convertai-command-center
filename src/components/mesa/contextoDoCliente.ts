@@ -89,6 +89,15 @@ export interface RespostaDoMontar {
   reserva_usada: string | null;
   /** Sem fonte nova: não montou de novo, só leu as referências pendentes. */
   ja_atualizado?: boolean;
+  /** Frente LR: referências que não foram lidas (com o motivo) e as que ficaram para a próxima. */
+  referencias_falharam?: number;
+  referencias_restantes?: number;
+  falhas_da_leitura?: { id: string; motivo: string }[];
+  /** true: nada foi feito (a tela mostra erro com o motivo). parcial: parte não foi feita. */
+  falhou?: boolean;
+  parcial?: boolean;
+  motivo?: string | null;
+  aviso_da_acao?: string;
 }
 
 export interface RespostaDaConversa {

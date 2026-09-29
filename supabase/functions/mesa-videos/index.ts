@@ -105,7 +105,7 @@ import {
   type ResultadoGerado,
 } from "../_shared/agente-de-video.ts";
 import { modelosDeVideo } from "../_shared/modelos-de-video.ts";
-import { jevPerguntar } from "../_shared/jev.ts";
+import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
 import { MAX_BYTES_DO_PROJETO, normalizarProjeto, type ProjetoDeEdicao, proximaRevisao, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 // Frente V-A (26/09): gerador (motores, ângulo, continuar, transição, antes e depois) e o diretor.
@@ -987,8 +987,10 @@ async function agenteEntender(ch: Chamador, corpo: Record<string, unknown>) {
       if (reserva !== NENHUMA) return json({ intencao: reserva, confianca, via: "palavras" });
     }
     return json({ intencao: escolha, confianca, via: "jev" });
-  } catch {
-    return json({ intencao: reserva, confianca: null, via: "palavras" });
+  } catch (e) {
+    // Frente LR: o Jev fora do ar não some em silêncio (log e jev_erro na resposta).
+    console.warn("mesa-videos: jev da intenção falhou; vale a palavra do pedido", { erro: String((e as Error)?.message ?? e) });
+    return json({ intencao: reserva, confianca: null, via: "palavras", jev_erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" });
   }
 }
 

@@ -1758,6 +1758,8 @@ ${blocoEditorial}`;
   await fila;
 
   const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  // Frente LR: o motivo de cada frente que falhou fica no log (a tela recebe o aviso).
+  for (const f of falhas) console.error("agente-calendario: frente dos temas falhou", { erro: String((f.reason as Error)?.message ?? f.reason) });
   if (porFase.size === 0 || juntar().length === 0) {
     // Sem temas a proposta sai; a pesquisa em andamento não acha mais a linha para gravar.
     await desfazer();
@@ -2386,7 +2388,11 @@ async function gravarItens(
   const itensComTarefa = itensComTaskId(p.itens, resultado);
   // Frente MF: cada item ganha a mesa que o faz, pelo formato do perfil (alternar: o Jev escolhe, o código equilibra).
   const mesasDoPlano = await marcarMesasDoPlano(servico, p.client_id, itensComTarefa, { referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId })
-    .catch(() => ({ perfil: "artes", custo: 0, fonte: "perfil" as const }));
+    .catch((e) => {
+      // Frente LR: sem a marcação, todos os itens ficam "arte"; a falha vai para o log.
+      console.error("agente-calendario: mesas do plano não marcadas (itens ficam como arte)", { clientId: p.client_id, erro: String((e as Error)?.message ?? e) });
+      return { perfil: "artes", custo: 0, fonte: "perfil" as const };
+    });
 
   if (erros.length > 0) {
     // Parcial: guarda o que entrou e continua pronta para nova tentativa
