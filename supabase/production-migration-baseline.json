@@ -1489,6 +1489,22 @@
       "remote_name": "aprovar_pelo_cliente",
       "remote_statements_sha256": "cceff4d45a1f7447fa3d109dc1f605b8a9508e0a35366a0ebbf8cb9074d20e42",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928090000",
+      "path": "supabase/migrations/20260928090000_tempo_de_trabalho.sql",
+      "local_sha256": "83c9513394abff2c2e55cc07cb3e6d53e4fa2dee82882daff181fadc54ff3678",
+      "remote_name": "tempo_de_trabalho",
+      "remote_statements_sha256": "309cb5643c19b9e9b964a48fee195ab369363e23dc6a10cafaf647735bf215cf",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260928100000",
+      "path": "supabase/migrations/20260928100000_reagendar_sem_travar.sql",
+      "local_sha256": "4b9f1feffd4c93a825061cbcf60ecc9b78b92ff94ffc0422115dd016bff56645",
+      "remote_name": "reagendar_sem_travar",
+      "remote_statements_sha256": "980aeec16b6e48bbb4b02baeba3af8f73a2afd9f310c7b1741e1d56634ab1dea",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
