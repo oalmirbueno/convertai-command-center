@@ -1513,6 +1513,14 @@
       "remote_name": "aviso_abre_o_conteudo",
       "remote_statements_sha256": "7959e52ac5ec0dd69fa4018bf42103b8820552e7317ecc78666729423e3e3866",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260929020000",
+      "path": "supabase/migrations/20260929020000_marcas_completas.sql",
+      "local_sha256": "98fc66055d122b379299d027c265f8d927cff61177a33c51d68351077950dffc",
+      "remote_name": "marcas_completas",
+      "remote_statements_sha256": "f320afbd3bd0dc450710274c35827c4b2400d027c6e8a7d071acb67fb6a9b1ec",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
