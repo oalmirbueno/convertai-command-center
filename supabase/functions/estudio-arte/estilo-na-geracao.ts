@@ -50,6 +50,8 @@ import {
   ROTULO_DA_FAIXA_DA_BORDA,
   templateEscolhidoNoTrabalho,
 } from "../_shared/templates-de-design.ts";
+// Frente FS (29/09): o que falha aqui segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export { blocoDoEstiloParaOGerador, ROTULO_DA_REFERENCIA_DO_ESTILO };
 export { ROTULO_DA_ANCORA_DO_TEMPLATE, ROTULO_DA_FAIXA_DA_BORDA, ROTULO_DA_LAMINA_DE_REFERENCIA };
@@ -80,13 +82,15 @@ export async function estiloNaGeracao(
     for (const r of g.referencias.slice(0, vagas)) {
       try {
         imagens.push(await deps.baixar(r.bucket, r.caminho, `estilo-${r.id.slice(0, 8)}`));
-      } catch {
+      } catch (err) {
         // Referência do estilo sumida: segue sem ela.
+        registrarFalha("estudio-arte: referência do estilo não abriu (segue sem ela)", err, { caminho: r.caminho });
       }
     }
     // Trava da marca (frente T): fonte e hex escritos no estilo saem; a letra e a cor são as do kit.
     return { guia: guiaComMarcaTravada(g), versao: e.versao_atual, imagens };
-  } catch {
+  } catch (err) {
+    registrarFalha("estudio-arte: estilo do cliente não entrou na geração", err);
     return null;
   }
 }
@@ -195,8 +199,9 @@ export async function templateNaLamina(
       if (ref) {
         try {
           indiceDaReferencia = anexar(await deps.baixar(ref.bucket, ref.caminho, `referencia-${k}`), ROTULO_DA_LAMINA_DE_REFERENCIA);
-        } catch {
+        } catch (err) {
           // Lâmina da referência sumida: segue só com o texto das partes.
+          registrarFalha("estudio-arte: lâmina da referência de carrossel não abriu", err, { caminho: ref.caminho });
         }
       }
     }
@@ -211,8 +216,9 @@ export async function templateNaLamina(
           const img = await deps.baixar("mesa", anterior.storage_path, `borda-${ordem - 1}`);
           const bytes = await (deps.recortar || recortarComImagemLocal)(img.bytes, (l, a) => faixaDaBorda(l, a));
           if (bytes) indiceDaFaixa = anexar({ bytes, mime: "image/png", nome: `borda-${ordem - 1}.png` }, ROTULO_DA_FAIXA_DA_BORDA);
-        } catch {
+        } catch (err) {
           // Sem a lâmina anterior (ainda não gerada ou sumida): segue sem a faixa.
+          registrarFalha("estudio-arte: faixa da lâmina anterior não saiu", err, { ordem });
         }
       }
     }
@@ -228,13 +234,15 @@ export async function templateNaLamina(
       if (indices.length >= MAX_ANCORAS_NO_GERADOR || vagas <= 0) break;
       try {
         indices.push(anexar(await deps.baixar(a.bucket, a.caminho, `template-${a.id.slice(0, 8)}`), ROTULO_DA_ANCORA_DO_TEMPLATE));
-      } catch {
+      } catch (err) {
         // Âncora sumida: segue sem ela.
+        registrarFalha("estudio-arte: âncora do template não abriu", err, { caminho: a.caminho });
       }
     }
     return blocoDoTemplateParaOGerador(tpl.nome, corpo, { ordem, total, indicesDasAncoras: indices, continuidade, kit });
-  } catch {
+  } catch (err) {
     // Falhou no meio: devolve as listas como estavam.
+    registrarFalha("estudio-arte: template de design não entrou na geração", err, { ordem });
     imagens.length = antes.imagens;
     rotulos.length = antes.rotulos;
     return "";

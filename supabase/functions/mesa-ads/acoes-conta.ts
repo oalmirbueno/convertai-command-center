@@ -21,6 +21,8 @@
 import { regraDeCorte } from "./calculos.ts";
 import { OBJETIVOS_DE_CAMPANHA } from "../_shared/conhecimento-ads.ts";
 import type { CaminhoDoAgente } from "../_shared/acoes-do-agente.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export const TIPOS_DE_ACAO = [
   "pausar",
@@ -711,7 +713,7 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
 
     // Prova da escrita: o estado relido logo depois (sem token; falha na releitura não desfaz nada),
     // a hora da releitura e o que a Meta respondeu (frente AD: "a prova lida da Meta depois de escrever").
-    const relerDepois = async () => estadoLido(await grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO(alvo.nivel)).catch(() => null));
+    const relerDepois = async () => estadoLido(await grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO(alvo.nivel)).catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)));
     const provado = async (resposta: Record<string, unknown>): Promise<ResultadoDoItem> => {
       const feito = agoraIso();
       const depois = await relerDepois();
@@ -780,8 +782,8 @@ export async function executarNaMeta(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
       }
       const feito = agoraIso();
       const [antigo, novo] = await Promise.all([
-        grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO("anuncio")).catch(() => null),
-        grafo.ler(adId, CAMPOS_DO_ESTADO("anuncio")).catch(() => null),
+        grafo.ler(alvo.meta_id, CAMPOS_DO_ESTADO("anuncio")).catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
+        grafo.ler(adId, CAMPOS_DO_ESTADO("anuncio")).catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
       ]);
       return {
         ok: true,
@@ -1055,7 +1057,7 @@ export async function montarCampanhaNaMeta(item: ItemDaAcaoNaConta, grafo: Grafo
       }
       if (!anuncios.length) throw new Error(`Nenhum anúncio subiu. ${falhas.join(" ")}`.trim());
       criado.anuncio_ids = anuncios.join(",");
-      const depois = estadoLido(await grafo.ler(campanhaId, "id,name,status,effective_status,daily_budget,account_id").catch(() => null));
+      const depois = estadoLido(await grafo.ler(campanhaId, "id,name,status,effective_status,daily_budget,account_id").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)));
       return {
         ok: true,
         feito_em: agoraIso(),
@@ -1065,7 +1067,7 @@ export async function montarCampanhaNaMeta(item: ItemDaAcaoNaConta, grafo: Grafo
       };
     } catch (e) {
       // Nada pela metade: a campanha criada é arquivada (deletar = arquivar).
-      await grafo.escrever(campanhaId, { status: "ARCHIVED" }).catch(() => null);
+      await grafo.escrever(campanhaId, { status: "ARCHIVED" }).catch((e) => (registrarFalha("mesa-ads: escrever falhou", e), null));
       return { ok: false, motivo: `A montagem parou no meio e a campanha criada foi arquivada: ${e instanceof Error ? e.message : "erro da Meta"}`, criado };
     }
   } catch (e) {
@@ -1114,7 +1116,7 @@ export async function ativarMontagem(item: ItemDaAcaoNaConta, grafo: GrafoMeta, 
     const conjunto = idMeta(criado?.conjunto_id);
     if (conjunto) await grafo.escrever(conjunto, { status: "ACTIVE" });
     await grafo.escrever(campanha, { status: "ACTIVE" });
-    return { ok: true, depois: estadoLido(await grafo.ler(campanha, "id,name,status,effective_status,daily_budget,account_id").catch(() => null)) };
+    return { ok: true, depois: estadoLido(await grafo.ler(campanha, "id,name,status,effective_status,daily_budget,account_id").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null))) };
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível ativar na Meta." };
   }

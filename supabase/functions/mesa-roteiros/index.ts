@@ -115,6 +115,8 @@ import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { anexosComCaminho, comCaminho, executarDireto, podeExecutarDireto } from "../_shared/acoes-do-agente.ts";
 // Frente AG (27/09): o "Ir para" de cada ação e resposta, e a sequência em passos com Parar.
 import { caminhoDosRoteiros } from "./acoes-dos-roteiros.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -338,7 +340,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
   const cerebroP = resumoDoCerebro(servico(), clientId, ["geral", "calendario", "campanha", "copy"], { limite: 1800 });
   const [cliente, consolidado, dossie, propostas, modelos] = await Promise.all([
     nomeDoCliente(clientId),
-    lerContextoConsolidado(servico(), clientId).catch(() => ({})),
+    lerContextoConsolidado(servico(), clientId).catch((e) => (registrarFalha("mesa-roteiros: lerContextoConsolidado falhou", e), ({}))),
     servico().from("client_dossiers").select("summary, dossier_type").eq("client_id", clientId).eq("is_current", true).order("effective_at", { ascending: false }).limit(1),
     peca
       ? servico().from("calendario_propostas").select("id, itens, criado_em").eq("client_id", clientId).eq("status", "gravada").contains("task_ids", [peca.id]).order("criado_em", { ascending: false }).limit(1)
@@ -811,9 +813,14 @@ async function modeloDoClienteAoAprovar(ch: Chamador, linha: LinhaDoRoteiro): Pr
     const { data, error } = ja
       ? await servico().from(TABELA_MODELOS).update(campos).eq("id", ja.id).select("id, nome").single()
       : await servico().from(TABELA_MODELOS).insert({ ...campos, escopo: "cliente", client_id: linha.client_id, origem_roteiro_id: linha.id, criado_por: ch.userId }).select("id, nome").single();
-    if (error) return null;
+    if (error) {
+      // Frente FS: a aprovação segue, mas o modelo do cliente que não gravou fica no log.
+      registrarFalha("mesa-roteiros: modelo do cliente não gravado ao aprovar", error, { roteiro_id: linha.id });
+      return null;
+    }
     return data as { id: string; nome: string };
-  } catch {
+  } catch (e) {
+    registrarFalha("mesa-roteiros: modelo do cliente não gravado ao aprovar", e, { roteiro_id: linha.id });
     return null;
   }
 }
@@ -1053,7 +1060,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
-  const aberto = corpo.roteiro_id ? await lerLinha(ch, corpo.roteiro_id).catch(() => null) : null;
+  const aberto = corpo.roteiro_id ? await lerLinha(ch, corpo.roteiro_id).catch((e) => (registrarFalha("mesa-roteiros: lerLinha falhou", e), null)) : null;
   const hojeDoPedido = new Date().toISOString().slice(0, 10);
   const janela = janelaDasPecas(mensagem, hojeDoPedido);
   const [modelo, historico, listas, cliente] = await Promise.all([
@@ -1063,7 +1070,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     nomeDoCliente(clientId),
   ]);
   // Frente AG: cérebro e dossiê do cliente (cache curto; sem leitura, segue vazio).
-  const contextoDoCliente = await CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"]).catch(() => "");
+  const contextoDoCliente = await CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"]).catch((e) => (registrarFalha("mesa-roteiros: contexto do agente não lido", e), ""));
   const hoje = new Date().toISOString().slice(0, 10);
   const atual = aberto ? versaoPorNumero(aberto.versoes, aberto.versao_atual) : null;
   const dados = {

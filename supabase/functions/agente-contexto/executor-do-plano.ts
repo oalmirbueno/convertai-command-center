@@ -16,6 +16,8 @@
  */
 import type { AcaoDoAgente, ItemDaAcaoDoAgente, ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
 import { pastaDoBrandBook } from "../_shared/identidade-visual.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 // deno-lint-ignore no-explicit-any
 export type ServicoDoPlano = { from: (tabela: string) => any };
@@ -282,7 +284,7 @@ export async function reverterItemDoPlano(db: ServicoDoPlano, clientId: string, 
       return;
     }
     case "atualizar_projeto": {
-      await projetoDoCliente(db, clientId, d.projeto_id).catch(() => undefined);
+      await projetoDoCliente(db, clientId, d.projeto_id).catch((e) => (registrarFalha("agente-contexto: projetoDoCliente falhou", e), undefined));
       const { error } = await db.from("projects").update((d.antes ?? {}) as Record<string, unknown>).eq("id", String(d.projeto_id)).eq("client_id", clientId);
       if (error) throw new Error("Não foi possível voltar o projeto.");
       return;

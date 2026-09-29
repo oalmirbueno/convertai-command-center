@@ -262,10 +262,10 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
 
   it("gerar_card: a logo escolhida no kit vai anexada ao gerador em todos os modos; nada é colado pelo código", () => {
     const g = corpoDe("gerarCard");
-    expect(g).toContain("const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card)) : [];");
+    expect(g).toContain("const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card), avisosDaGeracao) : [];");
     expect(g).toContain("const logo = escolherLogoDoKit(logosKit, t, card, valorDoFundo);");
     // 27/09: a logo vai achatada no fundo de contraste, com o texto dela na legenda.
-    expect(g).toContain("logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),");
+    expect(g).toContain("logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId, avisosDaGeracao) : Promise.resolve(null),");
     expect(g).toContain('if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });');
     expect(g).not.toContain("acabar(");
     expect(g).not.toContain("logosNoCodigo");
@@ -500,8 +500,9 @@ describe("6. designer mais forte e memória do cliente", () => {
     expect(estudio).toContain('import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";');
     expect(corpoDe("preferenciasDaArte")).toContain("areas: AREAS_DO_AGENTE.diretor_arte,");
     expect(corpoDe("preferenciasDaArte")).toContain("return blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));");
-    expect(corpoDe("gerarCard")).toContain("preferenciasDaArte(t.client_id).catch(() => \"\"),");
-    expect(corpoDe("ajustarCard")).toContain('auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch(() => ""),');
+    // Frente FS (29/09): as regras que não foram lidas agora deixam log e aviso na versão.
+    expect(corpoDe("gerarCard")).toContain("preferenciasDaArte(t.client_id).catch((e) => {");
+    expect(corpoDe("ajustarCard")).toContain('auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch((e) => {');
     // Chamadas longas do diretor com 5 min.
     expect((estudio.match(/timeoutMs: 300_000,/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });

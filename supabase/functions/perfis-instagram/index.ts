@@ -118,6 +118,8 @@ import {
   TETO_DE_CUSTO_DA_RODADA_USD,
   cabeNoTeto,
 } from "../_shared/perfis-instagram.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -715,9 +717,9 @@ type ContextoDoCliente = { nome: string; texto: string; estado: Record<string, u
 async function contextoDoCliente(clientId: string): Promise<ContextoDoCliente> {
   const [perfilRes, consolidado, dossie, cerebro, propostas] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
-    lerContextoConsolidado(servico(), clientId).catch(() => ({})),
-    lerDossie(servico(), clientId, 2500).catch(() => null),
-    resumoDoCerebro(servico(), clientId, ["geral", "copy", "campanha"], { limite: 1200, titulo: "O QUE O CLIENTE JÁ ENSINOU" }).catch(() => ({ texto: "" })),
+    lerContextoConsolidado(servico(), clientId).catch((e) => (registrarFalha("perfis-instagram: lerContextoConsolidado falhou", e), ({}))),
+    lerDossie(servico(), clientId, 2500).catch((e) => (registrarFalha("perfis-instagram: lerDossie falhou", e), null)),
+    resumoDoCerebro(servico(), clientId, ["geral", "copy", "campanha"], { limite: 1200, titulo: "O QUE O CLIENTE JÁ ENSINOU" }).catch((e) => (registrarFalha("perfis-instagram: resumoDoCerebro falhou", e), ({ texto: "" }))),
     servico().from("calendario_propostas").select("temas").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(3),
   ]);
   const p = perfilRes.data as { company_name?: string | null; full_name?: string | null } | null;
@@ -1884,7 +1886,7 @@ async function rodadaSemanal() {
   const aprendizado = await aprenderComOsNumerosDaSemana(servico() as unknown as BancoDoAprendizado, {
     gravarNoCerebro: (novo) => gravarNoCerebro(servico(), novo, { julgar: null }),
     tempoMs: Math.max(5_000, TEMPO_DO_CRON_MS - (Date.now() - inicio)),
-  }).catch(() => null);
+  }).catch((e) => (registrarFalha("perfis-instagram: aprenderComOsNumerosDaSemana falhou", e), null));
   await auditar(null, "perfis_rodada_semanal", { perfis: saida.length, entregas_lidas: aprendizado ? aprendizado.lidos : 0 }, true, inicio);
   return json({ rodados: saida.length, perfis: saida, aprendizado_das_entregas: aprendizado });
 }

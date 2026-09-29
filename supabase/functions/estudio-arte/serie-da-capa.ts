@@ -44,6 +44,8 @@ import { zonaDaCaixa } from "../_shared/fidelidade-da-referencia.ts";
 import type { PerguntaJev, RespostaJev, ResultadoJev } from "../_shared/jev.ts";
 import { type KitDaTrava, neutralizarMarcaDaReferencia } from "../_shared/trava-da-marca.ts";
 import { caminhoDaLeituraDoConteudo, chaveDoTexto, normalizarLeituraDoConteudo, VERSAO_DA_LEITURA_DO_CONTEUDO } from "./referencia-adapta-copy.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export const VERSAO_DA_SERIE = 1;
 /** Altura da letra (em % do quadro) a partir da qual o título da referência é o título gigante da capa. */
@@ -297,7 +299,7 @@ export async function separarIdentidadeDaCapa(e: { refId: string; molde: MoldeDa
     if (!brutos.length) return null;
     const assinatura = assinaturaDaSerie(brutos);
     const caminho = caminhoDaSerie(deps.pasta, e.refId);
-    const guardado = await deps.lerGuardado(caminho).catch(() => null);
+    const guardado = await deps.lerGuardado(caminho).catch((e) => (registrarFalha("estudio-arte: lerGuardado falhou", e), null));
     if (guardado && guardado.versao === VERSAO_DA_SERIE && guardado.assinatura === assinatura) {
       const itens = itensGuardados(guardado.itens);
       if (itens && itens.length === brutos.length) return { versao: VERSAO_DA_SERIE, itens, jev: "guardado" };
@@ -305,11 +307,11 @@ export async function separarIdentidadeDaCapa(e: { refId: string; molde: MoldeDa
     const duvidas = ambiguos(brutos);
     if (!duvidas.length) {
       const r = decidirSerie(brutos, null);
-      await deps.guardar(caminho, { versao: VERSAO_DA_SERIE, assinatura, em: new Date().toISOString(), jev: "nao_precisou", itens: r.itens }).catch(() => null);
+      await deps.guardar(caminho, { versao: VERSAO_DA_SERIE, assinatura, em: new Date().toISOString(), jev: "nao_precisou", itens: r.itens }).catch((e) => (registrarFalha("estudio-arte: guardar falhou", e), null));
       return { versao: VERSAO_DA_SERIE, itens: r.itens, jev: "nao_precisou" };
     }
     // A leitura do conteúdo (texto escrito, gancho) ajuda o Jev quando já está guardada; nunca é lida só para isto.
-    const lida = await deps.lerGuardado(caminhoDaLeituraDoConteudo(deps.pasta, e.refId)).catch(() => null);
+    const lida = await deps.lerGuardado(caminhoDaLeituraDoConteudo(deps.pasta, e.refId)).catch((e) => (registrarFalha("estudio-arte: lerGuardado falhou", e), null));
     const leitura = lida && lida.versao === VERSAO_DA_LEITURA_DO_CONTEUDO ? normalizarLeituraDoConteudo(lida.leitura) : null;
     let res: ResultadoJev;
     try {
@@ -317,15 +319,17 @@ export async function separarIdentidadeDaCapa(e: { refId: string; molde: MoldeDa
         estadoDaSerie(e.molde, brutos, leitura ? { texto_escrito: leitura.conteudo.texto_escrito, sentido: leitura.conteudo.sentido, gancho: leitura.estetica.estrategia_do_gancho } : null),
         perguntasDaSerie(brutos),
       );
-    } catch {
+    } catch (err) {
+      registrarFalha("estudio-arte: jev da série da capa falhou (vale a regra do código)", err, { referencia_id: e.refId });
       return { versao: VERSAO_DA_SERIE, itens: decidirSerie(brutos, null).itens, jev: "falhou" };
     }
     await deps.cobrarJev(res).catch(() => null);
     const r = decidirSerie(brutos, res.answers);
     if (!r.respondidas) return { versao: VERSAO_DA_SERIE, itens: r.itens, jev: "falhou" };
-    await deps.guardar(caminho, { versao: VERSAO_DA_SERIE, assinatura, em: new Date().toISOString(), jev: "respondeu", itens: r.itens }).catch(() => null);
+    await deps.guardar(caminho, { versao: VERSAO_DA_SERIE, assinatura, em: new Date().toISOString(), jev: "respondeu", itens: r.itens }).catch((e) => (registrarFalha("estudio-arte: guardar falhou", e), null));
     return { versao: VERSAO_DA_SERIE, itens: r.itens, jev: "respondeu" };
-  } catch {
+  } catch (err) {
+    registrarFalha("estudio-arte: série da capa falhou", err, { referencia_id: e.refId });
     return null;
   }
 }

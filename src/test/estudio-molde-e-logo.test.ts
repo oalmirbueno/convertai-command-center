@@ -109,7 +109,7 @@ describe("1. logo: o gerador vê a logo inteira e sabe o texto dela", () => {
     const leitura = corpoDe("leituraDaLogo");
     expect(leitura).toContain("const hash = (await sha256Hex(logo.imagem.bytes)).slice(0, 24);");
     expect(leitura).toContain('tarefa: "leitura_referencia"');
-    expect(corpoDe("ajustarCard")).toContain("const anexo = await anexoDaLogo(base, logo, nome, ch.userId);");
+    expect(corpoDe("ajustarCard")).toContain("const anexo = await anexoDaLogo(base, logo, nome, ch.userId, avisosDoAjuste);");
     expect(corpoDe("gerarCard")).toContain("logoDescricao: anexoLogo ? anexoLogo.descricao : null,");
     expect(estudio).not.toContain("LEGENDA_DA_LOGO");
     // Achatar é leve: tela da logo (até 512 px) com margem, sem abrir nada grande.

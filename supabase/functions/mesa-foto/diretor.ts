@@ -84,6 +84,8 @@ import {
   lerDestinoDoPost,
   type PostBruto,
 } from "./diretor-agentico.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 type Json = Record<string, unknown>;
 
@@ -181,7 +183,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       lista<Json>(db().from("foto_modelos").select("id, nome, status").eq("client_id", clientId).neq("origem", ORIGEM_CLONE).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(20)),
       lista<Json>(db().from("foto_biblioteca").select("id, titulo, categoria, client_id, prompt_pt, prompt_en, destaque").eq("tipo", "prompt").or(`client_id.is.null,client_id.eq.${clientId}`).order("destaque", { ascending: false }).limit(40)),
       lista<Json>(db().from("foto_books").select("id, nome, status, assunto").eq("client_id", clientId).neq("status", "arquivado").order("atualizado_em", { ascending: false }).limit(20)),
-      d.kitsDoCliente(clientId).catch(() => [] as KitBruto[]),
+      d.kitsDoCliente(clientId).catch((e) => (registrarFalha("mesa-foto: kitsDoCliente falhou", e), [] as KitBruto[])),
       lista<Json>(db().from("mesa_campanhas").select("id, nome, status").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(20)),
       db().storage.from("mesa").list(pastaDasLeituras(clientId), { limit: 1000 }).then((r) => (r.data ?? []).map((o) => String(o.name)), () => [] as string[]),
       postsDeFotos(clientId),

@@ -221,7 +221,8 @@ describe("Estúdio: marketing do diretor, legenda, cérebro e dossiê", () => {
   it("a base de design continua primeiro; marketing logo depois; cérebro e dossiê no fim", () => {
     expect(estudio).toContain("sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join(\"\\n\\n\"),");
     expect(estudio).toContain("sistema: `${CONHECIMENTO_DA_LEGENDA}\\n\\n${prompt}\\n\\n${INSTRUCOES_LEGENDA}`,");
-    expect(estudio).toContain("cerebroEDossieDoDiretor(clientId).catch(() => ({ texto: \"\", usouCerebro: false })),");
+    // Frente FS (29/09): a leitura que falha segue opcional, mas agora fica no log.
+    expect(estudio).toContain('cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),');
     const conversa = estudio.slice(estudio.indexOf("  const sistema = [\n    CONHECIMENTO_DIRETOR,"), estudio.indexOf('].filter(Boolean).join("\\n\\n");', estudio.indexOf("  const sistema = [\n    CONHECIMENTO_DIRETOR,")));
     for (const p of ["CONHECIMENTO_DIRETOR", "CONHECIMENTO_DA_DIRECAO", "prompt", "POLITICAS_META", "INSTRUCOES_CONVERSA", "doDiretor.texto"]) expect(conversa, p).toContain(p);
     const c = corpoDe(estudio, "cerebroEDossieDoDiretor");

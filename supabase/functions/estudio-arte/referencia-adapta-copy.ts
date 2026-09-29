@@ -32,6 +32,8 @@ import type { MoldeDaReferencia } from "../_shared/direcao-arte.ts";
 import type { FidelidadeDaReferencia } from "../_shared/fidelidade-da-referencia.ts";
 import type { PerguntaJev, RespostaJev, ResultadoJev } from "../_shared/jev.ts";
 import { type KitDaTrava, neutralizarMarcaDaReferencia } from "../_shared/trava-da-marca.ts";
+// Frente FS (29/09): o que falha aqui continua opcional (vale o prompt de hoje), mas fica no log com o motivo.
+import { nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
 
 export const VERSAO_DA_LEITURA_DO_CONTEUDO = 1;
 export const VERSAO_DA_ADAPTACAO = 1;
@@ -365,7 +367,8 @@ export async function leituraDoConteudo(refId: string, deps: Pick<DepsDaAdaptaca
     const leitura = normalizarLeituraDoConteudo(bruto);
     if (leitura) await deps.guardar(caminho, { versao: VERSAO_DA_LEITURA_DO_CONTEUDO, referencia_id: refId, lido_em: new Date().toISOString(), leitura });
     return leitura;
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: leitura do conteúdo da referência falhou", e, { referencia_id: refId });
     return null;
   }
 }
@@ -400,13 +403,14 @@ export async function adaptacaoDaReferencia(
       let res: ResultadoJev;
       try {
         res = await deps.perguntarJev(estadoDoJev(e.ctx, e.leitura), PERGUNTAS_DA_ADAPTACAO);
-      } catch {
+      } catch (err) {
+        registrarFalha("estudio-arte: jev da adaptação falhou", err, { referencia_id: e.refId });
         return nada("jev_falhou");
       }
       await deps.cobrarJev(res).catch(() => null);
       decisao = decidirAdaptacao(res.answers);
       if (!decisao) return nada("jev_falhou");
-      if (!decisao.serve) cena = normalizarCena(await deps.escreverCena(pedidoDaCena(e.ctx, e.leitura, e.molde, decisao.aproveitar)).catch(() => null));
+      if (!decisao.serve) cena = normalizarCena(await deps.escreverCena(pedidoDaCena(e.ctx, e.leitura, e.molde, decisao.aproveitar)).catch(nuloComLog("estudio-arte: cena da adaptação não escrita", { referencia_id: e.refId })));
       // Guarda o julgamento (e a cena, quando há): a mesma lâmina com o mesmo texto não paga de novo.
       if (decisao.serve || cena) {
         await deps.guardar(caminho, { versao: VERSAO_DA_ADAPTACAO, referencia_id: e.refId, em: new Date().toISOString(), serve: decisao.probabilidade, aproveitar: decisao.aproveitar, cena });
@@ -419,7 +423,8 @@ export async function adaptacaoDaReferencia(
       bloco,
       registro: { versao: VERSAO_DA_ADAPTACAO, adaptou: !!bloco, motivo: bloco ? "adaptou" : "sem_cena", serve: decisao.probabilidade, aproveitar: decisao.aproveitar, cena, guardada: deGuardada },
     };
-  } catch {
+  } catch (err) {
+    registrarFalha("estudio-arte: adaptação da referência falhou", err, { referencia_id: e.refId });
     return nada("erro");
   }
 }

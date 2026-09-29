@@ -29,6 +29,9 @@
  * - correção automática: 1 rodada, e só com "Corrigir sozinho" ligado.
  */
 
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
+
 export type EtapaDaFila = "fundo" | "gerar" | "conferir" | "corrigir";
 export type StatusDaFila = "fila" | "rodando" | "feito" | "erro" | "cancelado";
 
@@ -234,7 +237,7 @@ export interface PassoProcessado {
 export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, token: string): Promise<PassoProcessado> {
   let etapa = item.etapa;
   if (etapa === "gerar") {
-    const versoes = await deps.versoes(item).catch(() => null);
+    const versoes = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
     if (versoes !== null) {
       etapa = etapaNaRetomada(item, versoes);
       // Guarda quantas versões havia antes de gerar (só na primeira tentativa).
@@ -251,7 +254,7 @@ export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, 
   }
   const { mudanca, pararLote } = proximoPasso(item, etapa, r, deps.agora());
   const gravou = await deps.gravar(item, token, mudanca as unknown as Record<string, unknown>);
-  if (pararLote) await deps.pararLote(item, pararLote).catch(() => undefined);
+  if (pararLote) await deps.pararLote(item, pararLote).catch((e) => (registrarFalha("estudio-arte: pararLote falhou", e), undefined));
   return { item, etapa, mudanca, gravou };
 }
 

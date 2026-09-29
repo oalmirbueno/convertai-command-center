@@ -107,6 +107,8 @@ import {
   pedeAcaoNaPublicidade,
   REGRAS_DA_PUBLICIDADE,
 } from "./acoes-da-publicidade.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -673,6 +675,8 @@ async function avisosDoJev(c: CampanhaDePublicidade, fotos: { chave: string; con
     for (const k of Object.keys(questions)) porChave[k] = probabilidadeNoul(res.answers[k]);
     return { porChave, custo: cobrado ? cobrado.custoUsd : 0, erro: null };
   } catch (err) {
+    // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+    console.error("mesa-publicidade: jev falhou", { motivo: String((err as Error)?.message ?? err).slice(0, 300) });
     return { porChave: {}, custo: 0, erro: err instanceof JevErro ? err.codigo : "jev_indisponivel" };
   }
 }
@@ -950,7 +954,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const comAcoes = !!(c && c.id) && pedeAcaoNaPublicidade(mensagem);
   const [modelo, contextoDoCliente] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
-    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"]).catch(() => ""),
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"]).catch((e) => (registrarFalha("mesa-publicidade: contexto do agente não lido", e), "")),
   ]);
   const saida = await chamarTexto({
     clientId,
@@ -1001,7 +1005,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     acao: mensagemId ? acao : null,
     anexos: mensagemId ? anexosDaResposta : [],
     ir_para: destinoNaResposta(resposta, clientId),
-    campanha: acao && acao.executada_em && c && c.id ? await lerCampanha(ch, c.id).catch(() => null) : undefined,
+    campanha: acao && acao.executada_em && c && c.id ? await lerCampanha(ch, c.id).catch((e) => (registrarFalha("mesa-publicidade: lerCampanha falhou", e), null)) : undefined,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
   });

@@ -168,6 +168,8 @@ export function acoesDaBibliotecaEmLote(
         if (cobrado) custo += cobrado.custoUsd;
         bloco.forEach((i, n) => bate.set(i.id, probabilidadeNoul(res.answers[`item_${n}`])));
       } catch (e) {
+        // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+        console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
         erro = e instanceof JevErro ? e.codigo : "jev_indisponivel";
         bloco.forEach((i) => bate.set(i.id, null));
       }

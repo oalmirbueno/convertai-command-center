@@ -23,6 +23,8 @@ import { ErroDeRegra, limpo, listaDeTextos, UUID } from "./calculos.ts";
 // Frente AE (28/09): com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
 import { campanhaDaMarca, type MarcaLeve, resolverMarca } from "../_shared/marca.ts";
 import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 // ------------------------------------------------------------------ tipos
 
@@ -291,7 +293,7 @@ export function acoesDeCampanhas(f: FerramentasDaMesa) {
     const clientId = typeof corpo.client_id === "string" && UUID.test(corpo.client_id) ? corpo.client_id : "";
     if (!clientId) throw new ErroDeRegra(400, "client_id_invalido", "client_id inválido.");
     await f.garantirAcesso(ch, clientId);
-    const marca = await resolverMarca(f.servico(), clientId, { marca_id: corpo.marca_id }).catch(() => null);
+    const marca = await resolverMarca(f.servico(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("mesa-foto: resolverMarca falhou", e), null));
     const r = await lerCampanhasParaFoto(f.servico(), clientId, new Date(), marca);
     return f.json({ ...r, custo_usd: 0 });
   }

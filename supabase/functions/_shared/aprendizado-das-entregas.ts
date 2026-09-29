@@ -42,6 +42,8 @@ import {
   type TrabalhoParaMemoria,
 } from "./aprendizado-continuo.ts";
 import type { NovoAprendizado } from "./cerebro-do-cliente.ts";
+// Frente FS (29/09): a leitura por visão continua opcional (a memória grava sem ela), mas fica no log.
+import { nuloComLog, registrarFalha } from "./falha-registrada.ts";
 
 // deno-lint-ignore no-explicit-any
 export type BancoDoAprendizado = { from: (tabela: string) => any; storage: { from: (bucket: string) => any } };
@@ -65,7 +67,8 @@ export async function lerIndiceDasEntregas(db: BancoDoAprendizado, clientId: str
     if (error || !data) return indiceVazio();
     const texto = typeof (data as Blob).text === "function" ? await (data as Blob).text() : String(data);
     return normalizarIndice(JSON.parse(texto));
-  } catch {
+  } catch (e) {
+    registrarFalha("aprendizado-das-entregas: índice não lido (vale vazio)", e, { client_id: clientId });
     return indiceVazio();
   }
 }
@@ -78,8 +81,10 @@ export async function gravarIndiceDasEntregas(db: BancoDoAprendizado, clientId: 
       new Blob([JSON.stringify(indice)], { type: "application/json" }),
       { upsert: true, contentType: "application/json" },
     );
+    if (error) registrarFalha("aprendizado-das-entregas: índice não gravado", error, { client_id: clientId });
     return !error;
-  } catch {
+  } catch (e) {
+    registrarFalha("aprendizado-das-entregas: índice não gravado", e, { client_id: clientId });
     return false;
   }
 }
@@ -113,7 +118,7 @@ export async function registrarMemoriaDaEntrega(
     if (jaRegistrada(antes, m.id)) return { situacao: "ja_registrada", memoria: antes.entregas.find((e) => e.id === m.id) || null, leu_visao: false, cerebro: null };
     let descricao: DescricaoVisual | null = null;
     if (deps.lerVisao && m.capa) {
-      descricao = await deps.lerVisao(m.capa, m.miolo).catch(() => null);
+      descricao = await deps.lerVisao(m.capa, m.miolo).catch(nuloComLog("aprendizado-das-entregas: leitura por visão da entrega falhou (grava sem descrição)", { client_id: t.client_id }));
     }
     const memoria: MemoriaDaEntrega = { ...m, descricao_visual: descricao };
     // Relê antes de gravar: outra entrega do mesmo cliente pode ter entrado agora.
@@ -133,6 +138,7 @@ export async function registrarMemoriaDaEntrega(
     }).catch((e) => ({ gravada: false, situacao: null, id: null, reforcos: null, erro: e instanceof Error ? e.message : "falha" }));
     return { situacao: "registrada", memoria, leu_visao: !!descricao, cerebro };
   } catch (e) {
+    registrarFalha("aprendizado-das-entregas: entrega não registrada", e, { client_id: t.client_id, trabalho_id: t.id });
     return { situacao: "falhou", memoria: null, leu_visao: false, cerebro: null, erro: e instanceof Error ? e.message : "falha ao registrar" };
   }
 }
@@ -215,7 +221,7 @@ export async function aprenderComOsNumeros(
         evidencia: a.evidencia,
         fonte: "desempenho",
         referencia_id: e.trabalho_id,
-      }).catch(() => null);
+      }).catch(nuloComLog("aprendizado-das-entregas: aprendizado do desempenho não gravado", { client_id: clientId, trabalho_id: e.trabalho_id }));
       if (j.posicao === "topo") {
         topo++;
         // Reforço forte: o número real pesa mais que um pedido repetido.
@@ -227,6 +233,7 @@ export async function aprenderComOsNumeros(
     }
     return { situacao: "lido", julgadas: r.novos.length, topo, fundo };
   } catch (e) {
+    registrarFalha("aprendizado-das-entregas: números reais não lidos", e, { client_id: clientId });
     return { situacao: "falhou", julgadas: 0, topo: 0, fundo: 0, erro: e instanceof Error ? e.message : "falha" };
   }
 }
@@ -247,7 +254,8 @@ export async function aprenderComOsNumerosDaSemana(
   try {
     const r = await db.from("estudio_trabalhos").select("client_id").eq("status", "entregue").gte("atualizado_em", desde).order("atualizado_em", { ascending: false }).limit(1000);
     clientes = Array.from(new Set(linhas(r).map((l) => String(l.client_id || "")).filter((c) => UUID.test(c)))).slice(0, deps.limiteClientes ?? 60);
-  } catch {
+  } catch (e) {
+    registrarFalha("aprendizado-das-entregas: clientes com entrega não lidos", e);
     return { clientes: 0, lidos: 0, julgadas: 0 };
   }
   let lidos = 0;
@@ -280,7 +288,8 @@ export async function blocosDasEntregas(
       variedade: opcoes.capa ? linhaDaVariedadeDasEntregas(indice.entregas, opcoes.tipo) : "",
       entregas: indice.entregas.length,
     };
-  } catch {
+  } catch (e) {
+    registrarFalha("aprendizado-das-entregas: bloco para a lâmina não montado", e, { client_id: clientId });
     return { bloco: "", variedade: "", entregas: 0 };
   }
 }
@@ -289,7 +298,8 @@ export async function blocosDasEntregas(
 export async function sugestoesDasEntregas(db: BancoDoAprendizado, clientId: string, jaNoEstilo: string[] = []): Promise<SugestaoDaEntrega[]> {
   try {
     return sugestoesParaOEstilo((await lerIndiceDasEntregas(db, clientId)).entregas, jaNoEstilo);
-  } catch {
+  } catch (e) {
+    registrarFalha("aprendizado-das-entregas: sugestões não montadas", e, { client_id: clientId });
     return [];
   }
 }

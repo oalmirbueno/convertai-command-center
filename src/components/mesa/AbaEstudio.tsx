@@ -68,7 +68,7 @@ import { emColunas, encaixarNaJanela, rolarAte, useFaixa } from "./EstudioAltura
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
-import EstudioAvisoDoRosto from "./EstudioAvisoDoRosto";
+import EstudioAvisoDoRosto, { EstudioAvisosDaGeracao } from "./EstudioAvisoDoRosto";
 import EstudioEntrega from "./EstudioEntrega";
 // Frente AE (28/09): arte rápida, fora do plano do mês, no mesmo Estúdio.
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
@@ -624,6 +624,8 @@ function DetalheDoItem({
         g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
       }
       atualizar();
+      // Frente FS: a lâmina saiu, mas algo no caminho falhou e mudou a arte (fica também na lâmina).
+      if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning(`Lâmina ${ordem} gerada com aviso`, { description: g.aviso_da_acao, duration: 12000 });
       return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
       soltar(ordem);
@@ -847,6 +849,8 @@ function DetalheDoItem({
       });
       atualizar();
       custo = custoDaResposta(a) || 0;
+      // Frente FS: ajuste feito, mas algo no caminho falhou e mudou a arte (fica também na lâmina).
+      if (a && typeof a.aviso_da_acao === "string" && a.aviso_da_acao) toast.warning(`Lâmina ${ordem} ajustada com aviso`, { description: a.aviso_da_acao, duration: 12000 });
     } catch (e) {
       soltar(ordem);
       throw e;
@@ -1530,7 +1534,12 @@ function DetalheDoItem({
               />
             }
             versao={versaoNaTela}
-            avisoDoRosto={<EstudioAvisoDoRosto trabalhoId={trabalho.id} versao={versaoNaTela as any} />}
+            avisoDoRosto={
+              <>
+                <EstudioAvisoDoRosto trabalhoId={trabalho.id} versao={versaoNaTela as any} />
+                <EstudioAvisosDaGeracao versao={versaoNaTela as any} />
+              </>
+            }
             onAbrirFotos={() => abrirFerramenta("fotos", false)}
             onAbrirReferencias={() => {
               setRefsAlvo("lamina");

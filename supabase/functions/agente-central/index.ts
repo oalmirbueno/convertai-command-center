@@ -50,6 +50,8 @@ import {
   secaoDaLeitura,
   type LeituraDaSemana,
 } from "./regras.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Mesmos rótulos de SERVICE_LABELS (src/lib/cycleDefs.ts).
@@ -91,16 +93,23 @@ export const LIMITE_FATOS = 9000;
 
 // Frente CE (28/09): GPT-6 Luna (raciocínio escolhido na Central, máximo por
 // padrão) pelo motor das mesas; a cadeia antiga fica só de reserva, uma vez.
-async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo): Promise<{ dados: Record<string, unknown>; modelo: string } | null> {
+// Frente FS (29/09): sem resposta ou com JSON inválido, o motivo vai no log e na resposta (ia_erro), no
+// padrão do ritual_erro da frente LR. Antes o JSON inválido virava null em silêncio.
+type RespostaDaIA = { dados: Record<string, unknown>; modelo: string; erro: null } | { dados: null; modelo: null; erro: string };
+
+async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo): Promise<RespostaDaIA> {
   const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid });
   if (!r) {
-    console.warn("[agente-central] IA sem resposta");
-    return null;
+    const erro = "nenhum modelo respondeu (nem o escolhido nem o de reserva)";
+    console.error("[agente-central] IA sem resposta", { clientId, erro });
+    return { dados: null, modelo: null, erro };
   }
   try {
-    return { dados: extractJson(r.texto), modelo: r.rotulo };
-  } catch {
-    return null;
+    return { dados: extractJson(r.texto), modelo: r.rotulo, erro: null };
+  } catch (e) {
+    const erro = `a IA (${r.rotulo}) devolveu uma resposta sem JSON válido: ${String((e as Error)?.message ?? e).slice(0, 200)}`;
+    console.error("[agente-central] JSON inválido da IA", { clientId, modelo: r.rotulo, erro, inicio: r.texto.slice(0, 160) });
+    return { dados: null, modelo: null, erro };
   }
 }
 
@@ -180,7 +189,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
     // O estado real (orgânico e pago separados, com período): o mesmo leitor dos rituais.
-    lerEstadoReal(db, clientId).catch(() => null),
+    lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
@@ -192,7 +201,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "",
     dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
   ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
-  if (!r) return json({ error: "A IA não respondeu agora. Tente este cliente de novo." }, 502);
+  if (!r.dados) return json({ error: `A IA não respondeu agora (${r.erro}). Tente este cliente de novo.`, ia_erro: r.erro }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);
   if (!leitura.fase.nome) leitura.fase = { nome: fase.nome, motivo: contexto.motivoDaFase, proximo_degrau: fase.sinalDeAvanco };
   const perguntas = normalizarPerguntas(r.dados.perguntas);
@@ -233,13 +242,16 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   let leitura: LeituraDaSemana = leituraAntes;
   let confirmacoes: string[] = [];
   let aprendizados: Array<{ texto: string; area: AreaDoCerebro; categoria: "preferencia" | "evitar" | "aprendizado" }> = [];
+  // Frente FS: a IA que não organizou as respostas tem motivo na resposta (as respostas entram como o dono escreveu).
+  let iaErro: string | null = null;
   if (temResposta) {
     const r = await perguntarIA(SISTEMA_APLICAR, [
       `LEITURA DA SEMANA:\n${JSON.stringify(leituraAntes)}`,
       `PERGUNTAS E RESPOSTAS DO DONO:\n${respostas.map((x) => `- ${x.pergunta}\n  Resposta: ${x.resposta || "(sem resposta)"}`).join("\n")}`,
       contextoExtra ? `CONTEXTO EXTRA DO DONO:\n${contextoExtra}` : "",
     ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
-    if (r) {
+    if (!r.dados) iaErro = r.erro;
+    if (r.dados) {
       const nova = normalizarLeitura(r.dados.leitura);
       if (nova.onde_estamos) leitura = nova;
       confirmacoes = (Array.isArray(r.dados.confirmacoes) ? r.dados.confirmacoes : []).map((c) => String(c)).filter((c) => c.trim().length > 3).slice(0, 4);
@@ -313,7 +325,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
-    lerEstadoReal(db, clientId).catch(() => null),
+    lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
   ]);
   const n = nomes(perfil);
   const fatos = fatosDoAgente({
@@ -352,6 +364,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       }
       : null,
     ritual_erro: ritualErro,
+    ia_erro: iaErro,
   });
 }
 

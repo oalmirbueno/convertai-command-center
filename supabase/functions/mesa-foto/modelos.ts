@@ -86,6 +86,8 @@ import {
   type UsoDeReferencia,
   VISTAS_DA_PERSONA,
 } from "./personas.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export const REF_MODELO = "foto_modelo";
 /** referencia_tipo de ia_usos da sugestão pelo brief (o id é o do cliente: a persona ainda não existe). */
@@ -724,7 +726,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     // Persona marcada na imagem (tags persona:<id>): a identidade vai junto quando o alvo é pessoa.
     const personaId = (origem.tags ?? []).map((t) => t.match(/^persona:([0-9a-f-]{36})$/i)?.[1]).find(Boolean) ?? null;
     let persona: LinhaPersona | null = null;
-    if (alvo === "pessoa" && personaId) persona = await lerPersona(personaId).catch(() => null);
+    if (alvo === "pessoa" && personaId) persona = await lerPersona(personaId).catch((e) => (registrarFalha("mesa-foto: lerPersona falhou", e), null));
     if (persona?.client_id && persona.client_id !== clientId) persona = null;
     const ident = persona ? await identidadesParaDetalhe(persona, "", limite - 1) : { imagens: [], ids: [] };
     const prompt = promptDoDetalhe({ alvo, nome: persona?.nome ?? null, ficha: persona?.ficha ?? null, invariantes: persona?.invariantes ?? [], comIdentidade: ident.imagens.length });
@@ -825,7 +827,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
     const img = await imagemDaPersona(p.id, idDe(corpo.imagem_id, "imagem_id"));
     const pagador = await clienteQuePaga(ch, p, corpo.client_id);
     let ancora: LinhaImagemPersona | null = null;
-    if (p.ancora_imagem_id && p.ancora_imagem_id !== img.id) ancora = await imagemDaPersona(p.id, p.ancora_imagem_id).catch(() => null);
+    if (p.ancora_imagem_id && p.ancora_imagem_id !== img.id) ancora = await imagemDaPersona(p.id, p.ancora_imagem_id).catch((e) => (registrarFalha("mesa-foto: imagemDaPersona falhou", e), null));
     const [gerada, ...outras] = await Promise.all([
       f.baixarReduzida(img.storage_bucket, img.storage_path, 1280, "gerada"),
       ...(ancora ? [f.baixarReduzida(ancora.storage_bucket, ancora.storage_path, 1024, "ancora")] : []),
@@ -882,6 +884,8 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
         identidade_diferente: perguntas.identidade_diferente ? probabilidadeNoul(res.answers.identidade_diferente) : null,
       };
     } catch (e) {
+      // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+      console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
       erroJev = e instanceof JevErro ? e.codigo : "jev_indisponivel";
     }
     const composto = alertasDoRealismo(notas, leitura);

@@ -24,6 +24,8 @@
 import type { BlocoTexto, CardDirecao, PapelBloco, ZonaTexto } from "../_shared/direcao-arte.ts";
 import { blocoDoMiolo, type EscolhaDoMiolo, ehMioloDesenhado, escolhaSolta } from "./miolo-rico.ts";
 import type { PerguntaJev, ResultadoJev } from "../_shared/jev.ts";
+// Frente FS (29/09): o que falha aqui continua opcional (a lâmina segue), mas fica no log com o motivo.
+import { nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
 import {
   blocosDecorativos,
   candidatosDoTermo,
@@ -84,7 +86,7 @@ export async function termoDecorativoDaLamina(
     const base = { candidatos, palavra_da_referencia: palavra };
     if (candidatos.length < 2) return { termo: padrao, origem: "copy", ...base };
     const caminho = caminhoDoTermo(deps.pasta, copy, palavra || "");
-    const guardado = await deps.lerGuardado(caminho).catch(() => null);
+    const guardado = await deps.lerGuardado(caminho).catch(nuloComLog("estudio-arte: termo decorativo guardado não lido", { caminho }));
     if (guardado && guardado.versao === VERSAO_DO_TERMO && typeof guardado.termo === "string" && candidatos.indexOf(guardado.termo) >= 0) {
       return { termo: guardado.termo, origem: "guardado", ...base };
     }
@@ -94,15 +96,17 @@ export async function termoDecorativoDaLamina(
         estadoDoTermo({ blocos, textoExato: copy, funcao: e.card.funcao, ordem: e.card.ordem, total: e.total, conceito: e.conceito, palavraDaReferencia: palavra }),
         perguntaDoTermo(candidatos),
       );
-    } catch {
+    } catch (err) {
+      registrarFalha("estudio-arte: jev do termo decorativo falhou (vale o termo da copy)", err, { ordem: e.card.ordem });
       return { termo: padrao, origem: "copy", ...base };
     }
     await deps.cobrarJev(res).catch(() => null);
     const d = decidirTermo(res.answers, candidatos, padrao);
     if (!d.termo) return null;
-    await deps.guardar(caminho, { versao: VERSAO_DO_TERMO, em: new Date().toISOString(), termo: d.termo, origem: d.origem, candidatos }).catch(() => null);
+    await deps.guardar(caminho, { versao: VERSAO_DO_TERMO, em: new Date().toISOString(), termo: d.termo, origem: d.origem, candidatos }).catch(nuloComLog("estudio-arte: termo decorativo não guardado", { caminho }));
     return { termo: d.termo, origem: d.origem, ...base };
-  } catch {
+  } catch (err) {
+    registrarFalha("estudio-arte: termo decorativo falhou (texto decorativo da referência fica)", err, { ordem: e.card.ordem });
     return null;
   }
 }
@@ -218,15 +222,17 @@ export async function enxugarMiolo<C extends Pick<CardDirecao, "ordem" | "funcao
   cards: C[],
   conceito: string | null | undefined,
   escrever: (sistema: string, pedido: string) => Promise<{ json: unknown; custoUsd: number }>,
-): Promise<{ cards: C[]; mudou: number[]; longas: number[]; custoUsd: number }> {
+): Promise<{ cards: C[]; mudou: number[]; longas: number[]; custoUsd: number; erro?: string }> {
   const longas = cards.filter((c) => passaDoLimite(c, cards.length)).map((c) => c.ordem);
   if (!longas.length) return { cards, mudou: [], longas, custoUsd: 0 };
   try {
     const r = await escrever(INSTRUCOES_MIOLO_ENXUTO, pedidoDoMioloEnxuto(cards, conceito, longas));
     const aplicado = aplicarMioloEnxuto(cards, r.json, longas);
     return { ...aplicado, longas, custoUsd: Number(r.custoUsd) || 0 };
-  } catch {
-    return { cards, mudou: [], longas, custoUsd: 0 };
+  } catch (e) {
+    // Frente FS: o motivo volta (erro) para a direção avisar a equipe que o miolo ficou longo.
+    const erro = registrarFalha("estudio-arte: miolo não enxuto", e, { longas });
+    return { cards, mudou: [], longas, custoUsd: 0, erro };
   }
 }
 

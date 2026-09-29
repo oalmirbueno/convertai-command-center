@@ -488,6 +488,10 @@ import {
   sugestaoDeDividirEmDuas,
 } from "./texto-da-lamina.ts";
 import { aplicarPosicao, blocoDoArranjoDividido, planoDePosicoes, posicaoGravada, zonaExtraDoTexto } from "./posicao-na-serie.ts";
+// Frente FS (29/09): nenhuma falha termina em silêncio (log com motivo; saldo, cota e chave sobem; aviso onde muda o resultado).
+import { erroQueSobe, nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
+import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
+import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -712,7 +716,7 @@ async function comCopiaLeve(
   if (r && r.cabe) return r;
   // Sem cópia ao lado: original caro de abrir aqui (cabe: false) ou acima de 20 MB (null, a copias-leves aceita até 30 MB).
   if (!(await pedirCopiaLeve(bucket, caminho))) return r;
-  const deNovo = await comACopia().catch(() => null);
+  const deNovo = await comACopia().catch(nuloComLog("estudio-arte: cópia leve não abriu", { bucket, caminho }));
   return deNovo && deNovo.cabe ? deNovo : r;
 }
 
@@ -1085,8 +1089,10 @@ async function capaNaFila(t: Trabalho): Promise<boolean> {
       .in("status", ["fila", "rodando"])
       .in("etapa", ["fundo", "gerar"])
       .limit(1);
+    if (error) registrarFalha("estudio-arte: fila da capa não lida", error, { trabalho_id: t.id });
     return !error && Array.isArray(data) && data.length > 0;
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: fila da capa não lida", e, { trabalho_id: t.id });
     return false;
   }
 }
@@ -1312,7 +1318,8 @@ async function baixarLogo(clientId: string, kit: Kit, alternativa = false): Prom
   try {
     const limpa = await logoLimpa(bruta.bytes, { aparar: true });
     return limpa === bruta.bytes ? bruta : { bytes: limpa, mime: "image/png", nome: alternativa ? "logo-alternativa.png" : "logo-oficial.png" };
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: logo não limpa (vai a original)", e, { client_id: clientId });
     return bruta;
   }
 }
@@ -1369,12 +1376,13 @@ async function baixarLogoBruta(clientId: string, kit: Kit, alternativa = false):
   if (!onde) return null;
   try {
     return await baixarLogoReduzida(onde.bucket, onde.caminho, nome);
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: logo escolhida não abriu", e, { client_id: clientId, caminho: onde.caminho });
     // Logo escolhida no bucket mesa sumiu: tenta o arquivo do kit.
     if (onde.bucket === "mesa" && (alternativa ? kit?.logo_alt_file_id : kit?.logo_file_id)) {
       const semMesa = { ...(kit as NonNullable<Kit>), [alternativa ? "logo_alt_path" : "logo_path"]: null } as Kit;
       const outro = await ondeEstaALogo(clientId, semMesa, alternativa);
-      if (outro) return await baixarLogoReduzida(outro.bucket, outro.caminho, nome).catch(() => null);
+      if (outro) return await baixarLogoReduzida(outro.bucket, outro.caminho, nome).catch(nuloComLog("estudio-arte: logo do kit não abriu", { client_id: clientId, caminho: outro.caminho }));
     }
     return null;
   }
@@ -1415,20 +1423,26 @@ type LogoDoKit = { id: "principal" | "alternativa"; imagem: ImagemEntrada; medid
  * medida (tom, claridade e proporção). Na marca por projeto o kit já é o da
  * marca aberta (lerKit com o trabalho).
  */
-async function logosDoKit(clientId: string, kit: Kit, pedida: EscolhaDaLogo = "auto"): Promise<LogoDoKit[]> {
+async function logosDoKit(clientId: string, kit: Kit, pedida: EscolhaDaLogo = "auto", avisos?: string[]): Promise<LogoDoKit[]> {
+  // Frente FS: a logo do kit que não abre fica no log e vira aviso (a lâmina sairia sem ela, em silêncio).
+  const falhaDaLogo = (e: unknown, qual: string): null => {
+    const motivo = registrarFalha("estudio-arte: logo do kit não abriu", e, { client_id: clientId, logo: qual });
+    avisos?.push(`A logo ${qual} do kit não abriu (${motivo}); a lâmina seguiu sem ela. Confira o arquivo no kit da marca.`);
+    return null;
+  };
   // Escolha explícita: só a pedida é baixada e medida (limite de CPU). "auto" baixa as duas para achar a que contrasta.
   const temAlternativa = !!(kit?.logo_alt_path || kit?.logo_alt_file_id);
   const querPrincipal = pedida !== "alternativa" || !temAlternativa;
   const querAlternativa = temAlternativa && pedida !== "principal";
   const [principal, alternativa] = await Promise.all([
-    querPrincipal ? baixarLogo(clientId, kit).catch(() => null) : Promise.resolve(null),
-    querAlternativa ? baixarLogo(clientId, kit, true).catch(() => null) : Promise.resolve(null),
+    querPrincipal ? baixarLogo(clientId, kit).catch((e) => falhaDaLogo(e, "principal")) : Promise.resolve(null),
+    querAlternativa ? baixarLogo(clientId, kit, true).catch((e) => falhaDaLogo(e, "alternativa")) : Promise.resolve(null),
   ]);
   const saida: LogoDoKit[] = [];
   for (const [id, imagem] of [["principal", principal], ["alternativa", alternativa]] as const) {
     if (!imagem) continue;
     // Anti-bug AB2: acima do teto (logo sem cópia possível) não abre aqui; sem medida, vai a transparente, como antes.
-    const medida = abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO) ? await analisarLogo(imagem.bytes).catch(() => null) : null;
+    const medida = abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO) ? await analisarLogo(imagem.bytes).catch(nuloComLog("estudio-arte: logo não medida (vai transparente)", { client_id: clientId, logo: id })) : null;
     saida.push({ id, imagem, medida });
   }
   // A pedida não abriu: fica a principal (melhor uma logo certa que nenhuma).
@@ -1475,12 +1489,14 @@ async function leituraGuardada(caminho: string): Promise<Record<string, unknown>
 
 async function guardarLeitura(caminho: string, valor: unknown): Promise<void> {
   try {
-    await servico().storage.from("mesa").upload(caminho, new Blob([JSON.stringify(valor)], { type: "application/json" }), {
+    const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([JSON.stringify(valor)], { type: "application/json" }), {
       contentType: "application/json",
       upsert: true,
     });
-  } catch {
-    // Sem o cache, a próxima geração lê de novo.
+    if (error) throw error;
+  } catch (e) {
+    // Sem o cache, a próxima geração lê de novo (e paga de novo): fica no log.
+    registrarFalha("estudio-arte: leitura não guardada", e, { caminho });
   }
 }
 
@@ -1519,7 +1535,7 @@ Não invente letras que não estão na imagem. Escreva sem travessão.`;
  * símbolo), guardada pelo hash da logo: logo trocada no kit é lida de novo.
  * Recebe a logo já achatada no fundo de contraste (o branco aparece).
  */
-async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatada: Uint8Array | null }, nomeDaMarca: string, criadoPor: string): Promise<LeituraDaLogo | null> {
+async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatada: Uint8Array | null }, nomeDaMarca: string, criadoPor: string, avisos?: string[]): Promise<LeituraDaLogo | null> {
   const hash = (await sha256Hex(logo.imagem.bytes)).slice(0, 24);
   const caminho = `${pastaDasLeituras(t.client_id)}/logo-${hash}.json`;
   const guardada = await leituraGuardada(caminho);
@@ -1545,7 +1561,11 @@ async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatad
     const l = (r.json ?? {}) as Record<string, unknown>;
     await guardarLeitura(caminho, { versao: 1, lido_em: new Date().toISOString(), leitura: l });
     return normalizarLeituraDaLogo(l);
-  } catch {
+  } catch (e) {
+    // Frente FS: saldo, cota e chave sobem (o gerador cairia no mesmo erro); o resto fica no log e vira aviso.
+    if (erroQueSobe(e)) throw e;
+    const motivo = registrarFalha("estudio-arte: leitura da logo falhou", e, { trabalho_id: t.id });
+    avisos?.push(`A logo não pôde ser lida (${motivo}): a arte saiu sem o texto exato da logo na legenda. Confira a logo.`);
     return null;
   }
 }
@@ -1555,7 +1575,7 @@ async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatad
  * ESQUEMA_MOLDE em direcao-arte.ts), guardado por referência. O banco global
  * (prefixo g:) é guardado na pasta do cliente que usou.
  */
-async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string): Promise<MoldeDaReferencia | null> {
+async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string, avisos?: string[]): Promise<MoldeDaReferencia | null> {
   const caminho = `${pastaDasLeituras(t.client_id)}/molde-${ref.id.replace(/[^0-9a-z-]/gi, "-")}.json`;
   const guardado = await leituraGuardada(caminho);
   if (guardado && guardado.versao === VERSAO_DO_MOLDE) return normalizarMolde(guardado.molde);
@@ -1576,7 +1596,11 @@ async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEnt
     const molde = normalizarMolde(r.json);
     if (molde) await guardarLeitura(caminho, { versao: VERSAO_DO_MOLDE, referencia_id: ref.id, lido_em: new Date().toISOString(), molde });
     return molde;
-  } catch {
+  } catch (e) {
+    // Frente FS: saldo, cota e chave sobem; o resto fica no log e vira aviso (a arte segue a imagem, sem as medidas).
+    if (erroQueSobe(e)) throw e;
+    const motivo = registrarFalha("estudio-arte: molde da referência falhou", e, { trabalho_id: t.id, referencia_id: ref.id });
+    avisos?.push(`O layout da referência não foi medido (${motivo}): a arte seguiu a imagem da referência, sem as medidas do molde.`);
     return null;
   }
 }
@@ -1595,14 +1619,18 @@ type SerieDaReferencia = { ref: Referencia; imagem: ImagemEntrada; molde: MoldeD
  * virar o guia da identidade desta lâmina; sem nada só da capa ou com falha,
  * null (a lâmina replica como hoje).
  */
-async function serieDaReferenciaDaCapa(t: Trabalho, ref: Referencia, criadoPor: string): Promise<SerieDaReferencia | null> {
+async function serieDaReferenciaDaCapa(t: Trabalho, ref: Referencia, criadoPor: string, avisos?: string[]): Promise<SerieDaReferencia | null> {
   try {
     const imagem = await imagemDaReferencia(ref);
-    const molde = await moldeDaReferencia(t, ref, imagem, criadoPor);
+    const molde = await moldeDaReferencia(t, ref, imagem, criadoPor, avisos);
     if (!molde) return null;
     const separacao = await separarIdentidadeDaCapa({ refId: ref.id, molde }, depsDaAdaptacao(t, null, criadoPor));
     return separacao && temAlgoSoDaCapa(separacao) ? { ref, imagem, molde, separacao } : null;
-  } catch {
+  } catch (e) {
+    // Frente FS: saldo, cota e chave sobem; o resto fica no log e vira aviso (a lâmina replica a referência como antes).
+    if (erroQueSobe(e)) throw e;
+    const motivo = registrarFalha("estudio-arte: série da referência da capa falhou", e, { trabalho_id: t.id, referencia_id: ref.id });
+    avisos?.push(`A separação do que é só da capa não saiu (${motivo}): esta lâmina seguiu a referência do conjunto inteira.`);
     return null;
   }
 }
@@ -1612,7 +1640,7 @@ async function serieDaReferenciaDaCapa(t: Trabalho, ref: Referencia, criadoPor: 
  * está guardado: a separação dessa referência (guardada ou uma chamada do Jev).
  * Sem molde guardado, a capa sem referência ou falha: null (vale o bloco geral).
  */
-async function separacaoDaCapaGerada(t: Trabalho, capa: VersaoCard, criadoPor: string): Promise<{ refId: string; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie } | null> {
+async function separacaoDaCapaGerada(t: Trabalho, capa: VersaoCard, criadoPor: string, avisos?: string[]): Promise<{ refId: string; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie } | null> {
   try {
     const daCapa = referenciaDaCapaGerada(capa);
     if (!daCapa) return null;
@@ -1621,7 +1649,11 @@ async function separacaoDaCapaGerada(t: Trabalho, capa: VersaoCard, criadoPor: s
     if (!molde) return null;
     const separacao = await separarIdentidadeDaCapa({ refId: daCapa.moldeId, molde }, depsDaAdaptacao(t, null, criadoPor));
     return separacao ? { refId: daCapa.moldeId, molde, separacao } : null;
-  } catch {
+  } catch (e) {
+    // Frente FS: saldo, cota e chave sobem; o resto fica no log e vira aviso (vale o bloco geral da série).
+    if (erroQueSobe(e)) throw e;
+    const motivo = registrarFalha("estudio-arte: separação da capa gerada falhou", e, { trabalho_id: t.id });
+    avisos?.push(`A separação do que é só da capa não saiu (${motivo}): esta lâmina seguiu a capa pela regra geral da série.`);
     return null;
   }
 }
@@ -1680,7 +1712,7 @@ function depsDaAdaptacao(t: Trabalho, imagem: ImagemEntrada | null, criadoPor: s
 /** Contexto da lâmina para o julgamento e a cena: copy, roteiro do item, ideia do diretor e o negócio do cliente. */
 async function contextoDaAdaptacao(t: Trabalho, card: CardDirecao, total: number, nomeCliente: string): Promise<ContextoDaLamina> {
   const [ctx, tarefa] = await Promise.all([
-    lerContextoConsolidado(servico(), t.client_id).catch(() => ({} as Awaited<ReturnType<typeof lerContextoConsolidado>>)),
+    lerContextoConsolidado(servico(), t.client_id).catch((e) => (registrarFalha("estudio-arte: contexto do cliente não lido (adaptação)", e, { trabalho_id: t.id }), {} as Awaited<ReturnType<typeof lerContextoConsolidado>>)),
     t.task_id && UUID.test(t.task_id)
       ? servico().from("tasks").select("title, description").eq("id", t.task_id).maybeSingle().then((r) => r.data as { title: string | null; description: string | null } | null, () => null)
       : Promise.resolve(null),
@@ -1743,7 +1775,7 @@ async function fotosDoRostoEscolhido(t: Trabalho, rosto: RostoEscolhido): Promis
   // Frente R2: fotos de qualquer pasta ou de um clone, cada uma conferida agora (a que não vale fica de fora).
   if (rosto.fonte === "escolhidas") {
     const casa = casaUmaVez();
-    const locais = await Promise.all((rosto.itens ?? []).slice(0, MAX_FOTOS_ESCOLHIDAS).map((i) => localDoItemEscolhido(t, i, casa).catch(() => null)));
+    const locais = await Promise.all((rosto.itens ?? []).slice(0, MAX_FOTOS_ESCOLHIDAS).map((i) => localDoItemEscolhido(t, i, casa).catch(nuloComLog("estudio-arte: foto escolhida do rosto não conferida", { trabalho_id: t.id }))));
     return locais.filter((l): l is FotoDoRosto => !!l).map((l, i) => ({ bucket: l.bucket, caminho: l.caminho, nome: `rosto-${i + 1}` }));
   }
   if (rosto.fonte === "fotos") return (rosto.fotos ?? []).slice(0, MAX_FOTOS_DO_ROSTO).map((c, i) => ({ bucket: "mesa", caminho: c, nome: `rosto-${i + 1}` }));
@@ -1772,10 +1804,10 @@ async function fotosDoRostoEscolhido(t: Trabalho, rosto: RostoEscolhido): Promis
 /** rostos { trabalho_id }: os rostos que a tela pode escolher (do cliente e da casa), sem custo. */
 async function rostosDisponiveis(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
-  const casa = await clientesDaCasa().catch(() => [] as string[]);
+  const casa = await clientesDaCasa().catch((e) => (registrarFalha("estudio-arte: clientes da casa não lidos", e), [] as string[]));
   const [doCliente, daCasa] = await Promise.all([
-    rostosDosClientes([t.client_id]).catch(() => []),
-    rostosDosClientes(casa.filter((id) => id !== t.client_id)).catch(() => []),
+    rostosDosClientes([t.client_id]).catch((e) => (registrarFalha("estudio-arte: rostos do cliente não lidos", e, { trabalho_id: t.id }), [])),
+    rostosDosClientes(casa.filter((id) => id !== t.client_id)).catch((e) => (registrarFalha("estudio-arte: rostos da casa não lidos", e, { trabalho_id: t.id }), [])),
   ]);
   // Miniatura própria (<caminho>.mini.jpg) quando existe, senão o original; nunca a transformação do Storage.
   const comUrl = async (l: { id: string; nome: string; bucket: string; caminho: string }[]) =>
@@ -1797,7 +1829,7 @@ async function rostosDisponiveis(ch: Chamador, corpo: Record<string, unknown>) {
 /** Os clientes da casa lidos uma vez só por chamada. */
 function casaUmaVez(): () => Promise<string[]> {
   let p: Promise<string[]> | null = null;
-  return () => (p = p || clientesDaCasa().catch(() => [] as string[]));
+  return () => (p = p || clientesDaCasa().catch((e) => (registrarFalha("estudio-arte: clientes da casa não lidos", e), [] as string[])));
 }
 
 type CloneDoRosto = {
@@ -1953,14 +1985,14 @@ async function fotosParaORosto(ch: Chamador, corpo: Record<string, unknown>) {
   const r = lerRostoDoTrabalho(t.direcao, t.client_id);
   const casa = casaUmaVez();
   const itens = r && r.fonte === "escolhidas" ? r.itens ?? [] : [];
-  const locais = await Promise.all(itens.map((i) => localDoItemEscolhido(t, i, casa).catch(() => null)));
+  const locais = await Promise.all(itens.map((i) => localDoItemEscolhido(t, i, casa).catch(nuloComLog("estudio-arte: foto escolhida do rosto não conferida", { trabalho_id: t.id }))));
   const urls = await urlsDasMiniaturas(locais.filter((l): l is FotoDoRosto => !!l));
   let k = 0;
   const escolhidas = itens.map((id, i) => ({ id, disponivel: !!locais[i], nome: locais[i] ? locais[i]!.nome : null, url: locais[i] ? urls[k++] : null }));
   if (corpo.parte === "escolhidas") return json({ escolhidas, custo_usd: 0 });
   const [leituras, clones] = await Promise.all([
     leiturasDePessoasGuardadas(t.client_id),
-    casa().then((c) => clonesParaORosto(t, c)).catch(() => []),
+    casa().then((c) => clonesParaORosto(t, c)).catch((e) => (registrarFalha("estudio-arte: clones para o rosto não lidos", e, { trabalho_id: t.id }), [])),
   ]);
   return json({ escolhidas, leituras, clones, custo_usd: 0 });
 }
@@ -1983,7 +2015,7 @@ async function marcarPessoasNasFotos(ch: Chamador, corpo: Record<string, unknown
   const faltam = pedidos.filter((id) => !guardadas[id]);
   if (!faltam.length) return json({ leituras: guardadas, lidas: 0, custo_usd: 0 });
   const casa = casaUmaVez();
-  const locais = await Promise.all(faltam.map((id) => localDoItemEscolhido(t, id, casa).catch(() => null)));
+  const locais = await Promise.all(faltam.map((id) => localDoItemEscolhido(t, id, casa).catch(nuloComLog("estudio-arte: foto escolhida do rosto não conferida", { trabalho_id: t.id }))));
   const imagens = await Promise.all(locais.map(async (l, i) => {
     if (!l) return null;
     try {
@@ -1991,7 +2023,8 @@ async function marcarPessoasNasFotos(ch: Chamador, corpo: Record<string, unknown
       // (640 px) que a copias-leves grava. Nunca o original grande: a foto que não coube fica sem leitura.
       const red = await reduzidaSemTransformacao(servico(), l.bucket, l.caminho, 768, 768, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM, pedirCopia: true, maxPixels: MAX_PIXELS_LEITURA_EM_LOTE });
       return red && red.cabe ? { bytes: red.bytes, mime: red.mime, nome: `foto-${i + 1}.${extensaoDe(red.mime)}` } as ImagemEntrada : null;
-    } catch {
+    } catch (e) {
+      registrarFalha("estudio-arte: foto do rosto não reduzida para a leitura", e, { trabalho_id: t.id, caminho: l.caminho });
       return null;
     }
   }));
@@ -2047,7 +2080,7 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
     const [arteReduzida, ...fotos] = await Promise.all([
       reduzidaSemTransformacao(servico(), "mesa", alvo.storage_path, 1280, 1600, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM }),
       ...usadas.slice(0, 2).map((f) =>
-        comCopiaLeve(f.bucket, f.caminho, async () => await reduzidaSemTransformacao(servico(), f.bucket, f.caminho, 1024, 1024, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM })).catch(() => null)
+        comCopiaLeve(f.bucket, f.caminho, async () => await reduzidaSemTransformacao(servico(), f.bucket, f.caminho, 1024, 1024, { folga: 1.1, maxBytes: MAX_BYTES_IMAGEM })).catch(nuloComLog("estudio-arte: foto real da conferência do rosto não abriu", { trabalho_id: t.id, caminho: f.caminho }))
       ),
     ]);
     const arte = arteReduzida && arteReduzida.cabe ? arteReduzida : null;
@@ -2086,6 +2119,7 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
         outra = probabilidadeNoul(res.answers.outra_pessoa);
       } catch (e) {
         erroJev = e instanceof JevErro ? e.codigo : "jev_indisponivel";
+        registrarFalha("estudio-arte: jev (conferência do rosto) falhou", e, { trabalho_id: t.id, ordem });
       }
     }
     const a = avisoDaConferencia({ pessoaNaArte, outraPessoa: outra });
@@ -2101,6 +2135,7 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
   } catch (e) {
     // Saldo, cota e chave voltam como erro da chamada; o resto vira "indisponível" (só aviso).
     if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
+    registrarFalha("estudio-arte: conferência do rosto falhou", e, { trabalho_id: t.id, ordem });
     conferencia = { outra_pessoa: null, aviso: false, resumo: avisoDaConferencia({ pessoaNaArte: null, outraPessoa: null }).texto, conferida_em: new Date().toISOString(), custo_usd: 0, erro: codigoMotor(e) };
   }
   const custo = conferencia.custo_usd;
@@ -2129,7 +2164,7 @@ function registroDoRosto(r: RostoEscolhido, usadas: { bucket: string; caminho: s
  * Lâmina normal (frente R2): a direção pede uma pessoa? Noul do Jev sobre a
  * direção da lâmina. Falha: null (a lâmina segue como hoje, sem rosto).
  */
-async function direcaoPedePessoa(t: Trabalho, card: CardDirecao, rosto: RostoEscolhido, criadoPor: string): Promise<number | null> {
+async function direcaoPedePessoa(t: Trabalho, card: CardDirecao, rosto: RostoEscolhido, criadoPor: string, avisos?: string[]): Promise<number | null> {
   try {
     const layout = (card.layout ?? {}) as Record<string, unknown>;
     const res = await jevPerguntar({
@@ -2148,7 +2183,10 @@ async function direcaoPedePessoa(t: Trabalho, card: CardDirecao, rosto: RostoEsc
     });
     await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }).catch(() => null);
     return probabilidadeNoul(res.answers.pede_pessoa);
-  } catch {
+  } catch (e) {
+    // Frente FS: o Jev fora do ar tira o rosto escolhido desta lâmina; fica no log e vira aviso.
+    const motivo = registrarFalha("estudio-arte: jev (pede pessoa) falhou", e, { trabalho_id: t.id, ordem: card.ordem });
+    avisos?.push(`O Jev não respondeu se esta lâmina pede pessoa (${motivo}): a arte saiu sem o rosto escolhido.`);
     return null;
   }
 }
@@ -2172,28 +2210,27 @@ async function pranchaGuardada(clientId: string, refId: string): Promise<Leitura
   return normalizarPrancha(g.leitura);
 }
 
-/** Lê por visão se a referência é uma prancha (uma vez, guardada). Falha: null (a referência segue simples). */
-async function lerPrancha(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string): Promise<LeituraDaPrancha | null> {
-  try {
-    const leitor = await modeloDoPapel("leitura");
-    const r = await chamarTexto({
-      clientId: t.client_id,
-      tarefa: "leitura_referencia",
-      agente: "leitor",
-      modeloId: leitor.id,
-      sistema: SISTEMA_PRANCHA,
-      mensagens: [{ papel: "usuario", conteudo: "Esta imagem é uma arte só ou uma prancha com várias artes? Se for prancha, marque cada quadro.", imagens: [imagem] }],
-      esquemaJson: ESQUEMA_PRANCHA,
-      maxTokensSaida: 3_000,
-      referencia: { tipo: "estudio_trabalho", id: t.id },
-      criadoPor,
-    });
-    const bruto = (r.json ?? {}) as Record<string, unknown>;
-    await guardarLeitura(caminhoDaPrancha(t.client_id, ref.id), { versao: VERSAO_DA_PRANCHA, referencia_id: ref.id, lido_em: new Date().toISOString(), leitura: bruto });
-    return normalizarPrancha(bruto);
-  } catch {
-    return null;
-  }
+/**
+ * Lê por visão se a referência é uma prancha (uma vez, guardada). Frente FS: não engole mais nada; quem
+ * chama passa por lerPranchaComMotivo (saldo, cota e chave sobem; o resto volta com motivo e aviso).
+ */
+async function lerPrancha(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string): Promise<LeituraDaPrancha> {
+  const leitor = await modeloDoPapel("leitura");
+  const r = await chamarTexto({
+    clientId: t.client_id,
+    tarefa: "leitura_referencia",
+    agente: "leitor",
+    modeloId: leitor.id,
+    sistema: SISTEMA_PRANCHA,
+    mensagens: [{ papel: "usuario", conteudo: "Esta imagem é uma arte só ou uma prancha com várias artes? Se for prancha, marque cada quadro.", imagens: [imagem] }],
+    esquemaJson: ESQUEMA_PRANCHA,
+    maxTokensSaida: 3_000,
+    referencia: { tipo: "estudio_trabalho", id: t.id },
+    criadoPor,
+  });
+  const bruto = (r.json ?? {}) as Record<string, unknown>;
+  await guardarLeitura(caminhoDaPrancha(t.client_id, ref.id), { versao: VERSAO_DA_PRANCHA, referencia_id: ref.id, lido_em: new Date().toISOString(), leitura: bruto });
+  return normalizarPrancha(bruto);
 }
 
 /** Os ajustes de prancha do trabalho com o de uma referência trocado (null tira), no máximo 12 referências. */
@@ -2216,9 +2253,16 @@ const papeisDoTrabalho = (t: Trabalho, refId: string): PapelDoQuadro[] | null =>
 type QuadroNaLamina = { leitura: LeituraDaPrancha; quadro: ReturnType<typeof quadroDaLamina> };
 
 /** As referências prancha (já lidas) e o quadro de cada uma para esta lâmina; as simples não entram no mapa. */
-async function quadrosDasPranchas(t: Trabalho, refs: Referencia[], ordem: number, versoesAntes: number): Promise<Map<string, QuadroNaLamina>> {
+async function quadrosDasPranchas(t: Trabalho, refs: Referencia[], ordem: number, versoesAntes: number, avisos?: string[]): Promise<Map<string, QuadroNaLamina>> {
   const mapa = new Map<string, QuadroNaLamina>();
-  const lidas = await Promise.all(refs.map((r) => pranchaGuardada(t.client_id, r.id).catch(() => null)));
+  // Frente FS: a leitura guardada que não abre fica no log e vira aviso (a lâmina usa a imagem inteira).
+  const lidas = await Promise.all(refs.map((r) =>
+    pranchaGuardada(t.client_id, r.id).catch((e) => {
+      const motivo = registrarFalha("estudio-arte: prancha guardada não abriu", e, { trabalho_id: t.id, referencia_id: r.id });
+      avisos?.push(`A leitura da prancha não abriu (${motivo}): a lâmina usou a imagem inteira da referência.`);
+      return null;
+    })
+  ));
   refs.forEach((r, i) => {
     const l = lidas[i];
     if (!l || !l.prancha) return;
@@ -2238,7 +2282,8 @@ async function recortarQuadro(imagem: ImagemEntrada, q: { x0: number; y0: number
     const r = retanguloDoQuadro(q, img.width, img.height);
     if (!r) return null;
     return { bytes: await img.crop(r.x, r.y, r.largura, r.altura).encode(1), mime: "image/png", nome: `${nomeSeguro(nome)}.png` };
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: quadro da prancha não recortado", e, { nome });
     return null;
   }
 }
@@ -2255,7 +2300,7 @@ async function sequenciaDaCapa(t: Trabalho, capa: VersaoCard, ordem: number): Pr
   if (!ref) return null;
   const q = (await quadrosDasPranchas(t, [ref], ordem, 0)).get(ref.id);
   if (!q || !q.quadro || q.quadro.papel !== "sequencia") return null;
-  const inteira = await imagemDaReferencia(ref).catch(() => null);
+  const inteira = await imagemDaReferencia(ref).catch(nuloComLog("estudio-arte: referência da sequência não abriu", { trabalho_id: t.id, referencia_id: ref.id }));
   const recorte = inteira ? await recortarQuadro(inteira, q.leitura.quadros[q.quadro.indice], `sequencia-${ordem}`) : null;
   return recorte ? { imagem: recorte, nota: notaDoQuadro(q.quadro, q.leitura.tipo) } : null;
 }
@@ -2277,17 +2322,26 @@ async function pranchaDaReferencia(ch: Chamador, corpo: Record<string, unknown>)
   let url: string | null = null;
   let leuAgora = false;
   const forcar = corpo.forcar === true;
+  // Frente FS (29/09): antes a imagem que não abria e a leitura que falhava viravam "arte só" em silêncio,
+  // até com saldo ou cota no fim. Agora saldo, cota e chave sobem como erro; arquivo quebrado é pulado
+  // antes de gastar; a falha do provedor volta como aviso com o motivo (falhou, motivo, aviso_da_acao).
+  let falha: FalhaDaPrancha | null = null;
+  const log = { trabalho_id: t.id, referencia_id: ref.id };
   if (!leitura || leitura.prancha || forcar) {
-    const imagem = await imagemDaReferencia(ref).catch(() => null);
+    // Leitura já guardada e o arquivo quebrado depois: não lê, mas avisa igual (a arte também não abre o arquivo).
+    const aberta = await abrirImagemDaPrancha(() => imagemDaReferenciaCrua(ref), log);
+    const imagem = aberta.imagem;
+    if (aberta.falha) falha = aberta.falha;
     dimensoes = imagem ? dimensoesDoCabecalho(imagem.bytes) : null;
     // Sem leitura: lê quando não tem cara de arte única. Com `forcar`, lê de novo (a equipe pediu).
     if (imagem && (forcar || (!leitura && !pareceArteUnica(dimensoes)))) {
-      const nova = await lerPrancha(t, ref, imagem, ch.userId);
-      leuAgora = !!nova;
-      if (nova) leitura = nova;
+      const lida = await lerPranchaComMotivo(() => lerPrancha(t, ref, imagem, ch.userId), log);
+      leuAgora = !!lida.leitura;
+      if (lida.leitura) leitura = lida.leitura;
+      if (lida.falha) falha = lida.falha;
     }
   }
-  if (leitura && leitura.prancha && ref.storage_path) url = await urlAssinada(ref.storage_path).catch(() => null);
+  if (leitura && leitura.prancha && ref.storage_path) url = await urlAssinada(ref.storage_path).catch(nuloComLog("estudio-arte: url da prancha não assinada", log));
   const papeis = papeisDoTrabalho(t, ref.id);
   return json({
     referencia_id: ref.id,
@@ -2298,6 +2352,7 @@ async function pranchaDaReferencia(ch: Chamador, corpo: Record<string, unknown>)
     parece_arte_unica: dimensoes ? pareceArteUnica(dimensoes) : null,
     dimensoes,
     url,
+    ...camposDaFalhaDaPrancha(falha),
   });
 }
 
@@ -2325,7 +2380,8 @@ async function variedadeDaCapa(
       .order("atualizado_em", { ascending: false })
       .limit(15);
     trabalhos = (data as { cards?: unknown }[] | null) ?? [];
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: histórico das capas não lido (variedade sem histórico)", e, { trabalho_id: t.id });
     trabalhos = [];
   }
   const historico = capasNoHistorico(trabalhos, refId);
@@ -2358,10 +2414,10 @@ async function variedadeDaCapa(
  * liso de contraste (a parte branca aparece) e a legenda com o texto exato
  * dela. Sem medida (a logo não abriu na análise), vai a transparente.
  */
-async function anexoDaLogo(t: Trabalho, logo: LogoDoKit, nomeDaMarca: string, criadoPor: string): Promise<{ imagem: ImagemEntrada; legenda: string; descricao: string | null; leitura: LeituraDaLogo | null }> {
+async function anexoDaLogo(t: Trabalho, logo: LogoDoKit, nomeDaMarca: string, criadoPor: string, avisos?: string[]): Promise<{ imagem: ImagemEntrada; legenda: string; descricao: string | null; leitura: LeituraDaLogo | null }> {
   const clara = logo.medida ? logo.medida.clara : null;
-  const achatada = clara === null ? null : await logoSobreContraste(logo.imagem.bytes, clara).catch(() => null);
-  const leitura = await leituraDaLogo(t, { imagem: logo.imagem, achatada }, nomeDaMarca, criadoPor);
+  const achatada = clara === null ? null : await logoSobreContraste(logo.imagem.bytes, clara).catch(nuloComLog("estudio-arte: logo não achatada no fundo de contraste", { trabalho_id: t.id }));
+  const leitura = await leituraDaLogo(t, { imagem: logo.imagem, achatada }, nomeDaMarca, criadoPor, avisos);
   return {
     imagem: achatada ? { bytes: achatada, mime: "image/png", nome: "logo-oficial.png" } : logo.imagem,
     legenda: legendaDaLogo({ clara, texto: leitura?.texto || null, comFundo: !!achatada }),
@@ -2401,6 +2457,19 @@ type Referencia = {
  * vira a cópia de 2048 px (anexo, molde e quadro da prancha abrem a cópia).
  */
 async function imagemDaReferencia(ref: Referencia): Promise<ImagemEntrada> {
+  // Frente FS (29/09): arquivo quebrado (PNG ou JPEG cortado, vazio) é pego antes de ir ao gerador ou ao
+  // leitor: o provedor recusava o pedido INTEIRO. Erro com motivo; quem usa a referência como opcional avisa.
+  const imagem = await imagemDaReferenciaCrua(ref);
+  const defeito = defeitoDaImagem(imagem.bytes);
+  if (defeito) {
+    console.error("estudio-arte: referência com arquivo quebrado", { referencia_id: ref.id, defeito, bytes: imagem.bytes.byteLength });
+    throw new ErroEstudio(422, "referencia_quebrada", `A imagem desta referência está com defeito: ${MOTIVOS_DO_ARQUIVO[defeito] ?? defeito}. Troque o arquivo da referência.`, { referencia_id: ref.id, defeito });
+  }
+  return imagem;
+}
+
+/** Bytes da referência sem conferir o arquivo (a prancha confere com o motivo dela). */
+async function imagemDaReferenciaCrua(ref: Referencia): Promise<ImagemEntrada> {
   if (ref.storage_path) return await anexoLeve("mesa", ref.storage_path, `referencia-${ref.id.slice(0, 8)}`);
   if (ref.workspace_node_id) {
     const { data } = await servico()
@@ -2474,7 +2543,8 @@ async function preferenciasDaArte(clientId: string, memoria?: { tipo: string; te
       titulo: "REGRAS DA MARCA APRENDIDAS COM ESTE CLIENTE (pedidos de ajuste da equipe e reprovações do cliente; valem como regra da marca, acima do padrão de design e abaixo do texto exato, da paleta e da logo)",
     });
     if (r.texto) return r.texto;
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: cérebro do cliente não lido (vale a memória do diretor)", e, { client_id: clientId });
     // cérebro fora do ar: a memória do diretor abaixo
   }
   return blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));
@@ -2496,7 +2566,7 @@ async function cerebroEDossieDoDiretor(
   tipo?: string | null,
 ): Promise<{ texto: string; usouCerebro: boolean }> {
   // Frente AP (27/09): o que funcionou nas entregas deste cliente, no fim (vazio sem entrega).
-  const entregasP = blocoParaODiretor(clientId, tipo).catch(() => "");
+  const entregasP = blocoParaODiretor(clientId, tipo).catch((e) => (registrarFalha("estudio-arte: padrões das entregas não lidos", e, { client_id: clientId }), ""));
   const comEntregas = async (texto: string) => [texto, await entregasP].filter(Boolean).join("\n\n");
   try {
     const r = await contextoParaAgente(servico(), clientId, "arte", {
@@ -2509,8 +2579,9 @@ async function cerebroEDossieDoDiretor(
     const regras = blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));
     const dossie = r.dossie ? `DOSSIÊ ATUAL DO CLIENTE (fatos do painel; vazio não quer dizer que não existe)\n${r.dossie}` : "";
     return { texto: await comEntregas([regras, dossie].filter(Boolean).join("\n\n")), usouCerebro: false };
-  } catch {
-    return { texto: await comEntregas(await preferenciasDaArte(clientId, memoria).catch(() => "")), usouCerebro: false };
+  } catch (e) {
+    registrarFalha("estudio-arte: cérebro e dossiê não lidos (vale a memória do diretor)", e, { client_id: clientId });
+    return { texto: await comEntregas(await preferenciasDaArte(clientId, memoria).catch((e2) => (registrarFalha("estudio-arte: regras do cliente não lidas", e2, { client_id: clientId }), ""))), usouCerebro: false };
   }
 }
 
@@ -3021,8 +3092,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   // Arte rápida: sem item, a marca vem da tela ou da direção gravada (direcao.marca_id).
   const alvoDaMarca: AlvoDaMarca = rapida ? { marca_id: corpo.marca_id, direcao: existente?.direcao } : { task_id: item.tarefa.id, marca_id: corpo.marca_id };
   const [, , kit, fontes, marcaDoItem] = await Promise.all([
-    sincronizarReferencias(db, clientId).catch(() => null),
-    sincronizarAcervo(db, clientId).catch(() => null),
+    sincronizarReferencias(db, clientId).catch(nuloComLog("estudio-arte: referências não sincronizadas", { client_id: clientId })),
+    sincronizarAcervo(db, clientId).catch(nuloComLog("estudio-arte: acervo não sincronizado", { client_id: clientId })),
     lerKit(clientId, alvoDaMarca),
     lerFontes(clientId, alvoDaMarca),
     marcaDe(clientId, alvoDaMarca),
@@ -3106,7 +3177,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         .order("created_at", { ascending: false })
         .limit(15),
       // Frente H: regras aprendidas (cérebro) e dossiê atual do cliente, numa leitura só.
-      cerebroEDossieDoDiretor(clientId).catch(() => ({ texto: "", usouCerebro: false })),
+      cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),
     ]);
     const contexto = {
       item: {
@@ -3236,6 +3307,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     });
     mioloLongo = enxuto.longas;
     mioloEnxuto = enxuto.mudou;
+    // Frente FS: o redator que falhou deixa o miolo longo; a equipe vê o aviso com o motivo (antes: só "0 enxutas").
+    if (enxuto.erro) avisosDoDiretor = [...avisosDoDiretor, `O texto das lâminas longas não foi enxuto agora (${enxuto.erro}): confira o tamanho antes de gerar.`];
     if (enxuto.mudou.length) {
       const n = enxuto.cards.length;
       direcao.cards = enxuto.cards.map((c) =>
@@ -3486,7 +3559,8 @@ async function imagensDoPedidoParaODiretor(a: ArteRapida, fotos: ImagemAcervo[])
       } else if (arq.caminho) {
         imagens.push(await anexoLeve("mesa", arq.caminho, arq.codigo));
       }
-    } catch {
+    } catch (e) {
+      registrarFalha("estudio-arte: arquivo do pedido não abriu para o diretor", e, { nome: arq.nome });
       avisos.push(`O diretor não conseguiu abrir ${arq.nome}: ele seguiu pelo texto.`);
     }
   }
@@ -3511,7 +3585,7 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
   if (!existente && !UUID.test(texto(corpo.marca_id, 64)) && (await marcasDoCliente(servico(), clientId)).length >= 2) {
     throw new ErroEstudio(400, "escolha_a_marca", "Este cliente tem mais de uma marca. Escolha a marca no topo da Mesa antes de criar a arte.");
   }
-  const marcaDoPedido = await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(() => null);
+  const marcaDoPedido = await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(nuloComLog("estudio-arte: marca do pedido não lida", { client_id: clientId }));
   const trabalhoId = existente?.id ?? crypto.randomUUID();
   const avisos: string[] = [];
   let custoJev = 0;
@@ -3626,7 +3700,7 @@ async function rapidaParaAgenda(ch: Chamador, corpo: Record<string, unknown>) {
   const data = texto(corpo.data, 10);
   if (!dataDaAgendaValida(data, hojeEmSaoPaulo())) throw new ErroEstudio(400, "data_invalida", "Escolha uma data de hoje em diante.");
   const pedidoId = texto(corpo.pedido_id, 80) || `${t.id}:${data}`;
-  const marca = await marcaDe(t.client_id, t).catch(() => null);
+  const marca = await marcaDe(t.client_id, t).catch(nuloComLog("estudio-arte: marca do trabalho não lida", { trabalho_id: t.id }));
   let criado;
   try {
     criado = await criarItemDaArteRapida(servico(), {
@@ -3846,6 +3920,7 @@ async function escolherReferencias(
     return comDestaque({ refs: escolhidas, jev: "ok" });
   } catch (e) {
     // Sem Jev, ao menos a arte publicada mais recente da marca vai junto.
+    registrarFalha("estudio-arte: escolha das referências pelo jev falhou", e, { trabalho_id: t.id });
     const identidade = await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     return comDestaque({ refs: identidade ? [identidade] : [], jev: codigoMotor(e) });
   }
@@ -3948,7 +4023,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     v.logo_presente = typeof l.logo_presente === "boolean" ? l.logo_presente : null;
     // Logo só é esperada quando a lâmina leva logo E o cliente tem o arquivo:
     // sem logo cadastrada, "logo faltando" era alarme falso (Mirante Luz, 23/09).
-    const esperaLogo = levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit).catch(() => null));
+    const esperaLogo = levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit).catch(nuloComLog("estudio-arte: logo da conferência não abriu", { trabalho_id: t.id })));
     v.logo_ok = v.logo_presente == null ? null : !esperaLogo && !v.logo_presente ? null : v.logo_presente === esperaLogo;
     const cmp = compararTexto(card.texto_exato, v.texto_lido);
     v.ortografia_ok = cmp.ortografia_ok;
@@ -3964,6 +4039,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   } catch (e) {
     // Saldo, cota e chave voltam como erro da chamada (402/403/503); o resto fica na verificacao.
     if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
+    registrarFalha("estudio-arte: leitura da conferência falhou", e, { trabalho_id: t.id });
     v.erro = `leitura: ${codigoMotor(e)}`;
     return { verificacao: v, usos };
   }
@@ -4060,6 +4136,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
       if (tomPedido) v.tom = { ...notaDoJev(res.answers.tom, TONS[tomPedido].niveis_jev), tom: tomPedido } as Verificacao["tom"];
     }
   } catch (e) {
+    registrarFalha("estudio-arte: jev da conferência falhou", e, { trabalho_id: t.id });
     v.identidade = { erro: codigoMotor(e) };
     if (navegacaoDaConferencia) v.navegacao = { esperado: navegacaoDaConferencia, erro: codigoMotor(e) };
     if (ads) {
@@ -4323,8 +4400,9 @@ async function soltarTrava(id: string, inicio: number, token: string, custo: num
         custo_usd: arred(num(x.custo_usd) + custo),
       };
     });
-  } catch {
+  } catch (e) {
     // A trava vence sozinha em ESPERA_DO_FUNDO_MS.
+    registrarFalha("estudio-arte: trava do fundo não solta", e, { trabalho_id: id, custo });
   }
 }
 
@@ -4627,8 +4705,10 @@ async function filaDoTrabalhoAndando(t: Trabalho): Promise<boolean> {
       .eq("client_id", t.client_id)
       .in("status", ["fila", "rodando"])
       .limit(1);
+    if (error) registrarFalha("estudio-arte: fila de geração não lida", error);
     return !error && Array.isArray(data) && data.length > 0;
-  } catch {
+  } catch (e) {
+    registrarFalha("estudio-arte: fila de geração não lida", e);
     return false;
   }
 }
@@ -4759,8 +4839,23 @@ async function textoDaLamina(ch: Chamador, corpo: Record<string, unknown>) {
  * voltando à capa. Não vale no modo replicar (lá o layout é da referência).
  * As regras aprendidas com o cliente (cérebro do cliente) entram em todos.
  */
+/** Frente FS: nome do anexo no aviso quando ele não abre (a arte sai sem ele). */
+const NOME_DO_ANEXO: Partial<Record<TipoDoAnexo, string>> = {
+  foto_cliente: "A foto do cliente",
+  elemento: "Uma foto trazida pela equipe",
+  logo: "A logo",
+  capa: "A capa da série",
+  sequencia: "O quadro de sequência",
+  fonte: "A amostra da fonte do título",
+  fonte_texto: "A amostra da fonte do texto",
+  identidade: "A referência da marca",
+  selo: "O selo da campanha",
+};
+
 async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  // Frente FS (29/09): cada passo que falha e muda a arte deixa um aviso aqui (vai para a versão e para a resposta).
+  const avisosDaGeracao: string[] = [];
   const ordem = lerOrdem(corpo);
   garantirEditavel(t);
   // Frente R5: `let` porque o texto enxuto na geração troca a lâmina logo depois da conferência da tipografia.
@@ -4776,12 +4871,19 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Carrossel contínuo não existe no anúncio.
   const infinito = !ads && !!t.direcao.carrossel_infinito;
   // Frente AP (27/09): o que funcionou nas entregas deste cliente e, na capa, a variedade das capas entregues (vazios sem entrega).
-  const dasEntregasP = blocosParaALamina(t, card.funcao === "capa" || ordem === 1).catch(() => ({ bloco: "", variedade: "" }));
+  const dasEntregasP = blocosParaALamina(t, card.funcao === "capa" || ordem === 1).catch((e) => {
+    registrarFalha("estudio-arte: padrões das entregas não lidos", e, { trabalho_id: t.id });
+    return { bloco: "", variedade: "" };
+  });
   const [kit, fontes, modeloImagem, preferencias] = await Promise.all([
     lerKit(t.client_id, t),
     lerFontes(t.client_id, t),
     carregarModelo(t.modelo_imagem_id!, "imagem"),
-    preferenciasDaArte(t.client_id).catch(() => ""),
+    preferenciasDaArte(t.client_id).catch((e) => {
+      const motivo = registrarFalha("estudio-arte: regras do cliente não lidas", e, { trabalho_id: t.id });
+      avisosDaGeracao.push(`As regras aprendidas com o cliente não foram lidas (${motivo}): a arte saiu sem elas.`);
+      return "";
+    }),
   ]);
   const dasEntregas = await dasEntregasP;
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
@@ -4792,7 +4894,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const tipografia = tipografiaDoKit(fontes);
   if (!tipografia) throw new ErroEstudio(SEM_TIPOGRAFIA.status, SEM_TIPOGRAFIA.codigo, SEM_TIPOGRAFIA.mensagem);
   marca.fontes = tipografia.fontes;
-  const marcaDaTipografia = await marcaDe(t.client_id, t).catch(() => null);
+  const marcaDaTipografia = await marcaDe(t.client_id, t).catch(nuloComLog("estudio-arte: marca da tipografia não lida", { trabalho_id: t.id }));
   const chaveDaSerie = chaveDaTipografia(t.client_id, marcaDaTipografia ? marcaDaTipografia.id : null, tipografia);
   // Frente R5 (dono: "quando gerar a arte, ele já refinar e encurtar o conteúdo, senão fica textão"): acima do
   // limite do papel, uma chamada curta ao redator (guardada por texto); o texto enxuto vai para a direção e segue.
@@ -4812,7 +4914,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // quadro desta lâmina; a simples segue igual).
   const fidelidade = fidelidadeDaLamina(card, t.direcao);
   const versoesDaLamina = t.cards.filter((c) => c.ordem === ordem).length;
-  const quadrosDaPrancha = refsDaEquipe.length ? await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina) : new Map<string, QuadroNaLamina>();
+  const quadrosDaPrancha = refsDaEquipe.length ? await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina, avisosDaGeracao) : new Map<string, QuadroNaLamina>();
   // Prancha sem quadro para esta lâmina (perfil só com capas, da lâmina 2 em diante): sai desta lâmina, que segue a capa.
   for (let i = refsDaEquipe.length - 1; i >= 0; i--) {
     const q = quadrosDaPrancha.get(refsDaEquipe[i].id);
@@ -4865,7 +4967,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     foto: !!baseFoto,
     elementos: elementos.length,
   })
-    ? await serieDaReferenciaDaCapa(t, refsDaEquipe[0], ch.userId)
+    ? await serieDaReferenciaDaCapa(t, refsDaEquipe[0], ch.userId, avisosDaGeracao)
     : null;
   if (serieDaCapa) refsDaEquipe.splice(0, refsDaEquipe.length);
 
@@ -4918,13 +5020,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const leva = levaLogo(t, ordem);
   const zonaDoTexto = normalizarLayout(cardDoPrompt.layout, card.funcao, card.ordem, total).zona_texto;
   const capaDaSerie = card.funcao === "capa" || ordem === 1;
-  const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card)) : [];
+  const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card), avisosDaGeracao) : [];
   let valorDoFundo: number | null = null;
   if (logosKit.length > 1) {
     if (baseFoto && mascaraComLogo) {
       // Foto ou fatia: a claridade de verdade da área onde a logo vai.
       const aprox = caixaDaLogo(zonaDoTexto, capaDaSerie, quadro.formato, quadro.post, null);
-      valorDoFundo = await valorMedioNaArea(baseFoto, { x0: aprox.x0 / 100, y0: aprox.y0 / 100, x1: aprox.x1 / 100, y1: aprox.y1 / 100 }).catch(() => null);
+      valorDoFundo = await valorMedioNaArea(baseFoto, { x0: aprox.x0 / 100, y0: aprox.y0 / 100, x1: aprox.x1 / 100, y1: aprox.y1 / 100 }).catch(nuloComLog("estudio-arte: claridade da área da logo não medida", { trabalho_id: t.id, ordem }));
     } else {
       const layoutAgora = normalizarLayout(cardDoPrompt.layout, card.funcao, card.ordem, total);
       valorDoFundo = valorDaCor(layoutAgora.cor_fundo || corDoFundoDoKit(kit));
@@ -4984,7 +5086,19 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Replicar (27/09): cada referência é aberta uma vez (anexo e molde) e o molde
   // (layout medido por visão, guardado) é lido junto com a logo, em paralelo.
-  const imagensDasRefs = replicar ? await Promise.all(refsDaEquipe.map((r) => imagemDaReferencia(r).catch(() => null))) : [];
+  // Frente FS: a referência que não abre (arquivo sumido ou quebrado) fica no log e vira aviso; sem nenhuma, o 409 leva o motivo.
+  const motivosDasRefs: string[] = [];
+  const imagensDasRefs = replicar
+    ? await Promise.all(refsDaEquipe.map((r, i) =>
+      imagemDaReferencia(r).catch((e) => {
+        if (erroQueSobe(e)) throw e;
+        const motivo = registrarFalha("estudio-arte: referência da equipe não abriu", e, { trabalho_id: t.id, referencia_id: r.id });
+        motivosDasRefs.push(motivo);
+        avisosDaGeracao.push(`A referência ${i + 1} não abriu (${motivo}): a lâmina saiu sem ela.`);
+        return null;
+      })
+    ))
+    : [];
   // Prancha (frente E): a imagem da referência vira o quadro desta lâmina, recortado; o molde é lido e guardado por quadro.
   for (let i = 0; i < imagensDasRefs.length; i++) {
     const q = quadrosDaPrancha.get(refsDaEquipe[i].id);
@@ -4995,7 +5109,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       imagensDasRefs[i] = recorte;
       continue;
     }
-    // Sem o recorte, a imagem inteira, como antes (e a legenda sem a nota do quadro).
+    // Sem o recorte, a imagem inteira, como antes (e a legenda sem a nota do quadro). Frente FS: com aviso.
+    avisosDaGeracao.push(`O quadro da prancha não pôde ser recortado: a lâmina usou a imagem inteira da referência ${i + 1}.`);
     const nota = notaDaPrancha(refsDaEquipe[i]);
     quadrosDaPrancha.delete(refsDaEquipe[i].id);
     for (const c of candidatos) if (c.ref === refsDaEquipe[i] && nota) c.rotulo = c.rotulo.split(nota).join("");
@@ -5020,8 +5135,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const depsDaCopia = querAdaptar ? depsDaAdaptacao(t, imagensDasRefs[0], ch.userId) : null;
   const leituraDoConteudoP = refDaAdaptacao && depsDaCopia ? leituraDoConteudo(refDaAdaptacao.id, depsDaCopia) : Promise.resolve(null);
   const [anexoLogo, moldes] = await Promise.all([
-    logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),
-    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId) : Promise.resolve(null)))),
+    logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId, avisosDaGeracao) : Promise.resolve(null),
+    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId, avisosDaGeracao) : Promise.resolve(null)))),
   ]);
   // Logo achatada no fundo de contraste, com o texto dela na legenda (dono, 26/09: "a logo não tem nada a ver").
   if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });
@@ -5045,7 +5160,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const separacaoDaSerie: { refId: string; molde: MoldeDaReferencia; separacao: SeparacaoDaSerie; origem: "referencia_do_conjunto" | "capa_gerada" } | null = serieDaCapa
     ? { refId: serieDaCapa.ref.id, molde: serieDaCapa.molde, separacao: serieDaCapa.separacao, origem: "referencia_do_conjunto" }
     : capa && !replicar && !ads
-    ? await separacaoDaCapaGerada(t, capa, ch.userId).then((s) => (s ? { ...s, origem: "capa_gerada" as const } : null))
+    ? await separacaoDaCapaGerada(t, capa, ch.userId, avisosDaGeracao).then((s) => (s ? { ...s, origem: "capa_gerada" as const } : null))
     : null;
   // Frente E: replicando um quadro de sequência da prancha, ou em Inspirada e
   // Criativa (composição nova), a capa gerada vai junto para a série parecer uma
@@ -5061,7 +5176,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     });
   }
   // Frente E (d): capa feita de uma prancha; nas lâminas 2..N que não replicam, o quadro de sequência dela vai como guia.
-  const sequencia = capa && !replicar && !cenaFixa ? await sequenciaDaCapa(t, capa, ordem).catch(() => null) : null;
+  const sequencia = capa && !replicar && !cenaFixa
+    ? await sequenciaDaCapa(t, capa, ordem).catch((e) => {
+      const motivo = registrarFalha("estudio-arte: sequência da capa falhou", e, { trabalho_id: t.id, ordem });
+      avisosDaGeracao.push(`O quadro de sequência da prancha da capa não entrou (${motivo}): a lâmina seguiu só a capa.`);
+      return null;
+    })
+    : null;
   if (sequencia) {
     candidatos.push({
       tipo: "sequencia",
@@ -5114,9 +5235,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // escolhido, só quando a direção pede pessoa (Noul do Jev; falha = sem rosto). Sem rosto:
   // nada é lido e nada muda. A referência automática da marca cede a vaga às fotos do rosto.
   const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
-  const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId) : null;
+  const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;
   const rostoDaNormal = rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null;
-  const fotosDaNormal = rostoDaNormal ? await fotosDoRostoEscolhido(t, rostoDaNormal).catch(() => [] as FotoDoRosto[]) : [];
+  const fotosDaNormal = rostoDaNormal ? await fotosDoRostoEscolhido(t, rostoDaNormal).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[])) : [];
   if (rostoDaNormal && !fotosDaNormal.length) {
     throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
   }
@@ -5164,8 +5285,12 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   for (const c of escolhidosDaLamina) {
     try {
       imagens.push(await c.carregar());
-    } catch {
-      // Arquivo sumido fica de fora (a referência da equipe sem arquivo é tratada abaixo).
+    } catch (e) {
+      // Arquivo sumido fica de fora (a referência da equipe sem arquivo é tratada abaixo). Frente FS: com log e
+      // aviso, porque muda a arte (logo, capa ou referência que não entra).
+      if (erroQueSobe(e)) throw e;
+      const motivo = registrarFalha("estudio-arte: anexo da lâmina não abriu", e, { trabalho_id: t.id, ordem, tipo: c.tipo });
+      if (c.tipo !== "referencia_equipe") avisosDaGeracao.push(`${NOME_DO_ANEXO[c.tipo] ?? "Um anexo"} não abriu (${motivo}) e ficou de fora desta lâmina.`);
       continue;
     }
     rotulos.push(c.rotulo);
@@ -5189,13 +5314,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
   const indicesDoRosto: number[] = [];
   if (rostoEscolhido) {
-    const fotosDoRosto = await fotosDoRostoEscolhido(t, rostoEscolhido).catch(() => [] as FotoDoRosto[]);
+    const fotosDoRosto = await fotosDoRostoEscolhido(t, rostoEscolhido).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[]));
     if (!fotosDoRosto.length) {
       throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
     }
     const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDoRosto.length, max: maxFotosDoRosto(rostoEscolhido) });
     // Baixadas juntas; a que não abre fica de fora (a numeração segue contínua).
-    const baixadas = await Promise.all(fotosDoRosto.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(() => null)));
+    const baixadas = await Promise.all(fotosDoRosto.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(nuloComLog("estudio-arte: foto do rosto não abriu", { trabalho_id: t.id, caminho: f.caminho }))));
     baixadas.forEach((img, i) => {
       if (!img) return;
       imagens.push(img);
@@ -5207,7 +5332,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente R2: na lâmina normal as fotos do rosto entram no mesmo lugar (depois dos anexos da lâmina, antes do estilo).
   if (rostoDaNormal) {
     const vagas = vagasDoRosto({ usadas: imagens.length + deslocamento, limiteDoModelo: limiteDeReferencias(modeloImagem), pedidas: fotosDaNormal.length, max: maxFotosDoRosto(rostoDaNormal) });
-    const baixadas = await Promise.all(fotosDaNormal.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(() => null)));
+    const baixadas = await Promise.all(fotosDaNormal.slice(0, vagas).map((f) => imagemReduzida(f.bucket, f.caminho, f.nome).catch(nuloComLog("estudio-arte: foto do rosto não abriu", { trabalho_id: t.id, caminho: f.caminho }))));
     baixadas.forEach((img, i) => {
       if (!img) return;
       imagens.push(img);
@@ -5247,7 +5372,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   });
   const legendas = rotulos.map((r, i) => `imagem ${i + 1 + deslocamento}: ${r}`);
   if (replicar && !refsNoPrompt.length) {
-    throw new ErroEstudio(409, "referencia_sem_imagem", "A imagem da referência escolhida não foi encontrada. Escolha outra referência para esta lâmina.");
+    // Frente FS: o motivo real (arquivo sumido, quebrado) vai junto.
+    const motivo = motivosDasRefs[0] ?? null;
+    throw new ErroEstudio(409, "referencia_sem_imagem", `A imagem da referência escolhida não foi encontrada${motivo ? ` (${motivo})` : ""}. Escolha outra referência para esta lâmina.`, motivo ? { motivo } : {});
   }
   // Pedir "a logo anexada" sem o anexo faz o gerador inventar uma: sem a imagem, a lâmina vai sem logo.
   const logoNaChamada = indiceDaLogo !== null;
@@ -5397,7 +5524,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       origemDoMolde = dimensoesDoCabecalho(imagens[0].bytes);
       try {
         molde = await (cobrir(await decodificar(imagens[0].bytes), quadro.largura, quadro.altura)).encode(1);
-      } catch {
+      } catch (e) {
+        registrarFalha("estudio-arte: referência não abriu para editar (vai como anexo)", e, { trabalho_id: t.id, ordem });
         molde = null; // imagem que não abre (grande demais, formato): volta a ser só referência
       }
     }
@@ -5479,6 +5607,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     });
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
+      avisos: avisosDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5530,6 +5659,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const img = await chamarImagem({ ...comum, prompt, editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo });
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
+      avisos: avisosDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5586,6 +5716,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
+      avisos: avisosDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5631,11 +5762,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         recorte: { imagem: recorteNaLamina.recorte, posicao: recorteNaLamina.posicao, larguraDaTela: quadro.largura },
         proporcaoDoQuadro: quadro.final.largura / quadro.final.altura,
       });
-    } catch {
-      // Falhou: fica o que o gerador fez.
+    } catch (e) {
+      // Falhou: fica o que o gerador fez. Frente FS: com log e aviso (o recorte original não foi colado de novo).
+      const motivo = registrarFalha("estudio-arte: acabamento do recorte falhou", e, { trabalho_id: t.id, ordem });
+      avisosDaGeracao.push(`O acabamento não foi aplicado (${motivo}): ficou o que o gerador fez, sem colar o recorte original. Confira.`);
     }
     return await gravarVersao(ch, t, card, { ...img, png: fim.png, mime: "image/png" }, {
       origem: "gerar",
+      avisos: avisosDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
       custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5666,6 +5800,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
     origem: "gerar",
+    avisos: avisosDaGeracao,
     referencias: idsReferencias,
     // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
     custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
@@ -5693,8 +5828,11 @@ async function gravarVersao(
   t: Trabalho,
   card: CardDirecao,
   img: { png: Uint8Array; mime: string; usoId: string; custoUsd: number; saldoUsd: number; reservaUsada?: string | null },
-  meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown> },
+  meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown>; avisos?: string[] },
 ) {
+  // Frente FS (29/09): o que falhou no caminho e mudou a arte (logo não lida, referência que não abriu,
+  // molde não medido...) fica na versão (a tela mostra na lâmina) e volta em aviso_da_acao.
+  const avisos = [...new Set((meta.avisos ?? []).filter(Boolean))].slice(0, 6);
   const proxima = Math.max(0, ...t.cards.filter((c) => c.ordem === card.ordem).map((c) => c.versao)) + 1;
   const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, img.png, img.mime);
   const custo = arred(img.custoUsd);
@@ -5711,6 +5849,7 @@ async function gravarVersao(
     criado_em: new Date().toISOString(),
     criado_por: ch.userId,
     ...(meta.extra ?? {}),
+    ...(avisos.length ? { avisos_da_geracao: avisos } : {}),
   };
   // Acrescenta a versao (nunca substitui): o caminho no bucket ja e unico.
   const gravado = await mutarTrabalho(t.id, (atual) => ({
@@ -5731,6 +5870,7 @@ async function gravarVersao(
     // Qual rota atendeu (ex.: conta direta sem crédito e a chamada foi pelo OpenRouter): a tela avisa.
     reserva_usada: img.reservaUsada ?? null,
     status: gravado.status,
+    ...(avisos.length ? { avisos_da_geracao: avisos, aviso_da_acao: avisos.join(" ") } : {}),
   });
 }
 
@@ -5779,6 +5919,8 @@ Escreva sem travessão.`;
  */
 async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: MarcaDeAutocorrecao | null = null) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  // Frente FS (29/09): o que falhou no ajuste e muda a arte vai para a versão e para a resposta.
+  const avisosDoAjuste: string[] = [];
   const ordem = lerOrdem(corpo);
   const tipo: "livre" | "fundo" = !auto && corpo.tipo === "fundo" ? "fundo" : "livre";
   // Ajuste pontual: só as áreas marcadas na tela mudam (máscara + devolução dos pixels originais).
@@ -5825,10 +5967,14 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     lerKit(t.client_id, t),
     modeloDoPapel("leitura"),
     // A autocorreção só conserta texto e logo: as regras do cliente ficam para o ajuste pedido.
-    auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch(() => ""),
-    !auto && t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id).catch(() => null) : Promise.resolve(null),
+    auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch((e) => {
+      const motivo = registrarFalha("estudio-arte: regras do cliente não lidas (ajuste)", e, { trabalho_id: t.id });
+      avisosDoAjuste.push(`As regras aprendidas com o cliente não foram lidas (${motivo}): o ajuste seguiu sem elas.`);
+      return "";
+    }),
+    !auto && t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id).catch(nuloComLog("estudio-arte: campanha do ajuste não lida", { trabalho_id: t.id })) : Promise.resolve(null),
   ]);
-  const nomeDaMarca = (await marcaDoCliente(t.client_id, kit, undefined, t).catch(() => null))?.nomeCliente || "";
+  const nomeDaMarca = (await marcaDoCliente(t.client_id, kit, undefined, t).catch(nuloComLog("estudio-arte: nome da marca não lido", { trabalho_id: t.id })))?.nomeCliente || "";
   // Frente AG: com área marcada, o leitor vê de perto o que está nela (em 28/09 "apague isso" apagou a linha errada).
   const recorteDaArea = !auto && areas.length ? await recorteDasAreas(atual, areas) : null;
   // Frente AG: o Jev diz, junto com o leitor, se o pedido é claro (ruído do ditado, nome fora do contexto, vago).
@@ -5846,7 +5992,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         const cobrado = await cobrarJev(r, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId }).catch(() => null);
         return { resposta: r.answers.claro, custo: cobrado?.custoUsd ?? 0 };
       })
-      .catch(() => null)
+      // Frente FS: o Jev fora do ar não para o ajuste (o leitor segue), mas fica no log.
+      .catch(nuloComLog("estudio-arte: jev (pedido claro) falhou", { trabalho_id: t.id, ordem }))
     : Promise.resolve(null);
   const dir = await chamarTexto({
     clientId: t.client_id,
@@ -5926,8 +6073,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     const logo = escolherLogoDoKit(await logosDoKit(base.client_id, kit, escolhaDaLamina(base, card, daVersao)), base, { logo: card.logo ?? daVersao ?? undefined }, null);
     if (logo) {
       // A mesma logo achatada no fundo de contraste e com o texto dela na legenda (gerar_card).
-      const nome = (await marcaDoCliente(base.client_id, kit, undefined, base).catch(() => null))?.nomeCliente || "";
-      const anexo = await anexoDaLogo(base, logo, nome, ch.userId);
+      const nome = (await marcaDoCliente(base.client_id, kit, undefined, base).catch(nuloComLog("estudio-arte: nome da marca não lido", { trabalho_id: base.id })))?.nomeCliente || "";
+      const anexo = await anexoDaLogo(base, logo, nome, ch.userId, avisosDoAjuste);
       referencias.push(anexo.imagem);
       legendas.push(`imagem ${referencias.length + 1}: ${anexo.legenda}${anexo.descricao ? ` ${anexo.descricao}` : ""}`);
     }
@@ -5942,8 +6089,11 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         referencias.push(await imagemDaReferencia(ref));
         idsReferencias.push(ref.id);
         legendas.push(`imagem ${referencias.length + 1}: referência ESCOLHIDA PELA EQUIPE: ao aplicar o ajuste, siga de perto a estrutura de layout, a hierarquia, a escala da tipografia e o tratamento desta peça, com as cores, as fontes e a logo desta marca; não copie o texto nem a marca dela`);
-      } catch {
-        // Referência sem arquivo fica de fora do ajuste.
+      } catch (e) {
+        // Referência sem arquivo fica de fora do ajuste. Frente FS: com log e aviso (o ajuste não segue ela).
+        if (erroQueSobe(e)) throw e;
+        const motivo = registrarFalha("estudio-arte: referência do ajuste não abriu", e, { trabalho_id: base.id, referencia_id: ref.id });
+        avisosDoAjuste.push(`Uma referência escolhida não abriu (${motivo}): o ajuste seguiu sem ela.`);
       }
     }
   }
@@ -6003,7 +6153,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     // Bordas do fundo gravado só quando a versão atual está no enquadramento dele.
     const comBordas = !!marcaDaVersao.fundo && !marcaDaVersao.fora_da_emenda && !marcaDaVersao.alinhamento?.cena_mudada;
     // Fundo sumido (refeito): ficam as bordas da versão atual, que já eram as dele.
-    const fundoGravado = comBordas ? await baixar("mesa", marcaDaVersao.fundo!).catch(() => null) : null;
+    const fundoGravado = comBordas ? await baixar("mesa", marcaDaVersao.fundo!).catch(nuloComLog("estudio-arte: fundo gravado do contínuo não abriu", { trabalho_id: base.id, ordem })) : null;
     // Sem área marcada, o ajuste livre muda o texto: vale a área do texto da
     // lâmina (com folga). A cena é o panorama e não muda por ajuste.
     // A área da logo gerada também abre (o ajuste pode mexer nela) e a colagem nunca a apaga.
@@ -6042,15 +6192,19 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       // Anti-bug AB2: a cópia leve do recorte (bytesDoRecorte); grande demais cai aqui e fica o que o gerador manteve.
       const pos = await recorteNaCaixa(await bytesDoRecorte(r.caminho), q.largura, q.altura, r.caixa);
       if (!abertas.some((a) => cruza(a, pos.posicao))) recorteDeNovo = { imagem: pos.recorte, posicao: pos.posicao, larguraDaTela: q.largura };
-    } catch {
-      // Recorte sumido: fica o que o gerador manteve.
+    } catch (e) {
+      // Recorte sumido: fica o que o gerador manteve. Frente FS: com log e aviso (a pessoa ou o produto pode ter mudado).
+      const motivo = registrarFalha("estudio-arte: recorte do ajuste não abriu", e, { trabalho_id: base.id, ordem });
+      avisosDoAjuste.push(`O recorte original não abriu (${motivo}): a pessoa ou o produto ficou como o gerador manteve. Confira.`);
     }
     try {
       const fim = await acabamentoDaLamina(img.png, { recorte: recorteDeNovo, proporcaoDoQuadro: q.final.largura / q.final.altura });
       img = { ...img, png: fim.png, mime: "image/png" };
       acabamentoDoAjuste = { modo: "recorte", recorte: { ...r, colado: fim.recorte }, formato_post: q.post };
-    } catch {
-      // Acabamento falhou: fica a edição do gerador.
+    } catch (e) {
+      // Acabamento falhou: fica a edição do gerador. Frente FS: com log e aviso.
+      const motivo = registrarFalha("estudio-arte: acabamento do ajuste falhou", e, { trabalho_id: base.id, ordem });
+      avisosDoAjuste.push(`O acabamento não foi aplicado (${motivo}): ficou a edição do gerador, sem colar o recorte original. Confira.`);
     }
   }
   // A logo da versão ajustada é a que o gerador desenhou (a da versão anterior, mantida).
@@ -6077,6 +6231,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
 
   return await gravarVersao(ch, base, cardAjustado, img, {
     origem: "ajuste",
+    avisos: avisosDoAjuste,
     instrucao: auto ? (auto.conversa ? auto.motivos.join("; ") : `Correção automática ${auto.rodada}: ${auto.motivos.join("; ")}`) : pedido,
     custoExtraUsd: custoDaLeitura,
     referencias: idsReferencias,
@@ -6265,8 +6420,9 @@ async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Rec
       .sort((a, b) => b.nota - a.nota)
       .slice(0, MAX_HASHTAGS)
       .map((x) => x.h);
-  } catch {
-    // Sem Jev, as primeiras sugeridas pelo diretor.
+  } catch (e) {
+    // Sem Jev, as primeiras sugeridas pelo diretor. Frente FS: com log.
+    registrarFalha("estudio-arte: jev das hashtags falhou (vão as primeiras sugeridas)", e, { trabalho_id: t.id });
     return candidatas.slice(0, MAX_HASHTAGS);
   }
 }
@@ -6601,7 +6757,8 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
     try {
       const item = await lerItemDaAgenda(t.task_id);
       if (item.clientId === t.client_id) projetoId = item.projeto.id;
-    } catch {
+    } catch (e) {
+      registrarFalha("estudio-arte: item da agenda não lido (criativo sem projeto)", e, { trabalho_id: t.id });
       // Item apagado: o criativo vai para Arquivos sem projeto.
     }
   }
@@ -6767,14 +6924,14 @@ async function levarParaAgenda(ch: Chamador, t: Trabalho): Promise<ResumoDaAgend
   try {
     // Frente AP (28/09): a publicação nasce na data do conteúdo (dia da pauta + melhor horário),
     // planejada até a aprovação; a data confirmada pelo dono vale mais. Pauta passada: sem data.
-    const naData = t.publicar_em_confirmado_em && t.publicar_em ? t.publicar_em : await dataDoConteudo(servico(), t, agora).catch(() => null);
+    const naData = t.publicar_em_confirmado_em && t.publicar_em ? t.publicar_em : await dataDoConteudo(servico(), t, agora).catch(nuloComLog("estudio-arte: data do conteúdo não calculada", { trabalho_id: t.id }));
     r = await sincronizarPecaNaAgenda(contextoDaAgenda(ch), t, { quando: naData });
     aviso = r.aviso;
   } catch (e) {
     aviso = e instanceof ErroDaAgenda ? e.message : "A Agenda não respondeu. Use Levar para a Agenda.";
     console.error("estudio-arte: entrega na agenda falhou", { erro: e instanceof ErroDaAgenda ? e.codigo : e instanceof Error ? e.name : "desconhecido" });
   }
-  const proposta = t.publicar_em_confirmado_em ? null : await dataProposta(t, agora).catch(() => null);
+  const proposta = t.publicar_em_confirmado_em ? null : await dataProposta(t, agora).catch(nuloComLog("estudio-arte: data proposta não calculada", { trabalho_id: t.id }));
   const feito = r;
   try {
     await mutarTrabalho(t.id, (a) => ({
@@ -6800,9 +6957,10 @@ async function levarParaAgenda(ch: Chamador, t: Trabalho): Promise<ResumoDaAgend
         }
         : {}),
     }));
-  } catch {
+  } catch (e) {
     // Colunas da frente EA ainda não publicadas no banco: guarda ao menos o post.
-    if (feito?.post_id) await mutarTrabalho(t.id, () => ({ post_id: feito.post_id })).catch(() => null);
+    registrarFalha("estudio-arte: entrega não gravada no trabalho (guarda só o post)", e, { trabalho_id: t.id });
+    if (feito?.post_id) await mutarTrabalho(t.id, () => ({ post_id: feito.post_id })).catch(nuloComLog("estudio-arte: post da entrega não gravado no trabalho", { trabalho_id: t.id }));
   }
   return { ok: !!r, acao: r?.acao ?? null, post_id: r?.post_id ?? t.post_id ?? null, aviso, publicar_em: t.publicar_em_confirmado_em ? t.publicar_em ?? null : proposta };
 }
@@ -7363,7 +7521,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
     rostoPedido = conjunto.rosto === null ? null : normalizarRosto(conjunto.rosto, t.client_id);
     if (conjunto.rosto !== null && !rostoPedido) throw new ErroEstudio(400, "rosto_invalido", "Rosto inválido. Escolha um rosto do cliente, da equipe ou fotos desta pasta.");
     // Frente R2: fotos escolhidas nas pastas ou nos clones são conferidas já ao salvar (clone só com autorização válida).
-    if (rostoPedido && rostoPedido.fonte === "escolhidas" && !(await fotosDoRostoEscolhido(t, rostoPedido).catch(() => [] as FotoDoRosto[])).length) {
+    if (rostoPedido && rostoPedido.fonte === "escolhidas" && !(await fotosDoRostoEscolhido(t, rostoPedido).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[]))).length) {
       throw new ErroEstudio(409, "rosto_indisponivel", "Nenhuma das fotos escolhidas está disponível (apagada ou sem autorização válida). Escolha outras.");
     }
   }
@@ -7675,10 +7833,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     lerKit(t.client_id, t),
     lerFontes(t.client_id, t),
     memoriaDoDiretor(t.client_id),
-    marcaDe(t.client_id, t).then((m) => lerAcervo(t.client_id, 30, m)).catch(() => lerAcervo(t.client_id, 30)),
+    marcaDe(t.client_id, t).then((m) => lerAcervo(t.client_id, 30, m)).catch((e) => (registrarFalha("estudio-arte: marca do acervo não lida (vale o acervo inteiro)", e, { trabalho_id: t.id }), lerAcervo(t.client_id, 30))),
     imagensDoAcervo(t.client_id, idsDasFotos),
     // Sem o prompt global ativo a conversa ainda ajuda: a base de conhecimento vale.
-    promptDoDiretor(t.client_id).catch(() => ""),
+    promptDoDiretor(t.client_id).catch((e) => (registrarFalha("estudio-arte: prompt do diretor não lido (conversa)", e, { trabalho_id: t.id }), "")),
     idsDasReferencias.length ? referenciasPorId(t.client_id, idsDasReferencias) : Promise.resolve([] as Referencia[]),
     servico()
       .from("cliente_referencias")
@@ -7689,7 +7847,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       .order("criado_em", { ascending: false })
       .limit(8),
     t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id) : Promise.resolve(null),
-    t.task_id ? lerItemDaAgenda(t.task_id).catch(() => null) : Promise.resolve(null),
+    t.task_id ? lerItemDaAgenda(t.task_id).catch(nuloComLog("estudio-arte: item da agenda não lido (conversa)", { trabalho_id: t.id })) : Promise.resolve(null),
     conversaExistente
       ? servico().from("agente_mensagens").select("papel, conteudo, anexos").eq("conversa_id", conversaExistente).order("criado_em", { ascending: false }).limit(MAX_HISTORICO_CONVERSA)
       : Promise.resolve({ data: [] }),
@@ -7738,7 +7896,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
 
   // Frente H: o diretor conversa sabendo o que o cliente já ensinou (cérebro) e o dossiê atual.
-  const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria, t.tipo).catch(() => ({ texto: "", usouCerebro: false }));
+  const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria, t.tipo).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido (conversa)", e, { trabalho_id: t.id }), { texto: "", usouCerebro: false }));
   const contexto = {
     tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
     texto_pode_mudar: textoPodeMudar,
@@ -7795,7 +7953,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (aceitaImagem && versaoEmFoco) {
     try {
       imagens = [await baixarImagem("mesa", versaoEmFoco.storage_path, `lamina-${emFoco}-v${versaoEmFoco.versao}`)];
-    } catch {
+    } catch (e) {
+      registrarFalha("estudio-arte: lâmina em foco não abriu para o diretor", e, { trabalho_id: t.id });
       imagens = undefined;
     }
   }
@@ -8067,7 +8226,7 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = texto(corpo.pedido, 600);
   const [diretor, contexto, cerebro, marcaDoTexto, perfil] = await Promise.all([
     modeloDoPapel("diretor_arte"),
-    lerContextoConsolidado(servico(), t.client_id).catch(() => null),
+    lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido", { trabalho_id: t.id })),
     resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
     marcaDe(t.client_id, t),
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
@@ -8276,7 +8435,7 @@ async function executarAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
   if (guardada.mensagem.conversa_id) {
-    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ${textoDoResultado(r.resultados)}.` }]).catch(() => null);
+    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ${textoDoResultado(r.resultados)}.` }]).catch(nuloComLog("estudio-arte: mensagem do diretor não gravada", { trabalho_id: t.id }));
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "estudio_acao_do_diretor", origin: "mesa:estudio-arte",
@@ -8297,7 +8456,7 @@ async function desfazerAcaoDoDiretor(ch: Chamador, corpo: Record<string, unknown
     throw comoErroDoEstudio(e);
   }
   if (guardada.mensagem.conversa_id) {
-    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }]).catch(() => null);
+    await gravarMensagens(guardada.mensagem.conversa_id, t.client_id, [{ papel: "sistema", conteudo: `Diretor: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }]).catch(nuloComLog("estudio-arte: mensagem do diretor não gravada", { trabalho_id: t.id }));
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "estudio_desfazer_acao_do_diretor", origin: "mesa:estudio-arte",
@@ -8405,6 +8564,8 @@ async function executarPassoDaFila(ch: Chamador, etapa: EtapaDaFila, item: ItemD
     }
     return { ok: true, corpo: body };
   } catch (e) {
+    // Frente FS: a fila já grava o código; o motivo agora também fica no log.
+    if (e instanceof ErroEstudio || e instanceof IaMotorErro || e instanceof JevErro) registrarFalha("estudio-arte: passo da fila falhou", e, { etapa });
     if (e instanceof ErroEstudio) return { ok: false, codigo: e.codigo, mensagem: e.message };
     if (e instanceof IaMotorErro) return { ok: false, codigo: e.codigo, mensagem: MENSAGEM_MOTOR[e.codigo] ?? e.message };
     if (e instanceof JevErro) return { ok: false, codigo: "jev_indisponivel", mensagem: "A conferência do Jev não respondeu." };
@@ -8634,6 +8795,8 @@ Deno.serve(async (req) => {
     try {
       return await executar(chamador, corpo);
     } catch (e) {
+      // Frente FS: erro do motor, do Jev e do servidor (5xx) com motivo no log; o 4xx de validação só volta para a tela.
+      if (e instanceof IaMotorErro || e instanceof JevErro || (e instanceof ErroEstudio && e.status >= 500)) registrarFalha("estudio-arte: ação falhou", e, { acao });
       if (e instanceof ErroEstudio) return erro(e.status, e.codigo, e.message, e.detalhes);
       if (e instanceof IaMotorErro) return respostaDoMotor(e);
       if (e instanceof JevErro) return erro(502, "jev_indisponivel", "A conferência do Jev não respondeu. Tente de novo.", { codigo: e.codigo });

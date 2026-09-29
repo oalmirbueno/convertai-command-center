@@ -20,6 +20,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ehPostDeFotos, ErroDoPost, prepararPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { criarItemDoPostDeFotos } from "../_shared/post-de-fotos-item.ts";
 import { resolverMarca } from "../_shared/marca.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 type Chamador = { userId: string; token: string; doChamador: SupabaseClient };
 
@@ -71,7 +73,7 @@ export function acoesDasFotosNaAgenda(d: DepsDasFotos) {
       if (!DATA.test(data)) throw d.erro(400, "sem_item", "Escolha o item da Agenda ou a data do post novo.");
       const pedido = texto(corpo.pedido_id, 80) || crypto.randomUUID();
       // Frente AE: o item novo nasce no projeto da marca aberta (Acerbi ou CME), nunca no da outra.
-      const marca = await resolverMarca(db(), clientId, { marca_id: corpo.marca_id }).catch(() => null);
+      const marca = await resolverMarca(db(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("estudio-arte: resolverMarca falhou", e), null));
       try {
         const criado = await criarItemDoPostDeFotos(db(), {
           projetoId: marca ? marca.project_id : null,

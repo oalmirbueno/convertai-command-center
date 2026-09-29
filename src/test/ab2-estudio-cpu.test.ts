@@ -88,7 +88,8 @@ describe("AB2 Estúdio: logo", () => {
     // Limpar e medir abrem a logo: só até o teto.
     const b = corpoDe("baixarLogo");
     expect(b.indexOf("if (!abreAqui(dimensoesDoCabecalho(bruta.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO)) return bruta;")).toBeLessThan(b.indexOf("await logoLimpa("));
-    expect(corpoDe("logosDoKit")).toContain("abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO) ? await analisarLogo(imagem.bytes).catch(() => null) : null");
+    // Frente FS (29/09): a medida que falha agora fica no log (nuloComLog); o teto continua antes de abrir.
+    expect(corpoDe("logosDoKit")).toContain("abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO) ? await analisarLogo(imagem.bytes).catch(nuloComLog(");
     // A cópia leve da copias-leves grava PNG quando há transparência.
     expect(ler("supabase/functions/copias-leves/index.ts")).toContain('const tipo = alfa ? "image/png" : "image/jpeg";');
   });
@@ -132,13 +133,17 @@ describe("AB2 Estúdio: recorte, prancha e molde abrem a cópia", () => {
   });
 
   it("quadro da prancha e molde: a referência vem leve (anexoLeve) e o recorte do quadro não abre acima do teto", () => {
-    const i = corpoDe("imagemDaReferencia");
+    // Frente FS (29/09): imagemDaReferencia confere o arquivo (defeitoDaImagem) e os bytes vêm da Crua.
+    expect(corpoDe("imagemDaReferencia")).toContain("await imagemDaReferenciaCrua(ref)");
+    const i = corpoDe("imagemDaReferenciaCrua");
     expect(i).not.toContain("baixarImagem(");
     expect((i.match(/await anexoLeve\(/g) || []).length).toBe(3);
     const q = corpoDe("recortarQuadro");
     expect(q.indexOf("if (!abreAqui(dimensoesDoCabecalho(imagem.bytes), MAX_PIXELS_REDUCAO_NA_FUNCAO)) return null;")).toBeLessThan(q.indexOf("await decodificar(imagem.bytes)"));
     // O molde e a leitura da prancha recebem a mesma imagem da referência.
-    expect(corpoDe("gerarCard")).toContain("imagensDasRefs = replicar ? await Promise.all(refsDaEquipe.map((r) => imagemDaReferencia(r).catch(() => null))) : [];");
+    // Frente FS: a referência que não abre agora deixa log e aviso (antes: .catch(() => null) em silêncio).
+    const g = corpoDe("gerarCard");
+    expect(g).toContain("const imagensDasRefs = replicar\n    ? await Promise.all(refsDaEquipe.map((r, i) =>\n      imagemDaReferencia(r).catch((e) => {");
     // Pura: 6 MP abre; 12 MP e tamanho desconhecido não.
     expect(abreAqui({ largura: 3000, altura: 2000 }, TETO)).toBe(true);
     expect(abreAqui({ largura: 4000, altura: 3000 }, TETO)).toBe(false);

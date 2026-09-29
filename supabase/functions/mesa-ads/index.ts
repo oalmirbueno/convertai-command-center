@@ -369,6 +369,8 @@ import {
   rankingParaOPrompt,
   sinaisDaOferta,
 } from "./melhores-criativos.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1141,7 +1143,7 @@ async function montarContextoAds(
     // Brief respondido pelo cliente (formulário): produtos, preços e diferenciais costumam estar aqui.
     servico.from("briefings").select("responses, submitted, created_at").eq("client_id", clientId)
       .order("created_at", { ascending: false }).limit(3),
-    lerDocumentosDeMarca(servico, clientId, 6000).catch(() => []),
+    lerDocumentosDeMarca(servico, clientId, 6000).catch((e) => (registrarFalha("mesa-ads: lerDocumentosDeMarca falhou", e), [])),
   ]);
   const campanhas = ((campanhasQ.data as CampanhaDoMes[] | null) ?? [])
     .filter((c) => (!c.periodo_fim || c.periodo_fim >= inicioDoMes) && (!c.periodo_inicio || c.periodo_inicio <= fimDoMes))
@@ -2396,7 +2398,7 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const [conversaId, desempenho, refsDoNicho] = await Promise.all([
     abrirConversa(servico, clientId, planoId, chamador.userId),
     desempenhoDosEstilos(servico, clientId, achado.nicho?.id ?? null),
-    referenciasDoNicho(servico, achado.nicho?.id ?? null).catch(() => [] as ReferenciaResumo[]),
+    referenciasDoNicho(servico, achado.nicho?.id ?? null).catch((e) => (registrarFalha("mesa-ads: referenciasDoNicho falhou", e), [] as ReferenciaResumo[])),
   ]);
   // Referências: as do cliente, depois os padrões do nicho dele e só então o resto da biblioteca (menos, para o pedido não crescer).
   const idsDoNicho = new Set(refsDoNicho.map((r) => r.id));
@@ -2657,7 +2659,7 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const podeMudar = p.status !== "concluido";
 
   const [briefing, ctx, refs, anexos] = await Promise.all([
-    carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch(() => null),
+    carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     montarContextoAds(servico, p.client_id, marcaDoPedido(servico, p.client_id, corpo)),
     referenciasParaOPlano(servico, p.client_id),
     baixarAnexos(servico, p.client_id, corpo.anexos),
@@ -2784,7 +2786,7 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
   // Marca por projeto (Acerbi e CME): a escolhida na tela vai para a direção e o Estúdio usa a logo dela.
   const marcaDosCriativos = await marcaDoPedido(servico, p.client_id, corpo);
   const [briefing, marca, modeloImagem] = await Promise.all([
-    carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch(() => null),
+    carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     lerMarcaParaDirecaoDaMarca(servico, p.client_id, marcaDosCriativos),
     modeloPadrao("imagem"),
   ]);
@@ -3028,9 +3030,9 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   await exigirAcessoAoCliente(chamador, c.client_id);
   const qtd = Math.min(5, Math.max(1, Math.round(Number(corpo.quantidade) || 3)));
   const pedidoEquipe = texto(corpo.pedido, 1500);
-  const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch(() => null) : null;
+  const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
   const angulo = plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
-  const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch(() => null);
+  const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(c.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
   const s = await chamarTexto({
@@ -3108,7 +3110,7 @@ async function resultadosLer(servico: SupabaseClient, chamador: Chamador, corpo:
   const [{ data: ligados, error }, anuncios, briefing] = await Promise.all([
     servico.from("ads_criativos").select("id, nome, plano_id, angulo_id, formato, status, ad_id, evidencia, trabalho_id, copy").eq("client_id", clientId).not("ad_id", "is", null).limit(500),
     lerAnunciosDoCliente(servico, clientId),
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
   ]);
   if (error) throw new ErroHttp(503, "criativos_indisponiveis", "Não foi possível ler os criativos do cliente.");
   const lista = (ligados as (Criativo & { ad_id: string })[] | null) ?? [];
@@ -3149,9 +3151,9 @@ async function aprendizadoRegistrar(servico: SupabaseClient, chamador: Chamador,
   if (!(m.gasto > 0) || m.impressoes <= 0) {
     throw new ErroHttp(409, "sem_metricas_no_periodo", "Este anúncio não tem gasto nem impressões no período. Sem dado documentado, não há aprendizado E3.");
   }
-  const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch(() => null) : null;
+  const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
   const angulo = plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
-  const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch(() => null);
+  const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const tolera = numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl);
   const diagnostico = diagnosticar(m, linhas, tolera);
   const direcao = direcaoDoResultado(m, tolera);
@@ -3615,7 +3617,7 @@ async function abrirAnuncioProprio(servico: SupabaseClient, clientId: string, re
       .select("ad_id, ad_name, titulo, corpo, destino, effective_status, image_url, thumbnail_url, video_id, campaign_id, updated_at, raw")
       .eq("client_id", clientId).eq("ad_id", adId).order("updated_at", { ascending: false }).limit(1),
     lerDiarias(servico, clientId, { adIds: [adId] }),
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
   ]);
   const criativo = ((criativos as AnuncioMeta[] | null) ?? [])[0] ?? null;
   const copy = extrairCopyDoRaw(criativo?.raw, criativo ?? {});
@@ -4132,7 +4134,7 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
 
   const [emFoco, briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
     corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("criado_em", { ascending: false }).limit(12),
@@ -4339,7 +4341,7 @@ async function ofertaDoContexto(servico: SupabaseClient, chamador: Chamador, cor
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
   const [briefing, ctx, ofertasQ] = await Promise.all([
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("criado_em", { ascending: false }).limit(50),
   ]);
@@ -4463,11 +4465,11 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
     servico.from("external_accounts").select("id, status").eq("client_id", clientId).eq("platform", "meta_ads"),
     servico.from("ads_campaigns").select("campaign_id, name, effective_status, objective, daily_budget, lifetime_budget, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(300),
     lerAnunciosDoCliente(servico, clientId, false),
-    lerDiariasAds(servico, clientId, inicio, fim).catch(() => { throw new ErroHttp(503, "metricas_indisponiveis", "Não foi possível ler as métricas dos anúncios."); }),
-    lerDiariasAds(servico, clientId, antesInicio, antesFim).catch(() => [] as LinhaDiariaAds[]),
-    carregarBriefing(servico, clientId).catch(() => null),
+    lerDiariasAds(servico, clientId, inicio, fim).catch((e) => { registrarFalha("mesa-ads: lerDiariasAds falhou", e); throw new ErroHttp(503, "metricas_indisponiveis", "Não foi possível ler as métricas dos anúncios."); }),
+    lerDiariasAds(servico, clientId, antesInicio, antesFim).catch((e) => (registrarFalha("mesa-ads: lerDiariasAds falhou", e), [] as LinhaDiariaAds[])),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     servico.from("ads_referencias").select("id, ad_id, storage_path").eq("client_id", clientId).not("ad_id", "is", null),
-    lerSaldosDasContas(servico, clientId).catch(() => ({ contas: [] as SaldoDaConta[], disponivel: false })),
+    lerSaldosDasContas(servico, clientId).catch((e) => (registrarFalha("mesa-ads: lerSaldosDasContas falhou", e), ({ contas: [] as SaldoDaConta[], disponivel: false }))),
     // v5: criativos da Mesa Ads já ligados a anúncio (a mesma arte em outro anúncio herda o vínculo pela peça).
     servico.from("ads_criativos").select("id, nome, ad_id").eq("client_id", clientId).not("ad_id", "is", null).limit(500),
   ]);
@@ -4641,7 +4643,7 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
   const conta = await lerContaAoVivo(servico, clientId, corpo.dias, { inicio: corpo.inicio, fim: corpo.fim });
   const comDados = conta.anuncios.filter((a) => a.metricas.impressoes > 0).slice(0, 40);
   if (!comDados.length) throw new ErroHttp(409, "sem_dados_de_conta", "Nenhum anúncio com entrega no período. Sincronize a conta ou escolha um período maior.");
-  const briefing = await carregarBriefing(servico, clientId).catch(() => null);
+  const briefing = await carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const m = (x: MetricasDaConta) => ({ gasto: x.gasto, impressoes: x.impressoes, ctr_saida_pct: x.ctr_saida_pct, cpm: x.cpm, cpc: x.cpc, frequencia_media: x.frequencia_media, resultado: x.resultado_rotulo, resultados: x.resultados, resultados_por_tipo: x.resultados_por_tipo, custo_por_resultado: x.custo_por_resultado, roas: x.roas });
   const dados = {
     periodo: conta.periodo,
@@ -4809,7 +4811,7 @@ async function evolucao(servico: SupabaseClient, chamador: Chamador, corpo: Reco
   const periodo = periodoDoPedido(corpo, DIAS_DESEMPENHO, 30, hojeSaoPaulo());
   const [d, briefing] = await Promise.all([
     lerDesempenhoDoCliente(servico, clientId, periodo),
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
   ]);
   const leitura = lerEvolucao({
     periodo: { inicio: periodo.inicio, fim: periodo.fim },
@@ -4894,7 +4896,7 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
   await exigirAcessoAoCliente(chamador, clientId);
   const qtd = Math.min(16, Math.max(6, Math.round(Number(corpo.quantidade) || 10)));
   if (corpo.nicho != null && corpo.nicho !== "" && !NICHOS.some((n) => n.id === corpo.nicho)) throw new ErroHttp(400, "nicho_invalido", "Nicho desconhecido.");
-  const [ctx, briefing] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId).catch(() => null)]);
+  const [ctx, briefing] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null))]);
   const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId }, corpo.nicho);
   const nicho = achado.nicho;
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
@@ -5037,12 +5039,12 @@ async function contextoDoPacote(
   marcaDoPedidoP: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
 ): Promise<ContextoDoPacote> {
   const [briefing, marca] = await Promise.all([
-    carregarBriefing(servico, clientId, plano?.briefing_id ?? undefined).catch(() => null),
+    carregarBriefing(servico, clientId, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     // Marca por projeto (Acerbi e CME): a da tela; sem marca, a do cliente.
     Promise.resolve(marcaDoPedidoP).then((m) => lerMarcaParaDirecaoDaMarca(servico, clientId, m)),
   ]);
   const ofertaId = plano?.estrutura?.oferta_id;
-  const ofertaLinha = ofertaId ? await carregarOferta(servico, clientId, ofertaId).catch(() => null) : null;
+  const ofertaLinha = ofertaId ? await carregarOferta(servico, clientId, ofertaId).catch((e) => (registrarFalha("mesa-ads: carregarOferta falhou", e), null)) : null;
   const objetivo = objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao);
   return { briefing, plano, oferta: ofertaLinha ? ofertaDaLinha(ofertaLinha) : null, objetivo, marca };
 }
@@ -5191,7 +5193,7 @@ async function copyPacote(servico: SupabaseClient, chamador: Chamador, corpo: Re
   if (corpo.criativo_id) {
     unico = await carregarCriativo(servico, corpo.criativo_id);
     await exigirAcessoAoCliente(chamador, unico.client_id);
-    plano = unico.plano_id ? await carregarPlano(servico, unico.plano_id).catch(() => null) : null;
+    plano = unico.plano_id ? await carregarPlano(servico, unico.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
     criativos = [unico];
   } else if (corpo.plano_id) {
     plano = await carregarPlano(servico, corpo.plano_id);
@@ -5336,7 +5338,7 @@ async function pacoteEnviar(servico: SupabaseClient, chamador: Chamador, corpo: 
   if (error) throw new ErroHttp(503, "criativos_indisponiveis", "Não foi possível ler os criativos.");
   const criativos = ((data as Criativo[] | null) ?? []).map((c) => ({ ...c, copy: (c.copy ?? {}) as Record<string, unknown> }));
   if (!criativos.length) throw new ErroHttp(404, "sem_criativos", "Nenhum criativo encontrado para o pacote.");
-  if (!plano && criativos[0].plano_id) plano = await carregarPlano(servico, criativos[0].plano_id).catch(() => null);
+  if (!plano && criativos[0].plano_id) plano = await carregarPlano(servico, criativos[0].plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null));
   const ctx = await contextoDoPacote(servico, clientId, plano, marcaDoPedido(servico, clientId, corpo));
 
   const trabalhoIds = criativos.map((c) => c.trabalho_id).filter((x): x is string => !!x);
@@ -5671,7 +5673,7 @@ async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, 
       impressoesPendentes++;
       return;
     }
-    const h = await t.rodar().catch(() => null);
+    const h = await t.rodar().catch((e) => (registrarFalha("mesa-ads: tarefa de impressão falhou", e), null));
     if (h === PENDENTE) {
       impressoesPendentes++;
       return;
@@ -6033,11 +6035,11 @@ async function lerContextoDoAgenteSenior(servico: SupabaseClient, clientId: stri
   const [ctx, conta, briefing, ofertasQ, criativosQ, planosQ, desempenho] = await Promise.all([
     montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     lerContaAoVivo(servico, clientId, periodo.dias),
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(6),
     servico.from("ads_criativos").select("id, nome, formato, status, ad_id, plano_id, copy, criado_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(40),
     servico.from("ads_planos").select("id, nome, status, angulos, estrutura, criado_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(4),
-    lerDesempenhoDoCliente(servico, clientId, periodo).catch(() => null),
+    lerDesempenhoDoCliente(servico, clientId, periodo).catch((e) => (registrarFalha("mesa-ads: lerDesempenhoDoCliente falhou", e), null)),
   ]);
   const evolucaoLida = desempenho
     ? lerEvolucao({
@@ -6145,7 +6147,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     lerLinhaDaRotina(servico, clientId),
     oQueFoiFeitoParaOAgente(servico, clientId),
     // Frente AD: o que a mensagem cita pelo nome (pausado, encerrado, fora do período ou só na Meta).
-    itensCitadosNaMensagem(servico, clientId, mensagem).catch(() => ({ campanhas: [], conjuntos: [], anuncios: [] })),
+    itensCitadosNaMensagem(servico, clientId, mensagem).catch((e) => (registrarFalha("mesa-ads: itensCitadosNaMensagem falhou", e), ({ campanhas: [], conjuntos: [], anuncios: [] }))),
   ]);
   const leve = acaoClara ? raciocinioMaisLeve(modeloBase.modelo, modeloBase.raciocinio) : undefined;
   const modeloEscolhido = leve ? { ...modeloBase, raciocinio: leve } : modeloBase;
@@ -6269,7 +6271,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   } catch (err) {
     // Nunca some: o motivo fica na conversa (e o erro segue para a tela como antes).
     const motivo = err instanceof ErroHttp || err instanceof IaMotorErro ? err.message : "falha inesperada no servidor";
-    await registrarMensagens(servico, conversaId, clientId, [{ papel: "agente", conteudo: `Não consegui responder: ${motivo}. Nada foi feito na conta.` }]).catch(() => undefined);
+    await registrarMensagens(servico, conversaId, clientId, [{ papel: "agente", conteudo: `Não consegui responder: ${motivo}. Nada foi feito na conta.` }]).catch((e) => (registrarFalha("mesa-ads: registrarMensagens falhou", e), undefined));
     await andamento.passo("falhou", `Não deu: ${motivo}`, { fim: true, erro: motivo }).catch(() => undefined);
     throw err;
   }
@@ -6313,7 +6315,7 @@ async function itensDaContaParaOrdem(servico: SupabaseClient, clientId: string, 
   };
   const trecho = trechoParaBuscarNaMeta(mensagem, [...itens.campanhas.map((c) => c.nome || ""), ...itens.conjuntos.map((c) => c.nome || ""), ...itens.anuncios.map((a) => a.nome || "")]);
   if (!trecho) return itens;
-  const achados = await buscarNaMetaPeloNome(servico, clientId, trecho).catch(() => null);
+  const achados = await buscarNaMetaPeloNome(servico, clientId, trecho).catch((e) => (registrarFalha("mesa-ads: buscarNaMetaPeloNome falhou", e), null));
   if (!achados) return itens;
   const ja = new Set([...itens.campanhas.map((c) => c.campaign_id), ...itens.conjuntos.map((c) => c.adset_id), ...itens.anuncios.map((a) => a.ad_id)]);
   for (const c of achados.campanhas) if (!ja.has(c.id)) itens.campanhas.unshift({ campaign_id: c.id, nome: c.nome, status: c.efetivo, orcamento_diario: c.orcamento_diario_brl });
@@ -6331,9 +6333,9 @@ async function buscarNaMetaPeloNome(servico: SupabaseClient, clientId: string, t
   const saida = { campanhas: [] as CampanhaLida[], conjuntos: [] as ConjuntoLido[], anuncios: [] as AnuncioLido[] };
   for (const act of [...contas].slice(0, 3)) {
     const [c, g, a] = await Promise.all([
-      grafo.ler(`act_${act}/campaigns?limit=10&filtering=${filtro}`, "id,name,status,effective_status,daily_budget").catch(() => null),
-      grafo.ler(`act_${act}/adsets?limit=10&filtering=${filtro}`, "id,name,campaign_id,status,effective_status").catch(() => null),
-      grafo.ler(`act_${act}/ads?limit=10&filtering=${filtro}`, "id,name,campaign_id,adset_id,status,effective_status").catch(() => null),
+      grafo.ler(`act_${act}/campaigns?limit=10&filtering=${filtro}`, "id,name,status,effective_status,daily_budget").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
+      grafo.ler(`act_${act}/adsets?limit=10&filtering=${filtro}`, "id,name,campaign_id,status,effective_status").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
+      grafo.ler(`act_${act}/ads?limit=10&filtering=${filtro}`, "id,name,campaign_id,adset_id,status,effective_status").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
     ]);
     saida.campanhas.push(...campanhasDaMeta(c));
     saida.conjuntos.push(...conjuntosDaMeta(g));
@@ -6357,8 +6359,8 @@ async function detalheParaEscolher(grafo: GrafoMeta | null, c: CandidatoDaOrdem)
   const partes = [`id final ${c.meta_id.slice(-6)}`];
   if (!grafo) return partes.concat(c.status ? [STATUS_CURTO[c.status] ?? c.status.toLowerCase()] : []).join(" · ");
   const [info, ins] = await Promise.all([
-    grafo.ler(c.meta_id, c.nivel === "anuncio" ? "effective_status,created_time" : "effective_status,start_time,stop_time").catch(() => null),
-    grafo.ler(`${c.meta_id}/insights?date_preset=maximum`, "spend").catch(() => null),
+    grafo.ler(c.meta_id, c.nivel === "anuncio" ? "effective_status,created_time" : "effective_status,start_time,stop_time").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
+    grafo.ler(`${c.meta_id}/insights?date_preset=maximum`, "spend").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
   ]);
   const efetivo = info && typeof info.effective_status === "string" ? info.effective_status : c.status;
   if (efetivo) partes.push(STATUS_CURTO[efetivo] ?? efetivo.toLowerCase());
@@ -6659,7 +6661,7 @@ async function bloqueioNasContas(servico: SupabaseClient, token: string, grafo: 
   };
   let motivo: string | null = null;
   for (const id of contas) {
-    const conta = await grafo.ler(`act_${id}`, "name,user_tasks,account_status,business{id,name}").catch(() => null);
+    const conta = await grafo.ler(`act_${id}`, "name,user_tasks,account_status,business{id,name}").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null));
     (diagnostico.contas as Record<string, unknown>[]).push({ id, nome: conta?.name ?? null, tarefas: conta?.user_tasks ?? null, status: conta?.account_status ?? null, empresa: conta?.business ?? null, lida: !!conta });
     motivo = motivo ?? bloqueioDaGestaoNaConta(debug, conta, id);
   }
@@ -6742,7 +6744,7 @@ async function otimizarNaConversa(
   const [conta, acervo, briefing, rotina, planosQ, ctx] = await Promise.all([
     lerContaAoVivo(servico, e.clientId, DIAS_DO_OTIMIZAR),
     acervoDaConta(servico, e.clientId),
-    carregarBriefing(servico, e.clientId).catch(() => null),
+    carregarBriefing(servico, e.clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     lerLinhaDaRotina(servico, e.clientId),
     servico.from("ads_planos").select("*").eq("client_id", e.clientId).in("status", ["em_teste", "aprovado"]).order("atualizado_em", { ascending: false }).limit(1),
     montarContextoAds(servico, e.clientId, null),
@@ -6891,7 +6893,7 @@ async function acessoDeGestao(servico: SupabaseClient, clientId: string | null, 
     const chave = t.tokenId ?? `cliente:${clientId ?? "carteira"}`;
     if (opcoes.conferir) conferenciasEmMemoria.esquecer(chave);
     const lida = await conferenciasEmMemoria.obter(chave, async () => {
-      const bruto = await grafo.ler("me/permissions", "permission,status").catch(() => null);
+      const bruto = await grafo.ler("me/permissions", "permission,status").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null));
       const concedidos = escoposConcedidos(bruto);
       if (concedidos && t.tokenId) await servico.rpc("ads_token_registrar_escopos", { _token_id: t.tokenId, _escopos: concedidos });
       return { escopos: concedidos, em: new Date().toISOString() };
@@ -6906,7 +6908,7 @@ async function acessoDeGestao(servico: SupabaseClient, clientId: string | null, 
     if (opcoes.conferir) bloqueiosEmMemoria.esquecer(chaveDaConta);
     // Uma leitura a cada 10 min por cliente (conta + debug_token); Conferir agora lê de novo.
     const token = t.token;
-    const leitura = await bloqueiosEmMemoria.obter(chaveDaConta, () => bloqueioNasContas(servico, token, grafo, clientId)).catch(() => ({ motivo: null, diagnostico: null }));
+    const leitura = await bloqueiosEmMemoria.obter(chaveDaConta, () => bloqueioNasContas(servico, token, grafo, clientId)).catch((e) => (registrarFalha("mesa-ads: leitura dos bloqueios das contas falhou", e), ({ motivo: null, diagnostico: null })));
     if (leitura.motivo) return { grafo, gestao: { disponivel: false, motivo: leitura.motivo, faltam: [], escopos, conferido_em: em, tem_token: true, guardada: t.guardada, diagnostico: leitura.diagnostico } };
     if (leitura.diagnostico) return { grafo, gestao: { ...g, escopos, conferido_em: em, tem_token: true, guardada: t.guardada, diagnostico: leitura.diagnostico } };
   }
@@ -6972,7 +6974,7 @@ async function prepararAcoesDaConta(
   const grafo = acesso.grafo;
   const itens = await Promise.all(acoes.itens.map(async (i) => {
     if (!i.na_meta || !i.alvo) return i;
-    const lido = await grafo.ler(i.alvo.meta_id, CAMPOS_DO_ESTADO(i.alvo.nivel)).catch(() => null);
+    const lido = await grafo.ler(i.alvo.meta_id, CAMPOS_DO_ESTADO(i.alvo.nivel)).catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null));
     return fotografar(i, estadoLido(lido));
   }));
   return marcarEnsaio({ ...acoes, itens }, gestao);
@@ -7029,7 +7031,7 @@ async function anexoDaMensagemDoAgente(servico: SupabaseClient, chamador: Chamad
 
 /** Arte (base64) e copy do criativo da Mesa, para subir como anúncio novo. */
 async function apoioDoCriativo(servico: SupabaseClient, clientId: string, criativoId: string) {
-  const c = await carregarCriativo(servico, criativoId).catch(() => null);
+  const c = await carregarCriativo(servico, criativoId).catch((e) => (registrarFalha("mesa-ads: carregarCriativo falhou", e), null));
   if (!c || c.client_id !== clientId) return null;
   const { data: t } = c.trabalho_id
     ? await servico.from("estudio_trabalhos").select("id, cards, direcao").eq("id", c.trabalho_id).eq("client_id", clientId).maybeSingle()
@@ -7072,14 +7074,14 @@ async function projetoAtivo(servico: SupabaseClient, clientId: string): Promise<
 async function criarPlanoDoAgente(servico: SupabaseClient, chamador: Chamador, mensagemId: unknown): Promise<{ plano: Plano; lacunas: string[]; ja_existia: boolean }> {
   const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, mensagemId, "estrategia");
   if (typeof anexo.plano_criado_id === "string" && UUID.test(anexo.plano_criado_id)) {
-    const existente = await carregarPlano(servico, anexo.plano_criado_id).catch(() => null);
+    const existente = await carregarPlano(servico, anexo.plano_criado_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null));
     if (existente && existente.client_id === m.client_id) return { plano: existente, lacunas: Array.isArray(existente.estrutura.lacunas) ? existente.estrutura.lacunas as string[] : [], ja_existia: true };
   }
   const e = anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null;
   if (!e) throw new ErroHttp(404, "estrategia_inexistente", "Esta mensagem não tem a estratégia do agente.");
   const numeros = (anexo.numeros && typeof anexo.numeros === "object" ? anexo.numeros : {}) as Record<string, unknown>;
   const periodo = (numeros.periodo && typeof numeros.periodo === "object" ? numeros.periodo : {}) as Record<string, unknown>;
-  const briefing = await carregarBriefing(servico, m.client_id).catch(() => null);
+  const briefing = await carregarBriefing(servico, m.client_id).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const gasto = numeroOuNulo(numeros.gasto);
   const dias = numeroOuNulo(periodo.dias);
   const re = (e.reestruturacao && typeof e.reestruturacao === "object" ? e.reestruturacao : {}) as Record<string, unknown>;
@@ -7112,7 +7114,7 @@ async function criarPlanoDoAgente(servico: SupabaseClient, chamador: Chamador, m
   }).select("*").single();
   if (error || !data) throw new ErroHttp(503, "plano_nao_salvo", "Não foi possível criar o plano de teste.");
   const plano = data as Plano;
-  await gravar({ ...anexo, plano_criado_id: plano.id }).catch(() => null);
+  await gravar({ ...anexo, plano_criado_id: plano.id }).catch((e) => (registrarFalha("mesa-ads: gravar falhou", e), null));
   return { plano, lacunas: montado.lacunas, ja_existia: false };
 }
 
@@ -7390,7 +7392,7 @@ async function kitRecepcaoGerar(servico: SupabaseClient, chamador: Chamador, cor
   const clientId = plano.client_id;
   const ofertaId = typeof plano.estrutura.oferta_id === "string" ? plano.estrutura.oferta_id : null;
   const [briefing, ofertasQ, perfil, modeloEscolhido] = await Promise.all([
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(6),
     servico.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
     resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
@@ -7506,7 +7508,7 @@ async function pacoteImportar(servico: SupabaseClient, chamador: Chamador, corpo
 
   const marcaDosCriativos = await marcaDoPedido(servico, clientId, corpo);
   const [briefing, marca, modeloImagem] = await Promise.all([
-    carregarBriefing(servico, clientId).catch(() => null),
+    carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     lerMarcaParaDirecaoDaMarca(servico, clientId, marcaDosCriativos),
     modeloPadrao("imagem"),
   ]);
@@ -7927,7 +7929,7 @@ async function registrarNoQueFoiFeito(servico: SupabaseClient, clientId: string,
  * do dossiê (dossie_enfileirar; o cron de 1 min reescreve). Nunca reescreve o dossiê aqui.
  */
 async function mandarAoDossie(servico: SupabaseClient, clientId: string, criadoPor: string | null, titulo: string, conteudo: string, metadata: Record<string, unknown>) {
-  const projeto = await projetoAtivo(servico, clientId).catch(() => null);
+  const projeto = await projetoAtivo(servico, clientId).catch((e) => (registrarFalha("mesa-ads: projetoAtivo falhou", e), null));
   const { error } = await servico.from("project_memory").insert({
     client_id: clientId,
     project_id: projeto,
@@ -8196,7 +8198,9 @@ async function rotinaRegra(servico: SupabaseClient, chamador: Chamador, corpo: R
       const cobrado = await cobrarJev(r, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId });
       custo = cobrado?.custoUsd ?? 0;
       regra = regraDasRespostas(textoDaRegra, alvos, hoje, r.answers, meta);
-    } catch {
+    } catch (e) {
+      // Frente FS: o aviso já vai para a tela; o motivo agora também fica no log.
+      registrarFalha("mesa-ads: jev da regra da rotina falhou (fica só avisando)", e, { client_id: clientId });
       regra = { ...regraDasRespostas(textoDaRegra, alvos, hoje, null, meta), tipo: "so_avisar" as const };
       aviso = "Não consegui entender a instrução agora. Por segurança, a rotina fica só avisando (sem agir) até você revisar ou tirar esta regra.";
     }
@@ -8237,7 +8241,7 @@ function depsDaRotina(servico: SupabaseClient, clientId: string, ator: string | 
     lerRetrato: async () => {
       const [conta, briefing, planosQ, linha] = await Promise.all([
         lerContaAoVivo(servico, clientId, 7),
-        carregarBriefing(servico, clientId).catch(() => null),
+        carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
         servico.from("ads_planos").select("*").eq("client_id", clientId).in("status", ["em_teste", "aprovado"]).order("atualizado_em", { ascending: false }).limit(1),
         lerLinhaDaRotina(servico, clientId),
       ]);
@@ -8548,7 +8552,7 @@ async function estruturaDaColeta(
 /** Números do período por campanha, conjunto e anúncio (coleta do painel; resultado certo para o objetivo). */
 async function metricasDoGerenciador(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string }, paisDoAnuncio: Map<string, { campanha: string | null; conjunto: string | null }>) {
   const [diarias, campQ] = await Promise.all([
-    lerDiariasAds(servico, clientId, periodo.inicio, periodo.fim).catch(() => null),
+    lerDiariasAds(servico, clientId, periodo.inicio, periodo.fim).catch((e) => (registrarFalha("mesa-ads: lerDiariasAds falhou", e), null)),
     servico.from("ads_campaigns").select("campaign_id, objective, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(500),
   ]);
   const campanhasLidas = (campQ.data as { campaign_id: string; objective: string | null; updated_at: string | null }[] | null) ?? [];
@@ -8592,7 +8596,7 @@ async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo
   const marcar = (etapa: string, desde: number) => { tempos[etapa] = Date.now() - desde; };
   const [extQ, acesso, fotosQ, marcasQ] = await Promise.all([
     servico.from("external_accounts").select("id, platform, external_id, display_name, status").eq("client_id", clientId).in("platform", PLATAFORMAS_DE_ANUNCIO.map((p) => p.plataforma)),
-    acessoDeGestao(servico, clientId).catch(() => null),
+    acessoDeGestao(servico, clientId).catch((e) => (registrarFalha("mesa-ads: acessoDeGestao falhou", e), null)),
     servico.from("ads_account_snapshot").select("external_account_id, account_status, balance, amount_spent, currency, coletado_em").eq("client_id", clientId),
     servico.from("ads_rotina_acoes").select("id, origem, tipo, estado, alvo, resumo, criado_em, desfazer, prova").eq("client_id", clientId)
       .gte("criado_em", new Date(agoraMs - 7 * 86400_000).toISOString()).order("criado_em", { ascending: false }).limit(150),
@@ -8931,7 +8935,7 @@ async function gerenciadorAnuncio(servico: SupabaseClient, chamador: Chamador, c
   const inicioDoPedido = Date.now();
   const anuncio = await anunciosAbertos.obter(`${clientId}:${adId}:${periodo.inicio}:${periodo.fim}`, async () => {
     const [acesso, contas, coletaQ] = await Promise.all([
-      acessoDeGestao(servico, clientId).catch(() => null),
+      acessoDeGestao(servico, clientId).catch((e) => (registrarFalha("mesa-ads: acessoDeGestao falhou", e), null)),
       contasMetaDoCliente(servico, clientId),
       servico.from("ads_creatives").select("ad_id, ad_name, raw, titulo, corpo, destino, image_url, thumbnail_url, video_id").eq("client_id", clientId).eq("ad_id", adId)
         .order("updated_at", { ascending: false }).limit(1).maybeSingle(),

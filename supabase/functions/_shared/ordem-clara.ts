@@ -18,6 +18,8 @@
 import { jevPerguntar, probabilidadeNoul } from "./jev.ts";
 import { pareceOrdem } from "./acoes-do-agente.ts";
 import { pedeParaLevar } from "./mapa-do-painel.ts";
+// Frente FS (29/09): sem Jev a regra do verbo decide, mas a falha fica no log.
+import { registrarFalha } from "./falha-registrada.ts";
 
 export const LIMIAR_DA_ORDEM = 0.75;
 /** Ir sozinho para outra tela é mais incômodo que ficar: limiar mais alto. */
@@ -53,8 +55,9 @@ export async function ehOrdemClara(
     const p = probabilidadeNoul(r.answers.ordem);
     const l = probabilidadeNoul(r.answers.levar);
     if (p !== null) return { clara: p >= LIMIAR_DA_ORDEM, probabilidade: p, fonte: "jev", levar: l !== null ? l >= LIMIAR_DO_LEVAR : pedeParaLevar(texto) };
-  } catch {
+  } catch (e) {
     // Sem Jev: a regra do verbo decide.
+    registrarFalha("ordem-clara: jev falhou (vale a regra do verbo)", e, { agente: contexto.agente });
   }
   return { clara: pareceOrdem(texto), probabilidade: null, fonte: "regra", levar: pedeParaLevar(texto) };
 }

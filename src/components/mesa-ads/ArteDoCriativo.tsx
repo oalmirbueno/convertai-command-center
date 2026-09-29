@@ -362,6 +362,8 @@ export default function ArteDoCriativo({
       const g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalho.id, ordem });
       custo = custoDaResposta(g) || 0;
       onAtualizar();
+      // Frente FS: a arte saiu, mas algo no caminho falhou e mudou o resultado (logo, referência, molde).
+      if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning("Arte gerada com aviso", { description: g.aviso_da_acao, duration: 12000 });
     } catch (e) {
       soltar(ordem);
       throw e;

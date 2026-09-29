@@ -112,6 +112,8 @@ import {
   REDES_SOCIAIS,
   usernameDe,
 } from "../_shared/instagram-do-cliente.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -512,8 +514,8 @@ type Negocio = EstadoDaBio["negocio"] & { cidade_texto: string; dossie: string }
 async function negocioDoCliente(clientId: string, comDossie: boolean, marca: MarcaDoCliente | null = null): Promise<Negocio> {
   const [perfil, ctx, dossie] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
-    lerContextoDaMarca(servico(), clientId, marca).catch(() => ({})),
-    comDossie ? lerDossie(servico(), clientId, 1800).catch(() => null) : Promise.resolve(null),
+    lerContextoDaMarca(servico(), clientId, marca).catch((e) => (registrarFalha("mesa-instagram: lerContextoDaMarca falhou", e), ({}))),
+    comDossie ? lerDossie(servico(), clientId, 1800).catch((e) => (registrarFalha("mesa-instagram: lerDossie falhou", e), null)) : Promise.resolve(null),
   ]);
   const p = (perfil.data || {}) as { company_name?: string | null; full_name?: string | null };
   const c = ctx as Record<string, unknown>;

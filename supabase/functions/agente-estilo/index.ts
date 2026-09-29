@@ -117,6 +117,8 @@ import {
   rotasDosTemplates,
   templatesNaConversa,
 } from "./templates.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -259,7 +261,7 @@ type Pedido = { clientId: string; marcaId: string | null; marca: Awaited<ReturnT
 async function pedidoDoCliente(ch: Chamador, corpo: Record<string, unknown>): Promise<Pedido> {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const marca = await marcaDoPedido(servico(), clientId, corpo).catch(() => null);
+  const marca = await marcaDoPedido(servico(), clientId, corpo).catch((e) => (registrarFalha("agente-estilo: marcaDoPedido falhou", e), null));
   return { clientId, marcaId: chaveDaMarca(marca), marca };
 }
 
@@ -348,7 +350,7 @@ async function estadoParaATela(p: Pedido, e: EstiloDoCliente) {
   const refs = g ? g.referencias : [];
   const testes = e.testes.slice().reverse();
   // Frente AP: só sugestão (entra com o botão da equipe); a que já está no estilo não volta.
-  const sugeridas = await sugestoesDasEntregas(banco(), p.clientId, refs.map((r) => r.id)).catch(() => []);
+  const sugeridas = await sugestoesDasEntregas(banco(), p.clientId, refs.map((r) => r.id)).catch((e) => (registrarFalha("agente-estilo: sugestoesDasEntregas falhou", e), []));
   const links = await linksAssinados([
     ...refs.map((r) => ({ bucket: r.bucket, caminho: r.caminho })),
     ...testes.map((t) => ({ bucket: BUCKET_DO_ESTILO, caminho: t.caminho })),
@@ -540,8 +542,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
     nomeDoCliente(p.clientId),
     estiloDo(p),
-    lerContextoDaMarca(servico(), p.clientId, p.marca).catch(() => ({})),
-    resumoDoCerebro(servico(), p.clientId, ["arte", "copy", "campanha"], { limite: 12, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }).catch(() => ({ texto: "" })),
+    lerContextoDaMarca(servico(), p.clientId, p.marca).catch((e) => (registrarFalha("agente-estilo: lerContextoDaMarca falhou", e), ({}))),
+    resumoDoCerebro(servico(), p.clientId, ["arte", "copy", "campanha"], { limite: 12, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }).catch((e) => (registrarFalha("agente-estilo: resumoDoCerebro falhou", e), ({ texto: "" }))),
     candidatasDoCliente(p),
   ]);
   // Anexos: guardados e lidos juntos (várias referências de uma vez).
@@ -549,7 +551,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const leitura = await lerReferencias(ch, p, conversaId, novas, anexos.map((a) => ({ bytes: a.bytes, mime: a.mime, nome: `${a.nome}.${extensao(a.mime)}` })));
   const alvos = alvosDoEstilo(estiloAntes, [...novas, ...doCliente.candidatas]);
   // Frente T: templates (t*), carrossel anexado (m1) e a leitura da sequência quando a mensagem fala de carrossel.
-  const tpl = await templatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, { novas, imagens: anexos.map((a) => ({ bytes: a.bytes, mime: a.mime, nome: `${a.nome}.${extensao(a.mime)}` })), mensagem, candidatas: alvos.candidatas }).catch(() => null);
+  const tpl = await templatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, { novas, imagens: anexos.map((a) => ({ bytes: a.bytes, mime: a.mime, nome: `${a.nome}.${extensao(a.mime)}` })), mensagem, candidatas: alvos.candidatas }).catch((e) => (registrarFalha("agente-estilo: templatesNaConversa falhou", e), null));
   const g = guiaAtual(estiloAntes);
   const hoje = new Date().toISOString().slice(0, 10);
   const c = contexto as Record<string, unknown>;
@@ -589,7 +591,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   const leituraDoAgente = limpo(j.leitura_das_referencias, 2000);
-  const gerador = await geradorDoEstudio(corpo.modelo_imagem_id).catch(() => null);
+  const gerador = await geradorDoEstudio(corpo.modelo_imagem_id).catch((e) => (registrarFalha("agente-estilo: geradorDoEstudio falhou", e), null));
   const acao = normalizarAcoesDoEstilo(separarAcoes(j.acoes).doEstilo, alvos, {
     proposta: j.proposta_de_estilo,
     clientId: p.clientId,
@@ -1054,7 +1056,7 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
     input: { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
     success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
   });
-  const e = await estiloDo(p).catch(() => null);
+  const e = await estiloDo(p).catch((e) => (registrarFalha("agente-estilo: estiloDo falhou", e), null));
   return json({ anexo: r.anexo, feitos, falhas, custo_usd: Math.round(custo * 1e6) / 1e6, estado: e ? await estadoParaATela(p, e) : null });
 }
 
@@ -1072,7 +1074,7 @@ async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
     correlationId: crypto.randomUUID(), toolName: "estilo_desfazer_acao_do_agente", origin: "mesa:agente-estilo", keyId: `mesa:agente-estilo:${ch.userId}`, scopes: ["mesa:write"],
     input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: r.falharam.length === 0, statusCode: 200, durationMs: 0, resultRef: guardada.mensagem.id,
   });
-  const e = await estiloDo(p).catch(() => null);
+  const e = await estiloDo(p).catch((e) => (registrarFalha("agente-estilo: estiloDo falhou", e), null));
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0, estado: e ? await estadoParaATela(p, e) : null });
 }
 

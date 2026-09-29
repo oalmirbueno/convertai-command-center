@@ -771,7 +771,7 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     modulo: "_shared/prancha-de-referencias.ts",
     ligacao: {
       arquivo: ESTUDIO,
-      trechos: ["await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina)", "prancha: pranchaDaReferencia,", "serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia })"],
+      trechos: ["await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina, avisosDaGeracao)", "prancha: pranchaDaReferencia,", "serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia })"],
     },
     intocado: "Referência simples (sem leitura de prancha, ou lida como arte única) segue igual; a geração nunca dispara a leitura da prancha.",
   },

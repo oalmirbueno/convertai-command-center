@@ -125,6 +125,8 @@ import type { Chamador, FerramentasDaMesa, ItemDaBibliotecaLido } from "./ferram
 import type { LinhaImagemPersona, LinhaPersona } from "./modelos.ts";
 import { garantirPermitido, identidadesDaVista, NIVEIS_PELE, personaUsavel } from "./personas.ts";
 import { FORMATOS, type Formato, TAMANHO_DO_FORMATO } from "./receitas.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export const REF_CANVAS = "foto_canvas";
 /** Padrão do Canvas (pesquisa, seção 4.3): GPT Image 2.5 Sunburst em qualidade alta. */
@@ -393,7 +395,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       return null;
     };
     const precisaDoContexto = entradas.ambiente.some((n) => n.dados.modo === "contexto" && !n.dados.texto);
-    const contexto = precisaDoContexto && f.contextoDoCliente ? await f.contextoDoCliente(canvas.client_id, undefined, corpo.marca_id).catch(() => null) : null;
+    const contexto = precisaDoContexto && f.contextoDoCliente ? await f.contextoDoCliente(canvas.client_id, undefined, corpo.marca_id).catch((e) => (registrarFalha("mesa-foto: contextoDoCliente falhou", e), null)) : null;
     for (const no of entradas.ambiente) {
       const textos: string[] = [];
       const modo = String(no.dados.modo || "descrever");
@@ -501,7 +503,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     if (ajuste.aviso) avisos.push(ajuste.aviso);
     // Cores da marca escolhida no topo (Acerbi ou CME); sem marca, as do cliente.
     const marca = await (corpo.marca_id === undefined ? Promise.resolve(null) : marcaDoPedido(db(), canvas.client_id, corpo))
-      .then((m) => lerMarcaParaDirecaoDaMarca(db(), canvas.client_id, m)).catch(() => null);
+      .then((m) => lerMarcaParaDirecaoDaMarca(db(), canvas.client_id, m)).catch((e) => (registrarFalha("mesa-foto: then falhou", e), null));
     const paleta = (marca?.paleta ?? [])
       .map((p) => (typeof p?.hex === "string" && /^#[0-9a-f]{3,8}$/i.test(p.hex) ? p.hex.toUpperCase() : null))
       .filter((x): x is string => !!x).slice(0, 5);
@@ -754,7 +756,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       if (ea || !a) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível guardar a âncora da personagem.");
       ancora = a as LinhaImagemPersona;
     } catch (e) {
-      await desfazer().catch(() => undefined);
+      await desfazer().catch((e) => (registrarFalha("mesa-foto: desfazer falhou", e), undefined));
       throw e;
     }
     const { data: pronta } = await db().from("foto_modelos").update({ ancora_imagem_id: ancora.id, motor_preferido_id: motorId, status: "ancora" }).eq("id", p.id).select("*").maybeSingle();
@@ -829,7 +831,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
         agente: "gerador_imagem",
       });
     } catch (e) {
-      // Falha fica escrita na geração; tentar de novo é pedido da equipe (sem laço aqui).
+      // Falha fica escrita na geração; tentar de novo é pedido da equipe (sem laço aqui). Frente FS: e no log.
+      console.error("mesa-foto: gerador do canvas falhou", { geracao_id: geracao.id, motivo: e instanceof Error ? e.message.slice(0, 300) : String(e) });
       await db().from("foto_canvas_geracoes").update({ status: "falhou", ultimo_erro: e instanceof Error ? e.message.slice(0, 300) : "Falha do gerador." }).eq("id", geracao.id);
       throw e;
     }
@@ -1009,6 +1012,8 @@ Não julgue beleza nem gosto. Português do Brasil, sem travessão. Responda só
       const rp = temPessoa ? notaScore(res.answers.realismo_pele) : null;
       jev = { divergencia_critica: div, lembra_pessoa_publica: lp, realismo_pele: rp, aviso: (div != null && div >= 0.5) || (lp != null && lp >= 0.5) || (rp != null && rp < 1.5) };
     } catch (e) {
+      // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+      console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
       jev = { erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" };
     }
     const alertas = [...base.alertas];
@@ -1055,7 +1060,7 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
     const [kitsQ, personasQ, contexto, modelo] = await Promise.all([
       db().from("foto_kits").select("id, client_id, nome, variante, tipo, invariantes, status").eq("client_id", c.client_id).neq("status", "arquivado").limit(30),
       db().from("foto_modelos").select("*").or(`client_id.is.null,client_id.eq.${c.client_id}`).neq("status", "arquivada").limit(30),
-      f.contextoDoCliente ? f.contextoDoCliente(c.client_id, undefined, corpo.marca_id).catch(() => null) : Promise.resolve(null),
+      f.contextoDoCliente ? f.contextoDoCliente(c.client_id, undefined, corpo.marca_id).catch((e) => (registrarFalha("mesa-foto: contextoDoCliente falhou", e), null)) : Promise.resolve(null),
       f.modeloDeTexto("diretor_arte", corpo.modelo_id),
     ]);
     const kits = ((kitsQ.data as { id: string; nome: string; variante: string | null; tipo: string; invariantes: string[] | null }[] | null) ?? []).filter((k) => k.tipo !== "pessoa");

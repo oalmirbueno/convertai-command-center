@@ -82,6 +82,11 @@ export interface RespostaDaPrancha {
   parece_arte_unica?: boolean | null;
   dimensoes?: { largura: number; altura: number } | null;
   url?: string | null;
+  /** Frente FS: a leitura (ou a abertura do arquivo) falhou; `motivo` e `aviso_da_acao` dizem por quê. */
+  falhou?: boolean;
+  motivo?: string | null;
+  prancha_erro?: string | null;
+  aviso_da_acao?: string | null;
 }
 
 /** Clique no quadro: capa, sequência, fora e de volta a capa. */

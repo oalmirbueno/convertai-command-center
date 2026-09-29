@@ -377,7 +377,7 @@ describe("4. Referência prancha", () => {
   });
 
   it("servidor: a geração só usa a leitura guardada (referência simples igual); o recorte é local; a tela lê pela ação prancha", () => {
-    expect(gerar).toContain("await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina)");
+    expect(gerar).toContain("await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina, avisosDaGeracao)");
     expect(gerar).not.toContain("lerPrancha(");
     const quadros = estudio.slice(estudio.indexOf("async function quadrosDasPranchas("), estudio.indexOf("async function recortarQuadro("));
     expect(quadros).toContain("pranchaGuardada(t.client_id, r.id)");

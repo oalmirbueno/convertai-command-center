@@ -49,6 +49,8 @@ import { conferirRepeticao, escreverRitual, MOMENTO, RITUAL_BRIEF } from "./escr
 import { lerContextoDoRitual } from "./contexto.ts";
 import { extrairMemoriaDoRitual } from "./memoria.ts";
 import { chaveDaPromessa, reforcarPromessas } from "./reforco.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -174,7 +176,7 @@ Deno.serve(async (req) => {
             promessas,
             evidencias,
             confirmadasPeloDono: confirmadas,
-          }, jevPerguntar).catch(() => null)
+          }, jevPerguntar).catch((e) => (registrarFalha("ritual-writer: julgarDaCentral falhou", e), null))
           : null;
 
         // Reforço interno: promessa da semana passada em andamento vira tarefa urgente e aviso.

@@ -9,6 +9,8 @@ import { getContextBundle as _sbGetContext, searchCode as _sbSearch, proposeUpda
 // Frente AG (26/09): o agente do workspace conhece o painel e lê o cérebro e o dossiê do cliente (cache curto).
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -600,7 +602,7 @@ Regras:
       ? `\n---PLANO DO ORQUESTRADOR---\nIntenção: ${orq.intent}\nPassos a executar:\n${orq.plan.map((s, i) => `${i + 1}. ${s}`).join("\n")}\nExecutor selecionado: ${persona?.gpt_name || "Prepro Director (padrão)"}${orq.needs_extra_agent ? ` · motivo: ${orq.reason}` : ""}`
       : "";
 
-    const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch(() => "") : "";
+    const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch((e) => (registrarFalha("workspace-agent: contexto do agente não lido", e), "")) : "";
     const systemMsg = [
       baseIdentity,
       thread.system_prompt || "",

@@ -23,6 +23,8 @@ import { estadoRealComoTexto, lerEstadoReal } from "../_shared/estado-real-do-cl
 import { semTravessao } from "../_shared/comunicacao-com-cliente.ts";
 import { type FeitoAntes, feitosComoTexto, filtrarJaFeitos, lerFeitosAntes } from "./feitos.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -126,7 +128,7 @@ Deno.serve(async (req) => {
 
     // O estado real (mesmo leitor dos rituais) e o que ja foi feito nas ultimas semanas.
     const [estado, feitosAntes] = await Promise.all([
-      lerEstadoReal(db, clientId, {}).catch(() => null),
+      lerEstadoReal(db, clientId, {}).catch((e) => (registrarFalha("esteira-semana: lerEstadoReal falhou", e), null)),
       lerFeitosAntes(db, clientId).catch((): FeitoAntes[] => []),
     ]);
 

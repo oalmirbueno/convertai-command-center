@@ -21,6 +21,8 @@ import {
   TAMANHO_4X5,
 } from "../_shared/ia-motor.ts";
 import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
+// Frente FS (29/09): falha que não para a ação fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerContextoDaMarca, type MarcaDoCliente } from "../_shared/marca.ts";
 import { type AcaoDoAgente, type AlvoComApelido, ErroDaAcao, type ItemDaAcaoDoAgente, type ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
 import { guiaAtual, guiaEmTexto, lerEstilo, type BancoDoEstilo } from "../_shared/estilo-do-cliente.ts";
@@ -146,7 +148,7 @@ async function mudar(d: DepsDosTemplates, ch: Chamador, clientId: string, id: st
 }
 
 async function existente(d: DepsDosTemplates, clientId: string, id: string): Promise<TemplateDeDesign> {
-  const t = await lerTemplate(banco(d), clientId, id).catch(() => null);
+  const t = await lerTemplate(banco(d), clientId, id).catch((e) => (registrarFalha("agente-estilo: lerTemplate falhou", e), null));
   if (!t) throw new ErroDaAcao(404, "template_inexistente", "Template não encontrado.");
   return t;
 }
@@ -174,7 +176,7 @@ async function paraATela(d: DepsDosTemplates, templates: TemplateDeDesign[]) {
       testes: t.testes.map((x) => marcar(BUCKET_DOS_TEMPLATES, x.caminho)),
     };
   });
-  const links = pedidos.length ? await d.linksAssinados(pedidos).catch(() => pedidos.map(() => "")) : [];
+  const links = pedidos.length ? await d.linksAssinados(pedidos).catch((e) => (registrarFalha("agente-estilo: linksAssinados falhou", e), pedidos.map(() => ""))) : [];
   const url = (i: number) => ({ mini: links[i] || links[i + 1] || "", url: links[i + 1] || links[i] || "" });
   return templates.map((t, k) => {
     const c = corpoAtual(t);
@@ -400,6 +402,7 @@ async function gerarTestes(d: DepsDosTemplates, ch: Chamador, p: Pedido, id: str
       const teste: TesteDoTemplate = { id: tid, caminho, tema, versao: t.versao_atual, custo_usd: img.custoUsd, criado_em: new Date().toISOString(), status: "novo" };
       return { teste, custo: img.custoUsd, erro: null as unknown };
     } catch (erro) {
+      registrarFalha("agente-estilo: teste do template falhou", erro, { template_id: t.id });
       return { teste: null, custo: 0, erro };
     }
   }));
@@ -573,8 +576,8 @@ async function referenciaCriar(d: DepsDosTemplates, ch: Chamador, corpo: Record<
 async function contextoDaCombinacao(d: DepsDosTemplates, p: Pedido, objetivo: string): Promise<ContextoDaCombinacao> {
   const [cliente, contexto, estilo] = await Promise.all([
     d.nomeDoCliente(p.clientId),
-    lerContextoDaMarca(d.servico(), p.clientId, p.marca).catch(() => ({})),
-    lerEstilo(d.servico() as unknown as BancoDoEstilo, p.clientId, p.marcaId).catch(() => null),
+    lerContextoDaMarca(d.servico(), p.clientId, p.marca).catch((e) => (registrarFalha("agente-estilo: lerContextoDaMarca falhou", e), ({}))),
+    lerEstilo(d.servico() as unknown as BancoDoEstilo, p.clientId, p.marcaId).catch((e) => (registrarFalha("agente-estilo: lerEstilo falhou", e), null)),
   ]);
   const c = contexto as Record<string, unknown>;
   return {
@@ -732,7 +735,7 @@ export async function templatesNaConversa(
   p: Pedido,
   e: { novas: Array<{ dados: { bucket: string; caminho: string } ; titulo: string }>; imagens: ImagemEntrada[]; mensagem: string; candidatas: Array<AlvoComApelido> },
 ): Promise<TemplatesNaConversa> {
-  const { templates } = await lerTemplates(banco(d), p.clientId, p.marcaId).catch(() => ({ templates: [] as TemplateDeDesign[] }));
+  const { templates } = await lerTemplates(banco(d), p.clientId, p.marcaId).catch((e) => (registrarFalha("agente-estilo: lerTemplates falhou", e), ({ templates: [] as TemplateDeDesign[] })));
   const carrossel = e.novas.map((n) => ({ bucket: n.dados.bucket, caminho: n.dados.caminho, nome: n.titulo }));
   let custo = 0;
   let leitura = "";
@@ -741,8 +744,9 @@ export async function templatesNaConversa(
       const lida = await lerSequencia(d, ch, p, e.imagens);
       custo += lida.custo;
       leitura = neutralizarMarcaDaReferencia(continuidadeEmTexto(lida.continuidade));
-    } catch {
-      // Sem leitura do carrossel: o agente segue com a leitura das referências do estilo.
+    } catch (erro) {
+      // Sem leitura do carrossel: o agente segue com a leitura das referências do estilo. Frente FS: com log.
+      registrarFalha("agente-estilo: leitura do carrossel falhou (vale a leitura das referências do estilo)", erro, { client_id: p.clientId });
     }
   }
   const alvos = alvosDosTemplates(templates, e.candidatas, carrossel.length);

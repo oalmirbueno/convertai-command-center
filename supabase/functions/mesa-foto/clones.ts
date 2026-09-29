@@ -66,6 +66,8 @@ import {
   type SaidaImagem,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
+// Frente FS (29/09): o Jev fora do ar continua opcional, mas fica no log.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { kitComMarca, marcaDoPedido } from "../_shared/marca.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, limpoOuNulo, listaDeTextos, mimeDe, nomeSeguro, sha256Hex, UUID } from "./calculos.ts";
 import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramentas.ts";
@@ -333,7 +335,7 @@ export function acoesDeClones(f: FerramentasDaMesa) {
   async function logoDaMarca(clientId: string, corpo: Record<string, unknown>): Promise<{ imagem: ImagemEntrada; paleta: string | null } | null> {
     const [kitLido, marca] = await Promise.all([
       db().from("cliente_kit_marca").select("paleta, logo_file_id, logo_path").eq("client_id", clientId).maybeSingle().then((r) => r.data as Record<string, unknown> | null, () => null),
-      marcaDoPedido(db(), clientId, corpo).catch(() => null),
+      marcaDoPedido(db(), clientId, corpo).catch((e) => (registrarFalha("mesa-foto: marcaDoPedido falhou", e), null)),
     ]);
     const kit = kitComMarca(kitLido ?? null, marca) as { paleta?: unknown; logo_path?: string | null; logo_file_id?: string | null } | null;
     let imagem: ImagemEntrada | null = null;
@@ -763,8 +765,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
         const cobrado = await cobrarJev(res, { clientId: c.client_id, tarefa: "estudio", referencia: { tipo: REF_CLONE, id: c.id }, criadoPor: ch.userId });
         if (cobrado) custo += cobrado.custoUsd;
         sorriso = sorrisoPeloJev(probabilidadeNoul(res.answers.sorriso), det.texto);
-      } catch {
-        // Jev fora do ar: segue como antes (sem foto de expressão automática).
+      } catch (e) {
+        // Jev fora do ar: segue como antes (sem foto de expressão automática). Frente FS: com log.
+        registrarFalha("mesa-foto: jev do sorriso falhou (sem foto de expressão automática)", e, { clone_id: c.id });
       }
     }
     if (!sorriso && !enviadas.length) return null;
@@ -1629,6 +1632,8 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       outra = probabilidadeNoul(res.answers.outra_pessoa);
       espelhada = probabilidadeNoul(res.answers.espelhada);
     } catch (e) {
+      // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+      console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
       erroJev = e instanceof JevErro ? e.codigo : "jev_indisponivel";
     }
     const composto = alertasDoClone(notas, outra, espelhada);

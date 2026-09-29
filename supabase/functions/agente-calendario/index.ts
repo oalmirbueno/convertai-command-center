@@ -232,6 +232,8 @@ import {
   textoCurtoDoDiagnostico,
   urlsDoTexto,
 } from "./diagnostico.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -918,6 +920,8 @@ async function checarEvolucao(
       const cobrado = await cobrarJev(r, { clientId: c.clientId, tarefa: "calendario", referencia: c.referencia, criadoPor: c.criadoPor }).catch(() => null);
       custo = cobrado ? cobrado.custoUsd : 0;
     } catch (e) {
+      // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+      console.error("agente-calendario: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
       erro = e instanceof JevErro ? e.codigo : "jev_indisponivel";
     }
   }
@@ -1321,7 +1325,7 @@ async function resolverModeloDoMes(modeloId: unknown, raciocinio: unknown): Prom
   let modelo: ModeloIa | null = null;
   if (typeof modeloId === "string" && modeloId.trim()) modelo = await carregarModelo(modeloId.trim(), "texto");
   if (!modelo) modelo = await modeloPadrao(PAPEL_DO_AGENTE_DO_MES);
-  if (!modelo) modelo = await carregarModelo(MODELO_DO_AGENTE_DO_MES, "texto").catch(() => null);
+  if (!modelo) modelo = await carregarModelo(MODELO_DO_AGENTE_DO_MES, "texto").catch((e) => (registrarFalha("agente-calendario: carregarModelo falhou", e), null));
   if (!modelo) {
     console.warn("[agente-calendario] GPT-6 Sol fora do catálogo; agente do mês no modelo do estrategista");
     modelo = await modeloPadrao(AGENTE);
@@ -1713,7 +1717,7 @@ ${blocoEditorial}`;
     const temasAgora = juntar();
     const r1 = brutosPorFase.get("1") ?? brutosPorFase.values().next().value ?? {};
     fila = fila.then(() => servico.from("calendario_propostas").update({ temas: temasAgora, diagnostico: texto(r1.diagnostico, 6000) || null })
-      .eq("id", propostaId).eq("client_id", clientId)).catch(() => undefined);
+      .eq("id", propostaId).eq("client_id", clientId)).catch((e) => (registrarFalha("agente-calendario: then falhou", e), undefined));
     return fila;
   };
 
@@ -1726,7 +1730,7 @@ ${blocoEditorial}`;
     if (!r.estruturado || respondendo) return;
     fila = fila.then(() => servico.from("calendario_propostas")
       .update({ parametros: { ...parametros, gerando_temas: true, diagnostico_estado: "pronto", diagnostico_estruturado: r.estruturado } })
-      .eq("id", propostaId).eq("client_id", clientId)).catch(() => undefined);
+      .eq("id", propostaId).eq("client_id", clientId)).catch((e) => (registrarFalha("agente-calendario: then falhou", e), undefined));
   });
 
   const resultados = await Promise.allSettled(frentes.map(async (f, k) => {
@@ -1831,7 +1835,7 @@ ${blocoEditorial}`;
     if (pesquisa.usoId) usos.push(pesquisa.usoId);
   } else {
     // Chegou depois da resposta: grava sozinha quando terminar (a função segue viva com waitUntil).
-    const tarde = pesquisaP.then((r) => gravarPesquisaAtrasada(servico, propostaId, clientId, diagnostico, r)).catch(() => undefined);
+    const tarde = pesquisaP.then((r) => gravarPesquisaAtrasada(servico, propostaId, clientId, diagnostico, r)).catch((e) => (registrarFalha("agente-calendario: then falhou", e), undefined));
     (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(tarde);
   }
   temas = jev.temas;
@@ -1948,7 +1952,7 @@ ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "-
   let fila: Promise<unknown> = Promise.resolve();
   const gravarParcial = () => {
     const agora = [...prontos.values()].sort((a, b) => a.data.localeCompare(b.data));
-    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", p.id).eq("client_id", p.client_id)).catch(() => undefined);
+    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", p.id).eq("client_id", p.client_id)).catch((e) => (registrarFalha("agente-calendario: then falhou", e), undefined));
     return fila;
   };
 
@@ -2304,9 +2308,9 @@ async function gravarItens(
 
   // Conteúdo de campanha: o briefing e a foto de cada card entram no texto da tarefa (o Estúdio lê).
   const idDaCampanha = typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id) ? p.parametros.campanha_id : null;
-  const campanhaDaProposta = idDaCampanha ? await carregarCampanha(servico, idDaCampanha).catch(() => null) : null;
+  const campanhaDaProposta = idDaCampanha ? await carregarCampanha(servico, idDaCampanha).catch((e) => (registrarFalha("agente-calendario: carregarCampanha falhou", e), null)) : null;
   const campanhaNoItem = campanhaDaProposta && campanhaDaProposta.client_id === p.client_id
-    ? await campanhaNaAgenda(servico, campanhaDaProposta).catch(() => null)
+    ? await campanhaNaAgenda(servico, campanhaDaProposta).catch((e) => (registrarFalha("agente-calendario: campanhaNaAgenda falhou", e), null))
     : null;
   tempo.marcar("leituras");
 
@@ -3831,7 +3835,7 @@ ${REGRAS_DOS_ITENS}`;
     ? "Troquei o ângulo, mas ainda parece perto do post anterior. Confira o cartão."
     : `Ângulo novo: ${ev ? ev.frase : item.angulo || "pronto"}.`;
   if (p.conversa_id) {
-    await registrarMensagens(servico, p.conversa_id, p.client_id, [{ papel: "agente", conteudo: resposta, uso_id: s.usoId }]).catch(() => undefined);
+    await registrarMensagens(servico, p.conversa_id, p.client_id, [{ papel: "agente", conteudo: resposta, uso_id: s.usoId }]).catch((e) => (registrarFalha("agente-calendario: registrarMensagens falhou", e), undefined));
   }
   return json({ proposta: atualizada, item, resposta, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd });
 }
@@ -3869,7 +3873,7 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
     throw new ErroHttp(400, "periodo_sem_dia_util", `A campanha vai de ${dataCurta(inicio)} a ${dataCurta(fim)} e não tem dia de segunda a sexta. Aumente o período da campanha.`);
   }
 
-  const propostaAntiga = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const propostaAntiga = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch((e) => (registrarFalha("agente-calendario: carregarProposta falhou", e), null)) : null;
   const proposta0 = propostaAntiga && propostaAntiga.status !== "descartada" ? propostaAntiga : null;
   const existentes = proposta0?.itens ?? [];
   const pedidoDaQuantidade = quantidadeDaCampanha(corpo.quantidade, existentes.length);
@@ -3938,7 +3942,7 @@ ${existentes.length ? `\nCONTEÚDOS QUE A CAMPANHA JÁ TEM (não repita tema, ga
   let fila: Promise<unknown> = Promise.resolve();
   const gravarParcial = () => {
     const agora = existentes.concat([...novos.values()]).sort((a, b) => a.data.localeCompare(b.data));
-    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", proposta.id).eq("client_id", c.client_id)).catch(() => undefined);
+    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", proposta.id).eq("client_id", c.client_id)).catch((e) => (registrarFalha("agente-calendario: then falhou", e), undefined));
     return fila;
   };
 
@@ -4148,8 +4152,9 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
       hypes = hypes
         .map((h, i) => ({ ...h, nota: notaDe0a10(notaScore(j.answers[`h${i}`]), NIVEIS_HYPE.length) }))
         .sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1));
-    } catch {
-      // Sem Jev a lista vai na ordem da pesquisa.
+    } catch (e) {
+      // Sem Jev a lista vai na ordem da pesquisa. Frente FS: com log.
+      console.error("agente-calendario: jev dos hypes falhou (vai a ordem da pesquisa)", { client_id: clientId, motivo: String((e as Error)?.message ?? e).slice(0, 300) });
     }
   }
 
@@ -4390,7 +4395,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     periodo_fim: fim,
     conceito: texto(r.conceito, 2000) || null,
     // A campanha nasce na marca aberta (Acerbi ou CME): as mesas só a mostram nela.
-    identidade: normalizarIdentidade(r.identidade, { tipo: tipoDaCriacao.tipo, marca_id: (await marcaDaChamada(servico, clientId, corpo).catch(() => null))?.id ?? null }),
+    identidade: normalizarIdentidade(r.identidade, { tipo: tipoDaCriacao.tipo, marca_id: (await marcaDaChamada(servico, clientId, corpo).catch((e) => (registrarFalha("agente-calendario: marcaDaChamada falhou", e), null)))?.id ?? null }),
     referencias_ids: referencias,
     proposta_id: proposta.id,
     status: "planejada",
@@ -4596,7 +4601,7 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const mensagem = texto(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer na campanha.");
 
-  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch((e) => (registrarFalha("agente-calendario: carregarProposta falhou", e), null)) : null;
   const inicio = c.periodo_inicio ?? hojeSaoPaulo();
   const fim = c.periodo_fim ?? somarDias(inicio, 21);
   const uteis = diasUteisDoPeriodo(inicio, fim);
@@ -4769,7 +4774,7 @@ async function campanhaPlanoImagens(servico: SupabaseClient, chamador: Chamador,
   if (c.plano_imagens === undefined) {
     throw new ErroHttp(503, "campanha_sem_colunas_novas", "O banco ainda não tem os campos de imagens e briefing da campanha. Falta aplicar o SQL de 25/09 (docs/mesa/migrations).");
   }
-  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch((e) => (registrarFalha("agente-calendario: carregarProposta falhou", e), null)) : null;
   const itens = proposta?.itens ?? [];
   if (!itens.length) throw new ErroHttp(409, "campanha_sem_conteudos", "A campanha ainda não tem conteúdos. Peça os conteúdos ao agente antes do plano de imagens.");
 
@@ -5156,7 +5161,7 @@ async function pecasDaAgendaParaAcoes(
     return c && nomeDaCampanha.has(c) ? { ...t, campanha: nomeDaCampanha.get(c) ?? null } : t;
   });
   if (opcoes.detalhe && pecas.length) {
-    const itens = await itensGravadosDasTarefas(servico, clientId, pecas.map((p) => p.id)).catch(() => new Map<string, Record<string, unknown>>());
+    const itens = await itensGravadosDasTarefas(servico, clientId, pecas.map((p) => p.id)).catch((e) => (registrarFalha("agente-calendario: itensGravadosDasTarefas falhou", e), new Map<string, Record<string, unknown>>()));
     pecas = pecas.map((p) => {
       const d = detalheDaPeca(itens.get(p.id));
       return d ? { ...p, detalhe: d } : p;
@@ -5399,7 +5404,7 @@ const JEV_DO_PEDIDO_MS = 8_000;
 async function rotaDoPedidoLivre(servico: SupabaseClient, chamador: Chamador, clientId: string, mensagem: string): Promise<DecisaoDoRoteamento> {
   try {
     const r = await jevPerguntar({ state: { mensagem: mensagem.slice(0, 4000) }, questions: { intencao: perguntaDaIntencao() } }, { timeoutMs: JEV_DO_PEDIDO_MS });
-    const conversaId = await conversaDoAgenteDoMes(servico, clientId, chamador.userId).catch(() => clientId);
+    const conversaId = await conversaDoAgenteDoMes(servico, clientId, chamador.userId).catch((e) => (registrarFalha("agente-calendario: conversaDoAgenteDoMes falhou", e), clientId));
     await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }).catch(() => null);
     return decidirRoteamento(r.answers.intencao, mensagem);
   } catch (e) {
@@ -5996,7 +6001,7 @@ async function restaurarItemDaAgenda(servico: SupabaseClient, chamador: Chamador
   const { error } = await servico.from("tasks").update({ deleted_at: null }).eq("id", t.id);
   if (error) throw new ErroHttp(500, "item_nao_restaurado", "Não foi possível devolver o item para a agenda. Tente de novo.");
   // Frente AE: o post planejado que saiu junto volta também.
-  const avisoDoPost = corpo.post_id ? await desarquivarPostDoItem(servico, clientId, t.id, corpo.post_id).catch(() => "O post da Agenda continua arquivado.") : null;
+  const avisoDoPost = corpo.post_id ? await desarquivarPostDoItem(servico, clientId, t.id, corpo.post_id).catch((e) => (registrarFalha("agente-calendario: desarquivarPostDoItem falhou", e), "O post da Agenda continua arquivado.")) : null;
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_restaurar_item_da_agenda", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
@@ -6162,8 +6167,8 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
   const campanhaDoItem = async (id: string | null): Promise<CampanhaNoItem | null> => {
     if (!id || !UUID.test(id)) return null;
     if (!campanhas.has(id)) {
-      const c = await carregarCampanha(servico, id).catch(() => null);
-      campanhas.set(id, c && c.client_id === clientId ? await campanhaNaAgenda(servico, c).catch(() => null) : null);
+      const c = await carregarCampanha(servico, id).catch((e) => (registrarFalha("agente-calendario: carregarCampanha falhou", e), null));
+      campanhas.set(id, c && c.client_id === clientId ? await campanhaNaAgenda(servico, c).catch((e) => (registrarFalha("agente-calendario: campanhaNaAgenda falhou", e), null)) : null);
     }
     return campanhas.get(id) ?? null;
   };

@@ -228,7 +228,7 @@ describe("4. Sem rosto = hoje", () => {
 
   it("sem rosto o Jev nem é chamado; fora do normal (foto, recorte, elementos, anúncio, replicar) também não", () => {
     expect(servidor).toContain("const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
-    expect(servidor).toContain("const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId) : null;");
+    expect(servidor).toContain("const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;");
     expect(servidor).toContain("const rostoDaNormal = rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null;");
     // Replicar: a linha da frente R continua a mesma.
     expect(servidor).toContain("const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;");

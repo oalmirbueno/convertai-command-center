@@ -77,6 +77,8 @@ export interface Aplicado {
   ritual: RitualDoAgente | null;
   /** Frente LR: motivo quando a IA não escreveu o ritual (null quando escreveu ou não havia ritual). */
   ritual_erro?: string | null;
+  /** Frente FS: motivo quando a IA não organizou as respostas (elas entraram como o dono escreveu). */
+  ia_erro?: string | null;
 }
 
 async function chamar<T>(body: Record<string, unknown>): Promise<T> {

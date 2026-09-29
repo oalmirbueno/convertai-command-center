@@ -315,7 +315,8 @@ export async function enviarGeracao(b: BaseDaFuncao, p: PedidoDeGeracao): Promis
       const r = await executor.enviar(endpoint, corpoDaGeracao(p.motor, entrada), credenciais, { idempotencia: `${pedidoId}-${n}` });
       envios.push({ ...base, ...r, estado: "enviado" });
     } catch (e) {
-      // Sem nova tentativa: o erro fica registrado e nada é cobrado.
+      // Sem nova tentativa: o erro fica registrado e nada é cobrado. Frente FS: e no log.
+      console.error("mesa-videos: envio ao provedor falhou", { endpoint, n, motivo: e instanceof Error ? e.message.slice(0, 300) : String(e) });
       envios.push({ ...base, erro: e instanceof Error ? e.message : "Falha ao enviar." });
     }
   }

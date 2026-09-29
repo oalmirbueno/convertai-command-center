@@ -24,6 +24,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { cobrarJev } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
+// Frente FS (29/09): o Jev fora do ar continua opcional (vale o equilíbrio sem ele), mas fica no log.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { formatoDoPerfil, type FormatoDoPerfil, reservarPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { equilibrarMesas, type ItemComMesa, perguntasDaMesa, textoDoPerfilParaOPlano } from "./mesa-do-item-regras.ts";
 
@@ -80,7 +82,8 @@ export async function marcarMesasDoPlano(
         return isFinite(p) ? p : null;
       });
       fonte = "jev";
-    } catch {
+    } catch (e) {
+      registrarFalha("agente-calendario: jev da mesa do item falhou (mesas pelo equilíbrio)", e, { client_id: clientId });
       prob = ordem.map(() => null);
     }
   }

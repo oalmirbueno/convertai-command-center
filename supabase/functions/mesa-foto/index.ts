@@ -286,6 +286,8 @@ import {
 } from "./recorte-do-gerador.ts";
 import { blocoDaIdentificacaoNoPedido, kitsComIdentificacao, legendaDaReferenciaWeb, produtoDaTela, referenciasWebDaTela } from "./kit-sugerir.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -470,6 +472,10 @@ const MENSAGEM_MOTOR: Record<string, { status: number; mensagem: string }> = {
 };
 
 function respostaDeErro(err: unknown): Response {
+  // Frente FS (29/09): erro do motor e do Jev voltam para a tela e agora também ficam no log com o motivo.
+  if (err instanceof IaMotorErro || err instanceof JevErro) {
+    console.error("[mesa-foto] ação falhou", { codigo: (err as { codigo?: string }).codigo ?? null, motivo: err.message.slice(0, 300) });
+  }
   if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message, ...err.extra }, err.status);
   if (err instanceof ErroDeRegra) return json({ error: err.codigo, mensagem: err.message, ...err.extra }, err.status);
   if (err instanceof IaMotorErro) {
@@ -1102,13 +1108,13 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId
     lerContextoConsolidado(servico(), clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
     servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
       .order("effective_at", { ascending: false }).limit(2),
-    lerDocumentosDeMarca(servico(), clientId, 6_000).catch(() => []),
+    lerDocumentosDeMarca(servico(), clientId, 6_000).catch((e) => (registrarFalha("mesa-foto: lerDocumentosDeMarca falhou", e), [])),
     servico().from("ads_briefings").select("oferta, publico, objecoes, restricoes").eq("client_id", clientId).eq("atual", true).maybeSingle(),
     servico().from("ads_planos").select("estrutura").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(1),
     servico().from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(20),
     // Frente AE: só as campanhas da marca escolhida (a do mês da outra marca não entra).
-    lerCampanhasParaFoto(servico(), clientId, new Date(), marcaEscolhida).catch(() => null),
+    lerCampanhasParaFoto(servico(), clientId, new Date(), marcaEscolhida).catch((e) => (registrarFalha("mesa-foto: lerCampanhasParaFoto falhou", e), null)),
   ]);
   const listaDeCampanhas: CampanhaParaFoto[] = campanhas ? campanhas.campanhas : [];
   const escolhida = pedida ? listaDeCampanhas.find((c) => c.id === pedida) || null : null;
@@ -1784,6 +1790,8 @@ async function produtoIdentificar(ch: Chamador, corpo: Record<string, unknown>) 
       };
       if (avisoJev.aviso) lacunas.unshift(avisoJev.aviso);
     } catch (e) {
+      // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+      console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
       avisoJev = { erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" };
     }
   }
@@ -1896,7 +1904,7 @@ async function estimarEnsaio(
   opcoes: { modeloImagemId?: unknown; qualidade?: Qualidade; extras?: number } = {},
 ): Promise<Estimativa & { modelo_imagem_id: string; qualidade: Qualidade }> {
   const mImg = await modeloDeImagem(opcoes.modeloImagemId);
-  const mLeitura = await modeloDeTexto("leitura").catch(() => null);
+  const mLeitura = await modeloDeTexto("leitura").catch((e) => (registrarFalha("mesa-foto: modeloDeTexto falhou", e), null));
   const qualidade = opcoes.qualidade ?? QUALIDADE_PADRAO;
   // Referências de estilo do ensaio (e a pessoa aprovada da campanha) também entram no gerador.
   const extras = Math.max(0, Math.min(3, opcoes.extras ?? 0));
@@ -2094,7 +2102,7 @@ async function aplicarNaTomada(ch: Chamador, ensaio: LinhaEnsaio, sugestao: Suge
     tomadaId = r.tomada.id;
     return { tomadas: r.tomadas, status: statusDoEnsaio(r.tomadas, atual.status) };
   });
-  const estimativa = await estimarEnsaio(gravado.tomadas, refs).catch(() => null);
+  const estimativa = await estimarEnsaio(gravado.tomadas, refs).catch((e) => (registrarFalha("mesa-foto: estimarEnsaio falhou", e), null));
   return json({
     ensaio: gravado,
     tomada: gravado.tomadas.find((t) => t.id === tomadaId) ?? null,
@@ -2703,7 +2711,7 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const mensagem = e instanceof Error ? e.message.slice(0, 300) : "Falha do gerador.";
     await mutarEnsaio(ensaio.id, (atual) => ({
       tomadas: atual.tomadas.map((t) => (t.id === tomada.id ? comStatus(t, "falhou", { ultimo_erro: mensagem }) : t)),
-    })).catch(() => {});
+    })).catch((e2) => (registrarFalha("mesa-foto: mutarEnsaio falhou", e2), undefined));
     throw e;
   }
   let nova: VersaoTomada | null = null;
@@ -2827,6 +2835,8 @@ async function versaoConferir(ch: Chamador, corpo: Record<string, unknown>) {
     const p = probabilidadeNoul(res.answers.divergencia);
     jev = { divergencia_critica: p, aviso: p != null && p >= 0.5 };
   } catch (e) {
+    // Frente FS: o código já vai para a tela; o motivo agora também fica no log.
+    console.error("mesa-foto: jev falhou", { motivo: String((e as Error)?.message ?? e).slice(0, 300) });
     jev = { erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" };
   }
   const conferencia: Conferencia = { ...base, jev, modelo_id: lido.modeloId, conferida_em: new Date().toISOString(), custo_usd: arred6(custo) };
@@ -3640,7 +3650,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     servico().from("foto_biblioteca").select("id, client_id, tipo, categoria, titulo, destaque").eq("tipo", "prompt")
       .or(`client_id.is.null,client_id.eq.${clientId}`)
       .order("destaque", { ascending: false }).limit(40),
-    kitsDoCliente(clientId).catch(() => [] as KitExistente[]),
+    kitsDoCliente(clientId).catch((e) => (registrarFalha("mesa-foto: kitsDoCliente falhou", e), [] as KitExistente[])),
     // Pacote do cliente (fotos, clones, prompts, books, produtos, modelos, campanhas, etapa e seleção da tela),
     // com apelidos, e a leitura por visão das fotos novas do pedido (uma vez por imagem).
     DIRETOR.prepararConversa(ch, clientId, corpo, idsDosAnexos),
@@ -3809,7 +3819,7 @@ async function agenteAplicar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = ensaio?.client_id ?? idDe(corpo.client_id, "client_id");
   if (!ensaio) await garantirAcesso(ch, clientId);
   // A sugestão passa de novo pela mesma conferência (a tela não é fonte de verdade).
-  const kitsCli = await kitsDoCliente(clientId).catch(() => [] as KitExistente[]);
+  const kitsCli = await kitsDoCliente(clientId).catch((e) => (registrarFalha("mesa-foto: kitsDoCliente falhou", e), [] as KitExistente[]));
   const kitPedido = corpo.kit_id != null && UUID.test(String(corpo.kit_id)) ? String(corpo.kit_id) : null;
   const [s] = normalizarSugestoes([corpo.sugestao], {
     tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [],

@@ -177,7 +177,11 @@ export async function escreverComModeloDaCentral(
     }
   }
 
-  const antigo = await legado(p.sistema, p.usuario, temperatura).catch(() => null);
+  // Frente FS: a reserva que também falha fica no log com o motivo (antes: null em silêncio).
+  const antigo = await legado(p.sistema, p.usuario, temperatura).catch((e) => {
+    console.error("[modelo-da-central] reserva (GPT-4.1) falhou", { motivo: motivoLegivel(e), antes: reserva });
+    return null;
+  });
   if (!antigo || !antigo.texto.trim()) return null;
   return { texto: antigo.texto, modelo: antigo.modelo, rotulo: antigo.modelo, raciocinio: null, custoUsd: null, reserva, usage: antigo.usage };
 }

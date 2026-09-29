@@ -59,6 +59,8 @@ import {
   regrasQueValem,
   type RetratoDaConta,
 } from "./rotina-trafego.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /** Linha de public.ads_rotina (SQL TR-01). */
 export type LinhaDaRotina = {
@@ -212,8 +214,8 @@ async function avisarUmaVez(deps: DepsDaRodada, avisos: Record<string, string>, 
 export async function orcamentoAtivoNaMeta(grafo: GrafoMeta, conta: string): Promise<number | null> {
   const filtro = encodeURIComponent('[{"field":"effective_status","operator":"IN","value":["ACTIVE"]}]');
   const [c, g] = await Promise.all([
-    grafo.ler(`act_${conta}/campaigns?limit=200&filtering=${filtro}`, "id,daily_budget").catch(() => null),
-    grafo.ler(`act_${conta}/adsets?limit=500&filtering=${filtro}`, "id,daily_budget").catch(() => null),
+    grafo.ler(`act_${conta}/campaigns?limit=200&filtering=${filtro}`, "id,daily_budget").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
+    grafo.ler(`act_${conta}/adsets?limit=500&filtering=${filtro}`, "id,daily_budget").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null)),
   ]);
   const lista = (b: Record<string, unknown> | null) => (b && Array.isArray(b.data) ? (b.data as Record<string, unknown>[]) : null);
   const lc = lista(c);
@@ -266,7 +268,7 @@ export async function rodarRotina(deps: DepsDaRodada, opcoes: { manual?: boolean
     referencia: dados.referencia,
   });
   const avaliacoes = r.itens.map((i) => avaliarItem(i, limites));
-  if (deps.resultadoDepois) await deps.resultadoDepois(r.totais, r.periodo).catch(() => undefined);
+  if (deps.resultadoDepois) await deps.resultadoDepois(r.totais, r.periodo).catch((e) => (registrarFalha("mesa-ads: resultadoDepois falhou", e), undefined));
 
   // 2. Gestão: sem ela, um aviso só (por motivo, a cada 24 h), e não age.
   if (!acesso.disponivel || !acesso.grafo) {
@@ -342,7 +344,7 @@ export async function rodarRotina(deps: DepsDaRodada, opcoes: { manual?: boolean
     }
     const alvoId = acao === "subir_verba" ? i.meta_id : i.meta_id;
     const campos = CAMPOS_DO_ESTADO(i.nivel) + (i.nivel === "conjunto" ? ",learning_stage_info" : "");
-    const bruto = await grafo.ler(alvoId, campos).catch(() => null);
+    const bruto = await grafo.ler(alvoId, campos).catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null));
     const fora = foraDasContas(bruto, contas);
     const antes = estadoLidoComAprendizado(bruto);
     if (fora || !antes) {
@@ -358,7 +360,7 @@ export async function rodarRotina(deps: DepsDaRodada, opcoes: { manual?: boolean
     let numeros = numerosDaProva(i, r.periodo);
     if (velha) {
       const faixa = encodeURIComponent(JSON.stringify({ since: r.periodo.inicio, until: r.periodo.fim }));
-      const insights = await grafo.ler(`${alvoId}/insights?time_range=${faixa}`, "spend,impressions,inline_link_clicks,frequency,actions").catch(() => null);
+      const insights = await grafo.ler(`${alvoId}/insights?time_range=${faixa}`, "spend,impressions,inline_link_clicks,frequency,actions").catch((e) => (registrarFalha("mesa-ads: leitura na Meta falhou", e), null));
       const relido = numerosDaMeta(insights, dados.tiposDeAcao(i.resultado_tipo));
       if (!relido) {
         estado.planeja.push(`Não mexi em ${i.nome}: a coleta está velha e não consegui reler os números na Meta.`);

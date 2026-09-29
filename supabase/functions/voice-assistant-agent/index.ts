@@ -64,6 +64,8 @@ import {
   regrasDoLancador,
   reverterItemDoLancador,
 } from "./acoes-do-lancador.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -265,14 +267,14 @@ async function lerPreContexto(
   const [perfil, contexto, projetos] = await Promise.all([
     Promise.resolve(
       supabase.from("profiles").select("company_name, full_name, services_config, client_type").eq("id", clientId).maybeSingle(),
-    ).catch(() => ({ data: null })),
+    ).catch((e) => (registrarFalha("voice-assistant-agent: leitura do banco falhou", e), ({ data: null }))),
     contextoParaAgente(supabase as never, clientId, s.areas[0], { areas: s.areas, limiteCerebro: 1200, limiteDossie: 2500 })
-      .catch(() => ({ texto: "" })),
+      .catch((e) => (registrarFalha("voice-assistant-agent: contextoParaAgente falhou", e), ({ texto: "" }))),
     Promise.resolve(
       supabase.from("projects").select("id, name, status, progress, deadline, project_type")
         .eq("client_id", clientId).is("deleted_at", null).not("status", "in", "(done,completed,cancelled)")
         .order("created_at", { ascending: false }).limit(8),
-    ).catch(() => ({ data: [] })),
+    ).catch((e) => (registrarFalha("voice-assistant-agent: leitura do banco falhou", e), ({ data: [] }))),
   ]);
   const p = (perfil as { data: Record<string, unknown> | null }).data;
   if (p) {
@@ -525,12 +527,12 @@ async function lerDadosDoLancador(
   clientId: string,
 ): Promise<DadosDoLancador> {
   const [perfil, projetos] = await Promise.all([
-    Promise.resolve(supabase.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle()).catch(() => ({ data: null })),
+    Promise.resolve(supabase.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle()).catch((e) => (registrarFalha("voice-assistant-agent: leitura do banco falhou", e), ({ data: null }))),
     Promise.resolve(
       supabase.from("projects").select("id, name, status, deadline")
         .eq("client_id", clientId).is("deleted_at", null).not("status", "in", "(done,completed,cancelled)")
         .order("created_at", { ascending: false }).limit(12),
-    ).catch(() => ({ data: [] })),
+    ).catch((e) => (registrarFalha("voice-assistant-agent: leitura do banco falhou", e), ({ data: [] }))),
   ]);
   const p = (perfil as { data: Record<string, unknown> | null }).data;
   const lista = (((projetos as { data: unknown }).data || []) as Array<{ id: string; name: string; status: string | null; deadline: string | null }>);
@@ -922,7 +924,7 @@ Deno.serve(async (req) => {
       body.clientId || body.servico || tela
         ? lerPreContexto(supabase, body.clientId || null, servico, tela).then((p) => p.texto)
         : Promise.resolve(""),
-      agir && body.clientId ? lerDadosDoLancador(supabase, body.clientId).catch(() => null) : Promise.resolve(null),
+      agir && body.clientId ? lerDadosDoLancador(supabase, body.clientId).catch((e) => (registrarFalha("voice-assistant-agent: lerDadosDoLancador falhou", e), null)) : Promise.resolve(null),
     ]);
     const alvosDoPedido = dadosDoLancador ? alvosDoLancador(dadosDoLancador) : null;
     // Roteamento (Jev) corre junto do modelo: onde o pedido se resolve e se é ordem clara.

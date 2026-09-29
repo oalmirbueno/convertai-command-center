@@ -126,6 +126,8 @@ import { organizarPorTipo } from "./organizar-por-tipo.ts";
 // Frente AG (26/09): o agente conhece o painel e o que a equipe ensina na conversa já vem feito, com Desfazer.
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from "./kit-na-conversa.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /**
  * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
@@ -366,11 +368,11 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
   // 1,5 s e o resto termina em segundo plano; a próxima leitura já vem completa.
   const sincronizar = Promise.all([
     sincronizarReferencias(db, clientId),
-    sincronizarAcervo(db, clientId).catch(() => null),
+    sincronizarAcervo(db, clientId).catch((e) => (registrarFalha("agente-contexto: sincronizarAcervo falhou", e), null)),
   ]);
   (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(sincronizar.catch(() => null));
   const sinc = await Promise.race([
-    sincronizar.then(([r]) => r).catch(() => null),
+    sincronizar.then(([r]) => r).catch((e) => (registrarFalha("agente-contexto: then falhou", e), null)),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
   ]);
   const [kit, docs, dossie, artes, logos, refs, fontes] = await Promise.all([
@@ -978,7 +980,7 @@ async function fontesDaBiblioteca(ch: Chamador, corpo: Record<string, unknown>) 
   await garantirAcesso(ch, clientId);
   const db = servico();
   // Frente T2: conta só as fontes que valem para a marca do pedido (a CME sem fonte própria usa as do cliente).
-  const marca = await marcaDoPedido(db, clientId, corpo).catch(() => null);
+  const marca = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marcaDoPedido falhou", e), null));
   const { data: atuais } = await db.from("cliente_fontes").select(colunasComMarca("id", marca)).eq("client_id", clientId);
   const daMarca = fontesDaMarca(((atuais as unknown) as { id: string; marca_id?: string | null }[] | null) ?? [], marca);
   if (daMarca.length) throw new ErroContexto(409, "cliente_ja_tem_fonte", "Este cliente já tem fonte definida. Remova as atuais para trocar pela biblioteca.");
@@ -1099,7 +1101,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const anteriores = ((historico.data as { papel: string; conteudo: string }[] | null) ?? []).reverse();
 
   // Pedido de mexer em logo, referência, foto ou arquivo: as listas entram no prompt (com apelidos, nunca id).
-  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch(() => null) : null;
+  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch((e) => (registrarFalha("agente-contexto: dadosParaAcoes falhou", e), null)) : null;
   // Papel próprio do agente de contexto no catálogo (padrão barato); sem ele, o de leitura.
   const estrategista = await modeloDoContexto();
   const estado = {
@@ -1684,11 +1686,11 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     db.from("agente_mensagens").select("papel, conteudo").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(12),
     dadosDoPlano(clientId, contexto),
     faseDoMetodo(clientId),
-    respostasDoBriefing(clientId).catch(() => null),
+    respostasDoBriefing(clientId).catch((e) => (registrarFalha("agente-contexto: respostasDoBriefing falhou", e), null)),
     lerDossie(db, clientId, 2500),
   ]);
   const anteriores = ((historico.data as { papel: string; conteudo: string }[] | null) ?? []).reverse().filter((m) => m.papel !== "sistema");
-  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch(() => null) : null;
+  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch((e) => (registrarFalha("agente-contexto: dadosParaAcoes falhou", e), null)) : null;
   const f = METODO_ACELERA[fase.fase];
   const { fontes_lidas: _lidas, caminho, identidade, ...contextoParaPrompt } = contexto as Record<string, unknown> & { fontes_lidas?: unknown; caminho?: unknown; identidade?: unknown };
   const estado = {
@@ -1837,7 +1839,7 @@ async function entradaDoPacote(clientId: string) {
     lerKit(clientId),
     // Só os campos de cadastro que podem sair: nada de token, senha ou e-mail pessoal.
     db.from("profiles").select("company_name, full_name, phone").eq("id", clientId).maybeSingle(),
-    respostasDoBriefing(clientId).catch(() => null),
+    respostasDoBriefing(clientId).catch((e) => (registrarFalha("agente-contexto: respostasDoBriefing falhou", e), null)),
     lerDossie(db, clientId, 3000),
     db.from("cliente_fontes").select("nome, papel").eq("client_id", clientId),
   ]);

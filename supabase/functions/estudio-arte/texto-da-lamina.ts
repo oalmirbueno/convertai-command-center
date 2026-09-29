@@ -45,6 +45,8 @@ import {
 } from "../_shared/menos-texto-nas-laminas.ts";
 import { passaDoLimite } from "../_shared/limite-do-miolo.ts";
 import { semTravessao } from "./refinar-texto.ts";
+// Frente FS (29/09): a falha do redator continua virando corte com aviso, agora com o motivo e no log.
+import { nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
 
 export type PapelDoBloco = "headline" | "subtitulo" | "apoio" | "numero" | "cta" | "selo";
 export type BlocoDaLamina = { papel: PapelDoBloco; texto: string };
@@ -412,7 +414,7 @@ export async function enxugarNaGeracao(
       em: agora,
     });
     const caminho = caminhoDoTexto(deps.pasta, papel, limite, original);
-    const guardado = await deps.lerGuardado(caminho).catch(() => null);
+    const guardado = await deps.lerGuardado(caminho).catch(nuloComLog("estudio-arte: texto enxuto guardado não lido", { caminho }));
     if (guardado && guardado.versao === VERSAO_DO_TEXTO && typeof guardado.texto === "string" && Array.isArray(guardado.blocos) && guardado.texto.trim()) {
       const r: TextoEnxuto = {
         texto: guardado.texto,
@@ -425,15 +427,17 @@ export async function enxugarNaGeracao(
     let resposta: { json: unknown; custoUsd: number };
     try {
       resposta = await deps.escrever(INSTRUCOES_TEXTO_NA_GERACAO, pedidoDoTextoNaGeracao(e));
-    } catch {
+    } catch (err) {
+      const motivo = registrarFalha("estudio-arte: redator do texto na geração falhou (corte no fim de frase)", err, { ordem: e.card.ordem });
       const cortados = cortarNaGeracao(e.card, e.total);
-      const r: TextoEnxuto = { texto: juntar(cortados), blocos: cortados, origem: "corte", aviso: "O redator não respondeu: o texto foi cortado no fim de frase. Confira." };
+      const r: TextoEnxuto = { texto: juntar(cortados), blocos: cortados, origem: "corte", aviso: `O redator não respondeu (${motivo}): o texto foi cortado no fim de frase. Confira.` };
       return { ...r, registro: registro(r), custoUsd: 0, guardado: false };
     }
     const r = aplicarTextoNaGeracao(e.card, e.total, resposta.json);
-    await deps.guardar(caminho, { versao: VERSAO_DO_TEXTO, em: agora, texto: r.texto, blocos: r.blocos, origem: r.origem, aviso: r.aviso }).catch(() => null);
+    await deps.guardar(caminho, { versao: VERSAO_DO_TEXTO, em: agora, texto: r.texto, blocos: r.blocos, origem: r.origem, aviso: r.aviso }).catch(nuloComLog("estudio-arte: texto enxuto não guardado", { caminho }));
     return { ...r, registro: registro(r), custoUsd: Number(resposta.custoUsd) || 0, guardado: false };
-  } catch {
+  } catch (err) {
+    registrarFalha("estudio-arte: texto na geração falhou (vai o texto combinado)", err, { ordem: e.card.ordem });
     return null;
   }
 }

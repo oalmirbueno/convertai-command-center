@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, Loader2 } from "lucide-react";
+import { LayoutGrid, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import {
@@ -57,7 +57,9 @@ export default function EstudioPranchaDaReferencia({
     try {
       const r = await chamarFuncao<RespostaDaPrancha>("estudio-arte", { acao: "prancha", trabalho_id: trabalhoId, referencia_id: referenciaId, forcar: true });
       queryClient.setQueryData(chave, r);
-      if (!r || !r.prancha) toast.message("É uma arte só", { description: "O estúdio usa a imagem inteira como referência, como sempre." });
+      // Frente FS: leitura que falhou não vira "é uma arte só".
+      if (r && r.falhou) toast.error("A prancha não foi lida", { description: r.aviso_da_acao || r.motivo || "Tente de novo.", duration: 12000 });
+      else if (!r || !r.prancha) toast.message("É uma arte só", { description: "O estúdio usa a imagem inteira como referência, como sempre." });
     } catch (e) {
       toast.error("Não deu para ler a referência", { description: textoDoErro(e) });
     } finally {
@@ -95,7 +97,34 @@ export default function EstudioPranchaDaReferencia({
     );
   }
   const r = q.data;
-  if (q.isError || !r) return null;
+  // Frente FS (29/09): erro (saldo, cota, chave, referência sumida) e leitura que falhou aparecem para a pessoa,
+  // com o motivo e o caminho para tentar de novo (antes: nada na tela, e a arte saía sem os quadros).
+  if (q.isError) {
+    return (
+      <p className="flex min-w-0 items-start text-[11px] leading-snug text-destructive" data-prancha="erro">
+        <TriangleAlert className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">Não deu para conferir se a {rotulo} tem várias artes: {textoDoErro(q.error)}</span>
+      </p>
+    );
+  }
+  if (!r) return null;
+  if (!r.prancha && r.falhou) {
+    return (
+      <p className="flex min-w-0 items-start text-[11px] leading-snug text-warning" data-prancha="aviso">
+        <TriangleAlert className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">{r.aviso_da_acao || r.motivo || "A prancha não pôde ser lida."}</span>
+        <button
+          type="button"
+          onClick={() => void lerAgora()}
+          disabled={lendo || bloqueado}
+          className="ml-1 shrink-0 text-primary underline-offset-2 hover:underline disabled:opacity-50"
+          data-prancha="ler-de-novo"
+        >
+          {lendo ? <Loader2 className="h-3 w-3 animate-spin" /> : "Ler de novo"}
+        </button>
+      </p>
+    );
+  }
   if (!r.prancha) {
     if (r.lida) return null;
     return (
@@ -130,6 +159,12 @@ export default function EstudioPranchaDaReferencia({
         </span>
         {salvando && <Loader2 className="ml-1 h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
       </p>
+      {r.falhou && (
+        <p className="mb-1.5 flex min-w-0 items-start text-[11px] leading-snug text-warning" data-prancha="aviso">
+          <TriangleAlert className="mr-1 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{r.aviso_da_acao || r.motivo}</span>
+        </p>
+      )}
       <ul className="grid grid-cols-6 gap-1">
         {quadros.map((x, i) => {
           const e = estiloDoQuadro(x, r.dimensoes);

@@ -334,6 +334,8 @@ export default function AgenteDaCentral() {
           respostas: item.respostas, contextoExtra: contexto,
         });
         atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, situacao: ap.ritual ? "publicando" : "pronto" }));
+        // Frente FS: a IA que não organizou as respostas não some em silêncio.
+        if (ap.ia_erro) toast.warning(`${c.nome}: a IA não organizou as respostas agora; elas entraram como foram escritas.`, { description: `Motivo: ${ap.ia_erro}` });
         if (ap.ritual) {
           const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id });
           atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, situacao: "pronto" }));

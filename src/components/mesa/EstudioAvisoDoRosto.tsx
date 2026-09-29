@@ -56,3 +56,29 @@ export default function EstudioAvisoDoRosto({ trabalhoId, versao }: { trabalhoId
     </p>
   );
 }
+
+/**
+ * Frente FS (29/09): o que falhou ao gerar ou ajustar esta versão e mudou a arte
+ * (logo não lida, referência que não abriu, molde não medido, Jev fora do ar...).
+ * O servidor grava em `avisos_da_geracao`; antes a lâmina saía como se tudo
+ * tivesse dado certo. Só aviso, sem laço de regerar.
+ */
+export function avisosDaVersao(v: { avisos_da_geracao?: unknown } | null | undefined): string[] {
+  const a = v && Array.isArray(v.avisos_da_geracao) ? v.avisos_da_geracao : [];
+  return a.filter((x): x is string => typeof x === "string" && !!x.trim()).slice(0, 6);
+}
+
+export function EstudioAvisosDaGeracao({ versao }: { versao: { avisos_da_geracao?: unknown } | null | undefined }) {
+  const avisos = avisosDaVersao(versao);
+  if (!avisos.length) return null;
+  return (
+    <ul className="mt-1 space-y-0.5" data-aviso="geracao">
+      {avisos.map((a, i) => (
+        <li key={i} className="flex min-w-0 items-start text-[12px] leading-snug text-warning">
+          <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{a}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

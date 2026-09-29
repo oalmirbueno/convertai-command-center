@@ -30,6 +30,8 @@ import {
   type PostExistente,
   type PublicacaoExistente,
 } from "../_shared/entrega-na-agenda.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 export class ErroDaAgenda extends Error {
   status: number;
@@ -297,7 +299,7 @@ export async function sincronizarPecaNaAgenda(
   // Revisão: o post anterior vira histórico (arquivar, nunca apagar). Se o
   // banco não deixar, fica como está: a Agenda já trata a revisão como a atual.
   if (plano.acao === "revisao" && plano.postAnteriorId) {
-    const anterior = await lerPostDaAgenda(ctx.db, plano.postAnteriorId).catch(() => null);
+    const anterior = await lerPostDaAgenda(ctx.db, plano.postAnteriorId).catch((e) => (registrarFalha("estudio-arte: lerPostDaAgenda falhou", e), null));
     if (anterior && !anterior.archived_at) {
       await ctx.doChamador.rpc("archive_editorial_post", { p_post_id: anterior.id, p_expected_version: anterior.version }).then(() => null, () => null);
     }

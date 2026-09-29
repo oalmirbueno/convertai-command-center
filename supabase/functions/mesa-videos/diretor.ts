@@ -47,6 +47,8 @@ import { kitPorId } from "../_shared/video-kits.ts";
 import { MOTORES_DE_VIDEO, motorPorId } from "../_shared/modelos-de-video.ts";
 import { MAX_BYTES_DO_PROJETO, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 import { type BaseDaFuncao, enviarGeracao } from "./geracao.ts";
+// Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BUCKET = "mesa";
@@ -63,8 +65,8 @@ async function contextoDoCliente(b: BaseDaFuncao, clientId: string): Promise<str
   const db = b.servico();
   const [perfil, contexto, dossie] = await Promise.all([
     db.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle().then((r) => r.data as { company_name?: string | null; full_name?: string | null } | null, () => null),
-    lerContextoConsolidado(db, clientId).catch(() => ({})),
-    lerDossie(db, clientId, 4000).catch(() => null),
+    lerContextoConsolidado(db, clientId).catch((e) => (registrarFalha("mesa-videos: lerContextoConsolidado falhou", e), ({}))),
+    lerDossie(db, clientId, 4000).catch((e) => (registrarFalha("mesa-videos: lerDossie falhou", e), null)),
   ]);
   const nome = perfil ? perfil.company_name || perfil.full_name || "" : "";
   return [nome ? `Cliente: ${nome}` : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : ""].filter(Boolean).join("\n\n") || "sem contexto registrado";
@@ -272,7 +274,9 @@ export async function diretorAvaliar(b: BaseDaFuncao, corpo: Record<string, unkn
     const av = lerAvaliacao(r.answers as any, descricoes);
     await b.auditar("video_diretor_avaliar", { client_id: clientId, plano: plano.ref, variacoes: descricoes.length }, true);
     return b.json({ ...av, custo_usd: descricao.custoUsd, sem_miniatura: semImagem, descricoes });
-  } catch {
+  } catch (e) {
+    // Frente FS: o aviso já vai para a tela; o motivo agora também fica no log.
+    console.error("mesa-videos: jev da continuidade falhou", { client_id: clientId, motivo: String((e as Error)?.message ?? e).slice(0, 300) });
     return b.json({ variacoes: [], melhor: null, confianca: null, custo_usd: descricao.custoUsd, sem_miniatura: semImagem, descricoes, aviso: "O Jev não respondeu agora. As descrições estão abaixo para conferir a olho." });
   }
 }
