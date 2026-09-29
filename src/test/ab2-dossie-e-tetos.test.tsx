@@ -298,9 +298,12 @@ describe("A1 (tela). entrega do Estúdio em partes continua sozinha", () => {
   });
 
   it("as três telas que entregam usam a repetição", () => {
-    for (const p of ["src/components/mesa/AbaEstudio.tsx", "src/components/mesa/AbaEntrega.tsx", "src/components/mesa-ads/AbaEstudioAds.tsx"]) {
+    for (const p of ["src/components/mesa/AbaEntrega.tsx", "src/components/mesa-ads/AbaEstudioAds.tsx"]) {
       expect(ler(p), p).toMatch(/repetirEntregaEmPartes\(\(\) => chamarFuncao\("estudio-arte", \{ acao: "entregar"/);
     }
+    // Frente EN: o Estúdio entrega pelas três opções (entregaComOpcoes), com a mesma repetição.
+    expect(ler("src/components/mesa/AbaEstudio.tsx")).toContain("await entregarComModo(trabalho.id, modo, { mostrarAoCliente })");
+    expect(ler("src/lib/mesa/entregaComOpcoes.ts")).toContain("await repetirEntregaEmPartes(() => chamar(corpoDoEntregar(trabalhoId, modo)));");
   });
 
   it("imagem-reduzida: a cópia pedida agora e maior que a caixa é reduzida (não volta o original)", () => {

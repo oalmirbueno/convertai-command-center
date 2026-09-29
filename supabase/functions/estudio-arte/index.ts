@@ -417,6 +417,8 @@ import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../
 import { ehPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts";
 import { acoesDaPublicacaoDaPeca, dataDoConteudo, type TrabalhoDaPublicacao } from "./publicacao-da-peca.ts";
+// Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
+import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
 import {
   aplicarArquivosNasLaminas,
@@ -6420,9 +6422,11 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   // Criativo de anúncio: entrega própria, fora da agenda e da aprovação de post.
   if (ehAds(t)) return await entregarAnuncio(ch, t, corpo);
+  // Frente EN: "Só Arquivos" (sem_agenda) entrega sem criar post na Agenda.
+  const semAgenda = corpo.sem_agenda === true;
   if (t.status === "entregue" && t.file_ids.length) {
     // Entregar de novo o que já está em Arquivos só confere a Agenda (idempotente).
-    const agenda = await levarParaAgenda(ch, t);
+    const agenda = semAgenda ? null : await levarParaAgenda(ch, t);
     return json({ trabalho_id: t.id, file_ids: t.file_ids, root_file_id: t.file_ids[0], ja_entregue: true, agenda });
   }
   if (!t.task_id) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
@@ -6549,7 +6553,7 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente EA: a peça já entra (ou se atualiza) na Agenda, sem data; a data
   // proposta fica no trabalho até o dono confirmar. Falha aqui não desfaz a
   // entrega: vira aviso na Entrega com "Levar para a Agenda".
-  const agenda = await levarParaAgenda(ch, gravado);
+  const agenda = semAgenda ? null : await levarParaAgenda(ch, gravado);
   return json({
     trabalho_id: t.id,
     status: gravado.status,
@@ -8580,6 +8584,25 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
     mutarTrabalho: (id, mudar) => mutarTrabalho(id, (t) => mudar(t as TrabalhoDaPublicacao)) as Promise<TrabalhoDaPublicacao>,
     exigirQuemPublica,
     contextoDaAgenda,
+  }).acoes,
+  // Frente EN: entrega_concluir (opção 1, pronto para agendar, e opção 3, só Arquivos).
+  ...acoesDaEntregaComOpcoes({
+    json,
+    servico,
+    erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem),
+    trabalhoComAcesso: (ch, id) => trabalhoComAcesso(ch, id) as Promise<TrabalhoDaEntrega>,
+    lerTrabalho: (id) => lerTrabalho(id) as Promise<TrabalhoDaEntrega>,
+    mutarTrabalho: (id, mudar) => mutarTrabalho(id, (t) => mudar(t as TrabalhoDaEntrega)) as Promise<TrabalhoDaEntrega>,
+    exigirQuemPublica,
+    contextoDaAgenda,
+    levarParaAgenda: (ch, t) => levarParaAgenda(ch, t as unknown as Trabalho),
+    agendar: async (ch, trabalhoId, quando) => {
+      const r = await publicacaoConfirmar(ch, { trabalho_id: trabalhoId, publicar_em: quando, publicar_ao_aprovar: false });
+      const corpo = (await r.json()) as { publicacao?: { quando: string | null; status: string } };
+      return { quando: corpo.publicacao?.quando ?? quando, status: corpo.publicacao?.status ?? "scheduled" };
+    },
+    dataDoConteudo: (t, agora) => dataDoConteudo(servico(), t, agora),
+    comHistorico,
   }).acoes,
 };
 

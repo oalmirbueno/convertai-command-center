@@ -522,7 +522,8 @@ describe("contratos", () => {
   const agenda = ler("supabase/functions/estudio-arte/agenda-da-entrega.ts");
 
   it("entregar leva para a Agenda sem desfazer a entrega quando a Agenda falha", () => {
-    expect(estudio).toContain("const agenda = await levarParaAgenda(ch, gravado);");
+    // Frente EN: "Só Arquivos" (sem_agenda) é a única entrega que não leva para a Agenda.
+    expect(estudio).toContain("const agenda = semAgenda ? null : await levarParaAgenda(ch, gravado);");
     expect(estudio).toContain("async function levarParaAgenda(ch: Chamador, t: Trabalho): Promise<ResumoDaAgenda>");
     // Anúncio não vai para a Agenda de posts.
     expect(estudio).toContain("if (ehAds(t) || t.status !== \"entregue\"");

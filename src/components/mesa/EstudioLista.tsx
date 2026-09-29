@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Check, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Star } from "lucide-react";
+import { Archive, Check, ChevronDown, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Send, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { opcoesDaEntrega, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
 import { dataCurta, rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
 import { ImagemDaMesa } from "./MesaContexto";
@@ -96,6 +106,75 @@ export interface ArquivarNaFaixa {
   onArquivar: (ids: string[]) => void;
   /** id -> ids das pautas parecidas no mesmo dia (pautasParecidas em arquivarDaFaixa.ts). */
   parecidas?: Record<string, string[]>;
+}
+
+/**
+ * Frente EN (28/09): entregar pela faixa, nas três opções (pronto para
+ * agendar, enviar para aprovação, só Arquivos), as pautas marcadas.
+ */
+export interface EntregarNaFaixa {
+  /** Admin e gestor: "Pronto para agendar" e "Mostrar ao cliente". */
+  podeLiberar: boolean;
+  /** Quantas das marcadas estão prontas (todas as lâminas com arte). */
+  prontas: (ids: string[]) => number;
+  onEntregar: (ids: string[], modo: ModoDeEntrega, mostrarAoCliente: boolean) => void;
+  /** Lote em andamento: o menu fica parado. */
+  ocupado?: boolean;
+}
+
+/** Menu "Entregar (n)" da seleção da faixa: as opções no menu, um clique entrega. */
+function MenuDeEntregaDaFaixa({ entregar, marcados, aoEntregar }: { entregar: EntregarNaFaixa; marcados: string[]; aoEntregar: () => void }) {
+  const [mostrar, setMostrar] = useState(false);
+  const prontas = marcados.length ? entregar.prontas(marcados) : 0;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={!prontas || entregar.ocupado}
+          className="mr-1 flex h-8 items-center rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+          title={marcados.length && !prontas ? "Nenhuma das marcadas tem todas as lâminas com arte" : "Entregar as marcadas"}
+          data-entregar-da-faixa={prontas}
+        >
+          {entregar.ocupado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+          Entregar {prontas ? `(${prontas})` : ""}
+          <ChevronDown className="ml-1 h-3.5 w-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-[12px] font-normal text-muted-foreground">
+          {prontas} de {marcados.length} {marcados.length === 1 ? "marcada pronta" : "marcadas prontas"} para entregar
+        </DropdownMenuLabel>
+        {opcoesDaEntrega(entregar.podeLiberar).map((o) => (
+          <DropdownMenuItem
+            key={o.modo}
+            className="flex-col items-start"
+            onSelect={() => {
+              entregar.onEntregar(marcados.slice(), o.modo, o.modo === "arquivos" && entregar.podeLiberar && mostrar);
+              aoEntregar();
+            }}
+            data-entregar-modo={o.modo}
+          >
+            <span className="text-[13px] font-medium">{o.modo === "aprovacao" && !entregar.podeLiberar ? "Pedir revisão da agência" : o.curto}</span>
+            <span className="text-[11px] text-muted-foreground">{o.dica}</span>
+          </DropdownMenuItem>
+        ))}
+        {entregar.podeLiberar && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={mostrar}
+              onCheckedChange={(v) => setMostrar(v === true)}
+              onSelect={(e) => e.preventDefault()}
+              className="text-[12px]"
+            >
+              Só Arquivos: mostrar ao cliente
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function CartaoDoItem({
@@ -219,6 +298,7 @@ export default function EstudioLista({
   recolhida = false,
   onRecolher,
   arquivar,
+  entregar,
   inicio,
   extra,
 }: {
@@ -242,6 +322,8 @@ export default function EstudioLista({
   onRecolher?: (recolher: boolean) => void;
   /** Frente AE: arquivar pela faixa (sem ele, a faixa fica como antes). */
   arquivar?: ArquivarNaFaixa;
+  /** Frente EN: entregar as marcadas (só com a seleção do arquivar). */
+  entregar?: EntregarNaFaixa;
   /** Frente AE-2: o que vem antes do período na barra (Pautas | Arte rápida), sem linha nova. */
   inicio?: ReactNode;
   /** Frente AE-2: ação compacta à direita da barra (Arquivados). */
@@ -357,13 +439,14 @@ export default function EstudioLista({
           type="button"
           onClick={() => setSelecionando(true)}
           className="flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-          title="Marcar várias pautas para arquivar de uma vez"
+          title={entregar ? "Marcar várias pautas para entregar ou arquivar de uma vez" : "Marcar várias pautas para arquivar de uma vez"}
         >
           <ListChecks className="mr-1 h-4 w-4" /> Selecionar
         </button>
       )}
       {arquivar && selecionando && (
         <span className="flex shrink-0 items-center" role="group" aria-label="Arquivar as marcadas">
+          {entregar && <MenuDeEntregaDaFaixa entregar={entregar} marcados={marcados} aoEntregar={sairDaSelecao} />}
           <button
             type="button"
             onClick={() => {

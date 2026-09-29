@@ -77,10 +77,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  recordOfflineClientApproval,
-  releaseFileToClient,
-  requestFileAgencyReview,
-  reviewFileAgency,
+  aprovarPeloCliente,
+  motivoDaRecusaDaAprovacao,
+  NOTA_DO_AVAL,
 } from "@/lib/fileApprovalActions";
 
 type PublicationAction =
@@ -600,9 +599,12 @@ export default function EditorialDetailSheet({
 
   /**
    * Poder total do admin sem sair da agenda: aprova o material de ponta a
-   * ponta em um clique (revisão interna, liberação e o aceite do cliente dado
-   * fora do painel). Cada passo usa a RPC oficial, então toda trava de
-   * segurança continua valendo e tudo fica auditado.
+   * ponta em um clique, pelo cliente (frente EN, 28/09: "o cliente está
+   * ocupado e pede para eu aprovar; aprovo valendo pelo cliente e por mim").
+   * Uma RPC só no banco (aprovar_pelo_cliente): revisão da agência, liberação
+   * e o aval do cliente dado ao admin (canal "equipe"), com as travas de
+   * sempre e tudo auditado. O cliente vê no histórico "Aprovado por <nome>
+   * em nome do cliente". Só admin e gestor.
    */
   const adminApproveNow = async (fileId: string | null) => {
     if (!fileId) {
@@ -610,64 +612,28 @@ export default function EditorialDetailSheet({
       return;
     }
     const proceed = await confirmDialog({
-      title: "Aprovar tudo agora?",
+      title: "Aprovar pelo cliente?",
       description:
-        "Registra em um passo a revisão interna, a liberação e o aceite do cliente (dado no grupo ou fora do painel). Use quando o aceite realmente aconteceu.",
+        "O cliente deu o aval para você aprovar. Registra em um passo a revisão interna, a liberação e a aprovação em nome dele; no histórico dele fica \"aprovado por você em nome do cliente\". Depois é só programar a publicação.",
       confirmLabel: "Aprovar tudo",
     });
     if (!proceed) return;
     setAdminActing(true);
     try {
-      const freshFile = async () => {
-        // A tabela files tem grants por coluna; a equipe lê pela view
-        // staff_files_secure (ler direto dava "permission denied for table files").
-        const { data, error } = await (supabase as any)
-          .from("staff_files_secure")
-          .select("id, version, approval_status, agency_approval_status, visibility")
-          .eq("id", fileId)
-          .single();
-        if (error) throw error;
-        return data as any;
-      };
-      let file = await freshFile();
-      if (file.approval_status === "rejected") {
-        toast.error(
-          "Este material foi rejeitado e a decisão é final. Crie uma revisão para aprovar a nova versão.",
-        );
-        return;
-      }
-      // Disponibilizado ao cliente = aprovado pela regra da casa: nada a fazer.
-      if (
-        file.visibility === "client_shared" &&
-        file.agency_approval_status === "approved"
-      ) {
+      const r = await aprovarPeloCliente(fileId, NOTA_DO_AVAL);
+      if (r?.estado === "disponivel") {
         toast.success(
           "Este material já foi disponibilizado ao cliente e conta como aprovado. Já pode agendar ou concluir.",
         );
-        await sheetQueryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
-        return;
+      } else if (r?.estado === "ja_aprovado") {
+        toast.success("Este material já estava aprovado. Já pode programar a publicação.");
+      } else {
+        toast.success("Aprovado pelo cliente. Já pode programar a publicação.");
       }
-      if (file.agency_approval_status === "not_requested") {
-        await requestFileAgencyReview(fileId);
-        file = await freshFile();
-      }
-      if (file.agency_approval_status !== "approved") {
-        await reviewFileAgency(fileId, "approved");
-        file = await freshFile();
-      }
-      if (file.visibility !== "approval") {
-        await releaseFileToClient(fileId, "approval");
-        file = await freshFile();
-      }
-      if (file.approval_status !== "approved") {
-        await recordOfflineClientApproval(fileId, Number(file.version ?? 1), "grupo");
-      }
-      toast.success("Material aprovado de ponta a ponta. Já pode agendar ou concluir.");
       await sheetQueryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+      await sheetQueryClient.invalidateQueries({ queryKey: ["all-files"] });
     } catch (error: unknown) {
-      toast.error(
-        editorialErrorMessage(error, "Não foi possível aprovar agora."),
-      );
+      toast.error(motivoDaRecusaDaAprovacao(error));
     } finally {
       setAdminActing(false);
     }

@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, Check, FolderCheck, FolderOpen, Loader2, RotateCcw, Send } from "lucide-react";
+import { CalendarCheck, Check, FileCheck2, FolderCheck, FolderOpen, Loader2, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { juntar } from "@/components/sistema/estilos";
+import { opcoesDaEntrega, rotuloDaOpcao, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { faltaEnviar, textoDaEntrega } from "./EstudioSituacao";
+import { useEstadoGuardado } from "./estudioUtil";
 import type { Trabalho } from "./useItensDoMes";
 
 /**
@@ -12,7 +16,15 @@ import type { Trabalho } from "./useItensDoMes";
  * aprovação num clique, ou só entregar. Depois de entregar, o mesmo lugar
  * mostra "Enviar para aprovação" (design: "Pedir revisão da agência") e o
  * link para Arquivos, pela mesma regra da aba Entrega (faltaEnviar).
+ *
+ * Frente EN (28/09, dono: "na hora de entregar, quero três opções"): antes de
+ * entregar, um seletor curto escolhe como (pronto para agendar, enviar para
+ * aprovação, só Arquivos) e um botão só entrega; a explicação fica no "?".
+ * Design não aprova pelo cliente (só admin e gestor). Depois de entregar, o
+ * admin ainda pode "Aprovar pelo cliente" enquanto a peça espera a aprovação.
  */
+
+const ICONE_DO_MODO: Record<ModoDeEntrega, typeof Send> = { pronto: FileCheck2, aprovacao: Send, arquivos: FolderCheck };
 
 function Passo({ feito, atual, titulo, detalhe }: { feito: boolean; atual: boolean; titulo: string; detalhe: ReactNode }) {
   return (
@@ -46,6 +58,8 @@ export default function EstudioEntrega({
   linkAgenda,
   onEntregar,
   onEnviar,
+  onAprovarPeloCliente,
+  aprovando = false,
   onReabrir,
   reabrindo = false,
 }: {
@@ -62,8 +76,12 @@ export default function EstudioEntrega({
   erroDoEnvio: string | null;
   linkArquivos: string;
   linkAgenda: string | null;
-  onEntregar: (tambemEnviar: boolean) => void;
+  /** Frente EN: o modo escolhido e, em "Só Arquivos", se o cliente já vê. */
+  onEntregar: (modo: ModoDeEntrega, mostrarAoCliente: boolean) => void;
   onEnviar: () => void;
+  /** Frente EN: entregue e esperando a aprovação, o admin aprova pelo cliente e agenda. */
+  onAprovarPeloCliente?: () => void;
+  aprovando?: boolean;
   /** "Reabrir para corrigir": mesmas lâminas e versões, nova rodada de entrega (arquivo novo). */
   onReabrir?: () => void;
   reabrindo?: boolean;
@@ -73,6 +91,14 @@ export default function EstudioEntrega({
   const falta = faltaEnviar(trabalho);
   const rotuloEnviar = ehDesign ? "Pedir revisão da agência" : "Enviar para aprovação";
   const enviado = entregue && !falta;
+  // Frente EN: como entregar (fica lembrado na sessão). Design não tem o "pronto para agendar".
+  const opcoes = opcoesDaEntrega(!ehDesign);
+  const [modoGuardado, setModo] = useEstadoGuardado<ModoDeEntrega>("mesa:estudio:modo-da-entrega", "aprovacao");
+  const opcao = opcoes.filter((o) => o.modo === modoGuardado)[0] || opcoes.filter((o) => o.modo === "aprovacao")[0];
+  const [mostrarAoCliente, setMostrarAoCliente] = useEstadoGuardado<boolean>("mesa:estudio:entrega-mostrar", false);
+  const IconeDoModo = ICONE_DO_MODO[opcao.modo];
+  const esperandoAprovacao =
+    trabalho.status === "entregue" && (!trabalho.entrega_status || trabalho.entrega_status === "aguardando_cliente" || trabalho.entrega_status === "aguardando_agencia");
 
   return (
     <div className="min-w-0 space-y-4">
@@ -92,13 +118,63 @@ export default function EstudioEntrega({
       </ol>
 
       {!entregue ? (
-        <div className="space-y-2">
-          <Button type="button" className="h-10 w-full" onClick={() => onEntregar(true)} disabled={!todas || ocupado || entregando}>
-            {entregando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-            {ehDesign ? "Entregar e pedir revisão" : "Entregar e enviar para aprovação"}
-          </Button>
-          <Button type="button" variant="outline" className="h-10 w-full" onClick={() => onEntregar(false)} disabled={!todas || ocupado || entregando}>
-            <FolderCheck className="mr-1.5 h-4 w-4" /> Só entregar em Arquivos
+        <div className="space-y-2" data-entrega-com-opcoes="">
+          <div className="flex min-w-0 items-center">
+            <p className="text-[13px] font-medium">Como entregar</p>
+            <AjudaRecolhida className="ml-1" rotulo="Como entregar">
+              Pronto para agendar: o cliente já deu o aval; aprova em nome dele (fica no histórico dele como aprovado por você) e
+              agenda na data do conteúdo, no perfil da marca. Sem data que sirva, pergunta a data. Enviar para aprovação: o
+              fluxo normal, o cliente aprova no portal. Só Arquivos: fica em Arquivos, sem aprovação e sem post na Agenda;
+              marque "Mostrar ao cliente" para ele já ver.
+            </AjudaRecolhida>
+          </div>
+          <div role="radiogroup" aria-label="Como entregar" className="space-y-0.5">
+            {opcoes.map((o) => {
+              const escolhida = o.modo === opcao.modo;
+              return (
+                <button
+                  key={o.modo}
+                  type="button"
+                  role="radio"
+                  aria-checked={escolhida}
+                  title={o.dica}
+                  onClick={() => setModo(o.modo)}
+                  disabled={entregando}
+                  data-modo-da-entrega={o.modo}
+                  className={juntar(
+                    "flex h-8 w-full min-w-0 items-center rounded-md px-2 text-left text-[13px]",
+                    escolhida ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <span className={juntar("mr-2 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border", escolhida ? "border-primary" : "border-border")} aria-hidden="true">
+                    {escolhida && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </span>
+                  <span className="truncate">{o.modo === "aprovacao" && ehDesign ? "Pedir revisão da agência" : o.curto}</span>
+                </button>
+              );
+            })}
+          </div>
+          {opcao.modo === "arquivos" && !ehDesign && (
+            <label className="flex min-h-8 cursor-pointer items-center px-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="mr-2 h-4 w-4 shrink-0 accent-primary"
+                checked={mostrarAoCliente}
+                onChange={(e) => setMostrarAoCliente(e.target.checked)}
+                disabled={entregando}
+                data-mostrar-ao-cliente=""
+              />
+              Mostrar ao cliente
+            </label>
+          )}
+          <Button
+            type="button"
+            className="h-10 w-full"
+            onClick={() => onEntregar(opcao.modo, opcao.modo === "arquivos" && !ehDesign && mostrarAoCliente)}
+            disabled={!todas || ocupado || entregando}
+          >
+            {entregando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <IconeDoModo className="mr-1.5 h-4 w-4" />}
+            {rotuloDaOpcao(opcao, ehDesign)}
           </Button>
           {!todas && <p className="text-center text-[11.5px] text-muted-foreground">Gere todas as lâminas para entregar.</p>}
         </div>
@@ -108,6 +184,20 @@ export default function EstudioEntrega({
             <Button type="button" className="h-10 w-full" onClick={onEnviar} disabled={enviando}>
               {enviando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
               {rotuloEnviar}
+            </Button>
+          )}
+          {!ehDesign && esperandoAprovacao && onAprovarPeloCliente && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full"
+              onClick={onAprovarPeloCliente}
+              disabled={aprovando || enviando}
+              title="O cliente deu o aval: aprova em nome dele e agenda na data do conteúdo"
+              data-aprovar-pelo-cliente=""
+            >
+              {aprovando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-1.5 h-4 w-4" />}
+              Aprovar pelo cliente e agendar
             </Button>
           )}
           {erroDoEnvio && (

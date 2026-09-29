@@ -6,12 +6,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Building2, CheckCircle2, ChevronLeft, ChevronRight, FileImage, FileText, Film, Loader2, MessageSquare, Plus, RefreshCw } from "lucide-react";
+import { Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, FileCheck2, FileImage, FileText, Film, ListChecks, Loader2, MessageSquare, Plus, RefreshCw } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import {
+  aprovarPeloCliente,
+  motivoDaRecusaDaAprovacao,
+  NOTA_DO_AVAL,
+  podeAprovarPeloCliente,
   recordOfflineClientApproval,
   releaseFileToClient,
   reviewFileAgency,
@@ -190,6 +194,10 @@ export default function AdminApprovals() {
     !!previewFile,
   );
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
+  // Frente EN: admin e gestor aprovam pelo cliente (um item ou vários marcados).
+  const [selecionando, setSelecionando] = useState(false);
+  const [marcados, setMarcados] = useState<string[]>([]);
+  const aprovavelPeloCliente = (f: any) => canReviewAndRelease && podeAprovarPeloCliente(f);
 
   // Build carousel children map
   const allFilesList = allFiles || [];
@@ -419,12 +427,102 @@ export default function AdminApprovals() {
     }
   };
 
+  /**
+   * Frente EN (28/09, dono: "o cliente está ocupado e pede para eu aprovar;
+   * eu entro e aprovo todos, valendo pelo cliente e por mim"). Uma RPC por
+   * material (aprovar_pelo_cliente): revisão interna, liberação e o aval do
+   * cliente dado ao admin, com as travas de sempre. O cliente recebe um aviso
+   * e vê no histórico "Aprovado por <nome> em nome do cliente".
+   */
+  const sairDaSelecao = () => {
+    setSelecionando(false);
+    setMarcados([]);
+  };
+  const handleApproveOnBehalf = async (arquivos: any[]) => {
+    const alvos = arquivos.filter(aprovavelPeloCliente);
+    if (!alvos.length) return;
+    const confirmed = await confirmDialog({
+      title: alvos.length === 1 ? `Aprovar "${alvos[0].file_name}" pelo cliente?` : `Aprovar ${alvos.length} materiais pelo cliente?`,
+      description:
+        "O cliente deu o aval para você aprovar. Registra a revisão interna, a liberação e a aprovação em nome dele. " +
+        "No histórico do cliente fica \"aprovado por você em nome do cliente\" e ele recebe um aviso.",
+      confirmLabel: "Aprovar pelo cliente",
+    });
+    if (!confirmed) return;
+    setSubmitting(true);
+    const falhas: string[] = [];
+    let feitos = 0;
+    try {
+      // Um de cada vez: cada aprovação trava o material no banco.
+      for (const f of alvos) {
+        try {
+          await aprovarPeloCliente(f.id, NOTA_DO_AVAL);
+          feitos++;
+        } catch (error) {
+          falhas.push(`${f.file_name || "material"}: ${motivoDaRecusaDaAprovacao(error)}`);
+        }
+      }
+      await refreshApprovalQueues();
+      await queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+      setPreviewFile(null);
+      sairDaSelecao();
+      if (falhas.length) {
+        toast({
+          title: feitos ? `${feitos} de ${alvos.length} aprovados pelo cliente` : "Nenhum material foi aprovado",
+          description: falhas.join(" ").slice(0, 400),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: feitos === 1 ? "Aprovado pelo cliente" : `${feitos} materiais aprovados pelo cliente`,
+          description: "Já podem ser programados na Agenda.",
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const aprovaveisNaTela = filtered.filter(aprovavelPeloCliente);
+
   const formatDate = (d: string) => {
     const data = new Date(d);
     return isNaN(data.getTime()) ? "" : data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
   const novoConteudo = `/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`;
+
+  /* Frente EN: aprovar pelo cliente em lote (só admin e gestor). */
+  const acoesDeLote = canReviewAndRelease && aprovaveisNaTela.length > 0 ? (
+    selecionando ? (
+      <span className="flex shrink-0 items-center" role="group" aria-label="Aprovar pelo cliente as marcadas">
+        <button
+          type="button"
+          className={juntar(botao.primario, "h-8 px-2.5 text-[12px]")}
+          disabled={!marcados.length || submitting}
+          onClick={() => void handleApproveOnBehalf(aprovaveisNaTela.filter((f: any) => marcados.indexOf(f.id) >= 0))}
+          data-aprovar-lote={marcados.length}
+        >
+          {submitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-1.5 h-3.5 w-3.5" />}
+          Aprovar pelo cliente{marcados.length ? ` (${marcados.length})` : ""}
+        </button>
+        <button type="button" className={juntar(botao.discreto, "ml-1 h-8 px-2 text-[12px]")} onClick={() => setMarcados(aprovaveisNaTela.map((f: any) => f.id))}>
+          Todas
+        </button>
+        <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={sairDaSelecao}>
+          Cancelar
+        </button>
+      </span>
+    ) : (
+      <button
+        type="button"
+        className={botao.barra}
+        onClick={() => setSelecionando(true)}
+        title="Marcar vários materiais e aprovar pelo cliente (o cliente deu o aval)"
+      >
+        <ListChecks className="mr-1 h-3.5 w-3.5" /> Aprovar pelo cliente
+      </button>
+    )
+  ) : null;
 
   /* Situação e cliente: seletores pequenos não ganham linha própria
      (SISTEMA.md 4.2). No computador vão na linha das filas, à direita; abaixo
@@ -449,6 +547,7 @@ export default function AdminApprovals() {
           (clients || []).map((client: any) => ({ valor: client.id, rotulo: client.company_name || client.full_name })),
         )}
       />
+      {acoesDeLote}
     </>
   );
 
@@ -541,23 +640,46 @@ export default function AdminApprovals() {
                   const images = getCarouselImages(f);
                   const isCarousel = images.length > 1;
                   const meta = [f.project?.name, f.client?.company_name || f.client?.full_name, formatDate(f.created_at)].filter(Boolean).join(" · ");
+                  const aprovavel = aprovavelPeloCliente(f);
+                  const marcado = marcados.indexOf(f.id) >= 0;
+                  const abrirOuMarcar = () => {
+                    if (selecionando) {
+                      if (aprovavel) setMarcados((l) => (l.indexOf(f.id) >= 0 ? l.filter((x) => x !== f.id) : l.concat([f.id])));
+                      return;
+                    }
+                    setPreviewFile(f);
+                  };
                   return (
                     <div
                       key={f.id}
                       role="button"
                       tabIndex={0}
-                      aria-label={`Abrir ${f.file_name || "entrega"}`}
-                      onClick={() => setPreviewFile(f)}
+                      aria-label={selecionando ? `Marcar ${f.file_name || "entrega"}` : `Abrir ${f.file_name || "entrega"}`}
+                      aria-pressed={selecionando ? marcado : undefined}
+                      onClick={abrirOuMarcar}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter" && e.key !== " ") return;
                         e.preventDefault();
-                        setPreviewFile(f);
+                        abrirOuMarcar();
                       }}
                       className={juntar(
                         superficie.painel,
-                        "flex h-full cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "relative flex h-full cursor-pointer flex-col overflow-hidden transition-colors hover:border-muted-foreground/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selecionando && !aprovavel && "cursor-default opacity-50",
+                        selecionando && marcado && "border-primary",
                       )}
                     >
+                      {selecionando && aprovavel && (
+                        <span
+                          className={juntar(
+                            "absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border",
+                            marcado ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background",
+                          )}
+                          aria-hidden="true"
+                        >
+                          {marcado && <Check className="h-3.5 w-3.5" />}
+                        </span>
+                      )}
                       <CarouselPreview images={images} small />
                       <div className="flex min-w-0 flex-1 flex-col px-4 py-3">
                         <div className="flex min-w-0 items-center">
@@ -578,6 +700,23 @@ export default function AdminApprovals() {
                             </span>
                             {activeFeedback}
                           </p>
+                        )}
+
+                        {aprovavel && !selecionando && (
+                          <div className="mt-auto pt-3">
+                            <button
+                              type="button"
+                              className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}
+                              disabled={submitting}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleApproveOnBehalf([f]);
+                              }}
+                              data-aprovar-pelo-cliente={f.id}
+                            >
+                              <FileCheck2 className="mr-1.5 h-3 w-3" aria-hidden="true" /> Aprovar pelo cliente
+                            </button>
+                          </div>
                         )}
 
                         {f[statusField] === "rejected" && (
@@ -712,6 +851,17 @@ export default function AdminApprovals() {
               <Link to={getCorrectionUrl(previewFile)} onClick={() => setPreviewFile(null)} className={botao.secundario}>
                 <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" /> Criar nova versão
               </Link>
+            )}
+            {/* Frente EN: o cliente deu o aval ao admin; aprova em nome dele. */}
+            {previewFile && aprovavelPeloCliente(previewFile) && (
+              <button
+                type="button"
+                className={botao.secundario}
+                disabled={submitting}
+                onClick={() => void handleApproveOnBehalf([previewFile])}
+              >
+                <FileCheck2 className="mr-1.5 h-3 w-3" aria-hidden="true" /> Aprovar pelo cliente
+              </button>
             )}
             {/* Cliente que aprova pelo grupo e não entra no painel: a equipe
                 registra o aceite aqui para nada ficar travado. */}

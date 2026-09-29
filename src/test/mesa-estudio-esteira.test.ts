@@ -380,13 +380,18 @@ describe("depois de entregar, o próprio Estúdio envia para aprovação", () =>
     expect(faltaEnviar({ ...entregue, entrega_status: "reprovado" })).toBe(true);
   });
 
-  it("antes de entregar: entregar e enviar num clique", () => {
+  it("antes de entregar: entregar e enviar num clique (ou só Arquivos, pelo seletor)", () => {
+    window.sessionStorage.removeItem("mesa:estudio:modo-da-entrega");
+    window.sessionStorage.removeItem("mesa:estudio:entrega-mostrar");
     const p = props({ trabalho: trabalhoBase({ status: "pronto", cards: entregue.cards }) });
     montar(h(EstudioEntrega, p));
     fireEvent.click(screen.getByRole("button", { name: /Entregar e enviar para aprovação/ }));
-    expect(p.onEntregar).toHaveBeenCalledWith(true);
+    expect(p.onEntregar).toHaveBeenCalledWith("aprovacao", false);
+    // Frente EN: as opções ficam no seletor "Como entregar"; um botão só entrega.
+    fireEvent.click(screen.getByRole("radio", { name: /Só Arquivos/ }));
     fireEvent.click(screen.getByRole("button", { name: /Só entregar em Arquivos/ }));
-    expect(p.onEntregar).toHaveBeenCalledWith(false);
+    expect(p.onEntregar).toHaveBeenCalledWith("arquivos", false);
+    window.sessionStorage.removeItem("mesa:estudio:modo-da-entrega");
   });
 
   it("o envio confere o resultado da arte, não só a resposta da RPC", async () => {
@@ -508,7 +513,8 @@ describe("a aba inteira no computador (faixa das pautas em cima, estúdio grande
       fireEvent.click(screen.getByRole("button", { name: "Conjunto" }));
       expect(screen.getByText("Mesma luz")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Entrega" }));
-      expect((screen.getByRole("button", { name: /Só entregar em Arquivos/ }) as HTMLButtonElement).disabled).toBe(true);
+      // Frente EN: o botão da entrega (no modo escolhido) fica parado até todas as lâminas terem arte.
+      expect((screen.getByRole("button", { name: /Entregar e enviar para aprovação/ }) as HTMLButtonElement).disabled).toBe(true);
 
       // Arte já na Agenda: mostra a arte e só refaz se pedir.
       aba.trocar("i-2");

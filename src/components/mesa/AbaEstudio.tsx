@@ -42,6 +42,7 @@ import {
   chamarFuncao,
   custoDaResposta,
   dataCurta,
+  dataEHora,
   ErroDaMesa,
   estimarLocal,
   inicioDoMes,
@@ -57,7 +58,6 @@ import {
   type ParteDaEstimativa,
   type Qualidade,
 } from "@/lib/mesa/api";
-import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 // Frente MF (27/09): post de fotos da Mesa Foto no mesmo trabalho do Estúdio (não gera arte aqui).
 import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
@@ -93,8 +93,9 @@ import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
-import AprovadasSemData from "./AprovadasSemData";
+import AprovadasSemData, { chaveDasAprovadasSemData, JanelaDaAprovada, type AprovadaSemData } from "./AprovadasSemData";
 import AgendarDoEstudio from "./AgendarDoEstudio";
+import { entregarComModo, entregarVarias, prontaParaEntregar, resumoDoLote, type ModoDeEntrega, type ResultadoDaEntrega } from "@/lib/mesa/entregaComOpcoes";
 import PedidoDoCliente from "./PedidoDoCliente";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
@@ -419,6 +420,9 @@ function DetalheDoItem({
   const [salvandoLegenda, setSalvandoLegenda] = useState(false);
   const [entregando, setEntregando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // Frente EN: aprovado pelo cliente (pelo admin) sem data que sirva: a janela do "Agendar" abre preenchida.
+  const [pedirData, setPedirData] = useState<AprovadaSemData | null>(null);
+  const [aprovandoPeloCliente, setAprovandoPeloCliente] = useState(false);
   const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
   // O andamento de cada lâmina (fila, gerando, ajustando, conferindo): a fonte do indicador único da prancheta.
   // Andamento do caminho antigo (sem a fila do servidor) e das ações diretas (ajustar, conferir).
@@ -1013,8 +1017,54 @@ function DetalheDoItem({
     else toast.error("Não foi possível copiar", { description: "Selecione o texto e copie à mão." });
   };
 
-  /** Entrega em Arquivos e, se pedido, já envia para aprovação (mesmo caminho da aba Entrega). */
-  const entregar = async (tambemEnviar: boolean) => {
+  /** A janela do "Agendar" para esta peça, com a data proposta (frente EN). */
+  const janelaDeData = (r: ResultadoDaEntrega): AprovadaSemData | null =>
+    trabalho
+      ? {
+          id: trabalho.id,
+          task_id: item.id,
+          // Logo depois de entregar, o trabalho da tela ainda não tem os arquivos: a janela só usa a quantidade (post ou carrossel).
+          file_ids:
+            trabalho.file_ids && trabalho.file_ids.length
+              ? trabalho.file_ids
+              : Array.from({ length: Math.max(1, (trabalho.direcao?.cards || []).length) }, (_, i) => `lamina-${i + 1}`),
+          post_id: trabalho.post_id || null,
+          aprovado_em: new Date().toISOString(),
+          publicar_em: r.publicarEm || trabalho.publicar_em || null,
+          entrega_aviso: r.motivo || null,
+          titulo: item.title,
+          dia: item.due_date || null,
+          project_id: item.project_id || null,
+        }
+      : null;
+
+  /** Depois da entrega com opção: aviso certo e, sem data, a pergunta da data. */
+  const depoisDaEntrega = (r: ResultadoDaEntrega) => {
+    if (!r.ok) {
+      setErroDoEnvio(r.erro || null);
+      toast.error("A entrega não terminou", { description: r.erro });
+      return;
+    }
+    if (r.modo === "aprovacao") {
+      toast.success(ehDesign ? "Entregue e enviado para a revisão da agência" : "Entregue e enviado para aprovação");
+    } else if (r.modo === "arquivos") {
+      toast.success("Entregue em Arquivos", { description: r.mostradoAoCliente ? "O cliente já vê em Arquivos. Não vai para a Agenda." : "Sem aprovação e sem post na Agenda." });
+    } else if (r.agendadoPara) {
+      toast.success("Aprovado pelo cliente e agendado", { description: `Vai ao ar ${dataEHora(r.agendadoPara)}.` });
+    } else {
+      toast.success("Aprovado pelo cliente", { description: r.motivo || "Escolha a data para agendar." });
+      setPedirData(janelaDeData(r));
+    }
+    void queryClient.invalidateQueries({ queryKey: chaveDasAprovadasSemData(clientId) });
+    void queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+  };
+
+  /**
+   * Entrega em Arquivos no modo escolhido (frente EN): pronto para agendar
+   * (aprova pelo cliente e agenda), enviar para aprovação (o de sempre) ou só
+   * Arquivos (sem post, e o cliente vê se marcado).
+   */
+  const entregar = async (modo: ModoDeEntrega, mostrarAoCliente = false) => {
     if (!trabalho) return;
     setEntregando(true);
     setErroDoEnvio(null);
@@ -1022,24 +1072,33 @@ function DetalheDoItem({
       // Legenda que não gravou: não entrega com a legenda antiga do banco.
       if (legendaMudou && !(await salvarLegenda(true))) return;
       // AB2: carrossel grande entrega em partes (limite de CPU); a tela continua sozinha.
-      await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: trabalho.id }));
-      if (tambemEnviar) {
-        try {
-          await enviarUmParaAprovacao(trabalho.id);
-          toast.success(ehDesign ? "Entregue e enviado para a revisão da agência" : "Entregue e enviado para aprovação");
-        } catch (e) {
-          setErroDoEnvio(textoDoErro(e));
-          toast.error("Entregue em Arquivos, mas o envio para aprovação falhou", { description: textoDoErro(e) });
-        }
-      } else {
-        toast.success("Entregue em Arquivos", { description: "O envio para aprovação fica aqui mesmo, na ferramenta Entrega." });
-      }
+      const r = await entregarComModo(trabalho.id, modo, { mostrarAoCliente });
+      depoisDaEntrega(r);
       atualizar();
       void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
     } catch (e) {
       avisarErro(e, "Não foi possível entregar");
     } finally {
       setEntregando(false);
+    }
+  };
+
+  /** Já entregue e esperando: o admin aprova pelo cliente e agenda (a mesma opção 1, sem entregar de novo). */
+  const aprovarPeloClienteAgora = async () => {
+    if (!trabalho) return;
+    const ok = await confirmar({
+      title: "Aprovar pelo cliente?",
+      description: `O cliente deu o aval para "${item.title}". Fica no histórico dele como aprovado por você, em nome dele, e já agenda na data do conteúdo.`,
+      confirmLabel: "Aprovar e agendar",
+    });
+    if (!ok) return;
+    setAprovandoPeloCliente(true);
+    setErroDoEnvio(null);
+    try {
+      depoisDaEntrega(await entregarComModo(trabalho.id, "pronto"));
+      atualizar();
+    } finally {
+      setAprovandoPeloCliente(false);
     }
   };
 
@@ -1318,6 +1377,9 @@ function DetalheDoItem({
         {estado === "producao" && acaoPrincipal}
         {/* Frente AP: arte entregue → Agendar (data do conteúdo, perfil e se vai postar), só admin e gestor. */}
         {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0 px-2.5" />}
+        {pedirData && (
+          <JanelaDaAprovada peca={pedirData} posicao={1} total={1} titulo="Agendar" onFechar={() => setPedirData(null)} onFeita={() => { setPedirData(null); atualizar(); }} />
+        )}
         {colunas && onFoco && (
           <Button
             type="button"
@@ -1947,8 +2009,10 @@ function DetalheDoItem({
       erroDoEnvio={erroDoEnvio}
       linkArquivos={`/arquivos?client=${clientId}`}
       linkAgenda={linkAgendaDoItem}
-      onEntregar={(tambemEnviar) => void entregar(tambemEnviar)}
+      onEntregar={(modo, mostrar) => void entregar(modo, mostrar)}
       onEnviar={() => void enviarAgora()}
+      onAprovarPeloCliente={mesa.podeRecarregar ? () => void aprovarPeloClienteAgora() : undefined}
+      aprovando={aprovandoPeloCliente}
       onReabrir={entregue ? () => void reabrir() : undefined}
       reabrindo={reabrindo}
     />
@@ -2110,7 +2174,7 @@ export default function AbaEstudio({
   tarefaId: string | null;
   onTarefa: (id: string | null) => void;
 }) {
-  const { clientId } = useMesa();
+  const { clientId, podeRecarregar } = useMesa();
   // Frente AE: &rapida=nova (pedido novo) ou &rapida=<trabalho> abre a arte rápida no lugar das pautas.
   const [parametrosDoModo, setParametrosDoModo] = useSearchParams();
   const alvoRapido = (parametrosDoModo.get(PARAMETRO_DA_ARTE_RAPIDA) || "").trim() || null;
@@ -2308,6 +2372,59 @@ export default function AbaEstudio({
     });
   };
 
+  /**
+   * Frente EN: entregar as pautas marcadas na faixa, no modo escolhido, uma de
+   * cada vez (a entrega abre lâminas e tem limite de CPU por chamada). As que
+   * não têm todas as lâminas com arte ficam de fora; as aprovadas sem data
+   * ficam no "sem data" da faixa.
+   */
+  const [entregandoLote, setEntregandoLote] = useState(false);
+  const trabalhoDoItem = (id: string) => {
+    const i = itens.filter((x) => x.id === id)[0] || (itemFora && itemFora.id === id ? itemFora : null);
+    return i ? trabalhoDe(i) : null;
+  };
+  const prontasDaFaixa = (ids: string[]) => ids.filter((id) => prontaParaEntregar(trabalhoDoItem(id))).length;
+  const entregarPautas = async (ids: string[], modo: ModoDeEntrega, mostrarAoCliente: boolean) => {
+    const trabalhos = ids.map(trabalhoDoItem).filter((t): t is Trabalho => prontaParaEntregar(t));
+    if (!trabalhos.length) {
+      toast.info("Nenhuma das marcadas está pronta", { description: "Gere todas as lâminas antes de entregar." });
+      return;
+    }
+    const titulo = modo === "pronto" ? "Aprovar pelo cliente e agendar" : modo === "aprovacao" ? "Entregar e enviar para aprovação" : "Só entregar em Arquivos";
+    const ok = await confirmarDaFaixa({
+      title: `${titulo}: ${trabalhos.length} ${trabalhos.length === 1 ? "peça" : "peças"}?`,
+      description:
+        modo === "pronto"
+          ? "O cliente deu o aval: cada peça vai para Arquivos, fica aprovada em nome dele (no histórico dele, aprovado por você) e entra na Agenda na data do conteúdo. As que não tiverem data ficam em \"sem data\"."
+          : modo === "aprovacao"
+            ? "Cada peça vai para Arquivos e segue para a aprovação de sempre."
+            : mostrarAoCliente
+              ? "Cada peça vai para Arquivos, visível ao cliente, sem aprovação e sem post na Agenda."
+              : "Cada peça vai para Arquivos, sem aprovação e sem post na Agenda.",
+      confirmLabel: "Entregar",
+    });
+    if (!ok) return;
+    setEntregandoLote(true);
+    const aviso = toast.loading(`Entregando 0 de ${trabalhos.length}…`);
+    try {
+      const r = await entregarVarias(
+        trabalhos.map((t) => t.id),
+        modo,
+        { mostrarAoCliente },
+        {},
+        (feitas, total) => toast.loading(`Entregando ${feitas} de ${total}…`, { id: aviso }),
+      );
+      const resumo = resumoDoLote(r);
+      if (resumo.tudoCerto) toast.success(resumo.titulo, { id: aviso, description: resumo.detalhe || undefined, duration: 10000 });
+      else toast.warning(resumo.titulo, { id: aviso, description: resumo.detalhe || undefined, duration: 15000 });
+    } finally {
+      setEntregandoLote(false);
+      relerDepoisDeArquivar();
+      void queryClientDaFaixa.invalidateQueries({ queryKey: chaveDasAprovadasSemData(clientId) });
+      void queryClientDaFaixa.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
+    }
+  };
+
   const escolher = (id: string) => {
     gravarUltimo(clientId, id);
     onTarefa(id);
@@ -2336,6 +2453,7 @@ export default function AbaEstudio({
       recolhida={recolhida}
       onRecolher={setRecolhida}
       arquivar={{ onArquivar: (ids) => void arquivarPautas(ids), parecidas }}
+      entregar={{ podeLiberar: podeRecarregar, prontas: prontasDaFaixa, onEntregar: (ids, modo, mostrar) => void entregarPautas(ids, modo, mostrar), ocupado: entregandoLote }}
       inicio={modoDoEstudio}
       extra={<><AprovadasSemData /><ArquivadosDaFaixa onMudou={relerDepoisDeArquivar} /></>}
     />
