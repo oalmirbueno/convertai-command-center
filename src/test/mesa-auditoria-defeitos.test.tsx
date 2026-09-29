@@ -226,8 +226,9 @@ describe("campanhas", () => {
     const aba = ler("src/components/mesa/AbaCampanhas.tsx");
     expect(aba).toContain("const andando = !!usePedidoDaCampanha(escolhida ? escolhida.id : null);");
     expect(aba).not.toContain("setAndando");
-    const detalhe = ler("src/components/mesa/CampanhaDetalhe.tsx");
-    expect(detalhe).toContain("usePedidoDaCampanha(`selo:${campanha.id}`)");
+    // Frente SEL (30/09): o selo mora em CampanhaSelo.tsx (gerar e melhorar), com a mesma trava.
+    const selo = ler("src/components/mesa/CampanhaSelo.tsx");
+    expect(selo).toContain("usePedidoDaCampanha(`selo:${campanha.id}`)");
   });
 
   it("tirar o hype não remonta a campanha nova (o formulário fica)", () => {

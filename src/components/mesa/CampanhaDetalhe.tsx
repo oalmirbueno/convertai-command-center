@@ -1,50 +1,43 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ExternalLink, Loader2, MessageSquare, Sparkles } from "lucide-react";
+import { ChevronLeft, ExternalLink, Loader2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { textoDoErro, usd } from "@/lib/mesa/api";
-import { Ampliar } from "./Ampliar";
-import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import CampanhaConteudos from "./CampanhaConteudos";
 import CampanhaReferencias, { MAX_REFERENCIAS, ReferenciasEscolhidas } from "./CampanhaReferencias";
-import { Cronometro } from "./Cronometro";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { juntar, texto } from "@/components/sistema/estilos";
 import {
-  campanhaSelo,
   chaves,
   lerProposta,
   mesDaData,
-  partesDoSelo,
   periodoCurto,
   salvarReferenciasDaCampanha,
   type Campanha,
 } from "./mesaV4Api";
 import {
-  aplicarRespostaDaCampanha,
-  marcarPedidoDaCampanha,
   MAX_IMAGENS_CAMPANHA,
   normalizarBriefing,
   normalizarImagensDaCampanha,
   normalizarPlanoDeImagens,
   planoDesatualizado,
   trocarCampanhaNoCache,
-  usePedidoDaCampanha,
 } from "./campanhasApi";
 import CampanhaBriefing from "./CampanhaBriefing";
 import { ImagensDaCampanhaSalvas } from "./CampanhaImagens";
 import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
 import CampanhaNasMesas from "./CampanhaNasMesas";
+import CampanhaSelo from "./CampanhaSelo";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**
  * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
- * geral, identidade do tema com o selo grande, referências e conteúdos). Os
+ * geral, selo (CampanhaSelo.tsx), identidade do tema, referências e conteúdos). Os
  * ajustes são pedidos ao agente da campanha, ao lado; aqui ficam as ações
  * diretas: gerar os conteúdos na hora, editar cada um, escolher e mandar para
- * a agenda (CampanhaConteudos.tsx), desenhar o selo, escolher referências e
+ * a agenda (CampanhaConteudos.tsx), escolher o selo, escolher referências e
  * abrir no Estúdio.
  */
 
@@ -57,7 +50,7 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 // ------------------------------------------------------------------ seções
 
-type IdDaSecao = "visao" | "briefing" | "imagens" | "plano" | "identidade" | "referencias" | "conteudos";
+type IdDaSecao = "visao" | "briefing" | "imagens" | "plano" | "selo" | "identidade" | "referencias" | "conteudos";
 
 const CHAVE_DAS_SECOES = "mesa:campanha:secoes-fechadas";
 
@@ -132,13 +125,8 @@ export default function CampanhaDetalhe({
   /** Tela menor: o agente fica numa gaveta, aberta por este botão. */
   onAbrirAgente?: () => void;
 }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId } = useMesa();
   const queryClient = useQueryClient();
-  // Selo em desenho guardado fora do componente (chave "selo:<id>"): trocar de
-  // campanha e voltar não libera um segundo desenho pago no meio do primeiro.
-  const seloEmCurso = usePedidoDaCampanha(`selo:${campanha.id}`);
-  const seloDesde = seloEmCurso ? seloEmCurso.desde : null;
-  const [seloAberto, setSeloAberto] = useState(false);
   const [galeria, setGaleria] = useState(false);
   const [fechadas, setFechadas] = useState<IdDaSecao[]>(lerFechadas);
   const [referencias, setReferencias] = useState<string[]>(campanha.referencias_ids || []);
@@ -203,33 +191,9 @@ export default function CampanhaDetalhe({
     });
   };
 
-  const desenharSelo = async () => {
-    const chaveDoSelo = `selo:${campanha.id}`;
-    marcarPedidoDaCampanha(chaveDoSelo, { mensagem: "selo", desde: Date.now() });
-    try {
-      return await campanhaSelo(campanha.id);
-    } finally {
-      marcarPedidoDaCampanha(chaveDoSelo, null);
-    }
-  };
-
   const pedir = (texto: string) => {
     if (onPedirAoAgente) onPedirAoAgente(texto);
   };
-
-  const botaoDoSelo = (
-    <BotaoComCusto
-      rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{campanha.selo_path ? "Desenhar de novo" : "Desenhar selo"}</>}
-      titulo="Selo da campanha"
-      descricao="O gerador de imagem desenha o selo (logo do tema) com o texto e as cores da campanha."
-      partes={() => partesDoSelo(catalogo)}
-      executar={desenharSelo}
-      aoConcluir={(data) => aplicarRespostaDaCampanha(queryClient, clientId, data)}
-      variant={campanha.selo_path ? "outline" : "default"}
-      disabled={seloDesde !== null}
-      className="h-8"
-    />
-  );
 
   const briefing = normalizarBriefing(campanha.briefing);
   const produtosEmFoco = briefing.produtos.map((p) => p.nome).join(", ");
@@ -370,39 +334,24 @@ export default function CampanhaDetalhe({
         <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />
       </Secao>
 
-      {/* Identidade do tema, com o selo grande. */}
+      {/* Frente SEL (30/09): o selo em seção própria, com os 4 caminhos, Melhorar, referências e versões. */}
+      <Secao
+        titulo="Selo"
+        resumo={campanha.selo_path ? "com selo" : "sem selo ainda"}
+        aberta={aberta("selo")}
+        onAlternar={() => alternar("selo")}
+      >
+        <CampanhaSelo campanha={campanha} />
+      </Secao>
+
+      {/* Identidade do tema. */}
       <Secao
         titulo="Identidade do tema"
         resumo={id.tema_visual || undefined}
         aberta={aberta("identidade")}
         onAlternar={() => alternar("identidade")}
       >
-        <div className="flex min-w-0 flex-col md:flex-row">
-          <div className="mb-4 flex shrink-0 flex-col items-center md:mb-0 md:mr-5">
-            {campanha.selo_path ? (
-              <button
-                type="button"
-                onClick={() => setSeloAberto(true)}
-                aria-label="Ver o selo grande"
-                className="block h-40 w-40 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-background"
-              >
-                <ImagemDaMesa caminho={campanha.selo_path} alt={`Selo da campanha ${campanha.nome}`} className="h-full w-full !object-contain p-2" />
-              </button>
-            ) : (
-              <div
-                className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-background p-3 text-center text-[13px] font-semibold leading-tight [overflow-wrap:anywhere]"
-                style={corDoSelo ? { color: corDoSelo } : undefined}
-              >
-                {selo.texto || campanha.nome}
-              </div>
-            )}
-            <div className="mt-2.5">{botaoDoSelo}</div>
-            {seloDesde !== null && (
-              <div className="mt-1.5 max-w-[180px]">
-                <Cronometro desde={seloDesde} rotulo="Desenhando" previsao="~40s" />
-              </div>
-            )}
-          </div>
+        <div className="min-w-0">
           <dl className="min-w-0 flex-1 space-y-3.5">
             {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}
             {paleta.length > 0 && (
@@ -475,13 +424,6 @@ export default function CampanhaDetalhe({
       </Secao>
 
 
-      {campanha.selo_path && (
-        <Ampliar
-          imagens={[{ caminho: campanha.selo_path, titulo: `Selo: ${campanha.nome}` }]}
-          indice={seloAberto ? 0 : null}
-          onFechar={() => setSeloAberto(false)}
-        />
-      )}
     </div>
   );
 }

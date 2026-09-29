@@ -134,7 +134,9 @@ describe("tipos de campanha: identidade e selo próprios", () => {
     expect(cal).toContain("tipoDaCampanhaPeloJev(clientId, pedidoTexto, hype, chamador.userId)");
     expect(cal).toContain("normalizarIdentidade(r.identidade, { tipo: tipoDaCriacao.tipo, marca_id:");
     expect(cal).toContain("normalizarIdentidade(nova.identidade, (c.identidade ?? null)");
-    expect(cal).toContain("direcaoDoSeloDoTipo(tipoDaCampanha(c.identidade))");
+    // Frente SEL (30/09): o selo mora em selo-da-campanha.ts e segue a direção do tipo.
+    const selo = fonte("supabase/functions/agente-calendario/selo-da-campanha.ts");
+    expect(selo).toContain("direcaoDoSeloDoTipo(tipo)");
     expect(cal).toContain("if (corpo.tipo !== undefined) {");
   });
 });

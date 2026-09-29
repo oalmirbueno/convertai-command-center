@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { alvoDoKit, kitDaMarcaAberta, type AlvoDoKit, type OrigemDoKit } from "@/lib/mesa/kitDaMarca";
-import { chaveDasMarcas, type MarcaDoCliente } from "@/lib/mesa/marcas";
+import { chaveDasMarcas, useMarcasDoCliente, type MarcaDoCliente } from "@/lib/mesa/marcas";
 import { supabase } from "@/integrations/supabase/client";
 import { useKitDoCliente, type KitDoContexto } from "./contextoDoCliente";
 import { useMarcaDaMesa, useMesaOpcional } from "./MesaContexto";
@@ -73,4 +73,17 @@ export async function gravarNoKit(alvo: AlvoDoKit, campos: Record<string, unknow
 /** Chaves de cache que mudam quando o kit (do cliente ou da marca) muda. */
 export function chavesDoKit(clientId: string): (readonly unknown[])[] {
   return [["mesa", "kit", clientId], ["mesa", "kit-tons", clientId], chaveDasMarcas(clientId)];
+}
+
+/**
+ * Kit de uma marca dada (não a do topo): telas que escolhem a marca por conta
+ * própria, como o estúdio de mockups da Mesa Identidade (a marca do projeto).
+ * Mesma regra de herança: a marca que não é a principal nunca herda da outra.
+ */
+export function useKitDaMarca(clientId: string, marcaId: string | null): { kit: KitDoContexto | null; marca: MarcaDoCliente | null; isLoading: boolean } {
+  const kitCliente = useKitDoCliente(clientId);
+  const marcas = useMarcasDoCliente(clientId);
+  const marca = useMemo(() => (marcas.data || []).find((m) => m.id === marcaId) || null, [marcas.data, marcaId]);
+  const kit = useMemo(() => kitDaMarcaAberta((kitCliente.data as KitDoContexto | null | undefined) || null, marca, clientId).kit as KitDoContexto | null, [kitCliente.data, marca, clientId]);
+  return { kit, marca, isLoading: kitCliente.isLoading || marcas.isLoading };
 }

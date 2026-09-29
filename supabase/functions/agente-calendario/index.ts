@@ -61,7 +61,6 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
-import { logoLimpa } from "../_shared/imagem-local.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
@@ -86,7 +85,7 @@ import {
 } from "./tetos-do-pedido.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 // Frente AE (28/09): tipos de campanha (promoção, lançamento, data comemorativa...), cada um com identidade e selo próprios.
-import { blocoDoTipoParaOEstrategista, direcaoDoSeloDoTipo, perguntaDoTipoDaCampanha, tipoDaCampanha, tipoPelaResposta, tipoValido, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../_shared/tipos-de-campanha.ts";
+import { blocoDoTipoParaOEstrategista, perguntaDoTipoDaCampanha, tipoDaCampanha, tipoPelaResposta, tipoValido, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../_shared/tipos-de-campanha.ts";
 import {
   createEditorialItem,
   createEditorialItemSchema,
@@ -244,6 +243,9 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { historicoParaOModelo, hojeParaOAgente } from "../_shared/conversa-segura.ts";
+import { acoesDoSelo, type CampanhaDoSelo } from "./selo-da-campanha.ts";
+import { acaoDoSeloNaConversa, blocoDoSeloParaOEstrategista, type PedidoDoSeloNaConversa } from "./selo-na-conversa.ts";
+import { falaDoSelo, type IntencaoDoSelo } from "../_shared/selo-da-campanha.ts";
 import { acaoDaConversaDaCampanha, CAMPOS_DA_CAMPANHA_NA_CONVERSA, type CampanhaAtual, camposDaCampanhaNaConversa, mudancasDaCampanha, patchParaVoltar } from "./campanha-na-conversa.ts";
 
 /**
@@ -4535,65 +4537,10 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
 }
 
 /**
- * campanha_selo { campanha_id }: desenha o selo (logo do tema) da campanha com
- * o gerador de imagem, no fundo limpo, e guarda em mesa/<cliente>/campanhas/.
- * O Estúdio anexa o selo na capa e no fechamento dos conteúdos da campanha.
+ * campanha_selo { campanha_id }: contrato antigo (uma opção gerada e já
+ * escolhida). Frente SEL (30/09): o selo mora em selo-da-campanha.ts, com
+ * versões, 4 caminhos (gerar, pronto, enviado, logo), Melhorar e referências.
  */
-async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
-  const c = await carregarCampanha(servico, corpo.campanha_id);
-  await exigirAcessoAoCliente(chamador, c.client_id);
-  const modelo = await modeloPadrao("imagem");
-  if (!modelo) throw new ErroHttp(409, "sem_modelo_de_imagem", "O catálogo não tem gerador de imagem padrão.");
-  const id = (c.identidade ?? {}) as Record<string, any>;
-  const { data: kitDoCliente } = await servico.from("cliente_kit_marca").select("paleta").eq("client_id", c.client_id).maybeSingle();
-  // Cores da marca escolhida (Acerbi ou CME) quando o cliente tem marca por projeto.
-  const kit = kitComMarca((kitDoCliente as Record<string, unknown> | null) ?? null, await marcaDaChamada(servico, c.client_id, corpo));
-  const paleta = [...(Array.isArray((kit as any)?.paleta) ? (kit as any).paleta : []), ...(Array.isArray(id.paleta_apoio) ? id.paleta_apoio : [])]
-    .map((p: any) => `${p?.nome ?? "cor"} ${p?.hex ?? ""}`).join(", ");
-  const textoSelo = texto(id.selo?.texto, 60) || c.nome;
-  const prompt = [
-    `SELO (logo do tema) da campanha "${c.nome}".`,
-    `Escreva exatamente este texto, com a grafia e os acentos certos, e nenhum outro: "${textoSelo}".`,
-    id.selo?.descricao ? `Desenho do selo: ${id.selo.descricao}` : "Selo gráfico simples e marcante, legível em tamanho pequeno.",
-    // Frente AE: cada tipo de campanha tem o seu selo, bonito e sem poluir.
-    direcaoDoSeloDoTipo(tipoDaCampanha(c.identidade)),
-    id.tipografia ? `Tipografia: ${id.tipografia}` : "",
-    paleta ? `Cores: ${paleta}.` : "",
-    "Fundo branco liso e vazio em volta (o fundo será removido). Um único selo centralizado, com margem, sem mockup, sem sombra de cena, sem outros elementos, vetorial e limpo.",
-  ].filter(Boolean).join("\n");
-  const img = await chamarImagem({
-    clientId: c.client_id,
-    modeloId: modelo.id,
-    prompt,
-    referencias: [],
-    qualidade: "media",
-    tamanho: "1024x1024",
-    referencia: { tipo: "mesa_campanha", id: c.id },
-    criadoPor: chamador.userId,
-    tarefa: "estudio",
-    agente: "gerador_imagem",
-  });
-  let png = img.png;
-  try {
-    png = await logoLimpa(img.png);
-  } catch {
-    // vai com o fundo branco
-  }
-  const caminho = `${c.client_id}/campanhas/${c.id}/selo-${Date.now()}.png`;
-  const { error: erroUpload } = await servico.storage.from("mesa").upload(caminho, new Blob([new Uint8Array(png)], { type: "image/png" }), { contentType: "image/png" });
-  if (erroUpload) throw new ErroHttp(503, "selo_nao_guardado", "O selo foi desenhado, mas não foi guardado.", { uso_id: img.usoId });
-  const { data, error } = await servico
-    .from("mesa_campanhas")
-    .update({ selo_path: caminho })
-    .eq("id", c.id)
-    .eq("client_id", c.client_id)
-    .select("*")
-    .single();
-  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "O selo foi guardado, mas a campanha não foi atualizada.");
-  await somarCustoDaCampanha(servico, c.id, c.client_id, img.custoUsd);
-  (data as Campanha).custo_usd = Math.round((Number((data as Campanha).custo_usd) + img.custoUsd) * 1e6) / 1e6;
-  return json({ campanha: data, selo_path: caminho, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
-}
 
 // ------------------------------------------------- conversa da campanha
 
@@ -4652,6 +4599,12 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   await exigirAcessoAoCliente(chamador, c.client_id);
   const mensagem = texto(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer na campanha.");
+  // Frente SEL (30/09): "melhora o selo", "usa a logo como selo", "esse selo aqui". Filtro barato e, só
+  // quando fala de selo ou logo, o Jev (Choice) diz o pedido; roda junto com a leitura do contexto.
+  const anexosPedidos = Array.isArray(corpo.anexos) ? corpo.anexos.length : 0;
+  const intencaoPedida: Promise<IntencaoDoSelo> = falaDoSelo(mensagem)
+    ? selo.intencaoDoSelo(c as unknown as CampanhaDoSelo, mensagem, anexosPedidos, chamador.userId)
+    : Promise.resolve("nenhuma" as IntencaoDoSelo);
 
   const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch((e) => (registrarFalha("agente-calendario: carregarProposta falhou", e), null)) : null;
   const inicio = c.periodo_inicio ?? hojeSaoPaulo();
@@ -4678,6 +4631,7 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
     // Frente AG1: as regras que o dono já ensinou para campanhas (evitar primeiro).
     lerRegrasDoDono(servico, c.client_id, { areas: ["campanha", "copy", "arte"], marcaId: corpo.marca_id ?? (c.identidade as Record<string, unknown> | null)?.marca_id }),
   ]);
+  const intencaoDoSelo = await intencaoPedida;
   // Com o estado dos cartões (o que já mudou, o que foi desfeito): "volte o nome de antes" tem a que voltar.
   const anteriores = historicoParaOModelo(((historico ?? []) as Array<{ papel: string; conteudo: string; anexos: unknown }>).slice().reverse(), { max: 12, maxChars: 2000 });
 
@@ -4692,7 +4646,7 @@ CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e N�
 ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
 
 PEDIDO DA EQUIPE: ${mensagem}
-${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}
+${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}${blocoDoSeloParaOEstrategista(intencaoDoSelo) ? `\n${blocoDoSeloParaOEstrategista(intencaoDoSelo)}\n` : ""}
 ${fotosDaCamp.length ? `Os conteúdos seguem o briefing e usam as imagens da campanha: a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>".
 ` : ""}${REGRA_DO_APRENDIZADO_NO_PROMPT}
 Aplique o pedido. Devolva:
@@ -4780,6 +4734,9 @@ ${REGRAS_DOS_ITENS}`;
       : null,
   });
   const avisoDasRecusas = conferidos.recusas.length ? `Não mudei: ${conferidos.recusas.join("; ")}.` : null;
+  // Frente SEL: o selo na conversa. Logo e anexo vão direto (sem custo, com Desfazer); Melhorar pede Confirmar com o custo.
+  const doSelo = await seloNaConversa(servico, campanha, intencaoDoSelo, mensagem, anexos.caminhos, corpo, chamador.userId);
+  campanha = doSelo.campanha;
   const aprendizado = await aprenderComOPedido(servico, {
     clientId: c.client_id, mensagem, regra: regraDoModelo(r.regra), agente: "da campanha", areas: ["campanha", "copy", "arte", "geral"], areaPadrao: "campanha",
     marcaId: corpo.marca_id ?? (c.identidade as Record<string, unknown> | null)?.marca_id, userId: chamador.userId, fonte: "agente_da_campanha", historico: anteriores.slice(-4).map((m) => m.conteudo),
@@ -4787,17 +4744,90 @@ ${REGRAS_DOS_ITENS}`;
   });
   const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
 
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || (feita ? feita.resumo : "Nada mudou na campanha."), [anexos.aviso, avisoDasRecusas]);
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || (feita ? feita.resumo : doSelo.acao ? doSelo.acao.resumo : "Nada mudou na campanha."), [anexos.aviso, avisoDasRecusas, doSelo.aviso]);
   const anexosDoAgente: unknown[] = [];
   if (conteudosMudaram && propostaFinal) anexosDoAgente.push({ proposta_id: propostaFinal.id });
   if (feita) anexosDoAgente.push(feita);
+  if (doSelo.acao) anexosDoAgente.push(doSelo.acao);
   if (aprendizado.anexo) anexosDoAgente.push(aprendizado.anexo);
   if (anexoSeguidas) anexosDoAgente.push(anexoSeguidas);
   await registrarMensagens(servico, conversaId, c.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
   ]);
-  return json({ campanha, proposta: propostaFinal, resposta, acao: feita, aprendizado: aprendizado.anexo, avisos: [anexos.aviso, avisoDasRecusas].filter(Boolean), conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta: propostaFinal, resposta, acao: feita, acao_do_selo: doSelo.acao, aprendizado: aprendizado.anexo, avisos: [anexos.aviso, avisoDasRecusas, doSelo.aviso].filter(Boolean), conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+/**
+ * Frente SEL (30/09): o que o agente da campanha faz com o selo, pela intenção
+ * que o Jev leu. Usar a logo ou a imagem anexada: faz na hora (sem custo) e o
+ * cartão chega feito, com Desfazer. Melhorar: cartão com o custo e Confirmar.
+ * Gerar opções novas: aviso para a seção Selo (a equipe escolhe entre várias).
+ * Falha vira aviso na resposta e vai para o log; nada some calado.
+ */
+async function seloNaConversa(
+  servico: SupabaseClient,
+  campanha: Campanha,
+  intencao: IntencaoDoSelo,
+  mensagem: string,
+  anexos: string[],
+  corpo: Record<string, unknown>,
+  userId: string,
+): Promise<{ campanha: Campanha; acao: ReturnType<typeof acaoDoSeloNaConversa>; aviso: string | null }> {
+  const c = campanha as unknown as CampanhaDoSelo;
+  const pedido: PedidoDoSeloNaConversa = { intencao, pedido: mensagem, anexos };
+  if (intencao === "usar_logo" || intencao === "usar_anexo") {
+    if (intencao === "usar_anexo" && !anexos[0]) return { campanha, acao: null, aviso: "Não troquei o selo: a imagem anexada não chegou." };
+    try {
+      const alvo = intencao === "usar_logo"
+        ? { origem: "logo", marca_id: corpo.marca_id }
+        : { origem: "enviado", caminho: anexos[0], remover_fundo: true, nome: "anexo da conversa" };
+      const r = await selo.usarPronto(servico, c, alvo, userId);
+      const acao = acaoDoSeloNaConversa(r.campanha, pedido, {
+        userId,
+        feito: { versao_id: r.versao.id, rotulo: intencao === "usar_logo" ? "Logo da marca" : "Imagem anexada", selo_id_antes: r.anterior ? r.anterior.selo_id : null, aviso: r.avisos.join(" ") || null },
+      });
+      return { campanha: r.campanha as unknown as Campanha, acao, aviso: r.avisos.length ? r.avisos.join(" ") : null };
+    } catch (e) {
+      const motivo = e instanceof ErroHttp ? e.message : registrarFalha("agente-calendario: selo na conversa falhou", e, { campanha_id: c.id });
+      return { campanha, acao: null, aviso: `Não troquei o selo: ${motivo}` };
+    }
+  }
+  if (intencao === "melhorar") {
+    if (!c.selo_id) return { campanha, acao: null, aviso: "A campanha ainda não tem selo para melhorar: gere as opções na seção Selo e escolha uma." };
+    const custo = await selo.estimarDesenho({ modelo_id: corpo.modelo_imagem_id }).catch((e) => (registrarFalha("agente-calendario: custo do selo não estimado", e), null));
+    return { campanha, acao: acaoDoSeloNaConversa(c, { ...pedido, custoUsd: custo }, { userId }), aviso: null };
+  }
+  if (intencao === "gerar") return { campanha, acao: null, aviso: "Para selos novos, use Gerar na seção Selo da campanha: saem 3 ou 4 opções, com o custo antes, e você escolhe." };
+  return { campanha, acao: null, aviso: null };
+}
+
+/** Confirmar o Melhorar do selo pedido na conversa: desenha a versão nova e ela vira o selo (com Desfazer). */
+async function melhorarSeloConfirmado(servico: SupabaseClient, chamador: Chamador, acao: { contexto?: Record<string, unknown> }, item: { alvo_id: string; para: unknown }, clientId: string, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, item.alvo_id);
+  if (c.client_id !== clientId) throw new Error("A campanha não é deste cliente.");
+  const ctx = acao.contexto || {};
+  const cs = c as unknown as CampanhaDoSelo;
+  const base = await selo.lerVersao(servico, cs, ctx.selo_id ?? cs.selo_id);
+  const pedido = texto(item.para, 600);
+  const refs = (Array.isArray(ctx.referencias) ? ctx.referencias : [])
+    .map((x) => String(x))
+    .filter((x) => x.startsWith(`${clientId}/`) && x.indexOf("..") < 0)
+    .slice(0, 3)
+    .map((caminho) => ({ caminho, papel: "estilo" as const, nota: pedido.slice(0, 200) }));
+  const d = await selo.desenhar(servico, cs, { campanha_id: c.id, marca_id: corpo.marca_id }, chamador.userId, { base, pedidoDeMelhora: pedido, refsExtras: refs });
+  const e = await selo.escolherSelo(servico, cs, d.versao, chamador.userId);
+  return { desfazer: { selo_id_antes: e.anterior.selo_id }, ...(d.avisos.length ? { aviso: d.avisos.join(" ") } : {}) };
+}
+
+/** Desfazer do selo pedido na conversa: o selo de antes volta (o novo fica no histórico). */
+async function voltarSeloDaConversa(servico: SupabaseClient, clientId: string, x: ResultadoDoItem) {
+  const c = await carregarCampanha(servico, x.alvo_id);
+  if (c.client_id !== clientId) throw new Error("A campanha não é deste cliente.");
+  const cs = c as unknown as CampanhaDoSelo;
+  const antes = (x.desfazer || {}).selo_id_antes;
+  const v = typeof antes === "string" && antes ? await selo.lerVersao(servico, cs, antes) : null;
+  await selo.escolherSelo(servico, cs, v);
 }
 
 // ------------------------------------ imagens, briefing e plano da campanha
@@ -6654,7 +6684,9 @@ async function executarAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
   const clientId = guardada.mensagem.client_id;
   let r;
   try {
-    r = await confirmarAcaoGuardada(guardada, async (item) => {
+    r = await confirmarAcaoGuardada(guardada, async (item, acao) => {
+      // Frente SEL: Melhorar o selo pedido na conversa da campanha (custa uma imagem; o custo foi mostrado antes).
+      if (item.operacao === "selo_melhorar") return await melhorarSeloConfirmado(servico, chamador, acao, item, clientId, corpo);
       if (item.operacao !== "atualizar_publico" || item.alvo_id !== clientId) throw new Error("Operação desconhecida.");
       const atual = await lerContextoDoKit(servico, clientId);
       const antes = atual.contexto.publico ?? null;
@@ -6667,11 +6699,12 @@ async function executarAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
   }
   if (corpo.descartar === true) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
+  const doSelo = guardada.acao.itens.some((i) => i.operacao === "selo_melhorar");
   if (guardada.mensagem.conversa_id) {
-    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{ papel: "sistema", conteudo: `Público do contexto: ${textoDoResultado(r.resultados)}.` }]);
+    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{ papel: "sistema", conteudo: `${doSelo ? "Selo da campanha" : "Público do contexto"}: ${textoDoResultado(r.resultados)}.` }]);
   }
   await auditLog({
-    correlationId: crypto.randomUUID(), toolName: "mesa_publico_do_contexto", origin: "mesa:agente-calendario",
+    correlationId: crypto.randomUUID(), toolName: doSelo ? "mesa_selo_da_campanha" : "mesa_publico_do_contexto", origin: "mesa:agente-calendario",
     keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["clients:write"],
     input: { client_id: clientId, mensagem_id: guardada.mensagem.id }, success: feitos === r.resultados.length, statusCode: 200, durationMs: 0, resultRef: guardada.mensagem.id,
   });
@@ -6690,6 +6723,11 @@ async function desfazerAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
         await desfazerNaCampanha(servico, clientId, x);
         return;
       }
+      // Frente SEL: o selo trocado ou melhorado na conversa volta ao de antes.
+      if (x.operacao === "selo_trocar" || x.operacao === "selo_melhorar") {
+        await voltarSeloDaConversa(servico, clientId, x);
+        return;
+      }
       const atual = await lerContextoDoKit(servico, clientId);
       await gravarPublicoNoKit(servico, clientId, (x.desfazer || {}).publico_antes ?? null, atual.existe, atual.contexto, chamador.userId);
     }, { userId: chamador.userId });
@@ -6698,10 +6736,13 @@ async function desfazerAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
     throw e;
   }
   if (guardada.mensagem.conversa_id) {
+    const doSelo = guardada.acao.itens.some((i) => i.operacao === "selo_trocar" || i.operacao === "selo_melhorar");
     const daCampanha = guardada.acao.itens.some((i) => i.operacao === "campanha_campo" || i.operacao === "campanha_conteudos");
     await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{
       papel: "sistema",
-      conteudo: daCampanha
+      conteudo: doSelo
+        ? `Selo da campanha: ${r.voltaram ? "voltou ao de antes" : "não voltou"}${r.falharam.length ? ` (${r.falharam[0].motivo})` : ""}.`
+        : daCampanha
         ? `Campanha: ${r.voltaram} ${r.voltaram === 1 ? "mudança voltou" : "mudanças voltaram"} ao que era${r.falharam.length ? `; ${r.falharam.length} não ${r.falharam.length === 1 ? "pôde" : "puderam"} voltar` : ""}.`
         : "Público do contexto: voltou ao de antes.",
     }]);
@@ -6729,6 +6770,15 @@ async function desfazerNaCampanha(servico: SupabaseClient, clientId: string, x: 
   await salvarProposta(servico, p, { itens: itensAntes });
 }
 
+/** Frente SEL (30/09): o selo da campanha (versões, 4 caminhos, Melhorar, referências). */
+const selo = acoesDoSelo({
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}),
+  json,
+  carregarCampanha: (s, id) => carregarCampanha(s, id) as unknown as Promise<CampanhaDoSelo>,
+  exigirAcesso: exigirAcessoAoCliente,
+  somarCusto: somarCustoDaCampanha,
+});
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   itens_mcp: itensMcp,
   ativar_item_mcp: ativarItemMcp,
@@ -6747,7 +6797,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   buscar_hypes: buscarHypes,
   campanha_criar: campanhaCriar,
   campanha_ajustar: campanhaAjustar,
-  campanha_selo: campanhaSelo,
+  ...selo.acoes,
   campanha_conversar: campanhaConversar,
   campanha_salvar: campanhaSalvar,
   campanha_plano_imagens: campanhaPlanoImagens,
@@ -6764,7 +6814,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo"]);
+const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", ...selo.longas]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

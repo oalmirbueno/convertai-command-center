@@ -194,6 +194,9 @@ export interface Campanha {
   identidade: IdentidadeDaCampanha | null;
   referencias_ids: string[] | null;
   selo_path: string | null;
+  /** Frente SEL (30/09): a versão escolhida do selo e as referências dele (ausentes antes do SQL). */
+  selo_id?: string | null;
+  selo_referencias?: unknown;
   proposta_id: string | null;
   status: EstadoDaCampanha;
   custo_usd: number | null;

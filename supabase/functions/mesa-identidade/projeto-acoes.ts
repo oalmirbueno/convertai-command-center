@@ -44,7 +44,7 @@ export const TAMANHO_DO_CONCEITO = TAMANHOS_DA_IDENTIDADE.conceito;
 export const TAMANHO_DA_PESQUISA = TAMANHOS_DA_IDENTIDADE.pesquisa;
 export const TAMANHO_DA_CONVERSA = TAMANHOS_DA_IDENTIDADE.conversa;
 
-const PARTES_EDITAVEIS = ["briefing", "pesquisa", "conceito", "sistema", "naming", "entrega"];
+const PARTES_EDITAVEIS = ["briefing", "pesquisa", "conceito", "sistema", "naming", "entrega", "mockups"];
 
 // ------------------------------------------------------------------ projeto
 
@@ -98,7 +98,17 @@ export async function projetoSalvar(ch: Chamador, corpo: Record<string, unknown>
     const valor = corpo.valor && typeof corpo.valor === "object" && !Array.isArray(corpo.valor) ? (corpo.valor as Record<string, unknown>) : null;
     if (!valor) throw new ErroHttp(400, "valor_invalido", "Nada para salvar.");
     if (JSON.stringify(valor).length > 200_000) throw new ErroHttp(413, "valor_grande_demais", "Esta parte ficou grande demais para salvar. Tire imagens coladas no texto.");
-    campos.dados = dadosComParte(p.dados, parte, valor, corpo.substituir === true);
+    if (parte === "mockups") {
+      // Estúdio de mockups (frente MCK): os enviados entram em dados.mockups (lista que o brandbook lê), sem repetir a mesma imagem.
+      const novos = (Array.isArray(valor.itens) ? valor.itens : [])
+        .filter((m: any) => m && typeof m.imagem === "string" && m.imagem && typeof m.titulo === "string")
+        .map((m: any) => ({ titulo: String(m.titulo).slice(0, 120), imagem: String(m.imagem).slice(0, 500) }));
+      const antes = Array.isArray(p.dados.mockups) ? (p.dados.mockups as Array<{ titulo: string; imagem: string }>) : [];
+      const lista = corpo.substituir === true ? novos : antes.concat(novos.filter((n) => !antes.some((a) => a.imagem === n.imagem)));
+      campos.dados = { ...p.dados, mockups: lista.slice(0, 60) };
+    } else {
+      campos.dados = dadosComParte(p.dados, parte, valor, corpo.substituir === true);
+    }
   }
   if (typeof corpo.titulo === "string" && corpo.titulo.trim()) campos.titulo = corpo.titulo.trim().slice(0, 120);
   if (typeof corpo.com_naming === "boolean" && p.modo === "rebranding") campos.com_naming = corpo.com_naming;

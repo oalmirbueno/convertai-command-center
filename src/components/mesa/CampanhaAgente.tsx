@@ -23,6 +23,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { usd } from "@/lib/mesa/api";
 
 /**
  * Agente da campanha (pedido do dono em 23/09, noite): a conversa com o
@@ -46,6 +47,8 @@ const ATALHOS = [
   { rotulo: "Acrescente um conteúdo de…", texto: "Acrescente um conteúdo de " },
   { rotulo: "Troque as cores de apoio", texto: "Troque as cores de apoio por " },
   { rotulo: "Deixe o selo mais…", texto: "Deixe o selo mais " },
+  // Frente SEL (30/09): o agente entende o selo (melhorar, usar a logo, usar a imagem anexada).
+  { rotulo: "Use a logo como selo", texto: "Use a logo da marca como selo da campanha." },
 ];
 
 const imagensDaMensagem = (m: MensagemDoAgente) =>
@@ -130,6 +133,8 @@ export default function CampanhaAgente({
       const data = await campanhaConversar({ campanhaId: campanha.id, mensagem, anexos: caminhos });
       // A campanha e os conteúdos mudam na tela antes de o "Trabalhando" sair.
       aplicarRespostaDaCampanha(queryClient, clientId, data);
+      // Frente SEL: o agente pode ter trocado o selo (logo, imagem anexada).
+      if (data && data.acao_do_selo) void queryClient.invalidateQueries({ queryKey: ["mesa", "selo-da-campanha", clientId, campanha.id] });
       await queryClient.invalidateQueries({ queryKey: chave });
       return data;
     } catch (e) {
@@ -172,7 +177,7 @@ export default function CampanhaAgente({
             <p className="inline-flex items-center text-[13px] font-medium">
               Converse para ajustar a campanha
               <AjudaRecolhida className="ml-1" rotulo="O que dá para pedir">
-                Peça mudanças no nome, no conceito, na identidade e nos conteúdos: mudar, acrescentar ou tirar. A tela atualiza na hora.
+                Peça mudanças no nome, no conceito, na identidade e nos conteúdos: mudar, acrescentar ou tirar. No selo: melhorar (com custo e Confirmar), usar a logo ou usar a imagem anexada (na hora, com Desfazer). A tela atualiza na hora.
               </AjudaRecolhida>
             </p>
           </div>
@@ -207,11 +212,12 @@ export default function CampanhaAgente({
                       key={a.id}
                       acao={a}
                       titulo={a.executada_direto ? "O agente mudou" : "O agente vai mudar"}
-                      observacao="Sem custo. Dá para desfazer."
+                      observacao={a.custo_estimado_usd ? `Custa ~${usd(a.custo_estimado_usd)}. Dá para desfazer.` : "Sem custo. Dá para desfazer."}
                       onPedido={(p) => chamarAcaoDoAgente("agente-calendario", m.id, a.id, p)}
                       onFeito={() => {
                         void queryClient.invalidateQueries({ queryKey: chave });
                         void queryClient.invalidateQueries({ queryKey: ["mesa", "campanhas", clientId] });
+                        void queryClient.invalidateQueries({ queryKey: ["mesa", "selo-da-campanha", clientId, campanha.id] });
                         if (campanha.proposta_id) void queryClient.invalidateQueries({ queryKey: ["mesa", "proposta-v4", campanha.proposta_id] });
                       }}
                     />

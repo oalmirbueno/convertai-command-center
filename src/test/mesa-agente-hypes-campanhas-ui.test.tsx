@@ -258,13 +258,15 @@ describe("campanhas", () => {
     expect(corpo.hype).toEqual({ titulo: "H" });
   });
 
-  it("Desenhar selo chama campanha_selo e Mandar para a agenda grava os conteúdos escolhidos com o projeto da proposta", async () => {
+  it("a seção Selo lê o estado do selo (sem custo) e Mandar para a agenda grava os conteúdos escolhidos com o projeto da proposta", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
     await screen.findByText("Teaser do amor");
-    fireEvent.click(screen.getByRole("button", { name: /Desenhar selo/ }));
-    await waitFor(() => expect(chamadasDe("campanha_selo").length).toBe(1));
-    expect(chamadasDe("campanha_selo")[0]).toEqual({ acao: "campanha_selo", campanha_id: campanha.id });
+    // Frente SEL (30/09): o selo tem seção própria (4 caminhos); abrir não gasta nada.
+    expect(screen.getByRole("button", { name: /Escolher o selo/ })).toBeTruthy();
+    await waitFor(() => expect(chamadasDe("selo_estado").length).toBe(1));
+    expect(chamadasDe("selo_estado")[0]).toEqual({ acao: "selo_estado", campanha_id: campanha.id });
+    expect(chamadasDe("campanha_selo").length).toBe(0);
     // 25/09: a equipe escolhe (todos os que faltam vêm marcados) e manda só os escolhidos.
     fireEvent.click(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ }));
     await waitFor(() => expect(chamadasDe("gravar").length).toBe(1));

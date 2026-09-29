@@ -95,6 +95,8 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.mesa-publicidade]
     verify_jwt = true
+  [functions.mesa-mockups]
+    verify_jwt = true
   [functions.mesa-roteiros]
     verify_jwt = true
   [functions.conselho]
