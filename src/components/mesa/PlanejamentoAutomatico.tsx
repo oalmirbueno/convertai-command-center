@@ -27,7 +27,7 @@ import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { atualizarAgenda, novoIdDaProposta } from "./mesaV4Api";
 import MesEscolhaEditorial from "./MesEscolhaEditorial";
 import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEditorial } from "./MesConhecimento";
-import { useKitDoCliente } from "./contextoDoCliente";
+import { useKitDaMesa } from "./kitDaMesa";
 import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
@@ -586,7 +586,8 @@ export default function PlanejamentoAutomatico() {
   }, [catalogo, modeloId]);
 
   // Contexto facilita o mês: objetivo e oferta já vêm do contexto do cliente (só se o campo estiver vazio).
-  const kit = useKitDoCliente(clientId);
+  // Frente MC: objetivo e oferta do contexto da marca aberta (a CME não herda a oferta da Acerbi).
+  const kit = useKitDaMesa();
   useEffect(() => {
     const c = kit.data && kit.data.contexto;
     if (!c) return;

@@ -62,7 +62,7 @@ import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 // Frente AP (27/09): as melhores artes entregues como sugestão de referência do estilo.
 import { lerIndiceDasEntregas, sugestoesDasEntregas } from "../_shared/aprendizado-das-entregas.ts";
 import { descricaoEmTexto } from "../_shared/aprendizado-continuo.ts";
-import { filtrarReferenciasDaMarca, lerContextoDaMarca, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
+import { etiquetaDaMarca, filtrarReferenciasDaMarca, fotoDaMarca, kitComMarca, lerContextoDaMarca, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
@@ -499,7 +499,9 @@ async function candidatasDoCliente(p: Pedido): Promise<{ candidatas: CandidataDe
       servico().from("cliente_referencias").select("id, storage_path, leitura, tags, papel, destaque, criado_em").eq("client_id", p.clientId).eq("ativa", true).not("storage_path", "is", null),
       p.marca,
     ).order("criado_em", { ascending: false }).limit(30),
-    servico().from("cliente_imagens").select("id, nome, storage_bucket, storage_path, descricao").eq("client_id", p.clientId).eq("ativa", true).eq("aprovada", true).order("criado_em", { ascending: false }).limit(12),
+    // Frente MC: só as fotos aprovadas da marca aberta (tags marca:<id>).
+    servico().from("cliente_imagens").select("id, nome, storage_bucket, storage_path, descricao, tags").eq("client_id", p.clientId).eq("ativa", true).eq("aprovada", true).order("criado_em", { ascending: false }).limit(24)
+      .then((r) => ({ ...r, data: ((r.data as { tags?: string[] | null }[] | null) ?? []).filter((f) => fotoDaMarca(f.tags ?? null, p.marca)).slice(0, 12) })),
   ]);
   const linhas = ((refs.data as Array<{ id: string; storage_path: string; leitura: string | null; tags: string[] | null; papel: string; destaque: boolean }> | null) ?? []);
   const aprovada = (r: { tags: string[] | null; papel: string }) => (r.tags || []).indexOf("arte-aprovada") >= 0 || r.papel === "identidade";
@@ -821,9 +823,9 @@ function pecasComoAlvos(linhas: LinhaDaPeca[], nomeDoTemplate: (id: string) => s
 // ------------------------------------------------------------------ testes (mesmo gerador do Estúdio)
 
 async function paletaDoCliente(p: Pedido): Promise<string[]> {
-  const bruta = p.marca && Array.isArray(p.marca.paleta) && p.marca.paleta.length
-    ? p.marca.paleta
-    : (((await servico().from("cliente_kit_marca").select("paleta").eq("client_id", p.clientId).maybeSingle()).data as { paleta?: unknown } | null)?.paleta ?? []);
+  // Frente MC: regra única (kitComMarca). Outra marca sem paleta fica sem cor; nunca a do cliente.
+  const doCliente = (((await servico().from("cliente_kit_marca").select("paleta").eq("client_id", p.clientId).maybeSingle()).data as { paleta?: unknown } | null) ?? { paleta: [] });
+  const bruta = (kitComMarca({ paleta: doCliente.paleta ?? [] }, p.marca ?? null) as { paleta?: unknown }).paleta ?? [];
   return (Array.isArray(bruta) ? bruta : []).map((c) => String((c as { hex?: unknown })?.hex || "")).filter((h) => /^#[0-9a-f]{6}$/i.test(h));
 }
 
@@ -975,7 +977,7 @@ async function aprovarTeste(ch: Chamador, p: Pedido, testeId: string): Promise<{
   const [acervo, referencia] = await Promise.all([
     servico().from("cliente_imagens").insert({
       client_id: p.clientId, origem: "arquivo", file_id: fileId, storage_bucket: "files", storage_path: caminhoArquivo, nome, pasta: "Estilo do cliente",
-      tags: ["estilo-do-cliente", "teste-aprovado"], descricao: t.tema ? `Teste aprovado do estilo: ${t.tema}` : "Teste aprovado do estilo do cliente", gerada: true, aprovada: true, aprovada_em: agora, ativa: true,
+      tags: ["estilo-do-cliente", "teste-aprovado", ...(p.marca && !p.marca.principal ? [etiquetaDaMarca(p.marca.id)] : [])], descricao: t.tema ? `Teste aprovado do estilo: ${t.tema}` : "Teste aprovado do estilo do cliente", gerada: true, aprovada: true, aprovada_em: agora, ativa: true,
     }).select("id").maybeSingle(),
     servico().from("cliente_referencias").insert({
       client_id: p.clientId, origem: "arquivo", file_id: fileId, storage_path: t.caminho, papel: "identidade", tags: ["estilo-do-cliente", "teste-aprovado"], ativa: true, ...marcaParaGravar(p.marca),

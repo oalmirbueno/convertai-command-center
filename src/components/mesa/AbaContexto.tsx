@@ -136,7 +136,9 @@ export default function AbaContexto() {
               Marca <strong>{marca.nome}</strong> aberta
             </p>
             <AjudaRecolhida className="ml-1.5 mr-2" rotulo="O que muda com a marca aberta">
-              Logo, cores, estilo e referências da marca ficam em Editar em detalhe, Marca. Documentos, dossiê e o agente ao lado são do cliente.
+              Tudo aqui é da {marca.nome}: logo, cores, estilo, regras, tom, contexto, documentos e dossiê do projeto dela, referências e fotos
+              marcadas como dela. O que ela não tem fica vazio (nunca o da outra marca). O agente ao lado lê o kit da {marca.nome} e não grava no kit
+              do cliente; para mudar, use Editar o kit.
             </AjudaRecolhida>
             <button type="button" onClick={() => irPara("marca")} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
               Editar o kit da {marca.nome}

@@ -1,3 +1,4 @@
+import { corpoComMarca } from "@/lib/mesa/marcas";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ErroDaMesa, mensagemDoCodigo } from "@/lib/mesa/api";
@@ -412,7 +413,8 @@ export async function erroDaChamada(error: any): Promise<ErroDaMesa> {
 }
 
 export async function chamarMesaVideos<T = any>(corpo: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("mesa-videos", { body: corpo });
+  // Frente MC: a marca aberta no topo vai junto (o diretor lê o contexto da CME com a CME aberta).
+  const { data, error } = await supabase.functions.invoke("mesa-videos", { body: corpoComMarca("mesa-videos", corpo) });
   if (error) throw await erroDaChamada(error);
   if (data && typeof data === "object" && typeof (data as any).error === "string") {
     const codigo = String((data as any).error);

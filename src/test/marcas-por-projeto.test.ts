@@ -169,13 +169,13 @@ describe("marca_id nas chamadas às funções (chamarFuncao)", () => {
     expect(corpoComMarca("estudio-arte", corpo)).toBe(corpo);
   });
 
-  it("com marca, só as quatro funções recebem marca_id, sem trocar o que a tela mandou", () => {
+  it("com marca, as funções que entendem marca recebem marca_id, sem trocar o que a tela mandou", () => {
     definirMarcaAtual(CLIENTE, CME, dono);
     expect(marcaAtual()).toEqual({ clientId: CLIENTE, marcaId: ID_CME });
-    for (const f of ["estudio-arte", "agente-calendario", "mesa-ads", "mesa-foto"]) {
+    // Frente MC (29/09): agente-contexto, Instagram, perfis, roteiros e vídeos também (antes a CME lia a Acerbi).
+    for (const f of ["estudio-arte", "agente-calendario", "mesa-ads", "mesa-foto", "agente-contexto", "mesa-instagram", "perfis-instagram", "mesa-roteiros", "mesa-videos"]) {
       expect(corpoComMarca(f, { acao: "x", client_id: CLIENTE }).marca_id).toBe(ID_CME);
     }
-    expect(corpoComMarca("agente-contexto", { acao: "x" }).marca_id).toBeUndefined();
     expect(corpoComMarca("ia-gateway", { acao: "x" }).marca_id).toBeUndefined();
     expect(corpoComMarca("mesa-ads", { acao: "x", marca_id: "outra" }).marca_id).toBe("outra");
     // nunca manda a marca de um cliente para outro
@@ -236,9 +236,9 @@ describe("regras do servidor", () => {
     expect(cmeVazia.logo_path).toBeNull();
     expect(cmeVazia.logo_file_id).toBeNull();
     expect(cmeVazia.paleta).toEqual([]);
-    // Frente AE (28/09, dono: "está misturando tudo"): a CME não herda o estilo da principal; as regras do dono valem para as duas.
+    // Frente AE (28/09) e MC (29/09): a CME não herda estilo nem regras da principal (regra única de herança).
     expect(cmeVazia.estilo).toBeNull();
-    expect(cmeVazia.regras).toBe("sem travessão");
+    expect(cmeVazia.regras).toBeNull();
     const cme = kitComMarca(kit, noServidor(CME, { paleta: [{ hex: "#E91E63" }], logo_path: `${CLIENTE}/marcas/${ID_CME}/logo.png`, estilo: "rosa" }));
     expect(cme.paleta).toEqual([{ hex: "#E91E63" }]);
     expect(cme.logo_path).toBe(`${CLIENTE}/marcas/${ID_CME}/logo.png`);
@@ -255,7 +255,8 @@ describe("regras do servidor", () => {
     const c = contextoComMarca(base, noServidor(CME, { tom: "acolhedor", contexto: { publico: "empreendedoras" }, contexto_extra: "Núcleo feminino" }));
     expect(c.tom_de_voz).toBe("acolhedor");
     expect(c.publico).toBe("empreendedoras");
-    expect(c.negocio).toBe("Associação comercial");
+    // Frente MC: o negócio da Acerbi não passa para a CME (só o contexto dela).
+    expect(c.negocio).toBeUndefined();
     expect(c.logo).toBeUndefined();
     expect(c.marca).toEqual({ nome: "CME", principal: false, contexto_extra: "Núcleo feminino" });
   });

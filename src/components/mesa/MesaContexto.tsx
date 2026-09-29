@@ -58,6 +58,11 @@ export function MesaProvider({ valor, children }: { valor: MesaValor; children: 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }
 
+/** A Mesa aberta, ou null fora dela (componente que também vive fora da casca). */
+export function useMesaOpcional(): MesaValor | null {
+  return useContext(Contexto);
+}
+
 export function useMesa(): MesaValor {
   const v = useContext(Contexto);
   if (!v) throw new Error("useMesa fora da Mesa do cliente");

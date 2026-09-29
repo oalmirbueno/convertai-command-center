@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { textoDoErro } from "@/lib/mesa/api";
 import { pastaDaFoto, pastasDoAcervo, useArvoreDoWorkspace } from "@/lib/mesa/pastas";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { fotoDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { ExploradorDePastas } from "./NavegadorDePastas";
 
 /**
@@ -48,9 +49,12 @@ const LIMITE_NA_TELA = 120;
 
 export function useAcervo(ativo = true) {
   const { clientId } = useMesa();
+  // Frente MC: só as fotos da marca aberta (regra única, heranca-da-marca).
+  const { marca } = useMarcaDaMesa();
   return useQuery({
     queryKey: ["mesa", "acervo", clientId],
     enabled: ativo && !!clientId,
+    select: marca ? (lista: ImagemDoAcervo[]) => lista.filter((i) => fotoDaMarcaAberta(i.tags, marca)) : undefined,
     staleTime: 60_000,
     queryFn: async (): Promise<ImagemDoAcervo[]> => {
       const { data, error } = await (supabase as any)

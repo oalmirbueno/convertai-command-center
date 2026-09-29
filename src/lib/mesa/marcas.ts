@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { linhaDaMarca } from "../../../supabase/functions/_shared/heranca-da-marca";
 
 /**
  * Marcas por projeto dentro do mesmo cliente (pedido do dono em 25/09: "na
@@ -31,12 +32,18 @@ export interface MarcaDoCliente {
   regras: string | null;
   tom: string | null;
   contexto_extra: string | null;
+  /** Contexto de negócio da marca (mesmo formato do contexto consolidado do cliente). */
+  contexto: Record<string, unknown>;
+  logo_tom: string | null;
+  logo_alt_tom: string | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const COLUNAS =
+const COLUNAS_BASE =
   "id, client_id, project_id, nome, principal, ordem, paleta, logo_path, logo_alt_path, logo_file_id, logo_alt_file_id, estilo, regras, tom, contexto_extra";
+/** Com o contexto e o tom da logo (frente MC); banco sem logo_tom relê só a base. */
+const COLUNAS = `${COLUNAS_BASE}, contexto, logo_tom, logo_alt_tom`;
 
 /** Linha do banco em forma segura (paleta sempre lista, ordem sempre número). */
 export function normalizarMarca(bruta: any): MarcaDoCliente | null {
@@ -57,6 +64,9 @@ export function normalizarMarca(bruta: any): MarcaDoCliente | null {
     regras: bruta.regras || null,
     tom: bruta.tom || null,
     contexto_extra: bruta.contexto_extra || null,
+    contexto: bruta.contexto && typeof bruta.contexto === "object" && !Array.isArray(bruta.contexto) ? bruta.contexto : {},
+    logo_tom: bruta.logo_tom || null,
+    logo_alt_tom: bruta.logo_alt_tom || null,
   };
 }
 
@@ -73,7 +83,8 @@ export function ordenarMarcas(marcas: MarcaDoCliente[]): MarcaDoCliente[] {
 export async function lerMarcasDoCliente(clientId: string): Promise<MarcaDoCliente[]> {
   if (!UUID.test(clientId)) return [];
   try {
-    const { data, error } = await (supabase as any).from("cliente_marcas").select(COLUNAS).eq("client_id", clientId);
+    let { data, error } = await (supabase as any).from("cliente_marcas").select(COLUNAS).eq("client_id", clientId);
+    if (error) ({ data, error } = await (supabase as any).from("cliente_marcas").select(COLUNAS_BASE).eq("client_id", clientId));
     if (error) return [];
     const lista = ((data || []) as any[]).map(normalizarMarca).filter((m): m is MarcaDoCliente => !!m && m.client_id === clientId);
     return ordenarMarcas(lista);
@@ -182,7 +193,21 @@ export function marcaAtual(): { clientId: string; marcaId: string } | null {
 
 /** Funções que entendem marca_id (supabase/functions/_shared/marca.ts). */
 // mesa-publicidade: campanha_criar grava a marca e a repassa às tomadas da Mesa Foto (anti-bug 26/09: ia sempre nula).
-const FUNCOES_COM_MARCA = ["estudio-arte", "agente-calendario", "mesa-ads", "mesa-foto", "agente-estilo", "mesa-publicidade"];
+// Frente MC (29/09): agente-contexto (ler, montar, conversar, logo e fontes da marca), mesa-instagram,
+// perfis-instagram, mesa-roteiros e mesa-videos também entendem marca_id; antes a CME lia o contexto da Acerbi.
+const FUNCOES_COM_MARCA = [
+  "estudio-arte",
+  "agente-calendario",
+  "mesa-ads",
+  "mesa-foto",
+  "agente-estilo",
+  "mesa-publicidade",
+  "agente-contexto",
+  "mesa-instagram",
+  "perfis-instagram",
+  "mesa-roteiros",
+  "mesa-videos",
+];
 
 /**
  * Corpo com marca_id quando há marca escolhida e a função entende: não troca
@@ -223,9 +248,8 @@ export function campanhaDaMarcaNaTela(identidade: unknown, marca: Pick<MarcaDoCl
  * (sem marca) e as dela; outra marca, só as dela.
  */
 export function referenciaDaMarca(marcaIdDaLinha: string | null | undefined, marca: Pick<MarcaDoCliente, "id" | "principal"> | null): boolean {
-  if (!marca) return true;
-  if (marca.principal) return !marcaIdDaLinha || marcaIdDaLinha === marca.id;
-  return marcaIdDaLinha === marca.id;
+  // Regra única (supabase/functions/_shared/heranca-da-marca.ts), a mesma das funções.
+  return linhaDaMarca(marcaIdDaLinha, marca);
 }
 
 /** marca_id para gravar direto numa linha nova (referência, fonte): só de marca que não é a principal. */

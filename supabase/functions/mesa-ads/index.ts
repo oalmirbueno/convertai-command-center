@@ -130,7 +130,8 @@ import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev, 
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
-import { contextoComMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
+import { campanhaDaMarca, contextoComMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar, marcasDoCliente } from "../_shared/marca.ts";
+import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   AGENTE_DO_CANAL,
@@ -1176,12 +1177,20 @@ async function montarContextoAds(
   const fimDoMes = somarDias(`${somarDias(`${hoje.slice(0, 7)}-28`, 5).slice(0, 7)}-01`, -1);
   // Cérebro do cliente (Frente H): ads, conta e copy, sem repetir e com teto; lido junto com o resto.
   const cerebroP = resumoDoCerebro(servico, clientId, ["ads", "conta", "copy"], { limite: 2000 });
+  // Frente MC (29/09): outra marca (CME) lê o dossiê, as campanhas e os documentos só dela.
+  const outraMarca = marcaEscolhida && !marcaEscolhida.principal ? marcaEscolhida : null;
+  const marcasDasAds = marcaEscolhida ? await marcasDoCliente(servico, clientId) : [];
+  const doProjetoDaMarca = marcaEscolhida ? (p: string | null) => projetoDaMarcaAberta(p, marcaEscolhida, marcasDasAds) : null;
   const [marca, consolidado, dossie, anuncios, diarias, aprendizados, memoria, campanhasQ, briefQ, documentos] = await Promise.all([
     lerMarcaParaDirecaoDaMarca(servico, clientId, marcaEscolhida),
     lerContextoConsolidado(servico, clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
-    servico.from("client_dossiers").select("content, summary, version, effective_at")
-      .eq("client_id", clientId).eq("dossier_type", "contexto").eq("is_current", true)
-      .order("effective_at", { ascending: false }).limit(1),
+    outraMarca
+      ? servico.from("client_dossiers").select("content, summary, version, effective_at")
+        .eq("client_id", clientId).eq("is_current", true).eq("project_id", outraMarca.project_id ?? "00000000-0000-0000-0000-000000000000")
+        .order("effective_at", { ascending: false }).limit(1)
+      : servico.from("client_dossiers").select("content, summary, version, effective_at")
+        .eq("client_id", clientId).eq("dossier_type", "contexto").eq("is_current", true)
+        .order("effective_at", { ascending: false }).limit(1),
     lerAnunciosDoCliente(servico, clientId),
     lerDiarias(servico, clientId, { desde }),
     servico.from("ads_aprendizados").select("texto, evidencia, periodo_inicio, periodo_fim, criado_em")
@@ -1189,14 +1198,16 @@ async function montarContextoAds(
     servico.from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(40),
     // Campanhas do mês da Mesa principal (as que valem neste mês ou sem período).
-    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status")
-      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(12),
+    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
+      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(24),
     // Brief respondido pelo cliente (formulário): produtos, preços e diferenciais costumam estar aqui.
     servico.from("briefings").select("responses, submitted, created_at").eq("client_id", clientId)
       .order("created_at", { ascending: false }).limit(3),
-    lerDocumentosDeMarca(servico, clientId, 6000).catch((e) => (registrarFalha("mesa-ads: lerDocumentosDeMarca falhou", e), [])),
+    lerDocumentosDeMarca(servico, clientId, 6000, doProjetoDaMarca).catch((e) => (registrarFalha("mesa-ads: lerDocumentosDeMarca falhou", e), [])),
   ]);
-  const campanhas = ((campanhasQ.data as CampanhaDoMes[] | null) ?? [])
+  const campanhas = ((campanhasQ.data as (CampanhaDoMes & { identidade?: unknown })[] | null) ?? [])
+    .filter((c) => campanhaDaMarca(c.identidade, marcaEscolhida))
+    .map(({ identidade: _identidade, ...c }) => c as CampanhaDoMes)
     .filter((c) => (!c.periodo_fim || c.periodo_fim >= inicioDoMes) && (!c.periodo_inicio || c.periodo_inicio <= fimDoMes))
     .slice(0, 8)
     .map((c) => ({ ...c, conceito: c.conceito ? String(c.conceito).slice(0, 600) : null }));

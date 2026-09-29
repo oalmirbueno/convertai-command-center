@@ -11,6 +11,7 @@ import ReferenciasDoEstudio, { type AlvoDasReferencias } from "@/components/mesa
 import type { Trabalho } from "@/components/mesa/useItensDoMes";
 import { adicionarPin, ehLinkDePin } from "@/lib/mesa/referencias";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { marcaParaGravarAgora } from "@/lib/mesa/marcas";
 import {
   capaDaReferencia,
   chavesAds,
@@ -133,7 +134,8 @@ export default function ReferenciasDoCriativo({
         gravarCopiasSemEsperar("mesa", caminho, f, { nome: f.name, mime: f.type });
         const { error: erroLinha } = await (supabase as any)
           .from("cliente_referencias")
-          .insert({ id, client_id: clientId, origem: "upload", papel: "tecnica", storage_path: caminho, tags: ["mesa-ads"] });
+          // Frente MC: referência enviada com a CME aberta é da CME (nunca vira referência da Acerbi).
+          .insert({ id, client_id: clientId, origem: "upload", papel: "tecnica", storage_path: caminho, tags: ["mesa-ads"], ...marcaParaGravarAgora(clientId) });
         if (erroLinha) throw erroLinha;
         await usarNoCriativo(id, f.name);
       }

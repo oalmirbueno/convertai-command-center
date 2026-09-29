@@ -233,8 +233,9 @@ export default function PerfisDoInstagram() {
   const [mudando, setMudando] = useState<string | null>(null);
 
   const consulta = useQuery({
-    queryKey: chaveDaLista(clientId),
-    queryFn: async () => normalizarLista(await chamarPerfis("listar", clientId, null)),
+    // Frente MC: a lista é da marca aberta (referências e concorrentes da CME não são os da Acerbi).
+    queryKey: [...chaveDaLista(clientId), marca ? marca.id : ""],
+    queryFn: async () => normalizarLista(await chamarPerfis("listar", clientId, marca ? marca.id : null)),
     staleTime: 60_000,
     placeholderData: (anterior) => anterior,
   });

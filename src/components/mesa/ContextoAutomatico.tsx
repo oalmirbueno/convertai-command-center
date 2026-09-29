@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Circle, CircleDashed, FileText, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, dataEHora, padraoDoContexto, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
@@ -15,6 +14,10 @@ import ContextoAprendizados, { SeletorDaOrigem, useAprendizadosDoCliente, type F
 import { aprendizadosDoPainel, resumoDosAprendizados } from "./aprendizadosDoPainel";
 import { useMesa } from "./MesaContexto";
 import type { ParteDoContexto } from "./AbaContexto";
+// Frente MC (29/09): tudo aqui é da marca aberta no topo (CME mostra e grava só o da CME).
+import { gravarNoKit, useKitDaMesa } from "./kitDaMesa";
+import SugestaoDoKitDaMarca from "./ContextoSugestaoDaMarca";
+import { fotoDaMarcaAberta, linhaDaMarca } from "../../../supabase/functions/_shared/heranca-da-marca";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import Painel from "@/components/sistema/Painel";
@@ -26,12 +29,12 @@ import {
   useAcervo,
   useFontesDoCliente,
   useInvalidarContexto,
-  useKitDoCliente,
   useLeituraDoContexto,
   useReferenciasDoCliente,
   scoreDoConsolidado,
   type KitDoContexto,
   type RespostaDoMontar,
+  type SugestaoDaMarcaMontada,
   type SugestoesDoContexto,
 } from "./contextoDoCliente";
 
@@ -513,11 +516,18 @@ const ROTULO_DO_CAMPO_DO_SCORE: Record<string, string> = {
 export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: ParteDoContexto) => void } = {}) {
   const { clientId, clientName, catalogo, atualizarCusto, userId } = useMesa();
   const queryClient = useQueryClient();
-  const leitura = useLeituraDoContexto(clientId);
-  const kitQuery = useKitDoCliente(clientId);
-  const fontes = useFontesDoCliente(clientId);
-  const acervo = useAcervo(clientId);
-  const referencias = useReferenciasDoCliente(clientId);
+  const kitQuery = useKitDaMesa();
+  const marca = kitQuery.marca;
+  const daMarca = kitQuery.daMarca;
+  const leitura = useLeituraDoContexto(clientId, marca ? marca.id : null);
+  const fontesTodas = useFontesDoCliente(clientId);
+  const acervoTodo = useAcervo(clientId);
+  const referenciasTodas = useReferenciasDoCliente(clientId);
+  // Contagens e checklist só com o que é da marca aberta (regra única, heranca-da-marca).
+  const fontes = { ...fontesTodas, data: fontesTodas.data ? fontesTodas.data.filter((f) => linhaDaMarca(f.marca_id, marca)) : fontesTodas.data };
+  const acervo = { ...acervoTodo, data: acervoTodo.data ? acervoTodo.data.filter((i) => fotoDaMarcaAberta(i.tags, marca)) : acervoTodo.data };
+  const referencias = { ...referenciasTodas, data: referenciasTodas.data ? referenciasTodas.data.filter((r) => linhaDaMarca(r.marca_id, marca)) : referenciasTodas.data };
+  const [montadaPorMarca, setMontadaPorMarca] = useState<Record<string, SugestaoDaMarcaMontada>>({});
   const invalidar = useInvalidarContexto();
   const montados = useRef<Record<string, boolean>>({});
   const relidos = useRef<Record<string, boolean>>({});
@@ -575,6 +585,9 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
     // ainda estão na tela continuam.
     const semMontagem = !!(data && data.ja_atualizado);
     if (!semMontagem) setSugestoesPorCliente((p) => ({ ...p, [alvo]: limpas }));
+    // Frente MC: montar com outra marca aberta volta como sugestão para ela (Confirmar e Desfazer).
+    const daMarcaMontada = data && data.sugestao_da_marca;
+    if (daMarcaMontada && daMarcaMontada.marca_id) setMontadaPorMarca((p) => ({ ...p, [daMarcaMontada.marca_id]: daMarcaMontada }));
     const f = data && data.fontes_escolhidas;
     if (f && temTexto(f.titulo)) {
       toast.success("Fontes escolhidas da biblioteca", {
@@ -601,13 +614,15 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   // Contexto nunca montado e há material: monta sozinho, uma vez por cliente.
   useEffect(() => {
     if (!dados || !clientId) return;
+    // Outra marca aberta: montar gasta e vira sugestão; só pelo botão, nunca sozinho.
+    if (daMarca) return;
     if (dados.kit && dados.kit.contexto_atualizado_em) return;
     if (montados.current[clientId]) return;
     if (!temMaterial) return;
     montados.current[clientId] = true;
     void montarSozinho(clientId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dados, clientId]);
+  }, [dados, clientId, daMarca]);
 
   // Referências novas entraram na leitura: a galeria relê. O "ler" termina a
   // sincronização em segundo plano, então relê uma vez alguns segundos depois.
@@ -648,10 +663,8 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
     const alvo = clientId;
     setAplicando(campo);
     try {
-      const { error } = await (supabase as any)
-        .from("cliente_kit_marca")
-        .upsert({ client_id: alvo, [campo]: sugestoes[campo], atualizado_por: userId }, { onConflict: "client_id" });
-      if (error) throw error;
+      // Grava onde a marca aberta manda (CME: linha dela; nunca o kit da Acerbi).
+      await gravarNoKit(kitQuery.alvo, { [campo]: sugestoes[campo] }, userId);
       tirarSugestao(alvo, campo);
       toast.success("Sugestão aplicada");
       invalidar(alvo);
@@ -706,9 +719,13 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
             <RefreshCw className={`h-3.5 w-3.5 ${leitura.isFetching ? "animate-spin" : ""}`} />
           </Button>
           <BotaoComCusto
-            rotulo={contextoMontado ? "Atualizar contexto" : "Montar contexto"}
-            titulo={contextoMontado ? "Atualizar o contexto" : "Montar o contexto"}
-            descricao="A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
+            rotulo={daMarca && marca ? `Montar contexto da ${marca.nome}` : contextoMontado ? "Atualizar contexto" : "Montar contexto"}
+            titulo={daMarca && marca ? `Montar o contexto da ${marca.nome}` : contextoMontado ? "Atualizar o contexto" : "Montar o contexto"}
+            descricao={
+              daMarca && marca
+                ? `O agente lê só os documentos, as artes e o dossiê do projeto da ${marca.nome} e devolve contexto, cores, estilo, regras e tom como sugestão. Nada é gravado sem o seu Confirmar.`
+                : "A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
+            }
             variant="outline"
             className="h-8 text-[12px]"
             disabled={!dados || montando}
@@ -724,6 +741,22 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
       />
 
       <Completude itens={itens} onIr={irParaSecao} />
+
+      {daMarca && marca && (
+        <SugestaoDoKitDaMarca
+          marca={marca}
+          alvo={kitQuery.alvo}
+          kit={kit}
+          montada={montadaPorMarca[marca.id] || null}
+          onDescartarMontada={() =>
+            setMontadaPorMarca((p) => {
+              const n = { ...p };
+              delete n[marca.id];
+              return n;
+            })
+          }
+        />
+      )}
 
       {montando && (
         <p className="flex items-center text-[12px] text-muted-foreground">

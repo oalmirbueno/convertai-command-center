@@ -949,7 +949,9 @@ export async function lerTemplates(
     const daAgencia = await db.from(TABELA_DOS_TEMPLATES).select(CAMPOS).eq("escopo", "agencia").order("atualizado_em", { ascending: false }).limit(MAX_TEMPLATES);
     todos = lista(doCliente.data, (x) => normalizarTemplate(x, "tabela")).concat(daAgencia.error ? [] : lista(daAgencia.data, (x) => normalizarTemplate(x, "tabela")));
   }
-  const daMarca = (t: TemplateDeDesign) => t.escopo === "agencia" || t.marca_id === null || t.marca_id === marcaId;
+  // Frente MC (29/09): regra única de herança. marcaId só vem para a marca que não é a principal (chaveDaMarca):
+  // ela vê os dela e os da agência, nunca os do cliente (os da Acerbi); sem marcaId, os do cliente e os da agência.
+  const daMarca = (t: TemplateDeDesign) => t.escopo === "agencia" || (marcaId ? t.marca_id === marcaId : t.marca_id === null);
   return { templates: todos.filter((t) => daMarca(t) && (opcoes.incluirArquivados || t.status === "ativo")), guardado_em: guardado };
 }
 

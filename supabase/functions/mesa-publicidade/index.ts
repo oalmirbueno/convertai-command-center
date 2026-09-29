@@ -42,6 +42,8 @@ import { carregarModelo, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type
 import { jevPerguntar, JevErro, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
+import { lerContextoDaMarca, marcaDoPedido as marcaDoPedidoNaMarca } from "../_shared/marca.ts";
+import { linhaDaMarca } from "../_shared/heranca-da-marca.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   acaoGuardadaNaMensagem,
@@ -393,13 +395,16 @@ async function campanhasListar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const { data, error } = await servico().from("publicidade_campanhas")
-    .select("id, nome, kit_id, kit_nome, categoria, status, atualizado_em, ensaio_id")
+    .select("id, nome, kit_id, kit_nome, categoria, status, atualizado_em, ensaio_id, marca_id")
     .eq("client_id", clientId).eq("arquivada", false).order("atualizado_em", { ascending: false }).limit(60);
   if (error) {
     if (tabelaFalta(error)) return json({ campanhas: [], banco: false });
     throw falhaDeBanco(error, "listar as campanhas");
   }
-  return json({ campanhas: data || [], banco: true });
+  // Frente MC: só as campanhas da marca aberta (sem marca gravada: da principal).
+  const marca = await marcaDoPedidoNaMarca(servico(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("mesa-publicidade: marca da lista falhou", e), null));
+  const daMarca = ((data || []) as { marca_id?: string | null }[]).filter((c) => linhaDaMarca(c.marca_id, marca));
+  return json({ campanhas: daMarca, banco: true });
 }
 
 async function campanhaCriar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -474,9 +479,11 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
   const c = e.c;
   if (!c.kit_id) throw new ErroHttp(409, "sem_produto", "Escolha o produto da campanha antes.");
   if (c.ensaio_id) throw new ErroHttp(409, "tomadas_ja_pedidas", "As tomadas já foram pedidas com o território aprovado. Abra uma campanha nova para outra direção.");
+  // Frente MC: o contexto da marca da campanha (CME não recebe o negócio e o público da Acerbi).
+  const marcaDaCampanha = await marcaDoPedidoNaMarca(servico(), c.client_id, { marca_id: (c as { marca_id?: unknown }).marca_id }).catch((e) => (registrarFalha("mesa-publicidade: marca da campanha falhou", e), null));
   const [{ kit }, contexto, modelo, regras] = await Promise.all([
     lerKit(c.client_id, c.kit_id),
-    lerContextoConsolidado(servico(), c.client_id),
+    marcaDaCampanha ? lerContextoDaMarca(servico(), c.client_id, marcaDaCampanha) : lerContextoConsolidado(servico(), c.client_id),
     modeloDeTexto(modeloId),
     // Frente AG2: as regras que a equipe ensinou valem na direção (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId: c.client_id, mesa: "publicidade", marcaId: c.marca_id }),

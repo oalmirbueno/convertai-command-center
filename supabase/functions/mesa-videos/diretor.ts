@@ -25,6 +25,7 @@
  * e desfazerItemDoDiretor (a versão do editor volta como rejeitada).
  */
 
+import { blocoDaMarca, lerContextoDaMarca, lerDossieDaMarca, marcaDoPedido, marcasDoCliente } from "../_shared/marca.ts";
 import { chamarTexto, cobrarJev, IaMotorErro } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
@@ -87,15 +88,17 @@ function projetoDoCorpo(b: BaseDaFuncao, v: unknown): ProjetoDoDiretor {
   return p;
 }
 
-async function contextoDoCliente(b: BaseDaFuncao, clientId: string): Promise<string> {
+async function contextoDoCliente(b: BaseDaFuncao, clientId: string, marcaId: unknown = null): Promise<string> {
   const db = b.servico();
+  // Frente MC (29/09): o Reels da CME parte do contexto e do dossiê da CME, nunca dos da Acerbi.
+  const marca = await marcaDoPedido(db, clientId, { marca_id: marcaId }).catch((e) => (registrarFalha("mesa-videos: marca do pedido falhou", e), null));
   const [perfil, contexto, dossie] = await Promise.all([
     db.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle().then((r) => r.data as { company_name?: string | null; full_name?: string | null } | null, (e) => (registrarFalha("mesa-videos: perfil do cliente não lido", e), null)),
-    lerContextoConsolidado(db, clientId).catch((e) => (registrarFalha("mesa-videos: lerContextoConsolidado falhou", e), ({}))),
-    lerDossie(db, clientId, 4000).catch((e) => (registrarFalha("mesa-videos: lerDossie falhou", e), null)),
+    (marca ? lerContextoDaMarca(db, clientId, marca) : lerContextoConsolidado(db, clientId)).catch((e) => (registrarFalha("mesa-videos: lerContextoConsolidado falhou", e), ({}))),
+    (marca ? lerDossieDaMarca(db, clientId, marca, 4000) : lerDossie(db, clientId, 4000)).catch((e) => (registrarFalha("mesa-videos: lerDossie falhou", e), null)),
   ]);
-  const nome = perfil ? perfil.company_name || perfil.full_name || "" : "";
-  return [nome ? `Cliente: ${nome}` : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : ""].filter(Boolean).join("\n\n") || "sem contexto registrado";
+  const nome = marca && !marca.principal ? marca.nome : perfil ? perfil.company_name || perfil.full_name || "" : "";
+  return [nome ? `Cliente: ${nome}` : "", marca ? blocoDaMarca(marca, await marcasDoCliente(db, clientId)) : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : ""].filter(Boolean).join("\n\n") || "sem contexto registrado";
 }
 
 /** Grava o projeto (trava otimista pela versão). Sem a tabela: devolve o projeto sem id e avisa (com o motivo no log). */
@@ -234,8 +237,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const selecionados = (Array.isArray(corpo.selecionados) ? (corpo.selecionados as unknown[]) : []).map((x) => String(x).toLowerCase()).filter((x) => itens.some((i) => i.ref === x));
   // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento).
   const [contexto, regras, cat, conversa, andamento] = await Promise.all([
-    contextoDoCliente(b, clientId),
-    regrasDaMesa(b.servico(), { clientId, mesa: "video" }),
+    contextoDoCliente(b, clientId, corpo.marca_id),
+    regrasDaMesa(b.servico(), { clientId, mesa: "video", marcaId: typeof corpo.marca_id === "string" ? corpo.marca_id : null }),
     catalogo(b),
     (async () => {
       const conversaId = atual.id ? await conversaDoProjeto(b, clientId, atual.id, false) : null;

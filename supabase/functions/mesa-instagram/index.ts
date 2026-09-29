@@ -63,7 +63,17 @@ import {
 import { JevErro, jevPerguntar, type RespostaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { lerDossie } from "../_shared/contexto-cliente.ts";
-import { kitComMarca, lerContextoDaMarca, marcasDoCliente, type MarcaDoCliente, type MarcaLeve, projetosDaMarca, resolverMarca } from "../_shared/marca.ts";
+import {
+  campanhaDaMarca,
+  kitComMarca,
+  lerContextoDaMarca,
+  lerDossieDaMarca,
+  marcasDoCliente,
+  type MarcaDoCliente,
+  type MarcaLeve,
+  projetosDaMarca,
+  resolverMarca,
+} from "../_shared/marca.ts";
 import { anexoDoCaminho } from "../_shared/acoes-do-agente.ts";
 import { blocoDoMapaDoPainel, caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import {
@@ -546,7 +556,8 @@ async function negocioDoCliente(clientId: string, comDossie: boolean, marca: Mar
   const [perfil, ctx, dossie] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
     lerContextoDaMarca(servico(), clientId, marca).catch((e) => (registrarFalha("mesa-instagram: lerContextoDaMarca falhou", e), ({}))),
-    comDossie ? lerDossie(servico(), clientId, 1800).catch((e) => (registrarFalha("mesa-instagram: lerDossie falhou", e), null)) : Promise.resolve(null),
+    // Frente MC: o dossiê da marca aberta (a CME não recebe o dossiê da Acerbi).
+    comDossie ? lerDossieDaMarca(servico(), clientId, marca, 1800).catch((e) => (registrarFalha("mesa-instagram: lerDossie falhou", e), null)) : Promise.resolve(null),
   ]);
   const p = (perfil.data || {}) as { company_name?: string | null; full_name?: string | null };
   const c = ctx as Record<string, unknown>;
@@ -719,14 +730,17 @@ async function capasDoCliente(clientId: string, chave: string) {
   return error ? [] : ((data as Array<Record<string, unknown>> | null) ?? []);
 }
 
-async function redesDoCliente(clientId: string) {
+async function redesDoCliente(clientId: string, daMarca: string[] | null = null) {
   const [manuais, conectadas] = await Promise.all([
     servico().from("cliente_redes_sociais").select("id, rede, endereco, criado_em").eq("client_id", clientId).is("arquivado_em", null).order("criado_em"),
-    servico().from("external_accounts").select("platform, handle, display_name, status").eq("client_id", clientId).in("platform", ["instagram", "facebook"]).eq("status", "active"),
+    servico().from("external_accounts").select("id, platform, handle, display_name, status").eq("client_id", clientId).in("platform", ["instagram", "facebook"]).eq("status", "active"),
   ]);
+  // Frente MC: com marcas, só as contas conectadas da marca aberta (a CME não lista o @ da Acerbi).
+  const contasConectadas = ((conectadas.data as Array<{ id: string; platform: string; handle: string | null; display_name: string | null }> | null) ?? [])
+    .filter((c) => !daMarca || daMarca.indexOf(c.id) >= 0);
   return {
     adicionadas: manuais.error ? [] : ((manuais.data as Array<Record<string, unknown>> | null) ?? []),
-    conectadas: ((conectadas.data as Array<{ platform: string; handle: string | null; display_name: string | null }> | null) ?? []).map((c) => ({
+    conectadas: contasConectadas.map((c) => ({
       rede: c.platform,
       endereco: c.handle || c.display_name || "",
     })),
@@ -866,7 +880,7 @@ async function painel(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
     negocioDoCliente(c.clientId, false, c.marca),
     lerPlano(c.clientId, chave),
     capasDoCliente(c.clientId, chave),
-    redesDoCliente(c.clientId),
+    redesDoCliente(c.clientId, c.marcas.length ? [...c.contas.map((x) => x.id), ...c.paginas.map((x) => x.id)] : null),
     conversaDoCliente(c.clientId, ch.userId, false),
     Promise.resolve(c.paginas),
   ]);
@@ -1407,16 +1421,19 @@ async function pagina(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
  * entram no mesmo pool (gerar a mais e escolher; sem laço).
  */
 /** O que dá a cara da marca aos destaques: campanhas ativas, posts que mais funcionaram e nomes já usados em outros clientes. */
-async function materialDaMarca(clientId: string, conta: ContaDoInstagram | null): Promise<{ campanhas: string[]; melhores: string[]; nomesDeOutros: string[] }> {
+async function materialDaMarca(clientId: string, conta: ContaDoInstagram | null, marca: MarcaLeve | null = null): Promise<{ campanhas: string[]; melhores: string[]; nomesDeOutros: string[] }> {
   const hoje = new Date().toISOString().slice(0, 10);
   const [camps, posts, outros] = await Promise.all([
-    servico().from("mesa_campanhas").select("nome, objetivo, conceito, periodo_fim, status").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(6),
+    // Frente MC: identidade entra para filtrar as campanhas da marca aberta (campanhaDaMarca).
+    servico().from("mesa_campanhas").select("nome, objetivo, conceito, periodo_fim, status, identidade").eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(12),
     conta
       ? servico().from("social_post_metrics").select("caption, total_interactions, reach").eq("client_id", clientId).eq("external_account_id", conta.id).order("total_interactions", { ascending: false, nullsFirst: false }).limit(5)
       : Promise.resolve({ data: [] as unknown[] }),
     servico().from("cliente_instagram_destaques").select("nome").neq("client_id", clientId).is("arquivado_em", null).limit(400),
   ]);
   const campanhas = (((camps as { data: unknown }).data as Array<Record<string, unknown>> | null) ?? [])
+    .filter((x) => campanhaDaMarca(x.identidade, marca))
+    .slice(0, 6)
     .filter((x) => !x.periodo_fim || String(x.periodo_fim) >= hoje)
     .map((x) => umaLinha([x.nome, x.objetivo, x.conceito].filter(Boolean).join(": "), 200));
   const melhores = (((posts as { data: unknown }).data as Array<Record<string, unknown>> | null) ?? []).map((x) => umaLinha(x.caption, 160)).filter(Boolean);
@@ -1444,7 +1461,7 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
     capasDoCliente(c.clientId, chaveDaConta(c.conta)),
     kitDoCliente(c.clientId, c.marca),
   ]);
-  const material = comIa ? await materialDaMarca(c.clientId, c.conta) : { campanhas: [], melhores: [], nomesDeOutros: [] };
+  const material = comIa ? await materialDaMarca(c.clientId, c.conta, c.marca) : { campanhas: [], melhores: [], nomesDeOutros: [] };
   const estado = {
     negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
     perfil: {

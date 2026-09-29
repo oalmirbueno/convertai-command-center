@@ -9,7 +9,11 @@ import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { useAvisarErro } from "./Custo";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { alvoDoKit, type AlvoDoKit } from "@/lib/mesa/kitDaMarca";
+import type { MarcaDoCliente } from "@/lib/mesa/marcas";
+import { contasDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
+import { chavesDoKit, gravarNoKit } from "./kitDaMesa";
 import NavegadorDePastas, { type ImagemEscolhida } from "./NavegadorDePastas";
 import { useInvalidarContexto, type CandidatoALogo, type KitDoContexto } from "./contextoDoCliente";
 import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
@@ -29,10 +33,15 @@ import { escolherIdentidadePrincipal } from "@/lib/identidadePrincipal";
  * arquivo original.
  */
 
-/** Foto do perfil do Instagram do cliente (a conta que representa a marca), guardada pelo robô de métricas. */
-export function useFotoDoInstagram(clientId: string, nomeDoCliente: string) {
+/**
+ * Foto do perfil do Instagram da marca aberta (a conta que representa a
+ * marca), guardada pelo robô de métricas. Com marcas (frente MC, 29/09): só
+ * as contas ligadas ao projeto da marca (regra única de heranca-da-marca);
+ * a CME nunca recebe a foto do @ da Acerbi. Sem conta da marca: null.
+ */
+export function useFotoDoInstagram(clientId: string, nomeDoCliente: string, marca: MarcaDoCliente | null = null, marcas: MarcaDoCliente[] = []) {
   return useQuery({
-    queryKey: ["mesa", "foto-instagram", clientId],
+    queryKey: ["mesa", "foto-instagram", clientId, marca ? marca.id : ""],
     enabled: !!clientId,
     staleTime: 10 * 60_000,
     retry: false,
@@ -42,7 +51,19 @@ export function useFotoDoInstagram(clientId: string, nomeDoCliente: string) {
         .select("client_id, external_account_id, username, profile_picture_url, captured_at")
         .eq("client_id", clientId);
       if (error || !data || !data.length) return null;
-      const escolhida = escolherIdentidadePrincipal(data as any[], nomeDoCliente) as any;
+      let lista = data as any[];
+      if (marca) {
+        const lig = await (supabase as any).from("project_external_accounts").select("project_id, external_account_id").eq("client_id", clientId);
+        const ligacoes = (lig.data || []) as { project_id: string; external_account_id: string }[];
+        lista = contasDaMarcaAberta(
+          lista.map((i) => ({ ...i, id: String(i.external_account_id) })),
+          ligacoes,
+          marca,
+          marcas,
+        );
+        if (!lista.length) return null;
+      }
+      const escolhida = escolherIdentidadePrincipal(lista, marca && !marca.principal ? marca.nome : nomeDoCliente) as any;
       if (!escolhida) return null;
       return { url: escolhida.profile_picture_url || null, username: escolhida.username || null, contaId: escolhida.external_account_id || null };
     },
@@ -124,7 +145,7 @@ export async function reduzirArquivoDeLogo(arquivo: Blob): Promise<{ blob: Blob;
  * transparência), grava em mesa/<cliente>/marca/ e aponta o kit do cliente
  * para ela. Usado quando o servidor recusa a logo por ser grande demais.
  */
-export async function gravarLogoReduzida(clientId: string, userId: string | null | undefined, alternativa: boolean, bucket: string, caminho: string) {
+export async function gravarLogoReduzida(clientId: string, userId: string | null | undefined, alternativa: boolean, bucket: string, caminho: string, alvo: AlvoDoKit = alvoDoKit(clientId, null)) {
   if (!bucket || !caminho) throw new Error("Não foi possível achar a imagem da logo para reduzir.");
   const { data, error } = await supabase.storage.from(bucket).download(caminho);
   if (error || !data) throw error || new Error("Não foi possível baixar a logo para reduzir.");
@@ -138,28 +159,34 @@ export async function gravarLogoReduzida(clientId: string, userId: string | null
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   const png: Blob | null = await new Promise((resolver) => canvas.toBlob(resolver, "image/png"));
   if (!png) throw new Error("O navegador não conseguiu reduzir a logo.");
-  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-reduzida.png`;
+  const destino = `${pastaDaLogo(alvo)}/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-reduzida.png`;
   const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
   if (envio.error) throw envio.error;
   gravarCopiasSemEsperar("mesa", destino, png, { mime: "image/png" });
   const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
-  const { error: erroKit } = await (supabase as any)
-    .from("cliente_kit_marca")
-    .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
-  if (erroKit) throw erroKit;
+  await gravarNoKit(alvo, campos, userId);
+}
+
+/** Pasta da logo no bucket mesa: a do cliente (kit) ou a da marca (mesmo caminho de ContextoKitDaMarca). */
+export function pastaDaLogo(alvo: AlvoDoKit): string {
+  return alvo.tabela === "cliente_marcas" ? `${alvo.clientId}/marcas/${alvo.marcaId}` : `${alvo.clientId}/marca`;
 }
 
 /** Grava uma logo já pronta no navegador (PNG sem fundo ou reduzida) em mesa/<cliente>/marca/ e aponta o kit para ela. */
-export async function gravarBlobDaLogo(clientId: string, userId: string | null | undefined, alternativa: boolean, png: Blob, sufixo: string) {
-  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-${sufixo}.png`;
+export async function gravarBlobDaLogo(clientId: string, userId: string | null | undefined, alternativa: boolean, png: Blob, sufixo: string, alvo: AlvoDoKit = alvoDoKit(clientId, null)) {
+  const destino = `${pastaDaLogo(alvo)}/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-${sufixo}.png`;
   const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
   if (envio.error) throw envio.error;
   gravarCopiasSemEsperar("mesa", destino, png, { mime: "image/png" });
   const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
-  const { error: erroKit } = await (supabase as any)
-    .from("cliente_kit_marca")
-    .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
-  if (erroKit) throw erroKit;
+  await gravarNoKit(alvo, campos, userId);
+}
+
+/** Tom da logo no lugar do alvo (kit do cliente ou linha da marca). */
+export function gravarTomNoAlvo(alvo: AlvoDoKit, alternativa: boolean, tom: TomDaLogo | null) {
+  return alvo.tabela === "cliente_marcas"
+    ? gravarTomDaLogo("cliente_marcas", { client_id: alvo.clientId, id: alvo.marcaId }, alternativa, tom)
+    : gravarTomDaLogo("cliente_kit_marca", { client_id: alvo.clientId }, alternativa, tom);
 }
 
 /**
@@ -268,9 +295,17 @@ export default function LogosDaMarca({
   compacto?: boolean;
 }) {
   const { clientId, userId, clientName } = useMesa();
+  const { marca, marcas } = useMarcaDaMesa();
+  // Frente MC: com outra marca aberta (CME), tudo aqui grava na linha dela, nunca no kit do cliente.
+  const alvo = alvoDoKit(clientId, marca);
+  const daMarca = alvo.tabela === "cliente_marcas";
   const queryClient = useQueryClient();
   const invalidar = useInvalidarContexto();
-  const fotoIg = useFotoDoInstagram(clientId, clientName);
+  const fotoIg = useFotoDoInstagram(clientId, clientName, marca, marcas);
+  const reler = () => {
+    invalidar(clientId);
+    for (const queryKey of chavesDoKit(clientId)) void queryClient.invalidateQueries({ queryKey });
+  };
   const [puxandoIg, setPuxandoIg] = useState<QualLogo | null>(null);
   const avisarErro = useAvisarErro();
   const [escolhendo, setEscolhendo] = useState<QualLogo | null>(null);
@@ -290,11 +325,12 @@ export default function LogosDaMarca({
   const alternativa = altPath ? { bucket: "mesa", caminho: altPath } : imagemDoArquivo(altArquivo.data);
 
   // Clara ou escura: o que está guardado no kit; sem isso, lido da própria imagem no navegador.
-  const tons = useTonsGravados(clientId);
-  const tomPrincipalGravado = principal && tons.data ? tons.data.logo : null;
-  const tomAltGravado = alternativa && tons.data ? tons.data.alt : null;
-  const lidaPrincipal = useTomDaLogo(tons.isLoading ? null : principal, tomPrincipalGravado);
-  const lidaAlt = useTomDaLogo(tons.isLoading ? null : alternativa, tomAltGravado);
+  const tons = useTonsGravados(daMarca ? "" : clientId);
+  const tomPrincipalGravado = daMarca ? (principal ? tomGravado(kit && kit.logo_tom) : null) : principal && tons.data ? tons.data.logo : null;
+  const tomAltGravado = daMarca ? (alternativa ? tomGravado(kit && kit.logo_alt_tom) : null) : alternativa && tons.data ? tons.data.alt : null;
+  const esperandoTons = !daMarca && tons.isLoading;
+  const lidaPrincipal = useTomDaLogo(esperandoTons ? null : principal, tomPrincipalGravado);
+  const lidaAlt = useTomDaLogo(esperandoTons ? null : alternativa, tomAltGravado);
   const tomDe: Record<QualLogo, TomDaLogo | null> = {
     logo: tomPrincipalGravado || (lidaPrincipal.data ? lidaPrincipal.data.tom : null),
     alt: tomAltGravado || (lidaAlt.data ? lidaAlt.data.tom : null),
@@ -322,34 +358,37 @@ export default function LogosDaMarca({
         }
         tom = r.tom;
         if (r.semFundo) {
-          await gravarBlobDaLogo(clientId, userId, alternativaFlag, r.blob, "sem-fundo");
-          await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+          await gravarBlobDaLogo(clientId, userId, alternativaFlag, r.blob, "sem-fundo", alvo);
+          await gravarTomNoAlvo(alvo, alternativaFlag, tom);
           toast.success(alternativaFlag ? "Logo alternativa definida sem o fundo" : "Logo definida sem o fundo", nome ? { description: nome } : undefined);
           setEscolhendo(null);
-          invalidar(clientId);
-          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
-          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+          reler();
           return;
         }
       }
       try {
-        await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem, id, alternativa: alternativaFlag });
+        await chamarFuncao("agente-contexto", {
+          acao: "definir_logo",
+          client_id: clientId,
+          origem,
+          id,
+          alternativa: alternativaFlag,
+          ...(alvo.tabela === "cliente_marcas" ? { marca_id: alvo.marcaId } : {}),
+        });
       } catch (e) {
         // Logo gigante (26/09: 7813 x 7813 px derrubou o Estúdio): reduz aqui e grava a versão menor.
         const erro = e as { codigo?: string; detalhes?: Record<string, unknown> };
         if (erro && erro.codigo === "logo_grande_demais" && erro.detalhes) {
-          await gravarLogoReduzida(clientId, userId, alternativaFlag, String(erro.detalhes.bucket || ""), String(erro.detalhes.caminho || ""));
+          await gravarLogoReduzida(clientId, userId, alternativaFlag, String(erro.detalhes.bucket || ""), String(erro.detalhes.caminho || ""), alvo);
           toast.message("A logo era grande demais e foi reduzida para 2048 px.");
         } else {
           throw e;
         }
       }
-      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+      await gravarTomNoAlvo(alvo, alternativaFlag, tom);
       toast.success(alternativaFlag ? "Logo alternativa definida" : "Logo definida", nome ? { description: nome } : undefined);
       setEscolhendo(null);
-      invalidar(clientId);
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+      reler();
     } catch (e) {
       avisarErro(e, "Logo não definida");
     } finally {
@@ -362,9 +401,16 @@ export default function LogosDaMarca({
     const alternativaFlag = qual === "alt";
     setPuxandoIg(qual);
     try {
+      if (marca && !(fotoIg.data && fotoIg.data.contaId)) {
+        toast.message(`A ${marca.nome} não tem Instagram ligado ao projeto dela.`, {
+          description: "Ligue a conta ao projeto da marca em Integrações. A foto de outra marca nunca entra aqui.",
+        });
+        return;
+      }
       const r = await chamarFuncao<{ bucket: string; caminho: string; username?: string }>("mesa-instagram", {
         acao: "foto_do_perfil",
         client_id: clientId,
+        ...(marca ? { marca_id: marca.id } : {}),
         ...(fotoIg.data && fotoIg.data.contaId ? { conta_id: fotoIg.data.contaId } : {}),
       });
       const nome = r.username ? `Foto do Instagram @${r.username}` : "Foto do Instagram";
@@ -379,25 +425,18 @@ export default function LogosDaMarca({
         }
         tom = c.tom;
         if (c.semFundo) {
-          await gravarBlobDaLogo(clientId, userId, alternativaFlag, c.blob, "instagram-sem-fundo");
-          await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+          await gravarBlobDaLogo(clientId, userId, alternativaFlag, c.blob, "instagram-sem-fundo", alvo);
+          await gravarTomNoAlvo(alvo, alternativaFlag, tom);
           toast.success("Logo puxada do Instagram, sem o fundo", { description: "A foto de perfil é pequena: troque pelo arquivo original quando tiver." });
-          invalidar(clientId);
-          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
-          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+          reler();
           return;
         }
       }
       const campos = alternativaFlag ? { logo_alt_path: r.caminho, logo_alt_file_id: null } : { logo_path: r.caminho, logo_file_id: null };
-      const { error: erroKit } = await (supabase as any)
-        .from("cliente_kit_marca")
-        .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
-      if (erroKit) throw erroKit;
-      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+      await gravarNoKit(alvo, campos, userId);
+      await gravarTomNoAlvo(alvo, alternativaFlag, tom);
       toast.success(alternativaFlag ? "Logo alternativa puxada do Instagram" : "Logo puxada do Instagram", { description: "A foto de perfil é pequena: troque pelo arquivo original quando tiver." });
-      invalidar(clientId);
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+      reler();
     } catch (e) {
       avisarErro(e, "Foto do Instagram não puxada");
     } finally {
@@ -409,13 +448,9 @@ export default function LogosDaMarca({
     setTirando(qual);
     try {
       const patch = qual === "logo" ? { logo_path: null, logo_file_id: null } : { logo_alt_path: null, logo_alt_file_id: null };
-      const { error } = await (supabase as any)
-        .from("cliente_kit_marca")
-        .upsert({ client_id: clientId, ...patch, atualizado_por: userId }, { onConflict: "client_id" });
-      if (error) throw error;
-      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, qual === "alt", null);
-      invalidar(clientId);
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+      await gravarNoKit(alvo, patch, userId);
+      await gravarTomNoAlvo(alvo, qual === "alt", null);
+      reler();
     } catch (e) {
       toast.error("Não foi possível tirar a logo", { description: textoDoErro(e) });
     } finally {
@@ -480,7 +515,7 @@ export default function LogosDaMarca({
                     className="h-7 px-2 text-[11.5px]"
                     onClick={() => void usarFotoDoInstagram(t.qual)}
                     disabled={!!puxandoIg || !!gravando}
-                    title="Usar a foto do perfil do Instagram do cliente"
+                    title={marca ? `Usar a foto do perfil do Instagram da ${marca.nome}` : "Usar a foto do perfil do Instagram do cliente"}
                     aria-label={`Usar a foto do Instagram como logo ${t.rotulo.toLowerCase()}`}
                   >
                     {puxandoIg === t.qual ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Instagram className="h-3.5 w-3.5" />}
@@ -536,7 +571,7 @@ export default function LogosDaMarca({
           if (!v && !gravando) setEscolhendo(null);
         }}
         titulo={escolhendo === "alt" ? "Escolher a logo alternativa" : "Escolher a logo principal"}
-        descricao="Só aparecem imagens. Ao clicar, a imagem é copiada para a marca do cliente e passa a valer para os agentes."
+        descricao={daMarca && marca ? `Só aparecem imagens. Ao clicar, a imagem vira a logo da ${marca.nome} (só dela) e passa a valer para os agentes.` : "Só aparecem imagens. Ao clicar, a imagem é copiada para a marca do cliente e passa a valer para os agentes."}
         onEscolher={(e: ImagemEscolhida) => {
           if (escolhendo) void definir(escolhendo, e.origem, e.id, e.nome);
         }}

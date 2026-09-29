@@ -17,6 +17,7 @@ import {
   type SocialPostMetric,
 } from "@/hooks/useSocialMetrics";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { useMarcaDaMesa } from "../MesaContexto";
 
 /**
  * Métricas do perfil e dos posts, organizadas (rodada 2, 28/09): os números
@@ -72,12 +73,16 @@ const interacoes = (p: SocialPostMetric) => Number(p.total_interactions ?? (p.li
 const ROTULO_DO_TIPO: Record<string, string> = { IMAGE: "Estático", CAROUSEL_ALBUM: "Carrossel", VIDEO: "Reels" };
 
 export default function MetricasDoPerfil({ clientId, contaId }: { clientId: string; contaId: string | null }) {
+  // Frente MC: com outra marca aberta (CME) e sem conta dela, nunca cai nos números de outra conta do cliente (a da Acerbi).
+  const { marca } = useMarcaDaMesa();
+  const soDaConta = !!marca && !marca.principal;
   const semanas = useSocialMetricsWeekly(clientId, 16);
   const linhas = useMemo(() => {
     const porConta = agruparPorConta(semanas.data);
+    if (soDaConta) return (contaId && porConta.get(contaId)) || [];
     return (contaId && porConta.get(contaId)) || contaPrincipal(semanas.data);
-  }, [semanas.data, contaId]);
-  const contaDosPosts = contaId || (linhas[0] ? linhas[0].external_account_id : undefined);
+  }, [semanas.data, contaId, soDaConta]);
+  const contaDosPosts = contaId || (soDaConta ? "00000000-0000-0000-0000-000000000000" : linhas[0] ? linhas[0].external_account_id : undefined);
   const posts = useSocialPostMetrics(clientId, 24, contaDosPosts);
   const [ordem, setOrdem] = useState<"recentes" | "engajados">("recentes");
   const [postsRecolhidos, setPostsRecolhidos] = useRecolhido(`mesa:instagram:metricas-posts:${clientId}`, false);
@@ -92,6 +97,16 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
   const maior = lista.reduce((m, p) => Math.max(m, interacoes(p)), 1);
 
   if (semanas.isLoading) return <p className={texto.auxiliar}>Carregando as métricas...</p>;
+  if (soDaConta && !contaId && marca) {
+    return (
+      <p className={juntar(texto.auxiliar, "flex items-center")} data-metricas-sem-conta-da-marca="">
+        A {marca.nome} ainda não tem Instagram ligado ao projeto dela
+        <AjudaRecolhida className="ml-1" rotulo="Como ligar o Instagram da marca">
+          Os números de outra conta do cliente não aparecem aqui. Ligue a conta ao projeto da {marca.nome} em Config, Integrações.
+        </AjudaRecolhida>
+      </p>
+    );
+  }
   if (!ultima) {
     return (
       <p className={juntar(texto.auxiliar, "flex items-center")}>

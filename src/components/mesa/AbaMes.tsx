@@ -49,7 +49,7 @@ import {
 import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useFiltroDaMarca, useMesa } from "./MesaContexto";
-import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
+import { filtrarPorMarca, projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -357,9 +357,12 @@ function PlanejarComEstrategista() {
   // lista relê a cada 3 s e o que já chegou aparece na tela.
   const [acompanhando, setAcompanhando] = useState<{ id: string; desde: number; etapa: "temas" | "detalhe" } | null>(null);
 
+  // Frente MC: as propostas do mês são da marca aberta (projeto da CME só na CME; sem projeto, só na principal).
+  const filtroDasPropostas = useFiltroDaMarca();
   const propostas = useQuery({
     queryKey: ["mesa", "propostas", clientId],
     refetchInterval: acompanhando ? 3000 : false,
+    select: (lista: Proposta[]) => filtrarPorMarca(lista as (Proposta & { project_id?: string | null })[], filtroDasPropostas),
     queryFn: async (): Promise<Proposta[]> => {
       const { data, error } = await (supabase as any)
         .from("calendario_propostas")

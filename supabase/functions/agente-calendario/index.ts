@@ -103,6 +103,9 @@ export { aplicarFotosDoPlano, pecasDoPlanoGravado };
 import { lerFormatoDoPerfil, marcarMesasDoPlano, reservarPostsDoPlano, textoDoPerfilParaOPlano } from "./mesa-do-item.ts";
 import {
   blocoDaMarca,
+  campanhaDaMarca,
+  contasDaMarcaDoCliente,
+  fotoDaMarca,
   kitComMarca,
   lerMarcaParaDirecaoDaMarca,
   type MarcaDoCliente,
@@ -110,6 +113,8 @@ import {
   projetosDoClienteNaMarca,
   resolverMarca,
 } from "../_shared/marca.ts";
+// Frente MC (29/09): conta, dossiê, números e agenda da marca aberta (a CME não lê o @ nem os números da Acerbi).
+import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   conferirLaminas,
@@ -1015,6 +1020,13 @@ async function montarContexto(
   const projectIds = await projetosDoClienteNaMarca(servico, clientId, marca, (projetos ?? []).map((p: { id: string }) => p.id));
   // Frente AP: memória editorial (todos os meses), lida junto.
   const memoriaEditorialP = lerMemoriaEditorial(servico, clientId, projectIds, !!marca);
+  // Frente MC: contas (Instagram) da marca; null = sem marca, sem filtro. Outra marca sem conta: nenhuma.
+  const [contasDaMarca, marcasDoMes] = marca
+    ? await Promise.all([contasDaMarcaDoCliente(servico, clientId, marca), marcasDoCliente(servico, clientId)])
+    : [null, []];
+  const SEM_CONTA = "00000000-0000-0000-0000-000000000000";
+  // deno-lint-ignore no-explicit-any
+  const soContas = (q: any): any => (contasDaMarca ? q.in("external_account_id", contasDaMarca.length ? contasDaMarca : [SEM_CONTA]) : q);
 
   // Frente H: cérebro do cliente (calendário, campanha e copy), lido junto; o "Plano do mês" segue pelo caminho próprio.
   const cerebroP = resumoDoCerebro(servico, clientId, ["calendario", "campanha", "copy"], { limite: 2000, manter: (f) => !mesDoPlano(f.texto) });
@@ -1036,18 +1048,25 @@ async function montarContexto(
     planos,
   ] = await Promise.all([
     servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
-    servico.from("external_accounts").select("handle, display_name").eq("client_id", clientId).eq("platform", "instagram").eq("status", "active").limit(1),
-    // Dossie geral atual: contexto, sem projeto.
-    servico.from("client_dossiers").select("content, summary, version, effective_at")
-      .eq("client_id", clientId).eq("dossier_type", "contexto").eq("is_current", true).is("project_id", null).maybeSingle(),
+    contasDaMarca
+      ? servico.from("external_accounts").select("handle, display_name").eq("client_id", clientId).eq("platform", "instagram").eq("status", "active")
+        .in("id", contasDaMarca.length ? contasDaMarca : [SEM_CONTA]).limit(1)
+      : servico.from("external_accounts").select("handle, display_name").eq("client_id", clientId).eq("platform", "instagram").eq("status", "active").limit(1),
+    // Dossie geral atual: contexto, sem projeto. Frente MC: outra marca lê o dossiê do projeto dela.
+    marca && !marca.principal
+      ? servico.from("client_dossiers").select("content, summary, version, effective_at")
+        .eq("client_id", clientId).eq("is_current", true).eq("project_id", marca.project_id ?? SEM_CONTA)
+        .order("effective_at", { ascending: false }).limit(1).maybeSingle()
+      : servico.from("client_dossiers").select("content, summary, version, effective_at")
+        .eq("client_id", clientId).eq("dossier_type", "contexto").eq("is_current", true).is("project_id", null).maybeSingle(),
     // SECURITY DEFINER com confianca de backend: chamada pelo cliente de servico.
     servico.rpc("movimentos_do_cliente", { _client_id: clientId, _desde: ha60, _ate: hoje.toISOString(), _somente_visiveis: false }),
-    servico.from("social_post_metrics")
+    soContas(servico.from("social_post_metrics")
       .select("media_type, caption, permalink, posted_at, like_count, comments_count, reach, saved, shares, total_interactions")
-      .eq("client_id", clientId).gte("posted_at", ha180).order("posted_at", { ascending: false }).limit(300),
-    servico.from("social_metrics_weekly")
+      .eq("client_id", clientId).gte("posted_at", ha180)).order("posted_at", { ascending: false }).limit(300),
+    soContas(servico.from("social_metrics_weekly")
       .select("week_start, week_end, followers, reach, profile_views, accounts_engaged, total_interactions")
-      .eq("client_id", clientId).order("week_start", { ascending: false }).limit(8),
+      .eq("client_id", clientId)).order("week_start", { ascending: false }).limit(8),
     projectIds.length
       ? servico.from("tasks").select("title, delivery_type, due_date, status")
         .in("project_id", projectIds).not("delivery_type", "is", null).is("deleted_at", null)
@@ -1059,7 +1078,7 @@ async function montarContexto(
         .gte("due_date", ha60.slice(0, 10)).lt("due_date", inicio).order("due_date", { ascending: false }).limit(60)
       : Promise.resolve({ data: [] as unknown[], error: null }),
     servico.from("editorial_posts")
-      .select("title, content_type, objective, production_status, editorial_publications(scheduled_at, status)")
+      .select("title, content_type, objective, production_status, project_id, editorial_publications(scheduled_at, status)")
       .eq("client_id", clientId).is("archived_at", null).order("created_at", { ascending: false }).limit(100),
     servico.from("cliente_kit_marca").select("paleta, estilo, regras, contexto").eq("client_id", clientId).maybeSingle(),
     servico.from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
@@ -1091,8 +1110,10 @@ async function montarContexto(
   const porSalvamento = [...comSalvamento].sort((a, b) => ((b.saved ?? 0) + (b.shares ?? 0)) - ((a.saved ?? 0) + (a.shares ?? 0)));
 
   // Itens editoriais do periodo: tarefas e publicacoes agendadas no periodo.
-  type PostEd = { title: string; content_type: string; objective: string | null; production_status: string; editorial_publications: Array<{ scheduled_at: string | null; status: string }> | null };
+  type PostEd = { title: string; content_type: string; objective: string | null; production_status: string; project_id?: string | null; editorial_publications: Array<{ scheduled_at: string | null; status: string }> | null };
   const postsNoPeriodo = ((postsEditoriais.data ?? []) as PostEd[])
+    // Frente MC: só a agenda da marca aberta.
+    .filter((p) => projetoDaMarcaAberta(p.project_id ?? null, marca, marcasDoMes))
     .map((p) => ({
       titulo: p.title,
       formato: p.content_type,
@@ -3045,7 +3066,7 @@ async function fotosDaCampanha(servico: SupabaseClient, c: Campanha): Promise<{ 
 }
 
 /** Sem imagem escolhida, o plano olha o acervo: fotos reais recentes (sem logo, arte pronta nem referência da internet). */
-async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string, limite = 10): Promise<FotoDaCampanha[]> {
+async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string, limite = 10, marca: MarcaDoCliente | null = null): Promise<FotoDaCampanha[]> {
   const { data } = await servico
     .from("cliente_imagens")
     .select(CAMPOS_FOTO)
@@ -3056,6 +3077,8 @@ async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string
     .limit(40);
   const ordem = ["produto", "ambiente", "pessoa", "antes_depois", "detalhe", "equipe", "fachada"];
   return ((data as FotoDaCampanha[] | null) ?? [])
+    // Frente MC: só as fotos da marca da campanha (etiqueta marca:<id>; sem etiqueta, só a principal).
+    .filter((f) => fotoDaMarca((f as { tags?: string[] | null }).tags ?? null, marca))
     .filter((f) => !fotoNaoPublicavel(f))
     .sort((a, b) => {
       const ia = ordem.indexOf(a.categoria || ""), ib = ordem.indexOf(b.categoria || "");
@@ -4846,7 +4869,7 @@ async function campanhaPlanoImagens(servico: SupabaseClient, chamador: Chamador,
   const fonte: "campanha" | "acervo" = escolhidas.length ? "campanha" : "acervo";
   const candidatas: { foto: FotoDaCampanha; imagem: ImagemDaCampanha | null }[] = escolhidas.length
     ? escolhidas
-    : (await fotosDoAcervoParaOPlano(servico, c.client_id)).map((foto) => ({ foto, imagem: null }));
+    : (await fotosDoAcervoParaOPlano(servico, c.client_id, 10, await marcaDaChamada(servico, c.client_id, { marca_id: ((c.identidade ?? {}) as Record<string, unknown>).marca_id ?? corpo.marca_id }))).map((foto) => ({ foto, imagem: null }));
   if (!candidatas.length) {
     throw new ErroHttp(409, "campanha_sem_imagens", "Nenhuma imagem para analisar. Escolha imagens para a campanha ou sincronize o acervo do cliente na aba Contexto.");
   }
@@ -5072,12 +5095,13 @@ async function salvarPlano(servico: SupabaseClient, clientId: string, mes: strin
  * que foi aprovado nos últimos 90 dias, campanhas ativas, os hypes da semana e
  * a agenda do mês e dos 3 seguintes (quantos, formatos e títulos).
  */
-async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string, mes: string) {
+async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string, mes: string, marca: MarcaDoCliente | null = null) {
   const inicio = `${mes}-01`;
   const ate = fimDoMes(somarMesesAoMes(mes, 3));
   const ha90 = new Date(Date.now() - 90 * 86_400_000).toISOString();
   const { data: projetos } = await servico.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200);
-  const projectIds = ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id);
+  // Frente MC: a agenda longa do agente do Mês é só dos projetos da marca aberta.
+  const projectIds = await projetosDoClienteNaMarca(servico, clientId, marca, ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id));
   const vazio = Promise.resolve({ data: [] as unknown[] });
   const [publicados, aprovados, campanhas, hypes, agenda] = await Promise.all([
     servico.from("editorial_publications").select("scheduled_at, editorial_posts(title, content_type)")
@@ -5086,8 +5110,8 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
     servico.from("estudio_trabalhos").select("task_id, entrega_status, atualizado_em")
       .eq("client_id", clientId).in("entrega_status", ["aprovado", "agendado"]).gte("atualizado_em", ha90)
       .order("atualizado_em", { ascending: false }).limit(40),
-    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status")
-      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(12),
+    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
+      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(24),
     servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1),
     projectIds.length
       ? servico.from("tasks").select("title, due_date, delivery_type")
@@ -5122,7 +5146,8 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
         return { titulo: corta(t?.title ?? "", 160), data: t?.due_date ?? null, situacao: a.entrega_status };
       })
       .filter((a) => a.titulo),
-    campanhas_ativas: ((campanhas.data ?? []) as Array<Record<string, unknown>>).map((c) => ({
+    // Frente MC: só as campanhas da marca aberta (sem marca gravada: da principal).
+    campanhas_ativas: ((campanhas.data ?? []) as Array<Record<string, unknown>>).filter((c) => campanhaDaMarca(c.identidade, marca)).slice(0, 12).map((c) => ({
       nome: c.nome, objetivo: corta(c.objetivo, 300), conceito: corta(c.conceito, 400), periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim }, status: c.status,
     })),
     hypes_da_semana: hype
@@ -5205,11 +5230,13 @@ async function pecasDaAgendaParaAcoes(
       ? servico.from("tasks").select("id, title, due_date, delivery_type, status").in("project_id", ids).is("deleted_at", null)
         .gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(limite)
       : Promise.resolve({ data: [] as unknown[] }),
-    servico.from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(30),
+    servico.from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim, identidade").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(60),
     servico.from("calendario_propostas").select("parametros, itens, task_ids").eq("client_id", clientId).not("parametros->>campanha_id", "is", null)
       .order("criado_em", { ascending: false }).limit(100),
   ]);
-  const listaDeCampanhas = ((campanhas.data ?? []) as CampanhaDaAgenda[]).filter((c) => c && UUID.test(String(c.id)));
+  const listaDeCampanhas = ((campanhas.data ?? []) as (CampanhaDaAgenda & { identidade?: unknown })[])
+    .filter((c) => c && UUID.test(String(c.id)) && campanhaDaMarca(c.identidade, marca))
+    .slice(0, 30);
   const nomeDaCampanha = new Map(listaDeCampanhas.map((c) => [c.id, c.nome]));
   // Tarefa → campanha: o item gravado leva campanha_id; sem ele, vale a campanha da proposta.
   const campanhaDaTarefa = new Map<string, string>();
@@ -5240,7 +5267,7 @@ async function pecasDaAgendaParaAcoes(
 }
 
 /** A proposta pedida ou a aberta mais recente do estrategista que começa neste mês. */
-async function propostaDoPlanejamento(servico: SupabaseClient, clientId: string, pedida: unknown, inicio: string, fim: string): Promise<Proposta | null> {
+async function propostaDoPlanejamento(servico: SupabaseClient, clientId: string, pedida: unknown, inicio: string, fim: string, marca: MarcaDoCliente | null = null): Promise<Proposta | null> {
   if (pedida != null && pedida !== "") {
     const p = await carregarProposta(servico, pedida);
     if (p.client_id !== clientId) throw new ErroHttp(403, "proposta_de_outro_cliente", "A proposta não é deste cliente.");
@@ -5248,15 +5275,17 @@ async function propostaDoPlanejamento(servico: SupabaseClient, clientId: string,
   }
   const { data } = await servico
     .from("calendario_propostas")
-    .select("id")
+    .select("id, project_id")
     .eq("client_id", clientId)
     .is("parametros->>origem", null)
     .in("status", ["temas", "detalhando", "pronta"])
     .gte("periodo_inicio", inicio)
     .lte("periodo_inicio", fim)
     .order("criado_em", { ascending: false })
-    .limit(1);
-  const id = ((data as Array<{ id: string }> | null) ?? [])[0]?.id;
+    .limit(10);
+  // Frente MC: a proposta em aberto da marca aberta (a da Acerbi não vira a da CME).
+  const marcasDoPlano = marca ? await marcasDoCliente(servico, clientId) : [];
+  const id = ((data as Array<{ id: string; project_id: string | null }> | null) ?? []).find((p) => projetoDaMarcaAberta(p.project_id, marca, marcasDoPlano))?.id;
   return id ? await carregarProposta(servico, id) : null;
 }
 
@@ -5542,16 +5571,16 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const mesDeHoje = hoje.slice(0, 7);
   const arquivos = normalizarArquivos(corpo.arquivos);
 
-  const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim);
-  const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
   const marcaP = marcaDaChamada(servico, clientId, corpo);
+  const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim, await marcaP);
+  const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
   // Frente AG1 (29/09): as regras que o dono já ensinou (evitar primeiro), da marca aberta.
   const regrasP = lerRegrasDoDono(servico, clientId, { areas: ["calendario", "campanha", "copy"], marcaId: corpo.marca_id });
   const [ctx, extra, imagens, conversaId, acoesCtx, mcp, kit] = await Promise.all([
     // O MCP entra à parte, com teto maior e dentro do orçamento.
     montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 }),
-    contextoDoPlanejamento(servico, clientId, mes),
+    marcaP.then((m) => contextoDoPlanejamento(servico, clientId, mes, m)),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
     marcaP.then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes, {
@@ -5564,7 +5593,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
   ]);
   const pecasDaAgenda = acoesCtx.pecas;
-  const contextoDoKit = ((kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {}) as Record<string, unknown>;
+  // Frente MC: o público atual é o do contexto da marca aberta (a CME não parte do público da Acerbi).
+  const contextoDoKit = ((kitComMarca({ contexto: (kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {} }, await marcaP) as { contexto?: Record<string, unknown> }).contexto ?? {}) as Record<string, unknown>;
   const publicoAtual = textoDoCampo(contextoDoKit.publico).trim();
 
   // Conversa recente (até 24 mensagens, 40 mil caracteres cada, 240 mil no total, as mais novas primeiro).

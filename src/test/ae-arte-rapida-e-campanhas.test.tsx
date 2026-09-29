@@ -300,7 +300,8 @@ describe("Acerbi e CME não se misturam", () => {
     expect(kit.logo_path).toBeNull();
     expect(kit.paleta).toEqual([]);
     expect(kit.estilo).toBeNull();
-    expect(kit.regras).toBe("não destacar associado");
+    // Frente MC (29/09): regra única de herança; as regras da Acerbi também não passam para a CME.
+    expect(kit.regras).toBeNull();
     const ctx = contextoComMarca({ negocio: "Associação", tom_de_voz: "formal" } as any, { ...CME, contexto: null } as any);
     expect((ctx as any).tom_de_voz).toBeUndefined();
     // Com tom próprio, vale o dela.

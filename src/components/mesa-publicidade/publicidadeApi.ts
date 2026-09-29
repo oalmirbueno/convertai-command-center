@@ -1,3 +1,4 @@
+import { marcaAtual } from "@/lib/mesa/marcas";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
@@ -58,8 +59,10 @@ export const chaveDasCampanhas = (clientId: string) => ["mesa-publicidade", "cam
 export const chaveDaCampanha = (campanhaId: string) => ["mesa-publicidade", "campanha", campanhaId];
 
 export function useCampanhas(clientId: string) {
+  // Frente MC: a lista é da marca aberta; a marca entra na chave (trocar para a CME não mostra a lista da Acerbi em cache).
+  const marca = marcaAtual();
   return useQuery({
-    queryKey: chaveDasCampanhas(clientId),
+    queryKey: [...chaveDasCampanhas(clientId), marca && marca.clientId === clientId ? marca.marcaId : ""],
     enabled: !!clientId,
     staleTime: 30_000,
     refetchOnWindowFocus: false,

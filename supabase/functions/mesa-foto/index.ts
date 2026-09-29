@@ -92,7 +92,8 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
-import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, resolverMarca } from "../_shared/marca.ts";
+import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
+import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 // Frente AG (26/09): o diretor de fotografia conhece o painel inteiro.
@@ -1120,12 +1121,19 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId
   const cerebroP = resumoDoCerebro(servico(), clientId, ["foto", "arte"], { limite: 1500 });
   // Marca por projeto (Acerbi e CME, _shared/marca.ts): a escolhida no topo; cliente sem marca segue igual.
   const marcaEscolhida = marcaId === undefined ? null : await resolverMarca(servico(), clientId, { marca_id: marcaId });
+  // Frente MC (29/09): outra marca (CME) lê só o dossiê e os documentos do projeto dela.
+  const outraMarca = marcaEscolhida && !marcaEscolhida.principal ? marcaEscolhida : null;
+  const marcasDaFoto = marcaEscolhida ? await marcasDoCliente(servico(), clientId) : [];
+  const doProjetoDaMarca = marcaEscolhida ? (p: string | null) => projetoDaMarcaAberta(p, marcaEscolhida, marcasDaFoto) : null;
   const [marca, consolidado, dossie, documentos, briefing, plano, memoria, campanhas] = await Promise.all([
     lerMarcaParaDirecaoDaMarca(servico(), clientId, marcaEscolhida),
     lerContextoConsolidado(servico(), clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
-    servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
-      .order("effective_at", { ascending: false }).limit(2),
-    lerDocumentosDeMarca(servico(), clientId, 6_000).catch((e) => (registrarFalha("mesa-foto: lerDocumentosDeMarca falhou", e), [])),
+    outraMarca
+      ? servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
+        .eq("project_id", outraMarca.project_id ?? "00000000-0000-0000-0000-000000000000").order("effective_at", { ascending: false }).limit(2)
+      : servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
+        .order("effective_at", { ascending: false }).limit(2),
+    lerDocumentosDeMarca(servico(), clientId, 6_000, doProjetoDaMarca).catch((e) => (registrarFalha("mesa-foto: lerDocumentosDeMarca falhou", e), [])),
     servico().from("ads_briefings").select("oferta, publico, objecoes, restricoes").eq("client_id", clientId).eq("atual", true).maybeSingle(),
     servico().from("ads_planos").select("estrutura").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(1),
     servico().from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("ativa", true)

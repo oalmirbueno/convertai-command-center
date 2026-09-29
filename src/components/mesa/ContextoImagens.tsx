@@ -20,7 +20,8 @@ import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal, useAvisarErro } from "./Custo";
 import { legendaDaFoto } from "./ContextoFotos";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { etiquetaDaMarca } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { ExploradorDePastas, Quadrado } from "./NavegadorDePastas";
 import { Campo } from "./Seletores";
 import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
@@ -54,7 +55,13 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
   const queryClient = useQueryClient();
   const [nome, setNome] = useState(imagem.nome);
   const [categoria, setCategoria] = useState(imagem.categoria || "outro");
-  const [tags, setTags] = useState((imagem.tags || []).join(", "));
+  // Frente MC: a etiqueta marca:<id> vira a escolha "Marca da foto" (não aparece como tag solta).
+  const { marcas } = useMarcaDaMesa();
+  const etiquetasDeMarca = (imagem.tags || []).filter((t) => t.indexOf("marca:") === 0);
+  const principal = marcas.find((m) => m.principal) || null;
+  const marcaInicial = marcas.find((m) => etiquetasDeMarca.indexOf(etiquetaDaMarca(m.id)) >= 0) || principal;
+  const [marcaDaFoto, setMarcaDaFoto] = useState<string>(marcaInicial ? marcaInicial.id : "");
+  const [tags, setTags] = useState((imagem.tags || []).filter((t) => t.indexOf("marca:") !== 0).join(", "));
   const [descricao, setDescricao] = useState(imagem.descricao || "");
   const [ativa, setAtiva] = useState(imagem.ativa);
   const [salvando, setSalvando] = useState(false);
@@ -65,8 +72,12 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
       const listaDeTags: string[] = [];
       for (const t of tags.split(",")) {
         const limpa = t.trim().toLowerCase();
-        if (limpa && listaDeTags.indexOf(limpa) < 0) listaDeTags.push(limpa);
+        if (limpa && limpa.indexOf("marca:") !== 0 && listaDeTags.indexOf(limpa) < 0) listaDeTags.push(limpa);
       }
+      // Marca da foto: a principal fica sem etiqueta (onde o acervo sempre esteve); outra marca, marca:<id>.
+      const escolhida = marcas.find((m) => m.id === marcaDaFoto);
+      if (marcas.length >= 2 && escolhida && !escolhida.principal) listaDeTags.push(etiquetaDaMarca(escolhida.id));
+      if (marcas.length < 2) for (const t of etiquetasDeMarca) listaDeTags.push(t);
       const { error } = await (supabase as any)
         .from("cliente_imagens")
         .update({
@@ -110,19 +121,29 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
             </Campo>
             <Campo rotulo="Categoria">
               <Select value={categoria} onValueChange={setCategoria}>
-                <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIAS_DO_ACERVO.map((c) => <SelectItem key={c.valor} value={c.valor}>{c.rotulo}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Campo>
+            {marcas.length >= 2 && (
+              <Campo rotulo="Marca da foto">
+                <Select value={marcaDaFoto} onValueChange={setMarcaDaFoto}>
+                  <SelectTrigger className="h-9 text-[13px]" aria-label="Marca da foto"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {marcas.map((m) => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Campo>
+            )}
             <Campo rotulo="Tags (separadas por vírgula)">
               <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Ex.: quarto, luz natural, casal" className="h-9" />
             </Campo>
             <Campo rotulo="Descrição">
               <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} placeholder="O que aparece na foto" />
             </Campo>
-            <label className="flex items-center text-[12.5px]">
+            <label className="flex items-center text-[13px]">
               <Switch checked={ativa} onCheckedChange={setAtiva} className="mr-2" />
               {ativa ? "Ativa: o Estúdio pode usar" : "Desativada: o Estúdio não usa"}
             </label>

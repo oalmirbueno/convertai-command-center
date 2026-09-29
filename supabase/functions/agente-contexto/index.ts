@@ -26,9 +26,21 @@
  *   entregues) para o acervo, com a pasta e uma categoria provável.
  * - acervo_classificar { client_id, ids? }: centavos. Lê em lote (modelo de
  *   leitura, imagens reduzidas) e preenche descrição, categoria e tags.
- * - definir_logo { client_id, origem, id, alternativa? }: sem IA. Copia a
- *   imagem escolhida (Arquivos, workspace ou acervo) para mesa/<cliente>/marca
- *   e grava logo_path (ou logo_alt_path) no kit.
+ * - definir_logo { client_id, origem, id, alternativa?, marca_id? }: sem IA.
+ *   Copia a imagem escolhida (Arquivos, workspace ou acervo) para
+ *   mesa/<cliente>/marca e grava logo_path (ou logo_alt_path) no kit; com
+ *   outra marca (não a principal), em mesa/<cliente>/marcas/<marca> e na
+ *   linha dela (cliente_marcas), nunca no kit do cliente.
+ * - sugerir_kit_da_marca { client_id, marca_id }: sem IA (só o Jev quando há
+ *   mais de uma logo possível). Acha a logo da marca no que já existe (pasta
+ *   com "logo" e o nome da marca no Workspace, arquivos do projeto dela) e a
+ *   conta do Instagram ligada ao projeto dela. Não grava: a tela mostra a
+ *   sugestão com Confirmar e Desfazer (frente MC, 29/09).
+ *
+ * Marca (frente MC): ler, montar, conversar e definir_logo entendem marca_id.
+ * Com outra marca aberta (CME), o kit, os documentos, o dossiê, as artes, as
+ * referências e as fontes são só os dela; montar devolve sugestão para a
+ * marca (não grava) e a conversa não grava no kit do cliente.
  *
  * Custos: toda IA passa pelo motor (carteira do cliente). O Jev é cobrado
  * pelo cobrarJev.
@@ -45,7 +57,22 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 // Frente T2: a fonte sugerida da biblioteca vai para o kit da marca do pedido (sem misturar marcas).
-import { colunasComMarca, fontesDaMarca, type MarcaLeve, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
+import {
+  blocoDaMarca,
+  colunasComMarca,
+  contasDaMarcaDoCliente,
+  fontesDaMarca,
+  kitComMarca,
+  lerDossieDaMarca,
+  type MarcaDoCliente,
+  type MarcaLeve,
+  marcaDoPedido,
+  marcaParaGravar,
+  marcasDoCliente,
+} from "../_shared/marca.ts";
+// Frente MC (29/09): a regra única de herança e a logo achada no que já existe.
+import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
+import { type ArquivoLeve, candidatosDaMarca, escolhaDaLogo, type NoDoWorkspaceLeve, perguntaDaLogo } from "./logo-da-marca.ts";
 import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 // Frente LR (29/09): leitura das referências em lotes, sem falha em silêncio.
@@ -357,6 +384,39 @@ async function lerKit(clientId: string): Promise<Kit> {
   return (data as Kit) ?? null;
 }
 
+/** Kit que vale para a marca do pedido (regra única): sem marca, o do cliente. */
+async function lerKitDaMarca(clientId: string, marca: MarcaDoCliente | null): Promise<Kit> {
+  const kit = await lerKit(clientId);
+  if (!marca) return kit;
+  const efetivo = kitComMarca((kit ?? { client_id: clientId }) as unknown as Record<string, unknown>, marca) as unknown as NonNullable<Kit>;
+  const atualizado = marca.contexto && typeof (marca.contexto as Record<string, unknown>).atualizado_em === "string"
+    ? String((marca.contexto as Record<string, unknown>).atualizado_em)
+    : null;
+  return {
+    ...efetivo,
+    client_id: clientId,
+    contexto_atualizado_em: marca.principal ? (atualizado ?? kit?.contexto_atualizado_em ?? null) : atualizado,
+  };
+}
+
+/** Outra marca (não a principal): tudo dela, nada gravado no kit do cliente. */
+const ehOutraMarca = (m: MarcaLeve | null): m is MarcaDoCliente => !!m && !m.principal;
+
+/** Candidatos a logo da marca: caminho inteiro (pasta + nome) e projeto dela (logo-da-marca.ts). */
+async function candidatosALogoDaMarca(db: SupabaseClient, clientId: string, marca: MarcaDoCliente) {
+  const [arquivos, nos, marcas] = await Promise.all([
+    db.from("files").select("id, file_name, folder, mime_type, project_id").eq("client_id", clientId).is("archived_at", null).is("parent_file_id", null).limit(1000),
+    db.from("workspace_nodes").select("id, parent_id, name, kind, mime").eq("client_id", clientId).limit(3000),
+    marcasDoCliente(db, clientId),
+  ]);
+  return candidatosDaMarca(
+    ((arquivos.data as ArquivoLeve[] | null) ?? []),
+    ((nos.data as NoDoWorkspaceLeve[] | null) ?? []),
+    { id: marca.id, principal: marca.principal, project_id: marca.project_id, nome: marca.nome },
+    marcas.map((m) => ({ id: m.id, principal: m.principal, project_id: m.project_id, nome: m.nome })),
+  );
+}
+
 async function nomeDoCliente(clientId: string): Promise<string> {
   const { data } = await servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle();
   const p = data as { company_name: string | null; full_name: string | null } | null;
@@ -380,26 +440,40 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
     sincronizar.then(([r]) => r).catch((e) => (registrarFalha("agente-contexto: then falhou", e), null)),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
   ]);
+  // Frente MC: com marca, tudo é da marca (kit, documentos e artes do projeto dela, dossiê dela, logo achada pelo caminho).
+  const marca = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marca do ler falhou", e), null));
+  const marcas = marca ? await marcasDoCliente(db, clientId) : [];
+  const doProjeto = marca ? (p: string | null) => projetoDaMarcaAberta(p, marca, marcas) : null;
   const [kit, docs, dossie, artes, logos, refs, fontes] = await Promise.all([
-    lerKit(clientId),
-    lerDocumentosDeMarca(db, clientId, 60_000),
-    lerDossie(db, clientId, 400),
-    artesAprovadas(db, clientId, 12),
-    candidatosALogo(db, clientId),
-    db.from("cliente_referencias").select("id, origem, papel, leitura").eq("client_id", clientId).eq("ativa", true),
-    db.from("cliente_fontes").select("id, nome, papel, origem").eq("client_id", clientId),
+    lerKitDaMarca(clientId, marca),
+    lerDocumentosDeMarca(db, clientId, 60_000, doProjeto),
+    marca ? lerDossieDaMarca(db, clientId, marca, 400) : lerDossie(db, clientId, 400),
+    artesAprovadas(db, clientId, 12, doProjeto),
+    marca ? candidatosALogoDaMarca(db, clientId, marca).then((l) => l.map((c) => ({ origem: c.origem, id: c.id, nome: c.caminho }))) : candidatosALogo(db, clientId),
+    db.from("cliente_referencias").select(colunasComMarca("id, origem, papel, leitura", marca)).eq("client_id", clientId).eq("ativa", true),
+    db.from("cliente_fontes").select(colunasComMarca("id, nome, papel, origem", marca)).eq("client_id", clientId),
   ]);
-  const listaRefs = (refs.data as { origem: string; papel: string; leitura: string | null }[] | null) ?? [];
-  const listaFontes = (fontes.data as { nome: string; papel: string; origem: string }[] | null) ?? [];
+  const listaRefs = ((refs.data as unknown as { origem: string; papel: string; leitura: string | null; marca_id?: string | null }[] | null) ?? [])
+    .filter((r) => linhaDaMarca(r.marca_id, marca));
+  const listaFontes = fontesDaMarca(((fontes.data as unknown as { nome: string; papel: string; origem: string; marca_id?: string | null }[] | null) ?? []), marca)
+    .map(({ nome, papel, origem }) => ({ nome, papel, origem }));
 
   const lacunas: string[] = [];
-  if (!kit?.logo_file_id && !kit?.logo_path) lacunas.push(logos.length ? "Escolha qual arquivo é a logo oficial." : "Envie a logo oficial em imagem (PNG com fundo transparente de preferência).");
+  const nomeDaMarca = ehOutraMarca(marca) ? ` da ${marca.nome}` : "";
+  if (!kit?.logo_file_id && !kit?.logo_path) {
+    lacunas.push(
+      logos.length
+        ? `Logo${nomeDaMarca} achada nos arquivos: confirme qual é a oficial.`
+        : `Envie a logo oficial${nomeDaMarca} em imagem (PNG com fundo transparente de preferência) ou puxe do Instagram${nomeDaMarca}.`,
+    );
+  }
   if (!Array.isArray(kit?.paleta) || !kit!.paleta!.length) lacunas.push("Paleta ainda não definida: o agente pode ler dos documentos e das artes.");
   if (!listaFontes.length) lacunas.push("Sem fonte definida: o agente escolhe um par da biblioteca da agência.");
   if (!kit?.contexto_atualizado_em) lacunas.push("Contexto ainda não montado pelo agente.");
 
   return json({
     kit,
+    marca: marca ? { id: marca.id, nome: marca.nome, principal: marca.principal } : null,
     fontes: listaFontes,
     encontrado: {
       documentos: docs.map((d) => ({ file_id: d.file_id, nome: d.nome, prioridade: d.prioridade, caracteres: d.texto.length })),
@@ -651,6 +725,9 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   await garantirAcesso(ch, clientId);
   const forcar = corpo.forcar === true;
   const db = servico();
+  // Frente MC: com outra marca aberta, monta a partir do que é DELA e devolve sugestão (nada no kit do cliente).
+  const marcaDoMontar = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marca do montar falhou", e), null));
+  if (ehOutraMarca(marcaDoMontar)) return await montarDaMarca(ch, clientId, marcaDoMontar);
 
   await Promise.all([
     sincronizarReferencias(db, clientId),
@@ -845,6 +922,96 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     custo_usd: r.custoUsd + leitura.custo,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
+  });
+}
+
+/**
+ * Contexto da marca que não é a principal (frente MC, 29/09): lê só os
+ * documentos e as artes do projeto dela e o dossiê dela, e devolve tudo como
+ * sugestão (contexto, paleta, estilo, regras e tom). Não grava: a tela mostra
+ * com Confirmar e Desfazer e grava na linha da marca.
+ */
+async function montarDaMarca(ch: Chamador, clientId: string, marca: MarcaDoCliente) {
+  const db = servico();
+  const marcas = await marcasDoCliente(db, clientId);
+  const doProjeto = (p: string | null) => projetoDaMarcaAberta(p, marca, marcas);
+  const [docs, dossie, artes, nome] = await Promise.all([
+    lerDocumentosDeMarca(db, clientId, 20_000, doProjeto),
+    lerDossieDaMarca(db, clientId, marca, 5000),
+    artesAprovadas(db, clientId, MAX_ARTES_NO_MONTAR, doProjeto),
+    nomeDoCliente(clientId),
+  ]);
+  const baixadas = await Promise.all(artes.map((a, i) => {
+    const c = caminhoDoArquivo(a);
+    return c ? baixarImagem(c.bucket, c.caminho, `arte-${marca.nome}-${i + 1}`) : Promise.resolve(null);
+  }));
+  const imagens = baixadas.filter(Boolean) as ImagemEntrada[];
+  if (!docs.length && !dossie && !imagens.length) {
+    throw new ErroContexto(409, "sem_fontes_da_marca", `Ainda não há documentos, dossiê nem artes no projeto da ${marca.nome} para montar o contexto dela. Envie em Arquivos, no projeto da ${marca.nome}.`);
+  }
+  const leitor = await modeloDoContexto();
+  const r = await chamarTexto({
+    clientId,
+    tarefa: "contexto",
+    agente: "contexto",
+    modeloId: leitor.id,
+    raciocinio: raciocinioPara(leitor, ["medium", "low"]),
+    sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}`,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: [
+        `Cliente: ${nome}. Monte o contexto SÓ da marca ${marca.nome}.`,
+        blocoDaMarca(marca, marcas),
+        "Tudo o que for de outra marca do cliente fica de fora (cores, logo, público, oferta e tom). Na dúvida, deixe o campo vazio e diga na lacuna.",
+        imagens.length ? `Anexei ${imagens.length} artes já publicadas pela ${marca.nome}.` : "Nenhuma arte publicada anexada.",
+        dossie ? `DOSSIÊ DA ${marca.nome.toUpperCase()}:\n${dossie}` : "",
+        ...docs.map((d) => `DOCUMENTO "${d.nome}"${d.prioridade ? " (identidade/estratégia)" : ""}:\n${d.texto}`),
+      ].filter(Boolean).join("\n\n"),
+      imagens,
+    }],
+    esquemaJson: ESQUEMA_CONTEXTO,
+    maxTokensSaida: 6000,
+    referencia: { tipo: REF_TIPO, id: clientId },
+    criadoPor: ch.userId,
+  });
+  const c = (r.json ?? {}) as Record<string, any>;
+  const paleta = (Array.isArray(c.paleta) ? c.paleta : [])
+    .map((p: any) => ({ nome: texto(p?.nome, 40), hex: texto(p?.hex, 7).toUpperCase(), papel: texto(p?.papel, 20) }))
+    .filter((p: any) => HEX.test(p.hex))
+    .slice(0, 8);
+  const contexto: ContextoConsolidado & { atualizado_em?: string } = {
+    negocio: texto(c.negocio, 1200),
+    publico: texto(c.publico, 1200),
+    oferta: texto(c.oferta, 1000),
+    diferenciais: (Array.isArray(c.diferenciais) ? c.diferenciais : []).map((d: unknown) => texto(d, 200)).filter(Boolean).slice(0, 6),
+    tipografia: {
+      titulo: texto(c.tipografia?.titulo, 120) || null,
+      texto: texto(c.tipografia?.texto, 120) || null,
+      observacao: texto(c.tipografia?.observacao, 500) || null,
+    },
+    logo: { descricao: texto(c.logo?.descricao, 600) || null },
+    lacunas: (Array.isArray(c.lacunas) ? c.lacunas : []).map((d: unknown) => texto(d, 200)).filter(Boolean).slice(0, 8),
+    fontes_lidas: [...docs.map((d) => d.nome), ...(dossie ? [`Dossiê da ${marca.nome}`] : []), ...(artes.length ? [`${artes.length} artes da ${marca.nome}`] : [])],
+    atualizado_em: new Date().toISOString(),
+  };
+  return json({
+    kit: await lerKitDaMarca(clientId, marca),
+    sugestoes: {},
+    sugestao_da_marca: {
+      marca_id: marca.id,
+      marca_nome: marca.nome,
+      contexto,
+      paleta,
+      estilo: texto(c.estilo, 3000) || null,
+      regras: texto(c.regras, 3000) || null,
+      tom: texto(c.tom_de_voz, 1000) || null,
+    },
+    fontes_escolhidas: null,
+    referencias_lidas: 0,
+    custo_usd: r.custoUsd,
+    saldo_usd: r.saldoUsd,
+    reserva_usada: r.reservaUsada ?? null,
+    aviso_da_acao: `Contexto da ${marca.nome} montado com os arquivos dela. Confira e confirme para gravar.`,
   });
 }
 
@@ -1146,9 +1313,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const conversaId = await garantirConversa(clientId, ch.userId);
   // 29/09: o pedido é gravado antes da IA (nunca some); se a IA falhar, ele sai e o texto volta ao campo.
   const pedido = await gravarPedidoDoContexto(conversaId, clientId, mensagem);
+  // Frente MC: com outra marca aberta, o agente enxerga o kit DELA e não grava no kit do cliente.
+  const marcaDaConversa = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marca da conversa falhou", e), null));
+  const soLeitura = ehOutraMarca(marcaDaConversa);
 
   const [kit, nome, linhas, fontes, memoria, refs, situacao, regras] = await Promise.all([
-    lerKit(clientId),
+    lerKitDaMarca(clientId, marcaDaConversa),
     nomeDoCliente(clientId),
     historicoDaConversa(conversaId),
     db.from("cliente_fontes").select("nome, papel, origem").eq("client_id", clientId),
@@ -1208,7 +1378,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const o = (r.json ?? {}) as Record<string, any>;
   // Frente AG: kit, contexto e memória que a equipe ensinou viram uma ação JÁ FEITA, com Desfazer
   // (antes gravava calado, sem volta). Sem custo e com reverso: vai direto (regra 6 do contrato).
-  const doKit = acaoDoKitNaConversa(o, { estilo: kit?.estilo ?? null, regras: kit?.regras ?? null, contexto: (kit?.contexto ?? null) as Record<string, unknown> | null }, clientId);
+  const doKit = soLeitura ? null : acaoDoKitNaConversa(o, { estilo: kit?.estilo ?? null, regras: kit?.regras ?? null, contexto: (kit?.contexto ?? null) as Record<string, unknown> | null }, clientId);
   const mudou: string[] = [];
   let kitFeito: AcaoDoAgente | null = null;
   if (doKit && podeExecutarDireto(doKit.acao, REGRAS_DO_KIT_NA_CONVERSA, { pedidoClaro: true, maxItens: MAX_ITENS_DO_KIT }).direto) {
@@ -1230,7 +1400,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     cobrar: (j) => cobrarJev(j, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId }),
   });
   const seguidas = regrasSeguidasDoModelo(o.seguiu, regras);
-  const resposta = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : kitFeito ? "Feito. Está no cartão, com Desfazer." : "Não consegui entender o pedido. Pode dizer de outro jeito?");
+  const respostaBase = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : kitFeito ? "Feito. Está no cartão, com Desfazer." : "Não consegui entender o pedido. Pode dizer de outro jeito?");
+  // Frente MC: com outra marca aberta, a conversa não grava no kit do cliente e diz onde mudar.
+  const pediuMudarKit = soLeitura && !!(o.estilo || o.regras || o.paleta || o.contexto);
+  const resposta = pediuMudarKit && marcaDaConversa
+    ? `${respostaBase}\n\nCom a ${marcaDaConversa.nome} aberta, eu não gravo no kit do cliente. Para mudar o kit da ${marcaDaConversa.nome}, use Contexto, Editar em detalhe, Marca (ou Montar contexto da ${marcaDaConversa.nome}).`
+    : respostaBase;
   // Frente AG (27/09): cada cartão leva o "Ir para" (kit na aba Contexto, foto no acervo, arquivo no Workspace);
   // sem cartão, a área que a resposta citou. "Faz e me leva" abre sozinho ao terminar.
   const anexosDaResposta = anexosComCaminho(
@@ -1257,7 +1432,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     memorias: memoriasEnsinadas,
     aprendizado: aprendizado.anexo,
     seguiu: seguidas,
-    kit: await lerKit(clientId),
+    kit: await lerKitDaMarca(clientId, marcaDaConversa),
     custo_usd: r.custoUsd,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
@@ -1468,13 +1643,33 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
     });
   }
 
-  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}.${EXTENSAO[img.mime] ?? "png"}`;
+  // Frente MC: outra marca (CME) grava na pasta e na linha dela; nunca no kit do cliente.
+  const marca = UUID.test(texto(corpo.marca_id, 64))
+    ? await marcaDoPedido(servico(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("agente-contexto: marca da logo falhou", e), null))
+    : null;
+  const daMarca = ehOutraMarca(marca) && marca.id === texto(corpo.marca_id, 64) ? marca : null;
+  const pasta = daMarca ? `${clientId}/marcas/${daMarca.id}` : `${clientId}/marca`;
+  const destino = `${pasta}/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}.${EXTENSAO[img.mime] ?? "png"}`;
   const { error: erroUpload } = await servico().storage.from("mesa").upload(destino, new Blob([new Uint8Array(img.bytes)], { type: img.mime }), {
     contentType: img.mime,
     upsert: true,
   });
   if (erroUpload) throw new ErroContexto(503, "logo_nao_copiada", "Não foi possível guardar a logo. Tente de novo.");
   const agora = new Date().toISOString();
+  if (daMarca) {
+    const campos = alternativa
+      ? { logo_alt_path: destino, logo_alt_file_id: null, logo_alt_tom: null }
+      : { logo_path: destino, logo_file_id: null, logo_tom: null };
+    let r = await servico().from("cliente_marcas").update({ ...campos, atualizado_por: ch.userId }).eq("id", daMarca.id).eq("client_id", clientId);
+    // Banco sem logo_tom (T-logo-tom.sql): grava sem ele.
+    if (r.error) {
+      const semTom = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
+      r = await servico().from("cliente_marcas").update({ ...semTom, atualizado_por: ch.userId }).eq("id", daMarca.id).eq("client_id", clientId);
+    }
+    if (r.error) throw new ErroContexto(503, "kit_nao_gravado", `A logo foi copiada, mas a marca ${daMarca.nome} não foi atualizada.`);
+    const relida = await marcaDoPedido(servico(), clientId, { marca_id: daMarca.id }).catch((e) => (registrarFalha("agente-contexto: marca relida falhou", e), null));
+    return json({ kit: await lerKitDaMarca(clientId, relida ?? daMarca), caminho: destino, marca_id: daMarca.id });
+  }
   const { error } = await servico().from("cliente_kit_marca").upsert({
     client_id: clientId,
     [alternativa ? "logo_alt_path" : "logo_path"]: destino,
@@ -1490,6 +1685,73 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
     .eq("client_id", clientId)
     .then(() => undefined, () => undefined);
   return json({ kit: await lerKit(clientId), caminho: destino });
+}
+
+// ------------------------------------------------------------------ kit da marca (frente MC)
+
+/**
+ * O que já existe para o kit da marca, sem gravar nada: a logo achada nos
+ * arquivos (um candidato: ele; mais de um: o Jev escolhe, com "nenhum") e a
+ * conta do Instagram ligada ao projeto da marca (foto do perfil). A tela
+ * mostra com Confirmar e Desfazer; as cores saem da logo, no navegador.
+ */
+async function sugerirKitDaMarca(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  const db = servico();
+  const marcaId = texto(corpo.marca_id, 64);
+  if (!UUID.test(marcaId)) throw new ErroContexto(400, "marca_invalida", "Escolha a marca no topo.");
+  const marca = await marcaDoPedido(db, clientId, { marca_id: marcaId });
+  if (!marca || marca.id !== marcaId) throw new ErroContexto(404, "marca_inexistente", "Esta marca não é deste cliente.");
+  const [candidatos, contas, marcas] = await Promise.all([
+    candidatosALogoDaMarca(db, clientId, marca),
+    contasDaMarcaDoCliente(db, clientId, marca),
+    marcasDoCliente(db, clientId),
+  ]);
+
+  let escolhida = candidatos.length === 1 ? candidatos[0] : null;
+  let como: "unico" | "jev" | "nenhum" = escolhida ? "unico" : "nenhum";
+  let confianca: number | null = null;
+  if (!escolhida && candidatos.length > 1) {
+    try {
+      const outras = marcas.filter((m) => m.id !== marca.id).map((m) => m.nome);
+      const lista = candidatos.slice(0, 10);
+      const r = await jevPerguntar(perguntaDaLogo({ id: marca.id, principal: marca.principal, project_id: marca.project_id, nome: marca.nome }, outras, lista));
+      await cobrarJev(r, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId }).catch((e) => (registrarFalha("agente-contexto: cobrança do Jev da logo falhou", e), null));
+      const resposta = r.answers.logo;
+      confianca = typeof resposta?.confidence === "number" ? resposta.confidence : null;
+      escolhida = escolhaDaLogo(lista, resposta);
+      if (escolhida) como = "jev";
+    } catch (e) {
+      if (!(e instanceof JevErro)) throw e;
+      registrarFalha("agente-contexto: Jev da logo da marca", e);
+    }
+  }
+
+  // Instagram da marca: só contas ligadas ao projeto dela (a CME nunca recebe o @ da Acerbi).
+  let instagram: { conta_id: string; username: string | null; foto_url: string | null } | null = null;
+  if (contas && contas.length) {
+    const { data } = await db
+      .from("social_client_identity")
+      .select("external_account_id, username, profile_picture_url, captured_at")
+      .eq("client_id", clientId)
+      .in("external_account_id", contas)
+      .order("captured_at", { ascending: false })
+      .limit(5);
+    const linha = ((data as { external_account_id: string; username: string | null; profile_picture_url: string | null }[] | null) ?? [])[0];
+    if (linha) instagram = { conta_id: linha.external_account_id, username: linha.username, foto_url: linha.profile_picture_url };
+  }
+
+  return json({
+    marca: { id: marca.id, nome: marca.nome, principal: marca.principal },
+    kit: await lerKitDaMarca(clientId, marca),
+    logo: escolhida
+      ? { origem: escolhida.origem, id: escolhida.id, nome: escolhida.nome, caminho: escolhida.caminho, como, confianca, imagem: await origemDaImagem(clientId, escolhida.origem, escolhida.id) }
+      : null,
+    candidatos: candidatos.map((c) => ({ origem: c.origem, id: c.id, nome: c.nome, caminho: c.caminho })),
+    instagram,
+    tem_instagram: !!(contas && contas.length),
+  });
 }
 
 // ------------------------------------------------------------------ ações (propor e confirmar)
@@ -1529,19 +1791,21 @@ async function dadosParaAcoes(clientId: string): Promise<DadosDoContexto> {
 }
 
 /** Uma operação do agente de contexto, já confirmada. */
-async function executarItemDoContexto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
+async function executarItemDoContexto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente, marca: MarcaDoCliente | null = null): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
   const db = servico();
+  // Frente MC: confirmado com outra marca aberta (CME), a logo vai para a linha dela; nunca para o kit do cliente.
+  const outra = ehOutraMarca(marca) ? marca : null;
   if (item.operacao === "trocar_logo") {
     const alternativa = item.alvo_id === "alternativa";
-    const antes = await lerKit(clientId);
+    const antes = outra ? outra : await lerKit(clientId);
     const caminhoAntes = alternativa ? antes?.logo_alt_path ?? null : antes?.logo_path ?? null;
     try {
-      await definirLogo(ch, { client_id: clientId, origem: "acervo", id: String(item.para), alternativa });
+      await definirLogo(ch, { client_id: clientId, origem: "acervo", id: String(item.para), alternativa, ...(outra ? { marca_id: outra.id } : {}) });
     } catch (e) {
       if (e instanceof ErroContexto && e.codigo === "logo_grande_demais") throw new Error("A imagem é grande demais para virar logo aqui. Troque pela tela de Logos, que reduz antes de gravar.");
       throw e;
     }
-    return { desfazer: { alternativa, caminho: caminhoAntes } };
+    return { desfazer: { alternativa, caminho: caminhoAntes, ...(outra ? { marca_id: outra.id } : {}) } };
   }
   if (item.operacao === "arquivar_referencia") {
     const { data } = await db.from("cliente_referencias").select("id, client_id, ativa").eq("id", item.alvo_id).maybeSingle();
@@ -1564,6 +1828,7 @@ async function executarItemDoContexto(ch: Chamador, clientId: string, item: Item
     return { aviso: frase.slice(0, 300) };
   }
   if (item.operacao === "montar_contexto") {
+    if (outra) throw new Error(`Com a ${outra.nome} aberta, o contexto dela sai pelo botão Montar contexto da ${outra.nome} (vira sugestão para confirmar); o do cliente não muda.`);
     const antes = await lerKit(clientId);
     const r = await montar(ch, { client_id: clientId, atualizar: true });
     const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
@@ -1580,6 +1845,15 @@ async function executarItemDoContexto(ch: Chamador, clientId: string, item: Item
 async function desfazerItemDoContexto(clientId: string, r: ResultadoDoItem) {
   const db = servico();
   const d = (r.desfazer ?? {}) as Record<string, unknown>;
+  if (r.operacao === "trocar_logo" && typeof d.marca_id === "string" && UUID.test(d.marca_id)) {
+    // Frente MC: a logo trocada era da outra marca; volta na linha dela.
+    const alternativa = d.alternativa === true;
+    const { error } = await db.from("cliente_marcas")
+      .update({ [alternativa ? "logo_alt_path" : "logo_path"]: (d.caminho as string | null) ?? null, [alternativa ? "logo_alt_file_id" : "logo_file_id"]: null })
+      .eq("id", d.marca_id).eq("client_id", clientId);
+    if (error) throw new Error("Não foi possível voltar a logo de antes.");
+    return;
+  }
   if (r.operacao === "trocar_logo") {
     const alternativa = d.alternativa === true;
     const { error } = await db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_path" : "logo_path"]: (d.caminho as string | null) ?? null, atualizado_em: new Date().toISOString() }).eq("client_id", clientId);
@@ -1618,6 +1892,8 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
   const guardada = await propostaDoContexto(ch, corpo);
   const clientId = guardada.mensagem.client_id;
   const inicio = Date.now();
+  // Frente MC: a marca aberta na hora do Confirmar (a tela manda marca_id).
+  const marcaDaAcao = await marcaDoPedido(servico(), clientId, { marca_id: corpo.marca_id }).catch((e) => (registrarFalha("agente-contexto: marca da ação falhou", e), null));
   let r: { anexo: AcaoDoAgente; resultados: ResultadoDoItem[]; terminou: boolean };
   // Plano, brand book e pasta nova correm um item de cada vez, na ordem (o projeto antes
   // dos marcos, a pasta nasce uma vez só); o resto, três ao mesmo tempo.
@@ -1631,9 +1907,11 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
     r = await confirmarAcaoGuardada(
       guardada,
       (item, acao) =>
-        ehOperacaoDoPlano(item.operacao) || ehOperacaoDoKit(item.operacao)
+        ehOutraMarca(marcaDaAcao) && ehOperacaoDoKit(item.operacao)
+          ? Promise.reject(new Error(`Com a ${marcaDaAcao.nome} aberta, o kit muda em Contexto, Marca (só na ${marcaDaAcao.nome}); o kit do cliente não muda.`))
+          : ehOperacaoDoPlano(item.operacao) || ehOperacaoDoKit(item.operacao)
           ? executarItemDoPlano(servico(), clientId, item, acao, memoria, deps)
-          : executarItemDoContexto(ch, clientId, item),
+          : executarItemDoContexto(ch, clientId, item, marcaDaAcao),
       // Frente AG (27/09): acervo e workspace vão em passos de 6 (andamento e Parar na tela). O plano
       // fica numa chamada só: a memória do plano (o projeto novo antes das tarefas) vive nesta chamada.
       {
@@ -2239,6 +2517,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   acervo_sincronizar: acervoSincronizar,
   acervo_classificar: acervoClassificar,
   definir_logo: definirLogo,
+  sugerir_kit_da_marca: sugerirKitDaMarca,
   fontes_da_biblioteca: fontesDaBiblioteca,
   // Ler e montar pela conversa usam IA: com fôlego, a confirmação não cai no limite da plataforma.
   executar_acao_agente: (ch, corpo) => Promise.resolve(respostaComFolego(() => executarAcaoDoContexto(ch, corpo).catch((e) => respostaDoErro(e, "executar_acao_agente")), corsHeaders)),

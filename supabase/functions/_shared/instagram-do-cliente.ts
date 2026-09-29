@@ -16,6 +16,7 @@
 
 import type { CaminhoDoAgente } from "./acoes-do-agente.ts";
 import { caminhoDaResposta, caminhoNaArea } from "./mapa-do-painel.ts";
+import { contasDaMarcaAberta } from "./heranca-da-marca.ts";
 
 // ------------------------------------------------------------------ contas
 
@@ -77,19 +78,8 @@ export type LigacaoDaConta = { external_account_id: string; project_id: string }
  * Conta ligada a duas marcas vale para as duas.
  */
 export function contasDaMarca<C extends { id: string }>(contas: C[], ligacoes: LigacaoDaConta[], marca: MarcaDasContas | null, marcas: MarcaDasContas[]): C[] {
-  if (!marca) return contas;
-  const projetosDe: Record<string, string[]> = {};
-  for (const l of ligacoes) (projetosDe[l.external_account_id] = projetosDe[l.external_account_id] || []).push(l.project_id);
-  if (!marca.principal) {
-    if (!marca.project_id) return [];
-    return contas.filter((c) => (projetosDe[c.id] || []).indexOf(marca.project_id as string) >= 0);
-  }
-  const deOutras = marcas.filter((m) => m.id !== marca.id && m.project_id).map((m) => m.project_id as string);
-  return contas.filter((c) => {
-    const ps = projetosDe[c.id] || [];
-    if (marca.project_id && ps.indexOf(marca.project_id) >= 0) return true;
-    return !ps.some((p) => deOutras.indexOf(p) >= 0);
-  });
+  // Frente MC (29/09): a regra mora em heranca-da-marca.ts (a mesma da tela e das outras funções).
+  return contasDaMarcaAberta(contas, ligacoes, marca, marcas);
 }
 
 /** A marca dona de uma conta (para agrupar na tela e recusar conta de outra marca). */

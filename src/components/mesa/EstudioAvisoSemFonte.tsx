@@ -1,6 +1,6 @@
 import { AjudaRecolhida } from "@/components/sistema";
-import { useKitDoCliente } from "./contextoDoCliente";
 import { useMarcaDaMesa } from "./MesaContexto";
+import { useKitDaMesa } from "./kitDaMesa";
 import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
 
 /**
@@ -35,10 +35,11 @@ function Linha({ texto, clientId, ajuda }: { texto: string; clientId: string; aj
 
 export function EstudioAvisoDoKit({ clientId }: { clientId: string }) {
   const { marca } = useMarcaDaMesa();
-  const kit = useKitDoCliente(clientId);
+  // Frente MC: as cores da marca aberta (CME sem cor avisa; nunca olha a paleta da Acerbi).
+  const kit = useKitDaMesa(clientId);
   // Frente T2: as fontes da marca aberta (a mesma regra do servidor).
   const semFonte = useSemTipografia(clientId, marca);
-  const semCor = kit.isSuccess && kitSemCor(kit.data as { paleta?: unknown } | null);
+  const semCor = !kit.isLoading && !kit.isError && kitSemCor(kit.data as { paleta?: unknown } | null);
   if (!semFonte && !semCor) return null;
   return (
     <div className="min-w-0" data-aviso="kit-incompleto">

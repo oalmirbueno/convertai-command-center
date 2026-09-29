@@ -205,7 +205,7 @@ describe("seletor de marca na casca da Mesa", () => {
 });
 
 describe("kit da CME no Contexto", () => {
-  const valor = (): MesaValor => ({
+  const valor = (m: MarcaDoCliente = CME): MesaValor => ({
     clientId: ACERBI_CLIENTE,
     clientName: "Acerbi",
     userId: "u-1",
@@ -218,15 +218,15 @@ describe("kit da CME no Contexto", () => {
     abrirRecarga: () => undefined,
     abrirChaves: () => undefined,
     abrirModelos: () => undefined,
-    marcas: [ACERBI, CME],
-    marca: CME,
+    marcas: [ACERBI, m],
+    marca: m,
   });
 
   function montarKit(m: MarcaDoCliente) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
       <QueryClientProvider client={qc}>
-        <MesaProvider valor={valor()}>
+        <MesaProvider valor={valor(m)}>
           <ContextoKitDaMarca marca={m} />
         </MesaProvider>
       </QueryClientProvider>,
@@ -238,11 +238,12 @@ describe("kit da CME no Contexto", () => {
     expect(caminhoDaLogoDaMarca(ACERBI_CLIENTE, ID_CME, true, "png", 5)).toBe(`${ACERBI_CLIENTE}/marcas/${ID_CME}/logo-alternativa-5.png`);
   });
 
-  it("sem logo avisa que nunca usa a do cliente; salvar grava paleta, estilo e tom na marca", async () => {
+  it("frente MC: a mesma tela do kit do cliente, só com o que é da CME; salvar grava paleta, estilo e tom só na marca", async () => {
     montarKit(linhaDaMarca({ ...CME, paleta: [{ nome: "Rosa", hex: "#E91E63", papel: "principal" }], estilo: "leve" }));
     expect(screen.getByText(/Kit próprio da marca/)).toBeTruthy();
-    expect(screen.getAllByText(/nunca usa a do cliente/).length).toBe(2);
-    fireEvent.change(screen.getByPlaceholderText("Vazio: usa o tom do cliente."), { target: { value: "acolhedor" } });
+    // O editor padrão (ContextoMarca) com o estilo da CME; o placeholder do tom diz que nunca usa o da outra marca.
+    await waitFor(() => expect(screen.getByDisplayValue("leve")).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText(/Como a CME fala/), { target: { value: "acolhedor" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar kit da CME" }));
     await waitFor(() => expect(mock.update).toHaveBeenCalled());
     const [tabela, campos] = mock.update.mock.calls[0];

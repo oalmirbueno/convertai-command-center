@@ -60,6 +60,9 @@ import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.t
 // Frente AP (27/09): na rodada da semana, as entregas do Estúdio aprendem com os números reais (sem IA, sem cron novo).
 import { aprenderComOsNumerosDaSemana, type BancoDoAprendizado } from "../_shared/aprendizado-das-entregas.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
+// Frente MC (29/09): contexto, dossiê, pilares e números da marca aberta (a CME não lê a Acerbi).
+import { contasDaMarcaDoCliente, lerContextoDaMarca, lerDossieDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar, projetoNaMarca } from "../_shared/marca.ts";
+import { linhaDaMarca } from "../_shared/heranca-da-marca.ts";
 import { conhecimentoCalendarioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import {
   type AcaoDoAgente,
@@ -720,19 +723,28 @@ async function capturarPelaApi(perfil: Perfil, tokens: TokenDoInstagram[]): Prom
 
 type ContextoDoCliente = { nome: string; texto: string; estado: Record<string, unknown>; pilares: string[] };
 
-async function contextoDoCliente(clientId: string): Promise<ContextoDoCliente> {
-  const [perfilRes, consolidado, dossie, cerebro, propostas] = await Promise.all([
+/** Marca do pedido (marca_id da tela); sem marcas no cliente, null e nada muda. */
+async function marcaDoCorpo(clientId: string, corpo: Record<string, unknown> | null | undefined): Promise<MarcaDoCliente | null> {
+  return await marcaDoPedido(servico(), clientId, corpo ? { marca_id: corpo.marca_id } : null).catch((e) => (registrarFalha("perfis-instagram: marca do pedido falhou", e), null));
+}
+
+async function contextoDoCliente(clientId: string, marca: MarcaDoCliente | null = null): Promise<ContextoDoCliente> {
+  const [perfilRes, consolidado, dossie, cerebro, propostasBrutas] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
-    lerContextoConsolidado(servico(), clientId).catch((e) => (registrarFalha("perfis-instagram: lerContextoConsolidado falhou", e), ({}))),
-    lerDossie(servico(), clientId, 2500).catch((e) => (registrarFalha("perfis-instagram: lerDossie falhou", e), null)),
+    (marca ? lerContextoDaMarca(servico(), clientId, marca) : lerContextoConsolidado(servico(), clientId)).catch((e) => (registrarFalha("perfis-instagram: lerContextoConsolidado falhou", e), ({}))),
+    (marca ? lerDossieDaMarca(servico(), clientId, marca, 2500) : lerDossie(servico(), clientId, 2500)).catch((e) => (registrarFalha("perfis-instagram: lerDossie falhou", e), null)),
     resumoDoCerebro(servico(), clientId, ["geral", "copy", "campanha"], { limite: 1200, titulo: "O QUE O CLIENTE JÁ ENSINOU" }).catch((e) => (registrarFalha("perfis-instagram: resumoDoCerebro falhou", e), ({ texto: "" }))),
-    servico().from("calendario_propostas").select("temas").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(3),
+    servico().from("calendario_propostas").select("temas, project_id").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(8),
   ]);
   const p = perfilRes.data as { company_name?: string | null; full_name?: string | null } | null;
-  const nome = (p && (p.company_name || p.full_name)) || "Cliente";
+  const nome = (marca && !marca.principal ? marca.nome : "") || (p && (p.company_name || p.full_name)) || "Cliente";
   const c = consolidado as Record<string, unknown>;
   const pilares: string[] = [];
-  for (const linha of ((propostas.data as Array<{ temas: unknown }> | null) ?? [])) {
+  const propostas: Array<{ temas: unknown; project_id?: string | null }> = [];
+  for (const linha of ((propostasBrutas.data as Array<{ temas: unknown; project_id?: string | null }> | null) ?? [])) {
+    if (propostas.length < 3 && (await projetoNaMarca(servico(), clientId, marca, linha.project_id ?? null))) propostas.push(linha);
+  }
+  for (const linha of propostas) {
     for (const t of Array.isArray(linha.temas) ? linha.temas as Array<Record<string, unknown>> : []) {
       const pilar = umaLinha(t && t.pilar, 60);
       if (pilar) pilares.push(pilar);
@@ -870,7 +882,9 @@ async function listar(ch: Chamador, corpo: Record<string, unknown>) {
     if (semTabela(error)) return json({ sql_pendente: true, aviso: AVISO_SQL, perfis: [], mudancas: [], captura_api: { disponivel: false, origem: null, motivo: AVISO_SQL }, limite_por_papel: LIMITE_POR_PAPEL, custo_usd: 0 });
     falhaDoBanco(error, "Não foi possível ler os perfis agora.");
   }
-  const perfis = (data as Perfil[] | null) ?? [];
+  // Frente MC: referências e concorrentes da marca aberta (marca_id nulo = do cliente, só na principal).
+  const marcaDaLista = await marcaDoCorpo(clientId, corpo);
+  const perfis = ((data as (Perfil & { marca_id?: string | null })[] | null) ?? []).filter((p) => linhaDaMarca(p.marca_id, marcaDaLista));
   const ids = perfis.map((p) => p.id);
   const [contagem, rodadas, tokens] = await Promise.all([
     ids.length
@@ -950,6 +964,7 @@ async function adicionar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!podeAdicionar(lista.filter((p) => p.papel === corpo.papel).length)) {
     throw new ErroHttp(409, "limite_de_perfis", `O limite é ${LIMITE_POR_PAPEL} ${corpo.papel === "concorrente" ? "concorrentes" : "referências"} por cliente. Arquive um para trocar.`);
   }
+  const marcaNova = await marcaDoCorpo(clientId, corpo);
   const { data, error: e2 } = await servico().from("cliente_perfis_instagram").insert({
     client_id: clientId,
     papel: corpo.papel,
@@ -957,7 +972,12 @@ async function adicionar(ch: Chamador, corpo: Record<string, unknown>) {
     nome: umaLinha(corpo.nome, 120) || null,
     origem: "manual",
     criado_por: ch.userId,
+    // Frente MC: perfil adicionado com outra marca aberta é dela (nunca vira referência da principal).
+    ...marcaParaGravar(marcaNova),
   }).select("*").single();
+  if (e2 && marcaNova && !marcaNova.principal && /marca_id/.test(String((e2 as { message?: string }).message || ""))) {
+    throw new ErroHttp(409, "sql_pendente", "Perfis por marca ainda não estão no banco (migration 20260929020000). Peça para aplicar antes de adicionar com esta marca aberta.");
+  }
   if (e2 || !data) falhaDoBanco(e2, "Não foi possível adicionar o perfil.");
   await auditar(ch, "perfis_adicionar", { client_id: clientId, papel: corpo.papel, handle }, true, inicio, (data as Perfil).id);
   return json({ perfil: data, custo_usd: 0 });
@@ -1204,7 +1224,7 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
-  const ctx = await contextoDoCliente(clientId);
+  const ctx = await contextoDoCliente(clientId, await marcaDoCorpo(clientId, corpo));
   const r = await lerPostsDoPerfil(perfil, ctx, ch.userId);
   let custo = r.custo;
   let resumo: Record<string, unknown> | null = null;
@@ -1331,7 +1351,7 @@ async function planoIgual(ch: Chamador, corpo: Record<string, unknown>) {
   const quantas = quantasPautas(corpo.quantidade);
   const mes = mesPedido(corpo.mes);
   if (!diasUteisDoMes(mes, hojeEmSaoPaulo()).length) throw new ErroHttp(400, "mes_sem_dias", "Este mês não tem mais dias úteis. Escolha o próximo.");
-  const ctx = await contextoDoCliente(clientId);
+  const ctx = await contextoDoCliente(clientId, await marcaDoCorpo(clientId, corpo));
   const pedidoDaEquipe = limpo(corpo.pedido, 800);
   // Gera a mais e escolhe (sem laço de correção).
   const escritas = await escreverPautas(perfil, ctx, posts, {
@@ -1391,7 +1411,7 @@ async function ideiasResposta(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
-  const ctx = await contextoDoCliente(clientId);
+  const ctx = await contextoDoCliente(clientId, await marcaDoCorpo(clientId, corpo));
   const g = await gerarIdeias(perfil, ctx, ch.userId, null);
   if (!g.ideias.length && !g.bloqueadas.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes das ideias.");
   const conversaId = await conversaDoPerfil(ch, perfil);
@@ -1414,10 +1434,19 @@ async function ideiasResposta(ch: Chamador, corpo: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ comparar e conversar
 
-async function numerosDoCliente(clientId: string): Promise<string> {
+async function numerosDoCliente(clientId: string, marca: MarcaDoCliente | null = null): Promise<string> {
+  // Frente MC: só as contas da marca aberta; outra marca sem conta ligada fica sem números (nunca os da Acerbi).
+  const contas = await contasDaMarcaDoCliente(servico(), clientId, marca);
+  if (contas && !contas.length) return "NÚMEROS DO CLIENTE: esta marca ainda não tem Instagram ligado ao projeto dela no painel.";
+  let qSemanas = servico().from("social_metrics_weekly").select("week_start, followers, reach, total_interactions").eq("client_id", clientId);
+  let qPosts = servico().from("social_post_metrics").select("media_type, like_count, comments_count, posted_at").eq("client_id", clientId);
+  if (contas) {
+    qSemanas = qSemanas.in("external_account_id", contas);
+    qPosts = qPosts.in("external_account_id", contas);
+  }
   const [semanas, posts] = await Promise.all([
-    servico().from("social_metrics_weekly").select("week_start, followers, reach, total_interactions").eq("client_id", clientId).order("week_start", { ascending: false }).limit(4),
-    servico().from("social_post_metrics").select("media_type, like_count, comments_count, posted_at").eq("client_id", clientId).order("posted_at", { ascending: false }).limit(24),
+    qSemanas.order("week_start", { ascending: false }).limit(4),
+    qPosts.order("posted_at", { ascending: false }).limit(24),
   ]);
   const s = ((semanas.data as Array<{ week_start: string; followers: number | null; reach: number | null; total_interactions: number | null }> | null) ?? []);
   const p = ((posts.data as Array<{ media_type: string | null; like_count: number | null; comments_count: number | null; posted_at: string | null }> | null) ?? []);
@@ -1440,7 +1469,8 @@ async function comparar(ch: Chamador, corpo: Record<string, unknown>) {
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
   const posts = comApelidosDosPosts(await postsDoPerfil(perfil.id, 30));
   if (!posts.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes de comparar.");
-  const [ctx, numeros] = await Promise.all([contextoDoCliente(clientId), numerosDoCliente(clientId)]);
+  const marcaDoComparar = await marcaDoCorpo(clientId, corpo);
+  const [ctx, numeros] = await Promise.all([contextoDoCliente(clientId, marcaDoComparar), numerosDoCliente(clientId, marcaDoComparar)]);
   const modelo = await modeloDeTexto();
   const r = await chamarTexto({
     clientId,
@@ -1517,7 +1547,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   const [posts, ctx, historico, modelo, regras] = await Promise.all([
     postsDoPerfil(perfil.id, 40).then(comApelidosDosPosts),
-    contextoDoCliente(clientId),
+    marcaDoCorpo(clientId, corpo).then((m) => contextoDoCliente(clientId, m)),
     servico().from("agente_mensagens").select("id, papel, conteudo, anexos").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO + 6),
     modeloDeTexto(),
     lerRegrasDoDono(servico(), clientId, { areas: ["calendario", "conta", "copy"], marcaId: corpo.marca_id }),

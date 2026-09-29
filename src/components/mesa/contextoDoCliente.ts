@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
+import { useMarcaDaMesa } from "./MesaContexto";
+import { fotoDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
 
 /**
  * Dados da aba Contexto, vindos da função "agente-contexto".
@@ -34,6 +36,9 @@ export interface KitDoContexto {
   logo_path?: string | null;
   logo_alt_path?: string | null;
   logo_alt_file_id?: string | null;
+  /** Clara ou escura, guardado no kit (ou na marca); sem isso, a tela lê a imagem. */
+  logo_tom?: string | null;
+  logo_alt_tom?: string | null;
   estilo: string | null;
   regras: string | null;
   contexto: ContextoConsolidado | null;
@@ -93,11 +98,27 @@ export interface RespostaDoMontar {
   referencias_falharam?: number;
   referencias_restantes?: number;
   falhas_da_leitura?: { id: string; motivo: string }[];
+  /**
+   * Frente MC: com outra marca aberta (CME), montar não grava; devolve o
+   * contexto, as cores, o estilo, as regras e o tom lidos dos arquivos DELA,
+   * para a tela confirmar (e poder desfazer).
+   */
+  sugestao_da_marca?: SugestaoDaMarcaMontada | null;
   /** true: nada foi feito (a tela mostra erro com o motivo). parcial: parte não foi feita. */
   falhou?: boolean;
   parcial?: boolean;
   motivo?: string | null;
   aviso_da_acao?: string;
+}
+
+export interface SugestaoDaMarcaMontada {
+  marca_id: string;
+  marca_nome: string;
+  contexto: ContextoConsolidado & { atualizado_em?: string };
+  paleta: CorDoKit[];
+  estilo: string | null;
+  regras: string | null;
+  tom: string | null;
 }
 
 export interface RespostaDaConversa {
@@ -159,9 +180,10 @@ function normalizar(d: any): LeituraDoContexto {
  * até ~1,5 s e termina a sincronização em segundo plano; a leitura vale por
  * 5 minutos (cada mudança na aba invalida e relê na hora).
  */
-export function useLeituraDoContexto(clientId: string) {
+export function useLeituraDoContexto(clientId: string, marcaId: string | null = null) {
   return useQuery({
-    queryKey: chaveDoContexto(clientId),
+    // Frente MC: a marca entra na chave (a leitura da CME não é a da Acerbi); invalidar pelo cliente pega as duas.
+    queryKey: marcaId ? [...chaveDoContexto(clientId), marcaId] : chaveDoContexto(clientId),
     enabled: !!clientId,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
@@ -368,11 +390,17 @@ export function invalidarAcervo(queryClient: QueryClient, clientId: string) {
   void queryClient.invalidateQueries({ queryKey: chaveDoAcervoDoEstudio(clientId) });
 }
 
-/** Acervo de imagens reais do cliente (leitura direta, RLS da equipe). */
+/**
+ * Acervo de imagens reais do cliente (leitura direta, RLS da equipe). Frente
+ * MC: com marca aberta, só as fotos dela (etiqueta marca:<id>; sem etiqueta,
+ * só a principal). O cache guarda todas; o filtro é da tela.
+ */
 export function useAcervo(clientId: string) {
+  const { marca } = useMarcaDaMesa();
   return useQuery({
     queryKey: chaveDoAcervo(clientId),
     enabled: !!clientId,
+    select: marca ? (lista: ImagemDoAcervo[]) => lista.filter((i) => fotoDaMarcaAberta(i.tags, marca)) : undefined,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -421,6 +449,8 @@ export interface FonteDoClienteLinha {
   amostra_path: string | null;
   origem: string;
   biblioteca_id: string | null;
+  /** Marca da fonte (nulo = do cliente, usada pela principal). */
+  marca_id?: string | null;
 }
 
 export const chaveDasFontes = (clientId: string) => ["mesa", "fontes", clientId];
@@ -434,7 +464,7 @@ export function useFontesDoCliente(clientId: string) {
     queryFn: async (): Promise<FonteDoClienteLinha[]> => {
       const { data, error } = await (supabase as any)
         .from("cliente_fontes")
-        .select("id, nome, papel, storage_path, amostra_path, origem, biblioteca_id")
+        .select("id, nome, papel, storage_path, amostra_path, origem, biblioteca_id, marca_id")
         .eq("client_id", clientId)
         .order("criado_em", { ascending: true });
       if (error) throw error;
@@ -580,6 +610,8 @@ export interface ReferenciaDoCliente {
   tags: string[];
   ativa: boolean;
   criado_em: string | null;
+  /** Marca da referência (nulo = do cliente). */
+  marca_id?: string | null;
   nome: string;
   imagem: { bucket: string; caminho: string } | null;
 }
@@ -653,7 +685,7 @@ export function useReferenciasDoCliente(clientId: string) {
     queryFn: async (): Promise<ReferenciaDoCliente[]> => {
       const { data, error } = await (supabase as any)
         .from("cliente_referencias")
-        .select("id, origem, papel, url_origem, storage_path, workspace_node_id, file_id, leitura, tags, ativa, criado_em")
+        .select("id, origem, papel, url_origem, storage_path, workspace_node_id, file_id, leitura, tags, ativa, criado_em, marca_id")
         .eq("client_id", clientId)
         .order("criado_em", { ascending: false })
         .limit(1000);

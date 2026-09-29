@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { recortarDossie } from "./dossie-recortado.ts";
+import { etiquetasDaOrigem } from "./heranca-da-marca.ts";
 
 const txt = (v: unknown, max = 4000) => (v == null ? "" : String(v)).slice(0, max).trim();
 
@@ -35,19 +36,26 @@ export const FILTRO_SEM_IMAGEM_NEM_VIDEO = "mime_type.is.null,and(mime_type.not.
  * Texto dos documentos do cliente, os de identidade primeiro, até o limite
  * de caracteres (o texto inteiro de cada documento, na ordem das partes).
  */
-export async function lerDocumentosDeMarca(db: SupabaseClient, clientId: string, limite = 18_000): Promise<DocumentoDeMarca[]> {
+export async function lerDocumentosDeMarca(
+  db: SupabaseClient,
+  clientId: string,
+  limite = 18_000,
+  // Frente MC: só os documentos dos projetos da marca aberta (a CME não lê o documento mestre da Acerbi).
+  doProjeto: ((projectId: string | null) => boolean) | null = null,
+): Promise<DocumentoDeMarca[]> {
   // AB2: imagem e vídeo saem ANTES do limite. Antes os 400 mais recentes
   // vinham com as fotos junto e um cliente com muita foto ficava sem documento.
   const { data: arquivos } = await db
     .from("files")
-    .select("id, file_name, file_type, mime_type, created_at")
+    .select("id, file_name, file_type, mime_type, created_at, project_id")
     .eq("client_id", clientId)
     .is("archived_at", null)
     .or(FILTRO_SEM_IMAGEM_NEM_VIDEO)
     .order("created_at", { ascending: false })
     .limit(400);
-  const candidatos = ((arquivos as { id: string; file_name: string; file_type: string | null; mime_type: string | null }[] | null) ?? [])
-    .filter((f) => !MIME_IMAGEM.test(f.mime_type || "") && !NOME_IMAGEM.test(f.file_name || "") && !/^video\//i.test(f.mime_type || ""));
+  const candidatos = ((arquivos as { id: string; file_name: string; file_type: string | null; mime_type: string | null; project_id: string | null }[] | null) ?? [])
+    .filter((f) => !MIME_IMAGEM.test(f.mime_type || "") && !NOME_IMAGEM.test(f.file_name || "") && !/^video\//i.test(f.mime_type || ""))
+    .filter((f) => !doProjeto || doProjeto(f.project_id ?? null));
   if (!candidatos.length) return [];
 
   const { data: pedacos } = await db
@@ -139,17 +147,24 @@ export type ArteAprovada = {
  * Artes já feitas e aprovadas do cliente (a raiz de cada entrega em
  * materiais), as mais recentes primeiro. Mostram a identidade real da marca.
  */
-export async function artesAprovadas(db: SupabaseClient, clientId: string, limite = 12): Promise<ArteAprovada[]> {
+export async function artesAprovadas(
+  db: SupabaseClient,
+  clientId: string,
+  limite = 12,
+  // Frente MC: só as artes dos projetos da marca aberta.
+  doProjeto: ((projectId: string | null) => boolean) | null = null,
+): Promise<ArteAprovada[]> {
   const { data } = await db
     .from("files")
-    .select("id, file_name, file_type, mime_type, storage_bucket, storage_path, file_url, caption, created_at, approval_status, visibility")
+    .select("id, file_name, file_type, mime_type, storage_bucket, storage_path, file_url, caption, created_at, approval_status, visibility, project_id")
     .eq("client_id", clientId)
     .eq("folder", "materiais")
     .is("parent_file_id", null)
     .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(200);
-  const linhas = (data as (ArteAprovada & { mime_type: string | null; approval_status: string | null; visibility: string | null })[] | null) ?? [];
+  const linhas = ((data as (ArteAprovada & { mime_type: string | null; approval_status: string | null; visibility: string | null; project_id: string | null })[] | null) ?? [])
+    .filter((f) => !doProjeto || doProjeto(f.project_id ?? null));
   const imagens = linhas.filter((f) => MIME_IMAGEM.test(f.mime_type || "") || NOME_IMAGEM.test(f.file_name || ""));
   // Aprovada pelo cliente, ou compartilhada com ele sem pedir aprovação: as
   // duas são arte que foi para o ar com a marca dele.
@@ -336,7 +351,10 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
   // inserir de novo e o lote de 200 inteiro caía no índice único.
   type Existente = { workspace_node_id: string | null; file_id: string | null };
   type No = { id: string; parent_id: string | null; kind: string; name: string; mime: string | null; storage_path: string | null };
-  type ArqDoAcervo = { id: string; file_name: string; file_type: string | null; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
+  type ArqDoAcervo = { id: string; file_name: string; file_type: string | null; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null; project_id?: string | null };
+  // Frente MC: foto nova de marca que não é a principal (projeto dela ou pasta com o nome dela) já entra com a etiqueta marca:<id>.
+  const marcasDoAcervo = await db.from("cliente_marcas").select("id, nome, principal, project_id").eq("client_id", clientId)
+    .then((r) => ((r.data as { id: string; nome: string; principal: boolean; project_id: string | null }[] | null) ?? []), () => []);
   const [existentes, nos, arquivos] = await Promise.all([
     todasAsPaginas<Existente>((de, ate) =>
       db.from("cliente_imagens").select("workspace_node_id, file_id").eq("client_id", clientId).order("id", { ascending: true }).range(de, ate), 20_000),
@@ -347,7 +365,7 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
     // de fora; arte pronta entra marcada como "arte" e a leitura separa o resto.
     todasAsPaginas<ArqDoAcervo>((de, ate) =>
       db.from("files")
-        .select("id, file_name, file_type, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
+        .select("id, file_name, file_type, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id, project_id")
         .eq("client_id", clientId)
         .is("archived_at", null)
         .is("parent_file_id", null)
@@ -383,7 +401,9 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
     if (!(MIME_IMAGEM.test(n.mime || "") || NOME_IMAGEM.test(n.name))) continue;
     const c = caminho(n);
     if (c.referencia) continue;
+    const etiquetasNo = etiquetasDaOrigem({ caminho: `${c.pasta ?? ""} / ${n.name}` }, marcasDoAcervo);
     linhas.push({
+      tags: etiquetasNo,
       client_id: clientId,
       origem: "workspace",
       workspace_node_id: n.id,
@@ -402,7 +422,9 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
     if (!c) continue;
     const pasta = a.folder ? `Arquivos / ${a.folder}` : "Arquivos";
     const ehArte = TIPO_DE_ARTE.test(a.file_type || "") || /(1080x1350|1080x1080|feed|stories|carrossel)/i.test(a.file_name || "");
+    const etiquetasArq = etiquetasDaOrigem({ projectId: a.project_id ?? null }, marcasDoAcervo);
     linhas.push({
+      tags: etiquetasArq,
       client_id: clientId,
       origem: "arquivo",
       file_id: a.id,

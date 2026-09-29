@@ -13,6 +13,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
@@ -134,6 +135,8 @@ export default function MesaRoteiros() {
   const clienteNaLista = clientes.find((c) => c.id === clientIdUrl) || null;
   const naoEstaNaLista = clientesQuery.isSuccess && !clientesQuery.isFetching && clientes.length > 0 && !clienteNaLista;
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
+  // Frente MC: marca aberta (só no cliente com 2 ou mais marcas); vai para o endereço e para as chamadas (marca_id).
+  const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   // Rascunho do campo do agente, guardado por cliente (sair e voltar mantém).
@@ -151,7 +154,7 @@ export default function MesaRoteiros() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "agenda", roteiro: null, tarefa: null, modelo: null, avulso: null });
+    mudar({ client: id, etapa: o.etapa || "agenda", roteiro: null, tarefa: null, modelo: null, avulso: null, marca: null });
   };
 
   const abrirRoteiro = (id: string, destino: Etapa = "roteiro") => mudar({ etapa: destino, roteiro: id, tarefa: null, avulso: null, modelo: null });
@@ -216,8 +219,8 @@ export default function MesaRoteiros() {
           setModelosAbertos(true);
         },
         versaoCarteira,
-        marcas: [],
-        marca: null,
+        marcas,
+        marca,
       }
     : null;
 
@@ -228,6 +231,8 @@ export default function MesaRoteiros() {
       titulo="Mesa Roteiros"
       clientId={clientId}
       telaCheia={telaCheia}
+      // Frente MC (29/09): a Mesa Roteiros troca de marca como as outras mesas (a CME roteiriza com o contexto da CME).
+      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, roteiro: null, tarefa: null }, true)} /> : null}
       cliente={<SeletorDeClientesDaMesa mesa="roteiros" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
       etapas={
         clientId ? (

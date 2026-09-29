@@ -21,7 +21,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ErroDeRegra, limpo, listaDeTextos, UUID } from "./calculos.ts";
 // Frente AE (28/09): com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
-import { campanhaDaMarca, type MarcaLeve, resolverMarca } from "../_shared/marca.ts";
+import { campanhaDaMarca, type MarcaLeve, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
+import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
@@ -272,7 +273,7 @@ export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string,
       .order("criado_em", { ascending: false })
       .limit(40),
     db.from("calendario_propostas")
-      .select("id, itens, status, periodo_inicio, periodo_fim")
+      .select("id, itens, status, periodo_inicio, periodo_fim, project_id")
       .eq("client_id", clientId)
       .in("status", ["pronta", "gravada"])
       .lte("periodo_inicio", ref.fim)
@@ -281,7 +282,11 @@ export async function lerCampanhasParaFoto(db: SupabaseClient, clientId: string,
       .limit(20),
   ]);
   const linhas = (campanhas.error ? [] : ((campanhas.data ?? []) as LinhaCampanhaDaMesa[])).filter((l) => campanhaDaMarca((l as { identidade?: unknown }).identidade, marca));
-  const itens = propostas.error ? [] : itensDasPropostas((propostas.data ?? []) as { id: string; itens: unknown }[]);
+  // Frente MC: o calendário do mês da marca (a proposta da Acerbi não define a campanha do mês da CME).
+  const marcasDoMes = marca ? await marcasDoCliente(db, clientId) : [];
+  const propostasDaMarca = ((propostas.data ?? []) as { id: string; itens: unknown; project_id?: string | null }[])
+    .filter((p) => projetoDaMarcaAberta(p.project_id ?? null, marca, marcasDoMes));
+  const itens = propostas.error ? [] : itensDasPropostas(propostasDaMarca);
   return marcarCampanhaDoMes(linhas, itens, agora);
 }
 

@@ -7,6 +7,8 @@ import { botao, juntar } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { useAvisarErro } from "./Custo";
+import { useFiltroDaMarca } from "./MesaContexto";
+import { filtrarPorMarca } from "@/lib/mesa/marcas";
 import {
   dataCurtaBr,
   type EvolucaoDaPauta,
@@ -112,20 +114,23 @@ export const chaveDaLinhaDeEvolucao = (clientId: string) => ["mesa", "linha-de-e
 
 /** As pautas ligadas do cliente, por pilar (das propostas mais recentes). */
 export default function LinhaDeEvolucaoDoMes({ clientId }: { clientId: string }) {
+  // Frente MC: só as pautas das propostas da marca aberta.
+  const filtro = useFiltroDaMarca();
   const consulta = useQuery({
-    queryKey: chaveDaLinhaDeEvolucao(clientId),
+    queryKey: [...chaveDaLinhaDeEvolucao(clientId), filtro ? JSON.stringify(filtro) : ""],
     enabled: !!clientId,
     staleTime: 60_000,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data: bruto, error } = await (supabase as any)
         .from("calendario_propostas")
-        .select("id, status, itens")
+        .select("id, status, itens, project_id")
         .eq("client_id", clientId)
         .neq("status", "descartada")
         .order("criado_em", { ascending: false })
         .limit(40);
       if (error) throw error;
-      return linhasDeEvolucao(nosDasPropostas(data || []));
+      const data = filtrarPorMarca((bruto || []) as { project_id?: string | null }[], filtro);
+      return linhasDeEvolucao(nosDasPropostas(data as any[]));
     },
   });
   const linhas = consulta.data || [];

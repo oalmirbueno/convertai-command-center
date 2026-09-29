@@ -9,10 +9,11 @@
  * - a marca vem, nesta ordem, do projeto do item (tarefa ou proposta), do
  *   marca_id que a tela manda (casca das mesas) e, sem pista, da principal;
  * - marca de outro cliente nunca vale: a lista é sempre a do cliente do pedido;
- * - marca principal: o kit do cliente, com o que ela tiver preenchido por cima;
- * - outra marca: logo e paleta só dela (nunca do cliente); estilo, regras e
- *   tom do cliente quando ela deixa vazio; contexto extra soma ao do cliente;
- *   referências só as dela; fontes as dela e, sem nenhuma, as do cliente.
+ * - a herança mora em heranca-da-marca.ts (regra única, a mesma da tela):
+ *   principal = o kit do cliente com o que ela tiver preenchido por cima;
+ *   outra marca = SÓ o dela (logo, paleta, estilo, regras, tom, contexto,
+ *   referências, fontes, acervo, Instagram). Vazio fica vazio: nunca o do
+ *   cliente, nunca o da outra marca (frente MC, 29/09).
  *
  * Quem usa: estudio-arte (kit, logo, fontes, referências, contexto),
  * agente-calendario (contexto, projeto do mês, direção ao gravar), mesa-ads e
@@ -20,7 +21,18 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { type ContextoConsolidado, lerContextoConsolidado, lerMarcaParaDirecao } from "./contexto-cliente.ts";
+import { type ContextoConsolidado, juntarDossies, lerContextoConsolidado, lerDossie, lerMarcaParaDirecao } from "./contexto-cliente.ts";
+import {
+  contasDaMarcaAberta,
+  contextoDaMarcaAberta,
+  etiquetaDaMarca as etiquetaDaMarcaCentral,
+  fotoDaMarcaAberta,
+  linhaDaMarca,
+  logosDaMarca,
+  preenchido,
+  projetoDaMarcaAberta,
+  valorEfetivo,
+} from "./heranca-da-marca.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -116,37 +128,24 @@ type KitBase = {
 } & Record<string, unknown>;
 
 /**
- * Kit do cliente com a marca por cima. Sem marca devolve o mesmo objeto.
- * Principal: cada campo preenchido na marca vale; o resto é do cliente.
- * Outra marca: logo, paleta e estilo só dela (frente AE, 28/09, dono: "na
- * Acerbi está misturando tudo"); as regras dela ou, sem nenhuma, as do
- * cliente (as regras do dono valem para as duas marcas).
+ * Kit do cliente com a marca por cima (regra única de heranca-da-marca.ts).
+ * Sem marca devolve o mesmo objeto. Principal: cada campo preenchido na marca
+ * vale; o resto é do cliente. Outra marca: logo, paleta, estilo, regras e
+ * contexto só dela; vazio fica vazio (frente MC, 29/09: antes as regras e o
+ * contexto de negócio da Acerbi passavam para a CME).
  */
 export function kitComMarca<K extends KitBase | null>(kit: K, marca: MarcaDoCliente | null): K {
   if (!marca) return kit;
   const base: KitBase = kit ? { ...kit } : {};
-  const paletaDaMarca = Array.isArray(marca.paleta) && marca.paleta.length ? marca.paleta : null;
-  if (marca.principal) {
-    if (paletaDaMarca) base.paleta = paletaDaMarca;
-    if (marca.logo_path || marca.logo_file_id) {
-      base.logo_path = marca.logo_path;
-      base.logo_file_id = marca.logo_file_id;
-    }
-    if (marca.logo_alt_path || marca.logo_alt_file_id) {
-      base.logo_alt_path = marca.logo_alt_path;
-      base.logo_alt_file_id = marca.logo_alt_file_id;
-    }
-  } else {
-    base.paleta = paletaDaMarca ?? [];
-    base.logo_path = marca.logo_path;
-    base.logo_file_id = marca.logo_file_id;
-    base.logo_alt_path = marca.logo_alt_path;
-    base.logo_alt_file_id = marca.logo_alt_file_id;
-  }
-  if (temTexto(marca.estilo)) base.estilo = marca.estilo;
-  else if (!marca.principal) base.estilo = null;
-  if (temTexto(marca.regras)) base.regras = marca.regras;
-  if ("contexto" in base || marca.contexto) {
+  base.paleta = valorEfetivo("paleta", marca, Array.isArray(marca.paleta) ? marca.paleta : null, Array.isArray(base.paleta) ? base.paleta : null, [] as unknown[]);
+  const logos = logosDaMarca(marca, marca, base as Record<string, string | null>);
+  base.logo_path = logos.logo_path;
+  base.logo_file_id = logos.logo_file_id;
+  base.logo_alt_path = logos.logo_alt_path;
+  base.logo_alt_file_id = logos.logo_alt_file_id;
+  base.estilo = valorEfetivo("estilo", marca, marca.estilo, (base.estilo as string | null | undefined) ?? null, null as string | null);
+  base.regras = valorEfetivo("regras", marca, marca.regras, (base.regras as string | null | undefined) ?? null, null as string | null);
+  if ("contexto" in base || marca.contexto || !marca.principal) {
     const c = base.contexto && typeof base.contexto === "object" ? (base.contexto as ContextoConsolidado) : {};
     base.contexto = contextoComMarca(c, marca);
   }
@@ -154,24 +153,20 @@ export function kitComMarca<K extends KitBase | null>(kit: K, marca: MarcaDoClie
 }
 
 /**
- * Contexto consolidado do cliente com a marca por cima: campos preenchidos no
- * contexto da marca valem, o tom da marca vale sobre o tom do cliente, e o
- * contexto extra entra em campo próprio (marca). A descrição da logo do
- * cliente não vale para outra marca.
+ * Contexto consolidado com a marca por cima (regra única). Principal: o do
+ * cliente com o dela por cima. Outra marca: só o contexto dela (negócio,
+ * público, oferta, tipografia, logo, lacunas); nada do cliente. O tom da
+ * marca vale sobre o do contexto; o contexto extra entra em campo próprio.
  */
 export function contextoComMarca(base: ContextoConsolidado, marca: MarcaDoCliente | null): ContextoConsolidado & { marca?: Record<string, unknown> } {
   if (!marca) return base;
-  const saida: Record<string, unknown> = { ...(base || {}) };
   const daMarca = marca.contexto && typeof marca.contexto === "object" ? marca.contexto : {};
-  for (const k of Object.keys(daMarca)) {
-    const v = (daMarca as Record<string, unknown>)[k];
-    if (v == null || v === "" || (Array.isArray(v) && !v.length)) continue;
-    saida[k] = v;
-  }
+  const saida = contextoDaMarcaAberta(marca, daMarca, (base || {}) as Record<string, unknown>);
+  const tomDoContexto = preenchido(saida.tom_de_voz) ? (saida.tom_de_voz as string) : null;
+  const tom = valorEfetivo("tom", marca, temTexto(marca.tom) ? marca.tom : null, tomDoContexto, null as string | null);
   if (temTexto(marca.tom)) saida.tom_de_voz = marca.tom;
-  // Frente AE: outra marca sem tom próprio não herda o tom da principal (fica sem tom, nunca o da outra).
-  else if (!marca.principal && !temTexto((daMarca as Record<string, unknown>).tom_de_voz)) delete saida.tom_de_voz;
-  if (!marca.principal && !(daMarca as Record<string, unknown>).logo) delete saida.logo;
+  else if (tom) saida.tom_de_voz = tom;
+  else delete saida.tom_de_voz;
   saida.marca = {
     nome: marca.nome,
     principal: marca.principal,
@@ -189,25 +184,19 @@ export function contextoComMarca(base: ContextoConsolidado, marca: MarcaDoClient
  */
 export function fontesDaMarca<F extends { marca_id?: string | null }>(fontes: F[], marca: MarcaLeve | null): F[] {
   if (!marca) return fontes;
-  if (marca.principal) return fontes.filter((f) => !f.marca_id || f.marca_id === marca.id);
-  return fontes.filter((f) => f.marca_id === marca.id);
+  return fontes.filter((f) => linhaDaMarca(f.marca_id, marca));
 }
 
-/** Etiqueta da marca numa foto do acervo (cliente_imagens.tags), sem SQL novo. */
-export const etiquetaDaMarca = (marcaId: string) => `marca:${marcaId}`;
+/** Etiqueta da marca numa foto do acervo (cliente_imagens.tags), sem SQL novo. Regra em heranca-da-marca.ts. */
+export const etiquetaDaMarca = etiquetaDaMarcaCentral;
 
 /**
- * A foto do acervo vale para a escolha automática desta marca? Sem marca:
- * sempre. Com a etiqueta de outra marca: nunca. Com a dela: sim. Sem
- * etiqueta: só na principal (onde o acervo sempre esteve). A equipe ainda
- * escolhe qualquer foto à mão no Estúdio; aqui é o que o diretor pega sozinho.
+ * A foto do acervo vale para esta marca? Sem marca: sempre. Com a etiqueta
+ * de outra marca: nunca. Com a dela: sim. Sem etiqueta: só na principal.
+ * Regra única em heranca-da-marca.ts (fotoDaMarcaAberta), a mesma da tela.
  */
 export function fotoDaMarca(tags: string[] | null | undefined, marca: MarcaLeve | null): boolean {
-  if (!marca) return true;
-  const lista = Array.isArray(tags) ? tags : [];
-  const deMarcas = lista.filter((t) => typeof t === "string" && t.indexOf("marca:") === 0);
-  if (!deMarcas.length) return marca.principal;
-  return deMarcas.indexOf(etiquetaDaMarca(marca.id)) >= 0;
+  return fotoDaMarcaAberta(tags, marca);
 }
 
 /**
@@ -373,4 +362,61 @@ export async function lerMarcaParaDirecaoDaMarca(db: SupabaseClient, clientId: s
     tomDeVoz: contexto.tom_de_voz ?? null,
     temLogo: !!(kit.logo_path || kit.logo_file_id),
   };
+}
+
+// ------------------------------------------------------ leituras por marca (frente MC)
+
+/**
+ * Dossiê atual da marca: principal fica com o geral (sem projeto) e os dos
+ * projetos que não são de outra marca; outra marca, só o do projeto dela
+ * (nunca o dossiê da Acerbi na CME). Sem marca: o mesmo de lerDossie.
+ */
+export async function lerDossieDaMarca(db: SupabaseClient, clientId: string, marca: MarcaLeve | null, limite = 6000): Promise<string | null> {
+  if (!marca) return await lerDossie(db, clientId, limite);
+  try {
+    const [{ data }, marcas] = await Promise.all([
+      db
+        .from("client_dossiers")
+        .select("content, summary, dossier_type, project_id, created_at")
+        .eq("client_id", clientId)
+        .eq("is_current", true)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      marcasDoCliente(db, clientId),
+    ]);
+    const linhas = ((data as { content: string | null; summary: string | null; dossier_type: string | null; project_id: string | null }[] | null) ?? [])
+      .filter((l) => projetoDaMarcaAberta(l.project_id, marca, marcas))
+      .slice(0, 3);
+    if (!linhas.length) return null;
+    return juntarDossies(linhas, limite) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Contas (external_accounts) da marca: ids para filtrar métricas, posts e a
+ * conta do Instagram. Sem marca: null (sem filtro). Outra marca sem conta
+ * ligada ao projeto dela: lista vazia (nunca as da principal).
+ */
+export async function contasDaMarcaDoCliente(db: SupabaseClient, clientId: string, marca: MarcaLeve | null): Promise<string[] | null> {
+  if (!marca) return null;
+  try {
+    const [contas, ligacoes, marcas] = await Promise.all([
+      db.from("external_accounts").select("id").eq("client_id", clientId),
+      db.from("project_external_accounts").select("project_id, external_account_id").eq("client_id", clientId),
+      marcasDoCliente(db, clientId),
+    ]);
+    const lista = ((contas.data as { id: string }[] | null) ?? []);
+    const lig = ((ligacoes.data as { project_id: string; external_account_id: string }[] | null) ?? []);
+    return contasDaMarcaAberta(lista, lig, marca, marcas).map((c) => c.id);
+  } catch {
+    return marca.principal ? null : [];
+  }
+}
+
+/** A linha (proposta, post, item) é da marca pelo projeto? Regra única de heranca-da-marca.ts. */
+export async function projetoNaMarca(db: SupabaseClient, clientId: string, marca: MarcaLeve | null, projectId: string | null | undefined): Promise<boolean> {
+  if (!marca) return true;
+  return projetoDaMarcaAberta(projectId, marca, await marcasDoCliente(db, clientId));
 }

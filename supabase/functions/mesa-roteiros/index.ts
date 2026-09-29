@@ -44,6 +44,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
+import { lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
@@ -346,12 +347,17 @@ type ContextoDaPeca = {
   termosPrivados: string[];
 };
 
-async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { campanhaId?: string | null; modeloRoteiroId?: string | null; tipo: TipoDeRoteiro }): Promise<ContextoDaPeca> {
+async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { campanhaId?: string | null; modeloRoteiroId?: string | null; tipo: TipoDeRoteiro; marcaId?: unknown }): Promise<ContextoDaPeca> {
   const cerebroP = resumoDoCerebro(servico(), clientId, ["geral", "calendario", "campanha", "copy"], { limite: 1800 });
+  // Frente MC (29/09): a marca da peça (projeto da tarefa) ou a aberta no topo; a CME não roteiriza com o contexto da Acerbi.
+  const marca = await resolverMarca(servico(), clientId, { task_id: peca ? (peca as { id?: string }).id : null, marca_id: opcoes.marcaId }).catch((e) => (registrarFalha("mesa-roteiros: marca da peça falhou", e), null));
+  const outraMarca = marca && !marca.principal ? marca : null;
   const [cliente, consolidado, dossie, propostas, modelos] = await Promise.all([
-    nomeDoCliente(clientId),
-    lerContextoConsolidado(servico(), clientId).catch((e) => (registrarFalha("mesa-roteiros: lerContextoConsolidado falhou", e), ({}))),
-    servico().from("client_dossiers").select("summary, dossier_type").eq("client_id", clientId).eq("is_current", true).order("effective_at", { ascending: false }).limit(1),
+    outraMarca ? Promise.resolve(outraMarca.nome) : nomeDoCliente(clientId),
+    (marca ? lerContextoDaMarca(servico(), clientId, marca) : lerContextoConsolidado(servico(), clientId)).catch((e) => (registrarFalha("mesa-roteiros: lerContextoConsolidado falhou", e), ({}))),
+    outraMarca
+      ? servico().from("client_dossiers").select("summary, dossier_type").eq("client_id", clientId).eq("is_current", true).eq("project_id", outraMarca.project_id ?? "00000000-0000-0000-0000-000000000000").order("effective_at", { ascending: false }).limit(1)
+      : servico().from("client_dossiers").select("summary, dossier_type").eq("client_id", clientId).eq("is_current", true).order("effective_at", { ascending: false }).limit(1),
     peca
       ? servico().from("calendario_propostas").select("id, itens, criado_em").eq("client_id", clientId).eq("status", "gravada").contains("task_ids", [peca.id]).order("criado_em", { ascending: false }).limit(1)
       : Promise.resolve({ data: [] as unknown[], error: null }),
@@ -560,6 +566,8 @@ type PedidoDeRoteiro = {
   origem: OrigemDaVersao;
   /** Mudar o tom: reescreve o roteiro atual com este tom. */
   tom?: string;
+  /** Frente MC: marca aberta no topo (sem tarefa, é ela que diz de qual marca é o roteiro). */
+  marcaId?: unknown;
 };
 
 type Gerado = Gravado & { custo_usd: number; saldo_usd: number; aviso_jev: AvisoDoJev | null; reserva_usada?: string };
@@ -568,7 +576,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
   const peca = p.taskId ? await lerPeca(p.clientId, p.taskId) : null;
   if (peca && !ehPecaDeVideo(peca.formato)) throw new ErroHttp(409, "peca_nao_e_video", "Esta peça da agenda não é de vídeo (Reels, vídeo, short ou story).");
   const [ctx, modelo, regras] = await Promise.all([
-    contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo }),
+    contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo, marcaId: p.marcaId }),
     modeloDeTexto(p.modeloId),
     // Frente AG2: as regras que a equipe ensinou valem na geração (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId: p.clientId, mesa: "roteiro" }),
@@ -697,6 +705,7 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloRoteiroId: idOuNulo(corpo.modelo_roteiro_id, "modelo_roteiro_id"),
     campanhaId: idOuNulo(corpo.campanha_id, "campanha_id"),
     origem: "ia",
+    marcaId: corpo.marca_id,
   });
   return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aviso_banco: r.aviso_banco || null, reserva_usada: r.reserva_usada });
 }
@@ -740,6 +749,7 @@ async function tomMudar(ch: Chamador, corpo: Record<string, unknown>) {
     campanhaId: linha.campanha_id,
     origem: "ia",
     tom,
+    marcaId: corpo.marca_id,
   });
   return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aprendido: await aprendendo });
 }

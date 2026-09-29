@@ -1782,8 +1782,11 @@ function depsDaAdaptacao(t: Trabalho, imagem: ImagemEntrada | null, criadoPor: s
 
 /** Contexto da lâmina para o julgamento e a cena: copy, roteiro do item, ideia do diretor e o negócio do cliente. */
 async function contextoDaAdaptacao(t: Trabalho, card: CardDirecao, total: number, nomeCliente: string): Promise<ContextoDaLamina> {
+  // Frente MC: com a CME (marca que não é a principal) aberta, o negócio, o público e a oferta são os dela, nunca os da Acerbi.
   const [ctx, tarefa] = await Promise.all([
-    lerContextoConsolidado(servico(), t.client_id).catch((e) => (registrarFalha("estudio-arte: contexto do cliente não lido (adaptação)", e, { trabalho_id: t.id }), {} as Awaited<ReturnType<typeof lerContextoConsolidado>>)),
+    Promise.all([lerContextoConsolidado(servico(), t.client_id), marcaDe(t.client_id, t)])
+      .then(([base, marca]) => contextoComMarca(base, marca))
+      .catch((e) => (registrarFalha("estudio-arte: contexto do cliente não lido (adaptação)", e, { trabalho_id: t.id }), {} as Awaited<ReturnType<typeof lerContextoConsolidado>>)),
     t.task_id && UUID.test(t.task_id)
       ? servico().from("tasks").select("title, description").eq("id", t.task_id).maybeSingle().then((r) => r.data as { title: string | null; description: string | null } | null, () => null)
       : Promise.resolve(null),

@@ -64,8 +64,8 @@ type Metrica =
  * O que cada número conta está em `medir` abaixo e em src/components/sistema/regras.ts.
  */
 const TETO: Record<Metrica, number> = {
-  fonteForaDaEscala: 1274, // 29/09: agentes das mesas na escala
-  fonteComNomeDoTailwind: 280, // 28/09: ondas 1 e 2 da padronização somadas
+  fonteForaDaEscala: 1269, // 29/09: agentes das mesas e marcas na escala
+  fonteComNomeDoTailwind: 279, // 28/09: ondas 1 e 2 da padronização somadas
   translucidoEmBloco: 7, // 28/09: ondas 1 e 2 da padronização somadas
   rolagemPresaNoCelular: 11, // 28/09: ondas 1 e 2 da padronização somadas
   rolagemDentroDeRolagem: 2, // 28/09: ondas 1 e 2 da padronização somadas

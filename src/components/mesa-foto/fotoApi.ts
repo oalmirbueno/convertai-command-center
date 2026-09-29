@@ -13,6 +13,8 @@ import {
   type Qualidade,
 } from "@/lib/mesa/api";
 import { invalidarAcervo } from "@/components/mesa/contextoDoCliente";
+import { useMarcaDaMesa } from "@/components/mesa/MesaContexto";
+import { fotoDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { novoId } from "@/components/mesa/estudioUtil";
 
 /**
@@ -1046,9 +1048,12 @@ function erroDeTabela(error: any, tabela: string): Error {
 }
 
 export function useFotos(clientId: string) {
+  // Frente MC: na Mesa Foto, só as fotos da marca aberta (etiqueta marca:<id>; sem etiqueta, só a principal).
+  const { marca } = useMarcaDaMesa();
   return useQuery({
     queryKey: chaveDasFotos(clientId),
     enabled: !!clientId,
+    select: marca ? (lista: FotoDoAcervo[]) => lista.filter((f) => fotoDaMarcaAberta(f.tags, marca)) : undefined,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<FotoDoAcervo[]> => {
