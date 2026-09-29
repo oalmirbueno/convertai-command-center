@@ -3,7 +3,7 @@
  * Sobe o catálogo de mockups e as texturas para o bucket `mockups` e grava as linhas de
  * public.mockup_catalogo e public.textura_catalogo (upsert pelo id).
  *
- * Antes: aplicar supabase/migrations/20260930070000_estudio_de_mockups.sql (cria bucket e tabelas).
+ * Antes: aplicar supabase/migrations/20260930110000_estudio_de_mockups.sql (cria bucket e tabelas).
  *
  * Chave de serviço: nunca em arquivo. Vem, nesta ordem,
  *   1) da variável SUPABASE_SERVICE_ROLE_KEY do processo, ou
@@ -107,7 +107,7 @@ async function main() {
   const { createClient } = await import("@supabase/supabase-js");
   const db = createClient(URL_DO_PROJETO, chaveDeServico(), { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: bucket, error: erroBucket } = await db.storage.getBucket(BUCKET);
-  if (erroBucket || !bucket) throw new Error(`O bucket ${BUCKET} não existe. Aplique a migration 20260930070000_estudio_de_mockups.sql antes.`);
+  if (erroBucket || !bucket) throw new Error(`O bucket ${BUCKET} não existe. Aplique a migration 20260930110000_estudio_de_mockups.sql antes.`);
 
   let feitos = 0;
   const falhas = [];

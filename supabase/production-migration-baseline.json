@@ -1641,22 +1641,6 @@
       "remote_name": "mesa_site",
       "remote_statements_sha256": "68d8ca657213d87385e2738e106fbace66007e75188004fb04715b2821cb11ef",
       "remote_hash_mode": "supabase_cli_split"
-    },
-    {
-      "version": "20260930070000",
-      "path": "supabase/migrations/20260930070000_estudio_de_mockups.sql",
-      "local_sha256": "b04c203309f35b162a25036e8ec15d0256bec963431752b26d668ee0bd8c3633",
-      "remote_name": "estudio_de_mockups",
-      "remote_statements_sha256": "ab311a5f58fcb62bc57961e1d1cee5d4bd10008ead408044895c30b998fc42f9",
-      "remote_hash_mode": "supabase_cli_split"
-    },
-    {
-      "version": "20260930100000",
-      "path": "supabase/migrations/20260930100000_selo_da_campanha.sql",
-      "local_sha256": "fd2c1c2b452bcae8514ab74800b3cae52b940006721be57b2d01f170642870b5",
-      "remote_name": "selo_da_campanha",
-      "remote_statements_sha256": "2435a583e9db13f856807ea5c116028c82df5258f3cb70df77ed5395ee6b0a09",
-      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -131,7 +131,7 @@ export function faltaOSqlDoSelo(e: unknown): boolean {
 }
 
 export function acoesDoSelo(deps: DepsDoSelo) {
-  const semSql = () => deps.erro(503, "selo_sem_sql", "O banco ainda não tem as versões do selo. Falta aplicar o SQL 20260930100000_selo_da_campanha.sql.");
+  const semSql = () => deps.erro(503, "selo_sem_sql", "O banco ainda não tem as versões do selo. Falta aplicar o SQL 20260930110100_selo_da_campanha.sql.");
   const falhaDoBanco = (e: unknown, codigo: string, mensagem: string) => (faltaOSqlDoSelo(e) ? semSql() : deps.erro(503, codigo, mensagem));
 
   // ---------------------------------------------------------------- leituras

@@ -258,7 +258,7 @@ describe("selo da campanha: servidor, Estúdio e SQL", () => {
   const selo = fonte("supabase/functions/agente-calendario/selo-da-campanha.ts");
   const cal = fonte("supabase/functions/agente-calendario/index.ts");
   const estudio = fonte("supabase/functions/estudio-arte/index.ts");
-  const sql = fonte("supabase/migrations/20260930100000_selo_da_campanha.sql");
+  const sql = fonte("supabase/migrations/20260930110100_selo_da_campanha.sql");
 
   it("a direção nasce da marca DA CAMPANHA (identidade.marca_id), com kit, fontes e regras do dono; modelo escolhido na hora e referências anexadas", () => {
     expect(selo).toContain("(c.identidade as Record<string, unknown>).marca_id");

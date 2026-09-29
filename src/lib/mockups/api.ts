@@ -13,7 +13,7 @@ import type { CamadasCarregadas } from "./webgl";
 export const BUCKET_MOCKUPS = "mockups";
 const db = supabase as any;
 
-/** A tabela ainda não existe (migration 20260930070000 não aplicada)? */
+/** A tabela ainda não existe (migration 20260930110000 não aplicada)? */
 export function semCatalogo(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   return error.code === "42P01" || error.code === "PGRST205" || /mockup_catalogo|textura_catalogo|mockup_aplicacoes/.test(String(error.message || ""));
