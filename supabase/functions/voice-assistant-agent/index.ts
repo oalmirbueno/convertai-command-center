@@ -675,7 +675,7 @@ async function tratarAcoesDoLancador(
       const agora = Date.now();
       const resposta = String(parsed.resposta || parsed.narrative || acao.resumo || "Pronto.").slice(0, 2000);
       const { data: gravadas } = await supabase.from("agente_mensagens").insert([
-        { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto.slice(0, 4000) || "(pedido por voz)", criado_em: new Date(agora).toISOString() },
+        { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto.slice(0, 4000) || "(pedido por voz)", criado_em: new Date(agora).toISOString(), anexos: [] },
         { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, anexos: [acao], criado_em: new Date(agora + 1).toISOString() },
       ]).select("id, papel");
       mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;

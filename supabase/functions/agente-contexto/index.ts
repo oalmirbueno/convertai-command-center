@@ -1152,9 +1152,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }),
   );
   // client_id é obrigatório em agente_mensagens: sem ele o insert falhava calado e a conversa nunca ficava salva.
+  // 29/09: em insert de várias linhas, a coluna que falta vai como null (não usa o default). anexos é NOT NULL:
+  // sem 'anexos: []' na linha do usuário as duas linhas eram recusadas e a mensagem sumia.
   const agora = Date.now();
   const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
-    { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString() },
+    { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString(), anexos: [] },
     { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString(), anexos: anexosDaResposta },
   ]).select("id, papel");
   if (erroMensagens) console.error("agente-contexto: conversa nao gravada", { client_id: clientId, erro: erroMensagens.message });
@@ -1763,7 +1765,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   const resposta = texto(o.resposta, 5000) || (anexos.length ? "A lista está pronta para você confirmar." : "Pronto.");
   const agora = Date.now();
   const { data: gravadas, error: erroMensagens } = await db.from("agente_mensagens").insert([
-    { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString() },
+    { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString(), anexos: [] },
     { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString(), anexos },
   ]).select("id, papel");
   if (erroMensagens) console.error("agente-contexto: plano nao gravado na conversa", { client_id: clientId, erro: erroMensagens.message });
