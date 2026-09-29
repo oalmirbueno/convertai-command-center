@@ -57,14 +57,33 @@ export default function CartaoDeAcao({
    */
   recemFeita?: boolean;
 }) {
-  const [atual, setAtual] = useState<AcaoDoAgente>(acao);
+  // O último estado conhecido desta proposta (mesma lista, mesmo id) vale sobre o que o pai guardou:
+  // o pai remonta o cartão com o anexo antigo (lateral que recolhe, conversa relida) e o cartão não pode
+  // voltar a oferecer Confirmar do que já foi feito.
+  const [atual, setAtualLocal] = useState<AcaoDoAgente>(() => maisAvancada(acao, ultimoEstado.get(chaveDoCartao(acao))));
+  const setAtual = (a: AcaoDoAgente) => {
+    lembrarEstado(a);
+    setAtualLocal(a);
+  };
   const [fazendo, setFazendo] = useState<PedidoDaAcao | null>(null);
   // Só vai sozinho quando a confirmação acontece nesta tela (reabrir a conversa não navega).
   const [acabouAgora, setAcabouAgora] = useState(recemFeita && !!acao.executada_direto);
   // Parar pedido no meio da sequência: vale depois do passo em curso.
   const pararPedido = useRef(false);
   const [parando, setParando] = useState(false);
-  useEffect(() => setAtual(acao), [acao]);
+  // AG2 (29/09): antes o efeito dependia da referência do objeto. acoesDaMensagem cria objetos novos a
+  // cada render do pai (ex.: digitar no campo), e o cartão feito voltava a "aberta", com Confirmar de novo
+  // (e o segundo clique dava "Esta ação já foi feita"). Agora só sincroniza quando o CONTEÚDO muda, e
+  // nunca volta para um estado mais atrasado do que o já visto.
+  const assinatura = assinaturaDaAcao(acao);
+  useEffect(() => {
+    setAtualLocal((velho) => {
+      const melhor = maisAvancada(acao, velho && chaveDoCartao(velho) === chaveDoCartao(acao) ? velho : ultimoEstado.get(chaveDoCartao(acao)));
+      lembrarEstado(melhor);
+      return melhor;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinatura]);
   const estado = estadoDaAcao(atual);
   const resultados = atual.resultados || [];
   const resultadoDe = (i: ItemDaAcaoDoAgente) => resultados.find((x) => x.ref === i.ref && x.operacao === i.operacao) || null;
@@ -115,7 +134,16 @@ export default function CartaoDeAcao({
         const f = frasesDoResultado(novo ? novo.resultados : undefined, novo && novo.parada_em ? novo.itens.length : undefined);
         toast.success(f.titulo, { description: novo && novo.sem_desfazer && !novo.resultados?.some((x) => !x.ok) && !novo.parada_em ? "Pronto." : f.descricao });
       } else if (pedido === "desfazer") {
-        toast.success("Voltou como estava", { description: `${(r && r.voltaram) || 0} ${r && r.voltaram === 1 ? "item voltou" : "itens voltaram"}.` });
+        const falharam = r && Array.isArray(r.falharam) ? r.falharam : [];
+        if (falharam.length) {
+          // AG2: parte não voltou. Antes o aviso dizia "Voltou como estava" e o motivo sumia.
+          toast.warning(`${(r && r.voltaram) || 0} voltaram, ${falharam.length} não`, {
+            description: falharam.slice(0, 3).map((f) => `${f.titulo || "item"}: ${f.motivo || "não foi possível"}`).join(". "),
+            duration: 12000,
+          });
+        } else {
+          toast.success("Voltou como estava", { description: `${(r && r.voltaram) || 0} ${r && r.voltaram === 1 ? "item voltou" : "itens voltaram"}.` });
+        }
       }
       onFeito?.(pedido, r || {});
       return r || {};
@@ -145,10 +173,10 @@ export default function CartaoDeAcao({
         <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 truncate">{titulo || "O agente vai fazer"} · {total} {total === 1 ? "item" : "itens"}</span>
       </p>
-      {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {atual.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {(andando || (fazendo === "confirmar" && feitosAgora > 0)) && (
         <div className="mt-2" role="status" aria-live="polite">
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             {fazendo ? (parando ? "Parando depois deste passo" : "Fazendo") : "Parou no meio"}: {feitosAgora} de {total}
           </p>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -175,7 +203,7 @@ export default function CartaoDeAcao({
                       <ArrowRight className="inline h-3 w-3" /> {para}
                     </span>
                   )}
-                  {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
+                  {motivo && <span className="block text-[11px] text-destructive">{motivo}</span>}
                 </span>
               </li>
             );
@@ -183,7 +211,7 @@ export default function CartaoDeAcao({
         </ul>
       )}
       {atual.recusados.length > 0 && (
-        <div className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
+        <div className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
           <p className="font-medium">Fica de fora:</p>
           <ul>
             {atual.recusados.map((r) => (
@@ -244,7 +272,7 @@ export default function CartaoDeAcao({
         )}
         {estado === "feita" && (
           <>
-            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
               {parada ? `Parado · ${resultados.filter((r) => r.ok).length} de ${total} feitos` : atual.executada_direto ? "Feito na hora" : "Feito"}
               {falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
@@ -259,7 +287,7 @@ export default function CartaoDeAcao({
           </>
         )}
         {(estado === "descartada" || estado === "desfeita") && (
-          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
             {estado === "desfeita" ? "Desfeito: voltou como estava" : "Cancelado: nada mudou"}
           </span>
@@ -267,6 +295,51 @@ export default function CartaoDeAcao({
       </div>
     </section>
   );
+}
+
+// ------------------------------------------------------------------ estado que não volta atrás
+
+/**
+ * Último estado visto de cada proposta nesta aba (id + itens): sobrevive a remontar o cartão.
+ * Mora no globalThis para os testes limparem entre um caso e outro (src/test/setup.ts) sem importar a tela.
+ */
+const GLOBAL = globalThis as unknown as { __estadosDosCartoesDeAcao?: Map<string, AcaoDoAgente> };
+const ultimoEstado: Map<string, AcaoDoAgente> = GLOBAL.__estadosDosCartoesDeAcao || (GLOBAL.__estadosDosCartoesDeAcao = new Map<string, AcaoDoAgente>());
+const MAX_LEMBRADOS = 300;
+
+/** Chave da proposta: o id e a lista (dois agentes nunca colidem pelo id curto). */
+export function chaveDoCartao(a: Pick<AcaoDoAgente, "id" | "agente" | "itens">): string {
+  return `${a.agente || ""}|${a.id || ""}|${(a.itens || []).map((i) => `${i.operacao}:${i.ref}:${i.alvo_id || ""}`).join(",")}`;
+}
+
+/** O que muda o cartão: estado e andamento (não a identidade do objeto). */
+export function assinaturaDaAcao(a: AcaoDoAgente): string {
+  return [chaveDoCartao(a), a.executada_em || "", a.descartada_em || "", a.desfeita_em || "", a.parada_em || "", (a.resultados || []).length].join("|");
+}
+
+function ordemDoEstado(a: AcaoDoAgente): number {
+  const e = estadoDaAcao(a);
+  return e === "desfeita" ? 3 : e === "feita" || e === "descartada" ? 2 : 1;
+}
+
+/** Entre o que o pai mandou e o que o cartão já viu, fica o mais adiantado (sem nunca voltar atrás). */
+export function maisAvancada(dada: AcaoDoAgente, vista: AcaoDoAgente | null | undefined): AcaoDoAgente {
+  if (!vista || chaveDoCartao(vista) !== chaveDoCartao(dada)) return dada;
+  const od = ordemDoEstado(dada);
+  const ov = ordemDoEstado(vista);
+  if (ov !== od) return ov > od ? vista : dada;
+  return (vista.resultados || []).length > (dada.resultados || []).length ? vista : dada;
+}
+
+function lembrarEstado(a: AcaoDoAgente) {
+  if (!a || !a.id) return;
+  const k = chaveDoCartao(a);
+  ultimoEstado.delete(k);
+  ultimoEstado.set(k, a);
+  if (ultimoEstado.size > MAX_LEMBRADOS) {
+    const primeira = ultimoEstado.keys().next();
+    if (!primeira.done) ultimoEstado.delete(primeira.value);
+  }
 }
 
 /**

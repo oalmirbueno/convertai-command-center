@@ -185,7 +185,24 @@ sozinho por `import.meta.glob`), com as props
 - `diretor_para_editor { client_id, projeto, titulo? }` -> versão rascunho com o projeto de edição:
   os planos na ordem do roteiro com o resultado escolhido (`plano.escolhido`), inteiros e em
   sequência; texto na tela vira clipe da trilha de texto no tempo do plano; `faltando` lista os
-  planos sem resultado. `diretor_editor_desfazer { versao_id }` volta (a versão vira rejeitada).
+  planos sem resultado. `diretor_editor_desfazer { versao_id }` volta (a versão vira rejeitada;
+  só rascunho e só a versão com a nota "Montado pelo diretor").
+- AG2 (29/09): a conversa do diretor mora em `agente_conversas` (agente `diretor_arte`,
+  `referencia_tipo` `mesa_videos`, `referencia_id` = id do projeto) e `agente_mensagens`; a tela relê
+  de lá. O modelo recebe o histórico (12 últimas), o ESTADO REAL do roteiro (pronto ou motivo,
+  gerando, prontos, escolhido, custo por variação), a referência do pedido ("a segunda" = p2, Jev) e
+  as regras ensinadas (`aprendizado-das-mesas.ts`, mesa `video`). `acao.tipo`: `gerar`, `refazer`
+  (roteiro volta com a composição nova) ou `mandar_ao_editor`; `variacoes` 1 a 4. O cartão mora na
+  mensagem do agente (`executar_acao_agente`/`desfazer_acao_agente` acham em `video_acoes` ou em
+  `agente_mensagens`). Gerar: `contexto.custos[ref]` é o teto confirmado de cada plano (o executor
+  usa o catálogo em uso e recusa se o preço subiu). Mandar ao editor: sem custo e com Desfazer;
+  ordem clara vai na hora (proposta guardada antes). A resposta traz `anexos` ("Aprendi", "Segui") e
+  `aviso_registro` quando a conversa não foi guardada.
+- `agente_agir { client_id, mesa, texto, ordem?, selecionados?, ultima_resposta? }` (agente da
+  mesa): entende e age em `enviar_para_edicao`, `arquivar`, `vincular` (ligar à cena) e `organizar`,
+  com os vídeos que o pedido aponta (r1..rN na ordem da tela). Sem custo e com Desfazer: ordem clara
+  vai na hora; dúvida volta como `pergunta`. `aprendizado_esquecer` e `aprendizado_guardar` (mesa
+  `video`, ou `edicao` com `mesa: "edicao"`).
 - `template_salvar { client_id, projeto, nome, da_agencia }` e
   `template_arquivar { template_id, arquivar }` (arquivar, nunca apagar).
 

@@ -118,7 +118,8 @@ describe("Mesa Roteiros: pedido de mês à frente estica a janela das peças", (
     const f = ler("supabase/functions/mesa-roteiros/index.ts");
     expect(f).toContain("const janela = janelaDasPecas(mensagem, hojeDoPedido);");
     expect(f).toContain("listasParaOAgente(clientId, janela)");
-    expect(f).toContain("blocoDasAcoesDosRoteiros(roteirosOrdenados, listas.pecas, janela, listas.totalDePecas)");
+    // AG2: o bloco também leva os comentários do roteiro aberto (c1..); a janela continua passando.
+    expect(f).toContain("blocoDasAcoesDosRoteiros(roteirosOrdenados, listas.pecas, janela, listas.totalDePecas, comentarios)");
   });
 });
 

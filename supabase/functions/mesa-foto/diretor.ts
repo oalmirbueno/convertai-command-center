@@ -83,6 +83,9 @@ import {
   caminhoDaAcaoDoDiretor,
   lerDestinoDoPost,
   type PostBruto,
+  lerEnsaioPedido,
+  lerFotosDoKit,
+  lerNomeDoKit,
 } from "./diretor-agentico.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
@@ -536,8 +539,99 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     await d.chamar("canvas_salvar", ch, { client_id: clientId, canvas: { id: canvasId, nome: c.nome, nos, ligacoes, viewport: c.viewport }, versao_esperada: c.versao, ...(vazio ? { arquivar: true } : {}) });
   }
 
+  // ---------------------------------------------------------------- produto (kit) e ensaio (AG2, 29/09)
+
+  const CAMPOS_DO_KIT = "id, client_id, tipo, nome, variante, atributos, invariantes, lacunas, autorizacao, frente_imagem_id, status";
+
+  /** O kit como o kit_salvar recebe (o mesmo conjunto de fotos de agora), conferido contra o cliente. */
+  async function kitParaSalvar(clientId: string, kitId: string): Promise<{ kit: Json; refs: Json[] }> {
+    const { data, error } = await db().from("foto_kits").select(CAMPOS_DO_KIT).eq("id", kitId).maybeSingle();
+    if (error) {
+      registrarFalha("mesa-foto: produto não lido para o diretor", error, { kit_id: kitId });
+      throw new Error("Não foi possível ler o produto agora.");
+    }
+    const k = data as Json | null;
+    if (!k || k.client_id !== clientId) throw new Error("Produto não encontrado neste cliente.");
+    const { data: refs, error: e2 } = await db().from("foto_kit_refs").select("imagem_id, papel, vista, prioridade").eq("kit_id", kitId);
+    if (e2) {
+      registrarFalha("mesa-foto: fotos do produto não lidas para o diretor", e2, { kit_id: kitId });
+      throw new Error("Não foi possível ler as fotos do produto.");
+    }
+    const { client_id: _c, ...kit } = k;
+    return { kit, refs: ((refs as Json[] | null) ?? []).map((r) => ({ imagem_id: r.imagem_id, papel: r.papel, vista: r.vista ?? null, prioridade: r.prioridade ?? 100 })) };
+  }
+
+  async function salvarKit(ch: Chamador, clientId: string, kit: Json, refs: Json[]) {
+    await d.chamar("kit_salvar", ch, { client_id: clientId, kit, refs });
+  }
+
+  async function executarNoKit(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Json | null; aviso?: string }> {
+    const atual = await kitParaSalvar(clientId, item.alvo_id);
+    if (item.operacao === "renomear_kit") {
+      const n = lerNomeDoKit(item.para);
+      if (!n) throw new Error("O nome novo do produto não foi entendido.");
+      await salvarKit(ch, clientId, { ...atual.kit, nome: n.nome, variante: n.variante }, atual.refs);
+      return { desfazer: { nome: atual.kit.nome, variante: atual.kit.variante ?? null } };
+    }
+    const novas = lerFotosDoKit(item.para);
+    if (!novas.length) throw new Error("As fotos novas do produto não foram entendidas.");
+    const refs = novas.map((r) => {
+      const antes = atual.refs.find((x) => x.imagem_id === r.imagem_id && x.papel === r.papel);
+      return { imagem_id: r.imagem_id, papel: r.papel, vista: antes ? antes.vista : null, prioridade: antes ? antes.prioridade : 100 };
+    });
+    await salvarKit(ch, clientId, atual.kit, refs);
+    return { desfazer: { refs: atual.refs, frente_imagem_id: atual.kit.frente_imagem_id ?? null } };
+  }
+
+  async function reverterNoKit(ch: Chamador, clientId: string, r: ResultadoDoItem) {
+    const x = (r.desfazer || {}) as Json;
+    const atual = await kitParaSalvar(clientId, r.alvo_id);
+    if (r.operacao === "renomear_kit") {
+      await salvarKit(ch, clientId, { ...atual.kit, nome: x.nome, variante: x.variante ?? null }, atual.refs);
+      return;
+    }
+    const refs = Array.isArray(x.refs) ? (x.refs as Json[]) : [];
+    if (!refs.length) return;
+    await salvarKit(ch, clientId, { ...atual.kit, frente_imagem_id: x.frente_imagem_id ?? null }, refs);
+  }
+
+  /** Monta e salva o ensaio do produto SEM gerar (o mesmo caminho do cartão "Só montar o ensaio"). */
+  async function montarEnsaio(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer: Json; aviso?: string }> {
+    const e = lerEnsaioPedido(item.para);
+    if (!e) throw new Error("Diga se é variações ou campanha, e quantas fotos.");
+    const titulo = `${e.tipo === "campanha" ? "Campanha" : "Variações"} de ${item.titulo}`.slice(0, 160);
+    const sugestao: Json = e.tipo === "campanha"
+      ? { tipo: "campanha", titulo, motivo: "Montado pelo diretor a pedido da equipe.", kit_id: item.alvo_id, quantidade: e.quantidade, fotos: [] }
+      : { tipo: "plano_de_variacoes", titulo, motivo: "Montado pelo diretor a pedido da equipe.", kit_id: item.alvo_id, quantidade: e.quantidade, variacoes: [] };
+    const r = await d.chamar("agente_aplicar", ch, { client_id: clientId, kit_id: item.alvo_id, sugestao });
+    const ensaio = (r.ensaio || {}) as Json;
+    if (!ensaio.id) throw new Error("O ensaio não voltou salvo.");
+    const estimativa = Number(r.estimativa_usd);
+    const n = Array.isArray(ensaio.tomadas) ? (ensaio.tomadas as unknown[]).length : e.quantidade;
+    return {
+      desfazer: { ensaio_id: String(ensaio.id), tipo: e.tipo },
+      aviso: `Ensaio salvo com ${n} ${n === 1 ? "foto" : "fotos"}${isFinite(estimativa) && estimativa > 0 ? `; gerar custa ~US$ ${estimativa.toFixed(2)}` : ""}. Nada foi gerado: confirme a geração na etapa.`,
+    };
+  }
+
+  /** Desfazer do montar_ensaio: o ensaio vai para o arquivo (apagar é arquivar; o que já foi gerado fica no acervo). */
+  async function arquivarEnsaio(clientId: string, x: Json) {
+    const id = String(x.ensaio_id || "");
+    if (!UUID.test(id)) return;
+    const { error } = await db().from("foto_ensaios").update({ status: "arquivado" }).eq("id", id).eq("client_id", clientId);
+    if (error) {
+      registrarFalha("mesa-foto: ensaio não arquivado no Desfazer", error, { ensaio_id: id });
+      throw new Error("O ensaio não foi arquivado.");
+    }
+  }
+
   async function executarSemCusto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente, estado: EstadoDaExecucao): Promise<{ desfazer?: Json | null; aviso?: string } | void> {
     switch (item.operacao) {
+      case "renomear_kit":
+      case "fotos_do_kit":
+        return await executarNoKit(ch, clientId, item);
+      case "montar_ensaio":
+        return await montarEnsaio(ch, clientId, item);
       case "aprovar_e_enviar": {
         const [img] = await f.lerImagens(clientId, [item.alvo_id]);
         if (!img || img.ativa === false) throw new Error("A foto não está mais no acervo.");
@@ -580,6 +674,13 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
   async function reverterSemCusto(ch: Chamador, clientId: string, r: ResultadoDoItem) {
     const x = (r.desfazer || {}) as Json;
     switch (r.operacao) {
+      case "renomear_kit":
+      case "fotos_do_kit":
+        await reverterNoKit(ch, clientId, r);
+        return;
+      case "montar_ensaio":
+        await arquivarEnsaio(clientId, x);
+        return;
       case "aprovar_e_enviar":
         // A cópia em Arquivos fica (é registro do envio); a aprovação volta.
         if (x.aprovada === false) await d.chamar("acervo_decidir", ch, { client_id: clientId, imagem_id: r.alvo_id, decisao: "rejeitar" });
@@ -626,7 +727,9 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     if (!pd) throw new Error("O pedido desta foto não foi guardado. Peça de novo ao diretor.");
     let bookId: string | null = pd.operacao === "gerar_no_book" ? pd.alvo_id : null;
     if (pd.operacao === "gerar_do_prompt") bookId = await bookDoProduto(ch, clientId, String(pd.kit_id || ""));
-    const chamada = chamadaDaGeracao(pd, clientId, { bookId, marcaId });
+    // AG2: o que a equipe ensinou a EVITAR (guardado na proposta) vai no pedido de cada foto.
+    const evitar = ((acao.contexto || {}) as Json).evitar;
+    const chamada = chamadaDaGeracao(pd, clientId, { bookId, marcaId, evitar: Array.isArray(evitar) ? (evitar as string[]) : null });
     const r = await d.chamar(chamada.acao, ch, chamada.corpo);
     const imagem = (r.imagem || {}) as Json;
     if (!imagem.id) throw new Error("A foto não voltou do gerador.");
@@ -662,7 +765,13 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
 
   async function avisarNaConversa(g: AcaoGuardada, texto: string) {
     if (!g.mensagem.conversa_id) return;
-    await db().from("agente_mensagens").insert({ conversa_id: g.mensagem.conversa_id, client_id: g.mensagem.client_id, papel: "sistema", conteudo: texto }).then(() => undefined, () => undefined);
+    // AG2: a linha do resultado não some calada (o erro do insert vai para o log).
+    try {
+      const { error } = await db().from("agente_mensagens").insert({ conversa_id: g.mensagem.conversa_id, client_id: g.mensagem.client_id, papel: "sistema", conteudo: texto, anexos: [] });
+      if (error) registrarFalha("mesa-foto: resultado do diretor não gravado na conversa", error, { mensagem_id: g.mensagem.id });
+    } catch (e) {
+      registrarFalha("mesa-foto: resultado do diretor não gravado na conversa", e, { mensagem_id: g.mensagem.id });
+    }
   }
 
   /** diretor_executar_item: UMA foto da proposta paga (a tela chama item por item). */

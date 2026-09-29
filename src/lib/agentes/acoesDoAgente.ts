@@ -186,6 +186,8 @@ export interface RespostaDaAcao {
   feitos?: number;
   falhas?: number;
   voltaram?: number;
+  /** Desfazer: os itens que não voltaram, com o motivo (o cartão avisa). */
+  falharam?: Array<{ ref?: string; titulo?: string; motivo?: string }>;
   custo_usd?: number;
 }
 

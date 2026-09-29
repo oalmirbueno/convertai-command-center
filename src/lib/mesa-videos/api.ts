@@ -118,13 +118,108 @@ export function gravarProjetoDoDiretor(clientId: string, novo: ProjetoDoDiretor,
   avisar(clientId);
 }
 
+/**
+ * Volta o conteúdo anterior (bíblia, roteiro...). AG2 (29/09): mantém o id, a
+ * versão e a data do banco do projeto atual; antes voltava a versão velha e o
+ * próximo salvar (ou pedido ao diretor) dava "O projeto foi mudado em outra tela".
+ */
 export function desfazerProjetoDoDiretor(clientId: string): boolean {
   const m = lerProjeto(clientId);
   if (!m.anterior) return false;
-  memoria[clientId] = { atual: m.anterior, anterior: null };
-  gravarEstadoDaTela(chaveDoProjeto(clientId), m.anterior, "/mesa-videos");
+  const volta: ProjetoDoDiretor = { ...m.anterior, id: m.atual.id || m.anterior.id, versao: Math.max(m.atual.versao, m.anterior.versao), atualizado_em: m.atual.atualizado_em || m.anterior.atualizado_em };
+  memoria[clientId] = { atual: volta, anterior: null };
+  gravarEstadoDaTela(chaveDoProjeto(clientId), volta, "/mesa-videos");
   avisar(clientId);
   return true;
+}
+
+/** O projeto aberto agora (para quem precisa dele logo depois de um desfazer). */
+export const projetoAtualDoDiretor = (clientId: string): ProjetoDoDiretor => lerProjeto(clientId).atual;
+
+// ------------------------------------------------------------------ conversa do diretor (AG2, 29/09)
+
+/** Onde a conversa do diretor mora (igual a supabase/functions/mesa-videos/diretor.ts). */
+export const AGENTE_DA_CONVERSA_DO_DIRETOR = "diretor_arte";
+export const REFERENCIA_DA_CONVERSA_DO_DIRETOR = "mesa_videos";
+
+export interface MensagemGuardadaDoDiretor {
+  id: string;
+  papel: "usuario" | "agente";
+  conteudo: string;
+  anexos: unknown[];
+  criado_em: string;
+}
+
+export const chaveDaConversaDoDiretor = (clientId: string, projetoId: string | null) => ["mesa-videos", "diretor-conversa", clientId, projetoId || "sem-projeto"];
+
+/**
+ * A conversa guardada do projeto (agente_conversas + agente_mensagens). Sem
+ * projeto gravado: nada a ler (a tela fica com o que tem). Reabrir a mesa
+ * mostra as mensagens e os cartões no estado de agora (feito, desfeito...).
+ */
+export function useConversaDoDiretor(clientId: string, projetoId: string | null) {
+  return useQuery({
+    queryKey: chaveDaConversaDoDiretor(clientId, projetoId),
+    enabled: !!clientId && !!projetoId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+    queryFn: async (): Promise<{ conversaId: string | null; mensagens: MensagemGuardadaDoDiretor[] }> => {
+      const { data: conversas, error } = await (supabase as any)
+        .from("agente_conversas")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("agente", AGENTE_DA_CONVERSA_DO_DIRETOR)
+        .eq("referencia_tipo", REFERENCIA_DA_CONVERSA_DO_DIRETOR)
+        .eq("referencia_id", projetoId)
+        .order("criado_em", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const conversaId = Array.isArray(conversas) && conversas[0] ? String(conversas[0].id) : null;
+      if (!conversaId) return { conversaId: null, mensagens: [] };
+      const { data, error: e2 } = await (supabase as any)
+        .from("agente_mensagens")
+        .select("id, papel, conteudo, anexos, criado_em")
+        .eq("conversa_id", conversaId)
+        .order("criado_em", { ascending: false })
+        .limit(80);
+      if (e2) throw e2;
+      const mensagens = ((data || []) as any[])
+        .slice()
+        .reverse()
+        .filter((m) => m && (m.papel === "usuario" || m.papel === "agente"))
+        .map((m) => ({ id: String(m.id), papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || ""), anexos: Array.isArray(m.anexos) ? m.anexos : [], criado_em: String(m.criado_em || "") }));
+      return { conversaId, mensagens };
+    },
+  });
+}
+
+/**
+ * Os cartões do agente da mesa no estado de agora (video_acoes), pelos ids das
+ * mensagens que a tela guardou. Um cartão feito em outra aba não volta a pedir
+ * Confirmar. Sem a tabela: lista vazia (a tela fica com o que tem).
+ */
+export function useAcoesGuardadas(ids: string[]) {
+  const validos = ids.filter((x) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)).slice(-40);
+  return useQuery({
+    queryKey: ["mesa-videos", "acoes-guardadas", validos.join(",")],
+    enabled: validos.length > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+    queryFn: async (): Promise<Record<string, unknown[]>> => {
+      const { data, error } = await (supabase as any).from("video_acoes").select("id, anexos").in("id", validos);
+      if (error) {
+        if (tabelaAusente(error)) return {};
+        throw error;
+      }
+      const saida: Record<string, unknown[]> = {};
+      ((data || []) as { id: string; anexos: unknown }[]).forEach((l) => {
+        saida[String(l.id)] = Array.isArray(l.anexos) ? l.anexos : [];
+      });
+      return saida;
+    },
+  });
 }
 
 export function useProjetoDoDiretor(clientId: string): { projeto: ProjetoDoDiretor; podeDesfazer: boolean; mudar: (fn: (p: ProjetoDoDiretor) => ProjetoDoDiretor, guardarAnterior?: boolean) => void; trocar: (p: ProjetoDoDiretor) => void; desfazer: () => boolean } {

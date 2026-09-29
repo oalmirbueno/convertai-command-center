@@ -332,7 +332,8 @@ describe("agente da mesa (ações confirmadas)", () => {
     expect(alvos.map((a) => a.ref)).toEqual(["k1", "t1", "t2", "f1", "f2", "f3"]);
     expect(alvos.find((a) => a.ref === "f1")!.detalhe).toContain("produto mudou");
     // Frente AG: briefing, nome e aprovar território entraram no fim (as cinco de antes seguem iguais).
-    expect(OPERACOES_DA_PUBLICIDADE).toEqual(["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio"]);
+    // Frente AG2: avaliar a revisão, aprovar a foto conferida e refazer entraram depois (as de antes seguem iguais, na mesma ordem).
+    expect(OPERACOES_DA_PUBLICIDADE).toEqual(["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio", "avaliar_revisao", "aprovar_foto", "refazer_foto"]);
   });
 
   it("travas: reprova só quem mudou o produto; manda só aprovada; pede só com território aprovado", () => {

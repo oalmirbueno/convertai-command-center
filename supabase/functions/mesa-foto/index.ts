@@ -101,6 +101,7 @@ import {
   type AcaoDoAgente,
   type AcaoGuardada,
   acaoGuardadaNaMensagem,
+  anexosComCaminho,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
@@ -121,9 +122,20 @@ import {
   ESQUEMA_DAS_GERACOES_DO_DIRETOR,
   geracaoPodeIrSozinha,
   type ImagemBruta,
+  itensDaReferencia,
+  motivosDasSugestoesQueCairam,
+  normalizarOpcoes,
+  opcoesDoPacote,
   pedeParaLevar,
+  REGRA_DO_PEDIDO_DE_FAZER,
   regrasDoDiretor,
+  respostaSemPromessa,
+  sugestoesComIds,
 } from "./diretor-agentico.ts";
+// Frente AG2 (29/09): conversa gravada sem sumir, "essa/a segunda/todas", promessa vazia e aprendizado.
+import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
+import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+import { prometeuSemFazer } from "./promessa-do-diretor.ts";
 import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
@@ -910,6 +922,11 @@ const ESQUEMA_AGENTE = {
     agenda_das_fotos: S(["string", "null"]),
     ir_para: S("string", { enum: [...DESTINOS_DO_DIRETOR] }),
     ir_para_ref: S(["string", "null"]),
+    // AG2 (29/09): dúvida real vira UMA pergunta com respostas prontas (a tela mostra como botões).
+    pergunta: S(["string", "null"]),
+    opcoes: lista(S("string")),
+    // AG2: o que a equipe ensinou (regra) e as regras ensinadas que mudaram esta resposta.
+    ...CAMPOS_DO_APRENDIZADO,
   }),
 };
 
@@ -1023,18 +1040,18 @@ COMO RESPONDER (campo resposta), em blocos curtos, cada um numa linha própria c
 Entendi: o que você viu nas fotos e no pedido, em uma ou duas frases (se a palavra da equipe não bate com a foto, diga o que viu e siga com isso; ex.: "vi duas caixas do mouse NTC X, vou trabalhar com ele").
 Plano: o que você propõe e por quê, com números (quantas fotos, quais tipos).
 Atenção: só se houver lacuna real que muda o resultado (e o caminho padrão que você já tomou).
-Próximo passo: a ação exata que a equipe aplica agora.
+Próximo passo: o que foi para o cartão (ou a UMA pergunta que falta).
 
 SEJA PROATIVO:
 - Sempre proponha o próximo passo executável. Só pergunte quando a resposta muda o resultado, e mesmo assim entregue a sugestão com o caminho padrão.
-- Foto de caixa ou embalagem: leia marca, modelo, variante e códigos e devolva identificar_produto com os ids dessas fotos (ele pesquisa o produto real na internet, baixa fotos de referência e salva o kit). Nunca recuse porque "só tem a caixa".
+- Foto de caixa ou embalagem: leia marca, modelo, variante e códigos e devolva identificar_produto com os apelidos dessas fotos (ele pesquisa o produto real na internet, baixa fotos de referência e salva o kit). Nunca recuse porque "só tem a caixa".
 - Anexo com referencia_de_estilo true (print de perfil, moodboard) é só estilo: vai em referencias_estilo_ids, nunca em identificar_produto.
-- Sem kit do produto e com fotos anexadas do produto ou da caixa: a primeira sugestão é identificar_produto. Com kit (kit aberto ou kits_do_cliente), use o kit_id certo.
+- Sem kit do produto e com fotos anexadas do produto ou da caixa: a primeira sugestão é identificar_produto. Com kit, kit_id é o apelido k# dele. Ids e referências são sempre apelidos (i#, k#), nunca id.
 - "N fotos", "variações", "várias fotos", "tirar da caixa": plano_de_variacoes com N variações realmente diferentes (tipos da lista tipos_de_variacao; camera é um preset_id; cenario, luz, props e formato concretos). Padrão sem número: 8.
-- "Campanha", "modelo", "publicidade", "pessoa usando", print de perfil ou moodboard anexado: campanha com guia_de_estilo lido das imagens anexadas (paleta, luz, cenários, props, enquadramentos, clima, figurino, o que evitar), modelo (perfil, idade_aprox adulta, estilo) e as fotos (com_pessoa false para produto sozinho, flutuando ou em destaque). referencias_estilo_ids = ids das imagens anexadas que são referência de estilo. Extraia a DIREÇÃO, nunca copie foto, marca ou pessoa da referência.
+- "Campanha", "modelo", "publicidade", "pessoa usando" (com produto k#), print ou moodboard: campanha com guia_de_estilo lido das imagens anexadas (paleta, luz, cenários, props, enquadramentos, clima, figurino, o que evitar), modelo (perfil, idade_aprox adulta, estilo) e as fotos (com_pessoa false para produto sozinho, flutuando ou em destaque). referencias_estilo_ids = ids das imagens anexadas que são referência de estilo. Extraia a DIREÇÃO, nunca copie foto, marca ou pessoa da referência.
 
 TIPOS DE SUGESTÃO (até 6; em cada uma, campos que não se aplicam ficam null, listas vazias, textos vazios):
-- identificar_produto: imagem_ids (até 6 ids de fotos anexadas ou do acervo).
+- identificar_produto: imagem_ids (até 6 apelidos i# de fotos).
 - plano_de_variacoes: kit_id, quantidade (1 a 16), variacoes.
 - campanha: kit_id, quantidade, guia_de_estilo, modelo, fotos, referencias_estilo_ids.
 - tomada_nova e ajuste_tomada (só com ensaio aberto): campos com nome, objetivo, preset_id, cenario, luz, formato, pode_mudar.
@@ -1994,7 +2011,12 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     if (desconhecidas.length) throw new ErroHttp(400, "tomada_desconhecida", "Há tomada que não existe nesta receita.", { tomada_ids: desconhecidas });
   }
   const receita = pedidas && pedidas.size ? { ...receitaBase, tomadas: receitaBase.tomadas.filter((t) => pedidas.has(t.id)) } : receitaBase;
-  const [contexto, diretor] = await Promise.all([contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id), modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+  const [contexto, diretor, regrasEnsinadas] = await Promise.all([
+    contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
+    modeloDeTexto("diretor_arte", corpo.modelo_id),
+    // AG2: o que a equipe ensinou ao diretor vale também no plano (nunca lança).
+    regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
+  ]);
 
   const tomadasDaReceita = receita.tomadas.map((t) => ({
     id: t.id,
@@ -2020,7 +2042,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: SISTEMA_DIRETOR,
+    sistema: `${SISTEMA_DIRETOR}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `Planeje o ensaio com estes dados reais:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_PLANO,
     maxTokensSaida: 10_000,
@@ -2258,10 +2280,12 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const finalidade = limpo(corpo.finalidade, 200) || "anúncios, feed e loja";
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencia_ids) ? corpo.referencia_ids.map(String) : [];
-  const [contexto, diretor, estilos] = await Promise.all([
+  const [contexto, diretor, estilos, regrasEnsinadas] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, MAX_ESTILOS_NO_GERADOR),
+    // AG2: o que a equipe ensinou ao diretor vale também nas variações (nunca lança).
+    regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
   ]);
   const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: ctxVagas.temIdentidade ? "produto" : "embalagem" }, 2)
     .filter((f) => f.papel !== "estilo" && f.papel !== "cenario") as (RefDoKit & { imagem: LinhaImagem })[];
@@ -2296,7 +2320,7 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: SISTEMA_VARIACOES,
+    sistema: `${SISTEMA_VARIACOES}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
     mensagens: [{
       papel: "usuario",
       conteudo: `Escreva a direção de arte de cada vaga deste lote com os dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
@@ -2436,10 +2460,12 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const finalidade = limpo(corpo.finalidade, 200) || "campanha e feed";
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencias_estilo_ids) ? corpo.referencias_estilo_ids.map(String) : [];
-  const [contexto, diretor, estilos] = await Promise.all([
+  const [contexto, diretor, estilos, regrasEnsinadas] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, 4),
+    // AG2: o que a equipe ensinou ao diretor vale também na campanha (nunca lança).
+    regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
   ]);
   const comProduto = temIdentidade(kit, refs);
   const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: comProduto ? "produto" : "embalagem" }, 2)
@@ -2466,7 +2492,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: SISTEMA_CAMPANHA,
+    sistema: `${SISTEMA_CAMPANHA}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
     mensagens: [{
       papel: "usuario",
       conteudo: `Planeje a campanha com estes dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
@@ -2917,7 +2943,11 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
     });
     return { tomadas, status: statusDoEnsaio(tomadas, atual.status) };
   });
-  return json({ ensaio: gravado, versao: versaoFinal, imagem: imagem ? await comUrl(imagem) : null, custo_usd: 0 });
+  // AG2 (aprendizado): rejeitar com motivo ensina o diretor (vira regra só quando é gosto duradouro; nunca derruba a decisão).
+  const aprendido = decisao === "rejeitar" && motivo
+    ? await aprenderDoPedido(servico(), { clientId: ensaio.client_id, mesa: "foto", pedido: motivo, motivo, marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null, userId: ch.userId, forcar: true })
+    : null;
+  return json({ ensaio: gravado, versao: versaoFinal, imagem: imagem ? await comUrl(imagem) : null, aprendido, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------------ preparar
@@ -3561,17 +3591,19 @@ type LinhaMensagem = { papel: string; conteudo: string; criado_em: string };
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, referenciaId: string | null, abrirNova = false): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    const { data, error: erroConversa } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    // AG2: erro do banco não vira "conversa não encontrada".
+    if (erroConversa) {
+      registrarFalha("mesa-foto: conversa do diretor não lida", erroConversa, { conversa_id: id });
+      throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
+    }
     const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
     return c.id;
   }
-  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
-  q = referenciaId ? q.eq("referencia_id", referenciaId) : q.is("referencia_id", null);
   // "Nova conversa" na tela abre outra de verdade (antes reabria a última do mesmo kit).
-  const { data } = abrirNova ? { data: [] } : await q.order("criado_em", { ascending: false }).limit(1);
-  const achada = ((data as { id: string }[] | null) ?? [])[0];
-  if (achada) return achada.id;
+  const achada = abrirNova ? null : await conversaExistente(clientId, referenciaId);
+  if (achada) return achada;
   const { data: nova, error } = await servico().from("agente_conversas")
     .insert({ client_id: clientId, agente: AGENTE_DIRETOR, referencia_tipo: REF_CONVERSA, referencia_id: referenciaId, criado_por: ch.userId })
     .select("id").single();
@@ -3579,24 +3611,82 @@ async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unkn
   return (nova as { id: string }).id;
 }
 
-async function gravarMensagens(conversaId: string, clientId: string, msgs: { papel: "usuario" | "agente"; conteudo: string; anexos?: unknown[]; uso_id?: string | null }[]) {
-  const base = Date.now();
-  const { data, error } = await servico().from("agente_mensagens").insert(msgs.map((m, i) => ({
-    conversa_id: conversaId,
-    client_id: clientId,
-    criado_em: new Date(base + i).toISOString(),
-    papel: m.papel,
-    conteudo: m.conteudo.slice(0, 20_000),
-    anexos: m.anexos ?? [],
-    uso_id: m.uso_id || null,
-  }))).select("id, criado_em");
+/**
+ * A última conversa do diretor na referência (ensaio ou produto aberto; sem
+ * eles, a do cliente), sem criar. AG2: antes o erro de leitura era ignorado e
+ * a conversa seguinte nascia vazia (o histórico sumia calado).
+ */
+async function conversaExistente(clientId: string, referenciaId: string | null): Promise<string | null> {
+  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
+  q = referenciaId ? q.eq("referencia_id", referenciaId) : q.is("referencia_id", null);
+  const { data, error } = await q.order("criado_em", { ascending: false }).limit(1);
   if (error) {
-    // A resposta já foi cobrada: a tela recebe a resposta mesmo sem o histórico gravado.
-    console.error("[mesa-foto] mensagens nao gravadas", { conversa_id: conversaId, code: error.code });
-    return [];
+    registrarFalha("mesa-foto: conversa do diretor não lida", error, { client_id: clientId });
+    throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
   }
-  return ((data as { id: string; criado_em: string }[] | null) ?? []).slice().sort((a, b) => (a.criado_em < b.criado_em ? -1 : 1)).map((m) => m.id);
+  const achada = ((data as { id: string }[] | null) ?? [])[0];
+  return achada ? achada.id : null;
 }
+
+/** A referência da conversa como o agente_conversar decide: o ensaio aberto; sem ele, o produto aberto. */
+async function referenciaDaConversa(ch: Chamador, clientId: string, corpo: Record<string, unknown>): Promise<string | null> {
+  if (corpo.ensaio_id != null && corpo.ensaio_id !== "") {
+    const ensaio = await ensaioComAcesso(ch, idDe(corpo.ensaio_id, "ensaio_id"));
+    if (ensaio.client_id !== clientId) throw new ErroHttp(409, "ensaio_de_outro_cliente", "Este ensaio pertence a outro cliente.");
+    return ensaio.id;
+  }
+  if (corpo.kit_id != null && corpo.kit_id !== "") {
+    const kit = await lerKit(ch, idDe(corpo.kit_id, "kit_id"));
+    if (kit.client_id !== clientId) throw new ErroHttp(409, "kit_de_outro_cliente", "Este kit pertence a outro cliente.");
+    return kit.id;
+  }
+  return null;
+}
+
+/** Mensagens que a tela mostra ao reabrir a conversa (as mais recentes, na ordem). */
+const MAX_MENSAGENS_NA_TELA = 40;
+
+/**
+ * agente_historico { client_id, conversa_id?, kit_id?, ensaio_id? } -> { conversa_id, mensagens }
+ * AG2 (29/09): recarregar a página (ou abrir em outra aba) mostrava a conversa
+ * vazia, embora o servidor seguisse a mesma conversa (o modelo via o
+ * histórico, a tela não) e os cartões com Confirmar e Desfazer sumiam. Sem IA,
+ * custo 0: devolve cada mensagem com os anexos guardados (sugestões, ação,
+ * geração, caminho, opções, aprendizado) para a tela remontar os cartões no
+ * estado em que estão (feito, desfeito, aberto).
+ */
+async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  let conversaId: string | null = null;
+  if (corpo.conversa_id != null && corpo.conversa_id !== "") {
+    const id = idDe(corpo.conversa_id, "conversa_id");
+    const { data, error } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    if (error) {
+      registrarFalha("mesa-foto: conversa do diretor não lida (histórico)", error, { conversa_id: id });
+      throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
+    }
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    if (c && c.client_id === clientId && c.referencia_tipo === REF_CONVERSA) conversaId = c.id;
+  }
+  if (!conversaId) conversaId = await conversaExistente(clientId, await referenciaDaConversa(ch, clientId, corpo));
+  if (!conversaId) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });
+  const { data, error } = await servico().from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em")
+    .eq("conversa_id", conversaId).eq("client_id", clientId).order("criado_em", { ascending: false }).limit(MAX_MENSAGENS_NA_TELA);
+  if (error) {
+    registrarFalha("mesa-foto: mensagens do diretor não lidas (histórico)", error, { conversa_id: conversaId });
+    throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
+  }
+  const mensagens = ((data as { id: string; papel: string; conteudo: string; anexos: unknown; criado_em: string }[] | null) ?? [])
+    .slice()
+    .reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente" || m.papel === "sistema")
+    .map((m) => ({ id: m.id, papel: m.papel, conteudo: m.conteudo, anexos: Array.isArray(m.anexos) ? m.anexos : [], criado_em: m.criado_em }));
+  return json({ conversa_id: conversaId, mensagens, custo_usd: 0 });
+}
+
+/** Feito na hora, mas o registro da prova falhou: o cartão pode reabrir como aberto. */
+const AVISO_FEITO_SEM_REGISTRO = "Feito, mas o resultado não ficou guardado na conversa: ao reabrir, este cartão pode aparecer aberto. Não confirme de novo; confira em Fotos.";
 
 /** Anexos da conversa: ids do acervo ou caminhos do bucket mesa na pasta do cliente (até 4). */
 async function anexosDaConversa(clientId: string, bruto: unknown): Promise<{ imagens: ImagemEntrada[]; registro: unknown[]; doAcervo: LinhaImagem[] }> {
@@ -3641,7 +3731,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const idsDosAnexos = (Array.isArray(corpo.anexos) ? corpo.anexos : [])
     .map((x) => String(x && typeof x === "object" ? (x as Record<string, unknown>).imagem_id ?? "" : x ?? ""))
     .filter((x) => UUID.test(x));
-  const [contexto, diretor, historico, anexos, biblioteca, kitsDoCli, preparo] = await Promise.all([
+  const marcaId = typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null;
+  const [contexto, diretor, historico, anexos, biblioteca, kitsDoCli, preparo, regras] = await Promise.all([
     // Contexto do cliente com cache curto (diretor.ts): dossiê, marca e cérebro não são relidos a cada mensagem.
     DIRETOR.contextoComCache(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
@@ -3654,18 +3745,38 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Pacote do cliente (fotos, clones, prompts, books, produtos, modelos, campanhas, etapa e seleção da tela),
     // com apelidos, e a leitura por visão das fotos novas do pedido (uma vez por imagem).
     DIRETOR.prepararConversa(ch, clientId, corpo, idsDosAnexos),
+    // AG2: o que a equipe já ensinou a este diretor (EVITAR primeiro); nunca lança.
+    regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId }),
   ]);
+  if (historico.error) registrarFalha("mesa-foto: histórico do diretor não lido (segue sem ele)", historico.error, { conversa_id: conversaId });
+  if (biblioteca.error) registrarFalha("mesa-foto: biblioteca de prompts não lida (segue sem ela)", biblioteca.error, { client_id: clientId });
+  const pacote = preparo.pacote;
+  // AG2: o modelo nunca vê UUID. Kit, fotos anexadas e prompts vão pelo apelido do pacote (k#, i#, p#);
+  // foto anexada fora do pacote ganha x#. As sugestões voltam com apelido e viram id em sugestoesComIds.
+  const refDaImagem = new Map(pacote.imagens.map((i) => [i.id, i.ref]));
+  const refDoKit = new Map(pacote.kits.map((k) => [k.id, k.ref]));
+  const refDoPrompt = new Map(pacote.prompts.map((p) => [p.id, p.ref]));
+  const anexosForaDoPacote: Record<string, string> = {};
+  const refDoAnexo = (id: string) => {
+    const r = refDaImagem.get(id);
+    if (r) return r;
+    const ja = Object.keys(anexosForaDoPacote).find((k) => anexosForaDoPacote[k] === id);
+    if (ja) return ja;
+    const novo = `x${Object.keys(anexosForaDoPacote).length + 1}`;
+    anexosForaDoPacote[novo] = id;
+    return novo;
+  };
   const categoria = kit ? categoriaDoKit(kit.tipo) : null;
   const prompts = ((biblioteca.data as { id: string; client_id: string | null; categoria: string; titulo: string; destaque: boolean }[] | null) ?? [])
     .sort((a, b) => Number(b.categoria === categoria) - Number(a.categoria === categoria))
     .slice(0, 15)
-    .map((p) => ({ id: p.id, titulo: p.titulo, categoria: p.categoria, do_cliente: !!p.client_id }));
+    .map((p) => ({ ref: refDoPrompt.get(p.id) ?? null, titulo: p.titulo, categoria: p.categoria, do_cliente: !!p.client_id }));
+  const kitSemId = kit ? (({ id: _id, ...resto }) => resto)(resumoDoKit(kit, refs)) : null;
   const dados = {
     cliente: contexto.dados,
-    kit: kit ? resumoDoKit(kit, refs) : null,
+    kit: kit && kitSemId ? { ref: refDoKit.get(kit.id) ?? null, ...kitSemId } : null,
     ensaio: ensaio
       ? {
-        id: ensaio.id,
         receita_id: ensaio.receita_id,
         finalidade: ensaio.finalidade,
         formatos: ensaio.formatos,
@@ -3690,8 +3801,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
         }),
       }
       : null,
-    kits_do_cliente: kitsDoCli.slice(0, 20).map((k) => ({
-      id: k.id,
+    kits_do_cliente: kitsDoCli.slice(0, 20).filter((k) => refDoKit.has(k.id)).map((k) => ({
+      ref: refDoKit.get(k.id),
       nome: k.nome,
       variante: k.variante,
       status: k.status,
@@ -3699,7 +3810,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       fotos_da_embalagem: k.refs.filter((r) => r.papel === "embalagem").length,
     })),
     anexos_desta_mensagem: anexos.doAcervo.map((i) => ({
-      imagem_id: i.id,
+      ref: refDoAnexo(i.id),
       nome: i.nome,
       leitura: limpo(i.descricao, 300) || null,
       referencia_da_internet: (i.tags ?? []).includes(TAG_REFERENCIA_WEB),
@@ -3711,16 +3822,20 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     presets: PRESETS.map((p) => ({ id: p.id, nome: p.nome })),
     formatos: ensaio?.formatos ?? FORMATOS,
   };
-  const anteriores = ((historico.data as LinhaMensagem[] | null) ?? []).slice().reverse()
-    .filter((m) => m.papel === "usuario" || m.papel === "agente")
-    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 4000) }));
+  const brutos = ((historico.data as LinhaMensagem[] | null) ?? []).slice().reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente");
+  const anteriores = brutos.map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 4000) }));
+  const ultimaResposta = brutos.filter((m) => m.papel === "agente").map((m) => m.conteudo).pop() ?? null;
+  // AG2: "essa", "a segunda", "todas" contra a lista da etapa, na ordem da tela (Jev só quando o pedido aponta).
+  const listaDaTela = itensDaReferencia(pacote);
+  const referencia = await referenciaDoPedido(mensagem, listaDaTela.itens, { agente: "diretor de fotografia da Mesa Foto", ultimaResposta, selecionados: listaDaTela.selecionados });
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA_ESTUDIO,
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}`,
+    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE,
     maxTokensSaida: 12_000,
@@ -3729,9 +3844,10 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     criadoPor: ch.userId,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
-  const resposta = limpo(r.resposta, 6000) || "Sem resposta do diretor.";
+  let resposta = limpo(r.resposta, 6000) || "Sem resposta do diretor.";
   const kitsValidos = Array.from(new Set([...(kit ? [kit.id] : []), ...kitsDoCli.map((k) => k.id)]));
-  const sugestoes = normalizarSugestoes(r.sugestoes, {
+  const sugestoesBrutas = sugestoesComIds(r.sugestoes, pacote, anexosForaDoPacote);
+  const sugestoes = normalizarSugestoes(sugestoesBrutas, {
     tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [],
     formatos: ensaio?.formatos ?? FORMATOS,
     kitIds: kitsValidos,
@@ -3739,6 +3855,9 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   })
     // Sem ensaio aberto não há tomada para criar ou ajustar.
     .filter((s) => ensaio || (s.tipo !== "tomada_nova" && s.tipo !== "ajuste_tomada"));
+  // AG2: a sugestão que caía calada (campanha sem produto, 26/09) agora deixa o motivo.
+  const motivosQueCairam = motivosDasSugestoesQueCairam(sugestoesBrutas, sugestoes);
+  if (motivosQueCairam.length) registrarFalha("mesa-foto: sugestão do diretor não virou cartão", motivosQueCairam.join("; "), { conversa_id: conversaId });
   // Proativo: foto anexada sem kit e sem nenhuma sugestão vira "identificar produto" (a equipe decide aplicar).
   const anexadasDoProduto = anexos.doAcervo
     .filter((i) => !(i.tags ?? []).includes(TAG_REFERENCIA_WEB) && !i.gerada && !anexosDeEstilo.has(i.id))
@@ -3753,19 +3872,26 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     if (extra) sugestoes.push(extra);
   }
   // Propostas do diretor agêntico (apelidos trocados por alvos no servidor): sem custo e de geração (custo estimado antes).
-  const propostas = await DIRETOR.propostasDaResposta(ch, r, preparo.pacote);
+  // AG2: o aprendizado roda junto (nunca bloqueia; só grava preferência duradoura).
+  const [propostas, aprendido] = await Promise.all([
+    DIRETOR.propostasDaResposta(ch, r, pacote),
+    aprenderDoPedido(servico(), { clientId, mesa: "foto", pedido: mensagem, regraSugerida: r.regra_aprendida, marcaId, userId: ch.userId, ultimaResposta }),
+  ]);
   let acaoProposta = propostas.acao;
   let geracao = propostas.geracao;
+  // AG2: o que a equipe ensinou a EVITAR vai junto da geração (entra no pedido de cada foto).
+  const evitar = regras.regras.filter((g) => g.tipo === "evitar").map((g) => g.texto);
+  if (geracao && evitar.length) geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), evitar } };
   // Frente MF (27/09, "diretor que faz"): pedido "faz e me leva" abre sozinho a área quando termina.
   const levar = pedeParaLevar(mensagem);
   if (geracao && geracao.itens.length) {
-    const destino = destinoDoPost(r.agenda_das_fotos, preparo.pacote);
+    const destino = destinoDoPost(r.agenda_das_fotos, pacote);
     geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ...(destino ? { agenda_das_fotos: destino } : {}), ...(levar ? { abrir_sozinho: true } : {}) } };
   }
   if (acaoProposta && levar) acaoProposta = { ...acaoProposta, contexto: { ...(acaoProposta.contexto || {}), abrir_sozinho: true } };
   // Ordem clara, sem custo, com Desfazer e até 5 itens: faz na hora. Post novo na Agenda (cria item) pede Confirmar.
   const criaItemNovo = !!acaoProposta && acaoProposta.itens.some((i) => i.operacao === "post_na_agenda" && String(i.para || "").indexOf("novo:") === 0);
-  const direto = !!acaoProposta && !criaItemNovo && podeExecutarDireto(acaoProposta, regrasDoDiretor(preparo.pacote), { pedidoClaro: true }).direto;
+  const direto = !!acaoProposta && !criaItemNovo && podeExecutarDireto(acaoProposta, regrasDoDiretor(pacote), { pedidoClaro: true }).direto;
   // Geração barata (até o teto), com saldo: começa sozinha na tela, com o custo à vista e o botão de parar.
   const sozinha = !!geracao && geracaoPodeIrSozinha(geracao, { pedidoClaro: true, saldoUsd: typeof saida.saldoUsd === "number" ? saida.saldoUsd : null }).sozinha;
   let ordemClara = false;
@@ -3773,24 +3899,62 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     const resumos = [acaoProposta ? acaoProposta.resumo : "", geracao ? geracao.resumo : ""].filter(Boolean).join(" ");
     ordemClara = (await ehOrdemClara(mensagem, { agente: "diretor de fotografia da Mesa Foto", resumo: resumos })).clara;
   }
-  if (direto && ordemClara && acaoProposta) {
-    try {
-      acaoProposta = await DIRETOR.executarDiretoDoDiretor(ch, clientId, acaoProposta, { chave: `${conversaId}:${Date.now().toString(36)}`, abrirSozinho: levar });
-    } catch (e) {
-      // Falhou fazer na hora: a proposta fica para o Confirmar, como antes.
-      console.warn("[mesa-foto] execução direta do diretor falhou", { erro: e instanceof Error ? e.name : "desconhecido" });
+  if (sozinha && ordemClara && geracao) geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ir_sozinho: true } };
+  const vaiDireto = direto && ordemClara && !!acaoProposta;
+  // AG2: dúvida real vira UMA pergunta com respostas prontas (botões na tela).
+  const pergunta = limpo(r.pergunta, 300);
+  let opcoes = normalizarOpcoes(r.opcoes);
+  // AG2, trava da promessa vazia: resposta que diz que fez ou deixou pronto sem trazer nada vira aviso honesto.
+  let prometeuSemAcao = false;
+  if (!acaoProposta && !geracao && !sugestoes.length) {
+    const promessa = await prometeuSemFazer(resposta, mensagem);
+    if (promessa.prometeu) {
+      prometeuSemAcao = true;
+      registrarFalha("mesa-foto: diretor prometeu sem ação (resposta trocada por aviso)", motivosQueCairam.join("; ") || "nenhuma ação no JSON", { conversa_id: conversaId, fonte: promessa.fonte });
+      resposta = respostaSemPromessa(resposta, { entendi: blocosDaResposta(resposta).entendi, motivos: motivosQueCairam, pergunta });
+      if (!opcoes.length) opcoes = opcoesDoPacote(pacote);
     }
   }
-  if (sozinha && ordemClara && geracao) geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ir_sozinho: true } };
   // Caminho da resposta: a área onde a equipe continua (o apelido vira id aqui; o modelo nunca vê id).
-  const caminhoDaMensagem = caminhoDaResposta(r.ir_para, r.ir_para_ref, preparo.pacote, levar && !(acaoProposta && acaoProposta.executada_em) && !geracao);
-  const anexosDoAgente: unknown[] = sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [];
-  if (acaoProposta) anexosDoAgente.push(acaoProposta);
-  if (geracao) anexosDoAgente.push(geracao);
-  const mensagemIds = await gravarMensagens(conversaId, clientId, [
-    { papel: "usuario", conteudo: mensagem, anexos: anexos.registro },
-    { papel: "agente", conteudo: resposta, anexos: anexosDoAgente, uso_id: saida.usoId },
-  ]);
+  const caminhoDaMensagem = caminhoDaResposta(r.ir_para, r.ir_para_ref, pacote, levar && !vaiDireto && !geracao);
+  const seguidas = anexoDasRegrasSeguidas(r.regras_seguidas, regras.regras);
+  const anexosDaResposta = (): unknown[] => {
+    const lista: unknown[] = sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [];
+    if (acaoProposta) lista.push(acaoProposta);
+    if (geracao) lista.push(geracao);
+    if (opcoes.length) lista.push({ tipo: "opcoes_do_diretor", pergunta: pergunta || null, opcoes });
+    if (aprendido) lista.push(aprendido);
+    if (seguidas) lista.push(seguidas);
+    return anexosComCaminho(lista, caminhoDaMensagem);
+  };
+  // AG2: grava ANTES de fazer na hora (a prova e o Desfazer moram na mensagem); o erro nunca é engolido.
+  const troca = await gravarTroca(servico(), {
+    conversaId,
+    clientId,
+    usuario: { conteudo: mensagem, anexos: anexos.registro },
+    agente: { conteudo: resposta, anexos: anexosDaResposta(), uso_id: saida.usoId },
+    onde: "mesa-foto (diretor)",
+  });
+  let avisoRegistro: string | null = troca.erro ? AVISO_SEM_REGISTRO : null;
+  if (vaiDireto && acaoProposta) {
+    if (!troca.agenteId) {
+      // Sem a mensagem guardada, fazer na hora perderia a prova e o Desfazer: nada é feito (a equipe pede de novo).
+      registrarFalha("mesa-foto: execução direta do diretor não feita (mensagem não gravada)", troca.erro || "sem id", { conversa_id: conversaId });
+    } else {
+      try {
+        acaoProposta = await DIRETOR.executarDiretoDoDiretor(ch, clientId, acaoProposta, { chave: `${conversaId}:${Date.now().toString(36)}`, abrirSozinho: levar });
+        const { error: erroDoFeito } = await servico().from("agente_mensagens").update({ anexos: anexosDaResposta() }).eq("id", troca.agenteId).eq("client_id", clientId);
+        if (erroDoFeito) {
+          registrarFalha("mesa-foto: ação feita na hora sem registro na conversa", erroDoFeito, { mensagem_id: troca.agenteId });
+          avisoRegistro = AVISO_FEITO_SEM_REGISTRO;
+        }
+      } catch (e) {
+        // Falhou fazer na hora: a proposta fica para o Confirmar, como antes.
+        registrarFalha("mesa-foto: execução direta do diretor falhou (fica para o Confirmar)", e, { conversa_id: conversaId });
+      }
+    }
+  }
+  const guardou = !!troca.agenteId;
   return json({
     conversa_id: conversaId,
     resposta,
@@ -3798,15 +3962,22 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     sugestoes,
     // A conversa não grava kit: kit sai salvo de identificar_produto ou kit_sugerir.
     kit_ids: [],
-    mensagem_ids: mensagemIds,
+    mensagem_ids: [troca.usuarioId, troca.agenteId],
     // A ação só vale com a mensagem guardada (é por ela que a confirmação acha a lista).
-    acao: acaoProposta && mensagemIds[1] ? acaoProposta : null,
-    acao_de_geracao: geracao && mensagemIds[1] ? geracao : null,
-    mensagem_id: mensagemIds[1] ?? null,
+    acao: acaoProposta && guardou ? acaoProposta : null,
+    acao_de_geracao: geracao && guardou ? geracao : null,
+    mensagem_id: troca.agenteId,
     // Frente MF: para onde ir depois desta resposta (botão "Ir para"; vai sozinho no "faz e me leva").
     caminho: caminhoDaMensagem,
+    // AG2: pergunta com respostas prontas, aviso de registro, promessa trocada por aviso e o aprendizado.
+    pergunta: pergunta || null,
+    opcoes,
+    aviso_registro: avisoRegistro,
+    promessa_sem_acao: prometeuSemAcao,
+    aprendido: aprendido || null,
+    regras_seguidas: seguidas,
     // O que o diretor já conhecia nesta mensagem (a tela mostra no cabeçalho).
-    contexto_do_diretor: { resumo: preparo.pacote.resumo, foco_rotulo: preparo.pacote.foco_rotulo, leituras_feitas: preparo.lidas },
+    contexto_do_diretor: { resumo: pacote.resumo, foco_rotulo: pacote.foco_rotulo, leituras_feitas: preparo.lidas },
     custo_usd: arred6((Number(saida.custoUsd) || 0) + preparo.custoLeituras),
     saldo_usd: saida.saldoUsd,
     reserva_usada: saida.reservaUsada ?? null,
@@ -3921,6 +4092,50 @@ async function agenteAplicar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   const { itens, total } = await buscarNoOpenverse(s.busca, "comercial", 1);
   return json({ itens, total, busca: s.busca, fonte: "Openverse", custo_usd: 0 });
+}
+
+/**
+ * agente_aplicar com a marca na conversa (AG2, 29/09): a tela manda
+ * mensagem_id e sugestao_chave; aplicada, a sugestão guarda quando e o
+ * ensaio criado. Reabrir a conversa mostra "Aplicada" (e o andamento do lote)
+ * em vez de oferecer "Gerar todas" de novo. A marca nunca derruba a ação.
+ */
+async function agenteAplicarEMarcar(ch: Chamador, corpo: Record<string, unknown>) {
+  const resposta = await agenteAplicar(ch, corpo);
+  const mensagemId = String(corpo.mensagem_id ?? "");
+  const chave = String(corpo.sugestao_chave ?? "").slice(0, 40);
+  if (!resposta.ok || !UUID.test(mensagemId) || !chave) return resposta;
+  try {
+    const feito = (await resposta.clone().json().catch(() => ({}))) as Record<string, unknown>;
+    const ensaioId = feito.ensaio && typeof feito.ensaio === "object" ? String((feito.ensaio as Record<string, unknown>).id || "") : "";
+    const { data, error } = await servico().from("agente_mensagens").select("id, client_id, anexos").eq("id", mensagemId).maybeSingle();
+    if (error || !data) {
+      if (error) registrarFalha("mesa-foto: sugestão aplicada sem marca (mensagem não lida)", error, { mensagem_id: mensagemId });
+      return resposta;
+    }
+    const m = data as { id: string; client_id: string; anexos: unknown };
+    await garantirAcesso(ch, m.client_id);
+    const anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+    let mudou = false;
+    const novos = anexos.map((a) => {
+      if (!a || a.tipo !== "sugestoes" || !Array.isArray(a.sugestoes)) return a;
+      return {
+        ...a,
+        sugestoes: (a.sugestoes as Record<string, unknown>[]).map((sg) => {
+          if (!sg || sg.id !== chave) return sg;
+          mudou = true;
+          return { ...sg, aplicada: { em: new Date().toISOString(), por: ch.userId, ensaio_id: UUID.test(ensaioId) ? ensaioId : null } };
+        }),
+      };
+    });
+    if (mudou) {
+      const { error: e2 } = await servico().from("agente_mensagens").update({ anexos: novos }).eq("id", m.id).eq("client_id", m.client_id);
+      if (e2) registrarFalha("mesa-foto: sugestão aplicada sem marca na conversa", e2, { mensagem_id: m.id });
+    }
+  } catch (e) {
+    registrarFalha("mesa-foto: sugestão aplicada sem marca na conversa", e, { mensagem_id: mensagemId });
+  }
+  return resposta;
 }
 
 // ------------------------------------------------------------------ porta
@@ -4249,7 +4464,8 @@ const DIRETOR = acoesDoDiretor(FERRAMENTAS, {
     }
   },
   lerPorVisao: leituraPorVisao,
-  kitsDoCliente: (clientId) => kitsDoCliente(clientId).then((ks) => ks.map((k) => ({ id: k.id, nome: k.nome, variante: k.variante, status: k.status }))),
+  // AG2: as fotos do produto vão no pacote (trocar foto e montar ensaio sem reler o banco).
+  kitsDoCliente: (clientId) => kitsDoCliente(clientId).then((ks) => ks.map((k) => ({ id: k.id, nome: k.nome, variante: k.variante, status: k.status, refs: k.refs.map((r) => ({ imagem_id: r.imagem_id, papel: r.papel })) }))),
   auditar: (e) =>
     auditLog({
       correlationId: crypto.randomUUID(), toolName: e.toolName, origin: "mesa:mesa-foto",
@@ -4285,7 +4501,9 @@ async function executarAcaoNasFotos(ch: Chamador, corpo: Record<string, unknown>
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
   if (guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Fotos: ${textoDoResultado(r.resultados)}.` }).then(() => undefined, () => undefined);
+    // AG2: a linha do resultado não some calada.
+    const { error: erroDaLinha } = await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Fotos: ${textoDoResultado(r.resultados)}.`, anexos: [] });
+    if (erroDaLinha) registrarFalha("mesa-foto: resultado das fotos não gravado na conversa", erroDaLinha, { mensagem_id: guardada.mensagem.id });
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "foto_acao_do_diretor", origin: "mesa:mesa-foto",
@@ -4316,6 +4534,9 @@ async function desfazerAcaoNasFotos(ch: Chamador, corpo: Record<string, unknown>
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam });
 }
 
+/** AG2 (29/09): as rotas do aprendizado do diretor (cérebro do cliente, mesa "foto"). */
+const APRENDIZADO_DO_DIRETOR = rotasDoAprendizado({ mesa: "foto", servico: () => servico(), garantirAcesso: (c, clientId) => garantirAcesso(c as Chamador, clientId), json });
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
   acervo_registrar: acervoRegistrar,
@@ -4337,7 +4558,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   referencias_buscar: referenciasBuscar,
   referencia_importar: referenciaImportar,
   agente_conversar: agenteConversar,
-  agente_aplicar: agenteAplicar,
+  agente_aplicar: agenteAplicarEMarcar,
+  // AG2 (29/09): a conversa relida do banco ao reabrir (sem IA, custo 0).
+  agente_historico: agenteHistorico,
+  // AG2: "Esquecer" e "Guardar como regra" do aprendizado do diretor.
+  aprendizado_esquecer: APRENDIZADO_DO_DIRETOR.aprendizado_esquecer,
+  aprendizado_guardar: APRENDIZADO_DO_DIRETOR.aprendizado_guardar,
   executar_acao_agente: executarAcaoNasFotos,
   desfazer_acao_agente: desfazerAcaoNasFotos,
   // v2 (docs/mesa-foto/CONTRATO-V2.md)

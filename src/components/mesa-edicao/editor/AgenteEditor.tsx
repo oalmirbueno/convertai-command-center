@@ -6,8 +6,9 @@ import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { textoDoErro, usd, type ModeloIa } from "@/lib/mesa/api";
-import type { AcaoDoAgente, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
+import { acoesDaMensagem, estadoDaAcao, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import type { ProjetoDeEdicao, TrechoVisto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import {
   estimarPasso,
@@ -15,11 +16,14 @@ import {
   MAX_PASSOS,
   MAX_QUADROS_POR_CHAMADA,
   MAX_TEXTO_DO_PEDIDO,
+  podeAplicarDireto,
+  respostaPromete,
   sugerirModeloMaisBarato,
   temposDeAmostra,
   TETO_PADRAO_USD,
 } from "../../../../supabase/functions/editor-video/ferramentas";
-import { contextoDoAgente, rodarAgente, type ItemDoLog } from "@/lib/editor/agente";
+import { contextoDoAgente, conversaParaOModelo, ErroDoPrimeiroPasso, pedidoDeExportar, provaDaMudanca, rodarAgente, type ItemDoLog } from "@/lib/editor/agente";
+import { acaoDeExportar, AGENTE_DO_EDITOR, baixarExportacao } from "@/lib/editor/exportar";
 import { acaoDaProposta, acaoFeita } from "@/lib/editor/cartao";
 import { chamarEditorVideo, emPreparacao, novoId } from "@/lib/editor/api";
 import { aplicarOperacao, assinaturaDoProjeto, trilhaPrincipal, type Operacao } from "@/lib/editor/operacoes";
@@ -44,12 +48,15 @@ import { pegarPedidoPendente, temPedidoPendente } from "./ponteDoAgente";
  * silêncio, legenda) e vídeo sem fala marcada: antes, o Timestamp, com o
  * custo à vista e o clique do dono; depois o agente segue no projeto já com a
  * fala. Atalhos rodam as skills direto (de graça, sem modelo).
+ *
+ * AG2 (29/09): a conversa fica guardada na versão do vídeo (agente_conversas,
+ * referencia_tipo editor_agente) e volta ao reabrir, com os cartões no estado
+ * em que ficaram. Ordem clara (Jev) e atalho vão na hora, como UM passo do
+ * desfazer, com a lista do que mudou e o Desfazer do pedido inteiro; o resto
+ * pede Confirmar. Exportar é sempre cartão com Confirmar. O agente recebe a
+ * seleção e o cursor ("esse corte", "aqui") e as regras que a equipe ensinou.
+ * Pedido que não andou sai da conversa e volta ao campo, com o erro à vista.
  */
-
-interface Mensagem {
-  quem: "dono" | "agente";
-  itens: ItemDoLog[];
-}
 
 interface Preparo {
   /** Pedido livre (vai ao modelo depois) ou skill direta. */
@@ -57,6 +64,14 @@ interface Preparo {
   skill: IdDaSkill | null;
   fontes: string[];
   custoFala: number;
+  /** O que o dono escreveu (ou o atalho): volta ao campo se não andar. */
+  texto: string;
+  /** Bolha do dono na conversa (sai se o pedido não andar). */
+  chaveDoDono: string;
+  /** Últimas trocas, para o modelo. */
+  conversa: string;
+  /** O que já foi feito antes do agente (Timestamp pago): entra na resposta guardada. */
+  antes?: ItemDoLog[];
 }
 
 const ATALHOS: { skill: IdDaSkill; rotulo: string }[] = [
@@ -130,12 +145,110 @@ export function pedidoComDica(pedido: string): string {
   return base;
 }
 
+// ---------------------------------------------------------------- conversa guardada (AG2, 29/09)
+
+/** Log do agente guardado na mensagem (para reabrir igual). */
+export const TIPO_DO_LOG = "log_do_editor";
+/** Pergunta com opções guardada na mensagem. */
+export const TIPO_DA_PERGUNTA = "pergunta_do_editor";
+
+interface Mensagem {
+  chave: string;
+  quem: "dono" | "agente";
+  itens: ItemDoLog[];
+  /** Cartões desta resposta (mudança na linha do tempo, exportar). */
+  acoes: AcaoDoAgente[];
+  /** Linha no banco (o cartão marca o estado nela). */
+  mensagemId: string | null;
+  /** Anexos do aprendizado (Aprendi / Segui). */
+  anexos: unknown[];
+  /** Aviso de registro (a resposta não ficou guardada). */
+  aviso?: string | null;
+  opcoes?: string[];
+  /** Chegou agora (não ao reabrir). */
+  recemFeita?: boolean;
+}
+
+/**
+ * Propostas desta aba (id do cartão -> proposta com as operações): o Desfazer e
+ * o Confirmar precisam delas; sobrevivem a remontar a lateral (recolher, trocar
+ * de etapa e voltar). Recarregar a página perde: o cartão reaberto diz isso.
+ */
+const PROPOSTAS_DA_ABA = new Map<string, PropostaDaSkill>();
+const MAX_PROPOSTAS_DA_ABA = 60;
+function guardarProposta(id: string, p: PropostaDaSkill) {
+  PROPOSTAS_DA_ABA.delete(id);
+  PROPOSTAS_DA_ABA.set(id, p);
+  if (PROPOSTAS_DA_ABA.size > MAX_PROPOSTAS_DA_ABA) {
+    const primeira = PROPOSTAS_DA_ABA.keys().next();
+    if (!primeira.done) PROPOSTAS_DA_ABA.delete(primeira.value);
+  }
+}
+
+let seq = 0;
+const novaChave = () => `m${Date.now().toString(36)}${(seq++).toString(36)}`;
+
+/** Operações guardadas na mensagem só enquanto o cartão está aberto (para confirmar depois de recarregar). */
+const MAX_BYTES_DAS_OPERACOES = 150_000;
+function comOperacoesGuardadas(a: AcaoDoAgente, ops: Operacao[]): AcaoDoAgente {
+  if (a.executada_em || a.descartada_em) return a;
+  const texto = JSON.stringify(ops);
+  return texto.length <= MAX_BYTES_DAS_OPERACOES ? { ...a, contexto: { ...(a.contexto || {}), operacoes: ops } } : a;
+}
+
+/**
+ * Mensagem lida do banco vira mensagem da tela. Cartão feito numa sessão
+ * anterior perde o Desfazer (o histórico do desfazer é da aba; o Ctrl+Z e as
+ * Versões continuam); cartão aberto com as operações guardadas volta a poder
+ * ser confirmado (aplica de novo sobre o projeto de agora).
+ */
+export function mensagemDoBanco(m: { id: string; papel: string; conteudo: string; anexos: unknown }, projeto: ProjetoDeEdicao | null): Mensagem | null {
+  const anexos = Array.isArray(m.anexos) ? (m.anexos as unknown[]) : [];
+  if (m.papel === "usuario") return { chave: `b${m.id}`, quem: "dono", itens: [{ tipo: "resposta", texto: String(m.conteudo || "") }], acoes: [], mensagemId: m.id, anexos: [] };
+  if (m.papel !== "agente") return null;
+  const log = anexos.find((a) => a && typeof a === "object" && (a as { tipo?: unknown }).tipo === TIPO_DO_LOG) as { itens?: unknown } | undefined;
+  const itens: ItemDoLog[] = log && Array.isArray(log.itens)
+    ? (log.itens as ItemDoLog[]).filter((i) => i && typeof i.texto === "string").map((i) => ({ tipo: (["plano", "ferramenta", "resposta", "aviso"].indexOf(i.tipo) >= 0 ? i.tipo : "resposta") as ItemDoLog["tipo"], texto: i.texto }))
+    : [{ tipo: "resposta", texto: String(m.conteudo || "") }];
+  const pergunta = anexos.find((a) => a && typeof a === "object" && (a as { tipo?: unknown }).tipo === TIPO_DA_PERGUNTA) as { opcoes?: unknown } | undefined;
+  const acoes = acoesDaMensagem(anexos).map((a) => {
+    if (PROPOSTAS_DA_ABA.has(a.id)) return a;
+    const estado = estadoDaAcao(a);
+    if (estado === "feita" && !a.sem_desfazer) return { ...a, resultados: (a.resultados || []).map((r) => ({ ...r, desfazer: null })) };
+    if (estado === "aberta" && projeto && a.contexto && Array.isArray((a.contexto as { operacoes?: unknown }).operacoes)) {
+      const ops = (a.contexto as { operacoes: Operacao[] }).operacoes;
+      // base "recarregada" nunca bate: o Confirmar aplica as operações de novo sobre o projeto de agora (ou recusa com o motivo).
+      guardarProposta(a.id, { skill: "brabo", titulo: "Agente editor", resumo: a.resumo, operacoes: ops, avisos: [], base: "recarregada", resultado: projeto });
+    }
+    return a;
+  });
+  return {
+    chave: `b${m.id}`,
+    quem: "agente",
+    itens,
+    acoes,
+    mensagemId: m.id,
+    anexos,
+    opcoes: pergunta && Array.isArray(pergunta.opcoes) ? (pergunta.opcoes as unknown[]).map(String).slice(0, 4) : [],
+  };
+}
+
+const ehExportar = (a: AcaoDoAgente) => a.itens.length > 0 && a.itens.every((i) => i.operacao === "exportar");
+const textoDaMensagem = (m: Mensagem) => {
+  if (m.quem === "dono") return m.itens.map((i) => i.texto).join(" ");
+  const r = m.itens.filter((i) => i.tipo === "resposta");
+  return (r.length ? r[r.length - 1] : m.itens[m.itens.length - 1] || { texto: "" }).texto;
+};
+
 export default function AgenteEditor({
   projeto,
   controle,
   onAplicarProjeto,
   urls,
   semEditor,
+  versaoId,
+  selecao,
+  cursor,
 }: {
   projeto: ProjetoDeEdicao | null;
   controle: ControleDePropostas | null;
@@ -143,6 +256,12 @@ export default function AgenteEditor({
   urls: Record<string, string>;
   /** Sem editor aberto: o que a lateral diz (o seletor de modelo continua em cima). */
   semEditor?: ReactNode;
+  /** Versão do vídeo aberta: a conversa fica guardada nela (agente_conversas, referencia_tipo editor_agente). */
+  versaoId?: string | null;
+  /** Clipes escolhidos na linha do tempo (ids): "esse corte". */
+  selecao?: string[];
+  /** Tempo do cursor: "aqui". */
+  cursor?: () => number;
 }) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const grupos = useMemo(() => modelosDoAgente(catalogo || []), [catalogo]);
@@ -151,17 +270,24 @@ export default function AgenteEditor({
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`mesa-edicao:editor:agente:rascunho:${clientId}`, "", { esperaMs: 300 });
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [rodando, setRodando] = useState<string | null>(null);
+  const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
   const [gasto, setGastoNaTela] = useState(0);
   const gastoRef = useRef(0);
   const setGasto = (v: number | ((x: number) => number)) => {
     gastoRef.current = typeof v === "function" ? v(gastoRef.current) : v;
     setGastoNaTela(gastoRef.current);
   };
-  const [proposta, setProposta] = useState<{ acao: AcaoDoAgente; p: PropostaDaSkill } | null>(null);
   const [preparo, setPreparo] = useState<Preparo | null>(null);
   const parar = useRef(false);
   const refMsgs = useRef<HTMLDivElement | null>(null);
   const pendente = temPedidoPendente(clientId);
+  // O controle e o projeto mais novos (as respostas chegam depois de esperas).
+  const controleRef = useRef(controle);
+  controleRef.current = controle;
+  const projetoRef = useRef(projeto);
+  projetoRef.current = projeto;
+  const mensagensRef = useRef<Mensagem[]>([]);
+  mensagensRef.current = mensagens;
 
   const modelo = modelos.find((m) => m.id === escolha.modelo) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[0] || null;
   const raciocinios = (modelo && modelo.raciocinio) || [];
@@ -171,7 +297,88 @@ export default function AgenteEditor({
   const custo = custoDoPedido(porPasso, escolha.teto);
   const sugestao = modelo ? sugerirModeloMaisBarato(modelos, modelo.id, false, aceitaImagem) : null;
   const rolarParaBaixo = () => window.requestAnimationFrame(() => refMsgs.current && (refMsgs.current.scrollTop = refMsgs.current.scrollHeight));
-  const falar = (quem: Mensagem["quem"], itens: ItemDoLog[]) => setMensagens((l) => l.concat([{ quem, itens }]));
+  const juntarMensagem = (m: Omit<Mensagem, "chave"> & { chave?: string }): string => {
+    const chave = m.chave || novaChave();
+    setMensagens((l) => l.concat([{ ...m, chave }]));
+    return chave;
+  };
+  const mudarMensagem = (chave: string, f: (m: Mensagem) => Mensagem) => setMensagens((l) => l.map((m) => (m.chave === chave ? f(m) : m)));
+  const falar = (quem: Mensagem["quem"], itens: ItemDoLog[]) => juntarMensagem({ quem, itens, acoes: [], mensagemId: null, anexos: [] });
+
+  // ---------------------------------------------------------------- reabrir: a conversa volta do banco
+  const [lendo, setLendo] = useState(false);
+  useEffect(() => {
+    if (!versaoId || !clientId) return;
+    let vivo = true;
+    setLendo(true);
+    chamarEditorVideo<{ mensagens?: { id: string; papel: string; conteudo: string; anexos: unknown }[] }>({ acao: "conversa_ler", client_id: clientId, versao_id: versaoId })
+      .then((r) => {
+        if (!vivo) return;
+        const lidas = ((r && r.mensagens) || []).map((m) => mensagemDoBanco(m, projetoRef.current)).filter((m): m is Mensagem => !!m);
+        if (!lidas.length) return;
+        const ids = new Set(lidas.map((m) => m.mensagemId));
+        setMensagens((l) => lidas.concat(l.filter((m) => !m.mensagemId || !ids.has(m.mensagemId))));
+        rolarParaBaixo();
+      })
+      .catch((e) => {
+        if (!vivo || emPreparacao(e)) return;
+        console.error("[agente editor] conversa não lida", e);
+        falar("agente", [{ tipo: "aviso", texto: `Não li a conversa guardada: ${textoDoErro(e)}` }]);
+      })
+      .finally(() => vivo && setLendo(false));
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, versaoId]);
+
+  /** Guarda a troca (pedido + resposta com os cartões). Sem versão aberta, só na tela. */
+  const gravar = async (chaveDoAgente: string, pedidoTexto: string, m: Omit<Mensagem, "chave">, usoId: string | null) => {
+    if (!versaoId) return;
+    const anexos: unknown[] = ([{ tipo: TIPO_DO_LOG, itens: m.itens.slice(0, 60) }] as unknown[]).concat(m.acoes as unknown[], m.anexos);
+    if (m.opcoes && m.opcoes.length) anexos.push({ tipo: TIPO_DA_PERGUNTA, opcoes: m.opcoes });
+    try {
+      const r = await chamarEditorVideo<{ mensagem_id?: string | null; aviso_registro?: string | null }>({
+        acao: "conversa_gravar",
+        client_id: clientId,
+        versao_id: versaoId,
+        usuario: { conteudo: pedidoTexto },
+        agente: { conteudo: textoDaMensagem({ ...m, chave: chaveDoAgente }), anexos },
+        uso_id: usoId,
+      });
+      const id = r && r.mensagem_id ? String(r.mensagem_id) : null;
+      mudarMensagem(chaveDoAgente, (x) => ({ ...x, mensagemId: id, aviso: id ? r.aviso_registro || null : r.aviso_registro || "A resposta chegou, mas não ficou guardada na conversa." }));
+      // Clicou no cartão antes de a mensagem existir no banco: o estado de agora vai junto (reabrir não oferece Confirmar de novo).
+      const agora = mensagensRef.current.find((x) => x.chave === chaveDoAgente);
+      if (id && agora) {
+        agora.acoes.forEach((a) => {
+          const enviada = m.acoes.find((x) => x.id === a.id);
+          if (enviada && estadoDaAcao(enviada) !== estadoDaAcao(a)) marcarNoBanco(id, a);
+        });
+      }
+    } catch (e) {
+      if (emPreparacao(e)) return;
+      console.error("[agente editor] conversa não gravada", e);
+      mudarMensagem(chaveDoAgente, (x) => ({ ...x, aviso: `A resposta chegou, mas não ficou guardada na conversa (${textoDoErro(e)}).` }));
+    }
+  };
+
+  /** O cartão mudou: a mensagem guardada acompanha (reabrir não volta a "Confirmar"). */
+  const marcarNoBanco = (mensagemId: string, acao: AcaoDoAgente) => {
+    chamarEditorVideo({ acao: "conversa_marcar", client_id: clientId, mensagem_id: mensagemId, cartao: acao }).catch((e) => {
+      if (emPreparacao(e)) return;
+      console.error("[agente editor] estado do cartão não gravado", e);
+      toast.warning("Feito, mas não ficou guardado na conversa", { description: textoDoErro(e) });
+    });
+  };
+  const marcar = (chave: string, acao: AcaoDoAgente) => {
+    // A ref acompanha na hora (o gravar que chega depois compara com ela).
+    mensagensRef.current = mensagensRef.current.map((m) => (m.chave === chave ? { ...m, acoes: m.acoes.map((a) => (a.id === acao.id ? acao : a)) } : m));
+    mudarMensagem(chave, (m) => ({ ...m, acoes: m.acoes.map((a) => (a.id === acao.id ? acao : a)) }));
+    const atual = mensagensRef.current.find((m) => m.chave === chave);
+    const id = atual ? atual.mensagemId : null;
+    if (id) marcarNoBanco(id, acao);
+  };
 
   // Pedido deixado pelo agente de edição das outras etapas: vai para o campo quando o editor abriu (nada roda sem o clique).
   const comProjeto = !!projeto;
@@ -184,20 +391,89 @@ export default function AgenteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, pendente, comProjeto]);
 
-  // ---------------------------------------------------------------- proposta (skill direta ou do agente)
-  const proporDaSkill = (id: IdDaSkill, base: ProjetoDeEdicao) => {
-    const prop = proporSkill(id, base, { agora: new Date().toISOString(), selecionados: [] });
-    if (!prop.operacoes.length) {
-      falar("agente", [{ tipo: "aviso", texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}` }]);
-      return;
+  // ---------------------------------------------------------------- cartões
+  /** Ordem clara (Jev, sem custo): a mudança vai na hora, com Desfazer. Sem resposta, cartão com Confirmar. */
+  const ordemClara = async (pedido: string, resumo: string): Promise<boolean> => {
+    try {
+      const r = await chamarEditorVideo<{ clara?: boolean }>({ acao: "agente_ordem_clara", client_id: clientId, pedido, resumo });
+      return !!(r && r.clara === true);
+    } catch (e) {
+      if (!emPreparacao(e)) console.warn("[agente editor] ordem clara sem resposta (vai para Confirmar)", e);
+      return false;
     }
-    const acao = acaoDaProposta(`skill-${id}-${Date.now().toString(36)}`, "editor_video", `${prop.titulo}: ${prop.resumo}`, prop.operacoes, base, prop.avisos);
-    setProposta({ acao, p: prop.base ? prop : { ...prop, base: assinaturaDoProjeto(base) } });
-    falar("agente", [{ tipo: "resposta", texto: `${prop.titulo}: ${prop.resumo} Confira a lista e confirme.` }]);
   };
 
-  const rodarPedido = async (pedido: string, base: ProjetoDeEdicao) => {
-    if (!modelo) return;
+  /** Monta o cartão de uma proposta; aplica na hora quando pode (e diz no cartão "Feito na hora"). */
+  const cartaoDaProposta = (id: string, prop: PropostaDaSkill, base: ProjetoDeEdicao, direto: boolean): AcaoDoAgente => {
+    const prova = provaDaMudanca(base, prop.resultado);
+    const acao = acaoDaProposta(id, AGENTE_DO_EDITOR, [prop.resumo, prova].filter(Boolean).join(" "), prop.operacoes, base, prop.avisos);
+    guardarProposta(id, prop);
+    const c = controleRef.current;
+    if (direto && c && c.aplicar(prop, prop.titulo)) return { ...acaoFeita(acao, new Date().toISOString()), executada_direto: true };
+    return comOperacoesGuardadas(acao, prop.operacoes);
+  };
+
+  const aoPedidoDe = (chave: string, acao: AcaoDoAgente) => async (pedido: PedidoDaAcao): Promise<RespostaDaAcao> => {
+    const agora = new Date().toISOString();
+    let anexo: AcaoDoAgente;
+    let resposta: RespostaDaAcao;
+    if (pedido === "descartar") {
+      anexo = { ...acao, descartada_em: agora };
+      resposta = { anexo };
+    } else if (ehExportar(acao)) {
+      if (pedido !== "confirmar") throw new Error("Exportar não tem Desfazer.");
+      const p = projetoRef.current;
+      if (!p) throw new Error("Abra o vídeo no editor para exportar.");
+      const nome = await baixarExportacao(p, urls, agora);
+      anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: i.alvo_id, titulo: `${i.titulo}: ${nome}`, operacao: i.operacao, ok: true, desfazer: null })) };
+      resposta = { anexo, feitos: 1, falhas: 0 };
+    } else {
+      const prop = PROPOSTAS_DA_ABA.get(acao.id);
+      const c = controleRef.current;
+      if (!c) throw new Error("O editor não está aberto.");
+      if (pedido === "desfazer") {
+        if (!prop || !c.desfazer(prop)) throw new Error("Mudou depois de aplicar (ou a tela foi recarregada): use Ctrl+Z para voltar passo a passo, ou abra uma versão anterior.");
+        anexo = { ...acaoFeita(acao, acao.executada_em || agora), executada_direto: acao.executada_direto, desfeita_em: agora };
+        resposta = { anexo, voltaram: acao.itens.length };
+      } else {
+        if (!prop) throw new Error("Esta proposta é de antes de recarregar a tela e não guardou as mudanças. Peça de novo ao agente.");
+        if (!c.aplicar(prop, "Agente editor")) throw new Error("O projeto mudou depois da proposta e as mudanças não cabem mais. Peça de novo ao agente.");
+        anexo = acaoFeita(acao, agora);
+        resposta = { anexo, feitos: anexo.itens.length, falhas: 0 };
+      }
+    }
+    marcar(chave, anexo);
+    return resposta;
+  };
+
+  // ---------------------------------------------------------------- respostas
+  /** Pedido que não andou: a bolha sai e o texto volta ao campo, com o erro à vista. */
+  const devolverAoCampo = (chaveDoDono: string, texto: string, erro: string) => {
+    setMensagens((l) => l.filter((m) => m.chave !== chaveDoDono));
+    setRascunho(texto);
+    setErroDoEnvio(erro);
+  };
+
+  const responder = (pedidoTexto: string, m: Omit<Mensagem, "chave">, usoId: string | null = null) => {
+    const chave = juntarMensagem({ ...m, recemFeita: true });
+    void gravar(chave, pedidoTexto, m, usoId);
+    rolarParaBaixo();
+  };
+
+  const proporDaSkill = (id: IdDaSkill, base: ProjetoDeEdicao, pedidoTexto: string, antes: ItemDoLog[] = []) => {
+    const prop = proporSkill(id, base, { agora: new Date().toISOString(), selecionados: selecao || [] });
+    if (!prop.operacoes.length) {
+      responder(pedidoTexto, { quem: "agente", itens: antes.concat([{ tipo: "aviso", texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}` }]), acoes: [], mensagemId: null, anexos: [] });
+      return;
+    }
+    // Atalho é ordem clara (um clique), sem custo e com Desfazer: vai na hora.
+    const acao = cartaoDaProposta(`skill-${id}-${Date.now().toString(36)}`, prop.base ? prop : { ...prop, base: assinaturaDoProjeto(base) }, base, true);
+    const feita = !!acao.executada_em;
+    responder(pedidoTexto, { quem: "agente", itens: antes.concat([{ tipo: "resposta", texto: `${prop.titulo}: ${prop.resumo}${feita ? " Feito; o Desfazer volta tudo." : " Confira a lista e confirme."}` }]), acoes: [acao], mensagemId: null, anexos: [] });
+  };
+
+  const rodarPedido = async (pr: Preparo, base: ProjetoDeEdicao) => {
+    if (!modelo || !pr.pedido) return;
     setRodando("Pensando");
     parar.current = false;
     const antes = gastoRef.current;
@@ -206,30 +482,43 @@ export default function AgenteEditor({
         chamar: chamarEditorVideo,
         clientId,
         sessao: novoId(),
-        pedido: pedidoComDica(pedido),
+        pedido: pedidoComDica(pr.pedido),
         projeto: base,
         modeloId: modelo.id,
         raciocinio: raciocinio || null,
         tetoUsd: escolha.teto,
         agora: new Date().toISOString(),
         cancelado: () => parar.current,
-        aoPasso: (log, g) => {
+        tela: { selecionados: selecao || [], cursor_s: cursor ? cursor() : null },
+        conversa: pr.conversa,
+        aoPasso: (log, g, passo) => {
           setGasto(antes + g);
-          setRodando(log.length ? log[log.length - 1].texto.slice(0, 80) : "Pensando");
+          setRodando(`Passo ${passo} de até ${MAX_PASSOS}${log.length ? `: ${log[log.length - 1].texto.slice(0, 70)}` : ""}`);
         },
       });
       setGasto(antes + r.gasto_usd);
-      const itens = r.log.slice();
-      if (!r.operacoes.length) itens.push({ tipo: "aviso", texto: "Nada mudou na linha do tempo. Use um atalho abaixo ou diga o que mudar (ex.: corta os silêncios)." });
-      falar("agente", itens);
+      const itens = (pr.antes || []).concat(r.log);
+      const acoes: AcaoDoAgente[] = [];
       if (r.operacoes.length) {
-        const id = `agente-${Date.now().toString(36)}`;
-        const p: PropostaDaSkill = { skill: "brabo", titulo: "Agente editor", resumo: r.resposta || "Proposta do agente.", operacoes: r.operacoes, avisos: [], base: assinaturaDoProjeto(base), resultado: r.resultado };
-        setProposta({ acao: acaoDaProposta(id, "editor_video", p.resumo, r.operacoes, base), p });
+        const prop: PropostaDaSkill = { skill: "brabo", titulo: "Agente editor", resumo: r.resposta || "Proposta do agente.", operacoes: r.operacoes, avisos: [], base: assinaturaDoProjeto(base), resultado: r.resultado };
+        const travas = { operacoes: r.operacoes.length, falhas: r.falhas, recusadas: r.recusadas, parado: r.parado };
+        // O Jev só é perguntado quando todas as outras travas deixam ir direto.
+        const clara = podeAplicarDireto({ ...travas, ordemClara: true }).direto ? await ordemClara(pr.pedido, prop.resumo) : false;
+        const d = podeAplicarDireto({ ...travas, ordemClara: clara });
+        acoes.push(cartaoDaProposta(`agente-${Date.now().toString(36)}`, prop, base, d.direto));
       }
+      if (r.exportar) acoes.push(acaoDeExportar(r.resultado));
+      if (!acoes.length && !r.opcoes.length) {
+        if (!r.resposta) itens.push({ tipo: "aviso", texto: "Nada mudou na linha do tempo. Use um atalho abaixo ou diga o que mudar (ex.: corta os silêncios)." });
+        else if (respostaPromete(r.resposta)) itens.push({ tipo: "aviso", texto: "Nada mudou ainda: o agente só prometeu. Peça de novo ou use um atalho." });
+      }
+      const anexos = [r.aprendido, r.seguidas].filter(Boolean) as unknown[];
+      responder(pr.texto, { quem: "agente", itens, acoes, mensagemId: null, anexos, opcoes: r.opcoes }, r.uso_id);
     } catch (e) {
-      const t = emPreparacao(e) ? "O agente editor está em preparação: falta publicar a função editor-video." : textoDoErro(e);
-      falar("agente", [{ tipo: "aviso", texto: t }]);
+      const causa = e instanceof ErroDoPrimeiroPasso ? e.causa : e;
+      const t = emPreparacao(causa) ? "O agente editor está em preparação: falta publicar a função editor-video." : textoDoErro(causa);
+      console.error("[agente editor] pedido não andou", causa);
+      devolverAoCampo(pr.chaveDoDono, pr.texto, t);
     } finally {
       setRodando(null);
       atualizarCusto();
@@ -247,7 +536,8 @@ export default function AgenteEditor({
     return { fontes, custo: custoDaFala(p, pagas) };
   };
 
-  const seguir = async (pr: Preparo, comFala: boolean) => {
+  const seguir = async (preparado: Preparo, comFala: boolean) => {
+    let pr = preparado;
     if (!projeto) return;
     setPreparo(null);
     let base = projeto;
@@ -259,10 +549,10 @@ export default function AgenteEditor({
         base = r.projeto;
         setGasto((g) => g + r.custo_usd);
         if (onAplicarProjeto) onAplicarProjeto(base, "Fala marcada");
-        falar("agente", [{ tipo: "ferramenta", texto: `Timestamp: fala de ${r.marcadas} ${r.marcadas === 1 ? "vídeo marcada" : "vídeos marcada"} (${usd(r.custo_usd)}).` }]);
+        pr = { ...pr, antes: [{ tipo: "ferramenta", texto: `Timestamp: fala de ${r.marcadas} ${r.marcadas === 1 ? "vídeo marcada" : "vídeos marcada"} (${usd(r.custo_usd)}).` }] };
       } catch (e) {
         const t = emPreparacao(e) ? "O Timestamp está em preparação: falta publicar a função editor-video." : textoDoErro(e);
-        falar("agente", [{ tipo: "aviso", texto: `Não marquei a fala: ${t}` }]);
+        devolverAoCampo(pr.chaveDoDono, pr.texto, `Não marquei a fala: ${t}`);
         setRodando(null);
         atualizarCusto();
         rolarParaBaixo();
@@ -270,15 +560,14 @@ export default function AgenteEditor({
       }
       setRodando(null);
     }
-    if (pr.skill) proporDaSkill(pr.skill, base);
-    else if (pr.pedido) await rodarPedido(pr.pedido, base);
+    if (pr.skill) proporDaSkill(pr.skill, base, pr.texto, pr.antes || []);
+    else if (pr.pedido) await rodarPedido(pr, base);
     atualizarCusto();
     rolarParaBaixo();
   };
 
   const comecar = (pr: Omit<Preparo, "fontes" | "custoFala">, precisa: boolean) => {
     if (!projeto) return;
-    setProposta(null);
     const falta = precisa ? faltaDeFala(projeto) : { fontes: [], custo: 0 };
     const completo: Preparo = { ...pr, fontes: falta.fontes, custoFala: falta.custo };
     if (falta.fontes.length && falta.custo > 0) {
@@ -290,41 +579,38 @@ export default function AgenteEditor({
   };
 
   // ---------------------------------------------------------------- pedido ao agente
-  const enviar = () => {
-    const pedido = rascunho.trim();
-    if (!pedido || !modelo || rodando || !projeto) return;
-    falar("dono", [{ tipo: "resposta", texto: pedido }]);
+  const enviarTexto = (texto: string) => {
+    const pedido = texto.trim();
+    if (!pedido || !modelo || rodando || preparo || !projeto) return;
+    setErroDoEnvio(null);
+    const conversaAntes = conversaParaOModelo(mensagens.map((m) => ({ quem: m.quem, texto: textoDaMensagem(m) })));
+    const chaveDoDono = falar("dono", [{ tipo: "resposta", texto: pedido }]);
     setRascunho("");
     rolarParaBaixo();
-    comecar({ pedido, skill: null }, pedidoPrecisaDeFala(pedido));
+    // Só exportar: regra fixa, sem modelo e sem custo; vira o cartão com Confirmar.
+    if (pedidoDeExportar(pedido)) {
+      responder(pedido, { quem: "agente", itens: [{ tipo: "resposta", texto: "Pronto para exportar como está na linha do tempo. Confirme para baixar." }], acoes: [acaoDeExportar(projeto)], mensagemId: null, anexos: [] });
+      return;
+    }
+    comecar({ pedido, skill: null, texto: pedido, chaveDoDono, conversa: conversaAntes }, pedidoPrecisaDeFala(pedido));
   };
+  const enviar = () => enviarTexto(rascunho);
 
   const atalho = (id: IdDaSkill, rotulo: string) => {
-    if (rodando || !projeto) return;
-    falar("dono", [{ tipo: "resposta", texto: rotulo }]);
+    if (rodando || preparo || !projeto) return;
+    setErroDoEnvio(null);
+    const chaveDoDono = falar("dono", [{ tipo: "resposta", texto: rotulo }]);
     rolarParaBaixo();
-    comecar({ pedido: null, skill: id }, skillPrecisaDeFala(id));
+    comecar({ pedido: null, skill: id, texto: rotulo, chaveDoDono, conversa: "" }, skillPrecisaDeFala(id));
   };
 
-  const aoPedido = async (pedido: "confirmar" | "descartar" | "desfazer"): Promise<RespostaDaAcao> => {
-    if (!proposta) return {};
-    const agora = new Date().toISOString();
-    if (pedido === "descartar") {
-      const a = { ...proposta.acao, descartada_em: agora };
-      setProposta({ ...proposta, acao: a });
-      return { anexo: a };
-    }
-    if (!controle) throw new Error("O editor não está aberto.");
-    if (pedido === "desfazer") {
-      const ok = controle.desfazer(proposta.p);
-      const a = { ...acaoFeita(proposta.acao, agora), desfeita_em: ok ? agora : null };
-      setProposta({ ...proposta, acao: a });
-      return { anexo: a, voltaram: ok ? proposta.acao.itens.length : 0 };
-    }
-    if (!controle.aplicar(proposta.p, "Agente editor")) throw new Error("O projeto mudou depois da proposta. Peça de novo ao agente.");
-    const a = acaoFeita(proposta.acao, agora);
-    setProposta({ ...proposta, acao: a });
-    return { anexo: a, feitos: a.itens.length, falhas: 0 };
+  /** "Cancelar" no preparo da fala: nada foi feito, o pedido volta ao campo. */
+  const cancelarPreparo = () => {
+    if (!preparo) return;
+    const pr = preparo;
+    setPreparo(null);
+    setMensagens((l) => l.filter((m) => m.chave !== pr.chaveDoDono));
+    if (pr.pedido) setRascunho(pr.texto);
   };
 
   // ---------------------------------------------------------------- assistir (visão)
@@ -412,7 +698,7 @@ export default function AgenteEditor({
   const topo = (
     <div className="space-y-1.5" data-seletor-do-agente-editor="">
       <select
-        className={juntar(campo, "h-9 text-[12.5px]")}
+        className={juntar(campo, "h-9 text-[13px]")}
         value={modelo ? modelo.id : ""}
         onChange={(e) => setEscolha({ ...escolha, modelo: e.target.value, raciocinio: "" })}
         aria-label="Modelo do agente"
@@ -439,7 +725,7 @@ export default function AgenteEditor({
             </option>
           ))}
         </select>
-        <label className="flex shrink-0 items-center text-[11.5px] text-muted-foreground">
+        <label className="flex shrink-0 items-center text-[11px] text-muted-foreground">
           <span className="mr-1">Teto US$</span>
           <input className={juntar(campo, "h-8 w-16 px-1.5 text-[12px] tabular-nums")} type="number" min={0.05} max={5} step={0.05} value={escolha.teto} onChange={(e) => setEscolha({ ...escolha, teto: Math.max(0.05, Math.min(5, Number(e.target.value) || TETO_PADRAO_USD)) })} aria-label="Teto por pedido em dólar" />
         </label>
@@ -448,7 +734,7 @@ export default function AgenteEditor({
         Pedido ~{usd(custo.tipico)} (máx. {usd(custo.maximo)}) · gasto aqui {usd(gasto)}
       </p>
       {sugestao && (
-        <button type="button" className="text-left text-[11.5px] text-primary hover:underline" onClick={() => setEscolha({ ...escolha, modelo: sugestao.id, raciocinio: "" })}>
+        <button type="button" className="text-left text-[11px] text-primary hover:underline" onClick={() => setEscolha({ ...escolha, modelo: sugestao.id, raciocinio: "" })}>
           Sugestão: {nomeDoModelo(sugestao)} custa menos e dá conta de editar. Trocar?
         </button>
       )}
@@ -471,7 +757,7 @@ export default function AgenteEditor({
         <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => void seguir(preparo, false)}>
           Sem marcar
         </button>
-        <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={() => setPreparo(null)}>
+        <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={cancelarPreparo}>
           Cancelar
         </button>
       </div>
@@ -507,7 +793,11 @@ export default function AgenteEditor({
             </div>
           )}
           {cartaoDoPreparo}
-          {proposta && <CartaoDeAcao key={proposta.acao.id} acao={proposta.acao} titulo="O agente vai mudar" onPedido={aoPedido} observacao="Nada muda até confirmar. Ctrl+Z também desfaz." />}
+          {erroDoEnvio && (
+            <p className="text-[13px] text-destructive [overflow-wrap:anywhere]" role="alert" data-erro-do-envio="">
+              Não foi: {erroDoEnvio} O pedido voltou para o campo.
+            </p>
+          )}
         </>
       }
       compositor={
@@ -517,10 +807,10 @@ export default function AgenteEditor({
               <button
                 key={a.skill}
                 type="button"
-                disabled={!!rodando || !projeto}
+                disabled={!!rodando || !!preparo || !projeto}
                 onClick={() => atalho(a.skill, a.rotulo)}
                 data-atalho-do-editor={a.skill}
-                className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
               >
                 {a.rotulo}
               </button>
@@ -537,7 +827,10 @@ export default function AgenteEditor({
               className={juntar(campoTexto, "mr-1.5 min-h-[40px] flex-1 resize-none py-2")}
               rows={2}
               value={rascunho}
-              onChange={(e) => setRascunho(e.target.value)}
+              onChange={(e) => {
+                setRascunho(e.target.value);
+                if (erroDoEnvio) setErroDoEnvio(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -554,7 +847,7 @@ export default function AgenteEditor({
                 <Square className="h-4 w-4" />
               </button>
             ) : (
-              <button type="submit" className={juntar(botao.primario, "h-10 w-10 px-0")} disabled={!rascunho.trim() || !modelo || !projeto} aria-label="Mandar para o agente">
+              <button type="submit" className={juntar(botao.primario, "h-10 w-10 px-0")} disabled={!rascunho.trim() || !modelo || !projeto || !!preparo} aria-label="Mandar para o agente">
                 <Send className="h-4 w-4" />
               </button>
             )}
@@ -563,13 +856,48 @@ export default function AgenteEditor({
       }
     >
       {!projeto && <div className={juntar(texto.auxiliar, "px-1 py-2")} data-agente-sem-editor="">{semEditor || "Abra um vídeo no editor para o agente editar."}</div>}
-      {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>Peça uma edição ou use um atalho. Você confere a lista antes.</p>}
-      {mensagens.map((m, k) => (
-        <div key={k} className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
-          {m.itens.map((i, j) => (
-            <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[12.5px] text-muted-foreground", i.tipo === "aviso" && "text-[12.5px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
-              {i.texto}
-            </p>
+      {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>{lendo ? "Lendo a conversa desta versão." : "Peça uma edição ou use um atalho. Ordem clara vai na hora, com Desfazer; o resto você confirma."}</p>}
+      {mensagens.map((m) => (
+        <div key={m.chave} className="min-w-0 space-y-1.5" data-mensagem-do-editor={m.quem}>
+          <div className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
+            {m.itens.map((i, j) => (
+              <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
+                {i.texto}
+              </p>
+            ))}
+            {m.quem === "agente" && (
+              <AprendizadoDoAgente
+                anexos={m.anexos}
+                onEsquecer={(id) => chamarEditorVideo({ acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.mensagemId })}
+                onGuardar={(texto, tipo) => chamarEditorVideo({ acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.mensagemId })}
+              />
+            )}
+            {m.aviso && <p className="text-[11px] text-amber-500" data-aviso-registro="">{m.aviso}</p>}
+          </div>
+          {m.opcoes && m.opcoes.length > 0 && (
+            <div className="flex flex-wrap" role="group" aria-label="Respostas para o agente" data-opcoes-do-editor="">
+              {m.opcoes.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  disabled={!!rodando || !!preparo || !modelo || !projeto}
+                  onClick={() => enviarTexto(o)}
+                  className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-primary/50 disabled:opacity-50"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          {m.acoes.map((a) => (
+            <CartaoDeAcao
+              key={a.id}
+              acao={a}
+              titulo={ehExportar(a) ? "Exportar" : a.executada_direto ? "O agente mudou" : "O agente vai mudar"}
+              onPedido={aoPedidoDe(m.chave, a)}
+              recemFeita={m.recemFeita}
+              observacao={ehExportar(a) ? "Sem custo. Baixa um ZIP para o render na máquina da agência." : "Nada muda até confirmar. O Desfazer volta o pedido inteiro."}
+            />
           ))}
         </div>
       ))}

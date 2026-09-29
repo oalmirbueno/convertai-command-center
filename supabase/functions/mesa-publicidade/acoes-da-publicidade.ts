@@ -16,6 +16,15 @@
  * - renomear_campanha (k1): nome novo (Desfazer volta o nome). Sem custo: direto.
  * - aprovar_territorio (t1..t4): aprova e monta o plano das seis tomadas. Confirmar,
  *   sem Desfazer (para mudar, aprove outro antes de pedir as tomadas).
+ * Frente AG2 (29/09):
+ * - avaliar_revisao (k1): lê o ensaio na Mesa Foto e aplica a regra do produto (sem Jev,
+ *   sem custo). Direta: não muda nada que precise voltar.
+ * - aprovar_foto (f1..fN): aprova na Mesa Foto só a foto com o produto conferido. Confirmar,
+ *   sem Desfazer (a versão aprovada fica travada lá).
+ * - refazer_foto (f1..fN): reprova a versão com o motivo (a Mesa Foto usa o motivo na próxima)
+ *   e gera uma versão nova da tomada. Gasta imagem: custo no cartão e Confirmar.
+ * - editar_briefing ganhou objetivo, formatos e o que não pode mudar no produto (logo, cor da
+ *   variante, detalhes, outras restrições).
  *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
@@ -34,11 +43,14 @@ import {
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { type CampanhaDePublicidade, enderecoDoDestino, ROTULO_DA_MUDANCA, type RevisaoDePublicidade } from "./regras.ts";
 
-export const OPERACOES_DA_PUBLICIDADE = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio"];
+export const OPERACOES_DA_PUBLICIDADE = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "mandar_para_ads", "mandar_para_mesa", "editar_briefing", "renomear_campanha", "aprovar_territorio", "avaliar_revisao", "aprovar_foto", "refazer_foto"];
 export const ESQUEMA_DAS_ACOES_DA_PUBLICIDADE = esquemaDasAcoes(OPERACOES_DA_PUBLICIDADE);
 
 /** Operações sem reverso (gastam IA ou reprovam na Mesa Foto). */
-export const OPERACOES_SEM_REVERSO = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "aprovar_territorio"];
+export const OPERACOES_SEM_REVERSO = ["propor_territorios", "pedir_tomadas", "reprovar_foto", "aprovar_territorio", "aprovar_foto", "refazer_foto"];
+
+/** Operações que gastam IA (o custo estimado vai no cartão antes de confirmar). */
+export const OPERACOES_COM_CUSTO = ["propor_territorios", "pedir_tomadas", "refazer_foto"];
 
 /** Campos do briefing que o agente troca por pedido (texto simples; a oferta entra como hipótese). */
 export const CAMPOS_EDITAVEIS_DO_BRIEFING: Record<string, string> = {
@@ -49,7 +61,37 @@ export const CAMPOS_EDITAVEIS_DO_BRIEFING: Record<string, string> = {
   destino: "destino",
   proibido: "o que é proibido",
   oferta: "oferta",
+  // Frente AG2: o resto do briefing que a equipe pede na conversa.
+  objetivo: "tipo de objetivo",
+  formatos: "formatos",
+  logo: "logo e texto do rótulo que não mudam",
+  cor_da_variante: "cor da variante",
+  detalhes: "detalhes de material que não mudam",
+  outras: "outras restrições",
 };
+
+/** Objetivo em palavras ("vender", "mensagens"...) para o valor do briefing. */
+const OBJETIVOS_EM_PALAVRAS: Array<[RegExp, string]> = [
+  [/reconhec|lembran|marca|alcance/, "reconhecimento"],
+  [/visita|loja fisica|trafego/, "visitas"],
+  [/consult|mensag|whats|contato|lead/, "consultas"],
+  [/experiment|provar|amostra|teste/, "experimentacao"],
+  [/vend|compra|convers/, "venda"],
+];
+
+/** Valor normalizado de um campo do briefing (null quando não dá para ler). */
+export function valorDoCampoDoBriefing(campo: string, valor: string): string | null {
+  const t = valor.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (campo === "objetivo") {
+    for (const [re, id] of OBJETIVOS_EM_PALAVRAS) if (re.test(t)) return id;
+    return null;
+  }
+  if (campo === "formatos") {
+    const achados = (valor.match(/\b(4:5|9:16|1:1|16:9)\b/g) || []).filter((f, i, l) => l.indexOf(f) === i);
+    return achados.length ? achados.join(", ") : null;
+  }
+  return valor;
+}
 
 /** "publico: mulheres de 30 a 45" -> { campo, valor }. Campo fora da lista ou valor vazio: null. */
 export function lerEdicaoDoBriefing(bruto: unknown): { campo: string; valor: string } | null {
@@ -59,7 +101,8 @@ export function lerEdicaoDoBriefing(bruto: unknown): { campo: string; valor: str
   const campo = s.slice(0, i).trim().toLowerCase().replace(/\s+/g, "_");
   const valor = s.slice(i + 1).replace(/\s+/g, " ").trim().slice(0, 600);
   if (!Object.prototype.hasOwnProperty.call(CAMPOS_EDITAVEIS_DO_BRIEFING, campo) || valor.length < 2) return null;
-  return { campo, valor };
+  const v = valorDoCampoDoBriefing(campo, valor);
+  return v ? { campo, valor: v } : null;
 }
 
 type DadosDoAlvo = {
@@ -71,6 +114,8 @@ type DadosDoAlvo = {
   decisao?: string | null;
   imagem_id?: string | null;
   destinos?: string[];
+  /** A versão mais nova da tomada (só ela pode ser aprovada ou refeita). */
+  ultima?: boolean;
 };
 export type AlvoDaPublicidade = Alvo & { dados: DadosDoAlvo };
 
@@ -110,6 +155,7 @@ export function alvosDaPublicidade(c: CampanhaDePublicidade): Array<AlvoComApeli
   });
   c.revisoes.slice(0, 40).forEach((r, i) => {
     if (!r.id) return;
+    const ultima = !c.revisoes.some((x) => x.foto_tomada_id === r.foto_tomada_id && x.versao > r.versao);
     const destinos = c.encaminhamentos.filter((e) => e.imagem_id && e.imagem_id === r.imagem_id).map((e) => e.destino);
     const mud = r.avaliacao.mudancas.map((m) => ROTULO_DA_MUDANCA[m]).join(", ");
     saida.push({
@@ -119,7 +165,7 @@ export function alvosDaPublicidade(c: CampanhaDePublicidade): Array<AlvoComApeli
       detalhe: [ROTULO_DO_VEREDITO[r.avaliacao.veredito] || r.avaliacao.veredito, mud, r.decisao ? `decisão: ${r.decisao}` : "sem decisão", destinos.length ? `já em ${destinos.join(" e ")}` : ""]
         .filter(Boolean)
         .join("; "),
-      dados: { tipo: "foto", veredito: r.avaliacao.veredito, decisao: r.decisao, imagem_id: r.imagem_id, destinos },
+      dados: { tipo: "foto", veredito: r.avaliacao.veredito, decisao: r.decisao, imagem_id: r.imagem_id, destinos, ultima },
     });
   });
   return saida;
@@ -201,6 +247,40 @@ export const REGRAS_DA_PUBLICIDADE: Record<string, RegraDaOperacao<AlvoDaPublici
         ? "As tomadas já foram pedidas com outro território. Abra uma campanha nova para mudar a direção."
         : null,
   },
+  // Frente AG2: revisão pela conversa.
+  avaliar_revisao: {
+    rotulo: "Ler as fotos do ensaio e conferir o produto",
+    alvos: ["k"],
+    direta: true,
+    trava: (a) => (a.dados.tem_ensaio ? null : "Peça as tomadas à Mesa Foto antes de revisar."),
+  },
+  aprovar_foto: {
+    rotulo: "Aprovar a foto",
+    alvos: ["f"],
+    trava: (a) =>
+      a.dados.decisao === "aprovada"
+        ? "Já aprovada."
+        : a.dados.decisao === "reprovada"
+        ? "Já reprovada: refaça a tomada para ter uma versão nova."
+        : a.dados.ultima === false
+        ? "Há uma versão mais nova desta tomada."
+        : a.dados.veredito === "reprovada"
+        ? "A conferência mostra o produto mudado: não dá para aprovar."
+        : a.dados.veredito !== "produto_ok"
+        ? "O produto não foi conferido com as fontes: confira ao lado delas na Revisão e aprove lá."
+        : null,
+  },
+  refazer_foto: {
+    rotulo: "Refazer a foto",
+    alvos: ["f"],
+    para: (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 400) || "sem motivo extra",
+    trava: (a) =>
+      a.dados.decisao === "aprovada"
+        ? "Já aprovada: a versão aprovada fica travada na Mesa Foto."
+        : a.dados.ultima === false
+        ? "Há uma versão mais nova desta tomada: refaça a partir dela."
+        : null,
+  },
 };
 
 export const DESCRICOES_DA_PUBLICIDADE: Record<string, string> = {
@@ -211,25 +291,89 @@ export const DESCRICOES_DA_PUBLICIDADE: Record<string, string> = {
   mandar_para_mesa: "ref = foto APROVADA. Registra o envio para a Mesa (orgânico) com a linhagem.",
   editar_briefing: "ref = k1. para = \"campo: valor novo\", campo um de objetivo_texto, publico, ocasiao, tom, destino, proibido, oferta (um item por campo). Grava versão nova do briefing. Oferta sem fonte fica como hipótese.",
   renomear_campanha: "ref = k1. para = o nome novo da campanha.",
-  aprovar_territorio: "ref = território proposto (t1..t4). Aprova e monta o plano das seis tomadas (sem custo). Pedido \"aprove o território X\".",
+  aprovar_territorio: "ref = território proposto (t1..t4). Aprova e monta o plano das seis tomadas (sem custo). Pedido \"aprove o território X\" ou \"aprove essa direção\".",
+  avaliar_revisao: "ref = k1. Lê as fotos do ensaio na Mesa Foto e aplica a regra do produto (sem custo). Pedido \"avalie as fotos\", \"atualize a revisão\".",
+  aprovar_foto: "ref = foto (f1..fN) cujo detalhe diz \"produto conferido\" e sem decisão. Aprova na Mesa Foto (sem volta). Foto que não deu para conferir a equipe aprova na Revisão, ao lado das fontes.",
+  refazer_foto: "ref = foto (f1..fN), a versão mais nova da tomada, sem aprovação. para = o que corrigir (ex.: \"rótulo de frente, sem reflexo\"). Reprova a versão com esse motivo e gera uma nova na Mesa Foto (gasta imagem).",
 };
 
 /** O pedido fala de alguma das ações? Só então as listas entram no prompt. */
 export function pedeAcaoNaPublicidade(mensagem: string): boolean {
-  return /(propo|territ|pe[cç]a|pedi|tomada|reprov|mud(ou|aram)|mand[ae]|envi[ae]|mesa ads|ads|aprov|briefing|renome|nome da campanha|p[uú]blico|ocasi|oferta|proibid|tom d[aoe]|troqu?e|mude|ajust)/i.test(String(mensagem || ""));
+  return /(propo|territ|dire[cç][aã]o|pe[cç]a|pedi|tomada|reprov|mud(ou|aram)|mand[ae]|envi[ae]|mesa ads|ads|aprov|briefing|renome|nome da campanha|p[uú]blico|ocasi|oferta|proibid|tom d[aoe]|troqu?e|mude|ajust|refa[cçz]|avali|revis|confer|foto|imagem|formato|logo|cor da|restri|objetivo|destino|essa|esse|segund|primeir|[uú]ltim|todas|todos)/i.test(String(mensagem || ""));
 }
 
 export function blocoDasAcoesDaPublicidade(c: CampanhaDePublicidade): string {
   return `${blocoDosAlvos("CAMPANHA, TERRITÓRIOS E FOTOS", alvosDaPublicidade(c), "nenhum (abra uma campanha).")}\n${regraDasAcoes(DESCRICOES_DA_PUBLICIDADE)}`;
 }
 
-export function normalizarAcoesDaPublicidade(bruto: unknown, c: CampanhaDePublicidade, id?: string): AcaoDoAgente | null {
-  return normalizarAcaoDoAgente(bruto, alvosDaPublicidade(c), REGRAS_DA_PUBLICIDADE, {
+/** Custo estimado por operação com IA (US$), calculado pela função com o modelo do catálogo. */
+export type CustosDaPublicidade = { propor_territorios?: number | null; pedir_tomadas?: number | null; refazer_foto?: number | null };
+
+export function normalizarAcoesDaPublicidade(bruto: unknown, c: CampanhaDePublicidade, id?: string, custos: CustosDaPublicidade = {}): AcaoDoAgente | null {
+  const acao = normalizarAcaoDoAgente(bruto, alvosDaPublicidade(c), REGRAS_DA_PUBLICIDADE, {
     agente: "publicidade",
     id: id || `publicidade-${Date.now().toString(36)}`,
     contexto: { client_id: c.client_id, campanha_id: c.id },
     semDesfazer: (itens: ItemDaAcaoDoAgente[]) => itens.every((i) => OPERACOES_SEM_REVERSO.indexOf(i.operacao) >= 0),
   });
+  if (!acao) return null;
+  // Frente AG2: o que gasta IA leva o custo estimado no cartão (antes, nada: o cartão dizia só "gasta IA").
+  let total = 0;
+  let semEstimativa = false;
+  for (const i of acao.itens) {
+    if (OPERACOES_COM_CUSTO.indexOf(i.operacao) < 0) continue;
+    const v = custos[i.operacao as keyof CustosDaPublicidade];
+    if (typeof v === "number" && isFinite(v) && v >= 0) total += v;
+    else semEstimativa = true;
+  }
+  const comCusto = acao.itens.some((i) => OPERACOES_COM_CUSTO.indexOf(i.operacao) >= 0);
+  acao.custo_estimado_usd = comCusto ? (semEstimativa && !total ? null : Math.round(total * 1e6) / 1e6) : 0;
+  return acao;
+}
+
+// ------------------------------------------------------------------ "essa direção", "a segunda tomada", "todas"
+
+/** Item que o Jev escolhe (espelho do tipo de _shared/conversa-das-mesas.ts, sem importar Deno). */
+export type ItemDaReferencia = { ref: string; titulo: string; detalhe?: string | null };
+
+const semAcentoMin = (t: unknown) => String(t == null ? "" : t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/**
+ * A lista para "essa", "a segunda", "todas" (frente AG2), na ordem da tela e
+ * com os apelidos que o modelo vê: territórios (Direção, na ordem da
+ * campanha) quando o pedido fala de território ou direção; fotos (Revisão:
+ * as sem decisão primeiro) quando fala de foto, tomada, imagem ou revisão;
+ * sem pista, a etapa em que a campanha está (fotos depois do ensaio,
+ * territórios antes). "A segunda tomada" usa a ordem das tomadas do plano.
+ */
+export function itensDaReferenciaDaPublicidade(mensagem: string, c: CampanhaDePublicidade): { itens: ItemDaReferencia[]; lista: "territorios" | "fotos" } {
+  const t = semAcentoMin(mensagem);
+  const alvos = alvosDaPublicidade(c);
+  const territorios = alvos.filter((a) => a.dados.tipo === "territorio").map((a) => ({ ref: a.ref, titulo: a.titulo, detalhe: a.detalhe || null }));
+  const porId: Record<string, AlvoComApelido<AlvoDaPublicidade>> = {};
+  alvos.forEach((a) => {
+    if (a.dados.tipo === "foto") porId[a.id] = a;
+  });
+  const querTerritorio = /territ|direc/.test(t);
+  const querFoto = /foto|tomada|imagem|revis|versao|ensaio/.test(t);
+  if (querTerritorio && !querFoto) return { itens: territorios, lista: "territorios" };
+  if (!querFoto && !c.revisoes.length) return { itens: territorios, lista: "territorios" };
+  const ordemDaTomada = (r: RevisaoDePublicidade) => {
+    const tomada = c.tomadas.find((x) => x.foto_tomada_id === r.foto_tomada_id || (!!r.tomada_id && x.id === r.tomada_id));
+    return tomada ? tomada.ordem : 99;
+  };
+  // "A segunda tomada": ordem do plano; senão, a ordem da Revisão (sem decisão primeiro).
+  const porTomada = /tomada/.test(t);
+  const lista = c.revisoes
+    .filter((r) => !!porId[r.id])
+    .slice()
+    .sort((x, y) => (porTomada ? ordemDaTomada(x) - ordemDaTomada(y) || y.versao - x.versao : (x.decisao ? 1 : 0) - (y.decisao ? 1 : 0)));
+  const itens = lista.map((r) => {
+    const a = porId[r.id];
+    const ordem = ordemDaTomada(r);
+    return { ref: a.ref, titulo: a.titulo, detalhe: [ordem < 99 ? `tomada ${ordem}` : "", a.detalhe || ""].filter(Boolean).join("; ") || null };
+  });
+  return { itens, lista: "fotos" };
 }
 
 /**
@@ -269,10 +413,15 @@ export function caminhoDaPublicidade(
     ? ["tomadas", "Ver as tomadas"]
     : tem("propor_territorios") || tem("aprovar_territorio")
     ? ["direcao", "Ver a direção"]
-    : tem("reprovar_foto")
+    : tem("reprovar_foto") || tem("avaliar_revisao") || tem("aprovar_foto") || tem("refazer_foto")
     ? ["revisao", "Ver a revisão"]
     : tem("mandar_para_ads") || tem("mandar_para_mesa")
     ? ["envio", "Ver o envio"]
     : ["campanha", "Ver a campanha"];
   return caminhoNaArea("mesa_publicidade", { clientId: c.client_id, etapa, estado: { campanha: c.id }, rotulo, abrirSozinho: opcoes.abrirSozinho });
+}
+
+/** A resposta promete fazer sem trazer a lista? ("vou propor", "vou pedir"...). */
+export function respostaPromete(resposta: unknown): boolean {
+  return /\b(vou|irei|vamos) (j[aá] )?(propor|pedir|gerar|preparar|fazer|criar|refazer|mudar|trocar|aprovar|reprovar|mandar|enviar|avaliar|ajustar|montar)\b/i.test(String(resposta == null ? "" : resposta));
 }

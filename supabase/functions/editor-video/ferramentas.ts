@@ -8,8 +8,10 @@
  *    tipadas, a TELA executa (as operações são funções puras da linha do tempo)
  *    e devolve o resultado; o modelo confere e segue ou termina. Travas: no
  *    máximo MAX_PASSOS chamadas ao modelo e MAX_FERRAMENTAS ferramentas por
- *    pedido, teto de custo por sessão, e nada muda o projeto de verdade antes
- *    do Aplicar do dono.
+ *    pedido, teto de custo por sessão. AG2 (29/09): ordem clara (Jev) é
+ *    aplicada na hora como UM passo do desfazer, com a lista do que mudou e o
+ *    Desfazer; o resto (dúvida, falha no caminho, Parar) pede Confirmar; o
+ *    exportar é sempre um cartão com Confirmar.
  * 2. Timestamp: preço, partes do áudio e o deslocamento de tempo de cada parte
  *    (determinístico: palavra da parte n ganha exatamente o início da parte).
  * 3. Visão: o que o modelo viu só vale nos tempos dos quadros que ele recebeu.
@@ -49,13 +51,20 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
   { nome: "inserir_texto", descricao: "Texto na tela (trilha texto) num trecho.", argumentos: '{"inicio_s": number, "duracao_s": number, "texto": string}', leitura: false },
   { nome: "reordenar", descricao: "Nova ordem da trilha de vídeo, com todos os apelidos dela.", argumentos: '{"ordem": ["c2", "c1", "c3"]}', leitura: false },
   { nome: "fechar_buracos", descricao: "Encosta os clipes da trilha de vídeo.", argumentos: "{}", leitura: false },
+  // AG2 (29/09): música e trilhas. Volume de música/voz é por clipe (ajustar volume); tirar o som ou esconder é da trilha.
+  { nome: "trilha", descricao: "Tira o som (muda) ou esconde (oculta) uma trilha inteira, pelo id da trilha em ler_projeto (ex.: audio-1).", argumentos: '{"trilha": "audio-1", "muda"?: boolean, "oculta"?: boolean}', leitura: false },
   {
     nome: "aplicar_skill",
     descricao: "Roda uma skill determinística: brabo, cortar_silencios, legendas, punch_in, organizar_por_roteiro, antes_depois, fechar_buracos, transicoes_suaves.",
     argumentos: '{"skill": string, "parametros"?: object, "selecionados"?: ["c1", "c2"]}',
     leitura: false,
   },
+  // Exportar nunca roda sozinho: a tela mostra um cartão com Confirmar (baixa o projeto para o render na máquina da agência).
+  { nome: "exportar", descricao: "Prepara a exportação do vídeo como está (projeto.json, edl.json e o passo a passo do render). Vira um cartão com Confirmar; não muda a linha do tempo.", argumentos: "{}", leitura: true },
 ];
+
+/** Ferramenta que não muda a linha do tempo, mas sai da tela (vira cartão com Confirmar). */
+export const FERRAMENTAS_DE_SAIDA = ["exportar"];
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS_DO_AGENTE.map((f) => f.nome);
 
@@ -71,7 +80,11 @@ export interface RespostaDoPasso {
   terminou: boolean;
   /** Chamadas cortadas pelo limite ou recusadas (nome desconhecido, JSON quebrado). */
   recusadas: string[];
+  /** AG2: quando a resposta é UMA pergunta curta, as respostas possíveis (a tela vira botões). */
+  opcoes?: string[];
 }
+
+export const MAX_OPCOES_DA_PERGUNTA = 4;
 
 /** Esquema da resposta do modelo (estrito: argumentos vão como texto JSON). */
 export const ESQUEMA_DO_PASSO = {
@@ -79,8 +92,9 @@ export const ESQUEMA_DO_PASSO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["plano", "chamadas", "resposta", "terminou"],
+    required: ["plano", "chamadas", "resposta", "terminou", "opcoes"],
     properties: {
+      opcoes: { type: "array", items: { type: "string" } },
       plano: { type: "string" },
       chamadas: {
         type: "array",
@@ -126,13 +140,38 @@ export function lerPasso(bruto: unknown, cabem: number): RespostaDoPasso {
     }
     chamadas.push({ ferramenta: nome, argumentos });
   });
+  const opcoes = (Array.isArray(o.opcoes) ? o.opcoes : [])
+    .map((x) => String(x == null ? "" : x).replace(/\s+/g, " ").trim().slice(0, 80))
+    .filter((x, i, l) => !!x && l.indexOf(x) === i)
+    .slice(0, MAX_OPCOES_DA_PERGUNTA);
   return {
     plano: String(o.plano || "").slice(0, 1200),
     chamadas,
     resposta: String(o.resposta || "").slice(0, 2000),
     terminou: o.terminou === true || chamadas.length === 0,
     recusadas,
+    // Opções só valem numa pergunta que termina o pedido (sem ferramenta junto).
+    opcoes: chamadas.length ? [] : opcoes,
   };
+}
+
+/**
+ * Pode aplicar na hora (sem Confirmar)? Regra 6 do contrato comum, do jeito do
+ * editor: tudo o que o agente muda na linha do tempo é UM passo do desfazer
+ * (um Desfazer volta o pedido inteiro), sem custo. Vai direto quando a ordem é
+ * clara (Jev) e nada deu errado no caminho; senão, cartão com Confirmar.
+ */
+export function podeAplicarDireto(r: { operacoes: number; falhas: number; recusadas: number; parado: boolean; ordemClara: boolean }): { direto: boolean; motivo: string } {
+  if (!r.operacoes) return { direto: false, motivo: "nada para mudar" };
+  if (r.parado) return { direto: false, motivo: "parado no meio" };
+  if (r.falhas || r.recusadas) return { direto: false, motivo: "algo não deu no caminho" };
+  if (!r.ordemClara) return { direto: false, motivo: "o pedido não é uma ordem clara" };
+  return { direto: true, motivo: "ordem clara, sem custo e com Desfazer" };
+}
+
+/** Resposta que promete ("vou cortar") sem ter mudado nada. */
+export function respostaPromete(texto: string): boolean {
+  return /\b(vou|irei|vamos) (fazer|cortar|editar|aplicar|legendar|gerar|preparar|reordenar|exportar|tirar|ajustar|montar|deixar)\b/i.test(String(texto || ""));
 }
 
 export interface LimitesDoPedido {
@@ -164,12 +203,93 @@ export function sistemaDoAgente(): string {
     "Planeje, chame as ferramentas, confira o resultado que volta e termine. Prefira uma skill determinística quando ela faz o pedido inteiro.",
     "Pedido de editar (editar, edição dinâmica, Brabo, deixar dinâmico, cortar, legendar) só termina depois de ferramentas que MUDAM o projeto. Nunca responda só com texto nem diga que abriu algo: edite.",
     "Edição dinâmica = aplicar_skill brabo. Silêncios = cortar_silencios. Legenda = legendas. Ganchos = punch_in. Sem fala marcada as skills ainda rodam (tempo exato); avise na resposta.",
-    `Limites: até ${MAX_PASSOS} passos e ${MAX_FERRAMENTAS} ferramentas por pedido. Nada é aplicado sem o dono clicar em Aplicar.`,
-    "Responda sempre no JSON pedido: plano (uma frase), chamadas (ferramenta + argumentos_json), resposta (o que fez ou o que falta, curto) e terminou.",
+    "Reordenar = reordenar com TODOS os apelidos da trilha de vídeo. Música: volume por clipe (ajustar volume), tirar o som da trilha inteira (trilha muda). Exportar ou renderizar = exportar (vira um cartão com Confirmar; nunca diga que já exportou).",
+    "\"Esse\", \"este corte\", \"o selecionado\" = os clipes em \"Selecionados na tela\"; \"aqui\" = o cursor. \"O segundo clipe\" conta na ordem da trilha de vídeo. \"Todos\" = todos os da trilha de vídeo.",
+    "Dúvida real (não dá para saber qual clipe, qual trecho ou o que o dono quer): não mude nada; termine com UMA pergunta curta em resposta e até 4 respostas curtas em opcoes (ex.: [\"c2\", \"c3\"]). Sem dúvida, opcoes vazio.",
+    "Nunca prometa (\"vou cortar\"): ou chama a ferramenta agora, ou pergunta. Nunca cite clipe, trecho ou fala que não está no projeto.",
+    `Limites: até ${MAX_PASSOS} passos e ${MAX_FERRAMENTAS} ferramentas por pedido. Ordem clara é aplicada na hora, com Desfazer; o resto vai para o dono confirmar.`,
+    "Responda sempre no JSON pedido: plano (uma frase), chamadas (ferramenta + argumentos_json), resposta (o que fez ou o que falta, curto; quando mudou algo, diga o que mudou com apelidos e tempos), terminou e opcoes.",
     "Ferramentas:",
     ...FERRAMENTAS_DO_AGENTE.map((f) => `- ${f.nome} ${f.argumentos}: ${f.descricao}`),
   ].join("\n");
 }
+
+// ------------------------------------------------------------------ conversa (AG2): o que vem da tela, conferido
+
+/** Item que "essa", "o segundo" e "todos" apontam (mesma forma de _shared/conversa-das-mesas.ts). */
+export interface ItemDaTela {
+  ref: string;
+  titulo: string;
+  detalhe?: string | null;
+}
+
+/** Referência do pedido (mesma forma de _shared/conversa-das-mesas.ts). */
+export interface ReferenciaDaTela {
+  refs: string[];
+  alcance: "um" | "todas";
+  probabilidade: number;
+  incerta: boolean;
+  fonte: "jev";
+}
+
+export const MAX_CONVERSA_CHARS = 4000;
+export const APELIDO_DE_CLIPE = /^c\d{1,4}$/;
+const MAX_ITENS_DA_REFERENCIA = 60;
+
+/** Clipes da trilha de vídeo na ordem da tela, com apelido (nunca id): o que "o segundo", "esse" e "todos" apontam. */
+export function itensDoCorpo(v: unknown): ItemDaTela[] {
+  if (!Array.isArray(v)) return [];
+  const vistos = new Set<string>();
+  const saida: ItemDaTela[] = [];
+  v.slice(0, MAX_ITENS_DA_REFERENCIA).forEach((x) => {
+    const o = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+    const ref = String(o.ref || "").trim();
+    if (!APELIDO_DE_CLIPE.test(ref) || vistos.has(ref)) return;
+    vistos.add(ref);
+    saida.push({ ref, titulo: String(o.titulo || "Clipe").replace(/\s+/g, " ").slice(0, 120), detalhe: o.detalhe ? String(o.detalhe).slice(0, 120) : null });
+  });
+  return saida;
+}
+
+/** A referência que o passo 1 achou e a tela devolve nos passos seguintes: só apelidos que estão nos itens. */
+export function referenciaDoCorpo(v: unknown, itens: ItemDaTela[]): ReferenciaDaTela | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const refs = (Array.isArray(o.refs) ? o.refs : []).map((x) => String(x || "")).filter((r) => itens.some((i) => i.ref === r));
+  if (!refs.length) return null;
+  const p = Number(o.probabilidade);
+  return { refs, alcance: o.alcance === "todas" ? "todas" : "um", probabilidade: isFinite(p) ? p : 0, incerta: o.incerta === true, fonte: "jev" };
+}
+
+
+/**
+ * Sistema de um passo (AG2): o do agente (com o mapa do painel), as regras que
+ * a equipe ensinou (EVITAR primeiro, em todo passo) e a referência do pedido
+ * ("essa", "o segundo", "todos"), quando há.
+ */
+export function sistemaDoPasso(base: string, blocoDasRegras: string, blocoDaReferencia: string): string {
+  return [base, String(blocoDasRegras || "").trim(), String(blocoDaReferencia || "").trim()].filter(Boolean).join("\n\n");
+}
+
+export const ANEXOS_ACEITOS = ["log_do_editor", "acao_agente", "aprendizado_do_agente", "regras_seguidas", "pergunta_do_editor"];
+export const MAX_BYTES_DOS_ANEXOS = 400_000;
+
+/** Só os anexos que a tela do editor sabe mostrar, e com teto de tamanho. */
+export function anexosDoEditor(v: unknown): unknown[] {
+  if (!Array.isArray(v)) return [];
+  const lista = v.filter((a) => a && typeof a === "object" && ANEXOS_ACEITOS.indexOf(String((a as { tipo?: unknown }).tipo)) >= 0).slice(0, 8);
+  // Grande demais (proposta enorme): tira as operações guardadas para confirmar depois; a lista e a prova ficam.
+  if (JSON.stringify(lista).length > MAX_BYTES_DOS_ANEXOS) {
+    return lista.map((a) => {
+      const o = a as Record<string, unknown>;
+      if (o.tipo !== "acao_agente" || !o.contexto || typeof o.contexto !== "object") return a;
+      const { operacoes: _fora, ...resto } = o.contexto as Record<string, unknown>;
+      return { ...o, contexto: resto };
+    }).filter((a) => JSON.stringify(a).length <= MAX_BYTES_DOS_ANEXOS);
+  }
+  return lista;
+}
+
 
 // ------------------------------------------------------------------ custo (estimativa antes)
 

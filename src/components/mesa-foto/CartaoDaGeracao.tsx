@@ -42,6 +42,9 @@ export default function CartaoDaGeracao({
   const parar = useRef(false);
   const { valor, incompleto } = custoDaProposta(acao);
   const total = acao.itens.length;
+  // AG2: reaberta no meio (a página recarregou durante a geração), o botão diz só as que faltam.
+  const jaFeitas = Math.min(total, (acao.resultados || []).length);
+  const faltam = total - jaFeitas;
   const semSaldo = typeof saldoUsd === "number" && typeof valor === "number" && valor > saldoUsd + 1e-9;
   const textoDoCusto = valor === null ? "custo a confirmar" : `${incompleto ? "a partir de " : "~"}${usd(valor)}`;
   const vaiSozinha = iniciarSozinha && !semSaldo && !!acao.contexto && (acao.contexto as Record<string, unknown>).ir_sozinho === true;
@@ -97,9 +100,9 @@ export default function CartaoDaGeracao({
         renderConfirmar={(confirmar, ocupado) => (
           <>
             {vaiSozinha && <ConfirmarSozinho confirmar={confirmar} />}
-            <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void confirmar()} disabled={ocupado || semSaldo || total === 0} data-confirmar-geracao="">
+            <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void confirmar()} disabled={ocupado || semSaldo || faltam === 0} data-confirmar-geracao="">
               {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-              Gerar {total} {total === 1 ? "foto" : "fotos"} · {textoDoCusto}
+              Gerar {faltam} {faltam === 1 ? "foto" : "fotos"}{jaFeitas ? ` que ${faltam === 1 ? "falta" : "faltam"}` : ""} · {textoDoCusto}
             </Button>
             {ocupado && andamento && (
               <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => (parar.current = true)} data-parar-geracao="">

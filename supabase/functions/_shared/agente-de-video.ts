@@ -35,6 +35,10 @@ export const INTENCOES: Record<MesaDoAgente, IntencaoDoAgente[]> = {
     // Frente V-A (26/09): diretor (bíblia, roteiro, kits e templates) e troca de ângulo.
     { valor: "diretor", rotulo: "Planejar com o diretor", descricao: "Planejar um filme ou anúncio com o diretor: kit, pesquisa da região, bíblia (personagens, cenários, luz), roteiro plano a plano e template.", palavras: ["diretor", "biblia", "kit", "filme", "template", "shot list", "planejar", "pesquisa a regiao", "montar o filme"] },
     { valor: "angulo", rotulo: "Trocar o ângulo", descricao: "Gerar a mesma pessoa ou o mesmo cenário visto de outro ângulo de câmera (de lado, de costas, de cima).", palavras: ["angulo", "de lado", "de perfil", "de costas", "outro angulo", "trocar a camera"] },
+    // Frente AG2 (29/09): o agente age nos resultados (sem custo, com Desfazer).
+    { valor: "organizar", rotulo: "Organizar os takes", descricao: "Organizar os vídeos: separar por roteiro, cena e tomada, renomear no padrão e marcar os melhores takes.", palavras: ["organizar", "organiza", "organize", "renomear", "renomeia", "agrupar", "separar por cena", "separa por cena"] },
+    { valor: "arquivar", rotulo: "Arquivar resultados", descricao: "Arquivar (tirar da lista, sem apagar) um ou mais vídeos gerados que não servem.", palavras: ["arquivar", "arquive", "arquiva o", "arquiva a", "arquiva os", "arquiva as", "arquiva esse", "arquiva essa", "tira da lista", "tirar da lista"] },
+    { valor: "vincular", rotulo: "Ligar à cena", descricao: "Ligar um vídeo gerado a uma cena de um roteiro aprovado (vincular à cena 2, ligar ao roteiro).", palavras: ["vincular", "vincula", "vincule", "liga a cena", "liga na cena", "ligar a cena", "ligar na cena", "liga ao roteiro", "ligar ao roteiro"] },
   ],
   edicao: [
     { valor: "organizar", rotulo: "Organizar tudo", descricao: "Organizar os vídeos: separar por roteiro, cena e tomada, renomear no padrão e marcar os melhores takes.", palavras: ["organizar", "organiza", "separar", "separa", "renomear", "renomeia", "melhores", "melhor take", "agrupar"] },
@@ -109,15 +113,22 @@ export interface ResultadoGerado {
   estado: string;
   edicao_desde: string | null;
   grupo?: string | null;
+  /** AG2 (29/09): para as travas de arquivar e ligar à cena. */
+  melhor?: boolean;
+  em_versao_aprovada?: boolean;
+  roteiro_id?: string | null;
+  cena_ref?: string | null;
 }
 
 type AlvoDoResultado = Alvo & { dados: { r: ResultadoGerado } };
 
 export const AGENTE_DO_ENVIO = "envio_para_edicao";
 
-const REGRAS_DO_ENVIO: Record<string, RegraDaOperacao<AlvoDoResultado>> = {
+// AG2 (29/09): `direta` (regra 6 do contrato): sem custo e com Desfazer, a ordem clara vai na hora.
+export const REGRAS_DO_ENVIO: Record<string, RegraDaOperacao<AlvoDoResultado>> = {
   enviar_para_edicao: {
     rotulo: "Mandar para a Edição",
+    direta: true,
     trava: (a) => (a.dados.r.edicao_desde ? "Já está na Edição." : a.dados.r.estado === "arquivado" ? "Está arquivado." : null),
   },
 };
@@ -151,8 +162,102 @@ export function camposDoEnvio(operacao: string, agora: string): { edicao_desde: 
   throw new Error("Operação desconhecida.");
 }
 
+// ------------------------------------------------------------------ arquivar e ligar à cena (AG2, 29/09)
+
+/** Ações do agente da mesa nos resultados (arquivar, ligar à cena): sem custo, com Desfazer. */
+export const AGENTE_DOS_RESULTADOS = "resultados_da_mesa";
+
+/** Cena de roteiro aprovado que o agente pode ligar a um vídeo (id do roteiro nunca vai para o modelo nem para o Jev). */
+export interface CenaParaLigar {
+  roteiro_id: string;
+  roteiro: string;
+  cena_ref: string;
+  ordem: number;
+  titulo: string;
+}
+
+/** O valor da ligação guardado no item (roteiro|cena); a tela mostra o rótulo, nunca o id. */
+export const paraDaCena = (c: Pick<CenaParaLigar, "roteiro_id" | "cena_ref">) => `${c.roteiro_id}|${c.cena_ref}`;
+export function lerParaDaCena(v: unknown): { roteiro_id: string; cena_ref: string } | null {
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\|(.{1,40})$/i.exec(String(v || ""));
+  return m ? { roteiro_id: m[1], cena_ref: m[2] } : null;
+}
+export const rotuloDaCena = (c: Pick<CenaParaLigar, "roteiro" | "ordem" | "titulo">) => `${c.roteiro || "Roteiro"}, cena ${c.ordem}${c.titulo ? ` (${c.titulo})` : ""}`;
+
+export const REGRAS_DOS_RESULTADOS: Record<string, RegraDaOperacao<AlvoDoResultado>> = {
+  arquivar: {
+    rotulo: "Arquivar",
+    direta: true,
+    trava: (a) =>
+      a.dados.r.estado === "arquivado"
+        ? "Já está arquivado."
+        : a.dados.r.em_versao_aprovada
+          ? "Está numa versão aprovada: fica no acervo."
+          : a.dados.r.melhor
+            ? "Marcado como melhor take: desmarque antes de arquivar."
+            : null,
+  },
+  vincular_cena: {
+    rotulo: "Ligar à cena",
+    direta: true,
+    para: (v) => (lerParaDaCena(v) ? String(v) : null),
+    trava: (a, para) => {
+      const c = lerParaDaCena(para);
+      if (a.dados.r.estado === "arquivado") return "Está arquivado.";
+      return c && a.dados.r.roteiro_id === c.roteiro_id && a.dados.r.cena_ref === c.cena_ref ? "Já está ligado a esta cena." : null;
+    },
+  },
+};
+
+/** Os itens da etapa como o Jev e o cartão veem: r1..rN na ordem da tela (sem id). */
+export function itensReferiveis(lista: ResultadoGerado[]): Array<{ ref: string; titulo: string; detalhe: string | null }> {
+  return lista.map((r, i) => ({ ref: `r${i + 1}`, titulo: r.nome || "vídeo", detalhe: [r.edicao_desde ? "na Edição" : "", r.melhor ? "melhor take" : "", r.grupo || ""].filter(Boolean).join(", ") || null }));
+}
+
+/** Proposta de arquivar os vídeos escolhidos (null quando não há nenhum). */
+export function acaoDeArquivarResultados(escolhidos: ResultadoGerado[], opcoes: { id?: string } = {}): AcaoDoAgente | null {
+  if (!escolhidos.length) return null;
+  const alvos = comApelido(escolhidos.map((r): AlvoDoResultado => ({ id: r.id, titulo: r.nome || "vídeo", detalhe: r.grupo || null, dados: { r } })), "r");
+  const acao = normalizarAcaoDoAgente(
+    { resumo: `Arquivar ${alvos.length} ${alvos.length === 1 ? "vídeo" : "vídeos"} (sai da lista, não apaga). Dá para desfazer.`, itens: alvos.map((a) => ({ operacao: "arquivar", ref: a.ref })) },
+    alvos,
+    REGRAS_DOS_RESULTADOS,
+    { agente: AGENTE_DOS_RESULTADOS, id: opcoes.id },
+  );
+  if (acao) acao.custo_estimado_usd = 0;
+  return acao;
+}
+
+/** Proposta de ligar os vídeos escolhidos a UMA cena de roteiro aprovado. */
+export function acaoDeLigarACena(escolhidos: ResultadoGerado[], cena: CenaParaLigar, opcoes: { id?: string } = {}): AcaoDoAgente | null {
+  if (!escolhidos.length) return null;
+  const alvos = comApelido(escolhidos.map((r): AlvoDoResultado => ({ id: r.id, titulo: r.nome || "vídeo", detalhe: r.grupo || null, dados: { r } })), "r");
+  const rotulo = rotuloDaCena(cena);
+  const acao = normalizarAcaoDoAgente(
+    { resumo: `Ligar ${alvos.length} ${alvos.length === 1 ? "vídeo" : "vídeos"} a ${rotulo}. Dá para desfazer.`, itens: alvos.map((a) => ({ operacao: "vincular_cena", ref: a.ref, para: paraDaCena(cena) })) },
+    alvos,
+    REGRAS_DOS_RESULTADOS,
+    { agente: AGENTE_DOS_RESULTADOS, id: opcoes.id, rotuloDoPara: () => rotulo },
+  );
+  if (acao) acao.custo_estimado_usd = 0;
+  return acao;
+}
+
+/** Pergunta Choice do Jev: qual cena o pedido indica (c1..cN, na ordem dos roteiros). */
+export function perguntaDaCena(texto: string, cenas: CenaParaLigar[]) {
+  const criteria: Record<string, string> = {};
+  cenas.slice(0, 24).forEach((c, i) => {
+    criteria[`c${i + 1}`] = rotuloDaCena(c);
+  });
+  criteria[NENHUMA] = "o pedido não diz a cena, ou diz uma cena que não está na lista";
+  return {
+    state: { pedido: String(texto || "").slice(0, 600) },
+    questions: { cena: { type: "choice" as const, instructions: "A equipe quer ligar um vídeo a uma cena de roteiro. Qual destas cenas o `pedido` indica?", criteria } },
+  };
+}
+
 /** Agentes cujas propostas a função mesa-videos executa (o diretor entrou na frente V-A). */
-export const AGENTES_DA_MESA_DE_VIDEO = ["organizador_de_takes", AGENTE_DO_ENVIO, "diretor_de_video"] as const;
+export const AGENTES_DA_MESA_DE_VIDEO = ["organizador_de_takes", AGENTE_DO_ENVIO, "diretor_de_video", AGENTE_DOS_RESULTADOS] as const;
 
 /**
  * O "Ir para" das ações das mesas de vídeo (frente AG, 27/09: "quando termina
@@ -167,6 +272,11 @@ export function caminhoDaMesaDeVideo(clientId: string, acao: Pick<AcaoDoAgente, 
   const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
   if (acao.agente === AGENTE_DO_ENVIO) return caminhoNaArea("mesa_edicao", { ...base, etapa: "entrada", estado: { parte: "videos" }, rotulo: "Abrir na Mesa Edição" });
   if (acao.agente === "organizador_de_takes") return caminhoNaArea("mesa_edicao", { ...base, etapa: "organizar", rotulo: "Ver os takes organizados" });
-  if (acao.agente === "diretor_de_video") return caminhoNaArea("mesa_videos", { ...base, etapa: "resultados", rotulo: "Ver em Resultados" });
+  if (acao.agente === "diretor_de_video") {
+    // Mandar ao editor: a versão fica na Mesa Edição (etapa Editar, versões).
+    if (acao.resultados && acao.resultados.some((r) => r.ok && r.operacao === "mandar_ao_editor")) return caminhoNaArea("mesa_edicao", { ...base, etapa: "editar", estado: { parte: "versoes" }, rotulo: "Abrir no editor" });
+    return caminhoNaArea("mesa_videos", { ...base, etapa: "resultados", rotulo: "Ver em Resultados" });
+  }
+  if (acao.agente === AGENTE_DOS_RESULTADOS) return caminhoNaArea("mesa_videos", { ...base, etapa: "resultados", rotulo: "Ver em Resultados" });
   return null;
 }

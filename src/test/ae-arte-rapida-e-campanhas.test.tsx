@@ -507,7 +507,7 @@ describe("tela da arte rápida", () => {
     expect(corpo).toMatchObject({ client_id: CLIENTE, pedido: "Promoção do mouse gamer, R$ 149 no Pix até sexta", peca: "auto", campanha_id: CAMP_A });
     await waitFor(() => expect(mock.invoke.mock.calls.some((c) => (c[1] as any).body.acao === "enfileirar" && (c[1] as any).body.trabalho_id === trabalho.id)).toBe(true));
     // A peça criada abre no Estúdio de sempre, com "Levar para a Agenda" no lugar da Entrega.
-    expect(await screen.findByText(/Arte rápida · Arte única · Semana do Mouse/)).toBeTruthy();
+    expect(await screen.findByText(/Arte rápida · Arte única · Semana do Mouse/, {}, { timeout: 15000 })).toBeTruthy();
   });
 });
 

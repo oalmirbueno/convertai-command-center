@@ -109,6 +109,12 @@ import {
 } from "./acoes-da-publicidade.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG2 (29/09): conversa gravada sem perder a mensagem, "essa direção/a segunda tomada/todas" pelo Jev,
+// custo no cartão, revisão pela conversa e o aprendizado (regras que a equipe ensina).
+import { estimarComModelo } from "../_shared/ia-motor.ts";
+import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
+import { anexoDasRegrasSeguidas, aprenderDoPedido, type Aprendido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+import { alvosDaPublicidade, type CustosDaPublicidade, itensDaReferenciaDaPublicidade, respostaPromete } from "./acoes-da-publicidade.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -154,6 +160,8 @@ Responda só com o JSON pedido.`;
 
 const SISTEMA_DO_AGENTE = `Você é o agente da Mesa Publicidade do painel Aceleriq: ajuda a equipe a dirigir campanhas de produto (briefing, três territórios, seis tomadas pedidas à Mesa Foto, revisão do produto e envio para a Mesa e a Mesa Ads). Responda em português do Brasil, curto e direto, sem travessão. Você não gera imagem: quem produz é a Mesa Foto. Aprovar foto não aprova anúncio nem verba.
 
+Regras da conversa: responda com o estado real da campanha (o que está em "pendente" é o próximo passo). Nunca prometa ("vou propor", "vou pedir") sem trazer a ação em acoes: ou a lista vem nesta resposta, ou você faz UMA pergunta curta com as opções (os nomes da lista). Não invente território, foto, número nem custo que não está nos dados. regra_aprendida: quando o pedido ensina algo que vale para as próximas campanhas deste cliente ("nunca", "sempre", "não gostei de"), a regra numa frase curta no imperativo; senão, null. regras_seguidas: apelidos (g1...) das regras ensinadas que mudaram esta resposta; senão, lista vazia.
+
 ${CONHECIMENTO_DO_AGENTE}`;
 
 const S = (type: string | string[], extra: Record<string, unknown> = {}) => ({ type, ...extra });
@@ -182,7 +190,7 @@ const ESQUEMA_TERRITORIOS = {
 
 const ESQUEMA_DO_AGENTE = {
   nome: "resposta_do_agente_da_publicidade",
-  schema: obj({ resposta: S("string"), acoes: ESQUEMA_DAS_ACOES_DA_PUBLICIDADE }),
+  schema: obj({ resposta: S("string"), acoes: ESQUEMA_DAS_ACOES_DA_PUBLICIDADE, ...CAMPOS_DO_APRENDIZADO }),
 };
 
 const TAREFA = "estudio" as const;
@@ -433,7 +441,8 @@ async function campanhaCriar(ch: Chamador, corpo: Record<string, unknown>) {
     throw falhaDeBanco(error, "criar a campanha");
   }
   const id = String((data as Linha).id);
-  await servico().from("publicidade_briefings").insert({ campanha_id: id, client_id: clientId, versao: 1, briefing, criado_por: ch.userId });
+  const { error: erroDoBriefing } = await servico().from("publicidade_briefings").insert({ campanha_id: id, client_id: clientId, versao: 1, briefing, criado_por: ch.userId });
+  if (erroDoBriefing) registrarFalha("mesa-publicidade: primeira versão do briefing não gravada", erroDoBriefing);
   return json({ campanha: await lerCampanha(ch, id), banco: true });
 }
 
@@ -465,7 +474,13 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
   const c = e.c;
   if (!c.kit_id) throw new ErroHttp(409, "sem_produto", "Escolha o produto da campanha antes.");
   if (c.ensaio_id) throw new ErroHttp(409, "tomadas_ja_pedidas", "As tomadas já foram pedidas com o território aprovado. Abra uma campanha nova para outra direção.");
-  const [{ kit }, contexto, modelo] = await Promise.all([lerKit(c.client_id, c.kit_id), lerContextoConsolidado(servico(), c.client_id), modeloDeTexto(modeloId)]);
+  const [{ kit }, contexto, modelo, regras] = await Promise.all([
+    lerKit(c.client_id, c.kit_id),
+    lerContextoConsolidado(servico(), c.client_id),
+    modeloDeTexto(modeloId),
+    // Frente AG2: as regras que a equipe ensinou valem na direção (EVITAR primeiro). Nunca lança.
+    regrasDaMesa(servico(), { clientId: c.client_id, mesa: "publicidade", marcaId: c.marca_id }),
+  ]);
   const receita = receitaDaCategoria(c.categoria) || receitaParaProduto(kit.nome, kit.tipo);
   const dados = {
     produto: {
@@ -494,7 +509,7 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
     tarefa: TAREFA,
     agente: AGENTE_DIRETOR,
     modeloId: modelo.id,
-    sistema: SISTEMA_DO_DIRETOR,
+    sistema: SISTEMA_DO_DIRETOR + (regras.bloco ? `\n\n${regras.bloco}` : ""),
     mensagens: [{ papel: "usuario", conteudo: `Proponha os três territórios com estes dados reais:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_TERRITORIOS,
     maxTokensSaida: 9_000,
@@ -509,7 +524,8 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
   const custoPorTerritorio = Math.round((saida.custoUsd / territorios.length) * 1e6) / 1e6;
   if (e.banco && c.id) {
     // As propostas abertas anteriores saem da tela (ficam no banco como descartadas); a aprovada fica.
-    await servico().from("publicidade_territorios").update({ status: "descartado" }).eq("campanha_id", c.id).eq("status", "proposto");
+    const { error: erroDoDescarte } = await servico().from("publicidade_territorios").update({ status: "descartado" }).eq("campanha_id", c.id).eq("status", "proposto");
+    if (erroDoDescarte) registrarFalha("mesa-publicidade: territórios anteriores não descartados (os novos entram mesmo assim)", erroDoDescarte);
     const { error } = await servico().from("publicidade_territorios").insert(territorios.map((t) => {
       const { id: _id, status: _s, ...dadosDoTerritorio } = t;
       return { campanha_id: c.id, client_id: c.client_id, ordem: t.ordem, briefing_versao: c.briefing_versao, status: "proposto", dados: dadosDoTerritorio, custo_usd: custoPorTerritorio, criado_por: ch.userId };
@@ -525,7 +541,11 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
 
 async function territoriosPropor(ch: Chamador, corpo: Record<string, unknown>) {
   const e = await estadoDoPedido(ch, corpo);
-  return json(await proporTerritorios(ch, e, limpo(corpo.pedido, 1500, true) || null, corpo.modelo_id));
+  const pedido = limpo(corpo.pedido, 1500, true) || null;
+  // Frente AG2: pedir de novo com um pedido ("menos luxo, mais rua") é ajuste: ensina quando vale para sempre.
+  const aprendendo = pedido ? aprenderDoAjuste(e.c, ch.userId, pedido) : Promise.resolve(null);
+  const r = await proporTerritorios(ch, e, pedido, corpo.modelo_id);
+  return json({ ...r, aprendido: await aprendendo });
 }
 
 async function gravarPlano(e: Estado, tomadas: TomadaDePublicidade[], territorio: Territorio) {
@@ -552,7 +572,8 @@ async function territorioAprovar(ch: Chamador, corpo: Record<string, unknown>) {
   const plano = planoDeTomadas(aprovado, receitaDaCategoria(e.c.categoria), e.c.briefing, e.c.tomadas.map((x) => x.id));
   if (e.banco && e.c.id) {
     const agora = new Date().toISOString();
-    await servico().from("publicidade_territorios").update({ status: "proposto", decidido_por: null, decidido_em: null }).eq("campanha_id", e.c.id).eq("status", "aprovado").neq("id", id);
+    const { error: erroDoAnterior } = await servico().from("publicidade_territorios").update({ status: "proposto", decidido_por: null, decidido_em: null }).eq("campanha_id", e.c.id).eq("status", "aprovado").neq("id", id);
+    if (erroDoAnterior) throw falhaDeBanco(erroDoAnterior, "desaprovar o território anterior");
     const { error } = await servico().from("publicidade_territorios").update({ status: "aprovado", decidido_por: ch.userId, decidido_em: agora }).eq("id", id).eq("campanha_id", e.c.id);
     if (error) throw falhaDeBanco(error, "aprovar o território");
     e.c = { ...e.c, territorio_id: id };
@@ -599,7 +620,9 @@ async function pedirTomadas(ch: Chamador, e: Estado, corpo: Record<string, unkno
   let lacunas: string[] = [];
   if (!ensaio) {
     // A marca abre o pedido: é por ela que um pedido caído por tempo é achado (sem cobrar de novo).
-    const pedido = pedidoParaMesaFoto(c.briefing, t, tomadas, marca);
+    // Frente AG2: as regras EVITAR que a equipe ensinou entram no pedido à Mesa Foto.
+    const regras = await regrasDaMesa(servico(), { clientId: c.client_id, mesa: "publicidade", marcaId: c.marca_id });
+    const pedido = pedidoParaMesaFoto(c.briefing, t, tomadas, marca, regras.regras.filter((x) => x.tipo === "evitar").map((x) => x.texto));
     const corpoFoto: Record<string, unknown> = {
       acao: "campanha_planejar",
       client_id: c.client_id,
@@ -796,7 +819,8 @@ async function decidirRevisao(ch: Chamador, e: Estado, fotoTomadaId: string, ver
     }, { onConflict: "campanha_id,foto_tomada_id,versao" });
     if (error) throw new ErroHttp(503, "revisao_nao_gravada", "A decisão foi feita na Mesa Foto, mas a revisão não foi gravada aqui. Atualize a tela.");
     if (tomada && tomada.id) {
-      await servico().from("publicidade_tomadas").update({ status: revisao.decisao === "aprovada" ? "aprovada" : "reprovada", atualizado_em: agora }).eq("id", tomada.id).eq("campanha_id", c.id);
+      const { error: erroDaTomada } = await servico().from("publicidade_tomadas").update({ status: revisao.decisao === "aprovada" ? "aprovada" : "reprovada", atualizado_em: agora }).eq("id", tomada.id).eq("campanha_id", c.id);
+      if (erroDaTomada) registrarFalha("mesa-publicidade: status da tomada não gravado depois da decisão", erroDaTomada);
     }
     e.c = { ...c, revisoes: c.revisoes.filter((x) => x !== antes).concat([revisao]) };
     await tocarCampanha(e.c);
@@ -817,7 +841,19 @@ async function revisaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
   const fotoTomada = limpo(corpo.foto_tomada_id, 80);
   const versao = Number(corpo.versao);
   if (!fotoTomada || !isFinite(versao) || versao < 1) throw new ErroHttp(400, "foto_invalida", "Informe foto_tomada_id e versao.");
-  return json(await decidirRevisao(ch, e, fotoTomada, versao, decisao, limpo(corpo.motivo, 800), corpo.confirmo_produto === true));
+  const motivo = limpo(corpo.motivo, 800);
+  // Frente AG2 (aprendizado): reprovar com o motivo da equipe ensina (o Jev decide se vale para as próximas).
+  const aprendendo = decisao === "reprovar" && motivo ? aprenderDoAjuste(e.c, ch.userId, motivo) : Promise.resolve(null);
+  const r = await decidirRevisao(ch, e, fotoTomada, versao, decisao, motivo, corpo.confirmo_produto === true);
+  return json({ ...r, aprendido: await aprendendo });
+}
+
+/**
+ * Frente AG2: ajuste da equipe fora da conversa (reprovar com motivo, propor
+ * de novo com pedido) também ensina. Roda junto com a ação e nunca a bloqueia.
+ */
+function aprenderDoAjuste(c: CampanhaDePublicidade, userId: string, motivo: string): Promise<Aprendido | null> {
+  return aprenderDoPedido(servico(), { clientId: c.client_id, mesa: "publicidade", pedido: motivo, motivo, marcaId: c.marca_id, userId, forcar: true });
 }
 
 // ------------------------------------------------------------------ encaminhar (Mesa e Mesa Ads)
@@ -905,21 +941,50 @@ async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unkn
   return String((data as Linha).id);
 }
 
+/**
+ * O que falta na campanha, na ordem do trabalho (frente AG2): o agente diz o
+ * próximo passo real em vez de uma resposta genérica.
+ */
+function pendenciasDaCampanha(c: CampanhaDePublicidade): string[] {
+  const p: string[] = [];
+  if (!c.kit_id) p.push("escolher o produto da campanha (kit da Mesa Foto)");
+  lacunasDoBriefing(c.briefing).forEach((l) => p.push(`briefing: ${l}`));
+  const aprovado = c.territorios.find((x) => x.id === c.territorio_id);
+  if (!c.territorios.length) p.push("propor os três territórios");
+  else if (!aprovado) p.push("aprovar um território (Direção)");
+  if (aprovado && !c.ensaio_id) p.push("pedir as seis tomadas à Mesa Foto");
+  if (c.ensaio_id && !c.revisoes.length) p.push("ler as fotos do ensaio (avaliar a revisão) quando a Mesa Foto gerar");
+  const semDecisao = c.revisoes.filter((r) => !r.decisao);
+  const mudaram = semDecisao.filter((r) => r.avaliacao.veredito === "reprovada").length;
+  if (mudaram) p.push(`${mudaram} foto(s) com o produto mudado para reprovar ou refazer`);
+  const conferir = semDecisao.filter((r) => r.avaliacao.veredito !== "reprovada").length;
+  if (conferir) p.push(`${conferir} foto(s) sem decisão na Revisão`);
+  const aprovadas = c.revisoes.filter((r) => r.decisao === "aprovada" && r.imagem_id);
+  const naoEnviadas = aprovadas.filter((r) => !c.encaminhamentos.some((e) => e.imagem_id === r.imagem_id)).length;
+  if (naoEnviadas) p.push(`${naoEnviadas} foto(s) aprovada(s) ainda não mandada(s) para a Mesa ou a Mesa Ads`);
+  return p.slice(0, 12);
+}
+
 function resumoDaCampanhaParaOAgente(c: CampanhaDePublicidade): string {
   const t = c.territorios.find((x) => x.id === c.territorio_id);
+  // Frente AG2: o estado real com os apelidos que o modelo usa (t1.., f1..), nunca o id.
+  const apelidos = alvosDaPublicidade(c);
+  const refDe = (id: string | null | undefined) => (id ? (apelidos.find((a) => a.id === id) || { ref: null }).ref : null);
   return JSON.stringify({
     campanha: c.nome,
+    apelido_da_campanha: c.id ? "k1" : null,
     status: statusDaCampanha(c),
     produto: c.kit_nome || null,
     categoria: c.categoria,
     briefing: { versao: c.briefing_versao, ...c.briefing, lacunas: lacunasDoBriefing(c.briefing) },
-    territorios: c.territorios.map((x) => ({ nome: x.nome, status: x.status, conceito: x.conceito })),
+    territorios: c.territorios.map((x) => ({ apelido: refDe(x.id), nome: x.nome, status: x.status, conceito: x.conceito, promessa: x.promessa })),
     territorio_aprovado: t ? t.nome : null,
-    tomadas: c.tomadas.map((x) => ({ funcao: x.funcao, status: x.status })),
+    tomadas: c.tomadas.map((x) => ({ ordem: x.ordem, nome: x.nome, funcao: x.funcao, status: x.status })),
     ensaio_na_mesa_foto: !!c.ensaio_id,
-    revisoes: c.revisoes.map((r) => ({ veredito: r.avaliacao.veredito, mudancas: r.avaliacao.mudancas, decisao: r.decisao })),
+    revisoes: c.revisoes.map((r) => ({ apelido: refDe(r.id), foto: (apelidos.find((a) => a.id === r.id) || { titulo: null }).titulo, versao: r.versao, veredito: r.avaliacao.veredito, mudancas: r.avaliacao.mudancas, decisao: r.decisao })),
     enviados: c.encaminhamentos.map((x) => x.destino),
-  }).slice(0, 8000);
+    pendente: pendenciasDaCampanha(c),
+  }).slice(0, 9000);
 }
 
 /** O sistema do agente: base com o conhecimento, a campanha aberta e, quando o pedido é de ação, a lista com apelidos. */
@@ -947,41 +1012,62 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     c = { ...normalizarCampanha(corpo.rascunho, clientId), id: null, persistida: false };
     if (c.client_id !== clientId) c = null;
   }
-  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, c && c.id ? c.id : null, corpo.nova === true);
-  const { data: hist } = await servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(12);
-  const historico = ((hist || []) as Linha[]).reverse().filter((m) => m.papel === "usuario" || m.papel === "agente")
-    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 4000) }));
-  const comAcoes = !!(c && c.id) && pedeAcaoNaPublicidade(mensagem);
-  const [modelo, contextoDoCliente] = await Promise.all([
+  const campanha = c;
+  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, campanha && campanha.id ? campanha.id : null, corpo.nova === true);
+  const comAcoes = !!(campanha && campanha.id) && pedeAcaoNaPublicidade(mensagem);
+  const historicoP = servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(12);
+  // "Essa direção", "a segunda tomada", "todas": o Jev escolhe na lista da tela (só quando o pedido aponta; nunca lança).
+  const referenciaP = Promise.resolve(historicoP).then((h) => {
+    if (!campanha || !campanha.id) return { r: null, itens: [] as { ref: string; titulo: string; detalhe?: string | null }[] };
+    const ultima = ((h.data || []) as Linha[]).find((m) => m.papel === "agente");
+    const lista = itensDaReferenciaDaPublicidade(mensagem, campanha);
+    return referenciaDoPedido(mensagem, lista.itens, { agente: "diretor de campanha da Mesa Publicidade", ultimaResposta: ultima ? String(ultima.conteudo || "") : null })
+      .then((r) => ({ r, itens: lista.itens }));
+  });
+  const [hist, modelo, contextoDoCliente, regras, referencia] = await Promise.all([
+    historicoP,
     modeloDeTexto(corpo.modelo_id),
     CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"]).catch((e) => (registrarFalha("mesa-publicidade: contexto do agente não lido", e), "")),
+    // Frente AG2: as regras que a equipe ensinou (EVITAR primeiro). Nunca lança.
+    regrasDaMesa(servico(), { clientId, mesa: "publicidade", marcaId: campanha ? campanha.marca_id : null }),
+    referenciaP.catch((e) => (registrarFalha("mesa-publicidade: referência do pedido", e), { r: null, itens: [] })),
   ]);
+  if (hist.error) registrarFalha("mesa-publicidade: histórico da conversa não lido", hist.error, { conversa_id: conversaId });
+  const historico = ((hist.data || []) as Linha[]).reverse().filter((m) => m.papel === "usuario" || m.papel === "agente")
+    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 4000) }));
+  const ultimaResposta = historico.slice().reverse().find((m) => m.papel === "agente");
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: "conversa",
     agente: AGENTE_DIRETOR,
     modeloId: modelo.id,
     // Frente AG: cérebro e dossiê do cliente (cache curto) no fim do sistema.
-    sistema: sistemaDoAgente(c, comAcoes) + (contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente)}` : ""),
+    sistema: sistemaDoAgente(c, comAcoes) + (contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente)}` : "") + extras,
     mensagens: [...historico, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_DO_AGENTE,
     maxTokensSaida: 4_000,
     timeoutMs: TIMEOUT_TEXTO_MS,
-    referencia: c && c.id ? { tipo: REF_CAMPANHA, id: c.id } : undefined,
+    referencia: campanha && campanha.id ? { tipo: REF_CAMPANHA, id: campanha.id } : undefined,
     criadoPor: ch.userId,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
-  const resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
-  let acao: AcaoDoAgente | null = comAcoes && c ? normalizarAcoesDaPublicidade(r.acoes, c) : null;
+  let resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
+  // Frente AG2: o que o pedido ensinou vira regra (o Jev decide se vale para sempre); roda junto com a ação.
+  const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "publicidade", pedido: mensagem, regraSugerida: r.regra_aprendida, marcaId: campanha ? campanha.marca_id : null, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
+  let acao: AcaoDoAgente | null = comAcoes && campanha ? normalizarAcoesDaPublicidade(r.acoes, campanha, undefined, await custosDaConversa(ch, campanha, r.acoes)) : null;
   // Frente AG (27/09): o cartão leva o "Ir para" (campanha e etapa certas); "faz e me leva" abre sozinho ao terminar.
-  if (acao && c) acao = comCaminho(acao, caminhoDaPublicidade(c, acao, { abrirSozinho: pedeParaLevar(mensagem) }));
-  // "Ele já vai fazendo" (regra 6): briefing e nome, sem custo e com Desfazer, vão direto quando o pedido é ordem clara.
-  if (acao && c && c.id && podeExecutarDireto(acao, REGRAS_DA_PUBLICIDADE, { pedidoClaro: true }).direto) {
+  if (acao && campanha) acao = comCaminho(acao, caminhoDaPublicidade(campanha, acao, { abrirSozinho: pedeParaLevar(mensagem) }));
+  // "Ele já vai fazendo" (regra 6): briefing, nome e ler a revisão, sem custo e com Desfazer, vão direto quando o pedido é ordem clara.
+  if (acao && campanha && campanha.id && podeExecutarDireto(acao, REGRAS_DA_PUBLICIDADE, { pedidoClaro: true }).direto) {
     const ordem = await ehOrdemClara(mensagem, { agente: "diretor de campanha da Mesa Publicidade", resumo: acao.resumo });
     if (ordem.clara) {
-      const campanhaId = c.id;
-      acao = await executarDireto(acao, (item) => executarItem(ch, campanhaId, item), { userId: ch.userId });
-      acao = comCaminho({ ...acao, caminho: null }, caminhoDaPublicidade(c, acao, { abrirSozinho: ordem.levar }));
+      const campanhaId = campanha.id;
+      acao = await executarDireto(acao, async (item) => {
+        const feito = await executarItem(ch, campanhaId, item);
+        return feito ? { desfazer: feito.desfazer, aviso: feito.aviso } : undefined;
+      }, { userId: ch.userId });
+      acao = comCaminho({ ...acao, caminho: null }, caminhoDaPublicidade(campanha, acao, { abrirSozinho: ordem.levar }));
       await auditLog({
         correlationId: crypto.randomUUID(), toolName: "publicidade_acao_direta", origin: "mesa:mesa-publicidade",
         keyId: `mesa:mesa-publicidade:${ch.userId}`, scopes: ["files:write"],
@@ -990,25 +1076,74 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       });
     }
   }
+  // Frente AG2: resposta que promete sem trazer a lista não fica no ar como se algo fosse acontecer.
+  if (!acao && respostaPromete(resposta) && resposta.indexOf("?") < 0) {
+    resposta = `${resposta} ${campanha && campanha.id ? "Ainda não montei a lista: diga o que fazer (ex.: qual território ou foto) e eu preparo o cartão." : "Abra ou salve uma campanha para eu montar a lista."}`;
+  }
+  const aprendido = await aprendendo;
+  const seguidas = anexoDasRegrasSeguidas(r.regras_seguidas, regras.regras);
   // Resposta sem ação que cita outra área: o botão "Abrir <área>" fica guardado na mensagem.
   const anexosDaResposta = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
-  const base = Date.now();
-  const { data: gravadas } = await servico().from("agente_mensagens").insert([
-    { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base).toISOString(), papel: "usuario", conteudo: mensagem, anexos: [] },
-    { conversa_id: conversaId, client_id: clientId, criado_em: new Date(base + 1).toISOString(), papel: "agente", conteudo: resposta, anexos: anexosDaResposta, uso_id: saida.usoId || null },
-  ]).select("id, papel");
-  const mensagemId = ((gravadas || []) as Linha[]).find((m) => m.papel === "agente");
+  if (aprendido) anexosDaResposta.push(aprendido);
+  if (seguidas) anexosDaResposta.push(seguidas);
+  // Frente AG2: grava as duas linhas sem perder a mensagem (antes: o erro do insert era ignorado, o cartão
+  // sumia e uma ação já feita na hora perdia a prova e o Desfazer).
+  const troca = await gravarTroca(servico(), {
+    conversaId,
+    clientId,
+    usuario: { conteudo: mensagem, anexos: [] },
+    agente: { conteudo: resposta, anexos: anexosDaResposta, uso_id: saida.usoId || null },
+    onde: "mesa-publicidade",
+  });
+  const feitaNaHora = acao && acao.executada_em ? ` O que já foi feito na hora: ${textoDoResultado(acao.resultados || [])}. Sem o registro, o Desfazer não aparece aqui: confira na etapa da campanha.` : "";
   return json({
     conversa_id: conversaId,
-    mensagem_id: mensagemId ? String(mensagemId.id) : null,
+    mensagem_id: troca.agenteId,
     resposta,
-    acao: mensagemId ? acao : null,
-    anexos: mensagemId ? anexosDaResposta : [],
+    acao,
+    anexos: anexosDaResposta,
+    aprendido,
     ir_para: destinoNaResposta(resposta, clientId),
-    campanha: acao && acao.executada_em && c && c.id ? await lerCampanha(ch, c.id).catch((e) => (registrarFalha("mesa-publicidade: lerCampanha falhou", e), null)) : undefined,
+    campanha: acao && acao.executada_em && campanha && campanha.id ? await lerCampanha(ch, campanha.id).catch((e) => (registrarFalha("mesa-publicidade: lerCampanha falhou", e), null)) : undefined,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
+    ...(troca.erro || !troca.agenteId ? { aviso_registro: `${AVISO_SEM_REGISTRO}${feitaNaHora}` } : {}),
   });
+}
+
+/**
+ * Frente AG2: custo estimado das operações com IA que o modelo pediu, antes do
+ * cartão (nada é cobrado aqui). Territórios e o plano das tomadas: pelo modelo
+ * do catálogo; refazer foto: a estimativa da própria Mesa Foto (grátis).
+ * Sem estimativa, o cartão avisa que o custo sai na Mesa Foto.
+ */
+async function custosDaConversa(ch: Chamador, c: CampanhaDePublicidade, acoesBrutas: unknown): Promise<CustosDaPublicidade> {
+  const itens = acoesBrutas && typeof acoesBrutas === "object" && Array.isArray((acoesBrutas as Linha).itens) ? ((acoesBrutas as Linha).itens as Linha[]) : [];
+  const ops = new Set(itens.map((i) => String((i && i.operacao) || "")));
+  const custos: CustosDaPublicidade = {};
+  if (ops.has("propor_territorios") || ops.has("pedir_tomadas")) {
+    const m = await modeloDeTexto().catch((e) => (registrarFalha("mesa-publicidade: modelo para estimar", e), null));
+    if (m) {
+      custos.propor_territorios = estimarComModelo(m, { tokensEntrada: 7_000, tokensSaida: 6_000 });
+      custos.pedir_tomadas = estimarComModelo(m, { tokensEntrada: 2 * 1_600 + 6_000, tokensSaida: 8_000 });
+    }
+  }
+  if (ops.has("refazer_foto") && c.ensaio_id) {
+    const alvos = alvosDaPublicidade(c);
+    const ref = itens.find((i) => i && i.operacao === "refazer_foto");
+    const alvo = ref ? alvos.find((a) => a.ref === String(ref.ref || "").toLowerCase()) : null;
+    const revisao = alvo ? c.revisoes.find((x) => x.id === alvo.id) : null;
+    if (revisao) {
+      try {
+        const e = await chamarMesaFoto(ch, { acao: "estimar", acao_alvo: "tomada_gerar", ensaio_id: c.ensaio_id, tomada_id: revisao.foto_tomada_id });
+        const v = Number(e.estimativa_usd);
+        if (isFinite(v) && v >= 0) custos.refazer_foto = v;
+      } catch (e) {
+        registrarFalha("mesa-publicidade: estimativa do refazer na Mesa Foto", e);
+      }
+    }
+  }
+  return custos;
 }
 
 async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
@@ -1017,10 +1152,13 @@ async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const campanhaId = ehUuid(corpo.campanha_id) ? String(corpo.campanha_id) : null;
   let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
   q = campanhaId ? q.eq("referencia_id", campanhaId) : q.is("referencia_id", null);
-  const { data } = await q.order("criado_em", { ascending: false }).limit(1);
+  const { data, error: erroDaConversa } = await q.order("criado_em", { ascending: false }).limit(1);
+  // Frente AG2: histórico que não foi lido vira erro na tela (antes voltava vazio, como se não houvesse conversa).
+  if (erroDaConversa) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data || []) as Linha[])[0];
   if (!conversa) return json({ conversa_id: null, mensagens: [] });
-  const { data: msgs } = await servico().from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: false }).limit(40);
+  const { data: msgs, error: erroDasMensagens } = await servico().from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: false }).limit(40);
+  if (erroDasMensagens) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   return json({ conversa_id: conversa.id, mensagens: ((msgs || []) as Linha[]).reverse() });
 }
 
@@ -1028,17 +1166,17 @@ async function propostaDaPublicidade(ch: Chamador, corpo: Record<string, unknown
   return await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), { acaoId: corpo.acao_id, agente: "publicidade" });
 }
 
-async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string } | void> {
+async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string; custo?: number; aprendido?: Aprendido | null } | void> {
   // A campanha é relida a cada item: um item anterior pode ter mudado o estado.
   const e: Estado = { c: await lerCampanha(ch, campanhaId), banco: true };
   if (item.operacao === "propor_territorios") {
     const r = await proporTerritorios(ch, e, null);
-    return { aviso: `Custo: US$ ${Number(r.custo_usd || 0).toFixed(4)}.` };
+    return { aviso: `Custo: US$ ${Number(r.custo_usd || 0).toFixed(4)}.`, custo: Number(r.custo_usd) || 0 };
   }
   if (item.operacao === "pedir_tomadas") {
     if (e.c.territorio_id !== item.alvo_id) throw new ErroDaAcao(409, "territorio_nao_aprovado", "Este território não é o aprovado.");
     const r = await pedirTomadas(ch, e, {});
-    return { aviso: r.ja_pedido ? "O ensaio já existia na Mesa Foto." : `Custo: US$ ${Number(r.custo_usd || 0).toFixed(4)}.` };
+    return { aviso: r.ja_pedido ? "O ensaio já existia na Mesa Foto." : `Custo: US$ ${Number(r.custo_usd || 0).toFixed(4)}.`, custo: Number(r.custo_usd) || 0 };
   }
   // Frente AG: briefing, nome e território (sem custo). O briefing volta pelo Desfazer (versão nova com o de antes).
   if (item.operacao === "editar_briefing" || item.operacao === "renomear_campanha") {
@@ -1049,7 +1187,12 @@ async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDo
       const ed = lerEdicaoDoBriefing(item.para);
       if (!ed) throw new ErroDaAcao(400, "campo_invalido", "Campo do briefing desconhecido.");
       const bruto = JSON.parse(JSON.stringify(e.c.briefing)) as Record<string, unknown>;
+      const restricoes = (bruto.restricoes && typeof bruto.restricoes === "object" ? bruto.restricoes : {}) as Record<string, unknown>;
       if (ed.campo === "oferta") bruto.oferta = { texto: ed.valor, fonte: "", status: "hipotese" };
+      // Frente AG2: formatos em lista; o que não pode mudar no produto mora em restricoes.
+      else if (ed.campo === "formatos") bruto.formatos = ed.valor.split(/,\s*/);
+      else if (ed.campo === "logo" || ed.campo === "cor_da_variante") bruto.restricoes = { ...restricoes, [ed.campo]: ed.valor };
+      else if (ed.campo === "detalhes" || ed.campo === "outras") bruto.restricoes = { ...restricoes, [ed.campo]: ed.valor.split(/\s*[;,]\s*/).filter(Boolean) };
       else bruto[ed.campo] = ed.valor;
       briefing = normalizarBriefing(bruto);
     } else {
@@ -1062,11 +1205,34 @@ async function executarItem(ch: Chamador, campanhaId: string, item: ItemDaAcaoDo
     await territorioAprovar(ch, { campanha_id: campanhaId, territorio_id: item.alvo_id });
     return;
   }
+  // Frente AG2: ler o ensaio e aplicar a regra do produto (sem Jev, sem custo). Nada para voltar.
+  if (item.operacao === "avaliar_revisao") {
+    const r = await avaliarRevisoes(ch, e, false);
+    const n = r.campanha.revisoes.length;
+    return { desfazer: { nada: true }, aviso: `${n} ${n === 1 ? "foto lida" : "fotos lidas"}${r.sem_versao ? `; ${r.sem_versao} tomada(s) ainda sem foto` : ""}` };
+  }
   const revisao = e.c.revisoes.find((r) => r.id === item.alvo_id);
   if (!revisao) throw new ErroDaAcao(404, "foto_inexistente", "Foto não encontrada na revisão desta campanha.");
   if (item.operacao === "reprovar_foto") {
     await decidirRevisao(ch, e, revisao.foto_tomada_id, revisao.versao, "reprovar", "", false);
     return;
+  }
+  // Frente AG2: aprovar só com o produto conferido (podeAprovar recusa o resto, com o motivo).
+  if (item.operacao === "aprovar_foto") {
+    await decidirRevisao(ch, e, revisao.foto_tomada_id, revisao.versao, "aprovar", "", false);
+    return;
+  }
+  // Frente AG2: refazer = reprovar esta versão com o motivo (a Mesa Foto usa os motivos na próxima) e gerar a nova.
+  if (item.operacao === "refazer_foto") {
+    if (revisao.decisao === "aprovada") throw new ErroDaAcao(409, "foto_aprovada", "Já aprovada: a versão aprovada fica travada na Mesa Foto.");
+    const motivo = item.para && item.para !== "sem motivo extra" ? String(item.para) : "";
+    // O motivo do refazer também ensina (o Jev decide se vale para as próximas); roda junto e nunca bloqueia.
+    const aprendendo = motivo ? aprenderDoAjuste(e.c, ch.userId, motivo) : Promise.resolve(null);
+    if (!revisao.decisao) await decidirRevisao(ch, e, revisao.foto_tomada_id, revisao.versao, "reprovar", motivo, false);
+    const r = await chamarMesaFoto(ch, { acao: "tomada_gerar", ensaio_id: e.c.ensaio_id, tomada_id: revisao.foto_tomada_id });
+    const custo = Number(r.custo_usd) || 0;
+    const aprendido = await aprendendo;
+    return { aviso: `Versão nova gerada na Mesa Foto. Custo: US$ ${custo.toFixed(4)}.${aprendido && aprendido.id ? ` Aprendi: ${aprendido.texto}` : ""}`, custo, aprendido };
   }
   if (item.operacao === "mandar_para_ads" || item.operacao === "mandar_para_mesa") {
     const destino: DestinoDoAtivo = item.operacao === "mandar_para_ads" ? "ads" : "mesa";
@@ -1085,15 +1251,26 @@ async function executarAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>
   const inicio = Date.now();
   // Frente AG (27/09): em passos de 3 (a tela mostra o andamento e o Parar) e o "Ir para" com o que foi feito.
   const clienteDaCampanha = guardada.mensagem.client_id;
-  const r = await confirmarAcaoGuardada(guardada, (item) => executarItem(ch, campanhaId, item), {
-    descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1, porVez: 3,
+  let custo = 0;
+  const aprendidos: Aprendido[] = [];
+  // Frente AG2: refazer foto gera imagem (demora): um por passo, para o Parar valer entre uma e outra.
+  const porVez = guardada.acao.itens.some((i) => i.operacao === "refazer_foto") ? 1 : 3;
+  const r = await confirmarAcaoGuardada(guardada, async (item) => {
+    const feito = await executarItem(ch, campanhaId, item);
+    if (feito && typeof feito.custo === "number") custo += feito.custo;
+    if (feito && feito.aprendido) aprendidos.push(feito.aprendido);
+    return feito ? { desfazer: feito.desfazer, aviso: feito.aviso } : undefined;
+  }, {
+    descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1, porVez,
     caminho: (feita) => caminhoDaPublicidade({ client_id: clienteDaCampanha, id: campanhaId }, feita),
   });
   if (corpo.descartar === true && !r.anexo.executada_em) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
   if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: guardada.mensagem.client_id, papel: "sistema", conteudo: `Publicidade: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
+    // Frente AG2: a linha que não gravou fica no log (antes o erro era engolido).
+    const { error: erroDaLinha } = await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: guardada.mensagem.client_id, papel: "sistema", conteudo: `Publicidade: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.`, anexos: [] });
+    if (erroDaLinha) registrarFalha("mesa-publicidade: resultado da ação não gravado na conversa", erroDaLinha, { mensagem_id: guardada.mensagem.id });
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "publicidade_acao_do_agente", origin: "mesa:mesa-publicidade",
@@ -1101,7 +1278,7 @@ async function executarAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>
     input: { client_id: guardada.mensagem.client_id, campanha_id: campanhaId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) },
     success: falhas === 0, statusCode: 200, durationMs: Date.now() - inicio, resultRef: guardada.mensagem.id,
   });
-  return json({ anexo: r.anexo, feitos, falhas, campanha: await lerCampanha(ch, campanhaId) });
+  return json({ anexo: r.anexo, feitos, falhas, custo_usd: Math.round(custo * 1e6) / 1e6, aprendido: aprendidos[0] || null, campanha: await lerCampanha(ch, campanhaId) });
 }
 
 async function desfazerAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>) {
@@ -1110,6 +1287,8 @@ async function desfazerAcaoDoAgente(ch: Chamador, corpo: Record<string, unknown>
   if (!ehUuid(campanhaId)) throw new ErroHttp(409, "sem_campanha", "Esta ação não está ligada a uma campanha salva.");
   const c = await lerCampanha(ch, campanhaId);
   const r = await desfazerAcaoGuardada(guardada, async (x: ResultadoDoItem) => {
+    // Frente AG2: leitura da revisão não muda nada que precise voltar.
+    if (x.desfazer && x.desfazer.nada === true) return;
     // Frente AG: briefing e nome voltam como estavam (versão nova do briefing, o histórico fica).
     if (x.desfazer && x.desfazer.briefing_antes) {
       await briefingSalvar(ch, { campanha_id: campanhaId, briefing: x.desfazer.briefing_antes, nome: String(x.desfazer.nome_antes || "") });
@@ -1149,6 +1328,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   agente_historico: agenteHistorico,
   executar_acao_agente: executarAcaoDoAgente,
   desfazer_acao_agente: desfazerAcaoDoAgente,
+  // Frente AG2: "Esquecer" e "Guardar como regra" do aprendizado (sem IA).
+  ...rotasDoAprendizado({ mesa: "publicidade", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
 };
 
 /** Ações que podem passar de 150 s (IA, Mesa Foto, Jev): a resposta começa na hora (resposta-com-folego.ts). */

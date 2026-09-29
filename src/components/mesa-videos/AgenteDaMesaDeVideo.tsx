@@ -6,6 +6,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { Ditado } from "@/components/mesa/Ditado";
 import { textoDoErro } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -14,6 +15,7 @@ import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilo
 import { montarPacote } from "../../../supabase/functions/_shared/pacote-de-edicao";
 import { ehPedidoDeVideo } from "../../../supabase/functions/_shared/pedidos-de-video";
 import { INTENCOES, NENHUMA, intencaoPorPalavras, type MesaDoAgente } from "../../../supabase/functions/_shared/agente-de-video";
+import { useAcoesGuardadas } from "@/lib/mesa-videos/api";
 import { entradaDoPacote } from "@/components/mesa-edicao/pacote";
 import { deixarPedidoParaOEditor } from "@/components/mesa-edicao/editor/ponteDoAgente";
 import type { PropsDoAgenteDaMesa } from "./MesaDeVideo";
@@ -22,6 +24,7 @@ import {
   chaveDosArquivos,
   fotoDaCenaNoAcervo,
   naEntradaDaEdicao,
+  type ArquivoDeVideo,
   useArquivosDeVideo,
   useHistorias,
   usePedidos,
@@ -41,6 +44,13 @@ const DiretorDoVideo = lazy(() => import("./DiretorDoVideo"));
  * mandar os vídeos gerados para a Edição (Mesa Vídeos), com Confirmar/Cancelar
  * e Desfazer. O texto livre passa pelo Jev na função (fração de centavo); sem
  * ele, as palavras do pedido decidem. A conversa fica guardada por cliente.
+ *
+ * AG2 (29/09): o texto livre vai para agente_agir, que entende E age: mandar
+ * para a Edição, arquivar, ligar à cena e organizar os vídeos que o pedido
+ * aponta ("essa", "a segunda", "todos", "r2"), na ordem da tela. Ordem clara
+ * sem custo vai na hora, com a prova e o Desfazer no cartão; dúvida vira UMA
+ * pergunta. Os cartões voltam no estado do banco ao reabrir. Pedido que falha
+ * não some: a bolha sai e o texto volta ao campo com o erro à vista.
  */
 
 interface Mensagem {
@@ -49,6 +59,10 @@ interface Mensagem {
   texto: string;
   mensagem_id?: string | null;
   acao?: AcaoDoAgente | null;
+  /** "Aprendi"/"Segui" que a resposta trouxe. */
+  anexos?: unknown[];
+  /** A resposta chegou, mas o registro falhou (aviso_registro). */
+  aviso?: string | null;
 }
 
 const MAX_MENSAGENS = 40;
@@ -58,9 +72,16 @@ let contador = 0;
 const novoId = () => `m${Date.now().toString(36)}${(contador++).toString(36)}`;
 
 const CAPACIDADES: Record<MesaDoAgente, string[]> = {
-  videos: ["abrir a cena certa para gerar", "mandar os vídeos aprovados para a Edição", "abrir o diretor e a troca de ângulo", "resumir o que falta"],
+  videos: ["abrir a cena certa para gerar", "mandar para a Edição, arquivar ou ligar à cena (\"essa\", \"a segunda\", \"todos\"), com Desfazer", "abrir o diretor e a troca de ângulo", "resumir o que falta"],
   edicao: ["separar por roteiro, cena e tomada", "renomear e marcar os melhores takes", "abrir o editor e passar o pedido de edição ao agente editor", "resumir o que falta"],
 };
+
+/** Título do cartão pela ação (mandar, organizar, arquivar, ligar à cena). */
+export function tituloDoCartaoDaMesa(a: AcaoDoAgente): string {
+  if (a.agente === "envio_para_edicao") return "Mandar para a Edição";
+  if (a.agente === "resultados_da_mesa") return a.itens.some((i) => i.operacao === "vincular_cena") ? "Ligar à cena" : "Arquivar vídeos";
+  return "Organizar os takes";
+}
 
 export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgenteDaMesa) {
   const { clientId, clientName } = useMesa();
@@ -73,7 +94,10 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
   const [mensagens, setMensagens] = useEstadoDaTela<Mensagem[]>(`${mesa}:agente:conversa:${clientId}`, [], { validar: (v) => Array.isArray(v) });
   const [texto, setTexto] = useEstadoDaTela<string>(`${mesa}:agente:rascunho:${clientId}`, "");
   const [pensando, setPensando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement>(null);
+  // Respostas que chegaram agora nesta tela (o "faz e me leva" só navega nelas).
+  const novas = useRef<Set<string>>(new Set());
   // Frente V-A: Agente (atalhos) ou Diretor (bíblia, roteiro, pesquisa). Só na Mesa Vídeos.
   const [modoDoPainel, setModoDoPainel] = useEstadoDaTela<"agente" | "diretor">(`videos:agente:modo:${clientId}`, "agente", { validar: (v) => v === "agente" || v === "diretor" });
 
@@ -82,11 +106,36 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length, pensando]);
 
-  const juntarMensagens = (novas: Mensagem[]) => setMensagens((m) => m.concat(novas).slice(-MAX_MENSAGENS));
-  const responder = (t: string, extra: Partial<Mensagem> = {}) => juntarMensagens([{ id: novoId(), papel: "agente", texto: t, ...extra }]);
+  const juntarMensagens = (mais: Mensagem[]) => setMensagens((m) => m.concat(mais).slice(-MAX_MENSAGENS));
+  const responder = (t: string, extra: Partial<Mensagem> = {}) => {
+    const id = novoId();
+    novas.current.add(id);
+    juntarMensagens([{ id, papel: "agente", texto: t, ...extra }]);
+  };
 
   const arquivos = (arquivosQ.data && arquivosQ.data.arquivos) || [];
   const pedidos = (pedidosQ.data && pedidosQ.data.itens) || [];
+
+  // Os cartões no estado de agora (feito em outra aba, desfeito...), relidos do banco ao abrir.
+  const guardadas = useAcoesGuardadas(mensagens.filter((m) => m.acao && m.mensagem_id).map((m) => String(m.mensagem_id)));
+  const chaveDasGuardadas = guardadas.data ? Object.keys(guardadas.data).map((k) => `${k}:${JSON.stringify(guardadas.data ? guardadas.data[k] : null).length}`).join("|") : "";
+  useEffect(() => {
+    const doBanco = guardadas.data;
+    if (!doBanco) return;
+    setMensagens((l) =>
+      l.map((m) => {
+        const atual = m.acao;
+        if (!atual || !m.mensagem_id || !doBanco[m.mensagem_id]) return m;
+        const achada = doBanco[m.mensagem_id].map(acaoDoAnexo).find((a) => !!a && a.id === atual.id) || null;
+        return achada ? { ...m, acao: achada } : m;
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDasGuardadas]);
+
+  /** A lista da etapa na ordem da tela (Resultados na Mesa Vídeos; Entrada na Mesa Edição): o servidor numera r1..rN igual. */
+  const ordemDaTela = (): string[] =>
+    arquivos.filter((a: ArquivoDeVideo) => (mesa === "videos" ? a.tipo === "gerado" && a.estado !== "arquivado" : naEntradaDaEdicao(a))).map((a: ArquivoDeVideo) => a.id);
 
   const situacao = (): string => {
     if (mesa === "videos") {
@@ -170,6 +219,11 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         irPara("gerar", { modo: "angulo" });
         return responder("Abri a troca de ângulo em Gerar. Escolha a imagem e leve a câmera em volta da pessoa.");
       }
+      if (intencao === "organizar") return propor("takes_organizar_propor", "Já está organizado: nomes e grupos seguem o padrão por roteiro e cena.");
+      if (intencao === "arquivar" || intencao === "vincular") {
+        irPara("resultados");
+        return responder(intencao === "arquivar" ? "Abri os Resultados. Diga qual vídeo arquivar (ex.: \"arquiva o r2\") ou use o botão de cada um." : "Abri os Resultados. Diga qual vídeo e qual cena (ex.: \"liga o r1 à cena 2\").");
+      }
     } else {
       if (intencao === "organizar") return propor("takes_organizar_propor", "Já está organizado: nomes e grupos seguem o padrão por roteiro e cena.");
       if (intencao === "subir") {
@@ -198,24 +252,49 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
   const pedir = async (textoDoPedido: string, intencaoPronta?: string) => {
     const t = textoDoPedido.trim();
     if (!t || pensando) return;
-    juntarMensagens([{ id: novoId(), papel: "usuario", texto: t }]);
-    setTexto("");
+    const idDoPedido = novoId();
+    const ultima = mensagens.slice().reverse().find((m) => m.papel === "agente");
+    juntarMensagens([{ id: idDoPedido, papel: "usuario", texto: t }]);
+    if (!intencaoPronta) setTexto("");
+    setErro(null);
     setPensando(true);
     try {
-      let intencao = intencaoPronta || "";
-      if (!intencao) {
-        try {
-          const r = await chamarMesaVideos<{ intencao: string }>({ acao: "agente_entender", client_id: clientId, mesa, texto: t });
-          intencao = r && r.intencao ? r.intencao : NENHUMA;
-        } catch {
-          // Sem a função agora: as palavras do pedido decidem.
-          intencao = intencaoPorPalavras(mesa, t);
-        }
+      if (intencaoPronta) {
+        await executar(intencaoPronta, null);
+        return;
       }
-      await executar(intencao, intencaoPronta ? null : t);
+      let r: { intencao: string; resposta?: string | null; mensagem_id?: string | null; acao?: unknown; anexos?: unknown[]; aviso_registro?: string } | null = null;
+      try {
+        r = await chamarMesaVideos({ acao: "agente_agir", client_id: clientId, mesa, texto: t, ordem: ordemDaTela(), ultima_resposta: ultima ? ultima.texto.slice(0, 1000) : null });
+      } catch (e) {
+        // Sem a função agora: as palavras do pedido decidem o que abrir (nada age sem o servidor).
+        console.warn("[agente da mesa] agente_agir falhou; vale a palavra do pedido", e);
+        r = null;
+      }
+      if (!r) {
+        await executar(intencaoPorPalavras(mesa, t), t);
+        return;
+      }
+      const a = acaoDoAnexo(r.acao);
+      const extra: Partial<Mensagem> = { anexos: r.anexos || [], aviso: r.aviso_registro || null };
+      if (a && r.mensagem_id) {
+        responder(r.resposta || a.resumo || "A lista está pronta para confirmar.", { ...extra, mensagem_id: r.mensagem_id, acao: a });
+        if (a.executada_em) void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+        return;
+      }
+      if (r.resposta) {
+        responder(r.resposta, extra);
+        return;
+      }
+      await executar(r.intencao || NENHUMA, t);
+      const anexos = extra.anexos || [];
+      if (anexos.length) setMensagens((l) => (l.length && l[l.length - 1].papel === "agente" ? l.slice(0, -1).concat([{ ...l[l.length - 1], anexos }]) : l));
     } catch (e) {
+      // A mensagem não some: a bolha sai e o texto volta ao campo (atalho: só o aviso).
+      setMensagens((l) => l.filter((m) => m.id !== idDoPedido));
+      if (!intencaoPronta) setTexto(t);
+      setErro(textoDoErro(e));
       toast.error("O agente não conseguiu", { description: textoDoErro(e), duration: 9000 });
-      responder(`Não consegui agora: ${textoDoErro(e)}`);
     } finally {
       setPensando(false);
     }
@@ -278,17 +357,25 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
                 type="button"
                 disabled={pensando}
                 onClick={() => void pedir(i.rotulo, i.valor)}
-                className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
               >
                 {i.rotulo}
               </button>
             ))}
           </div>
+          {erro && (
+            <p role="alert" className="mb-1 text-[12px] leading-4 text-destructive" data-erro-do-agente="">
+              Não foi: {erro}
+            </p>
+          )}
           <textarea
             className={juntar(campoTexto, "min-h-[64px] resize-none")}
             value={texto}
             rows={2}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value);
+              if (erro) setErro(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -318,12 +405,25 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         <div key={m.id} className="min-w-0 space-y-2">
           <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
             <p className="whitespace-pre-wrap">{m.texto}</p>
+            {m.aviso && (
+              <p className="mt-1 text-[12px] leading-4 text-warning" data-aviso-registro="">
+                {m.aviso}
+              </p>
+            )}
+            {m.papel === "agente" && m.anexos && m.anexos.length > 0 && (
+              <AprendizadoDoAgente
+                anexos={m.anexos}
+                onEsquecer={(id) => chamarMesaVideos({ acao: "aprendizado_esquecer", client_id: clientId, id, mesa })}
+                onGuardar={(textoDaRegra, tipo) => chamarMesaVideos({ acao: "aprendizado_guardar", client_id: clientId, texto: textoDaRegra, tipo, mesa })}
+              />
+            )}
           </div>
           {m.acao && m.mensagem_id && (
             <CartaoDeAcao
               acao={m.acao}
-              titulo={m.acao.agente === "envio_para_edicao" ? "Mandar para a Edição" : "Organizar os takes"}
-              observacao="Sem custo. Nada muda até confirmar, e dá para desfazer."
+              titulo={tituloDoCartaoDaMesa(m.acao)}
+              observacao={m.acao.executada_direto ? "Feito na hora (sem custo). Dá para desfazer." : "Sem custo. Nada muda até confirmar, e dá para desfazer."}
+              recemFeita={novas.current.has(m.id)}
               onPedido={onPedido(m)}
               onFeito={(_p, resposta) => guardarAnexo(m.id, resposta)}
             />

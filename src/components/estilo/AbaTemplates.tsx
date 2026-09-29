@@ -74,7 +74,7 @@ export function PreviaDoTemplate({ corpo, deOnde = [] }: { corpo: CorpoDoTemplat
         {DIMENSOES_DO_TEMPLATE.filter((d) => corpo.regras && corpo.regras[d] && corpo.regras[d].length > 0).map((d) => (
           <div key={d} className="min-w-0">
             <dt className={texto.rotulo}>{ROTULOS_DAS_DIMENSOES[d]}</dt>
-            <dd className="mt-0.5 text-[12.5px] leading-5 [overflow-wrap:anywhere]">
+            <dd className="mt-0.5 text-[13px] leading-5 [overflow-wrap:anywhere]">
               {corpo.regras[d].map((r, i) => (
                 <span key={i} className="block">
                   {r}
@@ -86,7 +86,7 @@ export function PreviaDoTemplate({ corpo, deOnde = [] }: { corpo: CorpoDoTemplat
         {areas.length > 0 && (
           <div className="min-w-0">
             <dt className={texto.rotulo}>Áreas</dt>
-            <dd className="mt-0.5 text-[12.5px] leading-5 [overflow-wrap:anywhere]">
+            <dd className="mt-0.5 text-[13px] leading-5 [overflow-wrap:anywhere]">
               {areas.map((a) => (
                 <span key={a} className="block">
                   {ROTULOS_DAS_AREAS[a]}: {corpo.areas[a]}
@@ -99,7 +99,7 @@ export function PreviaDoTemplate({ corpo, deOnde = [] }: { corpo: CorpoDoTemplat
       {c && (
         <div className="min-w-0">
           <p className={texto.rotulo}>Continuidade</p>
-          <p className="mt-0.5 text-[12.5px] leading-5 [overflow-wrap:anywhere]">
+          <p className="mt-0.5 text-[13px] leading-5 [overflow-wrap:anywhere]">
             {c.total} lâminas{c.tipos.length ? `: ${c.tipos.map((t) => ROTULOS_DA_CONTINUIDADE[t]).join(", ")}` : ""}
             {c.descricao ? `. ${c.descricao}` : ""}
           </p>
@@ -203,6 +203,8 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
     const n = normalizarEstadoDosTemplates(d);
     queryClient.setQueryData(chave, n);
     void queryClient.invalidateQueries({ queryKey: ["estilo-templates", clientId] });
+    // Frente AG2: o seletor "Template" do Estúdio lê a lista leve (estudio_ler); template criado ou arquivado aparece lá.
+    void queryClient.invalidateQueries({ queryKey: ["estilo-no-estudio", clientId] });
   };
   const [ocupado, setOcupado] = useState<string | null>(null);
   const direto = async (acao: string, corpo: Record<string, unknown>, rotulo: string) => {
@@ -364,7 +366,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
           {t.gostos.length > 0 && (
             <ul className="mt-2 space-y-1.5">
               {t.gostos.map((g) => (
-                <li key={g.id} className="flex min-w-0 items-start text-[12.5px]">
+                <li key={g.id} className="flex min-w-0 items-start text-[13px]">
                   {g.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
                   <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     <span className="text-muted-foreground">{g.quem === "dono" ? "Dono" : "Cliente"}: </span>
@@ -412,14 +414,14 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
             <h3 className={juntar(texto.rotulo, "mb-2")}>Versões</h3>
             <ul className="divide-y divide-border rounded-md border border-border">
               {t.versoes.map((v) => (
-                <li key={v.numero} className="flex min-w-0 items-center px-3 py-2 text-[12.5px]">
+                <li key={v.numero} className="flex min-w-0 items-center px-3 py-2 text-[13px]">
                   <span className="mr-2 shrink-0 font-medium tabular-nums">v{v.numero}</span>
                   <span className="min-w-0 flex-1 truncate text-muted-foreground" title={v.nota}>
                     {v.nota}
                   </span>
                   <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(v.criado_em)}</span>
                   {v.numero === t.versao_atual ? (
-                    <span className="ml-2 inline-flex shrink-0 items-center text-[11.5px] text-primary">
+                    <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-primary">
                       <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Atual
                     </span>
                   ) : (
@@ -446,7 +448,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
             <MiniaturaDoTemplate mini={capaDoTemplate(t)} url={(t.laminas[0] || t.ancoras[0] || t.testes[0] || { url: "" }).url} alt={t.nome}>
               {!capaDoTemplate(t) && <Layers className="absolute left-1/2 top-1/2 -ml-3 -mt-3 h-6 w-6 text-muted-foreground" aria-hidden="true" />}
             </MiniaturaDoTemplate>
-            <p className="mt-1 truncate text-[12.5px] font-medium">{t.nome}</p>
+            <p className="mt-1 truncate text-[13px] font-medium">{t.nome}</p>
             <p className="truncate text-[11px] text-muted-foreground">
               {rotuloDoTipo(t)} · v{t.versao_atual}
               {t.status === "arquivado" ? " · arquivado" : ""}
@@ -558,7 +560,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
   const [fontes, setFontes] = useEstadoDaTela<string[]>(`estilo:templates:fontes:${clientId}`, [], { validar: (v) => Array.isArray(v) });
   const [objetivo, setObjetivo] = useEstadoDaTela<string>(`estilo:templates:objetivo:${clientId}`, "", { validar: (v) => typeof v === "string" });
   const [formato, setFormato] = useEstadoDaTela<string>(`estilo:templates:formato:${clientId}`, "carrossel", { validar: (v) => typeof v === "string" && FORMATOS_DO_TEMPLATE.indexOf(v as never) >= 0 });
-  const [resultado, setResultado] = useState<{ mensagem_id: string | null; resposta: string; acao: AcaoDoAgente | null } | null>(null);
+  const [resultado, setResultado] = useState<{ mensagem_id: string | null; resposta: string; acao: AcaoDoAgente | null; aviso: string | null } | null>(null);
   const [pedirAoDono, setPedirAoDono] = useState<{ motivo: string; fontes: Array<{ apelido: string; nome: string }> } | null>(null);
   const [escolhas, setEscolhas] = useState<Record<string, string>>({});
   const opcoesDeFonte = [
@@ -585,7 +587,8 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
     }
     setPedirAoDono(null);
     const acao = d && Array.isArray(d.anexos) ? d.anexos.map(acaoDoAnexo).find(Boolean) || null : null;
-    setResultado({ mensagem_id: d && d.mensagem_id ? String(d.mensagem_id) : null, resposta: String((d && d.resposta) || ""), acao });
+    // Frente AG2: resposta que não ficou guardada avisa (sem mensagem_id, o cartão não pode ser confirmado).
+    setResultado({ mensagem_id: d && d.mensagem_id ? String(d.mensagem_id) : null, resposta: String((d && d.resposta) || ""), acao, aviso: d && typeof d.aviso_registro === "string" ? d.aviso_registro : null });
     void queryClient.invalidateQueries({ queryKey: ["estilo-do-cliente", clientId] });
   };
   const partesDaCombinacao = () => (diretor ? [{ modeloId: diretor.id, tipo: "texto" as const, tokensEntrada: 6_000, tokensSaida: 3_500 }] : []);
@@ -614,7 +617,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
                       </span>
                     )}
                   </MiniaturaDoTemplate>
-                  <p className="mt-1 truncate text-[11.5px]">{o.nome}</p>
+                  <p className="mt-1 truncate text-[11px]">{o.nome}</p>
                   <p className="truncate text-[10.5px] text-muted-foreground">{o.detalhe}</p>
                 </button>
               );
@@ -638,7 +641,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
       </div>
       {pedirAoDono && (
         <section className="space-y-2" data-pedir-ao-dono="">
-          <p className="text-[12.5px] text-muted-foreground">{pedirAoDono.motivo}</p>
+          <p className="text-[13px] text-muted-foreground">{pedirAoDono.motivo}</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {DIMENSOES_DA_COMBINACAO.map((d) => (
               <div key={d} className="flex min-w-0 items-center">
@@ -661,7 +664,12 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
       )}
       {resultado && (
         <section className="space-y-2" data-resultado-da-combinacao="">
-          {resultado.resposta && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{resultado.resposta}</p>}
+          {resultado.resposta && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{resultado.resposta}</p>}
+          {resultado.aviso && (
+            <p className="text-[12px] text-warning" role="status" data-aviso-registro="">
+              {resultado.aviso}
+            </p>
+          )}
           {resultado.acao && <PropostasDaAcao acao={resultado.acao} />}
           {resultado.acao && resultado.mensagem_id && (
             <CartaoDeAcao
@@ -672,6 +680,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
               onFeito={(p) => {
                 if (p === "descartar") return;
                 void queryClient.invalidateQueries({ queryKey: ["estilo-templates", clientId] });
+                void queryClient.invalidateQueries({ queryKey: ["estilo-no-estudio", clientId] });
               }}
             />
           )}
@@ -725,7 +734,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
           <Archive className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      {estado && estado.aviso && <p className="rounded-md bg-muted/60 px-3 py-2 text-[11.5px] text-muted-foreground">{estado.aviso}</p>}
+      {estado && estado.aviso && <p className="rounded-md bg-muted/60 px-3 py-2 text-[11px] text-muted-foreground">{estado.aviso}</p>}
       {consulta.isError && !estado && <p className="text-[12px] text-muted-foreground">Não foi possível ler os templates agora.</p>}
       {conteudo}
     </div>

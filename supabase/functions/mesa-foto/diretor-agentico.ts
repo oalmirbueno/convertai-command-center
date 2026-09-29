@@ -45,6 +45,8 @@ import {
 import { type CampanhaParaFotos, DESCRICOES_DO_ACERVO, ehReferenciaDaInternet, regrasDoAcervo } from "../_shared/acoes-do-acervo.ts";
 import { type CampanhaDaMesaFoto, campanhasComApelido } from "./acoes-da-mesa-foto.ts";
 import { linkDoPostNaMesaFoto } from "../_shared/post-de-fotos.ts";
+import { type ItemReferivel } from "../_shared/conversa-das-mesas.ts";
+import { PAPEIS, PAPEIS_DE_EVIDENCIA } from "./receitas.ts";
 
 // ------------------------------------------------------------------ constantes
 
@@ -85,6 +87,10 @@ export const OPERACOES_SEM_CUSTO = [
   // Frente MF (27/09): a foto entra num post de fotos na Agenda (sem gerar) e o atalho para o Estúdio de fotos.
   "post_na_agenda",
   "abrir_no_estudio",
+  // Frente AG2 (29/09): o produto (kit) e o ensaio pelas ações que a Mesa Foto já tem (kit_salvar e agente_aplicar).
+  "renomear_kit",
+  "fotos_do_kit",
+  "montar_ensaio",
 ];
 
 export const OPERACOES_DE_GERACAO = ["gerar_clone", "variar_imagem", "gerar_do_prompt", "gerar_no_book", "melhorar_foto"];
@@ -215,7 +221,7 @@ export type CloneBruto = {
 
 export type PromptBruto = { id: string; titulo: string; categoria?: string | null; client_id?: string | null; prompt_pt?: string | null; prompt_en?: string | null };
 export type BookBruto = { id: string; nome: string; status?: string | null; assunto?: { tipo?: string; id?: string; nome?: string } | null };
-export type KitBruto = { id: string; nome: string; variante?: string | null; status?: string | null };
+export type KitBruto = { id: string; nome: string; variante?: string | null; status?: string | null; refs?: { imagem_id: string; papel: string }[] | null };
 export type PersonaBruta = { id: string; nome: string; status?: string | null };
 /** Post de fotos da Agenda (trabalho do estúdio com direcao.so_fotos) que ainda aceita fotos. */
 export type PostBruto = { trabalho_id: string; task_id: string; titulo: string; data: string | null; fotos: number; estado: string };
@@ -270,6 +276,8 @@ export type AlvoDoClone = Alvo & { dados: { status: string; autorizacao_ok: bool
 export type AlvoDoPrompt = Alvo & { dados: { texto: string; categoria: string } };
 export type AlvoDoBook = Alvo & { dados: { status: string; assunto_tipo: string; assunto_id: string | null } };
 export type AlvoSimples = Alvo & { dados: { status: string } };
+/** Produto (kit) com as fotos de referência (id e papel), para trocar foto e renomear sem reler o banco. */
+export type AlvoDoKit = Alvo & { dados: { status: string; nome: string; variante: string | null; refs: { imagem_id: string; papel: string }[] } };
 export type AlvoDoPost = Alvo & { dados: { task_id: string; data: string | null; fotos: number } };
 
 export type PacoteDoDiretor = {
@@ -280,7 +288,7 @@ export type PacoteDoDiretor = {
   clones: Array<AlvoComApelido<AlvoDoClone>>;
   prompts: Array<AlvoComApelido<AlvoDoPrompt>>;
   books: Array<AlvoComApelido<AlvoDoBook>>;
-  kits: Array<AlvoComApelido<AlvoSimples>>;
+  kits: Array<AlvoComApelido<AlvoDoKit>>;
   personas: Array<AlvoComApelido<AlvoSimples>>;
   campanhas: CampanhaParaFotos[];
   /** Posts de fotos na Agenda com apelido a1..aN (frente MF). */
@@ -428,13 +436,23 @@ export function montarPacote(e: EntradaDoPacote): PacoteDoDiretor {
   }));
 
   const kitsOrdenados = e.kits.slice().sort((a, b) => Number(b.id === foco.kit_id) - Number(a.id === foco.kit_id));
-  const kits: Array<AlvoComApelido<AlvoSimples>> = kitsOrdenados.slice(0, 20).map((k, n) => ({
-    id: k.id,
-    titulo: umaLinha(`${k.nome}${k.variante ? ` (${k.variante})` : ""}`, 140),
-    detalhe: [k.id === foco.kit_id ? "aberto na tela" : "", k.status || ""].filter(Boolean).join("; "),
-    ref: `k${n + 1}`,
-    dados: { status: String(k.status || "") },
-  }));
+  const kits: Array<AlvoComApelido<AlvoDoKit>> = kitsOrdenados.slice(0, 20).map((k, n) => {
+    const refs = (Array.isArray(k.refs) ? k.refs : []).filter((r) => r && UUID.test(String(r.imagem_id))).map((r) => ({ imagem_id: String(r.imagem_id), papel: String(r.papel || "identidade") }));
+    // AG2: as fotos do produto com o apelido da foto (o diretor troca a foto sem ver id).
+    const naLista = refs.map((r) => (refDaImagem.get(r.imagem_id) ? `${refDaImagem.get(r.imagem_id)} ${r.papel}` : "")).filter(Boolean);
+    const fora = refs.length - naLista.length;
+    return {
+      id: k.id,
+      titulo: umaLinha(`${k.nome}${k.variante ? ` (${k.variante})` : ""}`, 140),
+      detalhe: [
+        k.id === foco.kit_id ? "aberto na tela" : "",
+        k.status || "",
+        naLista.length ? `fotos ${naLista.join(", ")}${fora ? ` e mais ${fora}` : ""}` : refs.length ? `${refs.length} fotos` : "sem fotos",
+      ].filter(Boolean).join("; "),
+      ref: `k${n + 1}`,
+      dados: { status: String(k.status || ""), nome: umaLinha(k.nome, 120), variante: k.variante ? umaLinha(k.variante, 120) : null, refs },
+    };
+  });
 
   const personasOrdenadas = e.personas.slice().sort((a, b) => Number(b.id === foco.persona_id) - Number(a.id === foco.persona_id));
   const personas: Array<AlvoComApelido<AlvoSimples>> = personasOrdenadas.slice(0, 20).map((p, n) => ({
@@ -594,6 +612,11 @@ export const DESCRICOES_DO_DIRETOR: Record<string, string> = {
   fotos_do_clone: 'ref c#; para com o conjunto NOVO de fotos de origem do clone, de 1 a 4 apelidos de fotos reais separados por vírgula ("i2, i5"). Serve para trocar, tirar ou pôr foto no clone.',
   montar_book: 'ref c#, k# ou m# (o assunto do book: clone, produto ou modelo); para com o nome do book ("Book verão").',
   levar_ao_canvas: "ref i#; leva a foto para um canvas novo, já ligada a um resultado. para vazio.",
+  renomear_kit: 'ref k#; para com o nome novo do produto e, se mudar, a variante depois de "|" ("Mouse NTC X | Preto").',
+  fotos_do_kit:
+    'ref k#; para com o conjunto NOVO de fotos do produto: apelidos de fotos com o papel ("i2 identidade, i5 embalagem"; papéis: identidade, detalhe, embalagem, verso, rotulo, estilo, cenario). Serve para trocar, tirar ou pôr foto no produto; as variações e campanhas usam estas fotos.',
+  montar_ensaio:
+    'ref k#; monta e salva o ensaio do produto SEM gerar: para "variacoes N" (fotos do produto) ou "campanha N" (com modelo sintética), N de 1 a 16. O custo de gerar aparece no resultado e a geração espera o Confirmar na etapa.',
 };
 
 export const DESCRICOES_DAS_GERACOES: Record<string, string> = {
@@ -713,7 +736,83 @@ export const OPERACOES_DIRETAS_DO_DIRETOR = [
   "levar_ao_canvas",
   "post_na_agenda",
   "abrir_no_estudio",
+  // AG2: renomear o produto e montar o ensaio (sem gerar) voltam com o Desfazer. Trocar as fotos do produto pede Confirmar.
+  "renomear_kit",
+  "montar_ensaio",
 ];
+
+/** "Nome | Variante" -> "Nome|Variante" (variante vazia mantém a atual). Null quando não muda nada. */
+export function nomeDoKitPedido(bruto: unknown, atual: { nome: string; variante: string | null }): string | null {
+  const t = semTravessao(String(bruto ?? "")).replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  const i = t.indexOf("|");
+  const nome = umaLinha(i >= 0 ? t.slice(0, i) : t, 120);
+  const variante = i >= 0 ? umaLinha(t.slice(i + 1), 120) : "";
+  if (!nome) return null;
+  const varianteFinal = variante || atual.variante || "";
+  if (nome === atual.nome && varianteFinal === (atual.variante || "")) return null;
+  return `${nome}|${varianteFinal}`;
+}
+
+/** Lê o "Nome|Variante" guardado. */
+export function lerNomeDoKit(para: unknown): { nome: string; variante: string | null } | null {
+  const t = String(para ?? "");
+  const i = t.indexOf("|");
+  const nome = (i >= 0 ? t.slice(0, i) : t).trim();
+  if (!nome) return null;
+  const variante = i >= 0 ? t.slice(i + 1).trim() : "";
+  return { nome, variante: variante || null };
+}
+
+/**
+ * "i2 identidade, i5 embalagem" -> "id:papel,id:papel" (conjunto novo das fotos
+ * do produto, até 12). Foto fora da lista, arquivada, gerada sem aprovação num
+ * papel de evidência ou papel desconhecido: null (o item vai para ignorados).
+ * Null também quando o conjunto é o mesmo de agora.
+ */
+export function fotosDoKitPedidas(bruto: unknown, p: Pick<PacoteDoDiretor, "imagens">, atuais: { imagem_id: string; papel: string }[] = []): string | null {
+  const partes = String(bruto ?? "").toLowerCase().split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const porRef = new Map(p.imagens.map((i) => [i.ref.toLowerCase(), i]));
+  const saida: string[] = [];
+  for (const parte of partes) {
+    const [ref, papelBruto] = parte.split(/\s+/);
+    const i = porRef.get(String(ref || ""));
+    if (!i || !i.dados.ativa) return null;
+    const papel = String(papelBruto || "identidade").replace(/[óo]tulo/, "otulo");
+    if ((PAPEIS as string[]).indexOf(papel) < 0) return null;
+    if ((PAPEIS_DE_EVIDENCIA as string[]).indexOf(papel) >= 0 && i.dados.gerada && !i.dados.aprovada) return null;
+    const par = `${i.id}:${papel}`;
+    if (saida.indexOf(par) < 0) saida.push(par);
+    if (saida.length > 12) return null;
+  }
+  if (!saida.length) return null;
+  const chave = (l: string[]) => l.slice().sort().join(",");
+  if (chave(saida) === chave(atuais.map((r) => `${r.imagem_id}:${r.papel}`))) return null;
+  return saida.join(",");
+}
+
+/** O conjunto guardado ("id:papel,...") lido de volta. */
+export function lerFotosDoKit(para: unknown): { imagem_id: string; papel: string }[] {
+  return String(para ?? "").split(",").map((x) => {
+    const [id, papel] = x.split(":");
+    return { imagem_id: String(id || "").trim(), papel: String(papel || "").trim() };
+  }).filter((r) => UUID.test(r.imagem_id) && (PAPEIS as string[]).indexOf(r.papel) >= 0);
+}
+
+/** "variacoes 8" / "campanha 6" -> "variacoes:8" / "campanha:6". Sem número: 8 variações ou 6 da campanha. */
+export function ensaioPedido(bruto: unknown): string | null {
+  const t = String(bruto ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const tipo = /campanha|modelo/.test(t) ? "campanha" : /varia|fotos|ensaio|^\s*\d+\s*$/.test(t) || !t ? "variacoes" : null;
+  if (!tipo) return null;
+  const n = Number((/(\d+)/.exec(t) || [])[1]);
+  const q = Number.isFinite(n) && n > 0 ? Math.min(16, Math.floor(n)) : tipo === "campanha" ? 6 : 8;
+  return `${tipo}:${q}`;
+}
+
+export function lerEnsaioPedido(para: unknown): { tipo: "variacoes" | "campanha"; quantidade: number } | null {
+  const m = /^(variacoes|campanha):(\d+)$/.exec(String(para ?? ""));
+  return m ? { tipo: m[1] as "variacoes" | "campanha", quantidade: Math.max(1, Math.min(16, Number(m[2]))) } : null;
+}
 
 const DATA_DO_POST = /^(\d{4}-\d{2}-\d{2})\s*(.*)$/;
 
@@ -806,6 +905,29 @@ export function regrasDoDiretor(p: PacoteDoDiretor): Record<string, RegraDaOpera
       combina: true,
       trava: (a) => (dados(a).ativa === false ? "Esta foto está arquivada." : null),
     },
+    // AG2 (29/09): produto e ensaio pelas ações que já existem (kit_salvar e agente_aplicar), com Desfazer.
+    renomear_kit: {
+      rotulo: "renomear o produto",
+      alvos: ["k"],
+      combina: true,
+      para: (bruto, a) => nomeDoKitPedido(bruto, { nome: String(dados(a).nome || a.titulo), variante: (dados(a).variante as string | null) ?? null }),
+      trava: (a) => (dados(a).status === "arquivado" ? "O produto está arquivado." : null),
+    },
+    fotos_do_kit: {
+      rotulo: "trocar as fotos do produto",
+      alvos: ["k"],
+      combina: true,
+      para: (bruto, a) => fotosDoKitPedidas(bruto, p, (dados(a).refs as { imagem_id: string; papel: string }[]) || []),
+      trava: (a) => (dados(a).status === "arquivado" ? "O produto está arquivado." : null),
+    },
+    montar_ensaio: {
+      rotulo: "montar o ensaio (sem gerar)",
+      alvos: ["k"],
+      combina: true,
+      repete: true,
+      para: (bruto) => ensaioPedido(bruto),
+      trava: (a) => (dados(a).status === "arquivado" ? "O produto está arquivado." : !((dados(a).refs as unknown[]) || []).length ? "O produto não tem fotos: ponha as fotos antes (ou identifique o produto)." : null),
+    },
   };
   OPERACOES_DIRETAS_DO_DIRETOR.forEach((op) => {
     if (regras[op]) regras[op] = { ...regras[op], direta: true };
@@ -835,6 +957,18 @@ export function normalizarAcoesDoDiretor(bruto: unknown, p: PacoteDoDiretor, id?
       if (op === "fotos_do_clone") {
         const lista = String(para || "").split(",").filter(Boolean);
         return `${lista.length} ${lista.length === 1 ? "foto" : "fotos"}: ${lista.map((x) => nomeDaFoto.get(x) || "foto").join(", ")}`.slice(0, 300);
+      }
+      if (op === "fotos_do_kit") {
+        const lista = lerFotosDoKit(para);
+        return `${lista.length} ${lista.length === 1 ? "foto" : "fotos"}: ${lista.map((r) => `${nomeDaFoto.get(r.imagem_id) || "foto"} (${r.papel})`).join(", ")}`.slice(0, 300);
+      }
+      if (op === "renomear_kit") {
+        const n = lerNomeDoKit(para);
+        return n ? `${n.nome}${n.variante ? ` (${n.variante})` : ""}` : null;
+      }
+      if (op === "montar_ensaio") {
+        const e = lerEnsaioPedido(para);
+        return e ? `${e.tipo === "campanha" ? "campanha com modelo" : "variações"}, ${e.quantidade} ${e.quantidade === 1 ? "foto" : "fotos"}` : null;
       }
       return null;
     },
@@ -1115,6 +1249,12 @@ export function textoLivreDaVez(pd: PedidoDaGeracao): string {
   return base ? `${base}. ${nota}` : nota;
 }
 
+/** "Evite: a; b" com as regras EVITAR ensinadas (até 8), ou vazio. */
+export function textoDoEvitar(evitar: unknown): string {
+  const lista = (Array.isArray(evitar) ? evitar : []).map((x) => umaLinha(semTravessao(String(x ?? "")), 200)).filter(Boolean).slice(0, 8);
+  return lista.length ? `Evite: ${lista.join("; ")}` : "";
+}
+
 /**
  * A chamada que a Mesa Foto já tem para cada item (sem inventar executor):
  * clone -> clone_variacao_gerar; variação de foto do clone -> clone_variacao_gerar
@@ -1124,9 +1264,11 @@ export function textoLivreDaVez(pd: PedidoDaGeracao): string {
 export function chamadaDaGeracao(
   pd: PedidoDaGeracao,
   clientId: string,
-  opcoes: { bookId?: string | null; marcaId?: string | null } = {},
+  opcoes: { bookId?: string | null; marcaId?: string | null; evitar?: string[] | null } = {},
 ): { acao: string; corpo: Record<string, unknown>; precisaDeBook?: { kit_id: string } } {
-  const livre = textoLivreDaVez(pd);
+  // AG2 (aprendizado): o que a equipe ensinou a EVITAR entra no pedido de cada foto.
+  const evitar = textoDoEvitar(opcoes.evitar);
+  const livre = [textoLivreDaVez(pd), evitar].filter(Boolean).join(". ");
   const comMarca = (c: Record<string, unknown>) => (opcoes.marcaId ? { ...c, marca_id: opcoes.marcaId } : c);
   if (pd.operacao === "gerar_clone" || (pd.operacao === "variar_imagem" && pd.clone_id)) {
     const temPedido = !!(pd.cenario || pd.pose || pd.roupa || pd.livre);
@@ -1143,8 +1285,8 @@ export function chamadaDaGeracao(
   if (pd.operacao === "melhorar_foto") {
     const modo = (MODOS_DO_MELHORAR as readonly string[]).indexOf(String(pd.modo || "")) >= 0 ? String(pd.modo) : "luz_cor";
     const corpo: Record<string, unknown> = { client_id: clientId, imagem_id: pd.alvo_id, modo };
-    if (modo === "cenario") corpo.cenario = [pd.cenario, pd.livre].filter(Boolean).join(". ").slice(0, 1200);
-    else if (pd.livre || pd.cenario) corpo.instrucao = [pd.livre, pd.cenario].filter(Boolean).join(". ").slice(0, 1200);
+    if (modo === "cenario") corpo.cenario = [pd.cenario, pd.livre, evitar].filter(Boolean).join(". ").slice(0, 1200);
+    else if (pd.livre || pd.cenario || evitar) corpo.instrucao = [pd.livre, pd.cenario, evitar].filter(Boolean).join(". ").slice(0, 1200);
     if (pd.kit_id) corpo.kit_id = pd.kit_id;
     return { acao: "preparar", corpo };
   }
@@ -1310,6 +1452,15 @@ export function caminhoDaAcaoDoDiretor(acao: Pick<AcaoDoAgente, "agente" | "iten
     const r = primeiro("montar_book") as ResultadoComDesfazer;
     return com("Abrir o book", enderecoDaMesaFoto(clientId, "book", { book: texto(x(r).book_id) }));
   }
+  if (ops.indexOf("montar_ensaio") >= 0) {
+    const r = primeiro("montar_ensaio") as ResultadoComDesfazer;
+    const campanha = x(r).tipo === "campanha";
+    return com(campanha ? "Abrir a campanha" : "Abrir as variações", enderecoDaMesaFoto(clientId, campanha ? "campanha" : "ensaio", { ensaio: texto(x(r).ensaio_id), kit: r.alvo_id }));
+  }
+  if (ops.indexOf("renomear_kit") >= 0 || ops.indexOf("fotos_do_kit") >= 0) {
+    const r = (primeiro("fotos_do_kit") || primeiro("renomear_kit")) as ResultadoComDesfazer;
+    return com("Abrir o produto", enderecoDaMesaFoto(clientId, "kits", { kit: r.alvo_id }));
+  }
   if (ops.indexOf("fotos_do_clone") >= 0) {
     const r = primeiro("fotos_do_clone") as ResultadoComDesfazer;
     return com("Abrir o clone", enderecoDaMesaFoto(clientId, "clones", { clone: r.alvo_id }));
@@ -1388,3 +1539,140 @@ export function geracaoPodeIrSozinha(
   if (typeof opcoes.saldoUsd === "number" && opcoes.saldoUsd < custo) return { sozinha: false, motivo: "saldo não cobre" };
   return { sozinha: true, motivo: "ordem clara, barata e com saldo" };
 }
+
+// ------------------------------------------------------------------ conversa sem UUID e sem promessa vazia (AG2, 29/09)
+
+/**
+ * As sugestões antigas (plano de variações, campanha, identificar produto)
+ * falam em apelido como o resto do diretor: kit_id "k2" e imagem_ids "i3".
+ * Aqui o apelido vira id (o modelo nunca vê nem devolve UUID). UUID que o
+ * modelo copiou continua aceito (a conferência de sempre, em
+ * normalizarSugestoes, diz se é do cliente). Apelido desconhecido some.
+ */
+export function sugestoesComIds(bruto: unknown, p: Pick<PacoteDoDiretor, "imagens" | "kits">, extras: Record<string, string> = {}): unknown[] {
+  if (!Array.isArray(bruto)) return [];
+  const imagens = new Map<string, string>(p.imagens.map((i) => [i.ref.toLowerCase(), i.id]));
+  Object.keys(extras).forEach((k) => imagens.set(k.toLowerCase(), extras[k]));
+  const kits = new Map<string, string>(p.kits.map((k) => [k.ref.toLowerCase(), k.id]));
+  const umId = (v: unknown, mapa: Map<string, string>): string | null => {
+    const t = String(v ?? "").trim();
+    if (UUID.test(t)) return t;
+    return mapa.get(t.toLowerCase()) || null;
+  };
+  const lista = (v: unknown) => (Array.isArray(v) ? v.map((x) => umId(x, imagens)).filter((x): x is string => !!x) : v);
+  return bruto.map((b) => {
+    if (!b || typeof b !== "object") return b;
+    const s = { ...(b as Record<string, unknown>) };
+    if (s.kit_id != null && s.kit_id !== "") s.kit_id = umId(s.kit_id, kits);
+    if (s.imagem_ids !== undefined) s.imagem_ids = lista(s.imagem_ids);
+    if (s.referencias_estilo_ids !== undefined) s.referencias_estilo_ids = lista(s.referencias_estilo_ids);
+    return s;
+  });
+}
+
+/**
+ * Por que uma sugestão pedida pelo modelo não virou cartão (antes caía calada
+ * e a resposta dizia "aplique a campanha abaixo" sem nada abaixo). Hoje só
+ * plano de variações e campanha sem produto e identificar sem foto.
+ */
+export function motivosDasSugestoesQueCairam(bruto: unknown, ficaram: Array<{ tipo: string }>): string[] {
+  if (!Array.isArray(bruto)) return [];
+  const conta = (lista: Array<{ tipo?: unknown }>, tipo: string) => lista.filter((s) => s && s.tipo === tipo).length;
+  const brutas = bruto.filter((b) => b && typeof b === "object") as Array<{ tipo?: unknown }>;
+  const motivos: string[] = [];
+  if (conta(brutas, "campanha") > conta(ficaram, "campanha")) motivos.push("a campanha com modelo precisa de um produto (kit) com fotos");
+  if (conta(brutas, "plano_de_variacoes") > conta(ficaram, "plano_de_variacoes")) motivos.push("as variações precisam de um produto (kit) com fotos");
+  if (conta(brutas, "identificar_produto") > conta(ficaram, "identificar_produto")) motivos.push("identificar o produto precisa das fotos marcadas");
+  return motivos;
+}
+
+/**
+ * A resposta diz que fez, está fazendo ou deixou pronto (regra barata antes
+ * do Jev). Dado real: 26/09 20:28 e 27/09 15:24 ("vou usar o clone...",
+ * "aplique a campanha abaixo", "preparei uma campanha") com anexos vazios.
+ */
+const PROMETE = /\b(vou (gerar|preparar|criar|montar|fazer|organizar|deixar|usar|aplicar|mandar|colocar|p[oô]r|trocar|arquivar|aprovar)|preparei|organizei|montei|criei|gerei|deixei (tudo )?pront|est[aá] pront[ao] para|pronta para aplicar|pronto para aplicar|aplique|abaixo|cart[aã]o|j[aá] (fiz|est[aá] feito|coloquei|mandei))/i;
+
+export function pareceQuePromete(resposta: unknown): boolean {
+  return PROMETE.test(String(resposta ?? ""));
+}
+
+export type OpcaoDoDiretor = { rotulo: string; mensagem: string };
+
+/** Opções que o modelo mandou (2 a 4, curtas, sem travessão). */
+export function normalizarOpcoes(bruto: unknown): OpcaoDoDiretor[] {
+  if (!Array.isArray(bruto)) return [];
+  const saida: OpcaoDoDiretor[] = [];
+  bruto.forEach((b) => {
+    const t = umaLinha(semTravessao(String(b ?? "")), 140);
+    if (t && !saida.some((o) => o.mensagem === t) && saida.length < 4) saida.push({ rotulo: umaLinha(t, 60), mensagem: t });
+  });
+  return saida;
+}
+
+/**
+ * Opções prontas quando a resposta prometia sem ação: cada uma é um pedido
+ * que o diretor consegue fazer com o que está no pacote (clone autorizado,
+ * produto com fotos, fotos marcadas). Nada inventado: sem nada disso,
+ * marcar as fotos e identificar o produto.
+ */
+export function opcoesDoPacote(p: Pick<PacoteDoDiretor, "clones" | "kits" | "imagens" | "foco">): OpcaoDoDiretor[] {
+  const saida: OpcaoDoDiretor[] = [];
+  const somar = (rotulo: string, mensagem: string) => {
+    if (saida.length < 3 && !saida.some((o) => o.mensagem === mensagem)) saida.push({ rotulo: umaLinha(rotulo, 60), mensagem });
+  };
+  const clone = p.clones.find((c) => c.dados.aberto && c.dados.autorizacao_ok) || p.clones.find((c) => c.dados.autorizacao_ok);
+  if (clone) somar(`Gerar com o clone ${clone.titulo}`, `Gere as fotos que pedi com o clone ${clone.ref} (${clone.titulo}).`);
+  const kit = p.kits.find((k) => k.id === p.foco.kit_id && k.dados.refs.length) || p.kits.find((k) => k.dados.refs.length);
+  if (kit) {
+    somar(`Variações de ${kit.titulo}`, `Monte o ensaio de variações do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
+    somar(`Campanha com ${kit.titulo}`, `Monte a campanha com modelo do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
+  }
+  const marcadas = p.imagens.filter((i) => i.dados.selecionada && !i.dados.gerada);
+  if (marcadas.length && !kit) somar("Identificar o produto", `Identifique o produto pelas fotos marcadas (${marcadas.slice(0, 6).map((i) => i.ref).join(", ")}).`);
+  if (marcadas.length) somar("Melhorar a foto marcada", `Melhore a luz e a cor da ${marcadas[0].ref}.`);
+  if (!saida.length) somar("O que dá para fazer agora", "Com o que já está no painel, o que você consegue fazer agora? Liste as opções com o custo.");
+  return saida;
+}
+
+/**
+ * A resposta honesta quando o diretor prometeu e nada veio: o "Entendi" do
+ * modelo fica, o resto vira o aviso do que falta e UMA pergunta curta.
+ */
+export function respostaSemPromessa(resposta: string, p: { entendi?: string | null; motivos: string[]; pergunta?: string | null }): string {
+  const entendi = umaLinha(p.entendi || "", 600);
+  const motivo = p.motivos.length ? `: ${p.motivos.join("; ")}` : "";
+  const pergunta = umaLinha(semTravessao(p.pergunta || ""), 300) || "Qual destes caminhos eu sigo agora?";
+  return [
+    entendi ? `Entendi: ${entendi}` : "",
+    `Atenção: ainda não preparei nada nesta resposta${motivo}. Nenhuma foto foi gerada e nada foi cobrado além desta conversa.`,
+    `Próximo passo: ${pergunta}`,
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * Lista para "essa", "a segunda", "todas" (referenciaDoPedido), na ordem da
+ * tela da etapa aberta: clones na etapa Clones, books no Book, produtos em
+ * Produto; nas outras, as fotos (as marcadas primeiro, como no pacote).
+ */
+export function itensDaReferencia(p: Pick<PacoteDoDiretor, "foco" | "imagens" | "clones" | "books" | "kits">): { itens: ItemReferivel[]; selecionados: string[] } {
+  const e = p.foco.etapa;
+  const de = (lista: Array<{ ref: string; titulo: string; detalhe?: string | null }>) => lista.map((a) => ({ ref: a.ref, titulo: a.titulo, detalhe: a.detalhe || null }));
+  if (e === "clones" && p.clones.length) return { itens: de(p.clones), selecionados: p.clones.filter((c) => c.dados.aberto).map((c) => c.ref) };
+  if (e === "book" && p.books.length) return { itens: de(p.books), selecionados: p.books.filter((b) => b.id === p.foco.book_id).map((b) => b.ref) };
+  if (e === "kits" && p.kits.length) return { itens: de(p.kits), selecionados: p.kits.filter((k) => k.id === p.foco.kit_id).map((k) => k.ref) };
+  return { itens: de(p.imagens), selecionados: p.imagens.filter((i) => i.dados.selecionada).map((i) => i.ref) };
+}
+
+/**
+ * A regra que faltava (causa do "promete e não faz", 26 e 27/09): pedido de
+ * fazer vira ação na mesma resposta, ou UMA pergunta com opções. Vai no
+ * sistema do modelo depois do pacote (fora do SISTEMA_AGENTE, que tem teto).
+ */
+export const REGRA_DO_PEDIDO_DE_FAZER = `PEDIDO DE FAZER ("crie", "gere", "prepare", "monte", "já pode", "pode fazer", "deixa pronto", "prepare tudo"): a ação vai NESTA resposta, no JSON:
+- fotos novas: geracoes (clone c#, variação ou melhorar i#, prompt p#, book b#); o cartão mostra o custo antes;
+- sem custo: acoes (montar_ensaio, renomear_kit, fotos_do_kit, post_na_agenda, aprovar, arquivar, organizar...);
+- plano de variações ou campanha com direção detalhada: sugestoes, só com um produto k# que tem fotos (kit_id = k#).
+Pessoa real ("eu", "meu personagem", o dono, "pega do clone"): gerar_clone com o clone c#, uma linha por cena, nunca campanha. Campanha é pessoa sintética com um produto.
+Falta algo que muda o resultado (sem clone autorizado, sem produto com fotos, sem saber qual foto): nada de ação chutada; escreva UMA pergunta curta em pergunta (a mesma da resposta) e 2 a 4 respostas prontas em opcoes. Sem dúvida, pergunta null e opcoes vazia.
+Nunca escreva "vou gerar", "preparei", "organizei" ou "aplique abaixo" sem a ação no JSON. Resposta curta: Entendi, o que foi para o cartão e o Próximo passo.`;

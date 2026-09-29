@@ -114,14 +114,16 @@ function semSql(b: BaseDaFuncao, error: { message?: string; code?: string } | nu
 
 // ------------------------------------------------------------------ catálogo em uso
 
-async function catalogo(b: BaseDaFuncao): Promise<{ motores: MotorDeVideo[]; desligados: string[] }> {
+// Frente AG2 (29/09): exportados para o diretor propor e gerar com o MESMO catálogo e as
+// mesmas travas do gerar_video (preço do banco, motor desligado, chave que falta).
+export async function catalogo(b: BaseDaFuncao): Promise<{ motores: MotorDeVideo[]; desligados: string[] }> {
   const { data, error } = await b.servico().from("video_motores").select("id, linha, versao, rotulo, endpoints, preco, novo, disponivel, ativo").limit(500);
   // Sem a tabela (SQL V-01): vale o catálogo em código.
   if (error) return catalogoEmUso([]);
   return catalogoEmUso((data || []) as LinhaDoCatalogoDeVideo[]);
 }
 
-async function motorPronto(b: BaseDaFuncao, id: string): Promise<{ motor: MotorDeVideo; motores: MotorDeVideo[] }> {
+export async function motorPronto(b: BaseDaFuncao, id: string): Promise<{ motor: MotorDeVideo; motores: MotorDeVideo[] }> {
   const c = await catalogo(b);
   const m = motorPorId(id, c.motores);
   if (!m) throw b.erro(400, "motor_desconhecido", "Motor de vídeo desconhecido.");

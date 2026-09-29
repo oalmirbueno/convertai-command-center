@@ -18,8 +18,12 @@ import {
   acrescentarFotos,
   aplicarSugestao,
   chaveDaBiblioteca,
+  chaveDosEnsaios,
   chaveDosKits,
   conversarComDiretor,
+  esquecerRegraDoDiretor,
+  guardarRegraDoDiretor,
+  lerHistoricoDoDiretor,
   guardarEnsaio,
   identificarProduto,
   invalidarFotos,
@@ -40,8 +44,10 @@ import {
   type Ensaio,
   type IdentificacaoDoProduto,
   type MensagemDoDiretor,
+  type OpcaoDoDiretor,
   type SugestaoDoAgente,
 } from "./fotoApi";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { lerDaSessao } from "./sessao";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -91,6 +97,26 @@ function gravarConversa(clientId: string, id: string) {
     window.sessionStorage.setItem(chaveDaConversa(clientId), id);
   } catch {
     /* sem armazenamento: a conversa vale só nesta tela */
+  }
+}
+
+/** "Nova conversa" pedida e ainda sem mensagem: reabrir a tela não relê a antiga (AG2). */
+const chaveDaNova = (clientId: string) => `mesa-foto:conversa-nova:${clientId}`;
+
+function novaPedida(clientId: string): boolean {
+  try {
+    return window.sessionStorage.getItem(chaveDaNova(clientId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function marcarNova(clientId: string, sim: boolean) {
+  try {
+    if (sim) window.sessionStorage.setItem(chaveDaNova(clientId), "1");
+    else window.sessionStorage.removeItem(chaveDaNova(clientId));
+  } catch {
+    /* sem armazenamento: vale só nesta tela */
   }
 }
 
@@ -214,13 +240,21 @@ function useAoCriarEnsaio() {
   };
 }
 
-function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
+/** A sugestão já foi aplicada (marca guardada na conversa pela função, AG2). */
+function aplicadaAntes(sugestao: SugestaoDoAgente): { ensaio_id: string | null } | null {
+  const a = sugestao.bruto && (sugestao.bruto as Record<string, unknown>).aplicada;
+  if (!a || typeof a !== "object") return null;
+  const e = (a as Record<string, unknown>).ensaio_id;
+  return { ensaio_id: typeof e === "string" && e ? e : null };
+}
+
+function CartaoDaSugestao({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente; mensagemId?: string | null }) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const { ensaioId, irPara } = useMesaFoto();
   const [aplicando, setAplicando] = useState(false);
-  const [aplicada, setAplicada] = useState(false);
+  const [aplicada, setAplicada] = useState(!!aplicadaAntes(sugestao));
   // Tomada nova ou ajuste só com ensaio aberto; prompt e busca de referência valem sem ensaio.
   const precisaDeEnsaio = sugestaoPedeEnsaio(sugestao);
   const bloqueada = precisaDeEnsaio && !ensaioId;
@@ -228,7 +262,7 @@ function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
     if (bloqueada) return;
     setAplicando(true);
     try {
-      const r = await aplicarSugestao({ clientId, ensaioId }, sugestao);
+      const r = await aplicarSugestao({ clientId, ensaioId, mensagemId }, sugestao);
       if (r.ensaio) guardarEnsaio(queryClient, clientId, r.ensaio);
       if (r.kit_ids.length) void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
       if (custoDaResposta(r) !== null) atualizarCusto();
@@ -254,7 +288,7 @@ function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
       <p className="text-[13.5px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <div className="mt-2 flex items-center">
-        <Button type="button" size="sm" variant={aplicada ? "ghost" : "outline"} className="h-7 text-[11.5px]" disabled={bloqueada || aplicando || aplicada} onClick={() => void aplicar()}>
+        <Button type="button" size="sm" variant={aplicada ? "ghost" : "outline"} className="h-7 text-[11px]" disabled={bloqueada || aplicando || aplicada} onClick={() => void aplicar()}>
           {aplicando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : aplicada ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
           {aplicada ? "Aplicada" : "Aplicar"}
         </Button>
@@ -267,7 +301,7 @@ function CartaoDaSugestao({ sugestao }: { sugestao: SugestaoDoAgente }) {
 const QUANTIDADES = [4, 6, 8, 12, 16].map((n) => ({ valor: n, rotulo: String(n) }));
 
 /** plano_de_variacoes: quantidade e tipos ajustáveis, e gerar todas com o total antes. */
-function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) {
+function CartaoDoPlanoDeVariacoes({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente; mensagemId?: string | null }) {
   const { clientId, catalogo } = useMesa();
   const { kitId, ensaioId, irPara } = useMesaFoto();
   const aoCriar = useAoCriarEnsaio();
@@ -280,6 +314,8 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
   const [tipos, setTipos] = useState<string[]>(iniciais);
   const [criado, setCriado] = useState<Ensaio | null>(null);
   const [montando, setMontando] = useState(false);
+  // AG2: reabrir a conversa não oferece "Gerar todas" de novo: mostra o andamento do ensaio já criado.
+  const jaCriado = aplicadaAntes(sugestao);
   const avisarErro = useAvisarErro();
   const kit = plano.kit_id || kitId;
   const imagem = padraoPara(catalogo, "imagem");
@@ -288,7 +324,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
   const opcoesDeTipo = TIPOS_DE_VARIACAO.concat(iniciais.filter((t) => !TIPOS_DE_VARIACAO.some((x) => x.valor === t)).map((t) => ({ valor: t, rotulo: rotuloDoTipoDeVariacao(t) })));
 
   const criar = async () => {
-    const r = await aplicarSugestao({ clientId, ensaioId, kitId: kit }, sugestao, ajustes);
+    const r = await aplicarSugestao({ clientId, ensaioId, kitId: kit, mensagemId }, sugestao, ajustes);
     if (!r.ensaio) throw new Error("O diretor não montou o ensaio desta vez. Tente de novo.");
     return r;
   };
@@ -339,7 +375,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
                 type="button"
                 aria-pressed={dentro}
                 onClick={() => setTipos((l) => (dentro ? l.filter((x) => x !== t.valor) : l.concat([t.valor])))}
-                className={`mb-1 mr-1 h-7 max-w-full truncate rounded-full border px-2 text-[11.5px] ${dentro ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"}`}
+                className={`mb-1 mr-1 h-7 max-w-full truncate rounded-full border px-2 text-[11px] ${dentro ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground"}`}
               >
                 {t.rotulo}
               </button>
@@ -348,8 +384,8 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
         </div>
       </div>
       {!kit && <p className="text-[12px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
-      {criado ? (
-        <AndamentoDoLote ensaioId={criado.id} />
+      {criado || (jaCriado && jaCriado.ensaio_id) ? (
+        <AndamentoDoLote ensaioId={criado ? criado.id : String(jaCriado && jaCriado.ensaio_id)} />
       ) : (
         <div className="flex min-w-0 flex-wrap items-center">
           <BotaoComCusto
@@ -383,7 +419,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
 }
 
 /** campanha: guia de estilo, modelo sintético e as fotos; gerar ou abrir na aba Campanha. */
-function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
+function CartaoDaCampanha({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente; mensagemId?: string | null }) {
   const { clientId, catalogo } = useMesa();
   const { kitId, ensaioId, irPara } = useMesaFoto();
   const avisarErro = useAvisarErro();
@@ -392,11 +428,12 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
   const [quantidade, setQuantidade] = useState(plano.quantidade);
   const [criado, setCriado] = useState<Ensaio | null>(null);
   const [abrindo, setAbrindo] = useState(false);
+  const jaCriado = aplicadaAntes(sugestao);
   const kit = plano.kit_id || kitId;
   const imagem = padraoPara(catalogo, "imagem");
   const ajustes = { quantidade, fotos: plano.fotos.slice(0, quantidade).map((f) => f.bruto) };
   const criar = async () => {
-    const r = await aplicarSugestao({ clientId, ensaioId, kitId: kit }, sugestao, ajustes);
+    const r = await aplicarSugestao({ clientId, ensaioId, kitId: kit, mensagemId }, sugestao, ajustes);
     if (!r.ensaio) throw new Error("O diretor não montou a campanha desta vez. Tente de novo.");
     return r;
   };
@@ -437,8 +474,8 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
       )}
       <Pilulas rotulo="Quantidade de fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
       {!kit && <p className="text-[12px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
-      {criado ? (
-        <AndamentoDoLote ensaioId={criado.id} />
+      {criado || (jaCriado && jaCriado.ensaio_id) ? (
+        <AndamentoDoLote ensaioId={criado ? criado.id : String(jaCriado && jaCriado.ensaio_id)} />
       ) : (
         <div className="flex min-w-0 flex-wrap items-center">
           <BotaoComCusto
@@ -511,7 +548,7 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
           }}
         />
       )}
-      {!ids.length && <p className="text-[12.5px] text-muted-foreground">Marque as fotos no passo 1 ou anexe um print aqui embaixo.</p>}
+      {!ids.length && <p className="text-[13px] text-muted-foreground">Marque as fotos no passo 1 ou anexe um print aqui embaixo.</p>}
     </li>
   );
 }
@@ -554,11 +591,39 @@ function caminhoParaIrSozinho(m: MensagemDoDiretor): string | null {
   return c && c.abrir_sozinho ? c.destino : null;
 }
 
-function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConversa: string[] }) {
+/** Respostas prontas da pergunta do diretor: o toque manda a resposta (AG2). */
+function OpcoesDoDiretor({ opcoes, onOpcao, ocupado }: { opcoes: OpcaoDoDiretor[]; onOpcao?: (mensagem: string) => void; ocupado?: boolean }) {
+  if (!opcoes.length || !onOpcao) return null;
+  return (
+    <div className="mt-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Respostas prontas do diretor" data-opcoes-do-diretor="">
+      {opcoes.map((o) => (
+        <button
+          key={o.mensagem}
+          type="button"
+          disabled={ocupado}
+          title={o.mensagem}
+          onClick={() => onOpcao(o.mensagem)}
+          className={juntar("mb-1 mr-1 inline-flex h-7 max-w-full items-center rounded-md border border-primary/40 bg-background px-2 text-[11px] font-medium hover:border-primary disabled:opacity-60", foco)}
+        >
+          <span className="truncate">{o.rotulo}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDiretor; anexosDaConversa: string[]; onOpcao?: (mensagem: string) => void; ocupado?: boolean }) {
   const { irPara } = useMesaFoto();
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const irSozinhoPara = caminhoParaIrSozinho(m);
+  if (m.sistema) {
+    return (
+      <p className="mr-2 min-w-0 text-[12px] text-muted-foreground [overflow-wrap:anywhere]" data-linha-do-sistema="">
+        {m.texto}
+      </p>
+    );
+  }
   if (m.papel === "usuario") {
     return (
       <div className="ml-8 min-w-0">
@@ -601,21 +666,27 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
           <IdentificacaoComAcoes identificacao={m.identificacao} />
         </div>
       )}
+      {m.aviso && (
+        <p role="status" className="mt-1.5 text-[12px] text-warning [overflow-wrap:anywhere]" data-aviso-registro="">
+          {m.aviso}
+        </p>
+      )}
       {m.sugestoes.length > 0 && (
         <ul className="mt-2 grid min-w-0 grid-cols-1 gap-2">
           {m.sugestoes.map((s) =>
             s.tipo === "plano_de_variacoes" ? (
-              <CartaoDoPlanoDeVariacoes key={s.chave} sugestao={s} />
+              <CartaoDoPlanoDeVariacoes key={s.chave} sugestao={s} mensagemId={m.mensagemId} />
             ) : s.tipo === "campanha" ? (
-              <CartaoDaCampanha key={s.chave} sugestao={s} />
+              <CartaoDaCampanha key={s.chave} sugestao={s} mensagemId={m.mensagemId} />
             ) : s.tipo === "identificar_produto" ? (
               <CartaoIdentificar key={s.chave} sugestao={s} anexos={anexosDaConversa} />
             ) : (
-              <CartaoDaSugestao key={s.chave} sugestao={s} />
+              <CartaoDaSugestao key={s.chave} sugestao={s} mensagemId={m.mensagemId} />
             ),
           )}
         </ul>
       )}
+      <OpcoesDoDiretor opcoes={m.opcoes || []} onOpcao={onOpcao} ocupado={ocupado} />
       {m.acao && m.mensagemId && (
         <div className="mt-2">
           <CartaoDeAcao
@@ -626,6 +697,9 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
             onFeito={(p, resposta) => {
               if (p === "descartar") return;
               invalidarFotos(queryClient, clientId);
+              // AG2: produto (renomear, trocar foto) e ensaio montado também releem.
+              void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
+              void queryClient.invalidateQueries({ queryKey: chaveDosEnsaios(clientId) });
               // Diretor agêntico: clone, book e Canvas também releem (o resultado aparece na etapa aberta).
               if (m.acao && m.acao.agente === "diretor") atualizarTelasDepoisDoDiretor(queryClient, clientId, (resposta && (resposta.anexo as AcaoDoAgente)) || m.acao);
               const canvasId = resposta && (resposta as { canvas_id?: unknown }).canvas_id;
@@ -651,7 +725,13 @@ function Mensagem({ m, anexosDaConversa }: { m: MensagemDoDiretor; anexosDaConve
           <CaminhoPronto caminho={m.caminho} abrirSozinho={!!m.nova && !m.geracao && m.caminho.abrir_sozinho === true} />
         </div>
       )}
-      {m.custo_usd !== null && <p className="mt-1 text-[11.5px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
+      {/* AG2: "Aprendi" (com Esquecer) e "Segui" do que a equipe ensinou. */}
+      <AprendizadoDoAgente
+        anexos={m.anexosBrutos}
+        onEsquecer={(id) => esquecerRegraDoDiretor(clientId, id, m.mensagemId || null)}
+        onGuardar={(textoDaRegra, tipo) => guardarRegraDoDiretor(clientId, textoDaRegra, tipo, m.mensagemId || null)}
+      />
+      {m.custo_usd !== null && <p className="mt-1 text-[11px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
     </div>
   );
 }
@@ -682,7 +762,8 @@ function conversaGuardada(clientId: string): EstadoDaConversa {
     viva = !!conversas[clientId];
   }
   if (!conversas[clientId] || !viva) {
-    conversas[clientId] = { mensagens: [], conversaId: lerConversa(clientId), novaConversa: false, pendente: null };
+    const nova = novaPedida(clientId);
+    conversas[clientId] = { mensagens: [], conversaId: nova ? null : lerConversa(clientId), novaConversa: nova, pendente: null };
     try {
       window.sessionStorage.setItem(chaveViva(clientId), "1");
     } catch {
@@ -713,7 +794,10 @@ function useConversaGuardada(clientId: string): EstadoDaConversa {
 /** Último pedido de outra etapa já posto no rascunho (remontar a lateral não repõe o mesmo pedido). */
 const pedidosVistos: Record<string, number> = {};
 
-function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDiretor[]; pendente: string | null; anexos: string[] }) {
+/** Histórico já pedido ao servidor nesta aba (remontar a lateral não relê). */
+const historicoPedido: Record<string, boolean> = {};
+
+function Conversa({ mensagens, pendente, anexos, onOpcao }: { mensagens: MensagemDoDiretor[]; pendente: string | null; anexos: string[]; onOpcao?: (mensagem: string) => void }) {
   return (
     <>
       {mensagens.length === 0 && !pendente && (
@@ -721,8 +805,8 @@ function Conversa({ mensagens, pendente, anexos }: { mensagens: MensagemDoDireto
           Peça o que quer: melhorar uma foto, variações, campanha, book ou um carrossel na Agenda.
         </p>
       )}
-      {mensagens.map((m) => (
-        <Mensagem key={m.id} m={m} anexosDaConversa={anexos} />
+      {mensagens.map((m, i) => (
+        <Mensagem key={m.id} m={m} anexosDaConversa={anexos} onOpcao={i === mensagens.length - 1 ? onOpcao : undefined} ocupado={!!pendente} />
       ))}
       {pendente && (
         <p role="status" className="mr-6 inline-flex items-center rounded-xl bg-muted px-3.5 py-2.5 text-[13px] text-muted-foreground">
@@ -771,6 +855,28 @@ export default function AgenteDiretor({
   const estilosQueCabem = estilos.slice(0, Math.max(0, MAX_ANEXOS_DO_DIRETOR - anexos.length));
   const fotosDosEstilos = (fotos.data || []).filter((f) => estilos.indexOf(f.id) >= 0);
 
+  // AG2: a conversa guardada volta ao reabrir (recarregar, outra aba, outro dia), com os cartões no estado
+  // em que estão. Só com a lista vazia e sem "Nova conversa" pedida; o que chegou enquanto lia não é trocado.
+  useEffect(() => {
+    const alvo = clientId;
+    if (!alvo || historicoPedido[alvo]) return;
+    const atual = conversaGuardada(alvo);
+    if (atual.mensagens.length || atual.pendente || atual.novaConversa || novaPedida(alvo)) return;
+    historicoPedido[alvo] = true;
+    lerHistoricoDoDiretor({ clientId: alvo, conversaId: atual.conversaId, kitId, ensaioId })
+      .then((r) => {
+        if (!r.mensagens.length) return;
+        if (r.conversa_id) gravarConversa(alvo, r.conversa_id);
+        mudarConversa(alvo, (e) => (e.mensagens.length || e.pendente || e.novaConversa ? {} : { mensagens: r.mensagens, conversaId: r.conversa_id || e.conversaId }));
+      })
+      .catch((e) => {
+        // Não trava a conversa nova: o aviso diz que a anterior não voltou (e o próximo abrir tenta de novo).
+        historicoPedido[alvo] = false;
+        setErro(e);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
   // A conversa desce até a última mensagem (só a lista rola; a página não se mexe).
   useEffect(() => {
     const el = lista.current;
@@ -783,9 +889,11 @@ export default function AgenteDiretor({
     const alvo = clientId;
     setErro(null);
     if (mensagem === undefined) setTexto("");
+    // AG2: a bolha otimista tem id próprio; se o envio falhar, ela sai (o texto volta ao campo, sem duplicar no reenvio).
+    const idDaBolha = idLocal();
     mudarConversa(alvo, (e) => ({
       pendente: msg,
-      mensagens: e.mensagens.concat([{ id: idLocal(), papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
+      mensagens: e.mensagens.concat([{ id: idDaBolha, papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
     }));
     try {
       // A campanha da Mesa escolhida (sessão) vai junto: o diretor fala dentro dela.
@@ -794,6 +902,7 @@ export default function AgenteDiretor({
       const focoAgora = focoDaTela({ clientId: alvo, etapa: etapa || "acervo", selecionadas: comFotos ? selecionadas : [], kitId, ensaioId });
       const r = await conversarComDiretor({ clientId: alvo, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa, campanhaId, foco: { ...focoAgora } });
       if (r.conversa_id) gravarConversa(alvo, r.conversa_id);
+      marcarNova(alvo, false);
       if (r.kit_ids.length) aoGravarKits(r.kit_ids);
       if (r.identificacao) invalidarFotos(queryClient, alvo);
       mudarConversa(alvo, (e) => ({
@@ -815,6 +924,9 @@ export default function AgenteDiretor({
             geracao: r.geracao,
             mensagemId: r.mensagem_id,
             caminho: r.caminho,
+            opcoes: r.opcoes,
+            aviso: r.aviso_registro,
+            anexosBrutos: r.anexos,
             nova: true,
           },
         ]),
@@ -825,7 +937,8 @@ export default function AgenteDiretor({
       if (estilosQueCabem.length) setEstilos((l) => l.filter((id) => estilosQueCabem.indexOf(id) < 0));
     } catch (e) {
       setErro(e);
-      if (mensagem === undefined) setTexto((t) => t || msg);
+      mudarConversa(alvo, (st) => ({ mensagens: st.mensagens.filter((x) => x.id !== idDaBolha) }));
+      setTexto((t) => t || msg);
     } finally {
       mudarConversa(alvo, () => ({ pendente: null }));
       atualizarCusto();
@@ -852,6 +965,7 @@ export default function AgenteDiretor({
 
   const comecarDeNovo = () => {
     mudarConversa(clientId, () => ({ mensagens: [], conversaId: null, novaConversa: true }));
+    marcarNova(clientId, true);
     try {
       window.sessionStorage.removeItem(chaveDaConversa(clientId));
     } catch {
@@ -914,6 +1028,7 @@ export default function AgenteDiretor({
                 "melhorar fotos (luz, limpar, fundo, cenário) e gerar variações, fotos do clone e do book",
                 "montar post de fotos na Agenda e abrir a foto no Estúdio",
                 "aprovar, arquivar, organizar, montar book e levar ao Canvas",
+                "montar o ensaio (variações ou campanha) sem gerar, renomear o produto e trocar as fotos dele",
               ]}
             />
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
@@ -926,7 +1041,7 @@ export default function AgenteDiretor({
                     disabled={!!pendente}
                     onClick={() => void mandar(a.mensagem)}
                     className={juntar(
-                      "mb-1 mr-1 inline-flex h-7 max-w-full items-center rounded-md border border-border bg-background px-2 text-[11.5px] font-medium transition-colors hover:border-primary/50 disabled:opacity-60",
+                      "mb-1 mr-1 inline-flex h-7 max-w-full items-center rounded-md border border-border bg-background px-2 text-[11px] font-medium transition-colors hover:border-primary/50 disabled:opacity-60",
                       foco,
                     )}
                   >
@@ -992,7 +1107,7 @@ export default function AgenteDiretor({
                     {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                   </button>
                   <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1" />
-                  <Button type="submit" size="sm" className="h-8 px-3 text-[12.5px]" disabled={!texto.trim() || !!pendente} aria-label="Mandar">
+                  <Button type="submit" size="sm" className="h-8 px-3 text-[13px]" disabled={!texto.trim() || !!pendente} aria-label="Mandar">
                     {pendente ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
                     Mandar
                   </Button>
@@ -1024,7 +1139,7 @@ export default function AgenteDiretor({
           </>
         }
       >
-        <Conversa mensagens={mensagens} pendente={pendente} anexos={anexos.concat(estilosQueCabem)} />
+        <Conversa mensagens={mensagens} pendente={pendente} anexos={anexos.concat(estilosQueCabem)} onOpcao={(msg) => void mandar(msg)} />
       </PainelDoAgente>
     </div>
   );

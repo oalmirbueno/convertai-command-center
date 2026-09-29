@@ -43,6 +43,13 @@
  *   (contrato comum; executar_acao_agente e desfazer_acao_agente executam as duas propostas).
  * - agente_entender { client_id, mesa: videos|edicao, texto } -> { intencao, confianca, via }
  *   (Jev Choice; sem o Jev, as palavras do pedido).
+ * - agente_agir { client_id, mesa, texto, ordem?, selecionados?, ultima_resposta? } (AG2, 29/09)
+ *   -> { intencao, resposta, mensagem_id, acao, pergunta?, anexos }: entende e, para mandar à
+ *   Edição, arquivar, ligar à cena ou organizar, monta a proposta com os itens que o pedido
+ *   aponta (Jev sobre a lista na ordem da tela); ordem clara sem custo vai na hora com Desfazer.
+ * - aprendizado_esquecer / aprendizado_guardar (AG2): regras que a equipe ensinou (cérebro do cliente).
+ * - executar_acao_agente / desfazer_acao_agente também acham o cartão do diretor na conversa
+ *   (agente_mensagens), além de video_acoes.
  * - Projeto de edição (_shared/projeto-de-edicao.ts; coluna video_versoes.projeto, SQL E2-01):
  *   versao_registrar aceita { projeto }; projeto_salvar { versao_id, projeto, revisao_lida } -> { versao }
  *   (trava otimista pela revisão; versão aprovada não muda). É onde o editor completo grava.
@@ -55,11 +62,15 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
+  comCaminho,
   confirmarAcaoGuardada,
   desfazerAcaoGuardada,
   ErroDaAcao,
+  executarDireto,
   type ItemDaAcaoDoAgente,
+  podeExecutarDireto,
   type ResultadoDoItem,
+  textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import {
   acaoDaOrganizacao,
@@ -71,6 +82,7 @@ import {
   limparNome,
   MAX_CENA_REF,
   proporOrganizacao,
+  regrasDoOrganizador,
   type RoteiroParaOrganizar,
   type TakeParaOrganizar,
   TIPOS_DE_ARQUIVO,
@@ -91,19 +103,34 @@ import { conhecimentoEdicao } from "../_shared/conhecimento-edicao.ts";
 import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "../_shared/roteiros-para-video.ts";
 import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, podeMudarEstado, type EstadoDaTarefa } from "../_shared/computador-do-agente.ts";
 import {
+  acaoDeArquivarResultados,
+  acaoDeLigarACena,
   acaoDoEnvioParaEdicao,
   AGENTE_DO_ENVIO,
+  AGENTE_DOS_RESULTADOS,
   AGENTES_DA_MESA_DE_VIDEO,
   caminhoDaMesaDeVideo,
   camposDoEnvio,
+  type CenaParaLigar,
   CONFIANCA_MINIMA,
   intencaoPorPalavras,
   intencaoValida,
+  itensReferiveis,
+  lerParaDaCena,
   type MesaDoAgente,
   NENHUMA,
+  perguntaDaCena,
   perguntaDaIntencao,
+  REGRAS_DO_ENVIO,
+  REGRAS_DOS_RESULTADOS,
   type ResultadoGerado,
+  rotuloDaCena,
 } from "../_shared/agente-de-video.ts";
+// Frente AG2 (29/09): referência do pedido, ordem clara, aprendizado e falhas no log.
+import { pedidoAponta, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
+import { ehOrdemClara } from "../_shared/ordem-clara.ts";
+import { aprenderDoPedido, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { modelosDeVideo } from "../_shared/modelos-de-video.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
@@ -135,6 +162,7 @@ import {
   diretorParaEditor,
   diretorProporGerar,
   diretorSalvar,
+  desfazerItemDoDiretor,
   executarItemDoDiretor,
   templateArquivar,
   templateSalvar,
@@ -494,18 +522,28 @@ async function takesOrganizarPropor(ch: Chamador, corpo: Record<string, unknown>
   return json({ mensagem_id: (data as { id: string }).id, acao, roteiros_disponiveis: rot.disponivel });
 }
 
+/**
+ * A proposta guardada: em video_acoes (agente da mesa, Roteiro) ou, desde a AG2
+ * (29/09), na mensagem da conversa do diretor (agente_mensagens). Só as ações dos
+ * agentes da Mesa Vídeos passam; o acesso ao cliente é conferido pela linha.
+ */
 async function propostaGuardada(ch: Chamador, corpo: Record<string, unknown>) {
+  const exigir = (clientId: string) => garantirAcesso(ch, clientId);
+  let g;
   try {
-    const g = await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, (clientId) => garantirAcesso(ch, clientId), {
-      tabela: TABELA_DAS_ACOES,
-      acaoId: corpo.acao_id,
-    });
-    if ((AGENTES_DA_MESA_DE_VIDEO as readonly string[]).indexOf(g.acao.agente) < 0) throw new ErroHttp(404, "acao_inexistente", "Esta mensagem não tem ação da Mesa Vídeos.");
-    return g;
+    g = await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, exigir, { tabela: TABELA_DAS_ACOES, acaoId: corpo.acao_id });
   } catch (e) {
-    if (e instanceof ErroDaAcao && e.codigo === "mensagem_indisponivel") throw new ErroHttp(503, "banco_sem_mesa_videos", "A Mesa Vídeos ainda não foi ativada no banco. Aplique o SQL V2-01.");
-    throw e;
+    const semTabela = e instanceof ErroDaAcao && e.codigo === "mensagem_indisponivel";
+    if (!(e instanceof ErroDaAcao) || (e.codigo !== "mensagem_inexistente" && !semTabela)) throw e;
+    try {
+      g = await acaoGuardadaNaMensagem(servico(), corpo.mensagem_id, exigir, { acaoId: corpo.acao_id });
+    } catch (e2) {
+      if (semTabela && e2 instanceof ErroDaAcao && e2.codigo === "mensagem_inexistente") throw new ErroHttp(503, "banco_sem_mesa_videos", "A Mesa Vídeos ainda não foi ativada no banco. Aplique o SQL V2-01.");
+      throw e2;
+    }
   }
+  if ((AGENTES_DA_MESA_DE_VIDEO as readonly string[]).indexOf(g.acao.agente) < 0) throw new ErroHttp(404, "acao_inexistente", "Esta mensagem não tem ação da Mesa Vídeos.");
+  return g;
 }
 
 async function executarNoTake(clientId: string, item: ItemDaAcaoDoAgente): Promise<{ desfazer: Record<string, unknown> }> {
@@ -517,9 +555,21 @@ async function executarNoTake(clientId: string, item: ItemDaAcaoDoAgente): Promi
     await gravarCampos(clientId, atual.id, camposDoEnvio(item.operacao, new Date().toISOString()));
     return { desfazer: { campos: { edicao_desde: null } } };
   }
+  if (item.operacao === "vincular_cena") {
+    // AG2 (29/09): o roteiro e a cena são conferidos no banco na hora de gravar (nunca o id que veio de fora).
+    const c = lerParaDaCena(item.para);
+    if (!c) throw new Error("Cena inválida.");
+    const rot = await lerRoteiros(clientId);
+    const roteiro = rot.roteiros.find((r) => r.id === c.roteiro_id) || null;
+    if (!roteiro || !roteiro.cenas.some((x) => x.ref === c.cena_ref)) throw new Error("A cena não está mais nos roteiros aprovados deste cliente.");
+    if (atual.estado === "arquivado") throw new Error("Está arquivado.");
+    await gravarCampos(clientId, atual.id, { roteiro_id: c.roteiro_id, cena_ref: c.cena_ref });
+    return { desfazer: { campos: { roteiro_id: atual.roteiro_id || null, cena_ref: atual.cena_ref || null } } };
+  }
   if (item.operacao === "arquivar") {
     const aprovados = await arquivosEmVersaoAprovada(clientId);
     if (aprovados.indexOf(atual.id) >= 0) throw new Error("Está numa versão aprovada: fica no acervo.");
+    if (atual.estado === "arquivado") throw new Error("Já está arquivado.");
   }
   const desfazer = desfazerDaOperacao(atual, item.operacao);
   await gravarCampos(clientId, atual.id, camposDaOperacao(item.operacao, item.para) as Record<string, unknown>);
@@ -547,16 +597,19 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
   if (corpo.descartar === true && !r.anexo.executada_em) return json({ anexo: r.anexo });
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
-  await auditar(ch, doDiretor ? "video_diretor_gerar_planos" : guardada.acao.agente === AGENTE_DO_ENVIO ? "video_enviar_para_edicao" : "video_organizar_takes", { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) }, falhas === 0, guardada.mensagem.id);
+  await auditar(ch, doDiretor ? "video_diretor_gerar_planos" : guardada.acao.agente === AGENTE_DO_ENVIO ? "video_enviar_para_edicao" : guardada.acao.agente === AGENTE_DOS_RESULTADOS ? "video_resultados_agente" : "video_organizar_takes", { client_id: clientId, mensagem_id: guardada.mensagem.id, operacoes: r.anexo.itens.map((i) => i.operacao) }, falhas === 0, guardada.mensagem.id);
   return json({ anexo: r.anexo, feitos, falhas });
 }
 
 async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
   const guardada = await propostaGuardada(ch, corpo);
   const clientId = guardada.mensagem.client_id;
+  const doDiretor = guardada.acao.agente === AGENTE_DO_DIRETOR;
   const r = await desfazerAcaoGuardada(
     guardada,
     async (x) => {
+      // Diretor: a versão do editor volta como rejeitada (geração não tem desfazer e nem chega aqui).
+      if (doDiretor) return desfazerItemDoDiretor(baseDa(ch), x);
       const bruto = x.desfazer && typeof x.desfazer === "object" ? ((x.desfazer as { campos?: Record<string, unknown> }).campos || {}) : {};
       if ("edicao_desde" in bruto) {
         await gravarCampos(clientId, x.alvo_id, { edicao_desde: null });
@@ -872,7 +925,10 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
     .single();
   if (error) throw erroDeTabela(error, "video_versoes");
   await auditar(ch, "video_versao_decidir", { client_id: v.client_id, versao_id: v.id, decisao }, true, v.id);
-  return json({ versao: normalizarVersao(data) });
+  // AG2 (29/09): reprovar com motivo ensina a mesa (depois da decisão gravada; nunca a bloqueia).
+  const motivo = decisao === "rejeitar" && corpo.motivo ? String(corpo.motivo).replace(/\s+/g, " ").trim().slice(0, 600) : "";
+  const aprendido = motivo ? await aprenderDoPedido(servico(), { clientId: v.client_id, mesa: "edicao", pedido: motivo, motivo, userId: ch.userId, forcar: true }) : null;
+  return json({ versao: normalizarVersao(data), ...(aprendido ? { aprendido } : {}) });
 }
 
 // ------------------------------------------------------------------ projeto de edição
@@ -969,12 +1025,10 @@ async function resultadosParaEdicaoPropor(ch: Chamador, corpo: Record<string, un
 
 // ------------------------------------------------------------------ agente: entender o pedido
 
-async function agenteEntender(ch: Chamador, corpo: Record<string, unknown>) {
-  const clientId = String(corpo.client_id || "");
-  await garantirAcesso(ch, clientId);
-  const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
-  const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, 600);
-  if (!texto) throw new ErroHttp(400, "texto_vazio", "Escreva o que precisa.");
+type Entendimento = { intencao: string; confianca: number | null; via: "jev" | "palavras"; jev_erro?: string };
+
+/** Intenção do pedido (Jev Choice; sem ele ou com pouca certeza, as palavras do pedido). Nunca lança. */
+async function entenderPedido(ch: Chamador, clientId: string, mesa: MesaDoAgente, texto: string): Promise<Entendimento> {
   const reserva = intencaoPorPalavras(mesa, texto);
   try {
     const r = await jevPerguntar(perguntaDaIntencao(mesa, texto));
@@ -984,14 +1038,192 @@ async function agenteEntender(ch: Chamador, corpo: Record<string, unknown>) {
     const confianca = typeof resposta.confidence === "number" ? resposta.confidence : null;
     // Pouca certeza do Jev: vale a palavra do pedido quando ela reconhece algo.
     if (escolha === NENHUMA || (confianca !== null && confianca < CONFIANCA_MINIMA)) {
-      if (reserva !== NENHUMA) return json({ intencao: reserva, confianca, via: "palavras" });
+      if (reserva !== NENHUMA) return { intencao: reserva, confianca, via: "palavras" };
     }
-    return json({ intencao: escolha, confianca, via: "jev" });
+    return { intencao: escolha, confianca, via: "jev" };
   } catch (e) {
     // Frente LR: o Jev fora do ar não some em silêncio (log e jev_erro na resposta).
     console.warn("mesa-videos: jev da intenção falhou; vale a palavra do pedido", { erro: String((e as Error)?.message ?? e) });
-    return json({ intencao: reserva, confianca: null, via: "palavras", jev_erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" });
+    return { intencao: reserva, confianca: null, via: "palavras", jev_erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" };
   }
+}
+
+async function agenteEntender(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
+  const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, 600);
+  if (!texto) throw new ErroHttp(400, "texto_vazio", "Escreva o que precisa.");
+  return json(await entenderPedido(ch, clientId, mesa, texto));
+}
+
+// ------------------------------------------------------------------ agente: entender E agir (AG2, 29/09)
+
+/** Intenções em que o agente da mesa age nos itens (as outras só abrem a etapa na tela). */
+const INTENCOES_QUE_AGEM = ["enviar_para_edicao", "arquivar", "vincular", "organizar"];
+
+/** Apelidos escritos no pedido ("r2", "o r3 e o r5"): valem sem Jev. */
+function apelidosEscritos(texto: string, itens: { ref: string }[]): string[] {
+  const achados: string[] = [];
+  String(texto || "").toLowerCase().replace(/\br(\d{1,3})\b/g, (_m, n) => {
+    const ref = `r${Number(n)}`;
+    if (itens.some((i) => i.ref === ref) && achados.indexOf(ref) < 0) achados.push(ref);
+    return "";
+  });
+  return achados;
+}
+
+/** A lista da etapa na ordem da tela: a ordem mandada pela tela, conferida no banco (id de fora nunca passa sem estar lá). */
+function naOrdemDaTela<T extends { id: string; criado_em?: string | null }>(lista: T[], ordem: unknown): T[] {
+  const ids = Array.isArray(ordem) ? (ordem as unknown[]).map(String).filter((x) => UUID.test(x)) : [];
+  const porId = new Map(lista.map((a) => [a.id, a]));
+  const saida: T[] = [];
+  ids.forEach((id) => {
+    const a = porId.get(id);
+    if (a && saida.indexOf(a) < 0) saida.push(a);
+  });
+  // O que a tela não mandou vem depois, do mais novo para o mais velho (como a tela mostra).
+  lista
+    .filter((a) => saida.indexOf(a) < 0)
+    .sort((x, y) => String(y.criado_em || "").localeCompare(String(x.criado_em || "")))
+    .forEach((a) => saida.push(a));
+  return saida;
+}
+
+/** Cena do roteiro pedida: "cena 2" com um roteiro só vale sem Jev; senão o Jev escolhe (ou null). */
+async function cenaDoPedido(ch: Chamador, clientId: string, texto: string, cenas: CenaParaLigar[]): Promise<CenaParaLigar | null> {
+  if (!cenas.length) return null;
+  if (cenas.length === 1) return cenas[0];
+  const roteiros = new Set(cenas.map((c) => c.roteiro_id));
+  const n = /\bcena\s*(\d{1,3})\b/i.exec(texto);
+  if (n && roteiros.size === 1) return cenas.find((c) => c.ordem === Number(n[1])) || null;
+  try {
+    const r = await jevPerguntar(perguntaDaCena(texto, cenas));
+    await cobrarJev(r, { clientId, tarefa: "conversa", criadoPor: ch.userId });
+    const e = r.answers.cena || {};
+    const m = /^c(\d{1,3})$/.exec(String(e.choice || ""));
+    const conf = typeof e.confidence === "number" ? e.confidence : null;
+    if (!m || (conf !== null && conf < 0.6)) return null;
+    return cenas[Number(m[1]) - 1] || null;
+  } catch (e) {
+    registrarFalha("mesa-videos: cena do pedido sem Jev (pergunta à equipe)", e, { client_id: clientId });
+    return null;
+  }
+}
+
+/**
+ * agente_agir { client_id, mesa, texto, ordem?: ids na ordem da tela, selecionados?: ids, ultima_resposta? }
+ * -> { intencao, confianca, via, resposta, mensagem_id, acao, pergunta?, anexos }
+ *
+ * O agente da mesa entende o pedido e, quando é para agir nos vídeos (mandar
+ * para a Edição, arquivar, ligar à cena, organizar), monta a proposta do
+ * contrato comum com os itens que o pedido aponta ("essa", "a segunda",
+ * "todos": Jev sobre a lista na ordem da tela; "r2" escrito vale direto).
+ * Sem custo e com Desfazer: ordem clara (Jev) vai na hora, com a prova por item;
+ * senão o cartão pede Confirmar. Dúvida real (qual vídeo? qual cena?): UMA
+ * pergunta. Arquivar nunca pega "todos" sem a pessoa dizer.
+ */
+async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
+  const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, 600);
+  if (!texto) throw new ErroHttp(400, "texto_vazio", "Escreva o que precisa.");
+  const [ent, aprendido] = await Promise.all([
+    entenderPedido(ch, clientId, mesa, texto),
+    // Aprendizado: "nunca mande X", "não gostei de Y" viram regra da mesa (nunca bloqueia).
+    aprenderDoPedido(servico(), { clientId, mesa: mesa === "edicao" ? "edicao" : "video", pedido: texto, userId: ch.userId, ultimaResposta: corpo.ultima_resposta ? String(corpo.ultima_resposta) : null }),
+  ]);
+  const anexos = aprendido ? [aprendido] : [];
+  const base = { ...ent, anexos };
+  if (INTENCOES_QUE_AGEM.indexOf(ent.intencao) < 0) return json({ ...base, resposta: null, mensagem_id: null, acao: null });
+
+  const [arquivos, rot, aprovados] = await Promise.all([lerArquivosDoCliente(clientId), lerRoteiros(clientId), arquivosEmVersaoAprovada(clientId)]);
+  // A lista da etapa: Mesa Vídeos = vídeos gerados (Resultados); Mesa Edição = a Entrada.
+  const daEtapa = arquivos.filter((a) => (mesa === "videos" ? a.tipo === "gerado" : (a.tipo !== "gerado" || !!a.edicao_desde) && ["angulo", "quadro"].indexOf(String(a.tipo)) < 0));
+  const lista = naOrdemDaTela(daEtapa as (LinhaDoArquivo & { criado_em?: string | null })[], corpo.ordem);
+  const resultados: ResultadoGerado[] = lista.map((a) => ({ id: a.id, nome: a.nome, tipo: String(a.tipo), estado: a.estado, edicao_desde: a.edicao_desde || null, grupo: a.grupo, melhor: !!a.melhor, em_versao_aprovada: aprovados.indexOf(a.id) >= 0, roteiro_id: a.roteiro_id || null, cena_ref: a.cena_ref || null }));
+  const itens = itensReferiveis(resultados);
+  const refDoId: Record<string, string> = {};
+  resultados.forEach((r, i) => (refDoId[r.id] = itens[i].ref));
+  const selecionados = (Array.isArray(corpo.selecionados) ? (corpo.selecionados as unknown[]).map(String) : []).map((id) => refDoId[id]).filter(Boolean);
+
+  // Quais itens: apelido escrito > referência (Jev) > regra de cada intenção.
+  const escritos = apelidosEscritos(texto, itens);
+  const referencia = escritos.length ? null : await referenciaDoPedido(texto, itens, { agente: mesa === "edicao" ? "agente da Mesa Edição" : "agente da Mesa Vídeos", ultimaResposta: corpo.ultima_resposta ? String(corpo.ultima_resposta) : null, selecionados });
+  const pergunta = (t: string) => json({ ...base, resposta: t, pergunta: true, mensagem_id: null, acao: null });
+  const opcoes = (refs: string[]) => refs.slice(0, 4).map((ref) => `${ref} (${(itens.find((i) => i.ref === ref) || { titulo: "" }).titulo})`).join(", ");
+  let escolhidos: ResultadoGerado[] | null = null;
+  if (escritos.length) escolhidos = resultados.filter((_r, i) => escritos.indexOf(itens[i].ref) >= 0);
+  else if (referencia && referencia.incerta) return pergunta(`Você quer dizer ${referencia.alcance === "todas" ? "todos os vídeos da lista" : opcoes(referencia.refs)}? Responda com o apelido (ex.: "${referencia.refs[0] || "r1"}") ou "todos".`);
+  else if (referencia) escolhidos = referencia.alcance === "todas" ? resultados.slice() : resultados.filter((_r, i) => referencia.refs.indexOf(itens[i].ref) >= 0);
+  else if (pedidoAponta(texto) && !/\b(todos|todas|tudo)\b/i.test(texto) && ent.intencao !== "organizar") {
+    if (!itens.length) return json({ ...base, resposta: "Não há vídeo nesta etapa para isso.", mensagem_id: null, acao: null });
+    return pergunta(`Qual vídeo? ${opcoes(itens.map((i) => i.ref))}${itens.length > 4 ? "..." : ""}. Responda com o apelido (ex.: "r1").`);
+  }
+  if (!escolhidos && (ent.intencao === "arquivar" || ent.intencao === "vincular")) {
+    // Arquivar e ligar nunca pegam a lista inteira sem a pessoa dizer "todos".
+    if (/\b(todos|todas|tudo)\b/i.test(texto)) escolhidos = resultados.slice();
+    else if (resultados.length === 1) escolhidos = resultados.slice();
+    else if (!resultados.length) return json({ ...base, resposta: "Não há vídeo gerado nesta etapa.", mensagem_id: null, acao: null });
+    else return pergunta(`Quais vídeos? ${opcoes(itens.map((i) => i.ref))}${itens.length > 4 ? "..." : ""}. Diga o apelido (ex.: "r2") ou "todos".`);
+  }
+
+  const id = `agente-${Date.now().toString(36)}`;
+  let acao: AcaoDoAgente | null = null;
+  let regras: Record<string, { direta?: boolean }> = {};
+  let vazio = "";
+  if (ent.intencao === "enviar_para_edicao") {
+    acao = acaoDoEnvioParaEdicao(escolhidos || resultados, { id });
+    regras = REGRAS_DO_ENVIO;
+    vazio = "Nenhum vídeo gerado esperando a Edição.";
+  } else if (ent.intencao === "arquivar") {
+    acao = acaoDeArquivarResultados(escolhidos || [], { id });
+    regras = REGRAS_DOS_RESULTADOS;
+    vazio = "Nada para arquivar.";
+  } else if (ent.intencao === "vincular") {
+    const cenas: CenaParaLigar[] = [];
+    rot.roteiros.forEach((r) => r.cenas.forEach((c) => cenas.push({ roteiro_id: r.id, roteiro: r.titulo, cena_ref: c.ref, ordem: c.ordem, titulo: c.titulo || "" })));
+    if (!cenas.length) return json({ ...base, resposta: "Não há roteiro aprovado com cenas para ligar. Aprove um roteiro na Mesa Roteiros.", mensagem_id: null, acao: null });
+    const cena = await cenaDoPedido(ch, clientId, texto, cenas);
+    if (!cena) return pergunta(`Qual cena? ${cenas.slice(0, 5).map((c, i) => `c${i + 1} ${rotuloDaCena(c)}`).join("; ")}${cenas.length > 5 ? "..." : ""}.`);
+    acao = acaoDeLigarACena(escolhidos || [], cena, { id });
+    regras = REGRAS_DOS_RESULTADOS;
+    vazio = "Nada para ligar.";
+  } else {
+    const takes: TakeParaOrganizar[] = arquivos.map((a) => ({ ...a, em_versao_aprovada: aprovados.indexOf(a.id) >= 0 }));
+    const roteiros = rot.roteiros.map(paraOrganizar);
+    const soEstes = escolhidos ? escolhidos.map((x) => x.id) : null;
+    const propostos = proporOrganizacao(takes, roteiros, { melhores: true }).filter((i) => !soEstes || soEstes.indexOf(i.arquivo_id) >= 0);
+    acao = acaoDaOrganizacao(takes, propostos, roteiros, { id, resumo: propostos.length ? `Organizar ${new Set(propostos.map((i) => i.arquivo_id)).size} takes por roteiro e cena, com nomes no padrão roteiro_c01_t01. O arquivo original não muda.` : "" });
+    regras = regrasDoOrganizador(roteiros);
+    vazio = "Já está organizado: nomes e grupos seguem o padrão por roteiro e cena.";
+  }
+  if (!acao) return json({ ...base, resposta: vazio, mensagem_id: null, acao: null });
+
+  // A proposta nasce guardada ANTES de qualquer execução: o Desfazer sempre tem onde morar.
+  const { data: linha, error: eGravar } = await servico().from(TABELA_DAS_ACOES).insert({ client_id: clientId, anexos: [acao], criado_por: ch.userId }).select("id").single();
+  if (eGravar) {
+    registrarFalha("mesa-videos: proposta do agente não gravada", eGravar, { client_id: clientId });
+    throw erroDeTabela(eGravar, TABELA_DAS_ACOES);
+  }
+  const mensagemId = (linha as { id: string }).id;
+  let resposta = acao.itens.length ? `${acao.resumo} Confira a lista e confirme.` : `Não deu para fazer: ${acao.recusados.slice(0, 3).map((x) => `${x.titulo} (${x.motivo})`).join("; ")}`;
+  let avisoRegistro: string | null = null;
+  if (podeExecutarDireto(acao, regras, { pedidoClaro: true }).direto) {
+    const ordem = await ehOrdemClara(texto, { agente: "agente da mesa de vídeo", resumo: acao.resumo });
+    if (ordem.clara) {
+      const feita = await executarDireto(acao, (item) => executarNoTake(clientId, item), { userId: ch.userId, lote: 1 });
+      acao = comCaminho(feita, caminhoDaMesaDeVideo(clientId, feita, { abrirSozinho: ordem.levar }), { abrirSozinho: ordem.levar });
+      resposta = `Feito: ${textoDoResultado(feita.resultados || [])}. ${acao.resumo}`;
+      const { error: eFeita } = await servico().from(TABELA_DAS_ACOES).update({ anexos: [acao] }).eq("id", mensagemId).eq("client_id", clientId);
+      if (eFeita) {
+        avisoRegistro = registrarFalha("mesa-videos: ação feita, registro não gravado", eFeita, { mensagem_id: mensagemId }) && "A ação foi feita, mas o registro falhou: o Desfazer deste cartão pode não funcionar. Desfaça pela lista de Resultados.";
+      }
+      await auditar(ch, "video_agente_direto", { client_id: clientId, intencao: ent.intencao, itens: feita.itens.length }, (feita.resultados || []).every((x) => x.ok), mensagemId);
+    }
+  }
+  return json({ ...base, resposta, mensagem_id: mensagemId, acao, ...(avisoRegistro ? { aviso_registro: avisoRegistro } : {}) });
 }
 
 // ------------------------------------------------------------------ gerador e diretor (frente V-A)
@@ -1018,6 +1250,16 @@ async function motoresSincronizarDaEquipe(ch: Chamador) {
   return await motoresSincronizar(baseDa(ch));
 }
 
+// ------------------------------------------------------------------ aprendizado (AG2, 29/09)
+
+// "Esquecer" e "Guardar como regra": o diretor e o agente da Mesa Vídeos gravam na mesa "video";
+// o agente da Mesa Edição (mesa: "edicao" no corpo) na mesa "edicao".
+const rotaDoAprendizado = (mesa: "video" | "edicao") =>
+  rotasDoAprendizado({ mesa, servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json });
+const APRENDIZADO_DO_VIDEO = rotaDoAprendizado("video");
+const APRENDIZADO_DA_EDICAO = rotaDoAprendizado("edicao");
+const aprendizadoDaMesa = (corpo: Record<string, unknown>) => (corpo.mesa === "edicao" ? APRENDIZADO_DA_EDICAO : APRENDIZADO_DO_VIDEO);
+
 // ------------------------------------------------------------------ roteador
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
@@ -1038,6 +1280,10 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   computador_decidir: computadorDecidir,
   resultados_para_edicao_propor: resultadosParaEdicaoPropor,
   agente_entender: agenteEntender,
+  // AG2 (29/09): o agente da mesa entende E age (arquivar, ligar à cena, mandar para a Edição, organizar).
+  agente_agir: agenteAgir,
+  aprendizado_esquecer: (ch, corpo) => aprendizadoDaMesa(corpo).aprendizado_esquecer(ch, corpo),
+  aprendizado_guardar: (ch, corpo) => aprendizadoDaMesa(corpo).aprendizado_guardar(ch, corpo),
   projeto_salvar: projetoSalvar,
   // Frente V-A: gerador (contrato em docs/video/CONTRATOS.md).
   motores_estado: direto((b) => motoresEstado(b)),

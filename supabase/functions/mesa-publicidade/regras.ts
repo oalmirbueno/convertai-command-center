@@ -384,12 +384,15 @@ const QUEBRA = String.fromCharCode(10);
  * caracteres): território, as seis tomadas e o que não pode mudar. O
  * diretor da Mesa Foto monta as tomadas a partir disto, com as fontes do kit.
  */
-export function pedidoParaMesaFoto(b: Briefing, t: Territorio, tomadas: TomadaDePublicidade[], prefixo = ""): string {
+export function pedidoParaMesaFoto(b: Briefing, t: Territorio, tomadas: TomadaDePublicidade[], prefixo = "", evitar: string[] = []): string {
   const restricoes = restricoesEmLista(b.restricoes);
+  // Frente AG2: o que a equipe ensinou a EVITAR nesta mesa vai junto (teto próprio, depois das restrições).
+  const aprendidas = evitar.map((x) => limpo(x, 160)).filter(Boolean).slice(0, 6);
   // O fim (o que não pode mudar) nunca é cortado: ele tem teto próprio e entra inteiro.
   const fim = [
     restricoes.length ? `Não pode mudar no produto: ${restricoes.join("; ")}.`.slice(0, 700) : "",
     b.proibido ? `Não mostrar nem sugerir: ${b.proibido.slice(0, 240)}.` : "",
+    aprendidas.length ? `A equipe pediu para evitar: ${aprendidas.join("; ")}.`.slice(0, 360) : "",
     "Produto sempre das fontes do kit; nada de acessório, variante ou texto que não está nelas. Vista sem evidência volta como lacuna.",
   ].filter(Boolean).join(" ");
   const cabecaInteira = [

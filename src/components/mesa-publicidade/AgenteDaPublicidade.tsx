@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Megaphone, Send } from "lucide-react";
+import { AlertTriangle, Loader2, Megaphone, Send } from "lucide-react";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { usd } from "@/lib/mesa/api";
+import { chamarFuncao, usd } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { botao, campoTexto, conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
 import { useMesaPublicidade } from "./Comuns";
-import { chaveDaCampanha, conversarComOAgente, lerHistorico, normalizarCampanha, type MensagemDoAgente } from "./publicidadeApi";
+import { avisarAprendido, chaveDaCampanha, conversarComOAgente, lerHistorico, normalizarCampanha, type MensagemDoAgente } from "./publicidadeApi";
 
 /**
  * O agente da Mesa Publicidade, fixo ao lado das etapas (lateral da
@@ -33,11 +34,29 @@ import { chaveDaCampanha, conversarComOAgente, lerHistorico, normalizarCampanha,
 export const ATALHOS_DO_AGENTE = [
   { rotulo: "Proponha 3 territórios", texto: "Proponha 3 territórios para esta campanha." },
   { rotulo: "Peça as 6 tomadas", texto: "Peça as 6 tomadas à Mesa Foto com o território aprovado." },
+  { rotulo: "Avalie as fotos", texto: "Avalie as fotos do ensaio." },
   { rotulo: "Reprove as que mudaram o produto", texto: "Reprove as fotos que mudaram o produto." },
   { rotulo: "Mande as aprovadas para a Mesa Ads", texto: "Mande as aprovadas para a Mesa Ads." },
 ];
 
-const CAPACIDADES = ["mudar o briefing e o nome (na hora, com Desfazer)", "propor e aprovar territórios", "pedir as tomadas", "reprovar fotos que mudaram o produto", "mandar aprovadas para a Mesa e a Mesa Ads"];
+const CAPACIDADES = [
+  "mudar o briefing e o nome (na hora, com Desfazer)",
+  "propor e aprovar territórios",
+  "pedir as tomadas",
+  "avaliar a revisão, aprovar a foto conferida, reprovar ou refazer",
+  "mandar aprovadas para a Mesa e a Mesa Ads",
+  "aprender o que você ensinar (\"nunca\", \"sempre\", \"não gostei\")",
+];
+
+/** Observação do cartão: custo quando gasta IA e o que não volta (frente AG2). */
+export function observacaoDaPublicidade(a: { itens: Array<{ operacao: string }>; custo_estimado_usd?: number | null; sem_desfazer?: boolean }): string {
+  const ops = a.itens.map((i) => i.operacao);
+  const gasta = ops.some((o) => o === "propor_territorios" || o === "pedir_tomadas" || o === "refazer_foto");
+  const custo = typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0 ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira.` : gasta ? "Gasta IA da carteira; o custo exato sai na Mesa Foto." : "Sem custo.";
+  const semVolta = ops.some((o) => o === "reprovar_foto" || o === "aprovar_foto" || o === "refazer_foto" || o === "aprovar_territorio");
+  const volta = a.sem_desfazer ? "Não tem Desfazer." : semVolta ? "Aprovar e reprovar não voltam; o resto dá para desfazer." : "Dá para desfazer.";
+  return `${custo} ${volta}`;
+}
 
 interface Conversa {
   /** De qual campanha é a conversa na tela. */
@@ -69,8 +88,10 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
         setConversa({ chave, conversaId: h.conversaId, mensagens: h.mensagens.filter((m) => m.papel !== "sistema" || !!m.conteudo), lida: true });
         setNova(false);
       })
-      .catch(() => {
-        if (vivo) setConversa((c) => (c.chave === chave ? { ...c, lida: true } : c));
+      .catch((e) => {
+        if (!vivo) return;
+        setConversa((c) => (c.chave === chave ? { ...c, lida: true } : c));
+        avisarErro(e, "A conversa anterior não foi lida");
       });
     return () => {
       vivo = false;
@@ -87,8 +108,10 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
     const m = rascunho.trim();
     if (!m || enviando) return;
     const alvo = chave;
+    // Frente AG2: a bolha otimista leva uma marca; se o envio falhar, ela sai e o texto volta ao campo (reenviar não duplica).
+    const local = `local-${Date.now()}`;
     setEnviando(true);
-    setConversa((c) => ({ ...c, mensagens: c.mensagens.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null }]) }));
+    setConversa((c) => ({ ...c, mensagens: c.mensagens.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]) }));
     onRascunho("");
     try {
       const r = await conversarComOAgente({ clientId, campanha, mensagem: m, conversaId: conversa.chave === alvo ? conversa.conversaId : null, nova });
@@ -101,6 +124,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
       }
       atualizarCusto();
     } catch (e) {
+      setConversa((c) => ({ ...c, mensagens: c.mensagens.filter((x) => x.local !== local) }));
       avisarErro(e, "O agente não respondeu");
       onRascunho(m);
     } finally {
@@ -131,7 +155,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
               </button>
             )}
             <AjudaRecolhida rotulo="Como o agente da campanha funciona">
-              Converse sobre a campanha aberta. Quando o pedido for uma ação (propor territórios, pedir tomadas, reprovar, mandar para as mesas), o agente mostra a lista e você confirma. Propor e pedir gastam IA da carteira.
+              Converse sobre a campanha aberta. Briefing, nome e ler a revisão ele faz na hora, com Desfazer. O que gasta IA (propor territórios, pedir tomadas, refazer foto) ou não volta (aprovar e reprovar) vem num cartão com o custo para você confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.
             </AjudaRecolhida>
           </>
         }
@@ -181,7 +205,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
         {mensagens.map((m, i) => {
           const acoes = acoesDaMensagem(m.anexos);
           return (
-            <div key={m.id || `m-${i}`} className="min-w-0">
+            <div key={m.id || m.local || `m-${i}`} className="min-w-0">
               <div
                 className={juntar(
                   estiloDaConversa.balao,
@@ -191,6 +215,19 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd !== null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
+              {m.papel === "agente" && m.aviso && (
+                <p className="mr-6 mt-1 flex min-w-0 items-start text-[12px] text-warning" role="alert" data-aviso-registro="">
+                  <AlertTriangle className="mr-1.5 mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{m.aviso}</span>
+                </p>
+              )}
+              {m.papel === "agente" && (
+                <AprendizadoDoAgente
+                  anexos={m.anexos}
+                  onEsquecer={(id) => chamarFuncao("mesa-publicidade", { acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.id || undefined })}
+                  onGuardar={(texto, tipo) => chamarFuncao("mesa-publicidade", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.id || undefined })}
+                />
+              )}
               {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
               {m.id &&
                 acoes.map((a) => (
@@ -199,7 +236,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
                       acao={a}
                       recemFeita={!!m.nova}
                       titulo="O agente vai fazer na campanha"
-                      observacao={a.sem_desfazer ? "Propor e pedir gastam IA da carteira. Reprovar não tem volta." : "Nada muda até confirmar. Envio dá para desfazer."}
+                      observacao={observacaoDaPublicidade(a)}
                       onPedido={(p) => chamarAcaoDoAgente("mesa-publicidade", String(m.id), a.id, p)}
                       onFeito={(p, resposta) => {
                         if (p === "descartar") return;
@@ -207,6 +244,8 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
                         if (nova && nova.id) aplicar(nova);
                         else if (campanhaId) void queryClient.invalidateQueries({ queryKey: chaveDaCampanha(campanhaId) });
                         void queryClient.invalidateQueries({ queryKey: ["mesa-foto", "ensaios", clientId] });
+                        // Frente AG2: o motivo do refazer que virou regra aparece junto do resultado.
+                        if (resposta && (resposta as any).aprendido) avisarAprendido(clientId, (resposta as any).aprendido);
                         atualizarCusto();
                       }}
                     />

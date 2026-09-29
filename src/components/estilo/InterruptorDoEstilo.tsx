@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { AjudaRecolhida } from "@/components/sistema";
 import { useAvisarErro } from "@/components/mesa/Custo";
-import { chamarEstilo } from "./estiloApi";
+import { chamarEstilo, chaveDoEstudio, type LeituraDoEstudio, useEstiloNoEstudio } from "./estiloApi";
 
 /**
  * "Usar estilo do cliente nesta geração" (frente S2). Liga ou desliga
@@ -31,17 +31,10 @@ export default function InterruptorDoEstilo({
   const avisarErro = useAvisarErro();
   const queryClient = useQueryClient();
   const ids = trabalhoIds.filter(Boolean).slice().sort();
-  const chave = ["estilo-interruptor", clientId, ids.join(",")];
-  const lido = useQuery({
-    queryKey: chave,
-    queryFn: async () => {
-      const d = await chamarEstilo<{ ligados?: string[] }>("interruptor_ler", clientId, marcaId, { trabalho_ids: ids });
-      return Array.isArray(d && d.ligados) ? d.ligados! : [];
-    },
-    enabled: ids.length > 0,
-    staleTime: 30_000,
-  });
-  const ligadoNoBanco = ids.length > 0 && !!lido.data && ids.every((id) => lido.data!.indexOf(id) >= 0);
+  // Frente AG2: a mesma leitura do botão e do seletor (estudio_ler), sem chamada própria.
+  const chave = chaveDoEstudio(clientId, marcaId, ids);
+  const lido = useEstiloNoEstudio(clientId, marcaId, ids);
+  const ligadoNoBanco = ids.length > 0 && !!lido.data && ids.every((id) => lido.data!.ligados.indexOf(id) >= 0);
   const [ligado, setLigado] = useState(ligadoNoBanco);
   const [gravando, setGravando] = useState(false);
   useEffect(() => setLigado(ligadoNoBanco), [ligadoNoBanco]);
@@ -50,8 +43,13 @@ export default function InterruptorDoEstilo({
     setLigado(v);
     setGravando(true);
     try {
-      await chamarEstilo("interruptor", clientId, marcaId, { trabalho_ids: ids, ligado: v });
-      queryClient.setQueryData(chave, v ? ids : []);
+      const r = await chamarEstilo<{ falhas?: string[] }>("interruptor", clientId, marcaId, { trabalho_ids: ids, ligado: v });
+      const falhas = r && Array.isArray(r.falhas) ? r.falhas : [];
+      queryClient.setQueryData<LeituraDoEstudio | undefined>(chave, (d) =>
+        d ? { ...d, ligados: v ? Array.from(new Set(d.ligados.concat(ids.filter((id) => falhas.indexOf(id) < 0)))) : d.ligados.filter((id) => ids.indexOf(id) < 0 || falhas.indexOf(id) >= 0) } : d,
+      );
+      // Peça que não gravou (mudou agora ou não é do cliente): a chave volta e a pessoa sabe.
+      if (falhas.length) throw new Error(`${falhas.length} de ${ids.length} não mudaram. Tente de novo.`);
     } catch (e) {
       setLigado(!v);
       avisarErro(e, "Não foi possível mudar o estilo desta geração");

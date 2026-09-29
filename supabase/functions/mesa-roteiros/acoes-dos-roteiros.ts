@@ -27,10 +27,12 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { ehTipoDeRoteiro, modoDoTipo, ROTULO_DO_FORMATO, ROTULO_DO_STATUS, type StatusDoRoteiro, type TipoDeRoteiro } from "../_shared/roteiro-modelo.ts";
-import { DESCRICOES_DE_EDICAO, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
+import { DESCRICOES_DE_EDICAO, idDoComentario, lerIdDoComentario, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
+// Frente AG2 (29/09): "esse roteiro", "a segunda peça", "todos da semana" (só o tipo; a chamada ao Jev fica no index).
+import type { ItemReferivel } from "../_shared/conversa-das-mesas.ts";
 
 // Frente AG (26/09): as de edição sem IA (editar_texto, aprovar_roteiro, marcar_gravado) moram em acoes-de-edicao.ts.
-export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "gerar_roteiro", "arquivar_roteiro", ...OPERACOES_DE_EDICAO];
+export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "gerar_roteiro", "arquivar_roteiro", "gerar_pdf", ...OPERACOES_DE_EDICAO];
 /** Operações que chamam o roteirista (custam IA). */
 export const OPERACOES_COM_IA = ["refazer_gancho", "mudar_tom", "gerar_roteiro"];
 
@@ -57,6 +59,24 @@ export type PecaParaAcao = {
 };
 
 type AlvoDosRoteiros = { id: string; titulo: string; detalhe?: string | null; dados?: Record<string, unknown> };
+
+/** Comentário da equipe no roteiro aberto (alvo c1..cN do agente). */
+export type ComentarioParaAcao = { roteiro_id: string; id: string; texto: string; autor: string | null; resolvido: boolean; bloco_id?: string | null };
+
+/** Máximo de comentários que o agente vê (os mais novos, abertos primeiro). */
+export const MAX_COMENTARIOS_PARA_O_AGENTE = 20;
+
+export function alvosDosComentarios(comentarios: ComentarioParaAcao[]): Array<AlvoComApelido<AlvoDosRoteiros>> {
+  return comApelido(
+    comentarios.slice(0, MAX_COMENTARIOS_PARA_O_AGENTE).map((c) => ({
+      id: idDoComentario(c.roteiro_id, c.id),
+      titulo: umaLinha(c.texto, 140) || "comentário",
+      detalhe: [c.resolvido ? "resolvido" : "aberto", c.autor ? `de ${c.autor}` : "", c.bloco_id ? `bloco ${c.bloco_id}` : ""].filter(Boolean).join(" · "),
+      dados: { resolvido: c.resolvido },
+    })),
+    "c",
+  );
+}
 
 const dataCurta = (iso?: string | null) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
@@ -195,7 +215,21 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
     arquivar_roteiro: {
       rotulo: "arquivar",
       alvos: ["r"],
+      // Frente AG2: sem custo e com Desfazer (desarquivar): pedido claro vai direto.
+      direta: true,
       trava: (alvo) => (alvo.dados && alvo.dados.arquivado === true ? "Já está arquivado." : null),
+    },
+    // Frente AG2: o PDF de gravação (o mesmo caminho do botão Compartilhar da etapa PDF). Sem IA, mas
+    // sai da mesa: vai para Arquivos e pede a revisão da agência. Sempre com Confirmar e sem Desfazer.
+    gerar_pdf: {
+      rotulo: "gerar o PDF de",
+      alvos: ["r"],
+      trava: (alvo) => {
+        const d = alvo.dados || {};
+        if (d.arquivado === true) return "Roteiro arquivado. Desarquive antes.";
+        if (d.status !== "aprovado" && d.status !== "gravado") return "Só roteiro aprovado vai para o PDF. Aprove antes.";
+        return null;
+      },
     },
     ...regrasDeEdicao(),
   };
@@ -206,6 +240,7 @@ export const DESCRICOES_DOS_ROTEIROS: Record<string, string> = {
   mudar_tom: "reescreve as falas do roteiro (ref r..) no tom pedido, mantendo fatos, estrutura e tempos. para: o tom (ex.: 'mais leve e próximo').",
   gerar_roteiro: "gera o roteiro de uma peça de vídeo da agenda (ref p..). para: fala_camera, tutorial, ugc ou cinema (vazio: fala_camera). Pedido de 'peças da semana' vale para as peças com data nos próximos 7 dias.",
   arquivar_roteiro: "arquiva o roteiro (ref r..). Dá para desarquivar. para vazio.",
+  gerar_pdf: "gera UM PDF de gravação com os roteiros aprovados ou gravados pedidos (ref r.., um item por roteiro, até 12) e manda para Arquivos com a revisão da agência. Não aprova nada. para vazio.",
   ...DESCRICOES_DE_EDICAO,
 };
 
@@ -215,6 +250,7 @@ export function blocoDasAcoesDosRoteiros(
   pecas: PecaParaAcao[],
   janela?: { de: string; ate: string; estendida: boolean },
   totalDePecas?: number,
+  comentarios: ComentarioParaAcao[] = [],
 ): string {
   const max = janela && janela.estendida ? MAX_PECAS_NA_JANELA_ESTENDIDA : MAX_PECAS_NA_JANELA;
   // O período vai escrito: "nenhuma" sem dizer onde fazia o agente afirmar que não havia peça em dezembro.
@@ -223,7 +259,8 @@ export function blocoDasAcoesDosRoteiros(
   const total = Math.max(pecas.length, totalDePecas ?? 0);
   const corte = total > max ? `\n(Mostrando ${max} de ${total} peças${periodo ? ` ${periodo}` : ""}. Para as outras, a equipe pode pedir por mês.)` : "";
   const periodoNoBloco = periodo ? `\n(Peças com data ${periodo}.)` : "";
-  return `${blocoDosAlvos("ROTEIROS DO CLIENTE", alvosDosRoteiros(roteiros), "nenhum ainda.")}${blocoDosAlvos("PEÇAS DE VÍDEO DA AGENDA", alvosDasPecas(pecas, max), vazio)}${periodoNoBloco}${corte}\n${regraDasAcoes(DESCRICOES_DOS_ROTEIROS)}`;
+  const blocoComentarios = comentarios.length ? blocoDosAlvos("COMENTÁRIOS DA EQUIPE NO ROTEIRO ABERTO", alvosDosComentarios(comentarios)) : "";
+  return `${blocoDosAlvos("ROTEIROS DO CLIENTE", alvosDosRoteiros(roteiros), "nenhum ainda.")}${blocoDosAlvos("PEÇAS DE VÍDEO DA AGENDA", alvosDasPecas(pecas, max), vazio)}${periodoNoBloco}${corte}${blocoComentarios}\n${regraDasAcoes(DESCRICOES_DOS_ROTEIROS)}`;
 }
 
 /**
@@ -237,9 +274,10 @@ export function normalizarAcoesDosRoteiros(
   clientId: string,
   custoPorGeracaoUsd: number,
   id?: string,
+  comentarios: ComentarioParaAcao[] = [],
 ): AcaoDoAgente | null {
   // Mesmo conjunto do bloco: na janela estendida o agente vê até 120 peças (p1..p120).
-  const alvos = [...alvosDosRoteiros(roteiros), ...alvosDasPecas(pecas, MAX_PECAS_NA_JANELA_ESTENDIDA)];
+  const alvos = [...alvosDosRoteiros(roteiros), ...alvosDasPecas(pecas, MAX_PECAS_NA_JANELA_ESTENDIDA), ...alvosDosComentarios(comentarios)];
   const acao = normalizarAcaoDoAgente(bruto, alvos, regrasDosRoteiros(), {
     agente: "roteiros",
     id: id || `roteiros-${Date.now().toString(36)}`,
@@ -251,9 +289,46 @@ export function normalizarAcoesDosRoteiros(
     },
   });
   if (!acao) return null;
+  juntarPdfs(acao);
+  // Só PDF: não há o que desfazer pelo cartão (o arquivo fica em Arquivos).
+  if (acao.itens.length && acao.itens.every((i) => i.operacao === "gerar_pdf")) acao.sem_desfazer = true;
   const comIa = acao.itens.filter((i) => OPERACOES_COM_IA.indexOf(i.operacao) >= 0).length;
   acao.custo_estimado_usd = comIa ? Math.round(comIa * Math.max(0, custoPorGeracaoUsd) * 1e6) / 1e6 : 0;
   return acao;
+}
+
+/** Até quantos roteiros vão num PDF (o mesmo limite do pdf_compartilhar). */
+export const MAX_ROTEIROS_NO_PDF = 12;
+
+/**
+ * Vários gerar_pdf viram UM item (um PDF só com todos, na ordem pedida): o
+ * alvo leva os ids separados por vírgula e o cartão mostra os títulos. Acima
+ * de 12, o resto vai para acima_do_teto (a tela avisa).
+ */
+export function juntarPdfs(acao: AcaoDoAgente): AcaoDoAgente {
+  const pdfs = acao.itens.filter((i) => i.operacao === "gerar_pdf");
+  if (!pdfs.length) return acao;
+  const vao = pdfs.slice(0, MAX_ROTEIROS_NO_PDF);
+  const fora = pdfs.length - vao.length;
+  const primeiro = vao[0];
+  const unico = {
+    ...primeiro,
+    alvo_id: vao.map((i) => i.alvo_id).join(","),
+    titulo: vao.length === 1 ? primeiro.titulo : umaLinha(`${vao.length} roteiros: ${vao.map((i) => i.titulo).join("; ")}`, 200),
+    detalhe: vao.length === 1 ? primeiro.detalhe : "um PDF só, na ordem pedida",
+    para: null,
+  };
+  const idx = acao.itens.indexOf(primeiro);
+  acao.itens = acao.itens.filter((i) => i.operacao !== "gerar_pdf");
+  acao.itens.splice(Math.min(idx, acao.itens.length), 0, unico);
+  if (fora) acao.acima_do_teto = (acao.acima_do_teto || 0) + fora;
+  return acao;
+}
+
+/** Os ids de roteiro de um item gerar_pdf (os que não são UUID saem). */
+export function idsDoPdf(alvoId: unknown): string[] {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return Array.from(new Set(String(alvoId == null ? "" : alvoId).split(",").map((x) => x.trim()).filter((x) => uuid.test(x)))).slice(0, MAX_ROTEIROS_NO_PDF);
 }
 
 /**
@@ -273,15 +348,22 @@ export function caminhoDosRoteiros(
   const feitos = acao.resultados && acao.resultados.length ? acao.resultados.filter((r) => r.ok) : null;
   const ids: string[] = [];
   let gerado = false;
+  let pdf = false;
   for (const i of acao.itens) {
     if (i.operacao === "arquivar_roteiro") continue;
     const r = feitos ? feitos.find((x) => x.ref === i.ref && x.operacao === i.operacao) : null;
     if (feitos && !r) continue;
-    const id = i.operacao === "gerar_roteiro" ? String((r && r.desfazer && r.desfazer.roteiro_id) || "") : i.alvo_id;
+    if (i.operacao === "gerar_pdf") {
+      pdf = true;
+      continue;
+    }
+    const comentario = i.operacao === "resolver_comentario" ? lerIdDoComentario(i.alvo_id) : null;
+    const id = i.operacao === "gerar_roteiro" ? String((r && r.desfazer && r.desfazer.roteiro_id) || "") : comentario ? comentario.roteiroId : i.alvo_id;
     if (i.operacao === "gerar_roteiro") gerado = true;
     if (id && ids.indexOf(id) < 0) ids.push(id);
   }
   const base = { clientId, abrirSozinho: opcoes.abrirSozinho };
+  if (pdf && !ids.length) return caminhoNaArea("mesa_roteiros", { ...base, etapa: "pdf", rotulo: "Ver o PDF" });
   if (ids.length === 1) {
     return gerado
       ? caminhoNaArea("mesa_roteiros", { ...base, etapa: "roteiro", estado: { roteiro: ids[0] }, rotulo: "Abrir o roteiro" })
@@ -301,4 +383,63 @@ export function pecasDaSemana<T extends { data: string | null }>(pecas: T[], hoj
     const t = new Date(`${p.data.slice(0, 10)}T00:00:00Z`).getTime();
     return t >= inicio && t < fim;
   });
+}
+
+// ------------------------------------------------------------------ "esse roteiro", "a segunda", "todos da semana"
+
+const semAcentoMin = (t: unknown) => String(t == null ? "" : t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/**
+ * A lista que o Jev usa para resolver "essa", "a segunda", "todas" (frente
+ * AG2), na ORDEM DA TELA e com os apelidos que o modelo vê:
+ * - fala de comentário: os comentários do roteiro aberto (c..);
+ * - fala de peça, agenda ou "gerar os da semana": as peças (p..), por data
+ *   (como na Agenda); com "semana", só as dos próximos 7 dias;
+ * - senão, os roteiros (r..) como a Revisão mostra (mais recentes primeiro,
+ *   sem os arquivados, a não ser que o pedido fale deles); com "semana", só os
+ *   de peça dos próximos 7 dias.
+ * `selecionados` = o roteiro aberto na tela ("esse roteiro").
+ */
+export function itensDaReferencia(
+  mensagem: string,
+  roteirosNaTela: RoteiroParaAcao[],
+  roteirosComApelido: RoteiroParaAcao[],
+  pecas: PecaParaAcao[],
+  hoje: string,
+  abertoId: string | null,
+  comentarios: ComentarioParaAcao[] = [],
+): { itens: ItemReferivel[]; selecionados: string[]; lista: "roteiros" | "pecas" | "comentarios" } {
+  const t = semAcentoMin(mensagem);
+  const refDoRoteiro: Record<string, string> = {};
+  alvosDosRoteiros(roteirosComApelido).forEach((a) => {
+    refDoRoteiro[a.id] = a.ref;
+  });
+  const selecionados = abertoId && refDoRoteiro[abertoId] ? [refDoRoteiro[abertoId]] : [];
+  const semana = /\bsemana\b/.test(t);
+  if (/\bcomentari/.test(t) && comentarios.length) {
+    return { itens: alvosDosComentarios(comentarios).map((a) => ({ ref: a.ref, titulo: a.titulo, detalhe: a.detalhe || null })), selecionados, lista: "comentarios" };
+  }
+  if (/\b(pecas?|agenda|posts?|publicac)/.test(t) || (semana && /\b(ger[ae]|escrev|cri[ae]|faca|fazer|monte)/.test(t))) {
+    const refDaPeca: Record<string, string> = {};
+    alvosDasPecas(pecas, MAX_PECAS_NA_JANELA_ESTENDIDA).forEach((a) => {
+      refDaPeca[a.id] = a.ref;
+    });
+    const lista = semana ? pecasDaSemana(pecas, hoje) : pecas;
+    const itens = alvosDasPecas(lista, MAX_PECAS_NA_JANELA_ESTENDIDA)
+      .filter((a) => !!refDaPeca[a.id])
+      .map((a) => ({ ref: refDaPeca[a.id], titulo: a.titulo, detalhe: a.detalhe || null }));
+    return { itens, selecionados: [], lista: "pecas" };
+  }
+  const comArquivados = /arquivad/.test(t);
+  let lista = roteirosNaTela.filter((r) => comArquivados || !r.arquivado);
+  if (semana) lista = lista.filter((r) => !!r.data_da_peca && pecasDaSemana([{ data: r.data_da_peca }], hoje).length > 0);
+  const itens = alvosDosRoteiros(lista)
+    .filter((a) => !!refDoRoteiro[a.id])
+    .map((a) => ({ ref: refDoRoteiro[a.id], titulo: a.titulo, detalhe: a.detalhe || null }));
+  return { itens, selecionados, lista: "roteiros" };
+}
+
+/** A resposta promete fazer sem trazer a lista? ("vou gerar", "vou preparar"...). */
+export function respostaPromete(resposta: unknown): boolean {
+  return /\b(vou|irei|vamos) (j[aá] )?(gerar|preparar|fazer|criar|escrever|refazer|mudar|trocar|aprovar|arquivar|montar|ajustar|resolver|marcar)\b/i.test(String(resposta == null ? "" : resposta));
 }

@@ -147,8 +147,9 @@ function Referencia({
       return { anexo: { ...proposta.acao, descartada_em: agora } };
     }
     if (pedido === "desfazer") {
-      const ok = controle.desfazer(proposta.p);
-      return { anexo: { ...acaoFeita(proposta.acao, agora), desfeita_em: ok ? agora : null }, voltaram: ok ? proposta.acao.itens.length : 0 };
+      // AG2: Desfazer que não voltou não mostra mais "Voltou como estava, 0 itens" (o cartão mostra o motivo).
+      if (!controle.desfazer(proposta.p)) throw new Error("Mudou depois de aplicar: use Ctrl+Z para voltar passo a passo.");
+      return { anexo: { ...acaoFeita(proposta.acao, agora), desfeita_em: agora }, voltaram: proposta.acao.itens.length };
     }
     if (!controle.aplicar(proposta.p, proposta.p.titulo)) throw new Error("O projeto mudou. Veja a proposta de novo.");
     return { anexo: acaoFeita(proposta.acao, agora), feitos: proposta.acao.itens.length, falhas: 0 };

@@ -73,8 +73,9 @@ export default function PainelDeSkills({ projeto, contexto, controle }: { projet
       return { anexo: { ...acao, descartada_em: agora } };
     }
     if (pedido === "desfazer") {
-      const ok = controle.desfazer(proposta.p);
-      return { anexo: { ...acaoFeita(acao, agora), desfeita_em: ok ? agora : null }, voltaram: ok ? acao.itens.length : 0 };
+      // AG2: Desfazer que não voltou não mostra mais "Voltou como estava, 0 itens" (o cartão mostra o motivo).
+      if (!controle.desfazer(proposta.p)) throw new Error("Mudou depois de aplicar: use Ctrl+Z para voltar passo a passo.");
+      return { anexo: { ...acaoFeita(acao, agora), desfeita_em: agora }, voltaram: acao.itens.length };
     }
     const ok = controle.aplicar(proposta.p, proposta.p.titulo);
     if (!ok) throw new Error("O projeto mudou enquanto a proposta estava aberta. Veja a proposta de novo.");
@@ -94,7 +95,7 @@ export default function PainelDeSkills({ projeto, contexto, controle }: { projet
               observacao="Nada muda até confirmar. Ctrl+Z também desfaz."
             />
           ) : (
-            <div className="rounded-md bg-muted/50 px-3 py-2 text-[12.5px]">
+            <div className="rounded-md bg-muted/50 px-3 py-2 text-[13px]">
               <p className="font-medium">{proposta.p.titulo}</p>
               <p className="text-muted-foreground">{proposta.p.resumo}</p>
               {proposta.p.avisos.map((a) => (

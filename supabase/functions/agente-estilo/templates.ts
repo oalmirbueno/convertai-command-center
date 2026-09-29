@@ -23,6 +23,9 @@ import {
 import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 // Frente FS (29/09): falha que não para a ação fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG2 (29/09): a troca da combinação gravada sem sumir; o que a equipe mandou evitar entra no teste; o motivo do descarte ensina.
+import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
+import { aprenderDoPedido, regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { lerContextoDaMarca, type MarcaDoCliente } from "../_shared/marca.ts";
 import { type AcaoDoAgente, type AlvoComApelido, ErroDaAcao, type ItemDaAcaoDoAgente, type ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
 import { guiaAtual, guiaEmTexto, lerEstilo, type BancoDoEstilo } from "../_shared/estilo-do-cliente.ts";
@@ -368,7 +371,14 @@ async function gerarTestes(d: DepsDosTemplates, ch: Chamador, p: Pedido, id: str
   const t = await existente(d, p.clientId, id);
   const c = corpoAtual(t);
   if (!c || !corpoTemConteudo(c)) throw new ErroDaAcao(409, "template_vazio", "Este template ainda não diz nada para testar.");
-  const [gerador, cliente, paleta] = await Promise.all([d.geradorDoEstudio(modeloPedido), d.nomeDoCliente(p.clientId), d.paletaDoCliente(p)]);
+  const [gerador, cliente, paleta, ensinadas] = await Promise.all([
+    d.geradorDoEstudio(modeloPedido),
+    d.nomeDoCliente(p.clientId),
+    d.paletaDoCliente(p),
+    regrasDaMesa(d.servico(), { clientId: p.clientId, mesa: "estilo", marcaId: p.marcaId }),
+  ]);
+  const evitarLista = ensinadas.regras.filter((r) => r.tipo === "evitar").slice(0, 8).map((r) => r.texto.slice(0, 160));
+  const evitar = evitarLista.length ? `\nEVITAR (a equipe pediu): ${evitarLista.join("; ")}.` : "";
   const fontes = t.tipo === "referencia_carrossel" ? c.laminas_referencia.slice(0, 1).map((l) => ({ bucket: l.bucket, caminho: l.caminho, id: l.id })) : c.ancoras.slice(0, 3).map((a) => ({ bucket: a.bucket, caminho: a.caminho, id: a.id }));
   const refs: ImagemEntrada[] = [];
   for (const f of fontes) {
@@ -385,7 +395,7 @@ async function gerarTestes(d: DepsDosTemplates, ch: Chamador, p: Pedido, id: str
       const img = await chamarImagem({
         clientId: p.clientId,
         modeloId: gerador.id,
-        prompt: promptDoTesteDoTemplate({ nome: t.nome, corpo: c }, { cliente, tema, paleta, indices, variacao: k + 1, total: quantos }),
+        prompt: `${promptDoTesteDoTemplate({ nome: t.nome, corpo: c }, { cliente, tema, paleta, indices, variacao: k + 1, total: quantos })}${evitar}`,
         referencias: refs,
         qualidade: "media",
         tamanho: TAMANHO_4X5,
@@ -449,7 +459,12 @@ async function testeDescartar(d: DepsDosTemplates, ch: Chamador, corpo: Record<s
     if (teste.status === "aprovado") throw new ErroDaAcao(409, "teste_aprovado", "Este teste já virou âncora.");
     return comTesteDoTemplateMudado(x, testeId, (z) => ({ ...z, status: "descartado" }));
   });
-  return await respostaComEstado(d, ch, corpo);
+  // Frente AG2: descarte com motivo ensina (vira regra do cliente quando é preferência duradoura).
+  const motivo = limpo(corpo.motivo, 300);
+  const aprendido = motivo
+    ? await aprenderDoPedido(d.servico(), { clientId: p.clientId, mesa: "estilo", pedido: `Descartei o teste do template: ${motivo}`, motivo, marcaId: p.marcaId, userId: ch.userId, forcar: true })
+    : null;
+  return await respostaComEstado(d, ch, corpo, aprendido ? { aprendido } : {});
 }
 
 // ------------------------------------------------------------------ referência de carrossel
@@ -671,17 +686,16 @@ async function combinar(d: DepsDosTemplates, ch: Chamador, corpo: Record<string,
   }
   const e = r.escolha as { escolhas: Record<string, { fonte: string; duvida: boolean } | undefined>; coerencia: number | null };
   const resposta = fraseDaCombinacao(fontes, e, r.propostas);
-  const base = Date.now();
   const anexos = r.acao ? [r.acao] : [];
-  const { data: gravadas } = await d.servico()
-    .from("agente_mensagens")
-    .insert([
-      { conversa_id: conversaId, client_id: p.clientId, criado_em: new Date(base).toISOString(), papel: "usuario", conteudo: `Combinar ${fontes.map((f) => `"${f.nome}"`).join(" + ")}${objetivo ? ` para ${objetivo}` : ""}.`, anexos: [], uso_id: null },
-      { conversa_id: conversaId, client_id: p.clientId, criado_em: new Date(base + 1).toISOString(), papel: "agente", conteudo: resposta, anexos, uso_id: null },
-    ])
-    .select("id, papel");
-  const mensagemId = (((gravadas as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId, resposta, anexos, escolha: r.escolha, custo_usd: arred(r.custo) });
+  // Frente AG2: sem o insert em lote que ignorava o erro (cartão sem mensagem_id = Confirmar impossível).
+  const troca = await gravarTroca(d.servico(), {
+    conversaId,
+    clientId: p.clientId,
+    usuario: { conteudo: `Combinar ${fontes.map((f) => `"${f.nome}"`).join(" + ")}${objetivo ? ` para ${objetivo}` : ""}.`, anexos: [] },
+    agente: { conteudo: resposta, anexos },
+    onde: "agente-estilo (combinar templates)",
+  });
+  return json({ conversa_id: conversaId, mensagem_id: troca.agenteId, resposta, anexos, escolha: r.escolha, custo_usd: arred(r.custo), ...(troca.erro ? { aviso_registro: AVISO_SEM_REGISTRO } : {}) });
 }
 
 // ------------------------------------------------------------------ rotas

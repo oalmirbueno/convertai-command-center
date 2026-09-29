@@ -1,5 +1,6 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { chamarFuncao } from "@/lib/mesa/api";
+import { toast } from "sonner";
+import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import {
   normalizarCampanha,
   type CampanhaDePublicidade,
@@ -126,7 +127,34 @@ type Resposta = { campanha: CampanhaDePublicidade; bruto: any };
 
 async function naCampanha(c: CampanhaDePublicidade, acao: string, extras: Record<string, unknown> = {}): Promise<Resposta> {
   const data = await chamarFuncao<any>("mesa-publicidade", { ...extras, ...alvoDaCampanha(c), acao, client_id: c.client_id });
+  if (data && data.aprendido) avisarAprendido(c.client_id, data.aprendido);
   return { campanha: normalizarCampanha(data && data.campanha, c.client_id), bruto: data };
+}
+
+/**
+ * Frente AG2 (aprendizado): reprovar com motivo ou pedir territórios de novo
+ * com um pedido, quando vira regra, aparece como "Aprendi: ..." com Esquecer;
+ * o incerto pergunta se guarda.
+ */
+export function avisarAprendido(clientId: string, aprendido: any) {
+  const texto = aprendido && typeof aprendido.texto === "string" ? aprendido.texto : "";
+  if (!texto) return;
+  const id = typeof aprendido.id === "string" && aprendido.id ? aprendido.id : null;
+  const tipo = aprendido.categoria === "evitar" ? "evitar" : "preferencia";
+  const falhou = (e: unknown) => toast.error("Não foi possível", { description: textoDoErro(e), duration: 9000 });
+  if (id) {
+    toast.success("Aprendi", {
+      description: texto,
+      duration: 9000,
+      action: { label: "Esquecer", onClick: () => void chamarFuncao("mesa-publicidade", { acao: "aprendizado_esquecer", client_id: clientId, id }).then(() => toast.success("Esquecido"), falhou) },
+    });
+    return;
+  }
+  toast.info("Guardar como regra?", {
+    description: texto,
+    duration: 12000,
+    action: { label: "Guardar", onClick: () => void chamarFuncao("mesa-publicidade", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo }).then(() => toast.success("Guardado como regra"), falhou) },
+  });
 }
 
 export async function criarCampanha(clientId: string, kitId: string, categoria?: string | null): Promise<{ campanha: CampanhaDePublicidade; banco: boolean; aviso: string }> {
@@ -157,8 +185,12 @@ export interface MensagemDoAgente {
   conteudo: string;
   anexos: unknown[];
   custo_usd: number | null;
+  /** Aviso da resposta que não ficou guardada (aviso_registro). */
+  aviso?: string | null;
   /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
   nova?: boolean;
+  /** Marca da mensagem otimista do usuário (sai da lista quando o envio falha). */
+  local?: string;
 }
 
 export function normalizarMensagens(data: any): { conversaId: string | null; mensagens: MensagemDoAgente[] } {
@@ -191,6 +223,8 @@ export async function conversarComOAgente(p: { clientId: string; campanha: Campa
       anexos: data && Array.isArray(data.anexos) && data.anexos.length ? data.anexos : data && data.acao ? [data.acao] : [],
       custo_usd: data && typeof data.custo_usd === "number" ? data.custo_usd : null,
       nova: true,
+      // Frente AG2: a resposta chegou, mas não ficou guardada na conversa (a tela avisa; o cartão não confirma).
+      aviso: texto(data && data.aviso_registro) || null,
     },
     custo_usd: data && data.custo_usd,
   };

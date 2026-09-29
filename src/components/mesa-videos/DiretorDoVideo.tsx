@@ -6,16 +6,17 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { Ditado } from "@/components/mesa/Ditado";
 import { textoDoErro } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
-import { useProjetoDoDiretor } from "@/lib/mesa-videos/api";
+import { chaveDaConversaDoDiretor, type MensagemGuardadaDoDiretor, projetoAtualDoDiretor, useConversaDoDiretor, useProjetoDoDiretor } from "@/lib/mesa-videos/api";
 import { FASES_DO_DIRETOR, type FaseDoDiretor, type ProjetoDoDiretor } from "../../../supabase/functions/_shared/diretor-de-video";
 import type { IrPara } from "./MesaDeVideo";
-import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
+import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos } from "./videosApi";
 
 /**
  * Agente DIRETOR (frente V-A), no painel fixo da Mesa Vídeos.
@@ -24,6 +25,12 @@ import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
  * raciocínio máximo, pela carteira do cliente (centavos por resposta). As
  * mudanças na bíblia e no roteiro entram no projeto aberto e têm Desfazer.
  * O diretor só usa fato com fonte e o contexto do cliente; o resto pergunta.
+ *
+ * AG2 (29/09): a conversa mora no banco (agente_conversas do projeto) e volta
+ * ao reabrir, com os cartões no estado de agora. Pedido que falha não some: a
+ * bolha sai e o texto volta ao campo com o erro. O projeto sempre recebe a
+ * versão nova do banco (antes o segundo pedido dava "mudado em outra tela"), e
+ * o Desfazer grava a volta no banco. "Aprendi" e "Segui" ficam embaixo da resposta.
  */
 
 interface Mensagem {
@@ -36,6 +43,8 @@ interface Mensagem {
   avisos?: string[];
   custo?: number | null;
   mudou?: boolean;
+  anexos?: unknown[];
+  aviso?: string | null;
 }
 
 const ROTULO_DA_FASE: Record<FaseDoDiretor, string> = { briefing: "Briefing", pesquisa: "Pesquisa", biblia: "Bíblia", roteiro: "Roteiro", livre: "Conversa" };
@@ -44,50 +53,118 @@ const MAX = 40;
 let n = 0;
 const novoId = () => `d${Date.now().toString(36)}${(n++).toString(36)}`;
 
-const CAPACIDADES = ["pesquisar a região com fontes", "montar a bíblia e o roteiro plano a plano", "propor gerar com o custo à vista", "avaliar a continuidade e mandar ao editor"];
+const CAPACIDADES = ["pesquisar a região com fontes", "montar a bíblia e o roteiro plano a plano", "trocar plano, gerar e refazer com o custo à vista", "avaliar a continuidade e mandar ao editor (com Desfazer)"];
+
+/** A mensagem guardada como a tela mostra (a ação e o aprendizado vêm dos anexos). */
+export function mensagemDaConversa(m: MensagemGuardadaDoDiretor): Mensagem {
+  const acao = m.anexos.map(acaoDoAnexo).find((a): a is AcaoDoAgente => !!a) || null;
+  return { id: m.id, papel: m.papel, texto: m.conteudo, mensagem_id: m.papel === "agente" ? m.id : null, acao, anexos: m.anexos };
+}
+
+/** Título do cartão pela operação (gerar, refazer, editor). */
+export function tituloDoCartao(a: AcaoDoAgente): string {
+  if (a.itens.some((i) => i.operacao === "mandar_ao_editor")) return "Mandar ao editor";
+  const ctx = (a.contexto || {}) as { refazer?: boolean };
+  return ctx.refazer ? "Refazer planos" : "Gerar planos";
+}
+
+export function observacaoDoCartao(a: AcaoDoAgente): string {
+  if (a.itens.some((i) => i.operacao === "mandar_ao_editor")) return "Sem custo. O Desfazer deixa a versão rejeitada (não some).";
+  return `Custo estimado US$ ${Number(a.custo_estimado_usd || 0).toFixed(2).replace(".", ",")}. Sem desfazer.`;
+}
 
 export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo: ReactNode }) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
-  const { projeto, trocar, desfazer, podeDesfazer } = useProjetoDoDiretor(clientId);
+  const { projeto, trocar, mudar, desfazer, podeDesfazer } = useProjetoDoDiretor(clientId);
   const [mensagens, setMensagens] = useEstadoDaTela<Mensagem[]>(`mesa-videos:diretor:conversa:${clientId}`, [], { validar: (v) => Array.isArray(v) });
   const [textoDoCampo, setTexto] = useEstadoDaTela<string>(`mesa-videos:diretor:rascunho:${clientId}`, "");
   const [fase, setFase] = useEstadoDaTela<FaseDoDiretor>(`mesa-videos:diretor:fase:${clientId}`, projeto.fase || "briefing", { validar: (v) => (FASES_DO_DIRETOR as readonly string[]).indexOf(String(v)) >= 0 });
   const [pensando, setPensando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement>(null);
+  // Respostas que chegaram agora nesta tela (o "faz e me leva" só navega nelas; nunca vai para o navegador).
+  const novas = useRef<Set<string>>(new Set());
+  // A conversa guardada no banco manda (reabrir, outra aba, outro computador).
+  const guardada = useConversaDoDiretor(clientId, projeto.id);
+  const chaveDaLeitura = guardada.data ? guardada.data.mensagens.map((m) => `${m.id}:${m.anexos.length}`).join("|") : "";
+  useEffect(() => {
+    if (!guardada.data || pensando || !guardada.data.mensagens.length) return;
+    const doBanco = guardada.data.mensagens;
+    // O banco manda no texto e no cartão; o que só a resposta ao vivo trouxe (perguntas, avisos, custo) fica.
+    setMensagens((locais) =>
+      doBanco
+        .map((g) => {
+          const m = mensagemDaConversa(g);
+          const local = m.papel === "agente" ? locais.find((x) => x.mensagem_id === g.id) : null;
+          return local ? { ...m, id: local.id, perguntas: local.perguntas, avisos: local.avisos, custo: local.custo, mudou: local.mudou, aviso: local.aviso } : m;
+        })
+        .slice(-MAX),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDaLeitura]);
   useEffect(() => {
     const el = lista.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length, pensando]);
-  const juntarMensagens = (novas: Mensagem[]) => setMensagens((m) => m.concat(novas).slice(-MAX));
+  const juntarMensagens = (mais: Mensagem[]) => setMensagens((m) => m.concat(mais).slice(-MAX));
+  const recarregarConversa = (projetoId: string | null) => void queryClient.invalidateQueries({ queryKey: chaveDaConversaDoDiretor(clientId, projetoId) });
 
   const pedir = async () => {
     const t = textoDoCampo.trim();
     if (!t || pensando) return;
-    juntarMensagens([{ id: novoId(), papel: "usuario", texto: t }]);
+    const idDoPedido = novoId();
+    juntarMensagens([{ id: idDoPedido, papel: "usuario", texto: t }]);
     setTexto("");
+    setErro(null);
     setPensando(true);
     try {
-      const conversa = mensagens.slice(-8).map((m) => ({ papel: m.papel, texto: m.texto.slice(0, 600) }));
-      const r = await chamarMesaVideos<{ projeto: ProjetoDoDiretor; resposta: string; perguntas: string[]; avisos: string[]; custo_usd: number; mensagem_id: string | null; acao: unknown; pedido_do_editor: string[] | null; gravado: boolean }>({
+      const historico = mensagens.slice(-8).map((m) => ({ papel: m.papel, texto: m.texto.slice(0, 600) }));
+      const r = await chamarMesaVideos<{ projeto: ProjetoDoDiretor; resposta: string; perguntas: string[]; avisos: string[]; custo_usd: number; mensagem_id: string | null; acao: unknown; anexos?: unknown[]; aviso_registro?: string; gravado: boolean }>({
         acao: "diretor_conversar",
         client_id: clientId,
         projeto,
         texto: t,
         fase,
-        conversa,
+        conversa: historico,
       });
       const mudou = JSON.stringify(r.projeto.biblia) !== JSON.stringify(projeto.biblia) || JSON.stringify(r.projeto.roteiro) !== JSON.stringify(projeto.roteiro) || r.projeto.id !== projeto.id;
       if (mudou) trocar(r.projeto);
+      // Sem mudança de conteúdo o banco ainda subiu a versão: a tela precisa dela para o próximo pedido.
+      else if (r.projeto.versao !== projeto.versao || r.projeto.atualizado_em !== projeto.atualizado_em) mudar(() => r.projeto, false);
       atualizarCusto();
       const a = acaoDoAnexo(r.acao);
-      juntarMensagens([{ id: novoId(), papel: "agente", texto: r.resposta, perguntas: r.perguntas, avisos: r.avisos, custo: r.custo_usd, mensagem_id: r.mensagem_id, acao: a, mudou }]);
-      if (r.pedido_do_editor) toast.info("O diretor sugeriu mandar ao editor", { description: "Confira os resultados escolhidos no Roteiro e toque em Editor." });
+      const idDaResposta = novoId();
+      novas.current.add(idDaResposta);
+      juntarMensagens([{ id: idDaResposta, papel: "agente", texto: r.resposta, perguntas: r.perguntas, avisos: r.avisos, custo: r.custo_usd, mensagem_id: r.mensagem_id, acao: a, mudou, anexos: r.anexos || [], aviso: r.aviso_registro || null }]);
+      if (a && a.executada_em) void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+      recarregarConversa(r.projeto.id);
       if (mudou && ETAPA_DA_FASE[fase]) irPara(ETAPA_DA_FASE[fase] as string);
     } catch (e) {
-      juntarMensagens([{ id: novoId(), papel: "agente", texto: `Não consegui agora: ${textoDoErro(e)}` }]);
+      // A mensagem não some: a bolha sai, o texto volta ao campo e o erro fica à vista.
+      setMensagens((l) => l.filter((m) => m.id !== idDoPedido));
+      setTexto(t);
+      setErro(textoDoErro(e));
+      toast.error("O diretor não respondeu", { description: textoDoErro(e), duration: 9000 });
     } finally {
       setPensando(false);
+    }
+  };
+
+  const voltarMudanca = async () => {
+    if (!desfazer()) return;
+    const atual = projetoAtualDoDiretor(clientId);
+    if (!atual.id) {
+      toast.success("Voltou como estava");
+      return;
+    }
+    // A volta também vai para o banco (senão o próximo pedido partia do projeto desfeito só na tela).
+    try {
+      const r = await chamarMesaVideos<{ projeto: ProjetoDoDiretor }>({ acao: "diretor_salvar", client_id: clientId, projeto: atual, versao_lida: atual.versao });
+      mudar(() => r.projeto, false);
+      toast.success("Voltou como estava");
+    } catch (e) {
+      toast.error("Voltou nesta tela, mas não foi salvo", { description: textoDoErro(e), duration: 9000 });
     }
   };
 
@@ -106,12 +183,12 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
       acoes={
         <>
           {podeDesfazer && (
-            <button type="button" className={botao.icone} onClick={() => desfazer() && toast.success("Voltou como estava")} aria-label="Desfazer a última mudança do diretor" title="Desfazer">
+            <button type="button" className={botao.icone} onClick={() => void voltarMudanca()} aria-label="Desfazer a última mudança do diretor" title="Desfazer">
               <Undo2 className="h-3.5 w-3.5" />
             </button>
           )}
           <AjudaRecolhida rotulo="Como o diretor funciona">
-            O diretor pesquisa (com fontes), monta a bíblia (personagens, cenários, luz, regras) e o roteiro plano a plano. Ele não inventa fato: o que não sabe vira pergunta. Gerar sempre pede a sua confirmação com o custo. Cada resposta custa centavos (GPT-6 Luna, raciocínio máximo) na carteira do cliente.
+            O diretor pesquisa (com fontes), monta a bíblia (personagens, cenários, luz, regras) e o roteiro plano a plano. Diga "troca o motor do p2", "gera a segunda", "refaz p3 mais aberto" ou "manda ao editor". Ele não inventa fato: o que não sabe vira pergunta. Gerar sempre pede a sua confirmação com o custo; mandar ao editor tem Desfazer. O que você ensinar ("nunca...", "não gostei de...") vira regra. Cada resposta custa centavos (GPT-6 Luna, raciocínio máximo) na carteira do cliente.
           </AjudaRecolhida>
         </>
       }
@@ -126,11 +203,19 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
       compositor={
         <>
           <OQuePossoFazer capacidades={CAPACIDADES} />
+          {erro && (
+            <p role="alert" className={juntar(texto.auxiliar, "mb-1 text-destructive")} data-erro-do-diretor="">
+              Não foi: {erro}
+            </p>
+          )}
           <textarea
             className={juntar(campoTexto, "min-h-[64px] resize-none")}
             value={textoDoCampo}
             rows={2}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value);
+              if (erro) setErro(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -175,17 +260,32 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
                 {typeof m.custo === "number" ? `US$ ${m.custo.toFixed(3).replace(".", ",")}` : ""}
               </p>
             )}
+            {m.aviso && (
+              <p className={juntar(texto.auxiliar, "mt-1 text-warning")} data-aviso-registro="">
+                {m.aviso}
+              </p>
+            )}
+            {m.papel === "agente" && (
+              <AprendizadoDoAgente
+                anexos={m.anexos}
+                onEsquecer={(id) => chamarMesaVideos({ acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.mensagem_id })}
+                onGuardar={(textoDaRegra, tipo) => chamarMesaVideos({ acao: "aprendizado_guardar", client_id: clientId, texto: textoDaRegra, tipo, mensagem_id: m.mensagem_id })}
+              />
+            )}
           </div>
           {m.acao && m.mensagem_id && (
             <CartaoDeAcao
               acao={m.acao}
-              titulo="Gerar planos"
-              observacao={`Custo estimado US$ ${Number(m.acao.custo_estimado_usd || 0).toFixed(2).replace(".", ",")}. Sem desfazer.`}
+              titulo={tituloDoCartao(m.acao)}
+              observacao={observacaoDoCartao(m.acao)}
+              recemFeita={novas.current.has(m.id)}
               onPedido={onPedido(m)}
               onFeito={(_p, resposta) => {
                 const novo = acaoDoAnexo(resposta && resposta.anexo);
                 if (novo) setMensagens((l) => l.map((x) => (x.id === m.id ? { ...x, acao: novo } : x)));
                 void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+                void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+                recarregarConversa(projeto.id);
                 atualizarCusto();
               }}
             />

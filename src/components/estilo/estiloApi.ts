@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { chamarFuncao } from "@/lib/mesa/api";
 import {
   CAMPOS_DAS_REGRAS,
@@ -6,6 +7,7 @@ import {
   MAX_TESTES_POR_VEZ,
   ROTULOS_DAS_REGRAS,
 } from "../../../supabase/functions/_shared/estilo-do-cliente";
+import { FORMATOS_DO_TEMPLATE, type FormatoDoTemplate } from "../../../supabase/functions/_shared/templates-de-design";
 
 /**
  * Tela do estilo do cliente (frente S2): tipos do que a função agente-estilo
@@ -58,6 +60,10 @@ export interface MensagemDoEstilo {
   custo_usd?: number | null;
   /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
   nova?: boolean;
+  /** Frente AG2: a resposta chegou, mas não ficou guardada (aviso_registro da função). */
+  aviso?: string | null;
+  /** Mensagem otimista ainda sem resposta: sai da lista se o envio falhar. */
+  pendente?: string;
 }
 
 /** Frente AP: arte entregue que pode virar referência do estilo (só entra com o clique da equipe). */
@@ -91,6 +97,75 @@ export interface EstadoDoEstilo {
 export const chaveDoEstilo = (clientId: string, marcaId: string | null | undefined) => ["estilo-do-cliente", clientId, marcaId || "cliente"];
 /** Só se o estilo está ligado (botão e interruptor do Estúdio). */
 export const chaveDoEstiloLeve = (clientId: string, marcaId: string | null | undefined) => ["estilo-do-cliente-leve", clientId, marcaId || "cliente"];
+
+/**
+ * Frente AG2 (29/09): o que o Estúdio precisa do estilo numa leitura só
+ * (estudio_ler): se o estilo está ligado, o interruptor e o template de cada
+ * peça e a lista leve dos templates. Antes eram 4 chamadas a cada peça aberta
+ * (cerca de 720 por dia). O botão, o interruptor e o seletor usam a mesma
+ * chave: uma chamada para os três.
+ */
+export const chaveDoEstudio = (clientId: string, marcaId: string | null | undefined, ids: string[]) => ["estilo-no-estudio", clientId, marcaId || "cliente", ids.slice().sort().join(",")];
+
+export interface TemplateLeve {
+  id: string;
+  nome: string;
+  tipo: "template" | "referencia_carrossel";
+  formato: FormatoDoTemplate;
+  escopo: "cliente" | "agencia";
+  status: "ativo" | "arquivado";
+}
+
+export interface LeituraDoEstudio {
+  ativo: boolean;
+  versao_atual: number;
+  ligados: string[];
+  escolhas: Record<string, { id: string; fidelidade: string | null } | null>;
+  templates: TemplateLeve[];
+}
+
+export function normalizarLeituraDoEstudio(d: any): LeituraDoEstudio {
+  const lista = (v: any) => (Array.isArray(v) ? v : []);
+  return {
+    ativo: !!(d && d.ativo === true),
+    versao_atual: d && typeof d.versao_atual === "number" ? d.versao_atual : 0,
+    ligados: lista(d && d.ligados).map(String),
+    escolhas: d && d.escolhas && typeof d.escolhas === "object" ? d.escolhas : {},
+    templates: lista(d && d.templates)
+      .filter((t: any) => t && typeof t.id === "string")
+      .map((t: any) => ({
+        id: t.id,
+        nome: String(t.nome || "Template"),
+        tipo: t.tipo === "referencia_carrossel" ? "referencia_carrossel" : "template",
+        formato: (FORMATOS_DO_TEMPLATE as readonly string[]).indexOf(t.formato) >= 0 ? (t.formato as FormatoDoTemplate) : "post",
+        escopo: t.escopo === "agencia" ? "agencia" : "cliente",
+        status: t.status === "arquivado" ? "arquivado" : "ativo",
+      })),
+  };
+}
+
+/** A leitura única do Estúdio (sem peças, não chama). Também atualiza o "ligado" do botão. */
+export function useEstiloNoEstudio(clientId: string, marcaId: string | null | undefined, trabalhoIds: string[]) {
+  const queryClient = useQueryClient();
+  const ids = trabalhoIds.filter(Boolean).slice().sort();
+  return useQuery({
+    queryKey: chaveDoEstudio(clientId, marcaId, ids),
+    queryFn: async () => {
+      const n = normalizarLeituraDoEstudio(await chamarEstilo("estudio_ler", clientId, marcaId, { trabalho_ids: ids }));
+      queryClient.setQueryData(chaveDoEstiloLeve(clientId, marcaId), { ativo: n.ativo, versao_atual: n.versao_atual });
+      return n;
+    },
+    enabled: ids.length > 0,
+    staleTime: 60_000,
+  });
+}
+
+/** A versão atual do estilo foi gravada como rascunho provisório (sem evidência visual)? */
+export function versaoProvisoria(e: Pick<EstadoDoEstilo, "versoes" | "versao_atual"> | null | undefined): boolean {
+  if (!e) return false;
+  const v = e.versoes.find((x) => x.numero === e.versao_atual);
+  return !!v && String(v.nota || "").trim().indexOf("Provisório") === 0;
+}
 
 /** Chama a função do agente de estilo com o cliente e a marca abertos. */
 export function chamarEstilo<T = any>(acao: string, clientId: string, marcaId: string | null | undefined, corpo: Record<string, unknown> = {}): Promise<T> {

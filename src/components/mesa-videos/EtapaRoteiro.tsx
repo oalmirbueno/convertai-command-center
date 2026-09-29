@@ -185,7 +185,7 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
     setOcupado(`quadro-${p.ref}`);
     try {
       const caminho = await quadroDoVideoNoStorage(clientId, a.storage_bucket, a.storage_path, "ultimo");
-      void chamarMesaVideos({ acao: "quadro_registrar", client_id: clientId, storage_path: caminho, posicao: "ultimo", origem_arquivo_id: a.id }).catch(() => null);
+      void chamarMesaVideos({ acao: "quadro_registrar", client_id: clientId, storage_path: caminho, posicao: "ultimo", origem_arquivo_id: a.id }).catch((e) => console.warn("[roteiro] quadro não registrado no acervo", e));
       mudarPlano(prox.ref, { quadro_inicial: { tipo: "arquivo", ref: caminho } });
       toast.success(`O último quadro de ${p.ref} é o começo de ${prox.ref}`);
     } catch (e) {
@@ -218,7 +218,15 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
       const r = await chamarMesaVideos<{ versao: { id: string }; faltando: string[] }>({ acao: "diretor_para_editor", client_id: clientId, projeto });
       toast.success("Mandado ao editor", {
         description: r.faltando.length ? `Sem resultado escolhido: ${r.faltando.join(", ")}.` : "Todos os planos entraram na ordem do roteiro.",
-        action: { label: "Desfazer", onClick: () => void chamarMesaVideos({ acao: "diretor_editor_desfazer", versao_id: r.versao.id }) },
+        // AG2 (29/09): o Desfazer diz se voltou (antes falhava calado).
+        action: {
+          label: "Desfazer",
+          onClick: () =>
+            void chamarMesaVideos({ acao: "diretor_editor_desfazer", versao_id: r.versao.id }).then(
+              () => toast.success("Desfeito", { description: "A versão ficou rejeitada no editor (não some)." }),
+              (e) => toast.error("Não foi possível desfazer", { description: textoDoErro(e), duration: 9000 }),
+            ),
+        },
       });
     } catch (e) {
       toast.error("Não foi possível mandar ao editor", { description: textoDoErro(e), duration: 9000 });

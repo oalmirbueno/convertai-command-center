@@ -913,12 +913,13 @@ describe("agente de edição na tela", () => {
   });
 
   it("texto livre passa pela função (Jev) e abre a etapa pedida", async () => {
-    mock.invoke.mockImplementation((_f: string, { body }: any) => Promise.resolve({ data: body.acao === "agente_entender" ? { intencao: "versoes", confianca: 0.9, via: "jev" } : {}, error: null }));
+    // AG2 (29/09): o texto vai para agente_agir (entende E age); intenção só de abrir volta sem ação e a tela abre a etapa.
+    mock.invoke.mockImplementation((_f: string, { body }: any) => Promise.resolve({ data: body.acao === "agente_agir" ? { intencao: "versoes", confianca: 0.9, via: "jev", resposta: null, mensagem_id: null, acao: null, anexos: [] } : {}, error: null }));
     montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
     const campo = await screen.findByRole("textbox", { name: "Pedido para o agente" });
     fireEvent.change(campo, { target: { value: "quero ver as versões do reel" } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-    await waitFor(() => expect(chamadas("agente_entender")).toEqual([{ acao: "agente_entender", client_id: CLIENTE, mesa: "edicao", texto: "quero ver as versões do reel" }]));
+    await waitFor(() => expect(chamadas("agente_agir")).toEqual([expect.objectContaining({ acao: "agente_agir", client_id: CLIENTE, mesa: "edicao", texto: "quero ver as versões do reel" })]));
     expect(await screen.findByText("Abri as versões.")).toBeTruthy();
   });
 });

@@ -24,6 +24,8 @@ export async function chamarEditorVideo<T = any>(corpo: Record<string, unknown>)
       det = null;
     }
     if (det && typeof det.error === "string") throw new ErroDaMesa(String(det.error), typeof det.mensagem === "string" ? det.mensagem : mensagemDoCodigo(String(det.error), det), det);
+    // AG2: as rotas comuns do aprendizado respondem { erro: "texto" } (sem código): o motivo aparece, não "função indisponível".
+    if (det && typeof det.erro === "string") throw new ErroDaMesa("erro_do_servidor", det.erro, det);
     const status = ctx && typeof ctx.status === "number" ? ctx.status : 0;
     if (status === 404 || !ctx) throw new ErroDaMesa("funcao_indisponivel", "O editor ainda não tem a função editor-video publicada.");
     throw new ErroDaMesa("erro_desconhecido", String((error as any).message || "Não foi possível concluir. Tente de novo."));

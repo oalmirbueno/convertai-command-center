@@ -755,6 +755,8 @@ describe("8. Tela: aba Templates e o seletor Template", () => {
       if (body.acao === "template_no_trabalho_ler") return { data: { escolhas: {} }, error: null };
       if (body.acao === "template_no_trabalho") return { data: { template_id: body.template_id, feitos: 1, falhas: [] }, error: null };
       if (body.acao === "interruptor_ler") return { data: { ligados: [] }, error: null };
+      // Frente AG2: o seletor lê a lista leve e a escolha da peça na leitura única do Estúdio (estudio_ler).
+      if (body.acao === "estudio_ler") return { data: { client_id: CLIENTE, ativo: false, versao_atual: 0, ligados: [], escolhas: {}, templates: comTemplates ? [TEMPLATE_NA_TELA] : [] }, error: null };
       return { data: {}, error: null };
     });
   });
@@ -773,8 +775,14 @@ describe("8. Tela: aba Templates e o seletor Template", () => {
     comTemplates = false;
     montar(h(BotaoDoEstilo, { trabalhoIds: ["88888888-8888-8888-8888-888888888888"] }));
     await screen.findByRole("switch", { name: "Usar estilo do cliente nesta geração" });
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("agente-estilo", { body: expect.objectContaining({ acao: "templates_estado" }) }));
+    await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("agente-estilo", { body: expect.objectContaining({ acao: "estudio_ler" }) }));
     expect(screen.queryByRole("button", { name: /^Template:/ })).toBeNull();
+    // Uma leitura só para o botão, o interruptor e o seletor (antes eram 4 por peça aberta).
+    const acoes = mock.invoke.mock.calls.map((c: any[]) => c[1].body.acao);
+    expect(acoes.filter((a: string) => a === "estudio_ler").length).toBe(1);
+    expect(acoes).not.toContain("templates_estado");
+    expect(acoes).not.toContain("interruptor_ler");
+    expect(acoes).not.toContain("template_no_trabalho_ler");
   });
 
   it("painel com Conversa, Estilo, Templates e Testes; a aba Templates lista com miniatura e abre o detalhe", async () => {

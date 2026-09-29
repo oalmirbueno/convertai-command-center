@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Loader2, Send } from "lucide-react";
+import { AlertTriangle, Clapperboard, Loader2, Send } from "lucide-react";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -9,6 +9,7 @@ import { TAMANHO_DA_CONVERSA } from "../../../supabase/functions/_shared/roteiro
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -32,10 +33,36 @@ export const ATALHOS_DO_AGENTE = [
   { rotulo: "Refaça o gancho", texto: "Refaça o gancho deste roteiro." },
   { rotulo: "Roteiros da semana", texto: "Gere os roteiros das peças de vídeo da semana." },
   { rotulo: "Mude o tom", texto: "Mude o tom deste roteiro para mais leve e próximo." },
-  { rotulo: "Arquive este roteiro", texto: "Arquive este roteiro." },
+  { rotulo: "Resolva os comentários", texto: "Ajuste o roteiro pelos comentários abertos e marque como resolvidos." },
+  { rotulo: "PDF dos aprovados", texto: "Gere o PDF de gravação dos roteiros aprovados." },
 ];
 
-const CAPACIDADES = ["gerar roteiros das peças da agenda", "refazer gancho", "mudar o tom", "trocar título, gancho, CTA ou legenda (na hora)", "aprovar e marcar gravado", "arquivar roteiro"];
+const CAPACIDADES = [
+  "gerar roteiros das peças da agenda",
+  "refazer gancho e mudar o tom",
+  "trocar título, gancho, CTA ou legenda (na hora)",
+  "resolver comentários",
+  "aprovar, marcar gravado, arquivar e desarquivar",
+  "gerar o PDF de gravação dos aprovados",
+  "aprender o que você ensinar (\"nunca\", \"sempre\", \"não gostei\")",
+];
+
+/** Observação do cartão: custo quando usa IA, e o que não volta (frente AG2). */
+export function observacaoDosRoteiros(a: { itens: Array<{ operacao: string }>; custo_estimado_usd?: number | null; sem_desfazer?: boolean }): string {
+  const pdf = a.itens.some((i) => i.operacao === "gerar_pdf");
+  const custo = typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0 ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira.` : "Sem custo.";
+  const volta = a.custo_estimado_usd ? "Desfazer volta a versão anterior; o gasto não volta." : "Dá para desfazer.";
+  if (pdf) return `${custo} O PDF vai para Arquivos com a revisão da agência pedida e não volta pelo Desfazer.${a.sem_desfazer ? "" : ` ${volta}`}`;
+  return `${custo} ${volta}`;
+}
+
+/** O roteiro de um resultado (o comentário leva "roteiro:comentário"; o PDF não abre um roteiro só). */
+export function roteiroDoResultado(r: { operacao: string; alvo_id: string } | null | undefined): string | null {
+  if (!r || r.operacao === "arquivar_roteiro" || r.operacao === "gerar_roteiro" || r.operacao === "gerar_pdf") return null;
+  const id = String(r.alvo_id || "");
+  const i = id.indexOf(":");
+  return i > 0 ? id.slice(0, i) : id || null;
+}
 
 export interface MensagemDoAgente {
   id: string | null;
@@ -45,6 +72,10 @@ export interface MensagemDoAgente {
   custo_usd: number | null;
   /** Chegou agora nesta tela (não veio do histórico): o "faz e me leva" pode abrir sozinho. */
   nova?: boolean;
+  /** Aviso da resposta que não ficou guardada (aviso_registro): o cartão não pode ser confirmado. */
+  aviso?: string | null;
+  /** Marca da mensagem otimista do usuário (sai da lista quando o envio falha). */
+  local?: string;
 }
 
 export function normalizarHistorico(data: any): { conversaId: string | null; mensagens: MensagemDoAgente[] } {
@@ -91,8 +122,10 @@ export default function AgenteRoteirista({
         setMensagens(h.mensagens);
         setLida(true);
       })
-      .catch(() => {
-        if (vivo) setLida(true);
+      .catch((e) => {
+        if (!vivo) return;
+        setLida(true);
+        avisarErro(e, "A conversa anterior não foi lida");
       });
     return () => {
       vivo = false;
@@ -106,8 +139,10 @@ export default function AgenteRoteirista({
   const enviar = async () => {
     const m = texto.trim();
     if (!m || enviando) return;
+    // Frente AG2: a bolha otimista leva uma marca; se o envio falhar, ela sai e o texto volta ao campo (reenviar não duplica).
+    const local = `local-${Date.now()}`;
     setEnviando(true);
-    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null }]));
+    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]));
     onRascunho("");
     try {
       const d = await chamarFuncao<any>("mesa-roteiros", {
@@ -134,11 +169,13 @@ export default function AgenteRoteirista({
             anexos: d && Array.isArray(d.anexos) ? d.anexos : [],
             custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null,
             nova: true,
+            aviso: d && typeof d.aviso_registro === "string" && d.aviso_registro ? d.aviso_registro : null,
           },
         ]),
       );
       atualizarCusto();
     } catch (e) {
+      setMensagens((l) => l.filter((x) => x.local !== local));
       avisarErro(e, "O agente não respondeu");
       onRascunho(m);
     } finally {
@@ -168,7 +205,7 @@ export default function AgenteRoteirista({
               </button>
             )}
             <AjudaRecolhida rotulo="Como o agente de roteiros funciona">
-              Peça o que precisa. Quando for uma ação (gerar, refazer gancho, mudar tom, arquivar), o agente mostra a lista com o custo e você confirma. Desfazer volta a versão anterior; o gasto não volta.
+              Peça o que precisa. Trocar texto, aprovar, arquivar e resolver comentário ele faz na hora, com Desfazer. Gerar, refazer gancho e mudar o tom usam IA e vêm num cartão com o custo; o PDF vai para Arquivos e também pede Confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.
             </AjudaRecolhida>
           </>
         }
@@ -216,7 +253,7 @@ export default function AgenteRoteirista({
         {mensagens.map((m, i) => {
           const acoes = acoesDaMensagem(m.anexos);
           return (
-            <div key={m.id || `m-${i}`} className="min-w-0">
+            <div key={m.id || m.local || `m-${i}`} className="min-w-0">
               <div
                 className={juntar(
                   conversa.balao,
@@ -226,6 +263,19 @@ export default function AgenteRoteirista({
                 <TextoDoAgente texto={m.conteudo} clientId={clientId} />
                 {m.custo_usd !== null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
+              {m.papel === "agente" && m.aviso && (
+                <p className="mr-6 mt-1 flex min-w-0 items-start text-[12px] text-warning" role="alert" data-aviso-registro="">
+                  <AlertTriangle className="mr-1.5 mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{m.aviso}</span>
+                </p>
+              )}
+              {m.papel === "agente" && (
+                <AprendizadoDoAgente
+                  anexos={m.anexos}
+                  onEsquecer={(id) => chamarFuncao("mesa-roteiros", { acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.id || undefined })}
+                  onGuardar={(texto, tipo) => chamarFuncao("mesa-roteiros", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.id || undefined })}
+                />
+              )}
               {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
               {m.id &&
                 acoes.map((a) => (
@@ -234,11 +284,7 @@ export default function AgenteRoteirista({
                       acao={a}
                       recemFeita={!!m.nova}
                       titulo="O agente vai fazer nos roteiros"
-                      observacao={
-                        a.custo_estimado_usd
-                          ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira. Desfazer volta a versão anterior; o gasto não volta.`
-                          : "Sem custo. Dá para desfazer."
-                      }
+                      observacao={observacaoDosRoteiros(a)}
                       onPedido={(p) => chamarAcaoDoAgente("mesa-roteiros", String(m.id), a.id, p)}
                       onFeito={(p, resposta) => {
                         if (p === "descartar") return;
@@ -247,7 +293,8 @@ export default function AgenteRoteirista({
                         atualizarCusto();
                         const r = resposta && (resposta as any).anexo;
                         const unico = r && Array.isArray(r.resultados) && r.resultados.length === 1 && r.resultados[0].ok ? r.resultados[0] : null;
-                        if (unico && unico.operacao !== "arquivar_roteiro" && unico.operacao !== "gerar_roteiro" && onAbrirRoteiro) onAbrirRoteiro(unico.alvo_id);
+                        const abrir = roteiroDoResultado(unico);
+                        if (abrir && onAbrirRoteiro) onAbrirRoteiro(abrir);
                       }}
                     />
                   </div>

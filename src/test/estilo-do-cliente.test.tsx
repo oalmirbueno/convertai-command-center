@@ -485,6 +485,8 @@ describe("5. Tela: botão Estilo, interruptor e abas", () => {
       if (body.acao === "estado" && body.leve) return { data: { client_id: CLIENTE, ativo: true, versao_atual: 2 }, error: null };
       if (body.acao === "estado") return { data: ESTADO_COMPLETO, error: null };
       if (body.acao === "interruptor_ler") return { data: { ligados: [] }, error: null };
+      // Frente AG2: o Estúdio lê tudo numa chamada só (estudio_ler).
+      if (body.acao === "estudio_ler") return { data: { client_id: CLIENTE, ativo: true, versao_atual: 2, ligados: [], escolhas: {}, templates: [] }, error: null };
       if (body.acao === "interruptor") return { data: { ligado: body.ligado, feitos: 1, falhas: [] }, error: null };
       if (body.acao === "versao_voltar") return { data: { ...ESTADO_COMPLETO, versao_atual: 3 }, error: null };
       return { data: {}, error: null };

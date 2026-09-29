@@ -21,6 +21,9 @@ export interface PonteDoAgenteEditor {
   controle: ControleDePropostas;
   aplicarProjeto: (p: ProjetoDeEdicao, rotulo: string) => void;
   urls: Record<string, string>;
+  /** AG2 (29/09): o que está escolhido na linha do tempo ("esse corte") e o cursor ("aqui"). */
+  selecao?: string[];
+  cursor?: () => number;
 }
 
 let atual: PonteDoAgenteEditor | null = null;

@@ -4,7 +4,7 @@ import { Loader2, Palette } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { botao, juntar } from "@/components/sistema";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { chamarEstilo, chaveDoEstiloLeve } from "./estiloApi";
+import { chamarEstilo, chaveDoEstiloLeve, useEstiloNoEstudio } from "./estiloApi";
 import InterruptorDoEstilo from "./InterruptorDoEstilo";
 import SeletorDeTemplate from "./SeletorDeTemplate";
 
@@ -37,17 +37,20 @@ export default function BotaoDoEstilo({
   const { clientId, marca } = useMesa();
   const marcaId = marca && !marca.principal ? marca.id : null;
   const [aberto, setAberto] = useState(false);
+  const ids = trabalhoIds.filter((x): x is string => typeof x === "string" && !!x);
+  // Frente AG2: com peças na tela, a leitura única do Estúdio (estudio_ler) já traz o "ligado" e preenche a chave leve.
+  const doEstudio = useEstiloNoEstudio(clientId, marcaId, ids);
   const leve = useQuery({
     queryKey: chaveDoEstiloLeve(clientId, marcaId),
     queryFn: async () => {
       const d = await chamarEstilo<{ ativo?: boolean; versao_atual?: number }>("estado", clientId, marcaId, { leve: true });
       return { ativo: !!(d && d.ativo), versao_atual: (d && d.versao_atual) || 0 };
     },
+    enabled: ids.length === 0,
     staleTime: 60_000,
     retry: 1,
   });
-  const ativo = !!(leve.data && leve.data.ativo);
-  const ids = trabalhoIds.filter((x): x is string => typeof x === "string" && !!x);
+  const ativo = leve.data ? !!leve.data.ativo : !!(doEstudio.data && doEstudio.data.ativo);
 
   return (
     <span className={juntar("inline-flex min-w-0 items-center", className)} data-botao-do-estilo="">
@@ -75,7 +78,7 @@ export default function BotaoDoEstilo({
                 </p>
               }
             >
-              <PainelDoEstilo modeloImagemId={modeloImagemId} />
+              <PainelDoEstilo modeloImagemId={modeloImagemId} trabalhoIds={ids} />
             </Suspense>
           )}
         </DialogContent>

@@ -19,7 +19,7 @@ function AgenteDaEtapaEditar() {
   const ponte = usePonteDoAgente(clientId);
   const arquivosQ = useArquivosDeVideo(clientId);
   // Trocar de versão começa uma conversa nova (uma proposta de uma versão nunca cai na outra).
-  if (ponte) return <AgenteEditor key={ponte.versaoId} projeto={ponte.projeto} controle={ponte.controle} onAplicarProjeto={ponte.aplicarProjeto} urls={ponte.urls} />;
+  if (ponte) return <AgenteEditor key={ponte.versaoId} projeto={ponte.projeto} controle={ponte.controle} onAplicarProjeto={ponte.aplicarProjeto} urls={ponte.urls} versaoId={ponte.versaoId} selecao={ponte.selecao} cursor={ponte.cursor} />;
   const semVideo = !!arquivosQ.data && !((arquivosQ.data.arquivos || []).filter(naEntradaDaEdicao).length);
   return (
     <AgenteEditor

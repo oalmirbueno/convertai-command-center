@@ -1,6 +1,7 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { chamarFuncao } from "@/lib/mesa/api";
+import { toast } from "sonner";
+import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import {
   ehPecaDeVideo,
   FORMATOS_DE_VIDEO,
@@ -199,7 +200,35 @@ function comRoteiroNormalizado<T extends { roteiro?: unknown }>(r: T): T & { rot
 
 export async function chamarRoteiros<T = RespostaDoRoteiro>(acao: string, corpo: Record<string, unknown>): Promise<T> {
   const r = await chamarFuncao<any>("mesa-roteiros", { acao, ...corpo });
+  const clientId = String(corpo.client_id || (r && r.roteiro && r.roteiro.client_id) || "");
+  if (r && r.aprendido && clientId) avisarAprendido(clientId, r.aprendido);
   return (r && typeof r === "object" && "roteiro" in r ? comRoteiroNormalizado(r) : r) as T;
+}
+
+/**
+ * Frente AG2 (aprendizado): ajuste feito pela tela (pedido do gancho, tom,
+ * comentário) que virou regra aparece como "Aprendi: ..." com Esquecer; o
+ * incerto pergunta se guarda. Some sozinho; nada é gravado sem a regra.
+ */
+export function avisarAprendido(clientId: string, aprendido: any) {
+  const texto = aprendido && typeof aprendido.texto === "string" ? aprendido.texto : "";
+  if (!texto) return;
+  const id = typeof aprendido.id === "string" && aprendido.id ? aprendido.id : null;
+  const tipo = aprendido.categoria === "evitar" ? "evitar" : "preferencia";
+  const falhou = (e: unknown) => toast.error("Não foi possível", { description: textoDoErro(e), duration: 9000 });
+  if (id) {
+    toast.success("Aprendi", {
+      description: texto,
+      duration: 9000,
+      action: { label: "Esquecer", onClick: () => void chamarFuncao("mesa-roteiros", { acao: "aprendizado_esquecer", client_id: clientId, id }).then(() => toast.success("Esquecido"), falhou) },
+    });
+    return;
+  }
+  toast.info("Guardar como regra?", {
+    description: texto,
+    duration: 12000,
+    action: { label: "Guardar", onClick: () => void chamarFuncao("mesa-roteiros", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo }).then(() => toast.success("Guardado como regra"), falhou) },
+  });
 }
 
 export interface PedidoDeGeracao {

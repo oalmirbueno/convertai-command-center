@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { AjudaRecolhida, EstadoVazio, PainelDoAgente, SeletorCompacto, botao, campo, conversa, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { BotaoComCusto, EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
@@ -29,6 +30,7 @@ import {
   normalizarEstado,
   prepararAnexo,
   ROTULOS_DAS_REGRAS,
+  versaoProvisoria,
 } from "./estiloApi";
 import AbaTemplates, { PropostasDaAcao, type ReferenciaParaCombinar } from "./AbaTemplates";
 
@@ -78,7 +80,7 @@ export function GuiaLegivel({ guia, compacto = false }: { guia: GuiaDoEstilo; co
         {CAMPOS_DAS_REGRAS.filter((c) => guia.regras && guia.regras[c] && guia.regras[c].length > 0).map((c) => (
           <div key={c} className="min-w-0">
             <dt className={texto.rotulo}>{ROTULOS_DAS_REGRAS[c]}</dt>
-            <dd className="mt-0.5 text-[12.5px] leading-5 text-foreground [overflow-wrap:anywhere]">
+            <dd className="mt-0.5 text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">
               {guia.regras[c].map((r, i) => (
                 <span key={i} className="block">
                   {r}
@@ -102,7 +104,7 @@ function Miniatura({ url, alt, children }: { url: string; alt: string; children?
   );
 }
 
-export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: string | null }) {
+export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { modeloImagemId?: string | null; trabalhoIds?: string[] }) {
   const { clientId, clientName, catalogo, atualizarCusto, marca } = useMesa();
   const marcaId = marca && !marca.principal ? marca.id : null;
   const queryClient = useQueryClient();
@@ -114,6 +116,8 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
     queryKey: chave,
     queryFn: async () => normalizarEstado(await chamarEstilo("estado", clientId, marcaId)),
     staleTime: 60_000,
+    // Frente AG2: reabrir o painel relê a conversa do banco (o cache só aparece enquanto a leitura volta).
+    refetchOnMount: "always",
     placeholderData: (anterior) => anterior,
   });
   const estado = consulta.data || null;
@@ -132,16 +136,31 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
   const [anexos, setAnexos] = useState<AnexoParaEnviar[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [arrastando, setArrastando] = useState(false);
+  const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement | null>(null);
   const escolher = useRef<HTMLInputElement | null>(null);
-  const carregou = useRef(false);
+  // Frente AG2: a conversa vem do cache na hora e é trocada UMA vez pela leitura nova do banco
+  // (antes ficava a do cache: o que foi falado depois sumia ao reabrir). Depois de enviar ou
+  // abrir "Nova conversa", a tela manda.
+  const carregou = useRef<"nada" | "cache" | "banco">("nada");
+  const mexeu = useRef(false);
 
   useEffect(() => {
-    if (carregou.current || !estado || !estado.mensagens) return;
-    carregou.current = true;
+    if (!estado || !estado.mensagens || carregou.current === "banco") return;
+    const doBanco = consulta.isFetchedAfterMount;
+    if (!doBanco && carregou.current !== "nada") return;
+    carregou.current = doBanco ? "banco" : "cache";
+    if (mexeu.current) return;
     setMensagens(estado.mensagens);
     setConversaId(estado.conversa_id || null);
-  }, [estado]);
+  }, [estado, consulta.isFetchedAfterMount]);
+
+  // O cache acompanha a conversa da tela: reabrir mostra o que foi falado agora, antes da leitura voltar.
+  useEffect(() => {
+    if (carregou.current === "nada") return;
+    const guardaveis = mensagens.filter((m) => !m.pendente).map((m) => ({ ...m, nova: false }));
+    queryClient.setQueryData(chave, (antes: EstadoDoEstilo | null | undefined) => (antes ? { ...antes, mensagens: guardaveis, conversa_id: conversaId } : antes));
+  }, [mensagens, conversaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
@@ -174,8 +193,11 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
     const m = textoMsg.trim();
     if ((!m && !anexos.length) || enviando) return;
     setEnviando(true);
+    setErroDoEnvio(null);
+    mexeu.current = true;
     const enviados = anexos;
-    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m || `${enviados.length} referência(s) anexada(s).`, anexos: enviados.map((a) => ({ tipo: "imagem", url: a.previa })) }]));
+    const chaveDoEnvio = `envio-${Date.now().toString(36)}`;
+    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m || `${enviados.length} referência(s) anexada(s).`, anexos: enviados.map((a) => ({ tipo: "imagem", url: a.previa })), pendente: chaveDoEnvio }]));
     setTextoMsg("");
     setAnexos([]);
     try {
@@ -185,17 +207,30 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
         conversa_id: conversaId || undefined,
         nova_conversa: nova || undefined,
         modelo_imagem_id: modeloImagemId || undefined,
+        // Frente AG2: as peças abertas no Estúdio (p1..pN do agente: "usa o estilo nesta peça").
+        trabalho_ids: trabalhoIds.length ? trabalhoIds : undefined,
       });
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
+      const aviso = d && typeof d.aviso_registro === "string" ? d.aviso_registro : null;
       setMensagens((l) =>
-        l.concat([{ id: d && d.mensagem_id ? String(d.mensagem_id) : null, papel: "agente", conteudo: String((d && d.resposta) || ""), anexos: d && Array.isArray(d.anexos) ? d.anexos : [], custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null, nova: true }]),
+        l
+          .map((x) => (x.pendente === chaveDoEnvio ? { ...x, pendente: undefined } : x))
+          .concat([{ id: d && d.mensagem_id ? String(d.mensagem_id) : null, papel: "agente", conteudo: String((d && d.resposta) || ""), anexos: d && Array.isArray(d.anexos) ? d.anexos : [], custo_usd: d && typeof d.custo_usd === "number" ? d.custo_usd : null, nova: true, aviso }]),
       );
+      if (aviso) toast.warning("Resposta não guardada", { description: aviso, duration: 9000 });
       if (d && typeof d.aviso_dos_templates === "string") toast.info(d.aviso_dos_templates);
+      // Feito na hora (ordem clara, sem custo): o estilo e as peças da tela mudaram.
+      if (d && d.estado) guardar(d.estado);
+      if (d && d.pecas_mudaram) void queryClient.invalidateQueries({ queryKey: ["estilo-no-estudio", clientId] });
       atualizarCusto();
     } catch (e) {
-      avisarErro(e, "O agente de estilo não respondeu");
+      // A mensagem digitada nunca some: a bolha otimista sai e o texto e as imagens voltam ao campo, com o erro à vista.
+      setMensagens((l) => l.filter((x) => x.pendente !== chaveDoEnvio));
+      setTextoMsg(m);
       setAnexos(enviados);
+      setErroDoEnvio(textoDoErro(e) || "O agente de estilo não respondeu.");
+      avisarErro(e, "O agente de estilo não respondeu");
     } finally {
       setEnviando(false);
     }
@@ -257,6 +292,11 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
   const compositorDaConversa = (
     <>
       <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS} onAtalho={(t) => setTextoMsg(t)} />
+      {erroDoEnvio && (
+        <p className="text-[12px] text-destructive" role="alert" data-erro-do-envio="">
+          Não enviado: {erroDoEnvio} O texto voltou para o campo.
+        </p>
+      )}
       {anexos.length > 0 && (
         <div className="grid grid-cols-6 gap-1.5" data-anexos-do-estilo="">
           {anexos.map((a, i) => (
@@ -311,7 +351,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
           rows={2}
           maxLength={4000}
           placeholder="Ex.: o cliente gostou deste jeito, monte o estilo a partir destas referências"
-          className="mr-2 min-w-0 flex-1 text-[12.5px]"
+          className="mr-2 min-w-0 flex-1 text-[13px]"
           aria-label="Mensagem ao agente de estilo"
         />
         <button type="button" className={juntar(botao.primario, "h-10 w-10 px-0")} onClick={() => void enviar()} disabled={enviando || (!textoMsg.trim() && !anexos.length)} aria-label="Enviar ao agente de estilo">
@@ -386,10 +426,22 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                 {m.custo_usd != null && <p className="mt-1 text-[12px] text-muted-foreground">Custo: {usd(m.custo_usd)}</p>}
               </div>
             </div>
+            {m.aviso && (
+              <p className="mt-1 text-[12px] text-warning" role="status" data-aviso-registro="">
+                {m.aviso}
+              </p>
+            )}
+            {m.papel !== "usuario" && (
+              <AprendizadoDoAgente
+                anexos={m.anexos}
+                onEsquecer={(id) => chamarEstilo("aprendizado_esquecer", clientId, marcaId, { id, mensagem_id: m.id || undefined })}
+                onGuardar={(textoDaRegra, tipo) => chamarEstilo("aprendizado_guardar", clientId, marcaId, { texto: textoDaRegra, tipo, mensagem_id: m.id || undefined })}
+              />
+            )}
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
             {leitura && (
               <details className="mt-1.5 rounded-md bg-muted/40 px-3 py-2">
-                <summary className="cursor-pointer text-[12.5px] text-muted-foreground">Leitura das referências</summary>
+                <summary className="cursor-pointer text-[13px] text-muted-foreground">Leitura das referências</summary>
                 <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed">{leitura.texto}</p>
               </details>
             )}
@@ -410,6 +462,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                         onFeito={(p) => {
                           if (p === "descartar") return;
                           void queryClient.invalidateQueries({ queryKey: ["estilo-templates", clientId] });
+                          void queryClient.invalidateQueries({ queryKey: ["estilo-no-estudio", clientId] });
                           atualizarCusto();
                         }}
                       />
@@ -435,6 +488,11 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                         const novo = r && (r as any).estado;
                         if (novo) guardar(novo);
                         else void queryClient.invalidateQueries({ queryKey: chave });
+                        // Frente AG2: peça da tela mudou (estilo ou template na geração): o interruptor e o seletor releem.
+                        if (r && (r as any).pecas_mudaram) void queryClient.invalidateQueries({ queryKey: ["estilo-no-estudio", clientId] });
+                        // Descarte com motivo ensinou: o "Aprendi" aparece na conversa (e fica na linha do resultado ao reabrir).
+                        const aprendido = r && (r as any).aprendido;
+                        if (aprendido) setMensagens((l) => l.concat([{ id: null, papel: "sistema", conteudo: "Resultado da ação no estilo.", anexos: [aprendido] }]));
                         atualizarCusto();
                       }}
                     />
@@ -470,6 +528,12 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
           {estado.ativo ? "Estilo ligado" : "Estilo desligado"}
         </label>
         <AjudaRecolhida rotulo="O que é estilo ligado">Ligado, o estilo pode ser usado no Estúdio quando o interruptor da geração estiver ligado. Desligado, nenhuma geração usa.</AjudaRecolhida>
+        {versaoProvisoria(estado) && (
+          <span className="ml-2 inline-flex items-center text-[12px] text-warning" data-estilo-provisorio="">
+            Rascunho provisório
+            <AjudaRecolhida rotulo="O que é rascunho provisório">Esta versão foi montada sem evidência visual do cliente (sem referência, arte aprovada ou aprendizado). Mande referências na conversa antes de ligar.</AjudaRecolhida>
+          </span>
+        )}
         <span className="flex-1" />
         {!editando && (
           <button type="button" className={botao.secundario} onClick={abrirEdicao}>
@@ -484,7 +548,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
             <label className={texto.rotulo} htmlFor="estilo-resumo">
               Resumo
             </label>
-            <Textarea id="estilo-resumo" value={resumo} onChange={(e) => setResumo(e.target.value)} rows={2} maxLength={600} className="mt-1 text-[12.5px]" />
+            <Textarea id="estilo-resumo" value={resumo} onChange={(e) => setResumo(e.target.value)} rows={2} maxLength={600} className="mt-1 text-[13px]" />
           </div>
           {CAMPOS_DAS_REGRAS.map((c) => (
             <div key={c}>
@@ -500,7 +564,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                 }}
                 rows={2}
                 placeholder="Uma regra por linha"
-                className="mt-1 text-[12.5px]"
+                className="mt-1 text-[13px]"
               />
             </div>
           ))}
@@ -595,7 +659,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
           <h3 className={juntar(texto.rotulo, "mb-2")}>O que o cliente ensinou</h3>
           <ul className="space-y-1.5">
             {estado.aprendizados.map((a) => (
-              <li key={a.id} className="flex min-w-0 items-start text-[12.5px]">
+              <li key={a.id} className="flex min-w-0 items-start text-[13px]">
                 {a.tipo === "gostou" ? <ThumbsUp className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-label="Gostou" /> : <ThumbsDown className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Não gostou" />}
                 <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{a.texto}</span>
                 <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(a.em)}</span>
@@ -613,7 +677,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
           <h3 className={juntar(texto.rotulo, "mb-2")}>Versões</h3>
           <ul className="divide-y divide-border rounded-md border border-border">
             {estado.versoes.map((v) => (
-              <li key={v.numero} className="flex min-w-0 items-center px-3 py-2 text-[12.5px]">
+              <li key={v.numero} className="flex min-w-0 items-center px-3 py-2 text-[13px]">
                 <span className="mr-2 shrink-0 font-medium tabular-nums">v{v.numero}</span>
                 <span className="mr-2 shrink-0 text-muted-foreground">{ORIGEM_DA_VERSAO[v.origem] || v.origem}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground" title={v.nota}>
@@ -621,7 +685,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
                 </span>
                 <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{quando(v.criado_em)}</span>
                 {v.numero === estado.versao_atual ? (
-                  <span className="ml-2 inline-flex shrink-0 items-center text-[11.5px] text-primary">
+                  <span className="ml-2 inline-flex shrink-0 items-center text-[11px] text-primary">
                     <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Atual
                   </span>
                 ) : (
@@ -651,7 +715,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
       {testes.map((t) => (
         <div key={t.id} className="min-w-0">
           <Miniatura url={t.url} alt={t.tema || "Teste do estilo"} />
-          <p className="mt-1 truncate text-[11.5px] text-muted-foreground">
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">
             v{t.versao}
             {t.tema ? ` · ${t.tema}` : ""}
           </p>
@@ -708,6 +772,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
               type="button"
               className={botao.barra}
               onClick={() => {
+                mexeu.current = true;
                 setMensagens([]);
                 setConversaId(null);
                 setNova(true);
@@ -731,7 +796,7 @@ export default function PainelDoEstilo({ modeloImagemId }: { modeloImagemId?: st
             onEscolher={(v) => setAba(v as Aba)}
           />
         }
-        avisos={estado && estado.aviso ? <p className="rounded-md bg-muted/60 px-3 py-2 text-[11.5px] text-muted-foreground">{estado.aviso}</p> : undefined}
+        avisos={estado && estado.aviso ? <p className="rounded-md bg-muted/60 px-3 py-2 text-[11px] text-muted-foreground">{estado.aviso}</p> : undefined}
         compositor={aba === "conversa" ? compositorDaConversa : aba === "testes" && temGuia ? compositorDosTestes : undefined}
         refDasMensagens={lista}
         rotuloDasMensagens="Estilo do cliente"

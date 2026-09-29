@@ -20,6 +20,15 @@
  * - agente_passo { client_id, modelo_id, raciocinio?, referencia_id, passo, ferramentas_usadas, teto_usd,
  *     pedido, contexto, historico } -> { passo: { plano, chamadas, resposta, terminou, recusadas }, custo_usd, gasto_usd, saldo_usd }
  *     Um passo do laço de ferramentas (a tela executa as ferramentas).
+ *     AG2 (29/09): também recebe conversa (últimas trocas), itens_referencia (clipes da trilha de vídeo
+ *     com apelido, na ordem da tela), selecionados (apelidos) e referencia (a do passo 1, devolvida);
+ *     as regras ensinadas (regrasDaMesa "edicao") e "essa/o segundo/todos" (Jev) vão no sistema;
+ *     devolve uso_id, referencia (passo 1), aprendido e regras_seguidas.
+ * - agente_ordem_clara { client_id, pedido, resumo } -> { clara, fonte } (Jev; decide o "faz na hora com Desfazer")
+ * - conversa_ler { client_id, versao_id } -> { conversa_id, mensagens } (a conversa do editor por versão do vídeo)
+ * - conversa_gravar { client_id, versao_id, usuario, agente: { conteudo, anexos }, uso_id? } -> { mensagem_id, aviso_registro }
+ * - conversa_marcar { client_id, mensagem_id, cartao } -> { ok } (o cartão feito/desfeito/cancelado fica assim ao reabrir)
+ * - aprendizado_esquecer / aprendizado_guardar (_shared/aprendizado-das-mesas.ts, mesa "edicao")
  * - visao_descrever { client_id, fonte, modelo_id, quadros: [{ tempo_s, jpeg_base64 }], referencia_id, custo_maximo_usd }
  *     -> { trechos, custo_usd, saldo_usd } (só nos tempos dos quadros enviados).
  *
@@ -52,8 +61,13 @@ import {
   resolverChave,
 } from "../_shared/ia-motor.ts";
 import {
+  anexosDoEditor,
+  APELIDO_DE_CLIPE,
   custoDoTimestamp,
   deslocarPalavras,
+  itensDoCorpo,
+  MAX_CONVERSA_CHARS,
+  referenciaDoCorpo,
   ESQUEMA_DA_VISAO,
   ESQUEMA_DO_PASSO,
   lerPasso,
@@ -66,11 +80,16 @@ import {
   PROVEDORES_DE_TIMESTAMP,
   sistemaDaVisao,
   sistemaDoAgente,
+  sistemaDoPasso,
   tetoValido,
   trechosConferidos,
 } from "./ferramentas.ts";
 import { ESQUEMA_DA_RECEITA, normalizarReceita, sistemaDaReceita } from "./receita.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
+import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, pedidoAponta, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
+import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+import { ehOrdemClara } from "../_shared/ordem-clara.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -379,6 +398,22 @@ function historicoValido(v: unknown): MensagemMotor[] {
     .filter((m): m is MensagemMotor => !!m);
 }
 
+/** Esquema do passo com o aprendizado (AG2): regra_aprendida e regras_seguidas, estrito (todos em required). */
+const ESQUEMA_DO_PASSO_COM_APRENDIZADO = {
+  nome: ESQUEMA_DO_PASSO.nome,
+  schema: {
+    ...ESQUEMA_DO_PASSO.schema,
+    required: [...ESQUEMA_DO_PASSO.schema.required, "regra_aprendida", "regras_seguidas"],
+    properties: { ...ESQUEMA_DO_PASSO.schema.properties, ...CAMPOS_DO_APRENDIZADO },
+  },
+};
+
+/** Última fala do agente na conversa curta que a tela mandou ("Agente: ..."). */
+function ultimaFalaDoAgente(conversa: string): string | null {
+  const linhas = conversa.split("\n").filter((l) => l.indexOf("Agente: ") === 0);
+  return linhas.length ? linhas[linhas.length - 1].slice(8) : null;
+}
+
 async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
   await garantirAcesso(ch, clientId);
@@ -391,19 +426,30 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = String(corpo.pedido || "").replace(/\s+/g, " ").trim().slice(0, MAX_TEXTO_DO_PEDIDO);
   if (!pedido) throw new ErroHttp(400, "pedido_vazio", "Escreva o que o agente deve fazer.");
   const contexto = String(corpo.contexto || "").slice(0, MAX_CONTEXTO_CHARS);
-  const gasto = await gastoDaReferencia(clientId, REF_AGENTE, referencia);
+  const conversa = String(corpo.conversa || "").slice(-MAX_CONVERSA_CHARS);
+  const itens = itensDoCorpo(corpo.itens_referencia);
+  const selecionados = (Array.isArray(corpo.selecionados) ? corpo.selecionados : []).map((x) => String(x || "")).filter((r) => APELIDO_DE_CLIPE.test(r)).slice(0, 12);
+  // AG2: o que já é lido vai em paralelo (gasto da sessão, regras ensinadas e, no passo 1, "essa/o segundo/todos" pelo Jev).
+  const [gasto, regras, refDoPasso1] = await Promise.all([
+    gastoDaReferencia(clientId, REF_AGENTE, referencia),
+    regrasDaMesa(servico(), { clientId, mesa: "edicao" }),
+    passo === 1 && itens.length && pedidoAponta(pedido) ? referenciaDoPedido(pedido, itens, { agente: "editor_video", ultimaResposta: ultimaFalaDoAgente(conversa), selecionados }) : Promise.resolve(null),
+  ]);
+  const ref = passo === 1 ? refDoPasso1 : referenciaDoCorpo(corpo.referencia, itens);
   const parar = motivoParaParar({ passo, ferramentasUsadas: usadas, gastoUsd: gasto, tetoUsd: teto });
-  if (parar) return json({ passo: { plano: "", chamadas: [], resposta: parar, terminou: true, recusadas: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
+  if (parar) return json({ passo: { plano: "", chamadas: [], resposta: parar, terminou: true, recusadas: [], opcoes: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
   const m = await carregarModelo(modeloId, "texto");
   const mensagens: MensagemMotor[] = [
-    { papel: "usuario", conteudo: `Pedido do dono: ${pedido}\n\nProjeto agora:\n${contexto}` },
+    { papel: "usuario", conteudo: `Pedido do dono: ${pedido}\n\n${conversa ? `Conversa até aqui (mais antiga primeiro):\n${conversa}\n\n` : ""}Projeto agora:\n${contexto}` },
     ...historicoValido(corpo.historico),
   ];
   // AB2 (F): o agente de edição sabe onde cada coisa fica no painel (só na conversa, nunca na visão nem na receita).
   const sistema = `${sistemaDoAgente()}\n\n${blocoDoMapaDoPainel("edicao")}`;
-  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistema.length + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
+  // AG2: as regras que a equipe ensinou (EVITAR primeiro) e a referência do pedido vão no sistema, em todo passo.
+  const sistemaCompleto = sistemaDoPasso(sistema, regras.bloco, blocoDaReferencia(ref, itens));
+  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistemaCompleto.length + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
   if (gasto + estimativa > teto) {
-    return json({ passo: { plano: "", chamadas: [], resposta: `O próximo passo passaria do teto de US$ ${teto.toFixed(2)}. Aumente o teto ou simplifique o pedido.`, terminou: true, recusadas: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
+    return json({ passo: { plano: "", chamadas: [], resposta: `O próximo passo passaria do teto de US$ ${teto.toFixed(2)}. Aumente o teto ou simplifique o pedido.`, terminou: true, recusadas: [], opcoes: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
   }
   return respostaComFolego(async () => {
     try {
@@ -412,21 +458,177 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
         tarefa: "conversa",
         agente: "diretor_arte",
         modeloId,
-        sistema,
+        sistema: sistemaCompleto,
         mensagens,
         raciocinio,
-        esquemaJson: ESQUEMA_DO_PASSO,
+        esquemaJson: ESQUEMA_DO_PASSO_COM_APRENDIZADO,
         referencia: { tipo: REF_AGENTE, id: referencia },
         criadoPor: ch.userId,
       });
       const lido = lerPasso(r.json, Math.max(0, MAX_FERRAMENTAS - usadas));
+      const j = r.json && typeof r.json === "object" ? (r.json as Record<string, unknown>) : {};
+      const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
+      // Aprender: depois do principal e sem nunca travar o passo (aprenderDoPedido não lança).
+      const regraSugerida = typeof j.regra_aprendida === "string" && j.regra_aprendida.trim() ? j.regra_aprendida : null;
+      const aprendido = passo === 1 || (regraSugerida && corpo.ja_aprendeu !== true)
+        ? await aprenderDoPedido(servico(), { clientId, mesa: "edicao", pedido, regraSugerida, userId: ch.userId, ultimaResposta: ultimaFalaDoAgente(conversa) })
+        : null;
       await auditar(ch, "editor_agente_passo", { client_id: clientId, passo, chamadas: lido.chamadas.length, modelo_id: r.modeloId }, true);
-      return json({ passo: lido, custo_usd: r.custoUsd, gasto_usd: Math.round((gasto + r.custoUsd) * 10000) / 10000, saldo_usd: r.saldoUsd, modelo_id: r.modeloId, reserva_usada: r.reservaUsada || null });
+      return json({
+        passo: lido,
+        custo_usd: r.custoUsd,
+        gasto_usd: Math.round((gasto + r.custoUsd) * 10000) / 10000,
+        saldo_usd: r.saldoUsd,
+        modelo_id: r.modeloId,
+        reserva_usada: r.reservaUsada || null,
+        uso_id: r.usoId || null,
+        referencia: passo === 1 ? ref : undefined,
+        aprendido,
+        regras_seguidas: seguidas,
+      });
     } catch (e) {
       return respostaDeErro(e);
     }
   }, corsHeaders);
 }
+
+/** "É uma ordem clara?" (Jev Noul, sem custo para o cliente): decide se a mudança sem custo vai direto, com Desfazer. */
+async function agenteOrdemClara(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const pedido = String(corpo.pedido || "").replace(/\s+/g, " ").trim().slice(0, MAX_TEXTO_DO_PEDIDO);
+  if (!pedido) return json({ clara: false, fonte: "regra", probabilidade: null });
+  const r = await ehOrdemClara(pedido, { agente: "editor_video", resumo: String(corpo.resumo || "").slice(0, 400) });
+  return json({ clara: r.clara, fonte: r.fonte, probabilidade: r.probabilidade });
+}
+
+// ------------------------------------------------------------------ conversa do agente editor (AG2)
+
+const REF_CONVERSA = "editor_agente";
+const AGENTE_DA_CONVERSA = "diretor_arte";
+const MAX_MENSAGENS_LIDAS = 80;
+/** Campos de estado que o cartão muda depois (Confirmar, Cancelar, Desfazer, Parar). */
+const ESTADO_DA_ACAO = ["executada_em", "executada_direto", "descartada_em", "desfeita_em", "parada_em", "resultados", "andamento"];
+
+/** A versão do vídeo existe e é deste cliente (o id vem da tela: confere no banco antes de gravar). */
+async function garantirVersao(clientId: string, versaoId: string) {
+  const { data, error } = await servico().from("video_versoes").select("id").eq("id", versaoId).eq("client_id", clientId).maybeSingle();
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível conferir a versão agora.");
+  if (!data) throw new ErroHttp(404, "versao_inexistente", "Esta versão do vídeo não existe mais. Abra o editor de novo.");
+}
+
+async function conversaDaVersao(clientId: string, versaoId: string, userId: string | null): Promise<string | null> {
+  const { data, error } = await servico()
+    .from("agente_conversas")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("agente", AGENTE_DA_CONVERSA)
+    .eq("referencia_tipo", REF_CONVERSA)
+    .eq("referencia_id", versaoId)
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível ler a conversa agora.");
+  const existente = ((data as { id: string }[] | null) ?? [])[0];
+  if (existente) return existente.id;
+  if (!userId) return null;
+  const { data: nova, error: e2 } = await servico()
+    .from("agente_conversas")
+    .insert({ client_id: clientId, agente: AGENTE_DA_CONVERSA, referencia_tipo: REF_CONVERSA, referencia_id: versaoId, criado_por: userId })
+    .select("id")
+    .single();
+  if (e2 || !nova) throw new ErroHttp(500, "conversa_nao_criada", "Não foi possível abrir a conversa do agente editor.");
+  return (nova as { id: string }).id;
+}
+
+async function conversaLer(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const versaoId = idDe(corpo.versao_id, "versao_id");
+  const conversaId = await conversaDaVersao(clientId, versaoId, null);
+  if (!conversaId) return json({ conversa_id: null, mensagens: [] });
+  const { data, error } = await servico()
+    .from("agente_mensagens")
+    .select("id, papel, conteudo, anexos, criado_em")
+    .eq("conversa_id", conversaId)
+    .eq("client_id", clientId)
+    .order("criado_em", { ascending: false })
+    .limit(MAX_MENSAGENS_LIDAS);
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível ler a conversa agora.");
+  return json({ conversa_id: conversaId, mensagens: ((data as unknown[] | null) ?? []).slice().reverse() });
+}
+
+async function conversaGravar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const versaoId = idDe(corpo.versao_id, "versao_id");
+  const u = corpo.usuario && typeof corpo.usuario === "object" ? (corpo.usuario as Record<string, unknown>) : {};
+  const a = corpo.agente && typeof corpo.agente === "object" ? (corpo.agente as Record<string, unknown>) : {};
+  const doUsuario = String(u.conteudo || "").trim().slice(0, 4000);
+  const doAgente = String(a.conteudo || "").trim().slice(0, 8000);
+  if (!doUsuario) throw new ErroHttp(400, "pedido_vazio", "Sem o pedido para guardar.");
+  await garantirVersao(clientId, versaoId);
+  const conversaId = (await conversaDaVersao(clientId, versaoId, ch.userId)) as string;
+  // uso_id só se o uso é deste cliente (o id vem da tela).
+  let usoId: string | null = null;
+  if (UUID.test(String(corpo.uso_id || ""))) {
+    const { data } = await servico().from("ia_usos").select("id").eq("id", String(corpo.uso_id)).eq("client_id", clientId).maybeSingle();
+    usoId = data ? String((data as { id: string }).id) : null;
+  }
+  const t = await gravarTroca(servico(), {
+    conversaId,
+    clientId,
+    usuario: { conteudo: doUsuario, anexos: [] },
+    agente: { conteudo: doAgente || "(sem texto)", anexos: anexosDoEditor(a.anexos), uso_id: usoId },
+    onde: "editor-video",
+  });
+  return json({ conversa_id: conversaId, usuario_id: t.usuarioId, mensagem_id: t.agenteId, aviso_registro: t.erro ? AVISO_SEM_REGISTRO : null });
+}
+
+/** O cartão mudou de estado (Confirmar, Cancelar, Desfazer): a mensagem guardada acompanha, e reabrir não volta a "Confirmar". */
+async function conversaMarcar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const mensagemId = idDe(corpo.mensagem_id, "mensagem_id");
+  const nova = corpo.cartao && typeof corpo.cartao === "object" ? (corpo.cartao as Record<string, unknown>) : null;
+  const acaoId = nova ? String(nova.id || "") : "";
+  if (!nova || !acaoId) throw new ErroHttp(400, "acao_invalida", "Sem a ação para marcar.");
+  const { data, error } = await servico().from("agente_mensagens").select("id, conversa_id, anexos").eq("id", mensagemId).eq("client_id", clientId).maybeSingle();
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível ler a mensagem agora.");
+  if (!data) throw new ErroHttp(404, "mensagem_inexistente", "A mensagem desta ação não existe.");
+  const linha = data as { conversa_id: string; anexos: unknown };
+  const { data: conv } = await servico().from("agente_conversas").select("id").eq("id", linha.conversa_id).eq("client_id", clientId).eq("referencia_tipo", REF_CONVERSA).maybeSingle();
+  if (!conv) throw new ErroHttp(404, "mensagem_inexistente", "A mensagem não é do agente editor.");
+  let achou = false;
+  const anexos = (Array.isArray(linha.anexos) ? linha.anexos : []).map((x) => {
+    const o = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+    if (!o || o.tipo !== "acao_agente" || String(o.id) !== acaoId) return x;
+    achou = true;
+    const junto: Record<string, unknown> = { ...o };
+    ESTADO_DA_ACAO.forEach((k) => {
+      if (nova[k] !== undefined) junto[k] = nova[k];
+    });
+    // Resolvida: as operações guardadas para confirmar depois não servem mais.
+    if ((junto.executada_em || junto.descartada_em) && junto.contexto && typeof junto.contexto === "object") {
+      const { operacoes: _fora, ...resto } = junto.contexto as Record<string, unknown>;
+      junto.contexto = resto;
+    }
+    return junto;
+  });
+  if (!achou) throw new ErroHttp(404, "acao_inexistente", "Esta ação não está na mensagem.");
+  const { error: e2 } = await servico().from("agente_mensagens").update({ anexos }).eq("id", mensagemId).eq("client_id", clientId);
+  if (e2) {
+    registrarFalha("editor-video: estado do cartão não gravado", e2, { mensagem_id: mensagemId });
+    throw new ErroHttp(503, "banco_indisponivel", "A mudança foi feita, mas o estado do cartão não ficou guardado.");
+  }
+  return json({ ok: true });
+}
+
+const ROTAS_DO_APRENDIZADO = rotasDoAprendizado({
+  mesa: "edicao",
+  servico,
+  garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId),
+  json,
+});
 
 // ------------------------------------------------------------------ visão
 
@@ -589,6 +791,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   alinhar_iniciar: alinharIniciar,
   alinhar_andamento: alinharAndamento,
   agente_passo: agentePasso,
+  agente_ordem_clara: agenteOrdemClara,
+  conversa_ler: conversaLer,
+  conversa_gravar: conversaGravar,
+  conversa_marcar: conversaMarcar,
+  aprendizado_esquecer: ROTAS_DO_APRENDIZADO.aprendizado_esquecer,
+  aprendizado_guardar: ROTAS_DO_APRENDIZADO.aprendizado_guardar,
   visao_descrever: visaoDescrever,
   receita_ler: receitaLer,
   receita_salvar: receitaSalvar,

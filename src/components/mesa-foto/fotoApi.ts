@@ -1,4 +1,4 @@
-import { acaoDoAnexo, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { acaoDoAnexo, caminhoDosAnexos, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
@@ -2058,6 +2058,100 @@ export interface MensagemDoDiretor {
   caminho?: CaminhoDoAgente | null;
   /** A resposta acabou de chegar nesta tela (o que vai sozinho só vai agora, nunca ao reabrir). */
   nova?: boolean;
+  /** AG2: dúvida real vira UMA pergunta com respostas prontas (botões que mandam a resposta). */
+  opcoes?: OpcaoDoDiretor[];
+  /** AG2: a resposta chegou, mas não ficou guardada (os cartões dela não podem ser confirmados). */
+  aviso?: string | null;
+  /** AG2: os anexos guardados (o "Aprendi" e o "Segui" do aprendizado leem daqui). */
+  anexosBrutos?: unknown[];
+  /** Linha de resultado gravada pelo servidor (ex.: "Geração: 3 feitas"). */
+  sistema?: boolean;
+}
+
+export interface OpcaoDoDiretor {
+  rotulo: string;
+  mensagem: string;
+}
+
+/** Respostas prontas do diretor (anexo "opcoes_do_diretor" ou a lista da resposta). */
+export function normalizarOpcoesDoDiretor(v: unknown): OpcaoDoDiretor[] {
+  if (!Array.isArray(v)) return [];
+  const saida: OpcaoDoDiretor[] = [];
+  v.forEach((b: any) => {
+    const mensagem = typeof b === "string" ? b.trim() : b && typeof b === "object" ? texto(b.mensagem || b.rotulo) : "";
+    const rotulo = b && typeof b === "object" ? texto(b.rotulo || b.mensagem) : mensagem;
+    if (mensagem && saida.length < 4 && !saida.some((o) => o.mensagem === mensagem)) saida.push({ rotulo: (rotulo || mensagem).slice(0, 60), mensagem: mensagem.slice(0, 300) });
+  });
+  return saida;
+}
+
+/** "Entendi:" e "Próximo passo:" do texto (a resposta guardada não leva os campos soltos). */
+export function blocosDoTexto(t: string): { entendi: string; proximo_passo: string } {
+  const bloco = (rotulo: string) => {
+    const m = new RegExp(`^\\s*${rotulo}\\s*:\\s*(.+)$`, "im").exec(t || "");
+    return m ? m[1].trim() : "";
+  };
+  return { entendi: bloco("Entendi"), proximo_passo: bloco("Pr[oó]ximo passo") };
+}
+
+/**
+ * AG2 (29/09): a conversa relida do banco (agente_historico) volta como as
+ * mensagens da tela, com os cartões no estado guardado: sugestões (e se já
+ * foram aplicadas), a ação sem custo (aberta, feita ou desfeita), a geração,
+ * o caminho, as respostas prontas e o aprendizado. Nada "novo": o que vai
+ * sozinho (ir para a área, começar a geração barata) nunca repete ao reabrir.
+ */
+export function mensagensDoHistorico(v: unknown): MensagemDoDiretor[] {
+  if (!Array.isArray(v)) return [];
+  const saida: MensagemDoDiretor[] = [];
+  v.forEach((b: any) => {
+    if (!b || typeof b !== "object") return;
+    const id = texto(b.id);
+    const conteudo = texto(b.conteudo);
+    const anexos: unknown[] = Array.isArray(b.anexos) ? b.anexos : [];
+    if (!id) return;
+    if (b.papel === "usuario") {
+      saida.push({ id, papel: "usuario", texto: conteudo, sugestoes: [], custo_usd: null, anexos: anexos.length, estilos: 0 });
+      return;
+    }
+    if (b.papel === "sistema") {
+      if (conteudo) saida.push({ id, papel: "agente", texto: conteudo, sugestoes: [], custo_usd: null, anexos: 0, sistema: true });
+      return;
+    }
+    if (b.papel !== "agente") return;
+    const blocoDeSugestoes = anexos.find((a: any) => a && a.tipo === "sugestoes") as any;
+    const acoes = anexos.map(acaoDoAnexo).filter((a): a is AcaoDoAgente => !!a);
+    const opcoes = anexos.find((a: any) => a && a.tipo === "opcoes_do_diretor") as any;
+    const blocos = blocosDoTexto(conteudo);
+    saida.push({
+      id,
+      papel: "agente",
+      texto: conteudo || "Sem resposta.",
+      sugestoes: normalizarSugestoes(blocoDeSugestoes ? blocoDeSugestoes.sugestoes : []),
+      custo_usd: null,
+      anexos: 0,
+      entendi: blocos.entendi,
+      proximo_passo: blocos.proximo_passo,
+      acao: acoes.find((a) => a.agente !== "diretor_geracao") || null,
+      geracao: acoes.find((a) => a.agente === "diretor_geracao") || null,
+      mensagemId: id,
+      caminho: caminhoDosAnexos(anexos),
+      opcoes: normalizarOpcoesDoDiretor(opcoes ? opcoes.opcoes : []),
+      anexosBrutos: anexos,
+      nova: false,
+    });
+  });
+  return saida;
+}
+
+/** agente_historico: a conversa guardada (sem IA, custo 0). */
+export async function lerHistoricoDoDiretor(p: { clientId: string; conversaId: string | null; kitId: string | null; ensaioId: string | null }): Promise<{ conversa_id: string | null; mensagens: MensagemDoDiretor[] }> {
+  const corpo: Record<string, unknown> = { acao: "agente_historico", client_id: p.clientId };
+  if (p.conversaId) corpo.conversa_id = p.conversaId;
+  if (p.kitId) corpo.kit_id = p.kitId;
+  if (p.ensaioId) corpo.ensaio_id = p.ensaioId;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return { conversa_id: textoOuNulo(data && data.conversa_id), mensagens: mensagensDoHistorico(data && data.mensagens) };
 }
 
 export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
@@ -2104,6 +2198,12 @@ export interface RespostaDoDiretor {
   contexto_do_diretor: { resumo: string; foco_rotulo: string; leituras_feitas: number } | null;
   /** Frente MF: o caminho da resposta (rota interna, conferida). */
   caminho: CaminhoDoAgente | null;
+  /** AG2: dúvida real com respostas prontas. */
+  opcoes: OpcaoDoDiretor[];
+  /** AG2: a resposta não ficou guardada na conversa (os cartões dela não confirmam). */
+  aviso_registro: string | null;
+  /** AG2: os anexos da resposta como ficaram guardados (aprendizado). */
+  anexos: unknown[];
 }
 
 export async function conversarComDiretor(p: {
@@ -2152,6 +2252,9 @@ export async function conversarComDiretor(p: {
     mensagem_id: textoOuNulo(data && data.mensagem_id),
     geracao: acaoDoAnexo(data && data.acao_de_geracao),
     caminho: caminhoSeguro(data && data.caminho),
+    opcoes: normalizarOpcoesDoDiretor(data && data.opcoes),
+    aviso_registro: textoOuNulo(data && data.aviso_registro),
+    anexos: [data && data.aprendido, data && data.regras_seguidas].filter((a) => !!a && typeof a === "object"),
     contexto_do_diretor:
       data && data.contexto_do_diretor && typeof data.contexto_do_diretor === "object"
         ? { resumo: texto(data.contexto_do_diretor.resumo), foco_rotulo: texto(data.contexto_do_diretor.foco_rotulo), leituras_feitas: Number(data.contexto_do_diretor.leituras_feitas) || 0 }
@@ -2163,7 +2266,8 @@ export async function conversarComDiretor(p: {
 export const sugestaoPedeEnsaio = (s: Pick<SugestaoDoAgente, "tipo">) => s.tipo === "tomada_nova" || s.tipo === "ajuste_tomada";
 
 export async function aplicarSugestao(
-  p: { clientId: string; ensaioId: string | null; kitId?: string | null },
+  /** mensagemId: a resposta guardada do diretor (a função marca a sugestão como aplicada nela). */
+  p: { clientId: string; ensaioId: string | null; kitId?: string | null; mensagemId?: string | null },
   sugestao: SugestaoDoAgente,
   /** Ajustes da equipe no cartão (quantidade, tipos, variações escolhidas) por cima da sugestão. */
   ajustes?: Record<string, unknown>,
@@ -2182,6 +2286,10 @@ export async function aplicarSugestao(
   // Plano de variações e campanha criam um ensaio novo (não mexem no aberto).
   if (p.ensaioId && !cria) corpo.ensaio_id = p.ensaioId;
   if (p.kitId && cria) corpo.kit_id = p.kitId;
+  if (p.mensagemId && sugestao.chave) {
+    corpo.mensagem_id = p.mensagemId;
+    corpo.sugestao_chave = sugestao.chave;
+  }
   const data = await chamarFuncao<any>("mesa-foto", corpo);
   const referencias: ReferenciaEncontrada[] = [];
   if (data && Array.isArray(data.itens)) {
@@ -2880,4 +2988,30 @@ export async function limparExemplosDaBiblioteca(p: { modo: "openverse" | "nao_b
     aviso: data && typeof data.aviso === "string" ? data.aviso : null,
     custo_usd: Number(data && data.custo_usd) || 0,
   };
+}
+
+// ------------------------------------------------------------------ aprendizado do diretor (AG2, 29/09)
+
+/** A marca aberta deste cliente (a regra de uma marca não vale na outra). */
+function marcaDoCliente(clientId: string): string | null {
+  const m = marcaAtual();
+  return m && m.clientId === clientId ? m.marcaId : null;
+}
+
+/** "Esquecer": a regra ensinada sai do cérebro do cliente (a mensagem passa a mostrar "esquecido"). */
+export async function esquecerRegraDoDiretor(clientId: string, id: string, mensagemId: string | null) {
+  return await chamarFuncao<any>("mesa-foto", { acao: "aprendizado_esquecer", client_id: clientId, id, ...(mensagemId ? { mensagem_id: mensagemId } : {}) });
+}
+
+/** "Guardar como regra" do incerto. */
+export async function guardarRegraDoDiretor(clientId: string, textoDaRegra: string, tipo: "evitar" | "preferencia", mensagemId: string | null) {
+  const marca = marcaDoCliente(clientId);
+  return await chamarFuncao<any>("mesa-foto", {
+    acao: "aprendizado_guardar",
+    client_id: clientId,
+    texto: textoDaRegra,
+    tipo,
+    ...(marca ? { marca_id: marca } : {}),
+    ...(mensagemId ? { mensagem_id: mensagemId } : {}),
+  });
 }

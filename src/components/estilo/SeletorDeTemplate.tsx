@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Layers } from "lucide-react";
 import { AjudaRecolhida, SeletorCompacto } from "@/components/sistema";
 import { useAvisarErro } from "@/components/mesa/Custo";
-import { chamarTemplates, chaveDosTemplates, FIDELIDADES, normalizarEstadoDosTemplates, ROTULO_DA_FIDELIDADE, rotuloDoTipo } from "./templatesApi";
+import { chamarTemplates, FIDELIDADES, ROTULO_DA_FIDELIDADE, rotuloDoTipo } from "./templatesApi";
+import { chaveDoEstudio, type LeituraDoEstudio, useEstiloNoEstudio } from "./estiloApi";
 
 /**
  * "Template" desta geração (frente T), ao lado do interruptor do estilo.
@@ -16,26 +17,15 @@ export default function SeletorDeTemplate({ clientId, marcaId, trabalhoIds, clas
   const avisarErro = useAvisarErro();
   const queryClient = useQueryClient();
   const ids = trabalhoIds.filter(Boolean).slice().sort();
-  const lista = useQuery({
-    queryKey: chaveDosTemplates(clientId, marcaId, false),
-    queryFn: async () => normalizarEstadoDosTemplates(await chamarTemplates("templates_estado", clientId, marcaId, {})),
-    enabled: ids.length > 0,
-    staleTime: 60_000,
-  });
-  const chave = ["estilo-template-no-trabalho", clientId, ids.join(",")];
-  const lido = useQuery({
-    queryKey: chave,
-    queryFn: async () => {
-      const d = await chamarTemplates<{ escolhas?: Record<string, { id: string; fidelidade: string | null } | null> }>("template_no_trabalho_ler", clientId, marcaId, { trabalho_ids: ids });
-      return (d && d.escolhas) || {};
-    },
-    enabled: ids.length > 0,
-    staleTime: 30_000,
-  });
+  // Frente AG2: a lista leve dos templates e a escolha de cada peça vêm da leitura única do Estúdio (estudio_ler),
+  // sem os links assinados de todas as imagens que o templates_estado assinava só para mostrar os nomes.
+  const chave = chaveDoEstudio(clientId, marcaId, ids);
+  const lido = useEstiloNoEstudio(clientId, marcaId, ids);
+  const escolhasLidas = lido.data ? lido.data.escolhas : null;
   // Vários trabalhos (Estúdio Ads): mostra o escolhido só quando todos estão iguais.
-  const primeiro = lido.data && ids.length ? lido.data[ids[0]] || null : null;
-  const iguais = !!lido.data && ids.every((id) => {
-    const e = lido.data![id] || null;
+  const primeiro = escolhasLidas && ids.length ? escolhasLidas[ids[0]] || null : null;
+  const iguais = !!escolhasLidas && ids.every((id) => {
+    const e = escolhasLidas![id] || null;
     return (e ? e.id : "") === (primeiro ? primeiro.id : "") && (e ? e.fidelidade || "" : "") === (primeiro ? primeiro.fidelidade || "" : "");
   });
   const doBanco = iguais && primeiro ? primeiro : null;
@@ -47,7 +37,7 @@ export default function SeletorDeTemplate({ clientId, marcaId, trabalhoIds, clas
     setFidelidade(doBanco && doBanco.fidelidade ? doBanco.fidelidade : "identica");
   }, [doBanco ? doBanco.id : "", doBanco ? doBanco.fidelidade : ""]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const templates = lista.data ? lista.data.templates.filter((t) => t.status === "ativo") : [];
+  const templates = lido.data ? lido.data.templates.filter((t) => t.status === "ativo") : [];
   const escolhido = templates.find((t) => t.id === valor) || null;
 
   const gravar = async (id: string, nivel: string) => {
@@ -57,10 +47,15 @@ export default function SeletorDeTemplate({ clientId, marcaId, trabalhoIds, clas
     setGravando(true);
     try {
       const ehReferencia = !!templates.find((t) => t.id === id && t.tipo === "referencia_carrossel");
-      await chamarTemplates("template_no_trabalho", clientId, marcaId, { trabalho_ids: ids, template_id: id || null, ...(id && ehReferencia ? { fidelidade: nivel } : {}) });
-      const novo: Record<string, { id: string; fidelidade: string | null } | null> = {};
-      for (const t of ids) novo[t] = id ? { id, fidelidade: ehReferencia ? nivel : null } : null;
-      queryClient.setQueryData(chave, novo);
+      const r = await chamarTemplates<{ falhas?: string[] }>("template_no_trabalho", clientId, marcaId, { trabalho_ids: ids, template_id: id || null, ...(id && ehReferencia ? { fidelidade: nivel } : {}) });
+      const falhas = r && Array.isArray(r.falhas) ? r.falhas : [];
+      queryClient.setQueryData<LeituraDoEstudio | undefined>(chave, (d) => {
+        if (!d) return d;
+        const escolhas = { ...d.escolhas };
+        for (const t of ids) if (falhas.indexOf(t) < 0) escolhas[t] = id ? { id, fidelidade: ehReferencia ? nivel : null } : null;
+        return { ...d, escolhas };
+      });
+      if (falhas.length) throw new Error(`${falhas.length} de ${ids.length} não mudaram. Tente de novo.`);
     } catch (e) {
       setValor(antes.valor);
       setFidelidade(antes.fidelidade);

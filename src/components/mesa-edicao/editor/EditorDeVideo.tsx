@@ -92,7 +92,17 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   const tresColunas = useLarguraMinima(LARGURA_TRES_COLUNAS);
   const ajustesNaEsquerda = agenteNaLateral && !tresColunas;
   const abasDaEsquerda = ajustesNaEsquerda ? ABAS_COM_AJUSTES : ABAS_ESQUERDA;
-  const [h, setH] = useState<Historico>(() => comecarHistorico(projetoInicial));
+  const [h, setHNaTela] = useState<Historico>(() => comecarHistorico(projetoInicial));
+  // AG2 (29/09): o histórico mais novo fica numa ref, atualizada NA HORA de cada mudança. Antes o controle do
+  // agente usava o `h` da última renderização: "Fala marcada" seguida da aplicação direta na mesma volta
+  // aplicava sobre o histórico velho (o passo da fala sumia) e a assinatura conferida era a de antes.
+  const hRef = useRef<Historico>(h);
+  const setH = useCallback((v: Historico | ((x: Historico) => Historico)) => {
+    const novo = typeof v === "function" ? v(hRef.current) : v;
+    if (novo === hRef.current) return;
+    hRef.current = novo;
+    setHNaTela(novo);
+  }, []);
   const projeto = h.presente.projeto;
   const relogio = useMemo(() => criarRelogio(0), []);
   const previa = useRef<ControleDaPrevia | null>(null);
@@ -146,12 +156,12 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         return atual;
       }
     });
-  }, []);
-  const aplicarProjeto = useCallback((p: ProjetoDeEdicao, rotulo: string) => setH((atual) => fazer(atual, p, rotulo)), []);
+  }, [setH]);
+  const aplicarProjeto = useCallback((p: ProjetoDeEdicao, rotulo: string) => setH((atual) => fazer(atual, p, rotulo)), [setH]);
 
   const controle: ControleDePropostas = {
     aplicar: (prop, rotulo) => {
-      const atual = h.presente.projeto;
+      const atual = hRef.current.presente.projeto;
       let novo: ProjetoDeEdicao;
       if (!prop.base || prop.base === assinaturaDoProjeto(atual)) novo = prop.resultado;
       else {
@@ -162,16 +172,14 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         }
       }
       aplicadas.current.set(prop, novo);
-      setH(fazer(h, novo, rotulo));
+      setH((x) => fazer(x, novo, rotulo));
       return true;
     },
     desfazer: (prop) => {
+      // Só volta se nada mudou depois (um passo do desfazer = o lote inteiro). Quem chama mostra o motivo no cartão.
       const feito = aplicadas.current.get(prop);
-      if (!feito || h.presente.projeto !== feito) {
-        toast.error("Mudou depois de aplicar.", { description: "Use Ctrl+Z para voltar passo a passo." });
-        return false;
-      }
-      setH(desfazer(h));
+      if (!feito || hRef.current.presente.projeto !== feito) return false;
+      setH((x) => desfazer(x));
       return true;
     },
   };
@@ -179,7 +187,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   // Agente na lateral da mesa: publica o projeto e o jeito de aplicar a cada mudança.
   useEffect(() => {
     if (!agenteNaLateral) return;
-    publicarNaPonte({ clientId, versaoId, projeto, controle, aplicarProjeto, urls });
+    publicarNaPonte({ clientId, versaoId, projeto, controle, aplicarProjeto, urls, selecao, cursor: relogio.get });
   });
   useEffect(() => (agenteNaLateral ? () => tirarDaPonte(versaoId) : undefined), [agenteNaLateral, versaoId]);
 
@@ -290,10 +298,10 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   // ---------------------------------------------------------------- partes da tela
   const barra = (
     <div className="flex min-w-0 items-center" data-barra-do-editor="">
-      <button type="button" className={botao.icone} onClick={() => setH(desfazer(h))} disabled={!h.passado.length} aria-label={h.passado.length ? `Desfazer: ${h.presente.rotulo}` : "Nada para desfazer"} title="Ctrl+Z">
+      <button type="button" className={botao.icone} onClick={() => setH((x) => desfazer(x))} disabled={!h.passado.length} aria-label={h.passado.length ? `Desfazer: ${h.presente.rotulo}` : "Nada para desfazer"} title="Ctrl+Z">
         <Undo2 className="h-4 w-4" />
       </button>
-      <button type="button" className={botao.icone} onClick={() => setH(refazer(h))} disabled={!h.futuro.length} aria-label="Refazer" title="Ctrl+Shift+Z">
+      <button type="button" className={botao.icone} onClick={() => setH((x) => refazer(x))} disabled={!h.futuro.length} aria-label="Refazer" title="Ctrl+Shift+Z">
         <Redo2 className="h-4 w-4" />
       </button>
       <button type="button" className={juntar(botao.icone, "ml-1")} onClick={dividirNoCursor} aria-label="Dividir no cursor (S)" title="S">
@@ -465,7 +473,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
                   {inspector}
                 </RegiaoRolavel>
               ) : (
-                <AgenteEditor projeto={projeto} controle={controle} onAplicarProjeto={aplicarProjeto} urls={urls} />
+                <AgenteEditor projeto={projeto} controle={controle} onAplicarProjeto={aplicarProjeto} urls={urls} versaoId={versaoId} selecao={selecao} cursor={relogio.get} />
               )}
             </div>
           </div>

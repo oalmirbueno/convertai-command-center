@@ -15,7 +15,23 @@
 import type { RegraDaOperacao } from "../_shared/acoes-do-agente.ts";
 import { normalizarRoteiro, type Roteiro } from "../_shared/roteiro-modelo.ts";
 
-export const OPERACOES_DE_EDICAO = ["editar_texto", "aprovar_roteiro", "marcar_gravado"];
+export const OPERACOES_DE_EDICAO = ["editar_texto", "aprovar_roteiro", "marcar_gravado", "resolver_comentario", "desarquivar_roteiro"];
+
+/**
+ * Frente AG2 (29/09): comentário da equipe no roteiro aberto vira alvo (c1..).
+ * O id do alvo é "roteiro_id:comentario_id" (o executor separa e confere os
+ * dois no banco); o modelo só vê o apelido.
+ */
+export function idDoComentario(roteiroId: string, comentarioId: string): string {
+  return `${roteiroId}:${comentarioId}`;
+}
+
+export function lerIdDoComentario(alvoId: unknown): { roteiroId: string; comentarioId: string } | null {
+  const s = String(alvoId == null ? "" : alvoId);
+  const i = s.indexOf(":");
+  if (i <= 0 || i >= s.length - 1) return null;
+  return { roteiroId: s.slice(0, i), comentarioId: s.slice(i + 1) };
+}
 
 /** Campos que o agente troca por pedido, com o nome que a equipe usa. */
 export const CAMPOS_DE_TEXTO: Record<string, string> = {
@@ -101,6 +117,19 @@ export function regrasDeEdicao(): Record<string, RegraDaOperacao<AlvoDoRoteiro>>
         return d.status === "gravado" ? "Já está gravado." : d.status !== "aprovado" ? "Só roteiro aprovado vai para gravado." : null;
       },
     },
+    // Frente AG2: resolver comentário (c#) e desarquivar (r#), sem custo e com Desfazer.
+    resolver_comentario: {
+      rotulo: "resolver o comentário",
+      alvos: ["c"],
+      direta: true,
+      trava: (a) => ((a.dados as Record<string, unknown> | undefined)?.resolvido === true ? "Este comentário já está resolvido." : null),
+    },
+    desarquivar_roteiro: {
+      rotulo: "desarquivar",
+      alvos: ["r"],
+      direta: true,
+      trava: (a) => ((a.dados as Record<string, unknown> | undefined)?.arquivado === true ? null : "Este roteiro não está arquivado."),
+    },
   };
 }
 
@@ -108,4 +137,6 @@ export const DESCRICOES_DE_EDICAO: Record<string, string> = {
   editar_texto: "troca um trecho do roteiro (ref r..) sem o roteirista: para = \"campo: texto novo\", campo um de titulo, subtitulo, objetivo, gancho, cta, legenda (um item por campo). Vira versão nova, sem custo.",
   aprovar_roteiro: "aprova o roteiro (ref r..), como o botão da Revisão. para vazio.",
   marcar_gravado: "marca o roteiro aprovado (ref r..) como gravado. para vazio.",
+  resolver_comentario: "marca como resolvido um comentário da equipe no roteiro aberto (ref c..). Quando o pedido é \"resolva o comentário\" depois de corrigir o que ele pede, junte com editar_texto. para vazio.",
+  desarquivar_roteiro: "volta um roteiro arquivado (ref r.. com detalhe \"arquivado\") para a lista. para vazio.",
 };

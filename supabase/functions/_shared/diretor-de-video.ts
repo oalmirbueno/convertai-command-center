@@ -488,6 +488,10 @@ export function projetoDoKit(kit: KitDeVideo, valores: Record<string, string>, f
 
 // ------------------------------------------------------------------ conversa com o modelo
 
+/** O que o diretor pode pedir em `acao` (a equipe confirma o que custa; o editor tem Desfazer). */
+export const TIPOS_DA_ACAO_DO_DIRETOR = ["gerar", "refazer", "mandar_ao_editor"] as const;
+export type TipoDaAcaoDoDiretor = (typeof TIPOS_DA_ACAO_DO_DIRETOR)[number];
+
 /** Esquema JSON da resposta do diretor (o motor pede saída estruturada). */
 export function esquemaDoDiretor() {
   const texto = { type: "string" };
@@ -556,8 +560,9 @@ export function esquemaDoDiretor() {
         acao: {
           type: ["object", "null"],
           additionalProperties: false,
-          required: ["tipo", "planos"],
-          properties: { tipo: { type: "string", enum: ["gerar", "mandar_ao_editor"] }, planos: listaDeTexto },
+          required: ["tipo", "planos", "variacoes"],
+          // AG2 (29/09): "refazer" (mesmo plano com composição nova; o roteiro volta com o plano mudado) e variações.
+          properties: { tipo: { type: "string", enum: TIPOS_DA_ACAO_DO_DIRETOR }, planos: listaDeTexto, variacoes: { type: ["integer", "null"] } },
         },
       },
     },
@@ -600,7 +605,10 @@ REGRAS
 - Personagem de pessoa real só com autorização registrada. Nada de logo, texto ou preço dentro do vídeo gerado: isso vai na edição.
 - Um movimento de câmera por plano, ação visível, 3 a 8 s por plano, no máximo ${MAX_PLANOS} planos.
 - \`biblia\` e \`roteiro\`: devolva o objeto completo só quando mudar algo; senão null.
-- \`acao\`: só quando a equipe PEDIR para gerar ("gera os planos 1 a 3") ou mandar para o editor. planos: apelidos (p1..). Nada acontece sem a confirmação da equipe com o custo à vista.
+- \`acao\`: só quando a equipe PEDIR. tipo "gerar" ("gera os planos 1 a 3"), "refazer" (gerar de novo um plano com composição diferente: devolva também o \`roteiro\` completo com o prompt, o ângulo ou o enquadramento novos desse plano) ou "mandar_ao_editor" (montar a primeira versão com os resultados escolhidos). planos: apelidos (p1..); "todos" = todos os planos da lista. variacoes: 1 a 4 quando a equipe disser quantas, senão null. Gerar e refazer custam: a equipe confirma no cartão com o custo à vista. O editor não custa e tem Desfazer.
+- Trocar plano (motor, ângulo, cena, duração, enquadramento): devolva o \`roteiro\` completo com a troca; não gere junto se a equipe não pediu.
+- Nunca diga que vai gerar, refazer ou mandar ao editor sem pôr a \`acao\` na mesma resposta. Sem ação, diga o que falta (ex.: "p2 precisa do quadro inicial"). Use o ESTADO REAL abaixo: não proponha gerar plano que o estado diz que não está pronto.
+- Resposta curta e específica (até 4 frases). Dúvida real: UMA pergunta curta com as opções em \`perguntas\`.
 
 MOTORES DISPONÍVEIS (id; durações; capacidades; papéis):
 ${motoresParaOPrompt(motores)}
@@ -636,7 +644,7 @@ export interface RespostaDoDiretor {
   projeto: ProjetoDoDiretor;
   avisos: string[];
   /** Planos que o diretor quer gerar ou mandar ao editor (apelidos válidos). */
-  acao: { tipo: "gerar" | "mandar_ao_editor"; planos: string[] } | null;
+  acao: { tipo: TipoDaAcaoDoDiretor; planos: string[]; variacoes?: number } | null;
   mudou: { biblia: boolean; roteiro: boolean };
 }
 
@@ -723,10 +731,19 @@ export function aplicarRespostaDoDiretor(bruto: unknown, atual: ProjetoDoDiretor
   }
   let acao: RespostaDoDiretor["acao"] = null;
   const a = o.acao && typeof o.acao === "object" ? obj(o.acao) : null;
-  if (a && (a.tipo === "gerar" || a.tipo === "mandar_ao_editor")) {
+  if (a && (TIPOS_DA_ACAO_DO_DIRETOR as readonly string[]).indexOf(String(a.tipo)) >= 0) {
     const refs = projeto.roteiro.planos.map((p) => p.ref);
-    const planos = lista(a.planos).map((v) => linha(v, 8).toLowerCase()).filter((v, i, l) => refs.indexOf(v) >= 0 && l.indexOf(v) === i);
-    if (planos.length) acao = { tipo: a.tipo, planos };
+    const brutos = lista(a.planos).map((v) => linha(v, 8).toLowerCase());
+    // "todos" vale para a lista inteira (o modelo às vezes escreve em vez de listar).
+    const todos = brutos.some((v) => v === "todos" || v === "todas" || v === "*");
+    const planos = todos ? refs.slice() : brutos.filter((v, i, l) => refs.indexOf(v) >= 0 && l.indexOf(v) === i);
+    // O editor usa o roteiro inteiro: vale mesmo sem apelido.
+    const tipo = a.tipo as TipoDaAcaoDoDiretor;
+    if (planos.length || (tipo === "mandar_ao_editor" && refs.length)) {
+      acao = { tipo, planos: planos.length ? planos : refs.slice() };
+      const v = Number(a.variacoes);
+      if (a.variacoes !== null && a.variacoes !== undefined && isFinite(v) && v >= 1) acao.variacoes = Math.max(1, Math.min(4, Math.round(v)));
+    }
   }
   return { resposta: semTravessao(String(o.resposta || "").trim().slice(0, 2400)) || "Pronto.", perguntas, projeto, avisos, acao, mudou };
 }
@@ -804,8 +821,9 @@ const REGRAS_DO_DIRETOR: Record<string, RegraDaOperacao<AlvoDoPlano>> = {
  * Proposta do contrato comum para gerar os planos pedidos (p1, p3...). Custo
  * somado pelo código e mostrado antes; geração não tem Desfazer.
  */
-export function acaoDeGerarPlanos(projeto: ProjetoDoDiretor, refs: string[], opcoes: { id?: string; variacoes?: number; motores?: MotorDeVideo[] } = {}): AcaoDoAgente | null {
+export function acaoDeGerarPlanos(projeto: ProjetoDoDiretor, refs: string[], opcoes: { id?: string; variacoes?: number; motores?: MotorDeVideo[]; refazer?: boolean } = {}): AcaoDoAgente | null {
   const motores = opcoes.motores || MOTORES_DE_VIDEO;
+  const variacoes = Math.max(1, Math.min(4, Math.round(opcoes.variacoes || 1)));
   const alvos = comApelido(
     projeto.roteiro.planos.map((plano): AlvoDoPlano => {
       const m = motorPorId(plano.motor, motores);
@@ -817,28 +835,131 @@ export function acaoDeGerarPlanos(projeto: ProjetoDoDiretor, refs: string[], opc
     { resumo: "", itens: refs.map((ref) => ({ operacao: "gerar_plano", ref })) },
     alvos,
     REGRAS_DO_DIRETOR,
-    { agente: AGENTE_DO_DIRETOR, id: opcoes.id, contexto: { projeto_id: projeto.id, variacoes: opcoes.variacoes || 1 }, semDesfazer: () => true },
+    { agente: AGENTE_DO_DIRETOR, id: opcoes.id, contexto: { projeto_id: projeto.id, variacoes, ...(opcoes.refazer ? { refazer: true } : {}) }, semDesfazer: () => true },
   );
   if (!acao) return null;
   // O executor gera com o que foi mostrado na confirmação (nada muda entre propor e confirmar).
   const entradas: Record<string, EntradaDoPlano> = {};
+  // AG2 (29/09): o custo de CADA plano fica guardado; o executor só gera até esse valor
+  // (antes ia com teto infinito e o preço podia mudar entre o cartão e o clique).
+  const custos: Record<string, number> = {};
+  let usd = 0;
   acao.itens.forEach((i) => {
     const p = projeto.roteiro.planos.find((x) => x.ref === i.alvo_id);
     const e = p ? entradaDoPlano(projeto, p, motores).entrada : null;
     if (e) entradas[i.alvo_id] = e;
+    const c = p ? custoDaEntrada(p, e, motores, variacoes) : null;
+    if (c !== null) {
+      custos[i.alvo_id] = c;
+      usd += c;
+    }
   });
-  acao.contexto = { ...(acao.contexto || {}), entradas, titulo: projeto.titulo };
-  let usd = 0;
-  acao.itens.forEach((i) => {
-    const p = projeto.roteiro.planos.find((x) => x.ref === i.alvo_id);
-    const c = p ? custoDoPlano(p, motores, opcoes.variacoes || 1) : null;
-    if (c) usd += c;
-  });
+  acao.contexto = { ...(acao.contexto || {}), entradas, custos, titulo: projeto.titulo };
   acao.custo_estimado_usd = Math.round(usd * 10000) / 10000;
+  const verbo = opcoes.refazer ? "Refazer" : "Gerar";
   acao.resumo = acao.itens.length
-    ? `Gerar ${acao.itens.length} ${acao.itens.length === 1 ? "plano" : "planos"}${(opcoes.variacoes || 1) > 1 ? `, ${opcoes.variacoes} variações cada` : ""}. Custo estimado US$ ${acao.custo_estimado_usd.toFixed(2).replace(".", ",")}. Geração não tem desfazer.`
+    ? `${verbo} ${acao.itens.length} ${acao.itens.length === 1 ? "plano" : "planos"}${opcoes.refazer ? " com a composição nova" : ""}${variacoes > 1 ? `, ${variacoes} variações cada` : ""}. Custo estimado US$ ${acao.custo_estimado_usd.toFixed(2).replace(".", ",")}. Geração não tem desfazer.`
     : "Nenhum plano pronto para gerar.";
   return acao;
+}
+
+/**
+ * Custo de um plano como o gerador cobra (mesma conta do enviarGeracao: motor,
+ * duração, áudio, variações e referências). Null sem cotação.
+ */
+export function custoDaEntrada(p: Pick<PlanoDoRoteiro, "motor" | "duracao_s" | "fala" | "modo">, e: EntradaDoPlano | null, motores: MotorDeVideo[] = MOTORES_DE_VIDEO, variacoes = 1): number | null {
+  const m = motorPorId(e ? e.motor : p.motor, motores);
+  if (!m) return null;
+  if (!e) return custoDoPlano(p, motores, variacoes);
+  return custoDoMotor(m, { duracao_s: e.duracao_s, audio: e.audio, variacoes, referencias: e.referencias_paths.length }).usd;
+}
+
+// ------------------------------------------------------------------ mandar ao editor (contrato comum, com Desfazer)
+
+export const OPERACAO_DO_EDITOR = "mandar_ao_editor";
+
+/** Resumo de um plano para o executor montar a versão (sem o projeto inteiro na proposta). */
+export interface PlanoParaOEditor {
+  ref: string;
+  ordem: number;
+  titulo: string;
+  texto_na_tela: string | null;
+  duracao_s: number;
+  escolhido: string | null;
+}
+
+type AlvoDoProjeto = Alvo & { dados: { planos: PlanoParaOEditor[] } };
+
+/** Regras das operações do diretor para podeExecutarDireto: só o editor vai direto (sem custo, com Desfazer). */
+export const REGRAS_DIRETAS_DO_DIRETOR: Record<string, { direta?: boolean }> = {
+  gerar_plano: {},
+  [OPERACAO_DO_EDITOR]: { direta: true },
+};
+
+/**
+ * Proposta de mandar ao editor: UM item (v1, o projeto), a versão rascunho nasce
+ * com os resultados escolhidos na ordem do roteiro. Sem custo; o Desfazer deixa
+ * a versão rejeitada (nunca some). Sem nenhum escolhido: recusado com o motivo.
+ */
+export function acaoDeMandarAoEditor(projeto: ProjetoDoDiretor, opcoes: { id?: string } = {}): AcaoDoAgente | null {
+  const planos: PlanoParaOEditor[] = projeto.roteiro.planos.map((p) => ({ ref: p.ref, ordem: p.ordem, titulo: p.titulo, texto_na_tela: p.texto_na_tela, duracao_s: p.duracao_s, escolhido: p.escolhido }));
+  const escolhidos = planos.filter((p) => !!p.escolhido).length;
+  const alvos = comApelido<AlvoDoProjeto>([{ id: projeto.id || "projeto", titulo: projeto.titulo || "Vídeo", detalhe: `${escolhidos} de ${planos.length} planos com resultado escolhido`, dados: { planos } }], "v");
+  const regras: Record<string, RegraDaOperacao<AlvoDoProjeto>> = {
+    [OPERACAO_DO_EDITOR]: {
+      rotulo: "Mandar ao editor",
+      direta: true,
+      trava: (a) => (a.dados.planos.some((p) => !!p.escolhido) ? null : "Nenhum plano tem resultado escolhido. Escolha (ou avalie) as variações no Roteiro antes."),
+    },
+  };
+  const faltando = planos.filter((p) => !p.escolhido).map((p) => p.ref);
+  const acao = normalizarAcaoDoAgente(
+    { resumo: `Montar a versão rascunho no editor com ${escolhidos} ${escolhidos === 1 ? "plano" : "planos"} na ordem do roteiro${faltando.length ? ` (sem resultado: ${faltando.slice(0, 8).join(", ")})` : ""}. Sem custo; dá para desfazer.`, itens: [{ operacao: OPERACAO_DO_EDITOR, ref: "v1" }] },
+    alvos,
+    regras,
+    { agente: AGENTE_DO_DIRETOR, id: opcoes.id, contexto: { projeto_id: projeto.id, editor: { titulo: projeto.titulo || "Vídeo", formato: projeto.biblia.formato, notas: projeto.roteiro.notas || null, planos } } },
+  );
+  if (acao) acao.custo_estimado_usd = 0;
+  return acao;
+}
+
+// ------------------------------------------------------------------ estado real para o modelo
+
+/** Andamento de um plano lido do banco (pedidos do gerador ligados ao projeto). */
+export interface AndamentoDoPlano {
+  gerando: number;
+  prontos: number;
+  falharam: number;
+}
+
+/**
+ * O que o diretor precisa saber antes de responder, em linhas curtas: o que
+ * está pronto para gerar (ou o motivo), o que está gerando, o que já tem
+ * resultado e escolhido, e o custo de cada plano. Nunca leva id nem caminho.
+ */
+export function blocoDoEstadoReal(projeto: ProjetoDoDiretor, andamento: Record<string, AndamentoDoPlano> = {}, motores: MotorDeVideo[] = MOTORES_DE_VIDEO): string {
+  const planos = projeto.roteiro.planos;
+  if (!planos.length) return "\nESTADO REAL: o roteiro ainda não tem planos.";
+  const linhas = planos.slice(0, MAX_PLANOS).map((p) => {
+    const e = entradaDoPlano(projeto, p, motores);
+    const c = custoDaEntrada(p, e.entrada, motores, 1);
+    const a = andamento[p.ref] || { gerando: 0, prontos: 0, falharam: 0 };
+    const partes = [
+      e.motivo ? `não pronto: ${e.motivo}` : "pronto para gerar",
+      c !== null ? `US$ ${c.toFixed(2)} por variação` : "sem cotação",
+      a.gerando ? `${a.gerando} gerando` : "",
+      a.prontos ? `${a.prontos} ${a.prontos === 1 ? "pedido pronto" : "pedidos prontos"}` : "",
+      a.falharam ? `${a.falharam} com erro` : "",
+      p.escolhido ? "resultado escolhido" : "",
+    ].filter(Boolean);
+    return `${p.ref} (${p.titulo}): ${partes.join("; ")}`;
+  });
+  return `\nESTADO REAL DO ROTEIRO (na ordem da tela):\n${linhas.join("\n")}`;
+}
+
+/** A resposta promete fazer algo que custa ou muda (e não veio a ação)? */
+export function prometeSemAcao(resposta: string): boolean {
+  return /\b(vou|vamos|irei|estou|j[aá] estou|j[aá] vou)\s+(gerar|gerando|refazer|refazendo|mandar|mandando|enviar|enviando|preparar o cart|montar a vers)/i.test(String(resposta || ""));
 }
 
 // ------------------------------------------------------------------ para o editor

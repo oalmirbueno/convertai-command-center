@@ -26,6 +26,8 @@ export interface ResultadoDaFerramenta {
   operacoes: Operacao[];
   texto: string;
   ok: boolean;
+  /** Pedido de exportar (vira cartão com Confirmar; nunca roda sozinho). */
+  exportar?: boolean;
 }
 
 const num = (v: unknown) => {
@@ -52,9 +54,44 @@ export function visaoNaLinhaDoTempo(p: ProjetoDeEdicao, de: number, ate: number)
   return linhas;
 }
 
-/** Contexto que vai ao modelo: projeto com apelidos, fala resumida e o que foi visto. */
-export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000): string {
-  const partes = [resumoParaOAgente(p)];
+/** O que a tela sabe além do projeto (AG2): seleção e cursor. */
+export interface EstadoDaTela {
+  /** Ids dos clipes escolhidos na linha do tempo (viram apelidos aqui). */
+  selecionados?: string[];
+  /** Tempo do cursor na linha do tempo (s). */
+  cursor_s?: number | null;
+}
+
+/** Linhas do estado da tela para o modelo (apelidos, nunca id). */
+export function linhasDaTela(p: ProjetoDeEdicao, tela: EstadoDaTela = {}): string[] {
+  const a = apelidosDoProjeto(p);
+  const t = trilhaPrincipal(p);
+  const linhas: string[] = [];
+  const ordem = t ? emOrdem(t).map((c) => a.porId[c.id]).filter(Boolean) : [];
+  linhas.push(ordem.length ? `Trilha de vídeo na ordem: ${ordem.join(", ")} (${tempoFino(duracaoDaTrilhaPrincipal(p))}).` : "Trilha de vídeo vazia.");
+  const sel = (tela.selecionados || []).map((id) => a.porId[id]).filter(Boolean);
+  linhas.push(sel.length ? `Selecionados na tela: ${sel.join(", ")}.` : "Selecionados na tela: nenhum.");
+  if (typeof tela.cursor_s === "number" && isFinite(tela.cursor_s)) {
+    const sob = a.lista.filter((c) => c.inicio_s <= (tela.cursor_s as number) && c.fim_s > (tela.cursor_s as number)).map((c) => c.apelido);
+    linhas.push(`Cursor em ${tempoFino(tela.cursor_s)}${sob.length ? ` (sobre ${sob.join(", ")})` : ""}.`);
+  }
+  return linhas;
+}
+
+/** Itens para "essa", "o segundo", "todos" (Jev): os clipes da trilha de vídeo na ordem da tela. */
+export function itensDaReferencia(p: ProjetoDeEdicao): { ref: string; titulo: string; detalhe: string | null }[] {
+  const a = apelidosDoProjeto(p);
+  const t = trilhaPrincipal(p);
+  if (!t) return [];
+  return emOrdem(t).map((c) => {
+    const x = a.lista.find((l) => l.id === c.id);
+    return { ref: a.porId[c.id], titulo: x ? x.rotulo : "Clipe", detalhe: x ? `${tempoFino(x.inicio_s)} a ${tempoFino(x.fim_s)}` : null };
+  }).filter((i) => !!i.ref);
+}
+
+/** Contexto que vai ao modelo: projeto com apelidos, estado da tela, fala resumida e o que foi visto. */
+export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: EstadoDaTela = {}): string {
+  const partes = [resumoParaOAgente(p), linhasDaTela(p, tela).join("\n")];
   const fala = falaNaLinhaDoTempo(p);
   if (fala.length) {
     const linhas: string[] = [];
@@ -136,6 +173,18 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         if (!t) throw new ErroDaOperacao("Sem trilha de vídeo.");
         return aplicar([{ op: "reordenar", trilha: t.id, ordem: Array.isArray(a.ordem) ? (a.ordem as unknown[]).map(String) : [] }], "Reordenado.");
       }
+      case "trilha": {
+        const id = String(a.trilha || "");
+        if (!p.trilhas.some((t) => t.id === id)) throw new ErroDaOperacao(`Não existe a trilha ${id || "sem nome"}. Trilhas: ${p.trilhas.map((t) => t.id).join(", ") || "nenhuma"}.`);
+        const campos: { muda?: boolean; oculta?: boolean } = {};
+        if (typeof a.muda === "boolean") campos.muda = a.muda;
+        if (typeof a.oculta === "boolean") campos.oculta = a.oculta;
+        if (!Object.keys(campos).length) throw new ErroDaOperacao("Diga muda ou oculta.");
+        const o: Operacao = { op: "trilha", trilha: id, campos };
+        return { projeto: aplicarOperacao(p, o), operacoes: [o], texto: `Trilha ${id}${campos.muda !== undefined ? (campos.muda ? " sem som" : " com som") : ""}${campos.oculta !== undefined ? (campos.oculta ? " escondida" : " à vista") : ""}.`, ok: true };
+      }
+      case "exportar":
+        return { projeto: p, operacoes: [], texto: "Exportação preparada: o dono confirma no cartão.", ok: true, exportar: true };
       case "fechar_buracos":
       case "aplicar_skill": {
         const id = (ch.ferramenta === "fechar_buracos" ? "fechar_buracos" : String(a.skill || "")) as IdDaSkill;
@@ -150,7 +199,10 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         return { projeto: p, operacoes: [], texto: `Ferramenta desconhecida: ${ch.ferramenta}.`, ok: false };
     }
   } catch (e) {
-    const motivo = e instanceof ErroDaOperacao || e instanceof ErroDeApelido ? e.message : "Falhou.";
+    // AG2: erro inesperado não some mais como "Falhou." sem rastro: vai para o console e o motivo volta ao modelo.
+    const conhecido = e instanceof ErroDaOperacao || e instanceof ErroDeApelido;
+    if (!conhecido) console.error("[agente editor] ferramenta falhou", ch.ferramenta, e);
+    const motivo = conhecido ? (e as Error).message : `Falhou (${e instanceof Error ? e.message.slice(0, 120) : "erro desconhecido"}).`;
     return { projeto: p, operacoes: [], texto: `Erro em ${ch.ferramenta}: ${motivo}`, ok: false };
   }
 }
@@ -165,8 +217,12 @@ export interface PedidoAoAgente {
   raciocinio?: string | null;
   tetoUsd: number;
   agora: string;
-  aoPasso?: (log: ItemDoLog[], gasto: number) => void;
+  aoPasso?: (log: ItemDoLog[], gasto: number, passo: number) => void;
   cancelado?: () => boolean;
+  /** AG2: seleção e cursor da tela (o modelo recebe apelidos). */
+  tela?: EstadoDaTela;
+  /** AG2: as últimas trocas desta conversa (texto curto), para "e agora o outro" fazer sentido. */
+  conversa?: string;
 }
 
 export interface ResultadoDoAgente {
@@ -177,61 +233,193 @@ export interface ResultadoDoAgente {
   gasto_usd: number;
   passos: number;
   ferramentas: number;
+  /** Ferramentas que não deram, chamadas recusadas ou cortadas no limite. */
+  falhas: number;
+  recusadas: number;
+  /** Parou antes do fim (Parar, teto, limite, erro no meio). */
+  parado: boolean;
+  /** O modelo pediu para exportar (cartão com Confirmar). */
+  exportar: boolean;
+  /** Pergunta com opções (dúvida real). */
+  opcoes: string[];
+  /** Anexos do aprendizado (Aprendi / Segui), como vieram do servidor. */
+  aprendido: unknown | null;
+  seguidas: unknown | null;
+  /** Último uso registrado (liga a mensagem ao gasto). */
+  uso_id: string | null;
 }
 
-/** O laço: passo no servidor, ferramentas aqui, resultado de volta; para no limite. */
+/** O que o servidor devolve num passo (agente_passo). */
+interface RespostaDoServidor {
+  passo?: RespostaDoPasso;
+  gasto_usd?: number;
+  parou?: boolean;
+  uso_id?: string | null;
+  referencia?: unknown;
+  aprendido?: unknown;
+  regras_seguidas?: unknown;
+}
+
+/** Erro no primeiro passo (nada foi feito): quem chamou devolve o pedido ao campo. */
+export class ErroDoPrimeiroPasso extends Error {
+  causa: unknown;
+  constructor(causa: unknown) {
+    super(causa instanceof Error ? causa.message : "O agente não respondeu.");
+    this.name = "ErroDoPrimeiroPasso";
+    this.causa = causa;
+  }
+}
+
+/** O laço: passo no servidor, ferramentas aqui, resultado de volta; para no limite e diz por quê. */
 export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente> {
   let trabalho = e.projeto;
   const operacoes: Operacao[] = [];
   const log: ItemDoLog[] = [];
   const historico: { papel: "usuario" | "agente"; conteudo: string }[] = [];
+  const ap = apelidosDoProjeto(e.projeto);
+  const selecionados = ((e.tela && e.tela.selecionados) || []).map((id) => ap.porId[id]).filter(Boolean);
+  const itens = itensDaReferencia(e.projeto);
+  let referencia: unknown = null;
   let usadas = 0;
   let gasto = 0;
   let resposta = "";
   let passo = 0;
+  let falhas = 0;
+  let recusadas = 0;
+  let parado = false;
+  let terminouBem = false;
+  let exportar = false;
+  let opcoes: string[] = [];
+  let aprendido: unknown = null;
+  let seguidas: unknown = null;
+  let usoId: string | null = null;
   while (passo < MAX_PASSOS) {
     if (e.cancelado && e.cancelado()) {
-      log.push({ tipo: "aviso", texto: "Parado pelo dono." });
+      log.push({ tipo: "aviso", texto: `Parado pelo dono depois de ${passo} ${passo === 1 ? "passo" : "passos"}. O que já saiu fica para você conferir.` });
+      parado = true;
       break;
     }
     passo++;
-    const r = await e.chamar({
-      acao: "agente_passo",
-      client_id: e.clientId,
-      referencia_id: e.sessao,
-      modelo_id: e.modeloId,
-      raciocinio: e.raciocinio || undefined,
-      passo,
-      ferramentas_usadas: usadas,
-      teto_usd: e.tetoUsd,
-      pedido: e.pedido,
-      contexto: contextoDoAgente(trabalho),
-      historico,
-    });
+    let r: RespostaDoServidor | null | undefined;
+    try {
+      r = await e.chamar({
+        acao: "agente_passo",
+        client_id: e.clientId,
+        referencia_id: e.sessao,
+        modelo_id: e.modeloId,
+        raciocinio: e.raciocinio || undefined,
+        passo,
+        ferramentas_usadas: usadas,
+        teto_usd: e.tetoUsd,
+        pedido: e.pedido,
+        contexto: contextoDoAgente(trabalho, 50000, { ...(e.tela || {}), selecionados: (e.tela && e.tela.selecionados) || [] }),
+        historico,
+        conversa: e.conversa || undefined,
+        itens_referencia: itens,
+        selecionados,
+        referencia: referencia || undefined,
+      });
+    } catch (err) {
+      // Nada feito ainda: o pedido volta ao campo. No meio: o que já saiu fica, com o motivo.
+      if (passo === 1) throw new ErroDoPrimeiroPasso(err);
+      log.push({ tipo: "aviso", texto: `O passo ${passo} falhou (${err instanceof Error ? err.message : "sem resposta"}). O que já saiu fica para você conferir.` });
+      parado = true;
+      break;
+    }
     gasto = Number(r && r.gasto_usd) || gasto;
+    if (r && r.uso_id) usoId = String(r.uso_id);
+    if (r && r.referencia && !referencia) referencia = r.referencia;
+    if (r && r.aprendido) aprendido = r.aprendido;
+    if (r && r.regras_seguidas) seguidas = r.regras_seguidas;
     const p = (r && r.passo) as RespostaDoPasso | undefined;
-    if (!p) break;
+    if (!p) {
+      log.push({ tipo: "aviso", texto: `O passo ${passo} voltou vazio. Parei aqui.` });
+      parado = true;
+      break;
+    }
     if (p.plano) log.push({ tipo: "plano", texto: p.plano });
-    (p.recusadas || []).forEach((x) => log.push({ tipo: "aviso", texto: x }));
+    (p.recusadas || []).forEach((x) => {
+      recusadas++;
+      log.push({ tipo: "aviso", texto: x });
+    });
     const resultados: string[] = [];
-    (p.chamadas || []).forEach((c) => {
-      if (usadas >= MAX_FERRAMENTAS) return;
+    const chamadas = p.chamadas || [];
+    const cabem = Math.max(0, MAX_FERRAMENTAS - usadas);
+    chamadas.slice(0, cabem).forEach((c) => {
       usadas++;
       const x = executarFerramenta(trabalho, c, e.agora);
       trabalho = x.projeto;
       x.operacoes.forEach((o) => operacoes.push(o));
+      if (x.exportar) exportar = true;
+      if (!x.ok) falhas++;
       resultados.push(`${c.ferramenta}: ${x.texto}`);
       log.push({ tipo: "ferramenta", texto: `${c.ferramenta}${x.ok ? "" : " (não deu)"}: ${x.texto.split("\n")[0].slice(0, 160)}` });
     });
+    if (chamadas.length > cabem) {
+      recusadas += chamadas.length - cabem;
+      log.push({ tipo: "aviso", texto: `${chamadas.length - cabem} ${chamadas.length - cabem === 1 ? "ferramenta ficou" : "ferramentas ficaram"} de fora: limite de ${MAX_FERRAMENTAS} por pedido.` });
+    }
     if (p.resposta) resposta = p.resposta;
-    if (e.aoPasso) e.aoPasso(log.slice(), gasto);
-    if (p.terminou || !(p.chamadas || []).length || (r && r.parou)) break;
+    if (Array.isArray(p.opcoes) && p.opcoes.length && !chamadas.length) opcoes = p.opcoes.slice(0, 4);
+    if (e.aoPasso) e.aoPasso(log.slice(), gasto, passo);
+    if (r && r.parou) {
+      // O servidor parou pelo teto ou pelo limite: a resposta dele diz o motivo.
+      parado = true;
+      if (p.resposta) log.push({ tipo: "aviso", texto: p.resposta });
+      resposta = operacoes.length ? "Parei antes do fim. Confira o que já saiu." : "";
+      break;
+    }
+    if (p.terminou || !chamadas.length) {
+      terminouBem = true;
+      break;
+    }
     historico.push({ papel: "agente", conteudo: JSON.stringify({ plano: p.plano, chamadas: p.chamadas }) });
     historico.push({ papel: "usuario", conteudo: `Resultados:\n${resultados.join("\n")}\n\nClipes agora:\n${resumoParaOAgente(trabalho)}` });
   }
-  if (passo >= MAX_PASSOS) log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos.` });
+  if (!terminouBem && !parado && passo >= MAX_PASSOS) {
+    parado = true;
+    log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos sem o agente dizer que terminou. Confira o que já saiu.` });
+  }
   if (resposta) log.push({ tipo: "resposta", texto: resposta });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas };
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, uso_id: usoId };
+}
+
+/** Pedido que é só exportar/renderizar (regra fixa, sem modelo e sem custo): vira o cartão direto. */
+export function pedidoDeExportar(texto: string): boolean {
+  const t = String(texto || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  if (!/\b(export|renderiz|render\b|baixa(r)? o (video|projeto|pacote)|gera(r)? o (mp4|arquivo final))/.test(t)) return false;
+  // Pedido que também edita ("corta os silêncios e exporta") vai ao modelo.
+  return !/\b(cort|legend|silenci|reorden|ordem|apar|divid|tira|remov|brabo|dinamic|zoom|punch|musica|volume|texto)/.test(t);
+}
+
+/** Prova curta do que mudou (vai no cartão): duração e número de clipes, antes e depois. */
+export function provaDaMudanca(antes: ProjetoDeEdicao, depois: ProjetoDeEdicao): string {
+  const ta = trilhaPrincipal(antes);
+  const td = trilhaPrincipal(depois);
+  const na = ta ? ta.clipes.length : 0;
+  const nd = td ? td.clipes.length : 0;
+  const da = duracaoDaTrilhaPrincipal(antes);
+  const dd = duracaoDaTrilhaPrincipal(depois);
+  const partes: string[] = [];
+  if (Math.abs(da - dd) >= 0.01) partes.push(`duração ${tempoFino(da)} para ${tempoFino(dd)}`);
+  if (na !== nd) partes.push(`${na} para ${nd} ${nd === 1 ? "clipe" : "clipes"}`);
+  const legendasA = antes.trilhas.filter((t) => t.tipo === "legenda" || t.tipo === "texto").reduce((s, t) => s + t.clipes.length, 0);
+  const legendasD = depois.trilhas.filter((t) => t.tipo === "legenda" || t.tipo === "texto").reduce((s, t) => s + t.clipes.length, 0);
+  if (legendasA !== legendasD) partes.push(`${legendasD} ${legendasD === 1 ? "legenda ou texto" : "legendas e textos"} (antes ${legendasA})`);
+  return partes.length ? `Muda: ${partes.join("; ")}.` : "";
+}
+
+/** As últimas trocas da conversa, curtas, para o modelo (o pedido de agora não entra). */
+export function conversaParaOModelo(trocas: { quem: "dono" | "agente"; texto: string }[], maxTrocas = 8, maxChars = 3000): string {
+  const linhas = trocas
+    .filter((t) => t.texto && t.texto.trim())
+    .slice(-maxTrocas)
+    .map((t) => `${t.quem === "dono" ? "Dono" : "Agente"}: ${t.texto.replace(/\s+/g, " ").trim().slice(0, 400)}`);
+  const texto = linhas.join("\n");
+  return texto.length > maxChars ? texto.slice(texto.length - maxChars) : texto;
 }
 
 /** Duração total que muda (para a prévia: "de 1:20 para 1:05"). */
