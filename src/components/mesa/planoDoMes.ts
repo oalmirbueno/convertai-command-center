@@ -414,6 +414,8 @@ export interface AcaoNaAgenda {
   tipo: "acao_agenda";
   resumo: string;
   mes?: string;
+  /** 29/09: as palavras do dono no pedido (o refazer usa como orientação para as peças novas). */
+  pedido?: string;
   apagar: ItemDaAcaoNaAgenda[];
   mudar_data: ItemDaAcaoNaAgenda[];
   mudar_formato: ItemDaAcaoNaAgenda[];
@@ -497,7 +499,8 @@ export const desfazerAcaoNaAgenda = (mensagemId: string) =>
 export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcaoNaAgenda, "titulo" | "data" | "formato">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => `- ${i.data || "sem data"} · ${i.formato} · no lugar de "${String(i.titulo || "").replace(/\s+/g, " ").trim().slice(0, 140)}"`);
   const base = `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
-  const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 400);
+  // 29/09: 1200 caracteres, o pedido inteiro do dono cabe (antes 400 e só o resumo do agente).
+  const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 1200);
   return o ? `${base}\nOrientação da equipe para todas: ${o}` : base;
 }
 

@@ -536,7 +536,7 @@ describe("índice dos motores e ligação no código", () => {
 
   it("a função expõe as ações novas e o executor comum continua ligado", () => {
     const fonte = ler("supabase/functions/agente-contexto/index.ts");
-    for (const acao of ["ler_plano: lerPlano", "salvar_caminho: salvarCaminho", "pacote_externo: pacoteExterno", "preparar_identidade: prepararIdentidade", "importar_brand_book: importarBrandBook", "organizar_por_tipo: organizarPorTipoAcao", "executar_acao_agente: executarAcaoDoContexto"]) {
+    for (const acao of ["ler_plano: lerPlano", "salvar_caminho: salvarCaminho", "pacote_externo: pacoteExterno", "preparar_identidade: prepararIdentidade", "importar_brand_book: importarBrandBook", "organizar_por_tipo: organizarPorTipoAcao", "executar_acao_agente: (ch, corpo) => Promise.resolve(respostaComFolego(() => executarAcaoDoContexto(ch, corpo)"]) {
       expect(fonte).toContain(acao);
     }
     // A montagem do contexto não apaga o que o agente do cliente guardou.
@@ -573,7 +573,8 @@ describe("índice dos motores e ligação no código", () => {
   it("a tela manda o modo plano na mesma conversa e mostra o cartão de cada proposta", () => {
     const agente = ler("src/components/mesa/AgenteDeContexto.tsx");
     expect(agente).toContain('...(modo === "plano" ? { modo: "plano" } : {})');
-    expect(agente).toContain("anexos: propostas");
+    // 29/09 (AG1): a mensagem do agente leva todos os anexos (cartões, caminho, "Aprendi" e "Segui").
+    expect(agente).toContain("anexos: anexosDaResposta");
     const aba = ler("src/components/mesa/AbaContexto.tsx");
     expect(aba).toContain("<AgenteDeContexto preencher modo={modoDoAgente} onModo={setModoDoAgente} pedido={pedido} />");
     expect(aba).toContain("<ContextoPlanoDoCliente onPedirAoAgente={pedirAoAgente} />");

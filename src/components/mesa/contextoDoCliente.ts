@@ -106,6 +106,13 @@ export interface RespostaDaConversa {
   /** Ação proposta (logos, referências, acervo, workspace): só com a confirmação. */
   acao?: unknown;
   mensagem_id?: string | null;
+  /** 29/09: o pedido gravado antes da IA (nunca some). */
+  pedido_id?: string | null;
+  /** Todos os anexos da resposta (cartões, caminho, "Aprendi" e "Segui"). */
+  anexos?: unknown[];
+  acoes?: unknown[];
+  /** A resposta chegou, mas não ficou guardada: a tela mantém a mensagem e avisa. */
+  aviso?: string | null;
   memorias: number;
   kit: KitDoContexto | null;
   custo_usd: number | null;

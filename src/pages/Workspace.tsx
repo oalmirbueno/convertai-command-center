@@ -46,6 +46,8 @@ import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 import { urlsLevesEmLote } from "@/lib/miniaturas";
+// Frente OR (29/09): o "Organizar" do cliente vê as imagens (carrosséis, antes e depois, duplicatas) com prévia e Desfazer.
+import OrganizadorInteligente from "@/components/workspace/OrganizadorInteligente";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -295,6 +297,7 @@ export default function Workspace() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [applyingTpl, setApplyingTpl] = useState<string | null>(null);
   const [organizing, setOrganizing] = useState(false);
+  const [organizadorAberto, setOrganizadorAberto] = useState(false);
   const [newFolderName, setNewFolderName] = useEstadoDaTela<string>("workspace:rascunho:nova-pasta", "");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -364,9 +367,13 @@ export default function Workspace() {
   const clienteDoEndereco = parametros.get("client");
   useEffect(() => {
     if (!clienteDoEndereco || !clients) return;
-    if ((clients as any[]).some((c) => c.id === clienteDoEndereco) && clientId !== clienteDoEndereco) nav.setClient(clienteDoEndereco);
+    const existe = (clients as any[]).some((c) => c.id === clienteDoEndereco);
+    if (existe && clientId !== clienteDoEndereco) nav.setClient(clienteDoEndereco);
+    // "Organizar o workspace" (agente de contexto): /workspace?client=<id>&organizar=1 abre o organizador na raiz do cliente.
+    if (existe && parametros.get("organizar") === "1") setOrganizadorAberto(true);
     const resto = new URLSearchParams(parametros);
     resto.delete("client");
+    resto.delete("organizar");
     setParametros(resto, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteDoEndereco, clients]);
@@ -2329,14 +2336,23 @@ export default function Workspace() {
           <DropdownMenuItem onSelect={() => setTemplateOpen(true)}>
             <Sparkles className="mr-2 h-3.5 w-3.5" /> Aplicar template
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => void autoOrganize()}
-            disabled={organizing}
-            title="Move os arquivos deste nível para pastas do pipeline com base no nome e tipo"
-          >
-            {organizing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-2 h-3.5 w-3.5" />}
-            {organizing ? "Organizando..." : "Auto-organizar"}
-          </DropdownMenuItem>
+          {scope === "client" && clientId && !isVirt(parent?.id) ? (
+            <DropdownMenuItem
+              onSelect={() => setOrganizadorAberto(true)}
+              title="Lê as imagens deste nível e propõe pastas: carrosséis, antes e depois, posts, fotos e mais"
+            >
+              <Wand2 className="mr-2 h-3.5 w-3.5" /> Organizar
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onSelect={() => void autoOrganize()}
+              disabled={organizing}
+              title="Move os arquivos deste nível para pastas do pipeline com base no nome e tipo"
+            >
+              {organizing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-2 h-3.5 w-3.5" />}
+              {organizing ? "Organizando..." : "Auto-organizar"}
+            </DropdownMenuItem>
+          )}
           {emptyFoldersHere.length > 0 && (
             <DropdownMenuItem
               onSelect={() => setConfirmCleanup(true)}
@@ -3056,6 +3072,16 @@ export default function Workspace() {
         </DialogContent>
       </Dialog>
 
+      {scope === "client" && clientId && (
+        <OrganizadorInteligente
+          aberto={organizadorAberto}
+          onFechar={() => setOrganizadorAberto(false)}
+          clientId={clientId}
+          parentId={parent && !isVirt(parent.id) ? parent.id : null}
+          nivelNome={parent && !isVirt(parent.id) ? parent.name : "a raiz do cliente"}
+          onMudou={invalidate}
+        />
+      )}
       <TemplatePicker
         open={templateOpen}
         onOpenChange={setTemplateOpen}

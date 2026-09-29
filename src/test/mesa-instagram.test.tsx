@@ -371,7 +371,8 @@ describe("contrato da função mesa-instagram e da aba", () => {
   });
 
   it("ações longas com fôlego; token só no servidor; o agente monta o mapa e grava o caminho", () => {
-    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques"]);');
+    // 29/09 (AG1): as ações do agente das redes (capas e bio pela conversa) também com fôlego.
+    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques", "executar_acao_agente"]);');
     expect(f).toContain('rpc("mesa_facebook_token"');
     expect(f).toContain('rpc("perfis_instagram_token"');
     expect(f).toContain('blocoDoMapaDoPainel("instagram")');

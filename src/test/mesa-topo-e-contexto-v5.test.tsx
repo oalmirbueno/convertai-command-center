@@ -377,7 +377,9 @@ function comMesa(filho: ReactNode) {
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
-        <MesaProvider valor={valorDaMesa()}>{filho}</MesaProvider>
+        <MemoryRouter>
+          <MesaProvider valor={valorDaMesa()}>{filho}</MesaProvider>
+        </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>,
   );

@@ -7,6 +7,8 @@ import { botao, campo, campoTexto, conversa, juntar, texto } from "@/components/
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
+import AprendizadoNaConversa, { observacaoDoCusto } from "@/components/agentes/AprendizadoNaConversa";
+import { toast } from "sonner";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { avisarCustoReal, useAvisarErro } from "@/components/mesa/Custo";
@@ -91,8 +93,11 @@ export default function AgenteDoPerfil({
     setTrabalhando(acao);
     setPedidoAgora(mostrar || null);
     try {
-      const r = await chamarPerfis<any>(acao, clientId, marcaId, { perfil_id: perfil.id, ...extra });
+      // O mês escolhido vai junto: "gere o plano igual" na conversa usa o mesmo mês dos botões.
+      const r = await chamarPerfis<any>(acao, clientId, marcaId, { perfil_id: perfil.id, ...(acao === "conversar" ? { mes } : {}), ...extra });
       if (acao === "conversar") setRascunho("");
+      // A resposta chegou mas não ficou guardada: diz, em vez de sumir calada ao reabrir.
+      if (r && acao === "conversar" && !r.mensagem_id && r.aviso) toast.warning("Resposta não guardada", { description: String(r.aviso) });
       setRecebida(r && r.mensagem_id ? String(r.mensagem_id) : null);
       if (Number(r && r.custo_usd) > 0) avisarCustoReal(rotulo, r, atualizarCusto);
       onMudou();
@@ -215,6 +220,7 @@ export default function AgenteDoPerfil({
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {pautas && <PautasDoAnexo anexo={pautas} />}
             </div>
+            {m.papel === "agente" && <AprendizadoNaConversa anexos={m.anexos} clientId={clientId} />}
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
             {m.id &&
               acoes.map((a) => (
@@ -222,8 +228,8 @@ export default function AgenteDoPerfil({
                   <CartaoDeAcao
                     acao={a}
                     recemFeita={!!m.id && m.id === recebida}
-                    titulo={a.itens.some((x) => x.operacao === "agendar") ? "Vai para a agenda" : "Vai para o estilo"}
-                    observacao={a.itens.some((x) => x.operacao === "levar_ao_estilo") ? "O estilo só muda com a confirmação no agente de estilo." : undefined}
+                    titulo={a.itens.some((x) => x.operacao === "agendar") ? "Vai para a agenda" : a.itens.some((x) => x.operacao === "levar_ao_estilo") ? "Vai para o estilo" : "O agente vai analisar"}
+                    observacao={a.itens.some((x) => x.operacao === "levar_ao_estilo") ? "O estilo só muda com a confirmação no agente de estilo." : observacaoDoCusto(a, "Nada muda até confirmar.")}
                     onPedido={(pedido) => chamarAcaoDoAgente("perfis-instagram", m.id as string, a.id, pedido, { client_id: clientId, ...(marcaId ? { marca_id: marcaId } : {}) })}
                     onFeito={(_, r) => {
                       if (Number(r && r.custo_usd) > 0) atualizarCusto();

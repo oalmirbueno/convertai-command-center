@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { inicioDoMes, padraoPara, somarMeses, usd } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { BotaoDeAnexarArquivos, ListaDeArquivos, useArquivosDoAgente } from "./ArquivosDoAgente";
 import { estimativaDaGeracao, iniciarGeracaoPeloAgente, useAndamentoDaGeracao } from "./PlanejamentoAutomatico";
@@ -362,7 +363,8 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
       for (let n = 0; n < lotes.length; n++) {
         setLote({ feito: n, total: lotes.length });
         if (lotes.length > 1) toast.message(`Refazendo lote ${n + 1} de ${lotes.length}`, { id: `refazer-${mensagemId}` });
-        nova = await pedidoLivre({ clientId, mensagem: pedidoParaRefazer(lotes[n], atual.resumo), anexos: [], campanhaId: null });
+        // 29/09: a orientação é o pedido do dono (as palavras dele); sem ele, o resumo do agente, como antes.
+        nova = await pedidoLivre({ clientId, mensagem: pedidoParaRefazer(lotes[n], atual.pedido || atual.resumo), anexos: [], campanhaId: null });
         await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
       }
       setLote({ feito: lotes.length, total: lotes.length });
@@ -1149,6 +1151,11 @@ export default function AgenteDoMes({
                     </p>
                   )}
                   {lido && <p className="mr-6 text-[11px] text-muted-foreground">{lido}</p>}
+                  {m.papel === "agente" && (
+                    <div className="mr-6">
+                      <AprendizadoNaConversa anexos={m.anexos} clientId={clientId} />
+                    </div>
+                  )}
                   {mesesDoPlano.length > 0 && (
                     <div className="mr-6 flex flex-wrap">
                       {mesesDoPlano.map((x) => (
@@ -1167,7 +1174,7 @@ export default function AgenteDoMes({
                     <div key={a.id} className="mr-6">
                       <CartaoDeAcao
                         acao={a}
-                        titulo="Atualizar o contexto"
+                        titulo={a.executada_direto ? "O agente fez" : "Atualizar o contexto"}
                         observacao="Sem custo. Dá para desfazer."
                         onPedido={(p) => chamarAcaoDoAgente("agente-calendario", String(m.id), a.id, p)}
                         onFeito={() => void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) })}

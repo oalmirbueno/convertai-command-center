@@ -14,6 +14,11 @@
  *   tirar_marca (../_shared/acoes-do-acervo.ts).
  * - w1..wN (workspace do cliente): mover, renomear, arquivar
  *   (../_shared/acoes-do-workspace.ts). Nada é apagado.
+ * - x1 (referências sem leitura): ler_referencias, com custo (IA lê as
+ *   imagens), pede Confirmar. A leitura só soma: sem Desfazer.
+ * - x2 (contexto consolidado): montar_contexto, com custo, pede Confirmar.
+ *   O kit de antes (contexto, paleta, estilo, regras) fica guardado e o
+ *   Desfazer volta para ele (29/09: "ler pendentes, montar e atualizar").
  *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
@@ -42,7 +47,22 @@ export const OPERACOES_DO_CONTEXTO = [
   "mover",
   "renomear",
   "arquivar",
+  "ler_referencias",
+  "montar_contexto",
 ];
+
+/** Operações com custo de IA: nunca vão direto, o cartão mostra o custo e pede Confirmar. */
+export const OPERACOES_COM_CUSTO_DO_CONTEXTO = ["ler_referencias", "montar_contexto"];
+
+/** Custo estimado em US$ (medido em ia_usos, 29/09: leitura até US$ 0,005 por imagem; montagem até US$ 0,02). */
+export function custoEstimadoDoContexto(itens: Array<{ operacao: string }>, pendentes: number): number {
+  let custo = 0;
+  for (const i of itens) {
+    if (i.operacao === "ler_referencias") custo += Math.max(1, Math.min(12, pendentes || 0)) * 0.005;
+    if (i.operacao === "montar_contexto") custo += 0.02 + Math.max(0, Math.min(12, pendentes || 0)) * 0.005;
+  }
+  return Math.round(custo * 10000) / 10000;
+}
 
 export const ESQUEMA_DAS_ACOES_DO_CONTEXTO = esquemaDasAcoes(OPERACOES_DO_CONTEXTO);
 
@@ -54,6 +74,10 @@ export type DadosDoContexto = {
   referencias: ReferenciaDoCliente[];
   fotos: FotoDoAcervo[];
   nos: NoDoWorkspace[];
+  /** Referências ativas ainda sem leitura (x1). */
+  pendentes?: number;
+  /** Quando o contexto foi montado pela última vez (x2); null: nunca. */
+  montado_em?: string | null;
 };
 
 const umaLinha = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -75,7 +99,13 @@ export function alvosDoContexto(d: DadosDoContexto) {
   }));
   const fotos = alvosDoAcervo(d.fotos, 80);
   const nos = alvosDoWorkspace(d.nos, 150);
-  return { logos, referencias, fotos, nos };
+  const pendentes = Math.max(0, Number(d.pendentes) || 0);
+  const montado = d.montado_em && /^\d{4}-\d{2}-\d{2}/.test(d.montado_em) ? `montado em ${d.montado_em.slice(8, 10)}/${d.montado_em.slice(5, 7)}` : "nunca montado";
+  const tarefas: Array<AlvoComApelido<AlvoLivre>> = [
+    { ref: "x1", id: "referencias_pendentes", titulo: "Referências sem leitura", detalhe: pendentes ? `${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"} (lê até 12 por vez)` : "nenhuma pendente", dados: { pendentes } },
+    { ref: "x2", id: "contexto_consolidado", titulo: "Contexto consolidado da marca", detalhe: montado, dados: {} },
+  ];
+  return { logos, referencias, fotos, nos, tarefas };
 }
 
 /** Regras de todas as operações do agente de contexto. */
@@ -93,6 +123,16 @@ export function regrasDoContexto(alvos: ReturnType<typeof alvosDoContexto>): Rec
       },
     },
     arquivar_referencia: { rotulo: "arquivar", alvos: ["r"] },
+    ler_referencias: {
+      rotulo: "ler",
+      alvos: ["x"],
+      trava: (alvo) => (alvo.id !== "referencias_pendentes" ? "Só as referências pendentes podem ser lidas." : Number((alvo.dados || {}).pendentes) > 0 ? null : "Nenhuma referência pendente de leitura."),
+    },
+    montar_contexto: {
+      rotulo: "montar de novo",
+      alvos: ["x"],
+      trava: (alvo) => (alvo.id !== "contexto_consolidado" ? "Só o contexto consolidado pode ser montado." : null),
+    },
     ...acervo,
     ...workspace,
   };
@@ -101,15 +141,22 @@ export function regrasDoContexto(alvos: ReturnType<typeof alvosDoContexto>): Rec
 /** Proposta do agente de contexto a partir do campo `acoes`. */
 export function normalizarAcoesDoContexto(bruto: unknown, d: DadosDoContexto, clientId: string, id?: string): AcaoDoAgente | null {
   const alvos = alvosDoContexto(d);
-  const todos = ([] as Array<AlvoComApelido<AlvoLivre>>).concat(alvos.logos, alvos.referencias, alvos.fotos as unknown as Array<AlvoComApelido<AlvoLivre>>, alvos.nos as unknown as Array<AlvoComApelido<AlvoLivre>>);
+  const todos = ([] as Array<AlvoComApelido<AlvoLivre>>).concat(alvos.logos, alvos.referencias, alvos.fotos as unknown as Array<AlvoComApelido<AlvoLivre>>, alvos.nos as unknown as Array<AlvoComApelido<AlvoLivre>>, alvos.tarefas);
   const fotoPorId = new Map(alvos.fotos.map((f) => [f.id, f]));
   const destino = rotuloDoDestino(alvos.nos);
-  return normalizarAcaoDoAgente(bruto, todos, regrasDoContexto(alvos), {
+  const acao = normalizarAcaoDoAgente(bruto, todos, regrasDoContexto(alvos), {
     agente: "contexto",
     id: id || `contexto-${Date.now().toString(36)}`,
     contexto: { client_id: clientId },
     rotuloDoPara: (op, para) => (op === "trocar_logo" ? `a imagem ${fotoPorId.get(String(para))?.titulo ?? "do acervo"}` : destino(op, para)),
+    // Ler referências só soma leitura: sem nada para voltar quando é a única coisa da lista.
+    semDesfazer: (itens) => itens.length > 0 && itens.every((i) => i.operacao === "ler_referencias"),
   });
+  // Com IA no meio: o custo aparece no cartão antes do Confirmar (nunca vai direto).
+  if (acao && acao.itens.some((i) => OPERACOES_COM_CUSTO_DO_CONTEXTO.indexOf(i.operacao) >= 0)) {
+    acao.custo_estimado_usd = custoEstimadoDoContexto(acao.itens, Number(d.pendentes) || 0);
+  }
+  return acao;
 }
 
 /**
@@ -117,7 +164,7 @@ export function normalizarAcoesDoContexto(bruto: unknown, d: DadosDoContexto, cl
  * listas entram no prompt (são grandes; conversa sobre estilo não paga por elas).
  */
 export function pedeAcaoNoContexto(mensagem: string): boolean {
-  return /(arquiv|apag|tir[ae]|remov|mov[ae]|mover|mude de pasta|pasta|renome|organiz|etiquet|marque|tag|troqu?e a logo|trocar a logo|logo|refer[êe]ncia|acervo|workspace)/i.test(String(mensagem || ""));
+  return /(arquiv|apag|tir[ae]|remov|mov[ae]|mover|mude de pasta|pasta|renome|organiz|etiquet|marque|tag|troqu?e a logo|trocar a logo|logo|refer[êe]ncia|acervo|workspace|foto|imagem|imagens|pendente|leia|ler |l[êe] as|mont[ae]|remont|atualiz[ae] o contexto|refa[çc]a o contexto|consolid)/i.test(String(mensagem || ""));
 }
 
 /** Bloco do prompt com as listas e a regra das ações. */
@@ -128,6 +175,7 @@ export function blocoDasAcoesDoContexto(d: DadosDoContexto): string {
     blocoDosAlvos("REFERÊNCIAS ATIVAS", a.referencias, "nenhuma."),
     blocoDosAlvos("ACERVO DE FOTOS", a.fotos as unknown as Array<AlvoComApelido<AlvoLivre>>, "vazio."),
     blocoDosAlvos("ARQUIVOS DO WORKSPACE DO CLIENTE", a.nos as unknown as Array<AlvoComApelido<AlvoLivre>>, "vazio."),
+    blocoDosAlvos("TAREFAS DO CONTEXTO", a.tarefas),
     regraDasAcoes({
       trocar_logo: "ref k1 (principal) ou k2 (alternativa); para com o apelido i# da imagem do acervo que vira a logo.",
       arquivar_referencia: "ref r#; tira a referência das que os agentes usam (fica guardada). para vazio.",
@@ -138,6 +186,8 @@ export function blocoDasAcoesDoContexto(d: DadosDoContexto): string {
       mover: DESCRICOES_DO_WORKSPACE.mover,
       renomear: DESCRICOES_DO_WORKSPACE.renomear,
       arquivar: DESCRICOES_DO_WORKSPACE.arquivar,
+      ler_referencias: "ref x1; lê com IA as referências pendentes (até 12 por vez), com custo. para vazio.",
+      montar_contexto: "ref x2; monta de novo o contexto da marca a partir dos documentos, dossiê e artes (atualizar), com custo; o kit de antes fica guardado para Desfazer. para vazio.",
     }),
   ].join("");
 }

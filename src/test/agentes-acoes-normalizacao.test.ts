@@ -329,7 +329,8 @@ describe("agente do mês: refazer, formato, campanhas e gerar meses", () => {
     const ler = (p: string) => readFileSync(resolve(__dirname, "../../supabase/functions", p), "utf8");
     expect(ler("estudio-arte/index.ts")).toContain("executar_acao_agente: executarAcaoDoDiretor");
     expect(ler("estudio-arte/index.ts")).toContain("desfazer_acao_agente: desfazerAcaoDoDiretor");
-    expect(ler("agente-contexto/index.ts")).toContain("executar_acao_agente: executarAcaoDoContexto");
+    // 29/09 (AG1): com fôlego (ler e montar pela conversa usam IA).
+    expect(ler("agente-contexto/index.ts")).toContain("executar_acao_agente: (ch, corpo) => Promise.resolve(respostaComFolego(() => executarAcaoDoContexto(ch, corpo)");
     expect(ler("mesa-foto/index.ts")).toContain("executar_acao_agente: executarAcaoNasFotos");
     expect(ler("agente-calendario/index.ts")).toContain("registrar_geracao: registrarGeracao");
   });

@@ -445,6 +445,11 @@ export type DestaqueProposto = {
   icone: string;
   /** Rodada 3: o conceito visual da capa, da própria marca (objeto concreto do negócio). */
   conceito?: string;
+  /**
+   * 29/09: o que entra DENTRO do destaque (os stories que ele guarda, em ordem).
+   * O dono pediu "cada destaque tem o preenchimento do que vai gerar", não só nome e ícone.
+   */
+  conteudo?: string;
   /** Rodada 3: foto real do acervo para o estilo "foto" (fica intacta, só recortada no círculo). */
   foto?: { bucket: string; caminho: string };
 }
@@ -469,8 +474,11 @@ export function destaquesLimpos(bruto: unknown): DestaqueProposto[] {
     if (vistos[chave]) continue;
     vistos[chave] = true;
     const item: DestaqueProposto = { nome, icone: limparTexto(o.icone, 80).replace(/\n/g, " ") || iconePadrao(nome) };
-    const conceito = limparTexto(o.conceito, 200).replace(/\n/g, " ");
+    // 29/09: a direção da capa pode ser detalhada ("bem detalhadinho, com base na logo"); antes cortava em 200 no meio da frase.
+    const conceito = limparTexto(o.conceito, 400).replace(/\n/g, " ");
     if (conceito) item.conceito = conceito;
+    const conteudo = limparTexto(o.conteudo, 700).replace(/\n/g, " ");
+    if (conteudo) item.conteudo = conteudo;
     const foto = o.foto && typeof o.foto === "object" ? (o.foto as Record<string, unknown>) : null;
     if (foto && typeof foto.bucket === "string" && typeof foto.caminho === "string" && foto.caminho) item.foto = { bucket: foto.bucket, caminho: foto.caminho };
     saida.push(item);
@@ -520,7 +528,7 @@ export function promptDaCapa(d: DestaqueProposto, estilo: EstiloDaCapa, estiloDa
   const traco = estilo.traco === "cheio" ? "solid filled pictogram" : "clean line icon with uniform stroke, rounded ends";
   return [
     `Instagram story highlight cover icon. A single ${traco} of: ${d.icone}.`,
-    d.conceito ? `Concept of this brand for the icon (a concrete object of this business, not a generic symbol): ${d.conceito.slice(0, 200)}.` : "",
+    d.conceito ? `Concept of this brand for the icon (a concrete object of this business, not a generic symbol): ${d.conceito.slice(0, 300)}.` : "",
     "Same visual system as the other covers of this profile: same stroke weight, same icon size inside the central circle, same background.",
     `Icon color exactly ${estilo.desenho}. Perfectly flat, solid background color exactly ${estilo.fundo}, edge to edge, no gradient, no texture, no vignette, no shadow.`,
     "The icon is centered and occupies about 40 percent of the image width, with generous empty space around it.",

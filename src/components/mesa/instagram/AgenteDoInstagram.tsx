@@ -11,17 +11,26 @@ import { destaquesLimpos, type DestaqueProposto } from "../../../../supabase/fun
 import { modeloDaAba } from "./BioENome";
 import { chamarInstagram, type MensagemDaAba } from "./instagramApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import AprendizadoNaConversa, { observacaoDoCusto } from "@/components/agentes/AprendizadoNaConversa";
+import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import { toast } from "sonner";
 
 /**
  * Agente do Instagram, ao lado da aba (fixo no computador, gaveta no
  * celular). Conversa sobre bio, nome, destaques, grade e métricas com o
  * contexto do cliente; propõe destaques (nome e ícone) que vão para o
  * gerador com um clique; termina sempre com o caminho ("Ir para ...").
- * Não edita nada no Instagram: a API não deixa, e ele diz isso.
+ * 29/09: age pelo painel (reordena a grade na hora, com Desfazer; gera as
+ * capas dos destaques e analisa a bio depois do Confirmar, com o custo antes)
+ * e aprende com cada pedido ("Aprendi", com Esquecer). O que a API do
+ * Instagram não deixa (trocar a bio no app), ele diz em uma frase.
  */
 
 const ATALHOS = [
-  { rotulo: "Propor destaques", texto: "Proponha os destaques do perfil (nome curto e ícone de cada um), na ordem certa para quem chega." },
+  { rotulo: "Propor destaques", texto: "Proponha os destaques do perfil na ordem certa para quem chega: nome curto, ícone, a direção da capa com a cara da marca e o que entra em cada um." },
+  { rotulo: "Gerar as capas", texto: "Gere as capas dos destaques que você propôs, nas cores do kit." },
+  { rotulo: "Melhorar a bio", texto: "Analise a bio e o nome do perfil e sugira melhores." },
   { rotulo: "O que melhorar", texto: "Olhe o perfil inteiro (nome, bio, link, grade) e diga as 3 mudanças mais importantes, em ordem." },
   { rotulo: "Grade", texto: "Como organizar a grade dos próximos posts para o perfil ficar encaixado?" },
 ];
@@ -34,9 +43,12 @@ function DestaquesDoAnexo({ anexos, onUsar }: { anexos: unknown; onUsar: (l: Des
     <div className="mt-1.5 min-w-0 rounded-md border border-border bg-background px-2.5 py-2" data-destaques-propostos="">
       <ol className="list-decimal pl-5 text-[12.5px] leading-5">
         {itens.map((d) => (
-          <li key={d.nome}>
+          <li key={d.nome} className="mb-1">
             <span className="font-medium">{d.nome}</span>
             <span className="text-muted-foreground"> · {d.icone}</span>
+            {/* 29/09: a direção da capa e o que entra no destaque (antes só nome e ícone). */}
+            {d.conceito && <span className="block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Capa: {d.conceito}</span>}
+            {d.conteudo && <span className="block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Dentro: {d.conteudo}</span>}
           </li>
         ))}
       </ol>
@@ -54,6 +66,7 @@ export default function AgenteDoInstagram({
   pedido,
   onMensagens,
   onUsarDestaques,
+  onAcaoFeita,
 }: {
   mensagens: MensagemDaAba[];
   contaId: string | null;
@@ -61,6 +74,8 @@ export default function AgenteDoInstagram({
   pedido: { texto: string; n: number } | null;
   onMensagens: (m: MensagemDaAba[]) => void;
   onUsarDestaques: (l: DestaqueProposto[]) => void;
+  /** Depois de uma ação do agente (grade, capas, bio): a aba relê o painel. */
+  onAcaoFeita?: () => void;
 }) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const avisarErro = useAvisarErro();
@@ -81,10 +96,14 @@ export default function AgenteDoInstagram({
     setTrabalhando(true);
     setPedidoAgora(msg);
     try {
-      const r = await chamarInstagram<{ mensagem_id?: string | null; mensagens?: MensagemDaAba[]; custo_usd?: number }>("conversar", clientId, { mensagem: msg, ...(contaId ? { conta_id: contaId } : {}), ...(modelo ? { modelo_id: modelo.id } : {}) });
+      const r = await chamarInstagram<{ mensagem_id?: string | null; mensagens?: MensagemDaAba[]; custo_usd?: number; aviso?: string | null }>("conversar", clientId, { mensagem: msg, ...(contaId ? { conta_id: contaId } : {}), ...(modelo ? { modelo_id: modelo.id } : {}) });
       setRascunho("");
       setRecebida(r && r.mensagem_id ? String(r.mensagem_id) : null);
       if (r && Array.isArray(r.mensagens)) onMensagens(r.mensagens as MensagemDaAba[]);
+      // A resposta chegou mas não ficou guardada: diz, em vez de sumir calada ao reabrir.
+      if (r && !r.mensagem_id && r.aviso) toast.warning("Resposta não guardada", { description: r.aviso });
+      // A ordem da grade feita na hora já mudou a aba.
+      if (r && Array.isArray(r.mensagens) && r.mensagens.some((m) => m.id === r.mensagem_id && acoesDaMensagem(m.anexos).some((a) => !!a.executada_direto)) && onAcaoFeita) onAcaoFeita();
       if (Number(r && r.custo_usd) > 0) avisarCustoReal("Agente das redes", r, atualizarCusto);
     } catch (e) {
       avisarErro(e, "Agente das redes");
@@ -145,8 +164,8 @@ export default function AgenteDoInstagram({
       {mensagens.length === 0 && !trabalhando && (
         <p className={juntar(texto.auxiliar, "flex items-center")}>
           Peça destaques, uma leitura do perfil ou ajuda com a grade
-          <AjudaRecolhida className="ml-1" rotulo="O que o agente não faz">
-            O agente não edita o Instagram: a API não deixa.
+          <AjudaRecolhida className="ml-1" rotulo="O que o agente faz">
+            Reorganiza a grade na hora (com Desfazer), gera as capas dos destaques e analisa a bio depois do seu Confirmar. Trocar a bio e criar o destaque no app do Instagram fica com a equipe: a API não deixa.
           </AjudaRecolhida>
         </p>
       )}
@@ -164,6 +183,23 @@ export default function AgenteDoInstagram({
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
               {m.papel === "agente" && <DestaquesDoAnexo anexos={m.anexos} onUsar={onUsarDestaques} />}
             </div>
+            {m.papel === "agente" && m.id &&
+              acoesDaMensagem(m.anexos).map((a) => (
+                <div key={a.id} className="mt-1.5 min-w-0">
+                  <CartaoDeAcao
+                    acao={a}
+                    recemFeita={m.id === recebida}
+                    titulo={a.executada_direto ? "O agente fez" : "O agente vai fazer"}
+                    observacao={observacaoDoCusto(a, "Sem custo. Dá para desfazer.")}
+                    onPedido={(p) => chamarAcaoDoAgente("mesa-instagram", String(m.id), a.id, p, { client_id: clientId, ...(contaId ? { conta_id: contaId } : {}) })}
+                    onFeito={(p, resposta) => {
+                      if (p !== "descartar" && onAcaoFeita) onAcaoFeita();
+                      if (resposta && Number((resposta as { custo_usd?: number }).custo_usd) > 0) avisarCustoReal("Agente das redes", resposta, atualizarCusto);
+                    }}
+                  />
+                </div>
+              ))}
+            {m.papel === "agente" && <AprendizadoNaConversa anexos={m.anexos} clientId={clientId} />}
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
           </div>
         );

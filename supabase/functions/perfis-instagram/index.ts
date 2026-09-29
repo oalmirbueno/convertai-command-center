@@ -120,6 +120,11 @@ import {
 } from "../_shared/perfis-instagram.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG1 (29/09): a mensagem nunca some, as análises rodam pela conversa e o agente aprende com cada pedido.
+import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
+import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
+import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
+import { acaoDaAnalise, analiseDoModelo, ANALISES_DO_PERFIL, PROPRIEDADE_DA_ANALISE, REGRA_DA_ANALISE_NO_PROMPT } from "./analises-na-conversa.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -231,12 +236,13 @@ const ESQUEMA_DO_RESUMO = {
 
 const ESQUEMA_DA_CONVERSA = {
   nome: "conversa_do_perfil",
-  schema: {
+  // Frente AG1 (29/09): a análise que o pedido manda rodar (com Confirmar) e o aprendizado.
+  schema: esquemaComAprendizado({
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "acoes"],
-    properties: { resposta: S("string"), acoes: esquemaDasAcoes(["levar_ao_estilo"]) },
-  },
+    required: ["resposta", "acoes", "executar"],
+    properties: { resposta: S("string"), acoes: esquemaDasAcoes(["levar_ao_estilo"]), ...PROPRIEDADE_DA_ANALISE },
+  } as { type: string; additionalProperties: boolean; required: string[]; properties: Record<string, unknown> }),
 };
 
 const ESQUEMA_DA_COMPARACAO = {
@@ -1501,50 +1507,124 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const mensagem = limpo(corpo.mensagem, 3000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem.");
   const conversaId = await conversaDoPerfil(ch, perfil);
-  const [posts, ctx, historico, modelo] = await Promise.all([
+  // 29/09: o pedido é gravado antes da IA; se a IA falhar, ele sai e o texto volta ao campo (nunca some).
+  let pedido: { id: string; criado_em: string };
+  try {
+    pedido = await gravarPedidoAntes(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: mensagem });
+  } catch (e) {
+    if (e instanceof ErroDaConversa) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+  const [posts, ctx, historico, modelo, regras] = await Promise.all([
     postsDoPerfil(perfil.id, 40).then(comApelidosDosPosts),
     contextoDoCliente(clientId),
-    servico().from("agente_mensagens").select("papel, conteudo").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
+    servico().from("agente_mensagens").select("id, papel, conteudo, anexos").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO + 6),
     modeloDeTexto(),
+    lerRegrasDoDono(servico(), clientId, { areas: ["calendario", "conta", "copy"], marcaId: corpo.marca_id }),
   ]);
-  const anteriores = (((historico.data as Array<{ papel: string; conteudo: string }> | null) ?? []).slice().reverse())
-    .filter((m) => m.papel !== "sistema")
-    .map((m) => ({ papel: (m.papel === "usuario" ? "usuario" : "agente") as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
+  // Com o estado dos cartões (levado ao estilo, agendado, desfeito) e sem o pedido que acabou de entrar.
+  const anteriores = historicoParaOModelo(
+    (((historico.data as Array<{ id: string; papel: string; conteudo: string; anexos: unknown }> | null) ?? []).slice().reverse()),
+    { excluir: pedido.id, max: MAX_HISTORICO, maxChars: 2000 },
+  );
   const alvos = posts.map((p) => ({ id: p.id, ref: p.ref, titulo: `${p.formato}${p.fora_da_curva ? " (fora da curva)" : ""}`, detalhe: umaLinha(p.legenda || p.leitura, 150) || null, dados: { tem_imagem: !!p.midia_caminho } }));
-  const r = await chamarTexto({
-    clientId,
-    tarefa: "conversa",
-    agente: "estrategista",
-    modeloId: modelo.id,
-    raciocinio: raciocinioBaixo(modelo),
-    // Frente AG: o agente conhece o painel (pedido de outra área vira "abro para você?" com a rota).
-    sistema: `${SISTEMA_DA_CONVERSA}\n\n${blocoDoMapaDoPainel("perfis")}\n\nREGRAS DA SAÍDA (só o JSON):\n- resposta: o que você diz à equipe.\n${regraDasAcoes({ levar_ao_estilo: DESCRICOES_DAS_OPERACOES.levar_ao_estilo })}`,
-    mensagens: [
-      { papel: "usuario", conteudo: `DADOS DO CLIENTE:\n${ctx.texto}\n\nDADOS DO PERFIL:\n${blocoDoPerfil(perfil, posts)}\n${blocoDosAlvos("POSTS QUE PODEM IR AO ESTILO", alvos)}` },
-      { papel: "agente", conteudo: "Entendi o cliente e o perfil." },
-      ...anteriores,
-      { papel: "usuario", conteudo: mensagem },
-    ],
-    esquemaJson: ESQUEMA_DA_CONVERSA,
-    maxTokensSaida: 1500,
-    referencia: { tipo: REF_CONVERSA, id: perfil.id },
-    criadoPor: ch.userId,
-  });
-  const j = (r.json ?? {}) as { resposta?: unknown; acoes?: unknown };
+  const semLeitura = posts.filter((p) => !p.leitura).length;
+  let r: Awaited<ReturnType<typeof chamarTexto>>;
+  try {
+    r = await chamarTexto({
+      clientId,
+      tarefa: "conversa",
+      agente: "estrategista",
+      modeloId: modelo.id,
+      raciocinio: raciocinioBaixo(modelo),
+      // Frente AG: o agente conhece o painel (pedido de outra área vira "abro para você?" com a rota).
+      sistema: [
+        SISTEMA_DA_CONVERSA,
+        "Responda curto e específico: cite os posts pelo formato, a data e o número (curtidas, comentários), nunca genérico. Referência vaga (\"esse post\", \"o de ontem\", \"os melhores\") se resolve pelos dados e pela conversa; na dúvida real, pergunte em uma frase com as opções.",
+        hojeParaOAgente().texto,
+        blocoDasRegras(regras),
+        blocoDoMapaDoPainel("perfis"),
+        `REGRAS DA SAÍDA (só o JSON):\n- resposta: o que você diz à equipe.\n${regraDasAcoes({ levar_ao_estilo: DESCRICOES_DAS_OPERACOES.levar_ao_estilo })}\n${REGRA_DA_ANALISE_NO_PROMPT}\n${REGRA_DO_APRENDIZADO_NO_PROMPT}`,
+      ].join("\n\n"),
+      mensagens: [
+        { papel: "usuario", conteudo: `DADOS DO CLIENTE:\n${ctx.texto}\n\nDADOS DO PERFIL:\n${blocoDoPerfil(perfil, posts)}\n${semLeitura ? `(${semLeitura} ${semLeitura === 1 ? "post ainda sem leitura" : "posts ainda sem leitura"}: ler_posts lê.)\n` : ""}${blocoDosAlvos("POSTS QUE PODEM IR AO ESTILO", alvos)}` },
+        { papel: "agente", conteudo: "Entendi o cliente e o perfil." },
+        ...anteriores,
+        { papel: "usuario", conteudo: mensagem },
+      ],
+      esquemaJson: ESQUEMA_DA_CONVERSA,
+      maxTokensSaida: 2000,
+      referencia: { tipo: REF_CONVERSA, id: perfil.id },
+      criadoPor: ch.userId,
+    });
+  } catch (e) {
+    await soltarPedido(servico(), pedido.id, clientId);
+    throw e;
+  }
+  const j = (r.json ?? {}) as Record<string, unknown>;
   const texto = limpo(j.resposta, 3000) || "Não entendi. Pode dizer de outro jeito?";
   const escolhidos = posts.filter((p) => alvos.some((a) => a.id === p.id));
   const acao = j.acoes ? propostaDeEstilo(perfil, escolhidos, "", j.acoes) : null;
+  // 29/09: ler, comparar, ideias e plano igual também pela conversa (cartão com custo e Confirmar).
+  const analise = analiseDoModelo(j.executar);
+  const acaoDaAnaliseProposta = analise ? acaoDaAnalise(analise, perfil, { mes: typeof corpo.mes === "string" ? corpo.mes : null, pedido: mensagem }) : null;
   // Frente AG (27/09): o cartão leva o "Ir para"; sem cartão, a área que a resposta citou.
   const anexos = anexosComCaminho(
-    acao ? [comCaminho(acao, caminhoDosPerfis(clientId, acao, { abrirSozinho: pedeParaLevar(mensagem) }))] : [],
+    [
+      ...(acao ? [comCaminho(acao, caminhoDosPerfis(clientId, acao, { abrirSozinho: pedeParaLevar(mensagem) }))] : []),
+      ...(acaoDaAnaliseProposta ? [acaoDaAnaliseProposta] : []),
+    ],
     caminhoDaResposta(texto, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }),
   );
-  const [, mensagemId] = await gravarMensagens(conversaId, clientId, [
-    { papel: "usuario", conteudo: mensagem },
-    { papel: "agente", conteudo: texto, anexos, uso_id: r.usoId },
-  ]);
+  const aprendizado = await aprenderComOPedido(servico(), {
+    clientId, mensagem, regra: regraDoModelo(j.regra), agente: "do perfil", areas: ["calendario", "conta", "copy", "geral"], areaPadrao: "calendario",
+    marcaId: corpo.marca_id, userId: ch.userId, fonte: "agente_do_perfil", historico: anteriores.slice(-4).map((m) => m.conteudo),
+    cobrar: (x) => cobrarJev(x, { clientId, tarefa: "conversa", referencia: { tipo: REF_CONVERSA, id: perfil.id }, criadoPor: ch.userId }),
+  });
+  if (aprendizado.anexo) anexos.push(aprendizado.anexo);
+  const seguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(j.seguiu, regras));
+  if (seguidas) anexos.push(seguidas);
+  const mensagemId = await gravarResposta(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: texto, anexos, uso_id: r.usoId, depoisDe: pedido.criado_em });
   await registrarRodada({ clientId, perfilId: perfil.id, tipo: "conversa", status: "ok", custo: r.custoUsd, criadoPor: ch.userId, inicio });
-  return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos, ir_para: destinoNaResposta(texto, clientId), custo_usd: arred(r.custoUsd), reserva_usada: r.reservaUsada ?? null });
+  return json({
+    conversa_id: conversaId,
+    mensagem_id: mensagemId,
+    pedido_id: pedido.id,
+    aviso: mensagemId ? null : AVISO_RESPOSTA_NAO_GUARDADA,
+    resposta: texto,
+    anexos,
+    aprendizado: aprendizado.anexo,
+    ir_para: destinoNaResposta(texto, clientId),
+    custo_usd: arred(r.custoUsd),
+    reserva_usada: r.reservaUsada ?? null,
+  });
+}
+
+/** Roda a análise confirmada no cartão (ler, comparar, ideias, plano igual): o resultado entra na conversa. */
+async function executarAnaliseDoPerfil(ch: Chamador, acao: AcaoDoAgente, clientId: string, marcaId: string | null): Promise<{ resultados: ResultadoDoItem[]; custo: number }> {
+  const ctx = (acao.contexto || {}) as Record<string, unknown>;
+  const resultados: ResultadoDoItem[] = [];
+  let custo = 0;
+  for (const item of acao.itens) {
+    const analise = analiseDoModelo(item.operacao);
+    if (!analise) continue;
+    const base = { ref: item.ref, alvo_id: item.alvo_id, titulo: item.titulo, operacao: item.operacao };
+    const corpo = { client_id: clientId, perfil_id: item.alvo_id, ...(marcaId ? { marca_id: marcaId } : {}), ...(typeof ctx.mes === "string" ? { mes: ctx.mes } : {}), ...(typeof ctx.pedido === "string" ? { pedido: ctx.pedido } : {}) };
+    try {
+      const fn = analise === "ler_posts" ? ler : analise === "comparar" ? comparar : analise === "gerar_ideias" ? ideiasResposta : planoIgual;
+      const r = await fn(ch, corpo);
+      const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!r.ok) throw new Error(String(j.mensagem || j.error || "A análise falhou."));
+      custo += Number(j.custo_usd) || 0;
+      const aviso = analise === "ler_posts"
+        ? `${Number(j.lidos) || 0} ${Number(j.lidos) === 1 ? "post lido" : "posts lidos"}${Number(j.restantes) ? `, ${j.restantes} na fila` : ""}.`
+        : "O resultado está logo abaixo na conversa.";
+      resultados.push({ ...base, ok: true, motivo: aviso });
+    } catch (e) {
+      resultados.push({ ...base, ok: false, motivo: e instanceof Error ? e.message.slice(0, 300) : "A análise falhou." });
+    }
+  }
+  return { resultados, custo };
 }
 
 // ------------------------------------------------------------------ executar e desfazer
@@ -1726,6 +1806,12 @@ async function executarAcao(ch: Chamador, corpo: Record<string, unknown>) {
     custo += r.custo;
   }
   if (acao.itens.some((i) => i.operacao === "agendar")) resultados = resultados.concat(await executarAgendar(ch, acao, c, marcaId, projeto));
+  // Frente AG1: ler, comparar, ideias e plano igual pedidos na conversa.
+  if (acao.itens.some((i) => (ANALISES_DO_PERFIL as readonly string[]).indexOf(i.operacao) >= 0)) {
+    const r = await executarAnaliseDoPerfil(ch, acao, c, marcaId);
+    resultados = resultados.concat(r.resultados);
+    custo += r.custo;
+  }
   // Frente AG (27/09): o cartão feito leva o "Ir para" (as pautas no plano do mês, o estilo no Estúdio).
   const feita = { ...acao, executada_em: new Date().toISOString(), executada_por: ch.userId, resultados };
   const anexo = await guardada.gravar(comCaminho(feita, caminhoDosPerfis(c, feita)));

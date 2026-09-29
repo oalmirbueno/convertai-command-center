@@ -262,7 +262,8 @@ describe("Agente de contexto: voz, posicionamento, objeções e identidade", () 
     expect(k.tamanho).toBeLessThanOrEqual(TETO_CONTEXTO);
     expect(k.texto).toContain(VOZ_DE_MARCA);
     expect(contexto).toContain("sistema: `${SISTEMA_CONTEXTO}\\n\\n${CONHECIMENTO_DO_CONTEXTO}`,");
-    expect(contexto).toContain("sistema: `${SISTEMA_CONVERSA}\\n\\n${CONHECIMENTO_DO_CONTEXTO}\\n\\nCONTEXTO ATUAL (JSON):\\n${JSON.stringify(estado)}${dadosDasAcoes");
+    // 29/09 (AG1): a conversa monta o sistema em partes (hoje, conhecimento, regras do dono, contexto, ações).
+    expect(contexto).toContain("      SISTEMA_CONVERSA,\n      hoje.texto,\n      CONHECIMENTO_DO_CONTEXTO,\n      blocoDasRegras(regras),\n      `CONTEXTO ATUAL (JSON):\\n${JSON.stringify(estado)}`,");
     expect(contexto).toContain("sistema: SISTEMA_LEITURA,");
     expect(contexto).toContain("sistema: SISTEMA_ACERVO,");
   });

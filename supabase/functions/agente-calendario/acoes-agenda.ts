@@ -379,7 +379,7 @@ export function pedidoParaRefazer(itens: Array<Pick<ItemDaAcao, "titulo" | "data
   const linhas = itens.map((i) => `- ${i.data ?? "sem data"} · ${i.formato} · no lugar de "${umaLinha(i.titulo, 140)}"`);
   const base = `Refaça estes conteúdos que saíram da agenda, um para cada linha, na mesma data e no mesmo formato, com tema e abordagem novos (não repita o que saiu):\n${linhas.join("\n")}`;
   // O motivo do pedido (ex.: falar com o público real, não com agências) vale para todas as linhas.
-  const o = umaLinha(orientacao || "", 400);
+  const o = umaLinha(orientacao || "", 1200);
   return o ? `${base}\nOrientação da equipe para todas: ${o}` : base;
 }
 

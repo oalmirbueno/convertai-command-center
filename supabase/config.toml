@@ -145,3 +145,5 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.workspace-ocr]
     verify_jwt = true
+  [functions.workspace-organizar]
+    verify_jwt = true

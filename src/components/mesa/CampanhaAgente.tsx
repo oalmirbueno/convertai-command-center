@@ -19,6 +19,10 @@ import {
 } from "./campanhasApi";
 import { conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
+import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 
 /**
  * Agente da campanha (pedido do dono em 23/09, noite): a conversa com o
@@ -36,6 +40,8 @@ export interface RascunhoParaOAgente {
 }
 
 const ATALHOS = [
+  { rotulo: "Mude o período…", texto: "A campanha vai de " },
+  { rotulo: "Mude a oferta…", texto: "A oferta agora é " },
   { rotulo: "Mude o tom para…", texto: "Mude o tom para " },
   { rotulo: "Acrescente um conteúdo de…", texto: "Acrescente um conteúdo de " },
   { rotulo: "Troque as cores de apoio", texto: "Troque as cores de apoio por " },
@@ -75,7 +81,8 @@ export default function CampanhaAgente({
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const anexos = useAnexos(clientId);
-  const [texto, setTexto] = useState("");
+  // 29/09: o rascunho fica guardado por campanha (fechar a gaveta ou trocar de campanha não apaga o que foi escrito).
+  const [texto, setTexto] = useEstadoDaTela(`mesa:campanha:agente:rascunho:${campanha.id}`, "");
   // Fora do componente: remontar (gaveta fechada, outra campanha e volta) não
   // libera um segundo pedido pago enquanto o primeiro trabalha.
   const envio = usePedidoDaCampanha(campanha.id);
@@ -148,7 +155,7 @@ export default function CampanhaAgente({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold">Agente da campanha</span>
-          <span className="block truncate text-[11.5px] text-muted-foreground">{campanha.nome}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">{campanha.nome}</span>
         </span>
       </div>
 
@@ -189,8 +196,28 @@ export default function CampanhaAgente({
                   ))}
                 </div>
               )}
-              {m.papel === "agente" && mexeuNosConteudos(m) && (
+              {m.papel === "agente" && mexeuNosConteudos(m) && !acoesDaMensagem(m.anexos).length && (
                 <p className="mr-6 text-[11px] text-muted-foreground">Conteúdos atualizados na campanha.</p>
+              )}
+              {m.papel === "agente" && (
+                <div className="mr-6 space-y-1.5">
+                  {/* 29/09: o que mudou na campanha, com o antes e o depois e o Desfazer (antes mudava calado). */}
+                  {acoesDaMensagem(m.anexos).map((a) => (
+                    <CartaoDeAcao
+                      key={a.id}
+                      acao={a}
+                      titulo={a.executada_direto ? "O agente mudou" : "O agente vai mudar"}
+                      observacao="Sem custo. Dá para desfazer."
+                      onPedido={(p) => chamarAcaoDoAgente("agente-calendario", m.id, a.id, p)}
+                      onFeito={() => {
+                        void queryClient.invalidateQueries({ queryKey: chave });
+                        void queryClient.invalidateQueries({ queryKey: ["mesa", "campanhas", clientId] });
+                        if (campanha.proposta_id) void queryClient.invalidateQueries({ queryKey: ["mesa", "proposta-v4", campanha.proposta_id] });
+                      }}
+                    />
+                  ))}
+                  <AprendizadoNaConversa anexos={m.anexos} clientId={clientId} />
+                </div>
               )}
             </div>
           );

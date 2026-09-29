@@ -86,7 +86,7 @@ import {
 } from "./tetos-do-pedido.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 // Frente AE (28/09): tipos de campanha (promoção, lançamento, data comemorativa...), cada um com identidade e selo próprios.
-import { blocoDoTipoParaOEstrategista, direcaoDoSeloDoTipo, perguntaDoTipoDaCampanha, tipoDaCampanha, tipoPelaResposta, tipoValido, type TipoDeCampanha } from "../_shared/tipos-de-campanha.ts";
+import { blocoDoTipoParaOEstrategista, direcaoDoSeloDoTipo, perguntaDoTipoDaCampanha, tipoDaCampanha, tipoPelaResposta, tipoValido, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../_shared/tipos-de-campanha.ts";
 import {
   createEditorialItem,
   createEditorialItemSchema,
@@ -154,6 +154,7 @@ import {
   desfazerAcaoGuardada,
   ErroDaAcao,
   textoDoResultado,
+  type ResultadoDoItem,
 } from "../_shared/acoes-do-agente.ts";
 import {
   blocoDaAgendaParaAcoes,
@@ -234,6 +235,11 @@ import {
 } from "./diagnostico.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente AG1 (29/09): o agente aprende com cada pedido (regra duradoura pelo Jev) e diz as regras que seguiu.
+import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
+import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
+import { historicoParaOModelo, hojeParaOAgente } from "../_shared/conversa-segura.ts";
+import { acaoDaConversaDaCampanha, CAMPOS_DA_CAMPANHA_NA_CONVERSA, type CampanhaAtual, camposDaCampanhaNaConversa, mudancasDaCampanha, patchParaVoltar } from "./campanha-na-conversa.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -791,8 +797,12 @@ async function registrarMensagens(
       uso_id: m.uso_id ?? null,
     }));
   if (linhas.length === 0) return;
-  const { error } = await servico.from("agente_mensagens").insert(linhas);
-  if (error) console.error("[agente-calendario] mensagens nao gravadas", { conversa_id: conversaId, code: error.code });
+  // 29/09: uma segunda tentativa antes de desistir (a conversa sem a mensagem é o "some" que o dono viu).
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const { error } = await servico.from("agente_mensagens").insert(linhas);
+    if (!error) return;
+    console.error("[agente-calendario] mensagens nao gravadas", { conversa_id: conversaId, code: error.code, tentativa, motivo: String(error.message || "").slice(0, 200) });
+  }
 }
 
 // ------------------------------------------------------------ contexto real
@@ -3393,10 +3403,10 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 
 const ESQUEMA_PEDIDO = {
   nome: "pedido_do_mes",
-  schema: obj({
+  schema: esquemaComAprendizado(obj({
     resposta: S("string"),
     itens: { type: "array", items: ESQUEMA_ITEM },
-  }),
+  })),
 };
 
 /**
@@ -3440,18 +3450,21 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
-  const { data: historico } = await servico
-    .from("agente_mensagens")
-    .select("papel, conteudo")
-    .eq("conversa_id", conversaId)
-    .order("criado_em", { ascending: false })
-    .limit(10);
-  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
-    .reverse()
-    .filter((m) => m.papel === "usuario" || m.papel === "agente")
-    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
+  const [{ data: historico }, regras] = await Promise.all([
+    servico
+      .from("agente_mensagens")
+      .select("papel, conteudo, anexos")
+      .eq("conversa_id", conversaId)
+      .order("criado_em", { ascending: false })
+      .limit(12),
+    // Frente AG1: as regras que o dono já ensinou valem também para os conteúdos novos.
+    lerRegrasDoDono(servico, clientId, { areas: ["calendario", "campanha", "copy"], marcaId: corpo.marca_id }),
+  ]);
+  // Com o estado dos cartões e os registros do painel (o agente sabe o que já foi gravado ou desfeito).
+  const anteriores = historicoParaOModelo(((historico ?? []) as Array<{ papel: string; conteudo: string; anexos: unknown }>).slice().reverse(), { max: 10, maxChars: 2000 });
 
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+${blocoDasRegras(regras)}
 ${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
 ${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}${notaDoSistema(anexos.aviso)}
@@ -3460,6 +3473,7 @@ TAREFA: faça exatamente o que o pedido diz.
 - Quantidade: a pedida (se não disser, 1 conteúdo).
 - Datas: se o pedido disser uma data ou "hoje", use essa data (hoje é ${inicio}); senão, os próximos dias úteis livres a partir de ${inicio}. Só segunda a sexta.
 - resposta: em 1 a 3 frases, o que você preparou e por quê.
+${REGRA_DO_APRENDIZADO_NO_PROMPT}
 ${REGRAS_DOS_ITENS}`;
 
   const s = await chamarTexto({
@@ -3509,6 +3523,18 @@ ${REGRAS_DOS_ITENS}`;
 
   // Imagem anexada que ficou de fora: a equipe lê o aviso na resposta.
   const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem)]);
+  // Frente AG1: só o que a equipe digitou ensina (o refazer e o criar em lotes do próprio painel não).
+  const aprendizado = corpo.rotear === true
+    ? await aprenderComOPedido(servico, {
+      clientId, mensagem, regra: regraDoModelo(r.regra), agente: "do Mês (criar conteúdos)", areas: ["calendario", "campanha", "copy", "geral"], areaPadrao: "calendario",
+      marcaId: corpo.marca_id, userId: chamador.userId, fonte: "agente_do_mes", historico: anteriores.slice(-4).map((m) => m.conteudo),
+    cobrar: (j) => cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }),
+    })
+    : { anexo: null };
+  const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
+  const anexosDoAgente: unknown[] = [{ proposta_id: proposta.id }];
+  if (aprendizado.anexo) anexosDoAgente.push(aprendizado.anexo);
+  if (anexoSeguidas) anexosDoAgente.push(anexoSeguidas);
   await registrarMensagens(servico, conversaId, clientId, [
     {
       papel: "usuario",
@@ -3518,9 +3544,9 @@ ${REGRAS_DOS_ITENS}`;
         ...(arquivosDoPedido.lidos.length || arquivosDoPedido.nao_lidos.length ? [resumoDosArquivos(arquivosDoPedido.lidos, arquivosDoPedido.nao_lidos, null)] : []),
       ],
     },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
   ]);
-  return json({ proposta, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ proposta, resposta, aprendizado: aprendizado.anexo, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------------ conteúdo rápido (25/09)
@@ -4552,7 +4578,9 @@ const REF_CAMPANHA = "mesa_campanha";
 
 const ESQUEMA_CONVERSA_CAMPANHA = {
   nome: "conversa_da_campanha",
-  schema: obj({
+  // Frente AG1 (29/09): período, situação e tipo mudam de verdade (antes o agente dizia "registrei o encerramento"
+  // e nada mudava), e a regra/seguiu do aprendizado.
+  schema: esquemaComAprendizado(obj({
     resposta: S("string"),
     campanha: {
       ...obj({
@@ -4561,11 +4589,12 @@ const ESQUEMA_CONVERSA_CAMPANHA = {
         conceito: S("string"),
         identidade: ESQUEMA_CAMPANHA.schema.properties.identidade,
         briefing: ESQUEMA_BRIEFING,
+        ...CAMPOS_DA_CAMPANHA_NA_CONVERSA,
       }),
       type: ["object", "null"],
     },
     itens: { type: ["array", "null"], items: ESQUEMA_ITEM },
-  }),
+  })),
 };
 
 async function conversaDaCampanha(servico: SupabaseClient, c: Campanha, userId: string): Promise<string> {
@@ -4616,21 +4645,25 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
-  const { data: historico } = await servico
-    .from("agente_mensagens")
-    .select("papel, conteudo")
-    .eq("conversa_id", conversaId)
-    .order("criado_em", { ascending: false })
-    .limit(12);
-  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
-    .reverse()
-    .filter((m) => m.papel === "usuario" || m.papel === "agente")
-    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
+  const [{ data: historico }, regras] = await Promise.all([
+    servico
+      .from("agente_mensagens")
+      .select("papel, conteudo, anexos")
+      .eq("conversa_id", conversaId)
+      .order("criado_em", { ascending: false })
+      .limit(14),
+    // Frente AG1: as regras que o dono já ensinou para campanhas (evitar primeiro).
+    lerRegrasDoDono(servico, c.client_id, { areas: ["campanha", "copy", "arte"], marcaId: corpo.marca_id ?? (c.identidade as Record<string, unknown> | null)?.marca_id }),
+  ]);
+  // Com o estado dos cartões (o que já mudou, o que foi desfeito): "volte o nome de antes" tem a que voltar.
+  const anteriores = historicoParaOModelo(((historico ?? []) as Array<{ papel: string; conteudo: string; anexos: unknown }>).slice().reverse(), { max: 12, maxChars: 2000 });
 
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+${hojeParaOAgente().texto}
+${blocoDasRegras(regras)}
 
 CAMPANHA ATUAL (JSON):
-${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), status: c.status })}
+${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), status: c.status, periodo_inicio: c.periodo_inicio, periodo_fim: c.periodo_fim })}
 
 CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e NÃO MUDAM):
 ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
@@ -4638,9 +4671,10 @@ ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}
 ${fotosDaCamp.length ? `Os conteúdos seguem o briefing e usam as imagens da campanha: a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>".
-` : ""}Aplique o pedido. Devolva:
-- resposta: o que você mudou ou respondeu, em até 4 frases.
-- campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade, briefing) só se algo dela mudou; senão null. As imagens da campanha a equipe escolhe na tela (seção Imagens): se o pedido for trocar imagem, diga isso na resposta.
+` : ""}${REGRA_DO_APRENDIZADO_NO_PROMPT}
+Aplique o pedido. Devolva:
+- resposta: o que você mudou ou respondeu, em até 4 frases. Só diga que mudou o que está nos campos abaixo; o painel mostra o antes e o depois de cada campo, com Desfazer.
+- campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade, briefing) só se algo dela mudou; senão null. periodo_inicio e periodo_fim (AAAA-MM-DD) quando o pedido mudar quando a campanha começa ou termina ("até o dia 29" = periodo_fim), senão null. status (planejada, gravada ou encerrada) quando o pedido mudar a situação, senão null. tipo (${TIPOS_DE_CAMPANHA.join(", ")}) quando o pedido mudar o tipo, senão null. Oferta, produto, preço e público moram no briefing. As imagens da campanha a equipe escolhe na tela (seção Imagens): se o pedido for trocar imagem, diga isso na resposta.
 - itens: ${podeMudarItens ? `a lista COMPLETA de conteúdos atualizada só se algum conteúdo mudou, entrou ou saiu (mantenha tema_id dos que ficam; novo recebe tema_id novo; os que estão na agenda voltam iguais); senão null. Datas só de segunda a sexta entre ${inicio} e ${fim}.` : "sempre null (os conteúdos já estão na agenda; se o pedido for sobre eles, diga na resposta para ajustar no Estúdio)."}
 ${REGRAS_DOS_ITENS}`;
 
@@ -4669,6 +4703,14 @@ ${REGRAS_DOS_ITENS}`;
     if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade, (c.identidade ?? null) as Record<string, unknown> | null);
     // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
     if (nova.briefing && c.briefing !== undefined) campos.briefing = normalizarBriefing(nova.briefing);
+  }
+  // Frente AG1: período, situação e tipo conferidos (data válida, fim depois do começo, vocabulário fechado).
+  const conferidos = camposDaCampanhaNaConversa(nova, c as unknown as CampanhaAtual);
+  for (const k of ["periodo_inicio", "periodo_fim", "status"]) if (conferidos.campos[k] !== undefined) campos[k] = conferidos.campos[k];
+  if (conferidos.campos.tipo !== undefined) {
+    const base = { ...(((campos.identidade ?? c.identidade) ?? {}) as Record<string, unknown>) };
+    base.tipo = conferidos.campos.tipo;
+    campos.identidade = base;
   }
   const { data: gravada, error } = await servico
     .from("mesa_campanhas")
@@ -4705,12 +4747,34 @@ ${REGRAS_DOS_ITENS}`;
     if (livres.length) propostaFinal = await salvarProposta(servico, proposta, { itens: final, status: "pronta" });
   }
 
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || "Campanha atualizada.", [anexos.aviso]);
+  // Frente AG1 (29/09): o que mudou vira o cartão já feito (antes e depois, com Desfazer), nunca mudança calada.
+  const mudancas = mudancasDaCampanha(c as unknown as CampanhaAtual, campanha as unknown as CampanhaAtual);
+  const conteudosMudaram = !!proposta && !!propostaFinal && propostaFinal !== proposta;
+  const feita = acaoDaConversaDaCampanha(c, mudancas, {
+    userId: chamador.userId,
+    conteudos: conteudosMudaram && proposta && propostaFinal
+      ? { proposta_id: propostaFinal.id, itens_antes: proposta.itens as unknown[], quantos: propostaFinal.itens.length, task_ids_antes: proposta.task_ids.length }
+      : null,
+  });
+  const avisoDasRecusas = conferidos.recusas.length ? `Não mudei: ${conferidos.recusas.join("; ")}.` : null;
+  const aprendizado = await aprenderComOPedido(servico, {
+    clientId: c.client_id, mensagem, regra: regraDoModelo(r.regra), agente: "da campanha", areas: ["campanha", "copy", "arte", "geral"], areaPadrao: "campanha",
+    marcaId: corpo.marca_id ?? (c.identidade as Record<string, unknown> | null)?.marca_id, userId: chamador.userId, fonte: "agente_da_campanha", historico: anteriores.slice(-4).map((m) => m.conteudo),
+    cobrar: (j) => cobrarJev(j, { clientId: c.client_id, tarefa: "calendario", referencia: { tipo: REF_CAMPANHA, id: c.id }, criadoPor: chamador.userId }),
+  });
+  const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
+
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || (feita ? feita.resumo : "Nada mudou na campanha."), [anexos.aviso, avisoDasRecusas]);
+  const anexosDoAgente: unknown[] = [];
+  if (conteudosMudaram && propostaFinal) anexosDoAgente.push({ proposta_id: propostaFinal.id });
+  if (feita) anexosDoAgente.push(feita);
+  if (aprendizado.anexo) anexosDoAgente.push(aprendizado.anexo);
+  if (anexoSeguidas) anexosDoAgente.push(anexoSeguidas);
   await registrarMensagens(servico, conversaId, c.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: propostaFinal && propostaFinal !== proposta ? [{ proposta_id: propostaFinal.id }] : [] },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
   ]);
-  return json({ campanha, proposta: propostaFinal, resposta, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta: propostaFinal, resposta, acao: feita, aprendizado: aprendizado.anexo, avisos: [anexos.aviso, avisoDasRecusas].filter(Boolean), conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------ imagens, briefing e plano da campanha
@@ -4876,7 +4940,8 @@ const ESQUEMA_PLANO_DO_MES = obj({
 
 export const ESQUEMA_PLANEJAMENTO = {
   nome: "planejamento_do_mes",
-  schema: obj({
+  // Frente AG1 (29/09): regra e seguiu (o que o pedido ensina e as regras do dono usadas).
+  schema: esquemaComAprendizado(obj({
     resposta: S("string"),
     plano_do_mes: { ...ESQUEMA_PLANO_DO_MES, type: ["object", "null"] },
     proximos_meses: { type: ["array", "null"], items: obj({ mes: S("string"), plano: ESQUEMA_PLANO_DO_MES }) },
@@ -4933,7 +4998,7 @@ export const ESQUEMA_PLANEJAMENTO = {
       ...obj({ publico: S("string"), motivo: S("string") }),
       type: ["object", "null"],
     },
-  }),
+  })),
 };
 
 /** Mudança que o agente sugere na proposta: só o que entra, muda ou sai. */
@@ -5481,6 +5546,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
   const marcaP = marcaDaChamada(servico, clientId, corpo);
 
+  // Frente AG1 (29/09): as regras que o dono já ensinou (evitar primeiro), da marca aberta.
+  const regrasP = lerRegrasDoDono(servico, clientId, { areas: ["calendario", "campanha", "copy"], marcaId: corpo.marca_id });
   const [ctx, extra, imagens, conversaId, acoesCtx, mcp, kit] = await Promise.all([
     // O MCP entra à parte, com teto maior e dentro do orçamento.
     montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 }),
@@ -5509,15 +5576,19 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     .order("criado_em", { ascending: false })
     .limit(MAX_MENSAGENS_DO_HISTORICO);
   const linhasDoHistorico = (historico ?? []) as Array<{ papel: string; conteudo: string; anexos: unknown }>;
+  // 29/09: cada resposta leva o estado dos cartões (feito, desfeito, esperando) e os registros do painel
+  // ("18 peças saíram para ser refeitas"). Antes o agente não sabia o que já tinha acontecido e dizia
+  // "não encontrei peças desses meses" logo depois de ele mesmo tirá-las para refazer.
+  const cronologico = historicoParaOModelo(linhasDoHistorico.slice().reverse(), { max: MAX_MENSAGENS_DO_HISTORICO, maxChars: MAX_CHARS_POR_MENSAGEM_DO_HISTORICO });
   const anteriores: Array<{ papel: "usuario" | "agente"; conteudo: string }> = [];
   let usadoNoHistorico = 0;
-  for (const m of linhasDoHistorico) {
-    if (m.papel !== "usuario" && m.papel !== "agente") continue;
-    const c = String(m.conteudo || "").slice(0, MAX_CHARS_POR_MENSAGEM_DO_HISTORICO);
+  for (let i = cronologico.length - 1; i >= 0; i--) {
+    const c = cronologico[i].conteudo;
     if (usadoNoHistorico + c.length > 240_000) break;
     usadoNoHistorico += c.length;
-    anteriores.unshift({ papel: m.papel as "usuario" | "agente", conteudo: c });
+    anteriores.unshift(cronologico[i]);
   }
+  const regras = await regrasP;
   const caminhosDeLeitura: string[] = [];
   for (const m of linhasDoHistorico) {
     if (m.papel !== "usuario" || caminhosDeLeitura.length >= TURNOS_COM_ARQUIVOS) continue;
@@ -5562,6 +5633,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 
   const tarefa = `
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
+${hojeParaOAgente().texto}
+${blocoDasRegras(regras)}
 ${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
 ${mensagem}
 ${pedeMudanca ? `
@@ -5581,6 +5654,7 @@ Devolva:
 ${REGRA_DAS_ACOES_NA_AGENDA}
 - criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel ou estatico; reels, vídeo e story viram carrossel e você avisa), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
 - atualizar_publico: só quando a DECISÃO SOBRE O PÚBLICO mandar adaptar: { publico (o público novo, completo, como deve ficar no contexto), motivo (1 frase) }. Senão null.
+${REGRA_DO_APRENDIZADO_NO_PROMPT}
 Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato só carrossel ou estatico.
 ${editavel ? REGRAS_DOS_ITENS : ""}`;
 
@@ -5660,7 +5734,9 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const resposta = respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda)]);
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
-  if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
+  // 29/09: o pedido do dono vai junto: o refazer em lotes usa as palavras dele como orientação
+  // (antes usava o resumo do agente e a direção pedida, "menos texto, jardinagem, poda", se perdia).
+  if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) });
   if (geracao) anexosDaResposta.push(geracao);
   if (criacao) anexosDaResposta.push(criacao);
   if (acaoDoPublico) anexosDaResposta.push(acaoDoPublico as unknown as Record<string, unknown>);
@@ -5681,6 +5757,15 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     jev_erro: julgamento.erro,
   };
   anexosDaResposta.push(contextoUsado);
+  // Frente AG1: o que o pedido ensina para as próximas vezes (Jev decide) e as regras do dono que o agente seguiu.
+  const aprendizado = await aprenderComOPedido(servico, {
+    clientId, mensagem, regra: regraDoModelo(r.regra), agente: "do Mês", areas: ["calendario", "campanha", "copy", "geral"], areaPadrao: "calendario",
+    marcaId: corpo.marca_id, userId: chamador.userId, fonte: "agente_do_mes", historico: anteriores.slice(-4).map((m) => m.conteudo),
+    cobrar: (j) => cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }),
+  });
+  if (aprendizado.anexo) anexosDaResposta.push(aprendizado.anexo as unknown as Record<string, unknown>);
+  const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
+  if (anexoSeguidas) anexosDaResposta.push(anexoSeguidas as unknown as Record<string, unknown>);
 
   const caminhoDaLeitura = await guardarLeitura(servico, clientId, arquivos.lidos);
   await registrarMensagens(servico, conversaId, clientId, [
@@ -5715,7 +5800,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     resposta,
     planos,
     mudanca,
-    acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes } : null,
+    acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) } : null,
+    aprendizado: aprendizado.anexo,
     gerar_conteudos: geracao,
     criar_conteudos: criacao,
     acao_publico: acaoDoPublico,
@@ -6569,6 +6655,11 @@ async function desfazerAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
   let r;
   try {
     r = await desfazerAcaoGuardada(guardada, async (x) => {
+      // Frente AG1: a conversa da campanha (campo a campo e os conteúdos da proposta).
+      if (x.operacao === "campanha_campo" || x.operacao === "campanha_conteudos") {
+        await desfazerNaCampanha(servico, clientId, x);
+        return;
+      }
       const atual = await lerContextoDoKit(servico, clientId);
       await gravarPublicoNoKit(servico, clientId, (x.desfazer || {}).publico_antes ?? null, atual.existe, atual.contexto, chamador.userId);
     }, { userId: chamador.userId });
@@ -6577,9 +6668,35 @@ async function desfazerAcaoDoMes(servico: SupabaseClient, chamador: Chamador, co
     throw e;
   }
   if (guardada.mensagem.conversa_id) {
-    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{ papel: "sistema", conteudo: "Público do contexto: voltou ao de antes." }]);
+    const daCampanha = guardada.acao.itens.some((i) => i.operacao === "campanha_campo" || i.operacao === "campanha_conteudos");
+    await registrarMensagens(servico, guardada.mensagem.conversa_id, clientId, [{
+      papel: "sistema",
+      conteudo: daCampanha
+        ? `Campanha: ${r.voltaram} ${r.voltaram === 1 ? "mudança voltou" : "mudanças voltaram"} ao que era${r.falharam.length ? `; ${r.falharam.length} não ${r.falharam.length === 1 ? "pôde" : "puderam"} voltar` : ""}.`
+        : "Público do contexto: voltou ao de antes.",
+    }]);
   }
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam });
+}
+
+/** Volta um campo da campanha, ou os conteúdos da proposta, ao que era antes da conversa. */
+async function desfazerNaCampanha(servico: SupabaseClient, clientId: string, x: ResultadoDoItem) {
+  const d = (x.desfazer || {}) as Record<string, unknown>;
+  if (x.operacao === "campanha_campo") {
+    const c = await carregarCampanha(servico, x.alvo_id);
+    if (c.client_id !== clientId) throw new Error("A campanha não é deste cliente.");
+    const patch = patchParaVoltar(String(d.campo || ""), d.antes, (c.identidade ?? null) as Record<string, unknown> | null);
+    const { error } = await servico.from("mesa_campanhas").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", c.id).eq("client_id", clientId);
+    if (error) throw new Error("Não foi possível voltar a campanha.");
+    return;
+  }
+  const p = await carregarProposta(servico, x.alvo_id);
+  if (p.client_id !== clientId) throw new Error("Os conteúdos não são deste cliente.");
+  // O que foi para a agenda depois da conversa não sai por aqui (mexa pela Agenda).
+  if (p.task_ids.length > Number(d.task_ids_antes || 0)) throw new Error("Parte destes conteúdos já foi para a agenda depois; ajuste pela Agenda.");
+  const itensAntes = Array.isArray(d.itens_antes) ? (d.itens_antes as Item[]) : null;
+  if (!itensAntes) throw new Error("A lista de antes não ficou guardada.");
+  await salvarProposta(servico, p, { itens: itensAntes });
 }
 
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {

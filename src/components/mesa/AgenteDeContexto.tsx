@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +11,7 @@ import { useMesa } from "./MesaContexto";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
+import AprendizadoNaConversa, { marcaDaRegra, observacaoDoCusto } from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import {
   chaveDoHistorico,
@@ -40,6 +42,9 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
  * tarefas e caminho, sempre com o cartão de confirmação. `pedido` preenche a
  * caixa de mensagem (atalhos do Hub do plano).
  */
+/** O atalho abre o organizador do Workspace (lê as imagens, prévia, Confirmar e Desfazer). */
+const ORGANIZAR_O_WORKSPACE = "Organize os arquivos do workspace deste cliente em pastas por assunto.";
+
 export default function AgenteDeContexto({
   preencher = false,
   modo = "marca",
@@ -48,6 +53,7 @@ export default function AgenteDeContexto({
 }: { preencher?: boolean; modo?: ModoDoAgente; onModo?: (m: ModoDoAgente) => void; pedido?: { texto: string; n: number } | null } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const historico = useHistoricoDoContexto(clientId);
   const invalidar = useInvalidarContexto();
   // Rascunho guardado por cliente: sair e voltar (ou trocar de cliente e voltar)
@@ -87,20 +93,27 @@ export default function AgenteDeContexto({
     setErro(null);
     setTexto("");
     try {
-      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modo === "plano" ? { modo: "plano" } : {}) });
-      const propostas = data && Array.isArray((data as { acoes?: unknown[] }).acoes) ? ((data as { acoes?: unknown[] }).acoes as unknown[]) : data && data.acao ? [data.acao] : [];
+      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modo === "plano" ? { modo: "plano" } : {}), ...marcaDaRegra(alvo) });
+      // 29/09: todos os anexos (cartões, caminho, "Aprendi", "Segui"); antes só as propostas.
+      const anexosDaResposta = data && Array.isArray(data.anexos) ? data.anexos : data && Array.isArray(data.acoes) ? data.acoes : data && data.acao ? [data.acao] : [];
       const agora = new Date().toISOString();
       const resposta = String((data && data.resposta) || "Pronto.");
       queryClient.setQueryData<MensagemDoContexto[]>(chaveDoHistorico(alvo), (antes) =>
         (antes || []).concat([
-          { papel: "usuario", conteudo: msg, criado_em: agora },
-          { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: propostas },
+          { id: data && data.pedido_id ? String(data.pedido_id) : undefined, papel: "usuario", conteudo: msg, criado_em: agora },
+          { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: anexosDaResposta },
         ]),
       );
       setUltimo({ clientId: alvo, mudou: Array.isArray(data?.mudou) ? data.mudou : [], memorias: Number(data?.memorias || 0) });
       setRecebida(data && data.mensagem_id ? String(data.mensagem_id) : null);
       avisarCustoReal("Agente de contexto respondeu", data, atualizarCusto);
-      invalidar(alvo, { historico: true });
+      if (data && data.mensagem_id) {
+        invalidar(alvo, { historico: true });
+      } else {
+        // A resposta não ficou guardada: reler a conversa a apagaria da tela. Fica aqui, com o aviso.
+        invalidar(alvo);
+        setErro({ clientId: alvo, erro: new Error((data && data.aviso) || "A resposta chegou, mas não ficou guardada na conversa.") });
+      }
     } catch (e) {
       setErro({ clientId: alvo, erro: e });
       setTexto((t) => t || msg);
@@ -173,10 +186,10 @@ export default function AgenteDeContexto({
             <OQuePossoFazer
               capacidades={["trocar a logo por uma do acervo", "arquivar referências e fotos", "organizar fotos em pastas", "mover, renomear e arquivar arquivos do workspace"]}
               atalhos={[
-                { rotulo: "Organizar o workspace", texto: "Organize os arquivos do workspace deste cliente em pastas por assunto." },
+                { rotulo: "Organizar o workspace", texto: ORGANIZAR_O_WORKSPACE },
                 { rotulo: "Arquivar referências velhas", texto: "Arquive as referências que não combinam mais com a marca." },
               ]}
-              onAtalho={(t) => setTexto(t)}
+              onAtalho={(t) => (t === ORGANIZAR_O_WORKSPACE ? navigate(`/workspace?client=${clientId}&organizar=1`) : setTexto(t))}
             />
           )}
           <Textarea
@@ -235,6 +248,7 @@ export default function AgenteDeContexto({
               <TextoDoAgente texto={m.conteudo} clientId={clientId} />
             </BalaoDaConversa>
             {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.id && m.id === recebida} />}
+            {m.papel === "agente" && <AprendizadoNaConversa anexos={m.anexos} clientId={clientId} />}
             {m.papel === "agente" && m.id &&
               acoesDaMensagem(m.anexos).map((a) => (
                 <CartaoDeAcao
@@ -242,7 +256,7 @@ export default function AgenteDeContexto({
                   acao={a}
                   recemFeita={!!m.id && m.id === recebida}
                   titulo={a.executada_direto ? "O agente fez" : "O agente vai fazer"}
-                  observacao="Sem custo. Nada é apagado, e dá para desfazer."
+                  observacao={observacaoDoCusto(a, a.sem_desfazer ? "Sem custo. Nada é apagado." : "Sem custo. Nada é apagado, e dá para desfazer.")}
                   onPedido={(p) => chamarAcaoDoAgente("agente-contexto", String(m.id), a.id, p)}
                   onFeito={(p) => {
                     if (p !== "descartar") {

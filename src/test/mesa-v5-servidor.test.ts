@@ -153,8 +153,11 @@ describe("auditoria do servidor (23/09 noite)", () => {
   const contexto = ler("supabase/functions/agente-contexto/index.ts");
   const compartilhado = ler("supabase/functions/_shared/contexto-cliente.ts");
   it("conversa do agente de contexto grava com client_id e confere o erro", () => {
-    expect(contexto).toContain('{ conversa_id: conversaId, client_id: clientId, papel: "usuario"');
-    expect(contexto).toContain('console.error("agente-contexto: conversa nao gravada"');
+    // 29/09 (AG1): o pedido é gravado antes da IA, com client_id (conversa-segura.ts), e a falha volta como erro, não calada.
+    expect(contexto).toContain("return await gravarPedidoAntes(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: mensagem });");
+    const segura = readFileSync(resolve(__dirname, "../../supabase/functions/_shared/conversa-segura.ts"), "utf8");
+    expect(segura).toContain('.insert({ conversa_id: linha.conversa_id, client_id: linha.client_id, papel: "usuario", conteudo: linha.conteudo, anexos: linha.anexos ?? [], criado_em })');
+    expect(segura).toContain('console.error("conversa-segura: pedido nao gravado"');
   });
   it("atualizar o contexto não apaga o que a equipe ensinou (a menos que venha forcar)", () => {
     expect(contexto).toContain("const mesclado: ContextoConsolidado = forcar || !antigo ? contexto : {");

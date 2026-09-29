@@ -393,6 +393,7 @@ export default function AbaInstagram() {
       pedido={pedido}
       onMensagens={(m) => atualizar.mudar((p) => ({ ...p, mensagens: m }))}
       onUsarDestaques={usarDestaques}
+      onAcaoFeita={() => void atualizar.reler()}
     />
   );
 
