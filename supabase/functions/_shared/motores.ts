@@ -799,7 +799,7 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     pedido: "Dono: \"a equipe escolhe o rosto de quem vai aparecer, o dono ou o cliente, muito fiel, mas pose, ângulo, expressão e enquadramento podem variar para combinar com a arte\".",
     o_que: "Com direcao.rosto (cliente, equipe ou fotos na hora), até 2 fotos de identidade entram depois dos anexos da lâmina (antes das do estilo), no limite de imagens do modelo, e o bloco ROSTO ESCOLHIDO entra depois do bloco da copy. Opção destacar põe o rosto em evidência. A versão guarda rosto.",
     modulo: "estudio-arte/rosto-na-geracao.ts",
-    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "      blocoDoRostoAqui,"] },
+    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoEscolhido = replicar && fotosReplicar.length === 0 ? rostoDaFotoNoReplicar || lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "      blocoDoRostoAqui,"] },
     intocado: "Sem rosto escolhido (o padrão): nada é lido, nenhuma imagem entra e o prompt é byte a byte o de hoje.",
   },
   {
@@ -808,7 +808,7 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
     pedido: "Dono: \"posso buscar qualquer foto que tiver pessoas, abrir a pasta, selecionar qualquer foto e também o clone já gerado; detalhar sorrindo, assim; e com base na foto ele tem que variar e compor com a imagem\".",
     o_que: "Fonte escolhidas (1 a 3 fotos do acervo, Workspace, Arquivos ou de um clone, inclusive as geradas, conferidas na geração), campo como (pose e expressão) no bloco ROSTO ESCOLHIDO, que agora pede recriar a pessoa na composição e integrar na luz da arte. Lâmina normal leva o rosto quando o Noul do Jev diz que a direção pede pessoa (a referência automática cede a vaga). A versão guarda as fotos usadas; conferir_rosto é só aviso.",
     modulo: "estudio-arte/rosto-na-geracao.ts",
-    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;", "    blocoDoRostoNaNormal,"] },
+    ligacao: { arquivo: ESTUDIO, trechos: ["const rostoNaNormal = rostoDaFotoNaNormal || (!replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null);", "    blocoDoRostoNaNormal,"] },
     intocado: "Sem rosto escolhido (o padrão): nada é lido, o Jev não é chamado, nenhuma imagem entra e o prompt da lâmina normal e do replicar é byte a byte o de hoje (fixtures lamina-normal-hoje.json e replicar-identica-hoje.json).",
   },
   {
@@ -869,6 +869,21 @@ export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
       ],
     },
     intocado: "Arte única, story ou reel (9:16) e criativo de anúncio: bloco vazio e o prompt de hoje; promptDaLamina e promptDoReplicar não mudam (fixtures iguais); a autocorreção não lê o aviso (sem laço).",
+  },
+  {
+    id: "rosto_identidade",
+    em: "2026-09-29",
+    pedido: "Dono: \"eu coloco uma imagem do rosto na arte e ele faz exatamente aquela foto, em vez de aproveitar as características do rosto e fazer junto da imagem. Tem que ser feito pelo gerador, e não a mesma pose; tudo tem que fazer sentido com o tema e a composição. Mas tem imagens que eu quero que sejam exatamente elas\".",
+    o_que: "Cada foto da lâmina tem um uso: Foto exata (o de sempre, foto intacta e alinhada) ou Usar o rosto (fotos_livres[].uso e uso_do_acervo). No modo rosto a foto não é base nem elemento: vai ao gerador como imagem de identidade (mesmo caminho do rosto escolhido), com o bloco ROSTO ESCOLHIDO mais a frase do dono (mantenha a identidade da pessoa da imagem de referência; crie nova pose e composição conforme a direção; não copie a foto), sem colar o original. A versão guarda rosto.origem foto_da_lamina e a conferência do rosto também avisa pose igual à da foto (leitura por visão e alinhamento em código). Arte rápida ganha o papel Rosto (identidade) e, em Automático, o Jev (Choice com confiança mínima) decide exata ou rosto pelo pedido; a conversa com o diretor troca pelo campo uso_da_foto.",
+    modulo: "_shared/uso-da-foto.ts",
+    ligacao: {
+      arquivo: ESTUDIO,
+      trechos: [
+        "const acervoComoRosto = !!fotoDoAcervo && usoDoAcervo(card) === \"rosto\";",
+        "const rotuloDoRosto = rostoVeioDaFoto ? ROTULO_DA_FOTO_DE_IDENTIDADE : ROTULO_DA_FOTO_DO_ROSTO;",
+      ],
+    },
+    intocado: "Foto sem o campo uso (todas as de hoje): exata, byte a byte o caminho da foto real intacta (alinhamento, recorte das letras, logo). Recorte sem fundo e logo do pedido não têm uso. Sem foto em modo rosto, o rosto escolhido do trabalho segue como na frente R2.",
   },
 ];
 

@@ -10,6 +10,7 @@ import { useAcervo } from "./SeletorDoAcervo";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 import { AVISO_CONTINUO_SEM_MODELO } from "./estudioUtil";
 import { seloDaSerie } from "./fidelidadeDaReferencia";
+import { AJUDA_DO_USO, DICA_DO_USO, fotoSemUso, ROTULO_DO_USO, type UsoDaFoto, usoDaFotoLivre, usoDoAcervo } from "../../../supabase/functions/_shared/uso-da-foto";
 
 /**
  * O que a próxima geração da lâmina vai usar, mostrado EM CIMA da lâmina
@@ -30,7 +31,7 @@ import { seloDaSerie } from "./fidelidadeDaReferencia";
  * botão de gerar de novo.
  */
 
-export type ModoDaGeracao = "replicar_referencia" | "foto_real" | "foto_composta" | "elementos" | "recorte" | "continuo" | "normal";
+export type ModoDaGeracao = "replicar_referencia" | "foto_real" | "foto_composta" | "elementos" | "recorte" | "rosto" | "continuo" | "normal";
 
 export const AVISO_FOTO_RECOMPOSTA = "A foto é recomposta para seguir a referência; confira o rosto.";
 export const AVISO_FORA_DO_FUNDO = "Esta versão foi feita sobre um fundo contínuo que mudou depois: ela não emenda com as vizinhas. Gere de novo.";
@@ -43,6 +44,7 @@ export const DESCRICAO_DO_MODO: Record<ModoDaGeracao, string> = {
   foto_composta: "Foto de fundo com pessoa ou objeto real composto por cima.",
   elementos: "O gerador cria a cena e põe a pessoa ou o objeto real como é.",
   recorte: "Pessoa ou produto sem fundo: entra inteiro do lado oposto ao texto, com a cena, a referência e a identidade em volta, sem caixa.",
+  rosto: "Usar o rosto: o gerador cria uma cena nova, coerente com o tema e a composição, com a mesma pessoa da foto (traços, pele, cabelo, idade). Pose, luz e enquadramento vêm da direção de arte; a foto não é colada.",
   continuo: "Carrossel contínuo: o fundo panorâmico manda na cena; o gerador escreve o texto e desenha a logo por cima.",
   normal: "O gerador cria a lâmina inteira pela direção de arte.",
 };
@@ -56,6 +58,8 @@ export interface BaseDaLamina {
   temFoto: boolean;
   /** Vai recompor a foto do cliente (replicar referência com foto). */
   fotoRecomposta: boolean;
+  /** Frente RO: alguma foto da lâmina está em "Usar o rosto" (só a identidade, cena nova). */
+  comRosto: boolean;
 }
 
 /**
@@ -64,19 +68,24 @@ export interface BaseDaLamina {
  * referência fica fixa (ou composta com elementos).
  */
 export function baseDaLamina(
-  card: Pick<CardDaDirecao, "referencias_ids" | "imagens_ids" | "fotos_livres">,
+  card: Pick<CardDaDirecao, "referencias_ids" | "imagens_ids" | "fotos_livres" | "uso_do_acervo">,
   refsDoConjunto: string[] | null | undefined,
   continuo: boolean,
 ): BaseDaLamina {
   const proprias = card.referencias_ids || [];
   const daLamina = proprias.length > 0;
   const referencias = (daLamina ? proprias : refsDoConjunto || []).slice(0, 2);
-  const livres = card.fotos_livres || [];
-  const acervo = (card.imagens_ids || []).length > 0;
+  const todas = card.fotos_livres || [];
+  // Frente RO: a foto em "Usar o rosto" não é base nem elemento: vira a identidade da pessoa (cena nova).
+  const livres = todas.filter((f) => usoDaFotoLivre(f) === "exata" || f.recortada === true);
+  const temAcervo = (card.imagens_ids || []).length > 0;
+  const acervo = temAcervo && usoDoAcervo(card) === "exata";
+  const comRosto = (temAcervo && !acervo) || todas.length > livres.length;
   const fundo = acervo || livres.some((f) => f.papel === "fundo");
   const elementos = livres.some((f) => f.papel === "elemento");
   const recortado = livres.some((f) => f.papel === "elemento" && (f as { recortada?: boolean }).recortada === true);
-  const temFoto = fundo || elementos;
+  // A lâmina com foto própria (mesmo só o rosto) sai do fundo contínuo, como no servidor.
+  const temFoto = fundo || elementos || comRosto;
   const panorama = continuo && !temFoto;
   let modo: ModoDaGeracao;
   if (panorama) modo = "continuo";
@@ -84,9 +93,58 @@ export function baseDaLamina(
   else if (fundo && elementos) modo = "foto_composta";
   else if (fundo) modo = "foto_real";
   else if (recortado) modo = "recorte";
+  else if (comRosto) modo = "rosto";
   else if (elementos) modo = "elementos";
   else modo = "normal";
-  return { modo, referencias, daLamina, temFoto, fotoRecomposta: modo === "replicar_referencia" && temFoto };
+  return { modo, referencias, daLamina, temFoto, fotoRecomposta: modo === "replicar_referencia" && (fundo || elementos), comRosto };
+}
+
+/**
+ * Seletor compacto do uso da foto (frente RO, 29/09): "Foto exata" ou "Usar o
+ * rosto", sem caixa. Mostra quando o agente escolheu (Jev ou pelo pedido).
+ */
+export function SeletorDoUso({
+  uso,
+  por,
+  onTrocar,
+  bloqueado = false,
+  rotulo,
+}: {
+  uso: UsoDaFoto;
+  por?: string | null;
+  onTrocar?: (uso: UsoDaFoto) => void;
+  bloqueado?: boolean;
+  rotulo: string;
+}) {
+  const automatico = por === "jev" || por === "regra";
+  return (
+    <span className="mr-2 inline-flex shrink-0 items-center text-[11px]" role="radiogroup" aria-label={`Uso da ${rotulo}`} data-seletor-uso={uso}>
+      {(["exata", "rosto"] as UsoDaFoto[]).map((u) => (
+        <button
+          key={u}
+          type="button"
+          role="radio"
+          aria-checked={uso === u}
+          disabled={bloqueado || !onTrocar}
+          onClick={() => onTrocar && uso !== u && onTrocar(u)}
+          title={DICA_DO_USO[u]}
+          data-uso={u}
+          className={
+            uso === u
+              ? "rounded px-1 py-0.5 font-medium text-foreground underline decoration-primary decoration-2 underline-offset-4"
+              : "rounded px-1 py-0.5 text-muted-foreground hover:text-foreground disabled:hover:text-muted-foreground"
+          }
+        >
+          {u === "exata" ? "Foto exata" : "Usar o rosto"}
+        </button>
+      ))}
+      {automatico && (
+        <span className="ml-0.5 text-[11px] text-muted-foreground" title={`O agente escolheu ${ROTULO_DO_USO[uso].toLowerCase()} pelo pedido. Troque se precisar.`} data-uso-por={por}>
+          (auto)
+        </span>
+      )}
+    </span>
+  );
 }
 
 /** A versão nasceu recompondo a foto do cliente pela referência. */
@@ -222,6 +280,7 @@ export default function EstudioBaseDaLamina({
   total,
   fidelidade,
   avisoDoRosto,
+  onTrocarUso,
 }: {
   card: CardDaDirecao;
   refsDoConjunto: string[] | null | undefined;
@@ -255,6 +314,8 @@ export default function EstudioBaseDaLamina({
   fidelidade?: ReactNode;
   /** Frente R2: aviso da conferência do rosto escolhido (só aviso, EstudioAvisoDoRosto). */
   avisoDoRosto?: ReactNode;
+  /** Frente RO: troca o uso de uma foto (a do acervo ou uma trazida, pelo caminho): exata ou só o rosto. */
+  onTrocarUso?: (alvo: { acervo: true } | { caminho: string }, uso: UsoDaFoto) => void;
 }) {
   const base = baseDaLamina(card, refsDoConjunto, continuo);
   const foraDaEmenda = !!versao && versao.modo === "panorama" && versao.fora_da_emenda === true;
@@ -274,7 +335,9 @@ export default function EstudioBaseDaLamina({
   };
   const temAvisos =
     continuoSemModelo || (continuo && base.temFoto) || foraDoFundo || foraDaEmenda || base.fotoRecomposta || (versaoRecompos(versao) && !base.fotoRecomposta);
-  const resumo = `${base.temFoto ? "com foto" : "sem foto"} · ${base.referencias.length ? `${base.referencias.length} referência(s)` : "sem referência"}`;
+  const resumo = `${base.comRosto ? "com o rosto" : base.temFoto ? "com foto" : "sem foto"} · ${base.referencias.length ? `${base.referencias.length} referência(s)` : "sem referência"}`;
+  // Frente RO: há foto com seletor de uso (acervo ou trazida, fora logo e recorte): o "?" explica os dois usos.
+  const temFotoComUso = doAcervo.length > 0 || livres.some((f) => !fotoSemUso(f));
 
   // Ícone que abre a ferramenta (a dica diz o quê); com foto ou referência, as miniaturas vêm logo depois.
   const botaoIcone = (onClick: () => void, icone: ReactNode, dica: string, dado: string) => (
@@ -307,20 +370,40 @@ export default function EstudioBaseDaLamina({
                   <ImagemDaMesa caminho={fotoDoAcervo.storage_path} bucket={fotoDoAcervo.storage_bucket || "mesa"} alt={fotoDoAcervo.nome} className="h-full w-full" />
                 </Removivel>
               )}
+              {doAcervo.length > 0 && (
+                <SeletorDoUso
+                  uso={usoDoAcervo(card)}
+                  por={card.uso_do_acervo_por}
+                  rotulo="foto do acervo"
+                  bloqueado={bloqueado}
+                  onTrocar={onTrocarUso ? (u) => onTrocarUso({ acervo: true }, u) : undefined}
+                />
+              )}
               {livres.map((f) => {
                 const recortada = (f as { recortada?: boolean }).recortada === true;
-                const tituloDaFoto = f.papel === "fundo" ? "Fundo" : recortada ? "Elemento sem fundo" : "Elemento";
+                const uso = usoDaFotoLivre(f);
+                const tituloDaFoto = uso === "rosto" ? "Rosto (identidade)" : f.papel === "fundo" ? "Fundo" : recortada ? "Elemento sem fundo" : "Elemento";
                 return (
-                  <Removivel
-                    key={f.caminho}
-                    titulo={tituloDaFoto}
-                    onTirar={!bloqueado && onTirarFoto ? () => onTirarFoto(f.caminho) : undefined}
-                    rotulo={`Tirar da lâmina: ${tituloDaFoto.toLowerCase()}`}
-                    marca={recortada ? <Scissors className="h-2.5 w-2.5" /> : null}
-                    xadrez={recortada}
-                  >
-                    <ImagemDaMesa caminho={f.caminho} alt={tituloDaFoto} className="h-full w-full" />
-                  </Removivel>
+                  <span key={f.caminho} className="inline-flex min-w-0 items-center">
+                    <Removivel
+                      titulo={tituloDaFoto}
+                      onTirar={!bloqueado && onTirarFoto ? () => onTirarFoto(f.caminho) : undefined}
+                      rotulo={`Tirar da lâmina: ${tituloDaFoto.toLowerCase()}`}
+                      marca={recortada ? <Scissors className="h-2.5 w-2.5" /> : null}
+                      xadrez={recortada}
+                    >
+                      <ImagemDaMesa caminho={f.caminho} alt={tituloDaFoto} className="h-full w-full" />
+                    </Removivel>
+                    {!fotoSemUso(f) && (
+                      <SeletorDoUso
+                        uso={uso}
+                        por={f.uso_por}
+                        rotulo={tituloDaFoto.toLowerCase()}
+                        bloqueado={bloqueado}
+                        onTrocar={onTrocarUso ? (u) => onTrocarUso({ caminho: f.caminho }, u) : undefined}
+                      />
+                    )}
+                  </span>
                 );
               })}
             </div>
@@ -348,6 +431,7 @@ export default function EstudioBaseDaLamina({
             <div className="ml-auto flex shrink-0 items-center pl-1">
               <AjudaRecolhida rotulo="Como esta lâmina vai ser gerada" titulo="Como vai ser gerada" lado="bottom">
                 {DESCRICAO_DO_MODO[base.modo]}
+                {temFotoComUso ? <span className="mt-1.5 block">{AJUDA_DO_USO}</span> : null}
               </AjudaRecolhida>
               <button type="button" onClick={abrirMenu} aria-haspopup="menu" aria-expanded={!!menu} aria-label="Mais opções de fotos e referências" className="ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground">
                 <MoreHorizontal className="h-4 w-4" />

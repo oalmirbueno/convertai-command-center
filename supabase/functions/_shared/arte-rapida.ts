@@ -26,7 +26,12 @@
  *   (fotos_livres elemento, até 2 por lâmina);
  * - arte_para_melhorar: a arte que o cliente mandou; o diretor lê e refaz
  *   com a marca;
- * - referencia: composição ou clima; o diretor olha, sem copiar.
+ * - referencia: composição ou clima; o diretor olha, sem copiar;
+ * - rosto (frente RO, 29/09): foto de uma pessoa usada só pela IDENTIDADE
+ *   (Rosto (identidade)): o gerador cria uma cena nova com ela, na pose, luz e
+ *   composição da direção; a foto não é colada. "foto" passa a ser a Foto
+ *   exata. Em "Automático" o Jev decide também exata ou rosto pelo pedido
+ *   (_shared/uso-da-foto.ts).
  * PDF, Word e texto são lidos no navegador (leituraDeArquivos.ts) e chegam
  * como texto.
  *
@@ -40,6 +45,7 @@
  */
 
 import { rotuloDoTipo, tipoDaCampanha } from "./tipos-de-campanha.ts";
+import { decidirUso, perguntaDoUso, ROTULO_DO_USO } from "./uso-da-foto.ts";
 
 // ------------------------------------------------------------------ constantes
 
@@ -57,26 +63,28 @@ export const MAX_CHARS_DO_PEDIDO = 3_000;
 /** Logos por lâmina (o gerador compõe até 2 elementos). */
 export const MAX_LOGOS_POR_LAMINA = 2;
 
-export const PAPEIS_DO_ARQUIVO = ["foto", "logo", "arte_para_melhorar", "referencia"] as const;
+export const PAPEIS_DO_ARQUIVO = ["foto", "rosto", "logo", "arte_para_melhorar", "referencia"] as const;
 export type PapelDoArquivo = (typeof PAPEIS_DO_ARQUIVO)[number];
 export type PapelPedido = PapelDoArquivo | "auto";
 
 export const ROTULO_DO_PAPEL: Record<PapelDoArquivo, string> = {
   foto: "Foto",
+  rosto: "Rosto (identidade)",
   logo: "Logo",
   arte_para_melhorar: "Arte a melhorar",
   referencia: "Referência",
 };
 
 export const DICA_DO_PAPEL: Record<PapelDoArquivo, string> = {
-  foto: "Foto real (pessoa, evento, produto): entra como está, sem ser refeita",
+  foto: "Foto exata (pessoa, evento, produto): entra como está, sem ser refeita, mesma pose",
+  rosto: "Só o rosto da pessoa: o gerador cria uma cena nova com ela, em outra pose, coerente com o tema",
   logo: "Logo de parceiro ou do evento: aplicada como está",
   arte_para_melhorar: "Arte que o cliente mandou: o diretor refaz com a marca",
   referencia: "Referência de composição ou clima",
 };
 
-/** Código do arquivo para o diretor (F1, L1, A1, R1). */
-const PREFIXO_DO_PAPEL: Record<PapelDoArquivo, string> = { foto: "F", logo: "L", arte_para_melhorar: "A", referencia: "R" };
+/** Código do arquivo para o diretor (F1, P1, L1, A1, R1). P = pessoa (rosto, identidade). */
+const PREFIXO_DO_PAPEL: Record<PapelDoArquivo, string> = { foto: "F", rosto: "P", logo: "L", arte_para_melhorar: "A", referencia: "R" };
 
 export type PecaDaArteRapida = "unica" | "carrossel";
 export type PecaPedida = PecaDaArteRapida | "auto";
@@ -300,6 +308,8 @@ export interface PerguntasDaArteRapida {
   campanhas: Record<string, string>;
   /** Índice do arquivo (na lista pedida) de cada pergunta de papel. */
   papeis: Record<string, number>;
+  /** Frente RO: índice do arquivo de cada pergunta de uso (foto exata ou só o rosto). */
+  usos: Record<string, number>;
 }
 
 const MAX_CAMPANHAS_NA_PERGUNTA = 20;
@@ -330,6 +340,7 @@ export function perguntasDaArteRapida(p: PedidoDaArteRapida, campanhas: Campanha
   const questions: Record<string, PerguntaDeEscolha> = {};
   const mapaCampanhas: Record<string, string> = {};
   const papeis: Record<string, number> = {};
+  const usos: Record<string, number> = {};
   const arquivos = p.arquivos.map((a, i) => ({ posicao: i + 1, nome: a.nome, do_acervo: !!a.imagem_id, papel_escolhido: a.papel === "auto" ? null : a.papel }));
   const state: Record<string, unknown> = {
     pedido: p.pedido,
@@ -379,15 +390,19 @@ export function perguntasDaArteRapida(p: PedidoDaArteRapida, campanhas: Campanha
       type: "choice",
       instructions: `No pedido em \`pedido\`, qual é o papel do arquivo de imagem na posição ${i + 1} de \`arquivos\` (nome "${a.nome}")? Use o que o pedido diz sobre as imagens ("esta foto", "estas logos", "a arte que o cliente mandou") e o nome do arquivo.`,
       criteria: {
-        foto: { what: "Foto real para entrar na arte como está: pessoa, palestrante, evento, produto, ambiente, equipe." },
+        foto: { what: "Foto real de pessoa, palestrante, evento, produto, ambiente ou equipe: para entrar na arte (como está ou só com o rosto da pessoa numa cena nova)." },
         logo: { what: "Logo ou marca a aplicar na arte: parceiro, patrocinador, evento, apoio." },
         arte_para_melhorar: { what: "Uma arte já pronta (post, flyer, convite, banner) que o cliente mandou para refazer ou melhorar." },
         referencia: { what: "Referência de estilo, composição ou clima: um exemplo para seguir, não para entrar na arte." },
       },
     };
+    // Frente RO: pergunta junto (em paralelo) se, sendo foto, entra exata ou só com o rosto. Só vale quando o papel sai foto.
+    const idUso = `uso_${i + 1}`;
+    usos[idUso] = i;
+    questions[idUso] = perguntaDoUso({ caminhoDaFoto: `arquivos[${i}]`, nome: a.nome }) as PerguntaDeEscolha;
   });
 
-  return { state, questions, campanhas: mapaCampanhas, papeis };
+  return { state, questions, campanhas: mapaCampanhas, papeis, usos };
 }
 
 /**
@@ -429,7 +444,7 @@ export function decidirArteRapida(
   const confianca = (x: RespostaDeEscolha | undefined) => (x && typeof x.confidence === "number" && isFinite(x.confidence) ? x.confidence : null);
 
   // Papel de cada arquivo: a equipe; senão o Jev; senão o nome; senão foto.
-  const contagem: Record<PapelDoArquivo, number> = { foto: 0, logo: 0, arte_para_melhorar: 0, referencia: 0 };
+  const contagem: Record<PapelDoArquivo, number> = { foto: 0, rosto: 0, logo: 0, arte_para_melhorar: 0, referencia: 0 };
   const arquivos: ArquivoDaArteRapida[] = p.arquivos.map((a, i) => {
     let papel: PapelDoArquivo = "foto";
     let por: QuemDecidiu = "regra";
@@ -448,6 +463,16 @@ export function decidirArteRapida(
         papel = peloNome || "foto";
         // O Jev respondeu com pouca certeza: a regra decide e a equipe confere.
         if (doJev && !peloNome && doJev !== papel) avisos.push(`Não ficou claro o papel de "${a.nome}": entrou como ${ROTULO_DO_PAPEL[papel].toLowerCase()}. Troque se for ${ROTULO_DO_PAPEL[doJev].toLowerCase()}.`);
+      }
+      // Frente RO: foto em "Automático": exata ou só o rosto, pelo Jev (confiança mínima), pela regra do pedido ou exata.
+      if (papel === "foto") {
+        const idUso = perguntas && perguntas.usos ? Object.keys(perguntas.usos).filter((k) => perguntas.usos[k] === i)[0] : undefined;
+        const uso = decidirUso(idUso ? r[idUso] : null, p.pedido);
+        if (uso.uso === "rosto") {
+          papel = "rosto";
+          por = uso.por;
+        }
+        if (uso.duvida) avisos.push(`Não ficou claro se "${a.nome}" entra como está ou só com o rosto: entrou como ${ROTULO_DO_USO.exata.toLowerCase()}. Troque para Rosto (identidade) para uma cena nova com a pessoa.`);
       }
     }
     contagem[papel] += 1;
@@ -490,8 +515,9 @@ export function decidirArteRapida(
     }
   }
 
-  if (peca === "unica" && contagem.foto > 1) {
-    avisos.push(`Arte única usa uma foto só: ${contagem.foto - 1} ${contagem.foto - 1 === 1 ? "foto ficou" : "fotos ficaram"} de fora. Peça carrossel para usar todas.`);
+  const fotosDaPeca = contagem.foto + contagem.rosto;
+  if (peca === "unica" && fotosDaPeca > 1) {
+    avisos.push(`Arte única usa uma foto só: ${fotosDaPeca - 1} ${fotosDaPeca - 1 === 1 ? "foto ficou" : "fotos ficaram"} de fora. Peça carrossel para usar todas.`);
   }
   if (contagem.logo > MAX_LOGOS_POR_LAMINA) {
     avisos.push(`Até ${MAX_LOGOS_POR_LAMINA} logos por lâmina entram como estão; ${contagem.logo - MAX_LOGOS_POR_LAMINA} ficaram de fora. Junte as logos numa imagem só para entrar todas.`);
@@ -508,7 +534,8 @@ O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pedi
 - Você não pesquisa na internet: se o pedido pede especificações ou dados que não vieram (ex.: "pesquisa o que esse mouse faz"), não invente; peça em \`avisos_para_a_equipe\` (ex.: "Mande as especificações do mouse para entrarem na arte").
 - O pedido pode vir do ditado por voz, com palavras trocadas pelo som ("sell" ou "seleo" = selo; "shop" = a loja da marca). Entenda pelo contexto; se uma palavra não fizer sentido, deixe a parte dela de fora e pergunte em \`avisos_para_a_equipe\`. Nome de loja, site ou marketplace que não aparece no pedido escrito com clareza nem no contexto nunca vai para a arte.
 - Peça: \`item.pedido_avulso.peca\` manda. "unica" é exatamente 1 card. "carrossel" é a quantidade que o conteúdo pede (3 a 7) ou \`item.quantidade_de_laminas_pedida\`.
-- Fotos do pedido (códigos F1, F2...): fotos reais que entram como estão, nunca refeitas e nunca escurecidas. Para usar uma numa lâmina, ponha o código em imagem_acervo (ex.: "F1") e escreva o layout com o texto na área calma da foto. Toda foto do pedido aparece em alguma lâmina; em arte única, a F1 é a base. Letras impressas no produto da foto (modelo, marca do fabricante) nunca viram texto da arte.
+- Fotos do pedido (códigos F1, F2...): fotos reais que entram como estão (Foto exata), nunca refeitas e nunca escurecidas. Para usar uma numa lâmina, ponha o código em imagem_acervo (ex.: "F1") e escreva o layout com o texto na área calma da foto. Toda foto do pedido aparece em alguma lâmina; em arte única, a F1 é a base. Letras impressas no produto da foto (modelo, marca do fabricante) nunca viram texto da arte.
+- Rostos do pedido (códigos P1, P2..., "Rosto (identidade)"): a pessoa da foto, usada só pela identidade. A foto NÃO é a base: escreva em \`imagem\` uma cena NOVA com essa pessoa, coerente com o pedido, o tema e a campanha (onde ela está, o que faz, pose, gesto, ângulo, roupa se o tema pedir, luz e enquadramento), diferente da pose da foto. Ponha o código em imagem_acervo (ex.: "P1") em cada lâmina em que a pessoa aparece (pode repetir o mesmo P em várias lâminas do carrossel). Descreva a pessoa pelo papel ("a palestrante", "o dono da loja"), nunca pelos traços.
 - Logos do pedido (L1, L2...): logos de parceiros, patrocinadores ou do evento, anexadas pela equipe. Entram como estão, alinhadas e legíveis (faixa de logos na base ou junto do bloco de texto), sempre com a logo da marca do cliente também. Diga no layout onde ficam; nunca invente logo.
 - Arte a melhorar (A1...): a arte que o cliente mandou. Leia o texto e a intenção dela e refaça com a identidade da marca (fontes, cores, logo), mais clara e profissional, mantendo todas as informações.
 - Referência (R1...): composição ou clima para seguir; nunca copie texto nem marca dela.
@@ -538,23 +565,39 @@ export interface FotoLivreDaLamina {
   caminho: string;
   papel: "fundo" | "elemento";
   nota?: string;
+  /** Frente RO: "rosto" = só a identidade da pessoa; sem o campo, exata. */
+  uso?: "exata" | "rosto";
+  uso_por?: QuemDecidiu;
 }
 
 export interface LaminaComFotos {
   ordem: number;
   imagens_ids?: string[];
   fotos_livres?: FotoLivreDaLamina[];
+  /** Frente RO: uso da foto do acervo (imagens_ids). */
+  uso_do_acervo?: "exata" | "rosto";
+  uso_do_acervo_por?: QuemDecidiu;
 }
 
 const temFoto = (c: LaminaComFotos) => !!(c.imagens_ids && c.imagens_ids.length) || (c.fotos_livres || []).some((f) => f.papel === "fundo");
 
 function porFoto(c: LaminaComFotos, a: ArquivoDaArteRapida) {
+  const rosto = a.papel === "rosto";
+  delete c.uso_do_acervo;
+  delete c.uso_do_acervo_por;
   if (a.imagem_id) {
     c.imagens_ids = [a.imagem_id];
     c.fotos_livres = (c.fotos_livres || []).filter((f) => f.papel !== "fundo");
+    // Frente RO: a foto do acervo em Rosto (identidade) vira só a identidade da pessoa.
+    if (rosto) {
+      c.uso_do_acervo = "rosto";
+      c.uso_do_acervo_por = a.papel_por;
+    }
   } else if (a.caminho) {
     c.imagens_ids = [];
-    const base: FotoLivreDaLamina = { caminho: a.caminho, papel: "fundo", nota: `Foto real do pedido (${a.nome}): entra como está, sem ser refeita nem escurecida.` };
+    const base: FotoLivreDaLamina = rosto
+      ? { caminho: a.caminho, papel: "fundo", nota: `Rosto do pedido (${a.nome}): só a identidade da pessoa, numa cena nova pela direção.`, uso: "rosto", uso_por: a.papel_por }
+      : { caminho: a.caminho, papel: "fundo", nota: `Foto real do pedido (${a.nome}): entra como está, sem ser refeita nem escurecida.` };
     c.fotos_livres = [base].concat((c.fotos_livres || []).filter((f) => f.papel !== "fundo"));
   }
 }
@@ -574,7 +617,8 @@ export function aplicarArquivosNasLaminas<C extends LaminaComFotos>(
 ): C[] {
   const saida = cards.map((c) => ({ ...c, imagens_ids: (c.imagens_ids || []).slice(), fotos_livres: (c.fotos_livres || []).slice() })) as C[];
   if (!saida.length) return saida;
-  const fotos = arquivos.filter((a) => a.papel === "foto");
+  // Frente RO: o rosto (identidade) ocupa a lâmina como a foto, mas o mesmo P pode repetir em várias lâminas.
+  const fotos = arquivos.filter((a) => a.papel === "foto" || a.papel === "rosto");
   const usadas: Record<string, true> = {};
   if (peca === "unica") {
     const capa = saida[0];
@@ -585,7 +629,7 @@ export function aplicarArquivosNasLaminas<C extends LaminaComFotos>(
     }
   } else {
     saida.forEach((c) => {
-      const f = fotos.filter((x) => x.codigo === codigos[c.ordem] && !usadas[x.codigo])[0];
+      const f = fotos.filter((x) => x.codigo === codigos[c.ordem] && (x.papel === "rosto" || !usadas[x.codigo]))[0];
       if (f) {
         porFoto(c, f);
         usadas[f.codigo] = true;

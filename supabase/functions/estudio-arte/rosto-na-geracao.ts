@@ -33,6 +33,8 @@
  *   sem laço de regerar.
  */
 
+import { linhasDaIdentidadeDaFoto } from "../_shared/uso-da-foto.ts";
+
 export type FonteDoRosto = "cliente" | "equipe" | "fotos" | "escolhidas";
 export const FONTES_DO_ROSTO: FonteDoRosto[] = ["cliente", "equipe", "fotos", "escolhidas"];
 export const MAX_FOTOS_DO_ROSTO = 2;
@@ -204,7 +206,7 @@ export const SUGESTOES_DO_COMO = ["sorrindo", "séria confiante", "apontando par
  * `modo`: "replicar" (padrão, com referência) ou "lamina" (lâmina normal).
  * `como`: pose e expressão pedidas pela equipe.
  */
-export function blocoDoRosto(e: { indices: number[]; destacar: boolean; pessoaNaReferencia: boolean; como?: string; modo?: "replicar" | "lamina" }): string {
+export function blocoDoRosto(e: { indices: number[]; destacar: boolean; pessoaNaReferencia: boolean; como?: string; modo?: "replicar" | "lamina"; daFoto?: boolean }): string {
   if (!e.indices.length) return "";
   const imgs = e.indices.length === 1 ? `imagem ${e.indices[0]}` : `imagens ${e.indices.slice(0, -1).join(", ")} e ${e.indices[e.indices.length - 1]}`;
   const lamina = e.modo === "lamina";
@@ -217,6 +219,8 @@ export function blocoDoRosto(e: { indices: number[]; destacar: boolean; pessoaNa
       ? `- COMO ELA APARECE (pedido da equipe): ${como}. Faça essa pose e essa expressão com naturalidade; o rosto continua o das fotos.`
       : "",
     "- RECRIE a pessoa dentro da composição, nunca a foto recortada e colada: pose, gesto, direção do olhar e enquadramento escolhidos para combinar com o layout e deixar o texto livre e legível.",
+    // Frente RO (29/09): foto da lâmina no modo "Usar o rosto": a frase do dono e a cena nova pela direção.
+    ...(e.daFoto ? linhasDaIdentidadeDaFoto() : []),
     lamina
       ? "- Ela é a pessoa da cena desta lâmina, no lugar e na escala que a direção pede para a pessoa."
       : e.pessoaNaReferencia
@@ -344,6 +348,30 @@ Não identifique a pessoa e não diga quem ela é. Diga:
 - impressao_geral: se parece a mesma pessoa ou outra, e por quê (pose, luz, expressão e roupa diferentes são esperadas e não contam).
 Português do Brasil, sem travessão. Só o JSON pedido.`;
 
+/**
+ * Frente RO (29/09): no modo "Usar o rosto" (foto da lâmina) a mesma leitura
+ * também diz se a pose, o ângulo e o enquadramento ficaram iguais aos da foto
+ * (a foto colada). Só aviso; fora desse modo o esquema de sempre.
+ */
+export const ESQUEMA_CONFERENCIA_DO_ROSTO_COM_POSE = {
+  nome: "conferencia_do_rosto_com_pose",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["pessoa_na_arte", "nas_fotos", "na_arte", "impressao_geral", "pose_igual_a_foto"],
+    properties: {
+      pessoa_na_arte: { type: "boolean" },
+      nas_fotos: { type: "string" },
+      na_arte: { type: "string" },
+      impressao_geral: { type: "string" },
+      pose_igual_a_foto: { type: "boolean" },
+    },
+  },
+};
+
+export const SISTEMA_CONFERENCIA_DO_ROSTO_COM_POSE = `${SISTEMA_CONFERENCIA_DO_ROSTO.replace("Português do Brasil, sem travessão. Só o JSON pedido.", "")}- pose_igual_a_foto: verdadeiro se a pessoa da arte está na MESMA pose, ângulo da cabeça, expressão e enquadramento da primeira foto real, como se a foto tivesse sido recortada e colada na arte; falso se a pose ou o enquadramento mudaram.
+Português do Brasil, sem travessão. Só o JSON pedido.`;
+
 export const PERGUNTA_OUTRA_PESSOA = {
   type: "noul" as const,
   instructions:
@@ -357,6 +385,10 @@ export const PERGUNTA_OUTRA_PESSOA = {
 export type ConferenciaDoRosto = {
   outra_pessoa: number | null;
   aviso: boolean;
+  /** Frente RO: modo "Usar o rosto" com a pose igual à da foto (só aviso). */
+  pose_copiada?: boolean;
+  /** Frente RO: erro do alinhamento entre a arte e a foto (baixo = pixels colados). */
+  erro_da_pose?: number | null;
   sem_pessoa?: boolean;
   resumo: string;
   conferida_em: string;

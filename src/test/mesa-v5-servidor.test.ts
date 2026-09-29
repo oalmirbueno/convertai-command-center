@@ -28,7 +28,8 @@ describe("fotos da lâmina trazidas pela equipe", () => {
     expect(f).toContain('caminho.indexOf("..") >= 0');
     expect(f).toContain('papel === "fundo" && saida.some((f) => f.papel === "fundo")');
     expect(f).toContain('saida.filter((f) => f.papel === "elemento").length >= 2');
-    expect(direcao).toContain('export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean };');
+    // Frente RO (29/09): o uso da foto (exata ou só o rosto) entrou no fim do tipo, sem mexer no resto.
+    expect(direcao).toContain('export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean; uso?: "exata" | "rosto"; uso_por?: "equipe" | "jev" | "regra" };');
   });
   it("configurar grava as fotos e a direção refeita não as perde", () => {
     expect(corpoDe(estudio, "configurar")).toContain("mudou.fotos_livres = fotosLivres");
@@ -418,6 +419,7 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
   });
 
   it("12: mudar a zona do texto no contínuo refaz o fundo", () => {
-    expect(ler("supabase/functions/estudio-arte/conversa-do-diretor.ts")).toContain('"cor_fundo", "foto_acervo", "zona_texto"];');
+    // Frente RO: trocar o uso da foto (exata ou só o rosto) também muda a cena.
+    expect(ler("supabase/functions/estudio-arte/conversa-do-diretor.ts")).toContain('"cor_fundo", "foto_acervo", "zona_texto", "uso_da_foto"];');
   });
 });

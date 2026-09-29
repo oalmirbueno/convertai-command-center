@@ -500,7 +500,7 @@ describe("5. Ligação no servidor e na tela", () => {
     const g = corpoDe("gerarCard");
     const enxuga = g.indexOf("const textoNaGeracao = ads ? null : await textoDaLaminaNaGeracao(t, card,");
     expect(enxuga).toBeGreaterThan(g.indexOf("if (!tipografia) throw new ErroEstudio(SEM_TIPOGRAFIA.status"));
-    expect(enxuga).toBeLessThan(g.indexOf("const [foto] = card.imagens_ids?.length"));
+    expect(enxuga).toBeLessThan(g.indexOf("const [fotoDoAcervo] = card.imagens_ids?.length"));
     const posicao = g.indexOf("if (posicaoDaSerie) cardDoPrompt = posicaoDaSerie.card;");
     expect(posicao).toBeGreaterThan(0);
     expect(posicao).toBeLessThan(g.indexOf("const zonaDoTexto = normalizarLayout(cardDoPrompt.layout"));

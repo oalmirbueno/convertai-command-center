@@ -293,6 +293,7 @@ import {
   antesDaMudanca,
   PREFIXO_FOTO_DO_PEDIDO,
   traduzirApelidosDeFoto,
+  usoDaFotoNaLamina,
 } from "./conversa-do-diretor.ts";
 import {
   avisoDaFidelidade,
@@ -330,6 +331,7 @@ import {
   ehItemEscolhido,
   ehUuid,
   ESQUEMA_CONFERENCIA_DO_ROSTO,
+  ESQUEMA_CONFERENCIA_DO_ROSTO_COM_POSE,
   ESQUEMA_PESSOAS_NAS_FOTOS,
   estadoDaPessoaNaLamina,
   fotoDoAcervoLiberada,
@@ -349,11 +351,24 @@ import {
   ROTULO_DA_FOTO_DO_ROSTO,
   type RostoEscolhido,
   SISTEMA_CONFERENCIA_DO_ROSTO,
+  SISTEMA_CONFERENCIA_DO_ROSTO_COM_POSE,
   SISTEMA_PESSOAS_NAS_FOTOS,
   vagasDoRosto,
   VERSAO_DA_LEITURA_DE_PESSOAS,
   vistaDoCloneArquivada,
 } from "./rosto-na-geracao.ts";
+import {
+  avisoDaPoseCopiada,
+  lerQuemEscolheu,
+  lerUso,
+  perguntaDoUso,
+  ROTULO_DA_FOTO_DE_IDENTIDADE,
+  type UsoDaFoto,
+  usoDaFotoLivre,
+  mensagemFalaDaFoto,
+  usoDoAcervo,
+  usoPedidoNaConversa,
+} from "../_shared/uso-da-foto.ts";
 import {
   acabamentoDaLamina,
   ampliar,
@@ -367,6 +382,7 @@ import {
   cobrir,
   decodificar,
   dimensoesDoCabecalho,
+  estimarAlinhamento,
   fotoNaLamina,
   logoLimpa,
   logoSobreContraste,
@@ -2072,6 +2088,8 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
     .filter((f): f is { bucket: string; caminho: string } => !!f && typeof f === "object" && typeof (f as Record<string, unknown>).bucket === "string" && typeof (f as Record<string, unknown>).caminho === "string")
     .slice(0, MAX_FOTOS_ESCOLHIDAS);
   if (!usadas.length) throw new ErroEstudio(409, "sem_rosto", "Esta versão não usou rosto escolhido.");
+  // Frente RO: no modo "Usar o rosto" (foto da lâmina) a conferência também vê se a pose ficou a da foto (colada).
+  const daFoto = !!rosto && rosto.origem === "foto_da_lamina";
   const usos: { usoId: string; custoUsd: number }[] = [];
   let conferencia: ConferenciaDoRosto;
   try {
@@ -2092,13 +2110,13 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
       tarefa: "verificacao",
       agente: "leitor",
       modeloId: leitor.id,
-      sistema: SISTEMA_CONFERENCIA_DO_ROSTO,
+      sistema: daFoto ? SISTEMA_CONFERENCIA_DO_ROSTO_COM_POSE : SISTEMA_CONFERENCIA_DO_ROSTO,
       mensagens: [{
         papel: "usuario",
         conteudo: `Imagem 1 = arte gerada. Imagens 2 a ${reais.length + 1} = fotos reais da pessoa.`,
         imagens: [{ bytes: arte.bytes, mime: arte.mime, nome: "arte.png" }, ...reais.map((f, i) => ({ bytes: f.bytes, mime: f.mime, nome: `real-${i + 1}.${extensaoDe(f.mime)}` }))],
       }],
-      esquemaJson: ESQUEMA_CONFERENCIA_DO_ROSTO,
+      esquemaJson: daFoto ? ESQUEMA_CONFERENCIA_DO_ROSTO_COM_POSE : ESQUEMA_CONFERENCIA_DO_ROSTO,
       maxTokensSaida: 1_500,
       referencia: { tipo: "estudio_trabalho", id: t.id },
       criadoPor: ch.userId,
@@ -2123,11 +2141,15 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
       }
     }
     const a = avisoDaConferencia({ pessoaNaArte, outraPessoa: outra });
+    // Frente RO: pose igual à da foto (leitura) ou pixels que batem depois de alinhados (código, sem custo). Só aviso.
+    const erroDaPose = daFoto && pessoaNaArte !== false ? await erroDaPoseColada(arte.bytes, reais[0].bytes).catch(nuloComLog("estudio-arte: pose da conferência do rosto não medida", { trabalho_id: t.id, ordem })) : null;
+    const pose = daFoto ? avisoDaPoseCopiada({ poseIgualNaLeitura: typeof l.pose_igual_a_foto === "boolean" ? l.pose_igual_a_foto : null, erroDoAlinhamento: erroDaPose }) : { aviso: false, texto: null };
     conferencia = {
       outra_pessoa: outra == null ? null : Math.round(outra * 100) / 100,
-      aviso: a.aviso,
+      aviso: a.aviso || pose.aviso,
       ...(pessoaNaArte === false ? { sem_pessoa: true } : {}),
-      resumo: a.texto,
+      ...(daFoto ? { pose_copiada: pose.aviso, erro_da_pose: erroDaPose == null ? null : Math.round(erroDaPose * 10) / 10 } : {}),
+      resumo: pose.aviso && pose.texto ? (a.aviso ? `${a.texto} ${pose.texto}` : pose.texto) : a.texto,
       conferida_em: new Date().toISOString(),
       custo_usd: arred(usos.reduce((s, u) => s + u.custoUsd, 0)),
       erro: erroJev,
@@ -2149,6 +2171,19 @@ async function conferirRosto(ch: Chamador, corpo: Record<string, unknown>) {
     custo_usd: arred(num(atual.custo_usd) + custo),
   }));
   return json({ trabalho_id: t.id, ordem, versao: alvo.versao, conferencia, custo_usd: custo });
+}
+
+/**
+ * Frente RO: erro do alinhamento entre a arte e a foto do rosto (a foto coberta
+ * no quadro da arte). Baixo = a foto foi colada (mesma pose e recorte). Só
+ * código, sem custo; as duas imagens já vêm reduzidas (até 1280 px).
+ */
+async function erroDaPoseColada(arte: Uint8Array, foto: Uint8Array): Promise<number | null> {
+  const a = await decodificar(arte);
+  const f = cobrir(await decodificar(foto), a.width, a.height);
+  const est = estimarAlinhamento(f, a, []);
+  const erro = Number.isFinite(est.erro) && est.erro < est.erroSemAlinhar ? est.erro : est.erroSemAlinhar;
+  return Number.isFinite(erro) ? erro : null;
 }
 
 /** O que a versão guarda do rosto (frente R2): pose pedida, itens escolhidos e as fotos usadas (para a conferência). */
@@ -3547,7 +3582,7 @@ async function campanhasParaAArteRapida(clientId: string, marca: MarcaLeve | nul
 
 /** Até 4 imagens do pedido à vista do diretor (arte a melhorar, fotos e referências; as logos só entram na geração). */
 async function imagensDoPedidoParaODiretor(a: ArteRapida, fotos: ImagemAcervo[]): Promise<{ imagens: ImagemEntrada[]; avisos: string[] }> {
-  const ordem: Record<string, number> = { arte_para_melhorar: 0, foto: 1, referencia: 2 };
+  const ordem: Record<string, number> = { arte_para_melhorar: 0, foto: 1, rosto: 1, referencia: 2 };
   const alvos = a.arquivos.filter((x) => x.papel !== "logo").sort((x, y) => ordem[x.papel] - ordem[y.papel]).slice(0, 4);
   const imagens: ImagemEntrada[] = [];
   const avisos: string[] = [];
@@ -4903,8 +4938,20 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
   // ou trazida pela equipe (colada ou solta) como fundo.
-  const [foto] = card.imagens_ids?.length ? await imagensDoAcervo(t.client_id, card.imagens_ids) : [];
-  const livres = card.fotos_livres ?? [];
+  const [fotoDoAcervo] = card.imagens_ids?.length ? await imagensDoAcervo(t.client_id, card.imagens_ids) : [];
+  // Frente RO (29/09, dono: "ele faz exatamente aquela foto, em vez de aproveitar as características do rosto"):
+  // a foto marcada "Usar o rosto" não é base nem elemento. Vira só a IDENTIDADE da pessoa (como o rosto escolhido)
+  // e o gerador cria a cena nova pela direção. Sem a marca (o padrão), a foto é exata como sempre.
+  const acervoComoRosto = !!fotoDoAcervo && usoDoAcervo(card) === "rosto";
+  const foto = acervoComoRosto ? undefined : fotoDoAcervo;
+  const livresDaLamina = card.fotos_livres ?? [];
+  const livresComoRosto = livresDaLamina.filter((f) => usoDaFotoLivre(f) === "rosto" && !f.recortada);
+  const livres = livresDaLamina.filter((f) => livresComoRosto.indexOf(f) < 0);
+  const fotosDeIdentidade: FotoDoRosto[] = [
+    ...(acervoComoRosto && fotoDoAcervo ? [{ bucket: fotoDoAcervo.storage_bucket || "mesa", caminho: fotoDoAcervo.storage_path, nome: "rosto-da-lamina" }] : []),
+    ...livresComoRosto.map((f, i) => ({ bucket: "mesa", caminho: f.caminho, nome: `rosto-da-lamina-${i + 1}` })),
+  ].slice(0, MAX_FOTOS_ESCOLHIDAS);
+  const rostoDaFoto: RostoEscolhido | null = fotosDeIdentidade.length ? { fonte: "fotos", fotos: fotosDeIdentidade.map((f) => f.caminho) } : null;
   const fundoLivre = foto ? undefined : livres.find((f) => f.papel === "fundo");
   const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
   // Referências escolhidas pela equipe: com elas a lâmina replica o layout da referência (fora do contínuo).
@@ -5234,10 +5281,20 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente R2 (26/09): lâmina normal (sem referência, foto, recorte nem elementos) com rosto
   // escolhido, só quando a direção pede pessoa (Noul do Jev; falha = sem rosto). Sem rosto:
   // nada é lido e nada muda. A referência automática da marca cede a vaga às fotos do rosto.
-  const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
-  const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;
-  const rostoDaNormal = rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null;
-  const fotosDaNormal = rostoDaNormal ? await fotosDoRostoEscolhido(t, rostoDaNormal).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[])) : [];
+  // Frente RO: a foto da lâmina no modo "Usar o rosto" vale como o rosto desta lâmina (sem perguntar ao Jev se
+  // pede pessoa: a equipe pôs a pessoa). Com foto exata de fundo a cena é a da foto e o rosto não entra (aviso).
+  const rostoDaFotoNaNormal = rostoDaFoto && !replicar && !baseFoto && !recorteNaLamina ? rostoDaFoto : null;
+  if (rostoDaFoto && baseFoto && !panorama) {
+    avisosDaGeracao.push("Esta lâmina tem uma foto exata de fundo: o rosto (Usar o rosto) não entrou, porque a cena da foto fica como está. Tire a foto de fundo ou troque ela também para Usar o rosto.");
+  }
+  const rostoNaNormal = rostoDaFotoNaNormal || (!replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null);
+  const pedePessoa = rostoNaNormal && !rostoDaFotoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;
+  const rostoDaNormal = rostoDaFotoNaNormal || (rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null);
+  const fotosDaNormal = rostoDaFotoNaNormal
+    ? fotosDeIdentidade
+    : rostoDaNormal
+    ? await fotosDoRostoEscolhido(t, rostoDaNormal).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[]))
+    : [];
   if (rostoDaNormal && !fotosDaNormal.length) {
     throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
   }
@@ -5250,7 +5307,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente T2: lâmina > rosto > TIPOGRAFIA. Sem vaga para o rosto depois de a referência ceder, a amostra do
   // texto e depois a do título cedem (no replicar, pelo teto de fotos do rosto escolhido).
-  const rostoPrevisto = rostoDaNormal || (replicar && !candidatos.some((c) => !!c.fotoReplicar) ? lerRostoDoTrabalho(t.direcao, t.client_id) : null);
+  const rostoPrevisto = rostoDaNormal || (replicar && !candidatos.some((c) => !!c.fotoReplicar) ? rostoDaFoto || lerRostoDoTrabalho(t.direcao, t.client_id) : null);
   if (rostoPrevisto) {
     const queEntram = anexosDaLamina(candidatos, { base: temBase });
     const cedem = tipografiaQueCede({
@@ -5311,10 +5368,17 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente R (26/09, acréscimo do dono): rosto escolhido para a pessoa da referência.
   // Sem rosto (o padrão) nada é lido e nada entra. Com rosto: até 2 fotos depois
   // dos anexos da lâmina (antes das do estilo), no limite de imagens do modelo.
-  const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;
+  // Frente RO: a foto da lâmina em "Usar o rosto" vale sobre o rosto do trabalho.
+  const rostoDaFotoNoReplicar = replicar && fotosReplicar.length === 0 && rostoDaFoto ? rostoDaFoto : null;
+  const rostoEscolhido = replicar && fotosReplicar.length === 0 ? rostoDaFotoNoReplicar || lerRostoDoTrabalho(t.direcao, t.client_id) : null;
   const indicesDoRosto: number[] = [];
+  // Frente RO: o rosto desta versão veio da foto da lâmina (a conferência também olha a pose).
+  const rostoVeioDaFoto = !!rostoDaFotoNoReplicar || !!rostoDaFotoNaNormal;
+  const rotuloDoRosto = rostoVeioDaFoto ? ROTULO_DA_FOTO_DE_IDENTIDADE : ROTULO_DA_FOTO_DO_ROSTO;
   if (rostoEscolhido) {
-    const fotosDoRosto = await fotosDoRostoEscolhido(t, rostoEscolhido).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[]));
+    const fotosDoRosto = rostoDaFotoNoReplicar
+      ? fotosDeIdentidade
+      : await fotosDoRostoEscolhido(t, rostoEscolhido).catch((e) => (registrarFalha("estudio-arte: fotos do rosto não lidas", e, { trabalho_id: t.id }), [] as FotoDoRosto[]));
     if (!fotosDoRosto.length) {
       throw new ErroEstudio(409, "rosto_indisponivel", "O rosto escolhido não está disponível (foto apagada ou autorização vencida). Escolha outro rosto ou Nenhum.");
     }
@@ -5324,7 +5388,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     baixadas.forEach((img, i) => {
       if (!img) return;
       imagens.push(img);
-      rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);
+      rotulos.push(rotuloDoRosto);
       indicesDoRosto.push(imagens.length + deslocamento);
       fotosUsadasDoRosto.push({ bucket: fotosDoRosto[i].bucket, caminho: fotosDoRosto[i].caminho });
     });
@@ -5336,13 +5400,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     baixadas.forEach((img, i) => {
       if (!img) return;
       imagens.push(img);
-      rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);
+      rotulos.push(rotuloDoRosto);
       indicesDoRosto.push(imagens.length + deslocamento);
       fotosUsadasDoRosto.push({ bucket: fotosDaNormal[i].bucket, caminho: fotosDaNormal[i].caminho });
     });
   }
   const blocoDoRostoNaNormal = rostoDaNormal && indicesDoRosto.length
-    ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!rostoDaNormal.destacar, pessoaNaReferencia: false, como: rostoDaNormal.como, modo: "lamina" })
+    ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!rostoDaNormal.destacar, pessoaNaReferencia: false, como: rostoDaNormal.como, modo: "lamina", daFoto: rostoVeioDaFoto })
     : "";
   // Frente S2 (26/09): estilo do cliente, só com o interruptor do trabalho ligado e o estilo ativo.
   // Desligado (o padrão): null sem ler o banco, e nada abaixo muda. Ligado: as referências do
@@ -5575,7 +5639,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       }, depsDaCopia)
       : null;
     const blocoDoRostoAqui = indicesDoRosto.length
-      ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!(rostoEscolhido && rostoEscolhido.destacar), pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa"), como: rostoEscolhido ? rostoEscolhido.como : undefined })
+      ? blocoDoRosto({ indices: indicesDoRosto, destacar: !!(rostoEscolhido && rostoEscolhido.destacar), pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa"), como: rostoEscolhido ? rostoEscolhido.como : undefined, daFoto: rostoVeioDaFoto })
       : "";
     const prompt = [
       replica.prompt,
@@ -5630,7 +5694,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
           : {}),
         // Frente R: o que o julgamento decidiu (serve, adaptou, a cena) e o rosto usado (só com rosto escolhido).
         ...(adaptacao ? { adaptacao_da_copy: adaptacao.registro } : {}),
-        ...(rostoEscolhido ? { rosto: { fonte: rostoEscolhido.fonte, id: rostoEscolhido.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoEscolhido.destacar, ...registroDoRosto(rostoEscolhido, fotosUsadasDoRosto) } } : {}),
+        ...(rostoEscolhido ? { rosto: { fonte: rostoEscolhido.fonte, id: rostoEscolhido.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoEscolhido.destacar, ...(rostoVeioDaFoto ? { origem: "foto_da_lamina" } : {}), ...registroDoRosto(rostoEscolhido, fotosUsadasDoRosto) } } : {}),
         // Frente R3: o termo que trocou o texto decorativo da referência (a conferência espera ele na arte).
         ...(termoDaLamina ? { termo_decorativo: termoDaLamina.termo, termo_decorativo_origem: termoDaLamina.origem } : {}),
         molde_editado: !!molde,
@@ -5810,7 +5874,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       modo: "normal",
       // Frente R2: só com rosto escolhido (aplicado ou não, pela direção da lâmina).
       ...(rostoNaNormal
-        ? { rosto: { fonte: rostoNaNormal.fonte, id: rostoNaNormal.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoNaNormal.destacar, aplicado: !!rostoDaNormal, pede_pessoa: pedePessoa, ...registroDoRosto(rostoNaNormal, fotosUsadasDoRosto) } }
+        ? { rosto: { fonte: rostoNaNormal.fonte, id: rostoNaNormal.id ?? null, fotos: indicesDoRosto.length, destacar: !!rostoNaNormal.destacar, aplicado: !!rostoDaNormal, pede_pessoa: pedePessoa, ...(rostoVeioDaFoto ? { origem: "foto_da_lamina" } : {}), ...registroDoRosto(rostoNaNormal, fotosUsadasDoRosto) } }
         : {}),
       ...marcaDaLogo,
       ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }),
@@ -6245,6 +6309,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ...(a.entendi ? { entendi: texto(a.entendi, 300) } : {}),
       ...(fiel && fiel.removidas.length ? { texto_removido: fiel.removidas } : {}),
       versao_editada: atualVersao.versao,
+      // Frente RO (29/09): o ajuste mantém o formato da versão editada (sem ele, a entrega do 3:4 parava).
+      formato_post: formatoDaVersao(atualVersao as VersaoCard & { formato_post?: string | null; tamanho?: string | null }),
       uso_diretor: dir.usoId,
       tamanho: img.tamanho,
       tipo_ajuste: comMascara ? "area" : tipo,
@@ -6594,8 +6660,10 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   // Formato do conjunto: toda lâmina tem que ter nascido nele (o corte final de uma
   // lâmina 4:5 em 1:1 cortaria o texto). Versão antiga, sem a marca, é 4:5.
   const formatoDoConjunto = formatoDoPost(t.direcao.formato);
+  // Frente RO (29/09, arte rápida da Acerbi que não chegou ao cliente): o ajuste não gravava o formato e a
+  // versão ajustada de um post 3:4 caía como 4:5 aqui, e a entrega parava calada. Sem a marca, vale o tamanho.
   const foraDoFormato = ultimas
-    .filter((u) => formatoDoPost((u.versao as VersaoCard & { formato_post?: string | null }).formato_post) !== formatoDoConjunto)
+    .filter((u) => formatoDaVersao(u.versao as VersaoCard & { formato_post?: string | null; tamanho?: string | null }) !== formatoDoConjunto)
     .map((u) => u.card.ordem);
   if (foraDoFormato.length) {
     throw new ErroEstudio(409, "laminas_em_outro_formato", `O formato do post é ${QUADRO_DO_POST[formatoDoConjunto].rotulo}, mas ${foraDoFormato.length === 1 ? `a lâmina ${foraDoFormato[0]} foi gerada` : `as lâminas ${foraDoFormato.join(", ")} foram geradas`} em outro formato. Gere de novo antes de entregar.`, {
@@ -6723,6 +6791,24 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
       ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada."
       : null,
   });
+}
+
+/**
+ * Frente RO (29/09): o formato em que a versão nasceu. O gravado (formato_post);
+ * sem ele (versões de ajuste até 29/09), o formato cuja proporção bate com o
+ * tamanho da imagem (1104x1472 = 3:4); sem nenhum dos dois, 4:5 (as antigas).
+ */
+function formatoDaVersao(v: { formato_post?: unknown; tamanho?: unknown } | null | undefined): FormatoDoPost {
+  if (v && FORMATOS_DO_POST.indexOf(v.formato_post as FormatoDoPost) >= 0) return v.formato_post as FormatoDoPost;
+  const m = /^(\d+)x(\d+)$/.exec(typeof v?.tamanho === "string" ? v.tamanho : "");
+  if (m && Number(m[2]) > 0) {
+    const p = Number(m[1]) / Number(m[2]);
+    for (const f of FORMATOS_DO_POST) {
+      const g = QUADRO_DO_POST[f].gerador;
+      if (Math.abs(g.largura / g.altura - p) < 0.01) return f;
+    }
+  }
+  return formatoDoPost(null);
 }
 
 /**
@@ -7473,6 +7559,16 @@ function lerFotosLivres(v: unknown, clientId: string): FotoLivre[] {
     saida.push(nota ? { caminho, papel, nota } : { caminho, papel });
     // Pessoa ou produto sem fundo (Tirar fundo no Estúdio): entra pelo modo recorte.
     if (papel === "elemento" && o.recortada === true) saida[saida.length - 1].recortada = true;
+    // Frente RO: "Usar o rosto" (só a identidade, cena nova). Sem o campo: exata. Recorte é sempre exato.
+    const uso = lerUso(o.uso);
+    if (uso === "rosto" && !saida[saida.length - 1].recortada) {
+      saida[saida.length - 1].uso = "rosto";
+      saida[saida.length - 1].uso_por = lerQuemEscolheu(o.uso_por) || "equipe";
+    } else if (uso === "exata" && lerQuemEscolheu(o.uso_por) && lerQuemEscolheu(o.uso_por) !== "equipe") {
+      // Exata escolhida pelo Jev ou pela regra fica marcada (a tela mostra quem decidiu).
+      saida[saida.length - 1].uso = "exata";
+      saida[saida.length - 1].uso_por = lerQuemEscolheu(o.uso_por) as "jev" | "regra";
+    }
   }
   return saida;
 }
@@ -7545,6 +7641,8 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
   let logoCard: EscolhaDaLogo | null | undefined;
   // Fidelidade da lâmina (frente E): null tira a escolha (a lâmina segue o padrão do trabalho).
   let fidelidadeCard: FidelidadeDaReferencia | null | undefined;
+  // Frente RO: uso da foto do acervo desta lâmina ("exata" ou "rosto"; null volta ao padrão, exata).
+  let usoAcervoCard: UsoDaFoto | null | undefined;
   if (cardPedido) {
     ordem = lerOrdem(cardPedido);
     cardDaDirecao(t, ordem);
@@ -7563,6 +7661,10 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       fidelidadeCard = cardPedido.fidelidade_referencia === null ? null : fidelidadeDaReferencia(cardPedido.fidelidade_referencia);
       if (cardPedido.fidelidade_referencia !== null && !fidelidadeCard) throw new ErroEstudio(400, "fidelidade_invalida", "Fidelidade inválida. Use identica, proxima, inspirada ou criativa.");
     }
+    if (cardPedido.uso_do_acervo !== undefined) {
+      usoAcervoCard = cardPedido.uso_do_acervo === null ? null : lerUso(cardPedido.uso_do_acervo);
+      if (cardPedido.uso_do_acervo !== null && !usoAcervoCard) throw new ErroEstudio(400, "uso_invalido", "Uso da foto inválido. Use exata ou rosto.");
+    }
     if (cardPedido.texto_exato !== undefined) {
       novoTexto = texto(cardPedido.texto_exato, 1200);
       if (!novoTexto) throw new ErroEstudio(400, "texto_vazio", "O texto da lâmina não pode ficar vazio.");
@@ -7580,6 +7682,13 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       else if (fidelidadeCard !== undefined) mudou.fidelidade_referencia = fidelidadeCard;
       if (logoCard === null) delete mudou.logo;
       else if (logoCard !== undefined) mudou.logo = logoCard;
+      if (usoAcervoCard === null || usoAcervoCard === "exata") {
+        delete mudou.uso_do_acervo;
+        delete mudou.uso_do_acervo_por;
+      } else if (usoAcervoCard === "rosto") {
+        mudou.uso_do_acervo = "rosto";
+        mudou.uso_do_acervo_por = "equipe";
+      }
       if (novoTexto !== undefined && novoTexto !== c.texto_exato) {
         mudou.texto_exato = novoTexto;
         mudou.blocos = blocosDoTexto(novoTexto, c.funcao);
@@ -7762,7 +7871,8 @@ function laminasSemCaixa(t: Trabalho, kit: Kit): Set<number> {
   const continuo = !ehAds(t) && !!t.direcao.carrossel_infinito && totalCards(t) > 1;
   const saida = new Set<number>();
   for (const c of t.direcao.cards) {
-    const fotoReal = !!c.imagens_ids?.length || (c.fotos_livres ?? []).some((f) => f.papel === "fundo");
+    // Frente RO: a foto em "Usar o rosto" não é cena fixa (o gerador cria a cena); só a exata tira a caixa.
+    const fotoReal = (!!c.imagens_ids?.length && usoDoAcervo(c) === "exata") || (c.fotos_livres ?? []).some((f) => f.papel === "fundo" && usoDaFotoLivre(f) === "exata");
     if (todas || fotoReal || continuo) saida.add(c.ordem);
   }
   return saida;
@@ -7785,7 +7895,7 @@ function apelidosDasFotos(arte: ArteRapida | null, acervo: ImagemAcervo[]) {
   const apelidos: Record<string, string> = {};
   const rotuloDoValor: Record<string, string> = {};
   const fotosDoPedido: { apelido: string; nome: string; valor: string }[] = [];
-  for (const f of (arte?.arquivos ?? []).filter((a) => a.papel === "foto")) {
+  for (const f of (arte?.arquivos ?? []).filter((a) => a.papel === "foto" || a.papel === "rosto")) {
     const valor = f.imagem_id ? f.imagem_id : f.caminho ? `${PREFIXO_FOTO_DO_PEDIDO}${f.caminho}` : "";
     if (!valor || !f.codigo) continue;
     const apelido = f.codigo.toUpperCase();
@@ -7882,8 +7992,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       blocos: c.blocos ?? [],
       layout: c.layout,
       evitar: c.evitar || null,
-      foto_real: foto || (c.fotos_livres ?? []).some((f) => f.papel === "fundo") ? { apelido: rotuloDaFoto(c), resumo: foto ? resumoDaFoto(foto) : null } : null,
-      fotos_da_equipe: (c.fotos_livres ?? []).map((f) => ({ papel: f.papel, nota: f.nota ?? null })),
+      foto_real: foto || (c.fotos_livres ?? []).some((f) => f.papel === "fundo") ? { apelido: rotuloDaFoto(c), resumo: foto ? resumoDaFoto(foto) : null, uso: usoDaFotoNaLamina(c) } : null,
+      fotos_da_equipe: (c.fotos_livres ?? []).map((f) => ({ papel: f.papel, nota: f.nota ?? null, uso: usoDaFotoLivre(f) })),
       referencias_proprias: (c.referencias_ids ?? []).length,
       leva_logo: levaLogo(t, c.ordem),
       // Frente AG: o que está escrito hoje na arte (lido na conferência), sem as letras da logo.
@@ -8019,6 +8129,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     },
   });
   const avisos = normalizadas.avisos;
+  // Frente RO: "usa só o rosto dele, em outra pose" ou "coloca a foto exatamente como está" que o diretor
+  // não virou mudança: o Jev (Choice com "nenhum") e as palavras fortes decidem; vira uma mudança de um clique.
+  const mudancaDoUso = await mudancaDeUsoNaConversa(t, mensagem, emFoco, normalizadas.mudancas, ch.userId);
+  if (mudancaDoUso) normalizadas.mudancas.push(mudancaDoUso);
   // Frente AG: cada mudança leva o valor de hoje (a tela mostra antes e depois) e o nome da foto nova.
   const mudancas: MudancaProposta[] = normalizadas.mudancas.map((m) => {
     const foto = m.campos.foto_acervo;
@@ -8065,6 +8179,44 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
   });
+}
+
+/**
+ * Frente RO: a mensagem pede para trocar o uso da foto da lâmina em foco
+ * (exata ou só o rosto) e o diretor não propôs? Uma pergunta ao Jev (Choice
+ * com "nenhum"), só quando a mensagem fala de foto, rosto ou pose. Falha do
+ * Jev: valem as palavras fortes. Nada é gravado: vira mudança de um clique.
+ */
+async function mudancaDeUsoNaConversa(t: Trabalho, mensagem: string, ordem: number | null, mudancas: MudancaProposta[], criadoPor: string): Promise<MudancaProposta | null> {
+  if (ordem == null || !mensagemFalaDaFoto(mensagem)) return null;
+  const card = t.direcao.cards.find((c) => c.ordem === ordem);
+  const usoAtual = card ? usoDaFotoNaLamina(card) : null;
+  if (!usoAtual) return null;
+  if (mudancas.some((m) => m.alvo === "lamina" && m.ordem === ordem && !!m.campos.uso_da_foto)) return null;
+  let resposta: RespostaDeEscolha | null = null;
+  try {
+    const res = await jevPerguntar({
+      state: { pedido: mensagem, foto_da_lamina: { lamina: ordem, uso_de_hoje: usoAtual === "rosto" ? "só o rosto" : "foto exata" } },
+      questions: { uso: perguntaDoUso({ caminhoDaFoto: "foto_da_lamina", nenhum: true }) as PerguntaJev },
+    });
+    await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }).catch(() => null);
+    resposta = res.answers.uso as RespostaDeEscolha;
+  } catch (e) {
+    registrarFalha("estudio-arte: jev (uso da foto na conversa) falhou", e, { trabalho_id: t.id, ordem });
+  }
+  const uso = usoPedidoNaConversa({ mensagem, usoAtual, resposta });
+  if (!uso) return null;
+  return {
+    id: `m${mudancas.length + 1}`,
+    alvo: "lamina",
+    ordem,
+    titulo: uso === "rosto" ? "Usar só o rosto da foto" : "Usar a foto exata",
+    motivo: uso === "rosto"
+      ? "A pessoa continua a mesma, numa cena nova com pose, luz e enquadramento da direção."
+      : "A foto entra como está, sem mudar pose nem expressão.",
+    campos: { uso_da_foto: uso },
+    regerar: [ordem],
+  };
 }
 
 /** Linha curta com as mudanças propostas numa resposta (para o histórico que volta ao diretor). */

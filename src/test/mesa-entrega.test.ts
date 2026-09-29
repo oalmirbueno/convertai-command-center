@@ -113,9 +113,11 @@ describe("custo do Jev na carteira", () => {
     // rosto escolhido, fora de laço). Cada pergunta, uma cobrança; nenhuma se repete.
     // + frente AG (28/09): a fidelidade do texto ao pedido na arte rápida (Score, só aviso, uma por direção)
     // e a clareza do pedido de ajuste (Choice, em paralelo com o leitor, cobrada no .then; fora da autocorreção).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(8);
+    // + frente RO (29/09): o uso da foto pedido na conversa com o diretor (Choice com "nenhum", só quando a
+    // mensagem fala de foto, rosto ou pose e a lâmina em foco tem foto).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(9);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(8);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(7);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(8);
     const ajuste = estudio.slice(estudio.indexOf("const jevDoAjuste"), estudio.indexOf("const dir = await chamarTexto({", estudio.indexOf("const jevDoAjuste")));
     expect(ajuste).toContain("jevPerguntar({");
     expect(ajuste).toContain("await cobrarJev(r,");

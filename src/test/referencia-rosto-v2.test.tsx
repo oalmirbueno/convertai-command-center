@@ -168,7 +168,7 @@ describe("2. Detalhe de pose no bloco; recriar e integrar na luz da arte", () =>
   });
 
   it("servidor passa o como ao bloco do replicar e guarda na versão o como e as fotos usadas", () => {
-    expect(servidor).toContain('pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa"), como: rostoEscolhido ? rostoEscolhido.como : undefined })');
+    expect(servidor).toContain('pessoaNaReferencia: !!(refsNoPrompt[0].molde && refsNoPrompt[0].molde.assunto && refsNoPrompt[0].molde.assunto.tipo === "pessoa"), como: rostoEscolhido ? rostoEscolhido.como : undefined, daFoto: rostoVeioDaFoto })');
     expect(servidor).toContain("...registroDoRosto(rostoEscolhido, fotosUsadasDoRosto)");
     expect(servidor).toContain("...(usadas.length ? { fotos_usadas: usadas.slice(0, MAX_FOTOS_ESCOLHIDAS) } : {}),");
   });
@@ -227,11 +227,12 @@ describe("4. Sem rosto = hoje", () => {
   });
 
   it("sem rosto o Jev nem é chamado; fora do normal (foto, recorte, elementos, anúncio, replicar) também não", () => {
-    expect(servidor).toContain("const rostoNaNormal = !replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
-    expect(servidor).toContain("const pedePessoa = rostoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;");
-    expect(servidor).toContain("const rostoDaNormal = rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null;");
-    // Replicar: a linha da frente R continua a mesma.
-    expect(servidor).toContain("const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
+    // Frente RO (29/09): a foto da lâmina em "Usar o rosto" entra na frente; sem ela (rostoDaFotoNaNormal null), o de antes.
+    expect(servidor).toContain("const rostoNaNormal = rostoDaFotoNaNormal || (!replicar && !ads && !baseFoto && !recorteNaLamina && elementos.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null);");
+    expect(servidor).toContain("const pedePessoa = rostoNaNormal && !rostoDaFotoNaNormal ? await direcaoPedePessoa(t, cardDoPrompt, rostoNaNormal, ch.userId, avisosDaGeracao) : null;");
+    expect(servidor).toContain("const rostoDaNormal = rostoDaFotoNaNormal || (rostoNaNormal && laminaPedePessoa(pedePessoa) ? rostoNaNormal : null);");
+    // Replicar: sem foto em "Usar o rosto", a linha da frente R (lerRostoDoTrabalho) vale.
+    expect(servidor).toContain("const rostoEscolhido = replicar && fotosReplicar.length === 0 ? rostoDaFotoNoReplicar || lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
     for (const d of [{}, null, { rosto: null }, { rosto: { fonte: "escolhidas", itens: [] } }]) expect(lerRostoDoTrabalho(d, CLIENTE)).toBeNull();
     // Jev falhou (null) ou abaixo do limiar: sem rosto.
     expect(laminaPedePessoa(null)).toBe(false);

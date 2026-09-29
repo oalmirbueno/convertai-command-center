@@ -132,6 +132,13 @@ export type CardDirecao = {
    * "elemento" é pessoa, rosto ou objeto real que entra na composição igual.
    */
   fotos_livres?: FotoLivre[];
+  /**
+   * Frente RO (29/09): uso da foto do acervo desta lâmina (imagens_ids).
+   * "rosto": só a identidade da pessoa, cena nova pelo gerador. Sem o campo: exata (a foto intacta).
+   */
+  uso_do_acervo?: "exata" | "rosto";
+  /** Quem escolheu o uso da foto do acervo (equipe, Jev ou a regra do pedido). */
+  uso_do_acervo_por?: "equipe" | "jev" | "regra";
   /** Só no trabalho de anúncio (tipo 'ads'): formato do criativo; sem ele, feed 4:5. */
   formato?: FormatoCriativo;
   /** Logo do kit escolhida para esta lâmina (sobrepõe a do conjunto); sem ela, a do conjunto ou a que contrasta. */
@@ -227,7 +234,11 @@ export function anexosDaLamina<T extends { tipo: TipoDoAnexo }>(candidatos: T[],
   return saida;
 }
 
-export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean };
+/**
+ * Foto trazida pela equipe. Frente RO (29/09): `uso` "rosto" = só a identidade
+ * da pessoa (cena nova pelo gerador); sem o campo, exata (a foto intacta).
+ */
+export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean; uso?: "exata" | "rosto"; uso_por?: "equipe" | "jev" | "regra" };
 
 export type MarcaParaDirecao = {
   nomeCliente: string;

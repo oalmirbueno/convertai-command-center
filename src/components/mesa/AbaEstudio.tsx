@@ -148,6 +148,7 @@ import {
   useItemAvulso,
   useItensDoMes,
   type ArteNaAgenda,
+  type CardDaDirecao,
   type InfoDoRoteiro,
   type ItemDoMes,
   type PublicacaoDoPost,
@@ -919,6 +920,22 @@ function DetalheDoItem({
     }
   };
 
+  // Frente RO: "Foto exata" ou "Usar o rosto" por foto da lâmina (vale na próxima geração; as versões ficam).
+  const trocarUsoDaFoto = async (card: CardDaDirecao, alvo: { acervo: true } | { caminho: string }, uso: "exata" | "rosto") => {
+    try {
+      if ("acervo" in alvo) await configurar({ card: { ordem: card.ordem, uso_do_acervo: uso } });
+      else {
+        const fotos = (card.fotos_livres || []).map((f) => (f.caminho === alvo.caminho ? { ...f, uso, uso_por: "equipe" as const } : f));
+        await configurar({ card: { ordem: card.ordem, fotos_livres: fotos } });
+      }
+      toast.success(uso === "rosto" ? "Usar o rosto" : "Foto exata", {
+        description: uso === "rosto" ? "Na próxima geração, uma cena nova com a mesma pessoa." : "Na próxima geração, a foto entra como está.",
+      });
+    } catch (e) {
+      avisarErro(e, "Não foi possível trocar o uso da foto");
+    }
+  };
+
   const refazerFundo = async () => {
     setSalvandoContinuo(true);
     try {
@@ -1553,6 +1570,7 @@ function DetalheDoItem({
                 "Foto tirada da lâmina",
               )}
             onTirarFotoDoAcervo={() => void tirarDaLamina(cardSelecionado.ordem, { imagens_ids: [] }, "Foto tirada da lâmina")}
+            onTrocarUso={(alvo, uso) => void trocarUsoDaFoto(cardSelecionado, alvo, uso)}
             onTirarReferencia={(id) =>
               void tirarDaLamina(
                 cardSelecionado.ordem,

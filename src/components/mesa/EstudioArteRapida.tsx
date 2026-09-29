@@ -27,6 +27,8 @@ import { chaves, lerCampanhas, periodoCurto, useMidia, type Campanha } from "./m
 import { SeletorDeFormatoCompacto } from "./EstudioControles";
 import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { enviarUmParaAprovacao, FORMATOS_DO_POST, type FormatoDoPost } from "./estudioUtil";
+import { JanelaDaAprovada, type AprovadaSemData } from "./AprovadasSemData";
+import { corpoDaConclusao, corpoDoEntregar, opcoesDaEntrega, type ModoDeEntrega, type RespostaDaConclusao } from "@/lib/mesa/entregaComOpcoes";
 import { ultimasVersoes, type ItemDoMes, type Trabalho } from "./useItensDoMes";
 import {
   arquivarArteRapida,
@@ -64,6 +66,7 @@ import {
 } from "../../../supabase/functions/_shared/arte-rapida";
 import { horarioSugerido, localParaIso, partesNoFuso, problemaNoHorario } from "../../../supabase/functions/_shared/entrega-na-agenda";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
+import { AJUDA_DO_USO } from "../../../supabase/functions/_shared/uso-da-foto";
 
 /**
  * Arte rápida (frente AE, 28/09): a arte avulsa, fora do plano do mês, no
@@ -382,9 +385,16 @@ function PedidoDaArteRapida({
 
       {/* O campo grande: texto, microfone, fotos e arquivos. */}
       <div className="min-w-0">
-        <label htmlFor="pedido-da-arte-rapida" className="mb-1.5 block text-[12px] font-medium text-muted-foreground">
-          O que você precisa?
-        </label>
+        <div className="mb-1.5 flex items-center">
+          <label htmlFor="pedido-da-arte-rapida" className="block text-[12px] font-medium text-muted-foreground">
+            O que você precisa?
+          </label>
+          {(fotosDoAcervo.length > 0 || anexos.lista.length > 0) && (
+            <AjudaRecolhida className="ml-1.5" rotulo="Foto exata ou Rosto (identidade)" titulo="Foto ou só o rosto">
+              {AJUDA_DO_USO} Em Automático, o agente decide pelo pedido: "coloca essa foto" entra exata; "faz uma arte com ele falando sobre..." usa o rosto. Dá para trocar depois na base da lâmina.
+            </AjudaRecolhida>
+          )}
+        </div>
         <div className="rounded-xl border border-border bg-background focus-within:border-primary/60">
           <Textarea
             id="pedido-da-arte-rapida"
@@ -670,16 +680,21 @@ function amanhaEmSaoPaulo(): string {
 }
 
 export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho; onAbrirItem: (taskId: string) => void }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, catalogo, podeRecarregar } = useMesa();
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
   const avisarErro = useAvisarErro();
   const a = arteDoTrabalho(trabalho);
   const [data, setData] = useState(amanhaEmSaoPaulo);
   const [hora, setHora] = useState("");
-  const [enviar, setEnviar] = useState(true);
+  // Frente RO (29/09, arte rápida da Acerbi que "foi" mas não chegou ao cliente): as 3 opções da entrega (EN),
+  // o erro à vista (nada de silêncio) e o "Na Agenda" só quando a arte foi entregue de verdade.
+  const opcoes = opcoesDaEntrega(podeRecarregar);
+  const [modo, setModo] = useState<ModoDeEntrega>("aprovacao");
   const [passo, setPasso] = useState<string | null>(null);
-  const [fim, setFim] = useState<{ taskId: string; data: string; avisos: string[] } | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [agendar, setAgendar] = useState<AprovadaSemData | null>(null);
+  const [fim, setFim] = useState<{ taskId: string; data: string; avisos: string[]; entregue: boolean } | null>(null);
   const [arquivando, setArquivando] = useState(false);
   const melhores = useQuery({ queryKey: ["mesa", "melhores-horarios", clientId], staleTime: 10 * 60_000, retry: false, queryFn: () => lerMelhoresHorarios(clientId) });
 
@@ -698,21 +713,30 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
   const diretor = padraoPara(catalogo, "diretor_arte");
   const semLegenda = !(trabalho.legenda || "").trim();
 
+  /**
+   * O fluxo das pautas, na ordem: item na Agenda (idempotente: "Entregar de novo" reaproveita o item), legenda,
+   * arquivos em Arquivos no projeto da marca (entregar), a data confirmada ANTES da aprovação, e o modo:
+   * aprovação do cliente, pronto para agendar (aprova em nome dele e agenda; sem perfil ou data, a janela do
+   * Agendar pergunta) ou só Arquivos. Qualquer falha fica escrita na tela e pode ser refeita.
+   */
   const levar = async () => {
     const avisos: string[] = [];
     let custo = 0;
-    setPasso("Criando o item na Agenda");
-    const r = await levarArteRapidaParaAgenda({ trabalhoId: trabalho.id, data, pedidoId: `${trabalho.id}:${data}` });
-    gravarArteRapidaNoCache(queryClient, clientId, r.trabalho);
+    setErro(null);
+    let taskId: string | null = a && a.task_id ? a.task_id : null;
     try {
-      if (semLegenda) {
+      setPasso("Criando o item na Agenda");
+      const r = await levarArteRapidaParaAgenda({ trabalhoId: trabalho.id, data, pedidoId: `${trabalho.id}:${data}` });
+      gravarArteRapidaNoCache(queryClient, clientId, r.trabalho);
+      taskId = r.task.id;
+      if (semLegenda && modo !== "arquivos") {
         setPasso("Escrevendo a legenda");
         const l = await chamarFuncao<any>("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id });
         custo += Number(l && l.custo_usd) || 0;
       }
-      setPasso("Entregando em Arquivos e na Agenda");
-      await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: trabalho.id }));
-      if (iso) {
+      setPasso(modo === "arquivos" ? "Entregando em Arquivos" : "Entregando em Arquivos e na Agenda");
+      await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", corpoDoEntregar(trabalho.id, modo)));
+      if (modo !== "arquivos" && iso) {
         setPasso("Confirmando a data");
         try {
           await confirmarPublicacao(trabalho.id, iso, false);
@@ -720,14 +744,38 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           avisos.push(`A data fica para confirmar na Entrega do item: ${textoDoErro(e)}`);
         }
       }
-      if (enviar) {
+      if (modo === "aprovacao") {
         setPasso("Enviando para aprovação");
-        try {
-          await enviarUmParaAprovacao(trabalho.id);
-        } catch (e) {
-          avisos.push(`O envio para aprovação ficou para depois: ${textoDoErro(e)}`);
+        await enviarUmParaAprovacao(trabalho.id);
+      } else {
+        setPasso(modo === "pronto" ? "Aprovando pelo cliente e agendando" : "Guardando em Arquivos");
+        const c = await chamarFuncao<RespostaDaConclusao>("estudio-arte", corpoDaConclusao(trabalho.id, modo, false));
+        if (modo === "pronto" && c && c.precisa_data) {
+          // Sem perfil ou sem data que sirva: pergunta aqui mesmo (a janela do Agendar), com a peça já entregue.
+          if (c.motivo) avisos.push(c.motivo);
+          const atual = await lerArteRapida(clientId, trabalho.id).catch(() => null);
+          const t = atual || trabalho;
+          setAgendar({
+            id: t.id,
+            task_id: taskId,
+            file_ids: t.file_ids || [],
+            post_id: t.post_id || null,
+            aprovado_em: t.aprovado_em || null,
+            publicar_em: iso || t.publicar_em || null,
+            entrega_aviso: t.entrega_aviso || null,
+            titulo: a ? a.titulo : "Arte rápida",
+            dia: data || null,
+            project_id: null,
+          });
         }
       }
+      setFim({ taskId: taskId as string, data, avisos, entregue: true });
+      return { custo_usd: custo };
+    } catch (e) {
+      const motivo = textoDoErro(e, "Não foi possível entregar.");
+      setErro(motivo);
+      if (taskId) setFim({ taskId, data, avisos, entregue: false });
+      throw e;
     } finally {
       setPasso(null);
       void queryClient.invalidateQueries({ queryKey: ["mesa", "arte-rapida", clientId] });
@@ -735,8 +783,6 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
       void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
       void queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
     }
-    setFim({ taskId: r.task.id, data, avisos });
-    return { custo_usd: custo };
   };
 
   const arquivar = async () => {
@@ -760,6 +806,38 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
 
   const taskFeito = fim ? fim.taskId : a && a.task_id ? a.task_id : null;
   const dataFeita = fim ? fim.data : a && a.data ? a.data : null;
+  // Entregue de verdade: a arte está em Arquivos (file_ids). Item na Agenda sem entrega é o caso da Acerbi (29/09).
+  const entregue = (fim && fim.entregue) || (trabalho.status === "entregue" && (trabalho.file_ids || []).length > 0);
+  const naoEntregue = !!taskFeito && !entregue;
+  const seletorDoModo = (
+    <div className="min-w-0">
+      <p className="mb-1 flex items-center text-[12px] text-muted-foreground">
+        Como entregar
+        <AjudaRecolhida className="ml-1.5" rotulo="As opções da entrega">
+          {opcoes.map((o) => `${o.curto}: ${o.dica}`).join(" ")}
+        </AjudaRecolhida>
+      </p>
+      <div className="flex min-w-0 flex-wrap" role="radiogroup" aria-label="Como entregar" data-modo-da-entrega={modo}>
+        {opcoes.map((o) => (
+          <button
+            key={o.modo}
+            type="button"
+            role="radio"
+            aria-checked={modo === o.modo}
+            title={o.dica}
+            onClick={() => setModo(o.modo)}
+            className={
+              modo === o.modo
+                ? "mb-1 mr-3 text-[12px] font-medium text-foreground underline decoration-primary decoration-2 underline-offset-4"
+                : "mb-1 mr-3 text-[12px] text-muted-foreground hover:text-foreground"
+            }
+          >
+            {o.curto}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4" data-levar-para-agenda={trabalho.id}>
@@ -769,13 +847,42 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           <p className="mt-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]">{a.pedido || a.titulo}</p>
           <p className="mt-1 text-[11.5px] text-muted-foreground">
             {ROTULO_DA_PECA[a.peca]} {a.peca_por === "jev" ? "(o agente reconheceu)" : a.peca_por === "regra" ? "(pelo pedido)" : ""}
-            {a.arquivos.length ? ` · ${a.arquivos.map((x) => `${x.nome} (${ROTULO_DO_PAPEL[x.papel].toLowerCase()})`).join(", ")}` : ""}
+            {a.arquivos.length ? ` · ${a.arquivos.map((x) => `${x.nome} (${ROTULO_DO_PAPEL[x.papel].toLowerCase()}${x.papel_por !== "equipe" && (x.papel === "foto" || x.papel === "rosto") ? ", pelo agente" : ""})`).join(", ")}` : ""}
           </p>
           {a.avisos.length > 0 && <p className="mt-1 text-[11.5px] text-warning">{a.avisos.join(" ")}</p>}
         </div>
       )}
 
-      {taskFeito ? (
+      {naoEntregue ? (
+        <div className="space-y-3" data-nao-entregue={trabalho.id}>
+          <p className="text-[13px] font-semibold text-warning" role="alert">O item está na Agenda, mas a arte não chegou ao cliente</p>
+          <p className="text-[12px] leading-snug text-muted-foreground">
+            {erro || "A entrega em Arquivos não terminou. Entregue de novo: o item da Agenda é o mesmo, nada se repete."}
+          </p>
+          {seletorDoModo}
+          {passo && (
+            <p className="flex items-center text-[12px] text-muted-foreground" role="status">
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> {passo}
+            </p>
+          )}
+          <BotaoComCusto
+            rotulo={<><CalendarPlus className="mr-1.5 h-4 w-4" />Entregar de novo</>}
+            titulo="Entregar de novo"
+            descricao={semLegenda ? "Escreve a legenda (a única parte que usa IA) e entrega pelo fluxo da Agenda, no mesmo item." : "Entrega pelo fluxo da Agenda, no mesmo item. Sem custo de IA."}
+            partes={() => (semLegenda ? [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }] : [])}
+            executar={levar}
+            fecharAoConfirmar
+            disabled={!todas || passo !== null}
+            size="default"
+            className="h-11 w-full"
+          />
+          <div className="flex min-w-0 flex-wrap items-center">
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={() => onAbrirItem(taskFeito as string)}>
+              Continuar no item
+            </Button>
+          </div>
+        </div>
+      ) : taskFeito ? (
         <div className="space-y-2 rounded-lg border border-success/40 bg-success/5 px-3 py-3" role="status">
           <p className="flex items-center text-[13px] font-semibold">
             Na Agenda{dataFeita ? ` em ${dataCurta(dataFeita)}` : ""}
@@ -799,7 +906,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           <p className="flex items-center text-[13px] font-semibold">
             Levar para a Agenda
             <AjudaRecolhida className="ml-1.5" rotulo="O que o botão faz">
-              Escolha a data e confirme: o item nasce na Agenda, a arte vai para Arquivos e para o post, a data fica confirmada e o cliente recebe para aprovar.
+              Escolha a data, a hora e como entregar: o item nasce na Agenda, a arte vai para Arquivos (no projeto da marca) e para o post, a data fica confirmada e, conforme a opção, o cliente recebe para aprovar, a peça já fica aprovada e agendada, ou fica só em Arquivos.
             </AjudaRecolhida>
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -814,10 +921,8 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           </div>
           {!hora && <p className="text-[11.5px] text-muted-foreground">Hora sugerida pelo melhor horário do perfil.</p>}
           {problema && data && <p className="text-[12px] text-destructive">{problema}</p>}
-          <label className="flex min-w-0 items-center text-[12.5px]">
-            <Switch checked={enviar} onCheckedChange={setEnviar} className="mr-2 shrink-0" aria-label="Enviar ao cliente para aprovar" />
-            Enviar ao cliente para aprovar
-          </label>
+          {seletorDoModo}
+          {erro && <p className="text-[12px] leading-snug text-destructive" role="alert">{erro}</p>}
           {!todas && <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] text-warning">Gere {cards > 1 ? "todas as lâminas" : "a arte"} antes de levar ({feitas} de {cards || 1}).</p>}
           {passo && (
             <p className="flex items-center text-[12px] text-muted-foreground" role="status">
@@ -836,6 +941,21 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             className="h-11 w-full"
           />
         </div>
+      )}
+
+      {agendar && (
+        <JanelaDaAprovada
+          peca={agendar}
+          posicao={1}
+          total={1}
+          titulo="Agendar"
+          onFechar={() => setAgendar(null)}
+          onFeita={() => {
+            setAgendar(null);
+            void queryClient.invalidateQueries({ queryKey: ["mesa", "arte-rapida", clientId] });
+            void queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+          }}
+        />
       )}
 
       <div className="border-t border-border pt-3">

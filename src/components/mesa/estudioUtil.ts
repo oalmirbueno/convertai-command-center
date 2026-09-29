@@ -38,10 +38,25 @@ export function proporcaoDoFormato(f: FormatoDoPost): number {
 }
 
 /** A versão nasceu em outro formato que o do conjunto (a entrega pede gerar de novo). Versão antiga sem a marca é 4:5. */
-export function versaoForaDoFormato(versao: { formato_post?: unknown } | null | undefined, formato: FormatoDoPost): boolean {
+export function versaoForaDoFormato(versao: { formato_post?: unknown; tamanho?: unknown } | null | undefined, formato: FormatoDoPost): boolean {
   if (!versao) return false;
-  const nasceu = FORMATOS_DO_POST.some((x) => x.valor === versao.formato_post) ? (versao.formato_post as FormatoDoPost) : "feed_4x5";
-  return nasceu !== formato;
+  return formatoDaVersaoNaTela(versao) !== formato;
+}
+
+/**
+ * Frente RO (29/09): o formato em que a versão nasceu, pela mesma regra do
+ * servidor (formatoDaVersao em estudio-arte): o gravado; sem ele (ajustes até
+ * 29/09), a proporção do tamanho da imagem; sem os dois, 4:5.
+ */
+export function formatoDaVersaoNaTela(versao: { formato_post?: unknown; tamanho?: unknown }): FormatoDoPost {
+  if (FORMATOS_DO_POST.some((x) => x.valor === versao.formato_post)) return versao.formato_post as FormatoDoPost;
+  const m = /^(\d+)x(\d+)$/.exec(typeof versao.tamanho === "string" ? versao.tamanho : "");
+  if (m && Number(m[2]) > 0) {
+    const p = Number(m[1]) / Number(m[2]);
+    const achado = FORMATOS_DO_POST.filter((x) => Math.abs(x.proporcao - p) < 0.01)[0];
+    if (achado) return achado.valor;
+  }
+  return "feed_4x5";
 }
 
 /** Carrossel contínuo (panorama) só existe no 4:5: nos outros formatos as lâminas saem uma a uma, em série. */

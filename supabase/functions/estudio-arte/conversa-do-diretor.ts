@@ -66,11 +66,13 @@ export type CamposDaMudanca = {
   evitar: string;
   foto_acervo: string;
   texto_exato: string;
+  /** Frente RO: "exata" (a foto como está) ou "rosto" (só a identidade, cena nova). */
+  uso_da_foto: string;
 };
 
 export const CAMPOS_DO_CONJUNTO: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo"];
 export const CAMPOS_DA_LAMINA: (keyof CamposDaMudanca)[] = [
-  "imagem", "ponto_focal", "fundo", "tratamento", "zona_texto", "alinhamento", "cor_fundo", "cor_texto", "cor_destaque", "evitar", "foto_acervo", "texto_exato",
+  "imagem", "ponto_focal", "fundo", "tratamento", "zona_texto", "alinhamento", "cor_fundo", "cor_texto", "cor_destaque", "evitar", "foto_acervo", "texto_exato", "uso_da_foto",
 ];
 const TODOS_OS_CAMPOS: (keyof CamposDaMudanca)[] = [...CAMPOS_DO_CONJUNTO, ...CAMPOS_DA_LAMINA];
 
@@ -78,7 +80,7 @@ const TODOS_OS_CAMPOS: (keyof CamposDaMudanca)[] = [...CAMPOS_DO_CONJUNTO, ...CA
 const MAXIMO: Record<keyof CamposDaMudanca, number> = {
   conceito: 1200, fio_visual: 800, estilo: 600,
   imagem: 600, ponto_focal: 400, fundo: 400, tratamento: 500, zona_texto: 40, alinhamento: 20,
-  cor_fundo: 7, cor_texto: 7, cor_destaque: 7, evitar: 600, foto_acervo: 360, texto_exato: 1200,
+  cor_fundo: 7, cor_texto: 7, cor_destaque: 7, evitar: 600, foto_acervo: 360, texto_exato: 1200, uso_da_foto: 10,
 };
 
 export type MudancaProposta = {
@@ -140,6 +142,7 @@ export const ESQUEMA_CONVERSA = {
                 evitar: { type: "string" },
                 foto_acervo: { type: "string" },
                 texto_exato: { type: "string" },
+                uso_da_foto: { type: "string", enum: ["", "exata", "rosto"] },
               },
             },
           },
@@ -161,7 +164,7 @@ Responda como um diretor de arte sênior: direto, concreto, com base no conteúd
   - motivo: uma frase, por que isso serve ao conteúdo.
   - campos: preencha SÓ o que muda e deixe os outros como string vazia.
     - conjunto: conceito (a ideia visual nova do conjunto), fio_visual (protagonista, cenário, luz e tratamento que se repetem em todas as lâminas, em 2 a 4 frases), estilo (o estilo pedido para o trabalho inteiro: linguagem visual, textura, luz, clima; entra no prompt de todas as lâminas).
-    - lâmina: imagem (a cena ou o cenário concreto, com enquadramento e luz), ponto_focal, fundo, tratamento (técnica, estilo e luz desta lâmina), zona_texto, alinhamento, cor_fundo, cor_texto, cor_destaque (só hex da paleta da marca), evitar, foto_acervo (id de uma foto em \`acervo\` para virar a base da lâmina, ou "${SEM_FOTO}" para tirar a foto real e desenhar a cena), texto_exato.
+    - lâmina: imagem (a cena ou o cenário concreto, com enquadramento e luz), ponto_focal, fundo, tratamento (técnica, estilo e luz desta lâmina), zona_texto, alinhamento, cor_fundo, cor_texto, cor_destaque (só hex da paleta da marca), evitar, foto_acervo (id de uma foto em \`acervo\` para virar a base da lâmina, ou "${SEM_FOTO}" para tirar a foto real e desenhar a cena), texto_exato, uso_da_foto ("exata" ou "rosto": como a foto da lâmina entra).
 - memoria: uma frase curta com o que esta conversa ensina sobre o gosto da marca, reutilizável em outros trabalhos (ou string vazia).
 
 REGRAS DA CASA (obrigatórias)
@@ -170,7 +173,8 @@ REGRAS DA CASA (obrigatórias)
 - Sem caixa, faixa, painel, tarja ou retângulo atrás do texto quando a lâmina usa foto real ou o carrossel contínuo, ou quando as regras da marca pedem (\`lamina.sem_caixa_atras_do_texto\` verdadeiro). O texto vai direto na cena.
 - Texto exato: NÃO mude o texto das lâminas a menos que \`texto_pode_mudar\` seja verdadeiro (a equipe pediu mudança de texto). Quando mudar, escreva o texto completo da lâmina, com acentos, sem travessão.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo.
-- Lâmina com foto real (\`foto_real\` preenchida): a foto é usada como está. Para trocar o cenário dessa lâmina, proponha foto_acervo com outra foto do acervo ou "${SEM_FOTO}" junto com a imagem nova.
+- Lâmina com foto real (\`foto_real\` preenchida): \`foto_real.uso\` diz como ela entra. "exata": a foto é usada como está (mesma pose); para trocar o cenário, proponha foto_acervo com outra foto do acervo ou "${SEM_FOTO}" junto com a imagem nova. "rosto": a foto é só a identidade da pessoa e a cena é a de \`imagem\` (nova pose, luz e enquadramento).
+- FOTO EXATA OU SÓ O ROSTO (frente RO): "usa só o rosto dele", "em outra pose", "coloca ele numa cena nova falando sobre X": uso_da_foto "rosto" na lâmina da foto, e em \`imagem\` a cena nova com a pessoa pelo papel (onde está, o que faz, pose, luz), coerente com o tema. "Coloca a foto exatamente como está", "quero a foto igual", "sem mudar a foto": uso_da_foto "exata". Nunca descreva os traços do rosto.
 - Carrossel contínuo: a cena atravessa as lâminas; mudança de cenário, luz ou estilo vale para o conjunto (fio_visual ou estilo), nunca para uma lâmina solta.
 - Série: a mesma protagonista, cenário, luz e paleta do começo ao fim; varia só pose, gesto e enquadramento.
 - Seja honesto: se a arte atual já resolve, diga; se algo não dá para fazer no estúdio, diga.
@@ -283,7 +287,7 @@ const TEXTOS_LIVRES: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "est
 /** Campos que mudam a cena desenhada (no contínuo, o panorama precisa nascer de novo). */
 // zona_texto entra desde 25/09: o panorama deixa calma a zona do texto de cada
 // lâmina; mudar a zona no contínuo sem refazer o fundo punha o texto na parte cheia da cena.
-export const CAMPOS_DE_CENA: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo", "zona_texto"];
+export const CAMPOS_DE_CENA: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo", "zona_texto", "uso_da_foto"];
 
 /**
  * Confere as mudanças contra as regras da casa. Devolve só as que sobram com
@@ -348,6 +352,10 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
           continue;
         }
         campos[chave] = hex;
+        continue;
+      }
+      if (chave === "uso_da_foto") {
+        if (valor === "exata" || valor === "rosto") campos.uso_da_foto = valor;
         continue;
       }
       if (chave === "foto_acervo") {
@@ -494,6 +502,8 @@ export function aplicarNaDirecao<D extends DirecaoParaMudar>(
         const base: NonNullable<CardDirecao["fotos_livres"]> = [{ caminho, papel: "fundo", nota: "Foto real do pedido: entra como está, sem ser refeita nem escurecida." }];
         nova.fotos_livres = base.concat(nova.fotos_livres || []);
       }
+      // Frente RO: "usa só o rosto" ou "a foto exatamente como está" (vale na próxima geração).
+      if (c.uso_da_foto === "exata" || c.uso_da_foto === "rosto") aplicarUsoNaLamina(nova, c.uso_da_foto);
       if (c.texto_exato && c.texto_exato !== base.texto_exato) {
         nova.texto_exato = c.texto_exato;
         nova.blocos = blocosDoTexto(c.texto_exato, base.funcao);
@@ -569,11 +579,53 @@ export function antesDaMudanca(
     if (k === "texto_exato") v = card.texto_exato || "";
     else if (k === "evitar") v = card.evitar || "";
     else if (k === "foto_acervo") v = rotuloDaFoto(card);
+    else if (k === "uso_da_foto") v = usoDaFotoNaLamina(card) || "";
     else if (k === "imagem") v = String(l.imagem || card.ilustracao || "");
     else if (l[k] != null) v = String(l[k]);
     antes[k] = limparTexto(v, Math.max(MAXIMO[k], 400));
   }
   return antes;
+}
+
+/**
+ * Frente RO: o uso da foto principal da lâmina (acervo, fundo ou a pessoa
+ * trazida como elemento), "exata" ou "rosto"; null sem foto.
+ */
+export function usoDaFotoNaLamina(card: Pick<CardDirecao, "imagens_ids" | "fotos_livres" | "uso_do_acervo">): "exata" | "rosto" | null {
+  if ((card.imagens_ids || []).length) return card.uso_do_acervo === "rosto" ? "rosto" : "exata";
+  const livres = card.fotos_livres || [];
+  const alvo = livres.filter((f) => f.papel === "fundo")[0] || livres.filter((f) => f.papel === "elemento" && !f.recortada && !/^logo/i.test(String(f.nota || "")))[0];
+  if (!alvo) return null;
+  return alvo.uso === "rosto" ? "rosto" : "exata";
+}
+
+/** Frente RO: grava o uso na foto principal da lâmina (escolha da equipe pela conversa). Sem foto: nada muda. */
+export function aplicarUsoNaLamina(card: CardDirecao, uso: "exata" | "rosto"): void {
+  if ((card.imagens_ids || []).length) {
+    if (uso === "rosto") {
+      card.uso_do_acervo = "rosto";
+      card.uso_do_acervo_por = "equipe";
+    } else {
+      delete card.uso_do_acervo;
+      delete card.uso_do_acervo_por;
+    }
+    return;
+  }
+  const livres = (card.fotos_livres || []).slice();
+  let i = livres.findIndex((f) => f.papel === "fundo");
+  if (i < 0) i = livres.findIndex((f) => f.papel === "elemento" && !f.recortada && !/^logo/i.test(String(f.nota || "")));
+  if (i < 0) return;
+  const f = { ...livres[i] };
+  if (uso === "rosto") {
+    f.uso = "rosto";
+    f.uso_por = "equipe";
+    if (/entra como est/i.test(String(f.nota || ""))) f.nota = "Rosto da foto: só a identidade da pessoa, numa cena nova pela direção.";
+  } else {
+    delete f.uso;
+    delete f.uso_por;
+  }
+  livres[i] = f;
+  card.fotos_livres = livres;
 }
 
 /**

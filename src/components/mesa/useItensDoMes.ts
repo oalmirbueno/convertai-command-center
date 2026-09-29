@@ -79,6 +79,10 @@ export interface CardDaDirecao {
   fotos_livres?: FotoLivre[];
   /** Fidelidade à referência só desta lâmina (frente E); sem ela, o padrão do trabalho. */
   fidelidade_referencia?: string;
+  /** Frente RO: uso da foto do acervo (imagens_ids). "rosto" = só a identidade, cena nova; sem o campo, exata. */
+  uso_do_acervo?: "exata" | "rosto";
+  /** Quem escolheu o uso da foto do acervo. */
+  uso_do_acervo_por?: "equipe" | "jev" | "regra";
 }
 
 /** Foto real composta na lâmina: fica como é; o design e o texto vêm em volta ou por cima. */
@@ -89,6 +93,12 @@ export interface FotoLivre {
   papel: "fundo" | "elemento";
   /** Como usar (até 200 caracteres). */
   nota?: string;
+  /** Pessoa ou produto sem fundo (modo recorte). */
+  recortada?: boolean;
+  /** Frente RO: "rosto" = só a identidade da pessoa, cena nova pelo gerador; sem o campo, exata (a foto intacta). */
+  uso?: "exata" | "rosto";
+  /** Quem escolheu o uso (equipe, Jev ou a regra do pedido). */
+  uso_por?: "equipe" | "jev" | "regra";
 }
 
 export interface Trabalho {

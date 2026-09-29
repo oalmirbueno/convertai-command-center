@@ -64,14 +64,16 @@ describe("1. Sem rosto: o de hoje, byte a byte", () => {
   });
 
   it("no servidor o rosto só é lido no replicar, sem foto do cliente, e nada entra sem ele", () => {
-    expect(servidor).toContain("const rostoEscolhido = replicar && fotosReplicar.length === 0 ? lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
-    expect(servidor).toContain("if (rostoEscolhido) {\n    const fotosDoRosto = await fotosDoRostoEscolhido(t, rostoEscolhido)");
+    // Frente RO: sem foto da lâmina em "Usar o rosto" (rostoDaFotoNoReplicar null), o rosto do trabalho, como antes.
+    expect(servidor).toContain("const rostoEscolhido = replicar && fotosReplicar.length === 0 ? rostoDaFotoNoReplicar || lerRostoDoTrabalho(t.direcao, t.client_id) : null;");
+    expect(servidor).toContain("if (rostoEscolhido) {\n    const fotosDoRosto = rostoDaFotoNoReplicar\n      ? fotosDeIdentidade\n      : await fotosDoRostoEscolhido(t, rostoEscolhido)");
     expect(servidor).toContain("const blocoDoRostoAqui = indicesDoRosto.length\n");
     // As fotos do rosto entram depois dos anexos da lâmina e antes do estilo (que conta com elas no teto).
     const i = servidor.indexOf("const rostoEscolhido = replicar");
     expect(i).toBeGreaterThan(servidor.indexOf("for (const c of escolhidosDaLamina) {"));
     expect(i).toBeLessThan(servidor.indexOf("const estiloDoCliente = await estiloNaGeracao(t, {"));
-    expect(servidor).toContain("rotulos.push(ROTULO_DA_FOTO_DO_ROSTO);");
+    expect(servidor).toContain("const rotuloDoRosto = rostoVeioDaFoto ? ROTULO_DA_FOTO_DE_IDENTIDADE : ROTULO_DA_FOTO_DO_ROSTO;");
+    expect(servidor).toContain("rotulos.push(rotuloDoRosto);");
   });
 });
 

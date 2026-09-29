@@ -89,7 +89,8 @@ export type TomDaArteRapida = "neutro" | "primario" | "ok" | "alerta" | "erro";
 /** Onde a arte rápida está, numa palavra, para o histórico. Função pura. */
 export function situacaoDaArteRapida(t: Trabalho): { rotulo: string; tom: TomDaArteRapida } {
   const a = arteRapidaDa(t.direcao);
-  if (a && a.task_id) return { rotulo: "na Agenda", tom: "ok" };
+  // Frente RO (29/09): item na Agenda sem a arte em Arquivos não é "na Agenda" (a entrega parou; "Entregar de novo").
+  if (a && a.task_id) return t.status === "entregue" && (t.file_ids || []).length > 0 ? { rotulo: "na Agenda", tom: "ok" } : { rotulo: "não entregue", tom: "alerta" };
   const cards = (t.direcao && Array.isArray(t.direcao.cards) ? t.direcao.cards : []).length;
   const feitas = ultimasVersoes(t.cards || []).size;
   if (t.status === "erro") return { rotulo: "com erro", tom: "erro" };

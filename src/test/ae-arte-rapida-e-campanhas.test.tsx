@@ -173,7 +173,8 @@ describe("arte rápida: pedido, Jev e regras fixas", () => {
       { id: CAMP_A, nome: "Semana do Mouse", identidade: { tipo: "promocao" }, briefing: { oferta: "15% no Pix" } },
       { id: CAMP_B, nome: "Dia das Crianças" },
     ]);
-    expect(Object.keys(q.questions).sort()).toEqual(["campanha", "papel_1", "peca"]);
+    // Frente RO: a foto em Automático leva junto a pergunta do uso (exata ou só o rosto).
+    expect(Object.keys(q.questions).sort()).toEqual(["campanha", "papel_1", "peca", "uso_1"]);
     expect(q.campanhas).toEqual({ c1: CAMP_A, c2: CAMP_B });
     expect(JSON.stringify(q.questions.campanha.criteria.c1)).toContain("promoção");
     expect(Object.keys(q.questions.peca.criteria)).toEqual(["unica", "carrossel"]);
