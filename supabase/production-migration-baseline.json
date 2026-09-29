@@ -1545,6 +1545,102 @@
       "remote_name": "agentes_das_mesas_novas",
       "remote_statements_sha256": "2d972173e49cdbe2e2c30d8f330ad1205c925975d5d130959a32692ee2f49cf5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930010000",
+      "path": "supabase/migrations/20260930010000_briefing_modelos_e_link.sql",
+      "local_sha256": "2843e68ac19b2220d0f1f2d92cf25d7577675d7b49e6c53d0b3380afecde8307",
+      "remote_name": "briefing_modelos_e_link",
+      "remote_statements_sha256": "e318a00e166725828de5838e636ca294e22bf6c0fef18540495cc68df183671e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930010100",
+      "path": "supabase/migrations/20260930010100_briefing_link_publico.sql",
+      "local_sha256": "a8a5762562c0f3edddb5fe62e9db9a77a137980892c0229690075091f44abc6d",
+      "remote_name": "briefing_link_publico",
+      "remote_statements_sha256": "c15fc57bb29aef0d050d1007df922da71fc479100398001c6a9082beda5da195",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930020000",
+      "path": "supabase/migrations/20260930020000_propostas.sql",
+      "local_sha256": "5704b47018543c45b5cc3b2f4e94026b1961f33402720f51f9a5c9cb4963e13a",
+      "remote_name": "propostas",
+      "remote_statements_sha256": "e465e557ca18a1d80d88977767d053be1385b7e205b1f7bc13de5cfdcc607f64",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930030000",
+      "path": "supabase/migrations/20260930030000_contratos_modelos.sql",
+      "local_sha256": "ce071be8987bdbbb7db7418d600a531900fc99f751eedf89e419be7c6857d2b8",
+      "remote_name": "contratos_modelos",
+      "remote_statements_sha256": "4819d4f4fadac7cbdd42ded86b2338a7b038f449bad096cf19070ef4016d42f4",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930030100",
+      "path": "supabase/migrations/20260930030100_contratos_congelados.sql",
+      "local_sha256": "f65b4deb19dc2caba61b414a65eec6b2c5bfc430f4a3bc9096fd5320078002a9",
+      "remote_name": "contratos_congelados",
+      "remote_statements_sha256": "cfe4603f591f54b6dc816a9f60691f0a639321df8af6f36ce66f207057ab2f60",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930030200",
+      "path": "supabase/migrations/20260930030200_contratos_modelo_v1.sql",
+      "local_sha256": "cd39182e491fa85a51dc1cb8ecf186a4424ded02981931d7501d1c38713f9cc0",
+      "remote_name": "contratos_modelo_v1",
+      "remote_statements_sha256": "d33186405969d73c184a9879c65090122c6749cdcc60e92c5e441df721111f0e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930040000",
+      "path": "supabase/migrations/20260930040000_documentos_entrega.sql",
+      "local_sha256": "c75af00e2e30e17f839bf4e2e98ed3935eb820fe15d3009750bc507471e79ebe",
+      "remote_name": "documentos_entrega",
+      "remote_statements_sha256": "6a8efa9a52aa4786b1a16b061f8d41efc2ae8ff60d2aaf48eedec36e27f51fc3",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930050000",
+      "path": "supabase/migrations/20260930050000_conselho_de_agentes.sql",
+      "local_sha256": "632c5799e539c5a1738b87510c64765b3e0cabbf8b334e348d1affeb8b853c17",
+      "remote_name": "conselho_de_agentes",
+      "remote_statements_sha256": "c0fe40cc60dea053be68d3bcf06d2cea7839006fdd42b380d94944ab29b4de11",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930060000",
+      "path": "supabase/migrations/20260930060000_mesa_identidade.sql",
+      "local_sha256": "f5d05ab29f2f6465d331d3b78432c65d863eaebb32be332a6e36f34cb40e0fcd",
+      "remote_name": "mesa_identidade",
+      "remote_statements_sha256": "a585ee1fbeac28c4399aafd2198c26881ce4526af7b3d612da5d18c9e67d5a10",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930080000",
+      "path": "supabase/migrations/20260930080000_render_pedidos.sql",
+      "local_sha256": "502adc5ff4d04b6a4fe5e5bbd5e9056383a430a5f935e1abb844e790d59d2f3d",
+      "remote_name": "render_pedidos",
+      "remote_statements_sha256": "69b1d31d7e2e258ec029116e1d5f9ee68c75a3b1e4a16d4272468c0ff1ff7bf5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930090000",
+      "path": "supabase/migrations/20260930090000_motor_de_codigo.sql",
+      "local_sha256": "21fc47187ff6963c2ad6f19720b624a21c1caecdfcb479fd8ef43c33327ec303",
+      "remote_name": "motor_de_codigo",
+      "remote_statements_sha256": "2a759bd1048983018a7bc5d6a89077846de8c00b8557f0a0a97404b4e60f6a53",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930090100",
+      "path": "supabase/migrations/20260930090100_mesa_site.sql",
+      "local_sha256": "f6be79f15adc35e819cc344957d7ecc3fe60ef254cc79ea1d04f49d86fb4e290",
+      "remote_name": "mesa_site",
+      "remote_statements_sha256": "68d8ca657213d87385e2738e106fbace66007e75188004fb04715b2821cb11ef",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
