@@ -20,6 +20,9 @@
  *   MOTOR_PREVIA_MINUTOS prévia parada desliga depois disso (padrão 60)
  *   MOTOR_PRAZO_MIN      prazo de cada passada do agente (padrão 15)
  *   VERCEL_TOKEN, VERCEL_TEAM_ID   publicação (desligada sem elas)
+ *   UIUX_PYTHON          Python 3.8+ da busca da base de design (opcional: o worker acha sozinho)
+ *
+ * Depois de um git pull com mudança no worker, reinicie (Ctrl+C e npm run iniciar).
  */
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -28,8 +31,9 @@ import { executarTrabalho } from "./lib/executar.ts";
 import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
 import { esperar } from "./lib/processos.ts";
+import { acharPython } from "./modelo-site/scripts/uiux.mjs";
 
-const VERSAO = "motor-codigo 0.1.0 (opencode 1.18.33)";
+const VERSAO = "motor-codigo 0.1.0 (opencode 1.18.33, ui-ux-pro-max 2.15.0)";
 
 export function configDoAmbiente() {
   return {
@@ -40,8 +44,24 @@ export function configDoAmbiente() {
   };
 }
 
-async function capacidades() {
+/**
+ * Python da busca da base de design (skill ui-ux-pro-max): acha uma vez na
+ * partida e deixa em UIUX_PYTHON, que o opencode e o `node scripts/uiux.mjs`
+ * herdam. Sem Python, avisa uma vez e o motor segue só com o pacote.
+ */
+export function prepararPythonDaBase(): string | null {
+  const python = acharPython(process.env) as string | null;
+  if (python) process.env.UIUX_PYTHON = python;
+  else {
+    delete process.env.UIUX_PYTHON;
+    console.warn("[motor] sem Python 3.8+ nesta máquina: a busca da base de design (ui-ux-pro-max) fica desligada e o agente segue só com o pacote.");
+  }
+  return python;
+}
+
+async function capacidades(python: string | null) {
   return {
+    uiux: !!python,
     tunel: await temCloudflared(),
     openrouter: temChave("openrouter"),
     anthropic: temChave("anthropic"),
@@ -52,8 +72,9 @@ async function capacidades() {
 
 export async function laco(fila: Fila, opcoes: { umaVez?: boolean } = {}) {
   const cfg = configDoAmbiente();
-  const caps = await capacidades();
-  console.log(`[motor] ${VERSAO} · executor ${cfg.executor} · fila ${fila.nome} · projetos em ${cfg.pastaProjetos} · túnel ${caps.tunel ? "sim" : "não"}`);
+  const python = prepararPythonDaBase();
+  const caps = await capacidades(python);
+  console.log(`[motor] ${VERSAO} · executor ${cfg.executor} · fila ${fila.nome} · projetos em ${cfg.pastaProjetos} · túnel ${caps.tunel ? "sim" : "não"} · base de design ${python ? "com Python" : "sem Python"}`);
   let parar = false;
   process.on("SIGINT", () => {
     parar = true;
